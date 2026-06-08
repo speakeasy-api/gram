@@ -1,5 +1,13 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link as RouterLink } from "react-router";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  invalidateAllRiskListPolicies,
+  useRiskCreatePolicyMutation,
+  useRiskListPolicies,
+  useRiskPoliciesDeleteMutation,
+} from "@gram/client/react-query/index.js";
+import { invalidateAllRiskPoliciesStatus } from "@gram/client/react-query/riskPoliciesStatus.js";
 import {
   ShieldCheck,
   ShieldOff,
@@ -12,7 +20,6 @@ import {
   ChevronRight,
   ExternalLink,
   Lock,
-  ArrowRight,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -26,7 +33,7 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { Button, Link } from "@speakeasy-api/moonshine";
+import { Badge, Button, Link } from "@speakeasy-api/moonshine";
 import { useSlugs } from "@/contexts/Sdk";
 import { StepContainer } from "../step-container";
 import {
@@ -106,7 +113,7 @@ const DEFAULTS: Record<RuleCategory, CategoryConfig> = {
     messageTypes: new Set(["tool_request", "tool_response"]),
   },
   shadow_mcp: {
-    enabled: true,
+    enabled: false,
     action: "block",
     messageTypes: new Set(["tool_request"]),
   },
@@ -176,6 +183,75 @@ export function ConfigurePoliciesStep({
   );
   const [openCategory, setOpenCategory] = useState<RuleCategory | null>(null);
 
+  const queryClient = useQueryClient();
+  const { data: policiesData } = useRiskListPolicies();
+  const shadowPolicy = useMemo(
+    () =>
+      (policiesData?.policies ?? []).find((p) =>
+        (p.sources ?? []).includes("shadow_mcp"),
+      ),
+    [policiesData],
+  );
+
+  const invalidatePolicies = () => {
+    invalidateAllRiskListPolicies(queryClient);
+    invalidateAllRiskPoliciesStatus(queryClient);
+  };
+
+  const createShadowMutation = useRiskCreatePolicyMutation({
+    onSuccess: invalidatePolicies,
+    onError: () => {
+      setConfigs((prev) => ({
+        ...prev,
+        shadow_mcp: { ...prev.shadow_mcp, enabled: false },
+      }));
+    },
+  });
+  const deleteShadowMutation = useRiskPoliciesDeleteMutation({
+    onSuccess: invalidatePolicies,
+    onError: () => {
+      setConfigs((prev) => ({
+        ...prev,
+        shadow_mcp: { ...prev.shadow_mcp, enabled: true },
+      }));
+    },
+  });
+
+  useEffect(() => {
+    setConfigs((prev) => {
+      const desired = !!shadowPolicy;
+      if (prev.shadow_mcp.enabled === desired) return prev;
+      return {
+        ...prev,
+        shadow_mcp: { ...prev.shadow_mcp, enabled: desired },
+      };
+    });
+  }, [shadowPolicy]);
+
+  const handleShadowToggle = (checked: boolean) => {
+    setConfigs((prev) => ({
+      ...prev,
+      shadow_mcp: { ...prev.shadow_mcp, enabled: checked },
+    }));
+    if (checked) {
+      if (shadowPolicy) return;
+      createShadowMutation.mutate({
+        request: {
+          createRiskPolicyRequestBody: {
+            enabled: true,
+            sources: ["shadow_mcp"],
+            messageTypes: ["tool_request"],
+            action: "block",
+            autoName: true,
+          },
+        },
+      });
+    } else {
+      if (!shadowPolicy) return;
+      deleteShadowMutation.mutate({ request: { id: shadowPolicy.id } });
+    }
+  };
+
   const policyCenterHref = useMemo(
     () => (orgSlug ? `/${orgSlug}/risk-policies` : "/risk-policies"),
     [orgSlug],
@@ -229,14 +305,8 @@ export function ConfigurePoliciesStep({
       showBack
       onBack={onBack}
     >
-      <div className="space-y-6">
-        <ShadowMcpHero
-          config={shadow}
-          onToggle={(checked) =>
-            updateConfig("shadow_mcp", { enabled: checked })
-          }
-          onConfigure={() => setOpenCategory("shadow_mcp")}
-        />
+      <div className="space-y-12">
+        <ShadowMcpHero config={shadow} onToggle={handleShadowToggle} />
 
         <div className="space-y-2">
           <div className="flex items-baseline justify-between px-1">
@@ -493,81 +563,107 @@ export function ConfigurePoliciesStep({
 interface ShadowMcpHeroProps {
   config: CategoryConfig;
   onToggle: (checked: boolean) => void;
-  onConfigure: () => void;
 }
 
-function ShadowMcpHero({ config, onToggle, onConfigure }: ShadowMcpHeroProps) {
+function ShadowMcpHero({ config, onToggle }: ShadowMcpHeroProps) {
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-2xl",
-        "bg-gradient-to-br from-zinc-700 via-zinc-800 to-zinc-900",
-        "dark:from-zinc-800 dark:via-zinc-900 dark:to-zinc-950",
-        "ring-1 ring-zinc-950/60 dark:ring-white/[0.04]",
-        "shadow-[0_1px_0_rgba(255,255,255,0.06)_inset,0_2px_4px_rgba(0,0,0,0.08),0_12px_24px_-12px_rgba(0,0,0,0.35),0_24px_48px_-24px_rgba(0,0,0,0.45)]",
+        "relative overflow-hidden rounded-lg backdrop-blur-xl transition-all duration-700 ease-out",
+        "bg-gradient-to-br from-slate-500/85 via-slate-600/85 to-slate-700/85",
+        "dark:from-slate-600/85 dark:via-slate-700/85 dark:to-slate-800/85",
+        "ring-1",
+        config.enabled ? "ring-emerald-500/20" : "ring-[var(--bg-warning)]/30",
+        "shadow-[0_1px_0_rgba(255,255,255,0.1)_inset,0_0_0_1px_rgba(255,255,255,0.02)_inset,0_2px_4px_rgba(15,23,42,0.12),0_12px_28px_-12px_rgba(15,23,42,0.4),0_24px_56px_-24px_rgba(15,23,42,0.5)]",
       )}
     >
       <div
         aria-hidden
-        className="pointer-events-none absolute -top-32 -right-24 h-72 w-72 rounded-full bg-white/[0.05] blur-3xl"
+        className={cn(
+          "pointer-events-none absolute -top-32 -right-24 h-72 w-72 rounded-full blur-3xl transition-all duration-[1100ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
+          config.enabled
+            ? "translate-x-[-12%] translate-y-4 scale-150 bg-emerald-500/[0.28]"
+            : "translate-x-6 translate-y-[-8%] scale-75 bg-[var(--bg-warning)]/30",
+        )}
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute -bottom-40 -left-20 h-72 w-72 rounded-full bg-emerald-500/[0.06] blur-3xl"
+        className={cn(
+          "pointer-events-none absolute -bottom-40 -left-20 h-80 w-80 rounded-full blur-3xl transition-all duration-[1300ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
+          config.enabled
+            ? "translate-x-8 translate-y-[-10%] scale-150 bg-emerald-500/[0.3]"
+            : "translate-x-[-6%] translate-y-4 scale-50 bg-[var(--bg-warning)]/25",
+        )}
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent"
+        className={cn(
+          "pointer-events-none absolute top-1/2 left-1/2 h-64 w-64 -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl transition-all duration-[1500ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
+          config.enabled
+            ? "scale-125 bg-emerald-500/[0.15] opacity-100"
+            : "scale-50 bg-[var(--bg-warning)]/15 opacity-60",
+        )}
       />
-      <div className="relative flex items-start gap-5 p-6">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 rounded-lg bg-gradient-to-b from-white/[0.04] to-transparent"
+      />
+      <div className="relative flex items-start gap-5 p-6 pb-8">
         <div
           className={cn(
-            "flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl ring-1 backdrop-blur-sm transition-all",
-            "shadow-[0_1px_0_rgba(255,255,255,0.08)_inset,0_8px_16px_-8px_rgba(0,0,0,0.5)]",
+            "flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-md ring-1 backdrop-blur-md transition-all duration-500 ease-out",
+            "shadow-[0_1px_0_rgba(255,255,255,0.12)_inset,0_8px_16px_-8px_rgba(15,23,42,0.6)]",
             config.enabled
-              ? "bg-white/[0.08] text-white ring-white/15"
-              : "bg-white/[0.04] text-zinc-400 ring-white/10",
+              ? "bg-white/60 ring-white/50"
+              : "bg-white/55 ring-white/40",
           )}
         >
-          <ShieldOff className="h-6 w-6" strokeWidth={1.75} />
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            strokeWidth={1.75}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={cn(
+              "h-7 w-7 transition-colors duration-500 ease-out",
+              config.enabled ? "text-emerald-600" : "text-[var(--bg-warning)]",
+            )}
+          >
+            <path
+              d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"
+              stroke="currentColor"
+            />
+            <path
+              d="m9 12 2 2 4-4"
+              stroke="currentColor"
+              strokeDasharray="10"
+              strokeDashoffset={config.enabled ? 0 : 10}
+              style={{
+                transition: config.enabled
+                  ? "stroke-dashoffset 250ms ease-out 100ms"
+                  : "none",
+              }}
+            />
+          </svg>
         </div>
         <div className="min-w-0 flex-1 space-y-3 pt-0.5">
           <div className="flex items-center gap-2">
-            <p className="text-base font-medium tracking-tight text-zinc-50">
+            <p className="text-base font-medium tracking-tight text-slate-50">
               Shadow MCP enforcement
             </p>
-            <span
-              className={cn(
-                "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase ring-1 ring-inset backdrop-blur-sm",
-                config.enabled
-                  ? "bg-emerald-400/10 text-emerald-300 ring-emerald-400/25"
-                  : "bg-white/[0.06] text-zinc-400 ring-white/10",
-              )}
-            >
-              <span
-                className={cn(
-                  "h-1.5 w-1.5 rounded-full",
-                  config.enabled
-                    ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]"
-                    : "bg-zinc-500",
-                )}
-              />
-              {config.enabled ? "Active" : "Off"}
-            </span>
+            <Badge variant={config.enabled ? "success" : "warning"}>
+              <Badge.Text>{config.enabled ? "Active" : "Off"}</Badge.Text>
+            </Badge>
           </div>
-          <p className="max-w-md text-sm leading-relaxed text-zinc-300/90">
-            Block tool calls in Claude Code and Cursor that don&rsquo;t come
-            from a Speakeasy-issued MCP server. Stops shadow tools from running
-            on managed machines.
+          <p className="max-w-md text-sm leading-relaxed text-slate-300/90">
+            Force every MCP tool call through Speakeasy&rsquo;s control plane.
+            Unmanaged servers your team installs locally are blocked &mdash; so
+            RBAC, authz, and audit trails stay enforced across every agent.
           </p>
-          <button
-            type="button"
-            onClick={onConfigure}
-            className="group inline-flex items-center gap-1 text-xs font-medium text-zinc-100 transition-colors hover:text-white"
-          >
-            Configure scope
-            <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
-          </button>
         </div>
         <Switch
           checked={config.enabled}
@@ -576,7 +672,7 @@ function ShadowMcpHero({ config, onToggle, onConfigure }: ShadowMcpHeroProps) {
           className={cn(
             "mt-1 shadow-[0_1px_2px_rgba(0,0,0,0.3)_inset]",
             config.enabled
-              ? "bg-emerald-400 hover:bg-emerald-400/90"
+              ? "bg-emerald-500 hover:bg-emerald-500/90"
               : "bg-white/[0.12] hover:bg-white/[0.18]",
           )}
         />
@@ -625,11 +721,13 @@ function ActionRadio({
 
 type ActionPillKind = PolicyAction | "off";
 
-const ACTION_PILL_STYLES: Record<ActionPillKind, string> = {
-  block:
-    "bg-red-500/10 text-red-600 ring-red-500/20 dark:text-red-400 dark:bg-red-500/15 dark:ring-red-500/25",
-  flag: "bg-amber-500/10 text-amber-700 ring-amber-500/20 dark:text-amber-400 dark:bg-amber-500/15 dark:ring-amber-500/25",
-  off: "bg-secondary text-muted-foreground/80 ring-border",
+const ACTION_PILL_VARIANT: Record<
+  ActionPillKind,
+  "destructive" | "warning" | "neutral"
+> = {
+  block: "destructive",
+  flag: "warning",
+  off: "neutral",
 };
 
 const ACTION_PILL_LABEL: Record<ActionPillKind, string> = {
@@ -640,13 +738,8 @@ const ACTION_PILL_LABEL: Record<ActionPillKind, string> = {
 
 function ActionPill({ action }: { action: ActionPillKind }) {
   return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-semibold tracking-[0.06em] uppercase ring-1 ring-inset",
-        ACTION_PILL_STYLES[action],
-      )}
-    >
-      {ACTION_PILL_LABEL[action]}
-    </span>
+    <Badge variant={ACTION_PILL_VARIANT[action]}>
+      <Badge.Text>{ACTION_PILL_LABEL[action]}</Badge.Text>
+    </Badge>
   );
 }
