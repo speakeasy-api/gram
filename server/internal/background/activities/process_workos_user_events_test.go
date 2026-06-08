@@ -43,6 +43,10 @@ func directoryUserEventData(workosDirectoryUserID, email string) []byte {
 	return []byte(`{"id":"` + workosDirectoryUserID + `","email":"` + email + `","first_name":"Ada","last_name":"Lovelace","custom_attributes":{"department":"Engineering","team":"SDK"},"updated_at":"2026-05-12T10:00:00Z"}`)
 }
 
+func directoryUserEventDataWithOrganization(workosDirectoryUserID, workosOrgID, email string) []byte {
+	return []byte(`{"id":"` + workosDirectoryUserID + `","organization_id":"` + workosOrgID + `","email":"` + email + `","first_name":"Ada","last_name":"Lovelace","custom_attributes":{"department":"Engineering","team":"SDK"},"updated_at":"2026-05-12T10:00:00Z"}`)
+}
+
 func processWorkOSUserEventsParams(workosUserID string) activities.ProcessWorkOSUserEventsParams {
 	return activities.ProcessWorkOSUserEventsParams{WorkOSUserID: workosUserID, SinceEventID: nil}
 }
@@ -121,15 +125,15 @@ func TestProcessWorkOSUserEvents_StoresDirectoryUserAttributes(t *testing.T) {
 
 	const (
 		workosDirectoryUserID = "directory_user_attributes"
-		gramID                = "sb_existing_directory_user"
+		gramOrgID             = "gram_directory_user_attributes_org"
+		workosOrgID           = "org_directory_user_attributes"
 		email                 = "ada.directory@example.com"
 	)
-	_, err := usersrepo.New(conn).UpsertUser(ctx, localUserParams(gramID, email, "Ada Directory"))
-	require.NoError(t, err)
+	seedDirectoryAttributesWorkOSOrganization(t, ctx, conn, gramOrgID, workosOrgID)
 
 	workosClient := workos.NewStubClient()
 	workosClient.SetEventPages([][]events.Event{{
-		{ID: "event_directory_user_update", Event: "dsync.user.updated", CreatedAt: time.Now(), Data: directoryUserEventData(workosDirectoryUserID, email)},
+		{ID: "event_directory_user_update", Event: "dsync.user.updated", CreatedAt: time.Now(), Data: directoryUserEventDataWithOrganization(workosDirectoryUserID, workosOrgID, email)},
 	}})
 
 	activity := activities.NewProcessWorkOSUserEvents(logger, conn, workosClient)
@@ -137,8 +141,10 @@ func TestProcessWorkOSUserEvents_StoresDirectoryUserAttributes(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "event_directory_user_update", res.LastEventID)
 
-	row, err := usersrepo.New(conn).GetUser(ctx, gramID)
+	row, err := workosrepo.New(conn).GetDirectoryUserByWorkOSID(ctx, workosDirectoryUserID)
 	require.NoError(t, err)
+	require.Equal(t, gramOrgID, row.OrganizationID)
+	require.Equal(t, email, row.Email.String)
 	require.JSONEq(t, `{
 		"department": "Engineering",
 		"team": "SDK"

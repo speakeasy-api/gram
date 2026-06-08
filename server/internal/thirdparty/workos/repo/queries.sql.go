@@ -12,78 +12,88 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const closeUserGroupMembership = `-- name: CloseUserGroupMembership :execrows
-DELETE FROM user_group_memberships
-WHERE user_id = $1
-  AND group_id = $2
+const closeDirectoryUserGroupMembership = `-- name: CloseDirectoryUserGroupMembership :execrows
+UPDATE directory_user_group_memberships
+SET deleted_at = COALESCE(deleted_at, clock_timestamp()),
+  updated_at = clock_timestamp()
+WHERE directory_user_id = $1
+  AND directory_group_id = $2
+  AND deleted_at IS NULL
 `
 
-type CloseUserGroupMembershipParams struct {
-	UserID  string
-	GroupID uuid.UUID
+type CloseDirectoryUserGroupMembershipParams struct {
+	DirectoryUserID  uuid.UUID
+	DirectoryGroupID uuid.UUID
 }
 
-func (q *Queries) CloseUserGroupMembership(ctx context.Context, arg CloseUserGroupMembershipParams) (int64, error) {
-	result, err := q.db.Exec(ctx, closeUserGroupMembership, arg.UserID, arg.GroupID)
+func (q *Queries) CloseDirectoryUserGroupMembership(ctx context.Context, arg CloseDirectoryUserGroupMembershipParams) (int64, error) {
+	result, err := q.db.Exec(ctx, closeDirectoryUserGroupMembership, arg.DirectoryUserID, arg.DirectoryGroupID)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
 }
 
-const closeUserGroupMembershipByWorkOSIDs = `-- name: CloseUserGroupMembershipByWorkOSIDs :execrows
-DELETE FROM user_group_memberships
+const closeDirectoryUserGroupMembershipByWorkOSIDs = `-- name: CloseDirectoryUserGroupMembershipByWorkOSIDs :one
+UPDATE directory_user_group_memberships
+SET deleted_at = COALESCE(deleted_at, clock_timestamp()),
+  updated_at = clock_timestamp()
 WHERE workos_directory_user_id = $1
   AND workos_directory_group_id = $2
+  AND deleted_at IS NULL
+RETURNING id
 `
 
-type CloseUserGroupMembershipByWorkOSIDsParams struct {
+type CloseDirectoryUserGroupMembershipByWorkOSIDsParams struct {
 	WorkosDirectoryUserID  string
 	WorkosDirectoryGroupID string
 }
 
-func (q *Queries) CloseUserGroupMembershipByWorkOSIDs(ctx context.Context, arg CloseUserGroupMembershipByWorkOSIDsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, closeUserGroupMembershipByWorkOSIDs, arg.WorkosDirectoryUserID, arg.WorkosDirectoryGroupID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+func (q *Queries) CloseDirectoryUserGroupMembershipByWorkOSIDs(ctx context.Context, arg CloseDirectoryUserGroupMembershipByWorkOSIDsParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, closeDirectoryUserGroupMembershipByWorkOSIDs, arg.WorkosDirectoryUserID, arg.WorkosDirectoryGroupID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
-const closeUserGroupMembershipsForGroup = `-- name: CloseUserGroupMembershipsForGroup :execrows
-DELETE FROM user_group_memberships
-WHERE group_id = $1
+const closeDirectoryUserGroupMembershipsForGroup = `-- name: CloseDirectoryUserGroupMembershipsForGroup :execrows
+UPDATE directory_user_group_memberships
+SET deleted_at = COALESCE(deleted_at, clock_timestamp()),
+  updated_at = clock_timestamp()
+WHERE directory_group_id = $1
+  AND deleted_at IS NULL
 `
 
-func (q *Queries) CloseUserGroupMembershipsForGroup(ctx context.Context, groupID uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, closeUserGroupMembershipsForGroup, groupID)
+func (q *Queries) CloseDirectoryUserGroupMembershipsForGroup(ctx context.Context, directoryGroupID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, closeDirectoryUserGroupMembershipsForGroup, directoryGroupID)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
 }
 
-const countUserGroupMembershipsByWorkOSIDs = `-- name: CountUserGroupMembershipsByWorkOSIDs :one
+const countDirectoryUserGroupMembershipsByWorkOSIDs = `-- name: CountDirectoryUserGroupMembershipsByWorkOSIDs :one
 SELECT COUNT(*)
-FROM user_group_memberships
+FROM directory_user_group_memberships
 WHERE workos_directory_group_id = $1
   AND workos_directory_user_id = $2
+  AND deleted_at IS NULL
 `
 
-type CountUserGroupMembershipsByWorkOSIDsParams struct {
+type CountDirectoryUserGroupMembershipsByWorkOSIDsParams struct {
 	WorkosDirectoryGroupID string
 	WorkosDirectoryUserID  string
 }
 
-func (q *Queries) CountUserGroupMembershipsByWorkOSIDs(ctx context.Context, arg CountUserGroupMembershipsByWorkOSIDsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countUserGroupMembershipsByWorkOSIDs, arg.WorkosDirectoryGroupID, arg.WorkosDirectoryUserID)
+func (q *Queries) CountDirectoryUserGroupMembershipsByWorkOSIDs(ctx context.Context, arg CountDirectoryUserGroupMembershipsByWorkOSIDsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countDirectoryUserGroupMembershipsByWorkOSIDs, arg.WorkosDirectoryGroupID, arg.WorkosDirectoryUserID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
 }
 
 const deleteDirectoryGroupByWorkOSID = `-- name: DeleteDirectoryGroupByWorkOSID :execrows
-UPDATE groups
+UPDATE directory_groups
 SET deleted_at = COALESCE(deleted_at, clock_timestamp()),
   updated_at = clock_timestamp()
 WHERE workos_directory_group_id = $1
@@ -92,6 +102,22 @@ WHERE workos_directory_group_id = $1
 
 func (q *Queries) DeleteDirectoryGroupByWorkOSID(ctx context.Context, workosDirectoryGroupID string) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteDirectoryGroupByWorkOSID, workosDirectoryGroupID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteDirectoryUserByWorkOSID = `-- name: DeleteDirectoryUserByWorkOSID :execrows
+UPDATE directory_users
+SET deleted_at = COALESCE(deleted_at, clock_timestamp()),
+  updated_at = clock_timestamp()
+WHERE workos_directory_user_id = $1
+  AND deleted_at IS NULL
+`
+
+func (q *Queries) DeleteDirectoryUserByWorkOSID(ctx context.Context, workosDirectoryUserID string) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteDirectoryUserByWorkOSID, workosDirectoryUserID)
 	if err != nil {
 		return 0, err
 	}
@@ -118,16 +144,17 @@ func (q *Queries) GetDirectoryAttributesSyncLastEventID(ctx context.Context, arg
 }
 
 const getDirectoryGroupByWorkOSID = `-- name: GetDirectoryGroupByWorkOSID :one
-SELECT organization_id, name, attributes, deleted
-FROM groups
+SELECT organization_id, name, attributes, attributes_content_hash,deleted
+FROM directory_groups
 WHERE workos_directory_group_id = $1
 `
 
 type GetDirectoryGroupByWorkOSIDRow struct {
-	OrganizationID string
-	Name           string
-	Attributes     []byte
-	Deleted        bool
+	OrganizationID        string
+	Name                  string
+	Attributes            []byte
+	AttributesContentHash pgtype.Text
+	Deleted               bool
 }
 
 func (q *Queries) GetDirectoryGroupByWorkOSID(ctx context.Context, workosDirectoryGroupID string) (GetDirectoryGroupByWorkOSIDRow, error) {
@@ -137,19 +164,78 @@ func (q *Queries) GetDirectoryGroupByWorkOSID(ctx context.Context, workosDirecto
 		&i.OrganizationID,
 		&i.Name,
 		&i.Attributes,
+		&i.AttributesContentHash,
 		&i.Deleted,
 	)
 	return i, err
 }
 
+const getDirectoryGroupForMembershipByWorkOSID = `-- name: GetDirectoryGroupForMembershipByWorkOSID :one
+SELECT id, organization_id
+FROM directory_groups
+WHERE workos_directory_group_id = $1
+`
+
+type GetDirectoryGroupForMembershipByWorkOSIDRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) GetDirectoryGroupForMembershipByWorkOSID(ctx context.Context, workosDirectoryGroupID string) (GetDirectoryGroupForMembershipByWorkOSIDRow, error) {
+	row := q.db.QueryRow(ctx, getDirectoryGroupForMembershipByWorkOSID, workosDirectoryGroupID)
+	var i GetDirectoryGroupForMembershipByWorkOSIDRow
+	err := row.Scan(&i.ID, &i.OrganizationID)
+	return i, err
+}
+
 const getDirectoryGroupIDByWorkOSID = `-- name: GetDirectoryGroupIDByWorkOSID :one
 SELECT id
-FROM groups
+FROM directory_groups
 WHERE workos_directory_group_id = $1
 `
 
 func (q *Queries) GetDirectoryGroupIDByWorkOSID(ctx context.Context, workosDirectoryGroupID string) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, getDirectoryGroupIDByWorkOSID, workosDirectoryGroupID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const getDirectoryUserByWorkOSID = `-- name: GetDirectoryUserByWorkOSID :one
+SELECT id, organization_id, user_id, workos_directory_user_id, email, attributes, attributes_content_hash, created_at, updated_at, deleted_at, deleted
+FROM directory_users
+WHERE workos_directory_user_id = $1
+  AND deleted_at IS NULL
+`
+
+func (q *Queries) GetDirectoryUserByWorkOSID(ctx context.Context, workosDirectoryUserID string) (DirectoryUser, error) {
+	row := q.db.QueryRow(ctx, getDirectoryUserByWorkOSID, workosDirectoryUserID)
+	var i DirectoryUser
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.UserID,
+		&i.WorkosDirectoryUserID,
+		&i.Email,
+		&i.Attributes,
+		&i.AttributesContentHash,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getDirectoryUserIDByWorkOSID = `-- name: GetDirectoryUserIDByWorkOSID :one
+SELECT id
+FROM directory_users
+WHERE workos_directory_user_id = $1
+  AND deleted_at IS NULL
+`
+
+func (q *Queries) GetDirectoryUserIDByWorkOSID(ctx context.Context, workosDirectoryUserID string) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getDirectoryUserIDByWorkOSID, workosDirectoryUserID)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
@@ -181,10 +267,32 @@ func (q *Queries) GetUserSyncLastEventID(ctx context.Context, workosUserID pgtyp
 	return last_event_id, err
 }
 
-const openUserGroupMembership = `-- name: OpenUserGroupMembership :execrows
-INSERT INTO user_group_memberships (
-  user_id,
-  group_id,
+const linkDirectoryUsersToUserByEmail = `-- name: LinkDirectoryUsersToUserByEmail :execrows
+UPDATE directory_users
+SET user_id = $1,
+  updated_at = clock_timestamp()
+WHERE email = $2
+  AND user_id IS NULL
+  AND deleted_at IS NULL
+`
+
+type LinkDirectoryUsersToUserByEmailParams struct {
+	UserID pgtype.Text
+	Email  pgtype.Text
+}
+
+func (q *Queries) LinkDirectoryUsersToUserByEmail(ctx context.Context, arg LinkDirectoryUsersToUserByEmailParams) (int64, error) {
+	result, err := q.db.Exec(ctx, linkDirectoryUsersToUserByEmail, arg.UserID, arg.Email)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const openDirectoryUserGroupMembership = `-- name: OpenDirectoryUserGroupMembership :one
+INSERT INTO directory_user_group_memberships (
+  directory_user_id,
+  directory_group_id,
   workos_directory_user_id,
   workos_directory_group_id
 )
@@ -194,30 +302,31 @@ VALUES (
   $3,
   $4
 )
-ON CONFLICT (user_id, group_id) DO UPDATE SET
+ON CONFLICT (directory_user_id, directory_group_id) DO UPDATE SET
   workos_directory_user_id = EXCLUDED.workos_directory_user_id,
   workos_directory_group_id = EXCLUDED.workos_directory_group_id,
+  deleted_at = NULL,
   updated_at = clock_timestamp()
+RETURNING id
 `
 
-type OpenUserGroupMembershipParams struct {
-	UserID                 string
-	GroupID                uuid.UUID
+type OpenDirectoryUserGroupMembershipParams struct {
+	DirectoryUserID        uuid.UUID
+	DirectoryGroupID       uuid.UUID
 	WorkosDirectoryUserID  string
 	WorkosDirectoryGroupID string
 }
 
-func (q *Queries) OpenUserGroupMembership(ctx context.Context, arg OpenUserGroupMembershipParams) (int64, error) {
-	result, err := q.db.Exec(ctx, openUserGroupMembership,
-		arg.UserID,
-		arg.GroupID,
+func (q *Queries) OpenDirectoryUserGroupMembership(ctx context.Context, arg OpenDirectoryUserGroupMembershipParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, openDirectoryUserGroupMembership,
+		arg.DirectoryUserID,
+		arg.DirectoryGroupID,
 		arg.WorkosDirectoryUserID,
 		arg.WorkosDirectoryGroupID,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const setDirectoryAttributesSyncLastEventID = `-- name: SetDirectoryAttributesSyncLastEventID :one
@@ -285,7 +394,7 @@ func (q *Queries) SetUserSyncLastEventID(ctx context.Context, arg SetUserSyncLas
 }
 
 const upsertDirectoryGroup = `-- name: UpsertDirectoryGroup :one
-INSERT INTO groups (
+INSERT INTO directory_groups (
   organization_id,
   workos_directory_group_id,
   name,
@@ -308,10 +417,10 @@ ON CONFLICT (workos_directory_group_id) DO UPDATE SET
   attributes_content_hash = EXCLUDED.attributes_content_hash,
   deleted_at = NULL,
   updated_at = clock_timestamp()
-WHERE groups.attributes_content_hash IS DISTINCT FROM EXCLUDED.attributes_content_hash
-  OR groups.name IS DISTINCT FROM EXCLUDED.name
-  OR groups.organization_id IS DISTINCT FROM EXCLUDED.organization_id
-  OR groups.deleted_at IS NOT NULL
+WHERE directory_groups.attributes_content_hash IS DISTINCT FROM EXCLUDED.attributes_content_hash
+  OR directory_groups.name IS DISTINCT FROM EXCLUDED.name
+  OR directory_groups.organization_id IS DISTINCT FROM EXCLUDED.organization_id
+  OR directory_groups.deleted_at IS NOT NULL
 RETURNING id
 `
 
@@ -328,6 +437,59 @@ func (q *Queries) UpsertDirectoryGroup(ctx context.Context, arg UpsertDirectoryG
 		arg.OrganizationID,
 		arg.WorkosDirectoryGroupID,
 		arg.Name,
+		arg.Attributes,
+		arg.AttributesContentHash,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const upsertDirectoryUser = `-- name: UpsertDirectoryUser :one
+INSERT INTO directory_users (
+  organization_id,
+  user_id,
+  workos_directory_user_id,
+  email,
+  attributes,
+  attributes_content_hash,
+  deleted_at
+)
+VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  $6,
+  NULL
+)
+ON CONFLICT (workos_directory_user_id) DO UPDATE SET
+  organization_id = EXCLUDED.organization_id,
+  user_id = COALESCE(EXCLUDED.user_id, directory_users.user_id),
+  email = EXCLUDED.email,
+  attributes = EXCLUDED.attributes,
+  attributes_content_hash = EXCLUDED.attributes_content_hash,
+  deleted_at = NULL,
+  updated_at = clock_timestamp()
+RETURNING id
+`
+
+type UpsertDirectoryUserParams struct {
+	OrganizationID        string
+	UserID                pgtype.Text
+	WorkosDirectoryUserID string
+	Email                 pgtype.Text
+	Attributes            []byte
+	AttributesContentHash pgtype.Text
+}
+
+func (q *Queries) UpsertDirectoryUser(ctx context.Context, arg UpsertDirectoryUserParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, upsertDirectoryUser,
+		arg.OrganizationID,
+		arg.UserID,
+		arg.WorkosDirectoryUserID,
+		arg.Email,
 		arg.Attributes,
 		arg.AttributesContentHash,
 	)

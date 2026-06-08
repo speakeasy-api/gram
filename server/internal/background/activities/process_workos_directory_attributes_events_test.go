@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/workos/workos-go/v6/pkg/events"
 
@@ -15,7 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
-	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 func directoryGroupEventData(workosOrgID, workosDirectoryGroupID, name string) []byte {
@@ -49,7 +47,7 @@ func getDirectoryGroupRow(t *testing.T, ctx context.Context, conn workosrepo.DBT
 func countCurrentMemberships(t *testing.T, ctx context.Context, conn workosrepo.DBTX, workosDirectoryGroupID, workosDirectoryUserID string) int {
 	t.Helper()
 
-	count, err := workosrepo.New(conn).CountUserGroupMembershipsByWorkOSIDs(ctx, workosrepo.CountUserGroupMembershipsByWorkOSIDsParams{
+	count, err := workosrepo.New(conn).CountDirectoryUserGroupMembershipsByWorkOSIDs(ctx, workosrepo.CountDirectoryUserGroupMembershipsByWorkOSIDsParams{
 		WorkosDirectoryGroupID: workosDirectoryGroupID,
 		WorkosDirectoryUserID:  workosDirectoryUserID,
 	})
@@ -123,18 +121,24 @@ func TestProcessWorkOSDirectoryAttributesEvents_OpensAndClosesMembership(t *test
 		workosOrgID     = "org_directory_membership"
 		groupID         = "directory_group_membership"
 		directoryUserID = "directory_user_membership"
-		gramUserID      = "sb_directory_membership_user"
 		email           = "directory.membership@example.com"
 	)
 	seedDirectoryAttributesWorkOSOrganization(t, ctx, conn, gramOrgID, workosOrgID)
-	_, err := usersrepo.New(conn).UpsertUser(ctx, localUserParams(gramUserID, email, "Directory Member"))
-	require.NoError(t, err)
-	_, err = workosrepo.New(conn).UpsertDirectoryGroup(ctx, workosrepo.UpsertDirectoryGroupParams{
+	_, err := workosrepo.New(conn).UpsertDirectoryGroup(ctx, workosrepo.UpsertDirectoryGroupParams{
 		OrganizationID:         gramOrgID,
 		WorkosDirectoryGroupID: groupID,
 		Name:                   "Platform",
 		Attributes:             []byte(`{"id":"directory_group_membership","source":"group-event"}`),
 		AttributesContentHash:  conv.ToPGText("sha256:membership-group-seed"),
+	})
+	require.NoError(t, err)
+	_, err = workosrepo.New(conn).UpsertDirectoryUser(ctx, workosrepo.UpsertDirectoryUserParams{
+		OrganizationID:        gramOrgID,
+		UserID:                conv.ToPGTextEmpty(""),
+		WorkosDirectoryUserID: directoryUserID,
+		Email:                 conv.ToPGText(email),
+		Attributes:            []byte(`{"department":"Engineering","team":"SDK"}`),
+		AttributesContentHash: conv.ToPGText("sha256:membership-user-seed"),
 	})
 	require.NoError(t, err)
 
@@ -153,9 +157,12 @@ func TestProcessWorkOSDirectoryAttributesEvents_OpensAndClosesMembership(t *test
 	require.Equal(t, "event_membership_added", res.LastEventID)
 	require.Equal(t, 1, countCurrentMemberships(t, ctx, conn, groupID, directoryUserID))
 
-	user, err := usersrepo.New(conn).GetUser(ctx, gramUserID)
+	directoryUser, err := workosrepo.New(conn).GetDirectoryUserByWorkOSID(ctx, directoryUserID)
 	require.NoError(t, err)
-	require.JSONEq(t, `{}`, string(user.Attributes))
+	require.Equal(t, gramOrgID, directoryUser.OrganizationID)
+	require.False(t, directoryUser.UserID.Valid)
+	require.Equal(t, email, directoryUser.Email.String)
+	require.JSONEq(t, `{"department":"Engineering","team":"SDK"}`, string(directoryUser.Attributes))
 
 	_, _, attributes, deleted := getDirectoryGroupRow(t, ctx, conn, groupID)
 	require.JSONEq(t, `{"id":"directory_group_membership","source":"group-event"}`, string(attributes))
@@ -187,13 +194,10 @@ func TestProcessWorkOSDirectoryAttributesEvents_DeleteGroupClosesMemberships(t *
 		workosOrgID     = "org_directory_group_delete"
 		groupID         = "directory_group_delete"
 		directoryUserID = "directory_user_group_delete"
-		gramUserID      = "sb_directory_group_delete_user"
 	)
 	seedDirectoryAttributesWorkOSOrganization(t, ctx, conn, gramOrgID, workosOrgID)
-	_, err := usersrepo.New(conn).UpsertUser(ctx, localUserParams(gramUserID, "directory.group.delete@example.com", "Directory Delete"))
-	require.NoError(t, err)
 
-	groupUUID, err := workosrepo.New(conn).UpsertDirectoryGroup(ctx, workosrepo.UpsertDirectoryGroupParams{
+	groupIDUUID, err := workosrepo.New(conn).UpsertDirectoryGroup(ctx, workosrepo.UpsertDirectoryGroupParams{
 		OrganizationID:         gramOrgID,
 		WorkosDirectoryGroupID: groupID,
 		Name:                   "Platform",
@@ -201,10 +205,18 @@ func TestProcessWorkOSDirectoryAttributesEvents_DeleteGroupClosesMemberships(t *
 		AttributesContentHash:  conv.ToPGText("sha256:seed"),
 	})
 	require.NoError(t, err)
-	require.NotEqual(t, uuid.Nil, groupUUID)
-	_, err = workosrepo.New(conn).OpenUserGroupMembership(ctx, workosrepo.OpenUserGroupMembershipParams{
-		UserID:                 gramUserID,
-		GroupID:                groupUUID,
+	directoryUserIDUUID, err := workosrepo.New(conn).UpsertDirectoryUser(ctx, workosrepo.UpsertDirectoryUserParams{
+		OrganizationID:        gramOrgID,
+		UserID:                conv.ToPGTextEmpty(""),
+		WorkosDirectoryUserID: directoryUserID,
+		Email:                 conv.ToPGText("directory.group.delete@example.com"),
+		Attributes:            []byte(`{}`),
+		AttributesContentHash: conv.ToPGText("sha256:empty"),
+	})
+	require.NoError(t, err)
+	_, err = workosrepo.New(conn).OpenDirectoryUserGroupMembership(ctx, workosrepo.OpenDirectoryUserGroupMembershipParams{
+		DirectoryUserID:        directoryUserIDUUID,
+		DirectoryGroupID:       groupIDUUID,
 		WorkosDirectoryUserID:  directoryUserID,
 		WorkosDirectoryGroupID: groupID,
 	})

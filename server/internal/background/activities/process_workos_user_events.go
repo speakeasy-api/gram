@@ -171,6 +171,7 @@ type workosUserEventPayload struct {
 
 type workosDirectoryUserEventPayload struct {
 	ID               string          `json:"id"`
+	OrganizationID   string          `json:"organization_id"`
 	Email            string          `json:"email"`
 	CustomAttributes json.RawMessage `json:"custom_attributes"`
 	Username         string          `json:"username"`
@@ -213,8 +214,18 @@ func (p *ProcessWorkOSUserEvents) handleDirectoryUserEvent(ctx context.Context, 
 	if err := json.Unmarshal(event.Data, &payload); err != nil {
 		return oops.Permanent(fmt.Errorf("unmarshal directory user event payload: %w", err))
 	}
-	_, err := storeDirectoryUserAttributes(ctx, logger, dbtx, workosDirectoryUserID, payload)
-	return err
+	switch workos.EventKind(event.Event) {
+	case workos.EventKindDirectorySyncUserCreated, workos.EventKindDirectorySyncUserUpdated:
+		_, err := upsertDirectoryUser(ctx, dbtx, payload)
+		return err
+	case workos.EventKindDirectorySyncUserDeleted:
+		if _, err := workosrepo.New(dbtx).DeleteDirectoryUserByWorkOSID(ctx, workosDirectoryUserID); err != nil {
+			return fmt.Errorf("delete directory user: %w", err)
+		}
+		return nil
+	default:
+		return nil
+	}
 }
 
 func (p *ProcessWorkOSUserEvents) handleUserUpsert(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, payload workosUserEventPayload) (*workosUserExternalIDUpdate, error) {
@@ -239,6 +250,9 @@ func (p *ProcessWorkOSUserEvents) handleUserUpsert(ctx context.Context, logger *
 		WorkosUpdatedAt: conv.ToPGTimestamptz(payload.UpdatedAt),
 	}); err != nil {
 		return nil, fmt.Errorf("upsert synced user: %w", err)
+	}
+	if err := linkDirectoryUsersToUser(ctx, dbtx, resolved.userID, payload.Email); err != nil {
+		return nil, err
 	}
 
 	organizationQueries := organizationsrepo.New(dbtx)
@@ -376,6 +390,21 @@ func linkExistingUserToWorkOS(ctx context.Context, userQueries *usersrepo.Querie
 	default:
 		return fmt.Errorf("get linked user for WorkOS user %q: %w", workosUserID, err)
 	}
+}
+
+func linkDirectoryUsersToUser(ctx context.Context, dbtx database.DBTX, userID, email string) error {
+	email = strings.ToLower(strings.TrimSpace(email))
+	if email == "" {
+		return nil
+	}
+
+	if _, err := workosrepo.New(dbtx).LinkDirectoryUsersToUserByEmail(ctx, workosrepo.LinkDirectoryUsersToUserByEmailParams{
+		UserID: conv.ToPGText(userID),
+		Email:  conv.ToPGText(email),
+	}); err != nil {
+		return fmt.Errorf("link directory users to user: %w", err)
+	}
+	return nil
 }
 
 func displayNameFromWorkOSUser(payload workosUserEventPayload) string {
