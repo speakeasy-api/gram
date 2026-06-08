@@ -128,6 +128,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").Log(ctx, logger)
 	}
+	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
 	if err := endpoint.ValidateRef(challengeState.Endpoint); err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server").Log(ctx, logger)
 	}
@@ -207,6 +208,9 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").Log(ctx, logger)
 	}
+	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
+	issuerID := endpoint.UserSessionIssuerID.String()
+	mcpSlug := endpoint.Slug
 	if err := endpoint.ValidateRef(challengeState.Endpoint); err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server").Log(ctx, logger)
 	}
@@ -223,8 +227,11 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		// fall through
 	case "deny":
 		// Cancel: 303 (POST → GET) the MCP client back to its redirect_uri
-		// with access_denied per RFC 6749 §4.1.2.1, preserving the
-		// original state.
+		// with access_denied per RFC 6749 §4.1.2.1, preserving the original
+		// state. The user reached the consent screen and chose "no" — a
+		// decline, not an errant config.
+		s.metrics.RecordOAuthFlowDeclined(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
+		logger.InfoContext(ctx, "oauth flow declined at consent", attr.SlogOAuthError("access_denied"))
 		denyURL := buildClientRedirect(challengeState.RedirectURI, "", challengeState.State, "access_denied", "user denied consent")
 		http.Redirect(w, r, denyURL, http.StatusSeeOther)
 		return nil
@@ -233,6 +240,9 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	}
 
 	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
+		// Reaching an approved consent POST with no resolved subject is a code
+		// invariant break, not a user action — a config/code-class failure.
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
 		return oops.E(oops.CodeUnauthorized, nil, "authn challenge subject is not resolved").Log(ctx, logger)
 	}
 	subject := *challengeState.Subject
@@ -243,6 +253,9 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		ClientID:            challengeState.ClientID,
 	})
 	if err != nil {
+		// Client revoked mid-flow (config change) or DB error — either way the
+		// approved flow can't complete.
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeUnauthorized, err, "user session client revoked").Log(ctx, logger)
 		}
@@ -258,16 +271,19 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		UserSessionClientID: clientRow.ID,
 		RemoteSetHash:       remoteSetHashEmpty,
 	}); err != nil && !isUniqueViolation(err) {
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
 		return oops.E(oops.CodeUnexpected, err, "record consent").Log(ctx, logger)
 	}
 
 	code, err := generateOpaqueToken()
 	if err != nil {
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
 		return oops.E(oops.CodeUnexpected, err, "generate authorization code").Log(ctx, logger)
 	}
 
 	grant := UserSessionGrant{
 		Code:                code,
+		FlowID:              challengeState.FlowID,
 		UserSessionIssuerID: endpoint.UserSessionIssuerID,
 		UserSessionClientID: clientRow.ID,
 		ClientID:            challengeState.ClientID,
@@ -278,6 +294,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		CreatedAt:           time.Now(),
 	}
 	if err := s.userSessionGrantCache.Store(ctx, grant); err != nil {
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
 		return oops.E(oops.CodeUnexpected, err, "store user session grant").Log(ctx, logger)
 	}
 

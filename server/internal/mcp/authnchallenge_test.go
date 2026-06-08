@@ -18,6 +18,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
@@ -403,6 +404,63 @@ func TestHandleConsentPost_ApproveWithCSRFRedirectsWithCode(t *testing.T) {
 	require.NotEmpty(t, loc.Query().Get("code"))
 }
 
+// TestHandleConsentPost_PropagatesFlowIDIntoGrant asserts the flow id is
+// carried from the AuthnChallengeState into the UserSessionGrant minted on
+// consent approval, so the terminal /token leg (which only reads the grant)
+// can still log the same flow_id.
+func TestHandleConsentPost_PropagatesFlowIDIntoGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	subject := urn.NewUserSubject("consent-user-" + uuid.NewString())
+	stateID := uuid.NewString()
+	csrfToken := "csrf-" + uuid.NewString()
+	flowID := "flow-" + uuid.NewString()
+
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
+		ID:                  stateID,
+		FlowID:              flowID,
+		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		Endpoint: mcp.EndpointRef{
+			McpSlug:        toolset.McpSlug.String,
+			CustomDomainID: toolset.CustomDomainID,
+		},
+		ClientID:            client.ClientID,
+		RedirectURI:         client.RedirectUris[0],
+		State:               "client-state",
+		CodeChallenge:       "abc",
+		CodeChallengeMethod: "S256",
+		CSRFToken:           csrfToken,
+		Subject:             &subject,
+		CreatedAt:           time.Now(),
+	}))
+
+	form := url.Values{}
+	form.Set("state", stateID)
+	form.Set("csrf_token", csrfToken)
+	form.Set("action", "approve")
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/connect", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleConsent(w, req))
+	require.Equal(t, http.StatusSeeOther, w.Code)
+
+	loc, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(t, err)
+	code := loc.Query().Get("code")
+	require.NotEmpty(t, code)
+
+	grantCache := cache.NewTypedObjectCache[mcp.UserSessionGrant](ti.logger, ti.cacheAdapter, cache.SuffixNone)
+	grant, err := grantCache.Get(ctx, "userSessionGrant:"+toolset.UserSessionIssuerID.UUID.String()+":"+code)
+	require.NoError(t, err)
+	require.Equal(t, flowID, grant.FlowID, "flow id must propagate into the grant")
+}
+
 func TestHandleIDPCallback_ExchangesCodeAndRedirectsToConsent(t *testing.T) {
 	t.Parallel()
 
@@ -465,6 +523,74 @@ func TestHandleIDPCallback_ExchangesCodeAndRedirectsToConsent(t *testing.T) {
 	require.Contains(t, loc, "state=", "consent redirect should carry new challenge state")
 	// The state in the redirect should NOT be the original challengeID (it gets rotated)
 	require.NotContains(t, loc, challengeID, "challenge state should be rotated after IDP callback")
+}
+
+// TestHandleIDPCallback_PreservesFlowIDAcrossRotation asserts the stable
+// flow correlation id survives the deliberate cache-key (ID) rotation in
+// HandleIDPCallback. Without preservation, the private-toolset leg of a flow
+// would be uncorrelatable from the rest (AC: one flow_id reconstructs the
+// whole chain).
+func TestHandleIDPCallback_PreservesFlowIDAcrossRotation(t *testing.T) {
+	t.Parallel()
+
+	gramUserID := "user-" + uuid.New().String()[:8]
+	mock := &mockIdentityResolver{
+		exchangeResult: &identity.IDPUserInfo{
+			Sub:   "workos-user-123",
+			Email: "test@example.com",
+			Name:  "Test User",
+		},
+		upsertResult: gramUserID,
+		hasAccessResult: &sessions.Organization{
+			ID:   "org-id-placeholder",
+			Name: "Test Org",
+		},
+		hasAccessEmail: "test@example.com",
+		hasAccessOK:    true,
+	}
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
+	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+
+	flowID := "flow-" + uuid.NewString()
+	challengeID := uuid.NewString()
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
+		ID:                  challengeID,
+		FlowID:              flowID,
+		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		Endpoint: mcp.EndpointRef{
+			McpSlug:        toolset.McpSlug.String,
+			CustomDomainID: toolset.CustomDomainID,
+		},
+		ClientID:            "test-client",
+		RedirectURI:         "http://localhost:3000/callback",
+		State:               "client-state",
+		CodeChallenge:       "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+		CodeChallengeMethod: "S256",
+		CSRFToken:           "csrf-token",
+		CreatedAt:           time.Now(),
+	}))
+
+	mcpSlug := toolset.McpSlug.String
+	q := url.Values{"state": {challengeID}, "code": {"idp-auth-code-123"}}
+	req := httptest.NewRequest(http.MethodGet, "/mcp/"+mcpSlug+"/idp_callback?"+q.Encode(), nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleIDPCallback(w, req))
+	require.Equal(t, http.StatusFound, w.Code)
+
+	loc, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(t, err)
+	rotatedID := loc.Query().Get("state")
+	require.NotEmpty(t, rotatedID)
+	require.NotEqual(t, challengeID, rotatedID, "cache-key id must rotate")
+
+	rotated, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+rotatedID)
+	require.NoError(t, err)
+	require.Equal(t, flowID, rotated.FlowID, "flow id must survive the rotation")
 }
 
 // TestHandleIDPCallback_UsesBaseURLFromCachedState verifies that the

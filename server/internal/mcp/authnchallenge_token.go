@@ -141,10 +141,19 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	presentedAuthMethod string,
 	logger *slog.Logger,
 ) error {
+	// Flow-outcome dimensions. This is the authorization_code grant
+	// — the terminal leg of a user-facing OAuth flow — so every rejection
+	// below is a flow failure at the token stage, and the success path is the
+	// single point that counts a completion. The refresh_token grant handler
+	// deliberately records neither: refresh is not part of an initial flow.
+	issuerID := endpoint.UserSessionIssuerID.String()
+	mcpSlug := endpoint.Slug
+
 	req := usersessions.AuthCodeTokenRequestFromForm(r.PostForm)
 	req.SetDefaults()
 	if err := req.Validate(); err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "invalid_request")
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageToken)
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 
@@ -155,23 +164,47 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	grant, err := s.userSessionGrantCache.GetAndDelete(ctx, grantKey)
 	if err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "code_not_found_or_expired")
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageToken)
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code not found or expired")
 	}
 
+	// Grant in hand: stamp the flow id so the token leg shares the correlation
+	// key minted at /authorize and carried through the grant.
+	logger = logger.With(attr.SlogOAuthFlowID(grant.FlowID))
+
 	if grant.ClientID != clientRow.ClientID {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "code_client_mismatch")
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageToken)
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code was issued to a different client")
 	}
 	if grant.RedirectURI != req.RedirectURI {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "redirect_uri_mismatch")
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageToken)
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "redirect_uri does not match the original request")
 	}
 	if !verifyPKCES256(req.CodeVerifier, grant.CodeChallenge) {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "pkce_mismatch")
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageToken)
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code_verifier does not match code_challenge")
 	}
 
-	return s.mintSessionAndRespond(ctx, w, endpoint, clientRow, grant.Subject, baseURL, logger)
+	if err := s.mintSessionAndRespond(ctx, w, endpoint, clientRow, grant.Subject, baseURL, logger); err != nil {
+		// Almost all errors here occur before the 200 is written — issuer
+		// lookup, session_duration validation, signing, or persisting the
+		// user_sessions row — so no token reached the client and failed is
+		// correct. The lone post-commit case is a failure writing the response
+		// body after a 200 + persisted session (e.g. the client dropped the
+		// connection): we still count failed, because the client received no
+		// usable token, so the flow did not complete from its perspective.
+		// Conservatively bucketing this rare case as failed (not completed)
+		// keeps completed meaning "a token the client could actually use."
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageToken)
+		return err
+	}
+
+	s.metrics.RecordOAuthFlowCompleted(ctx, issuerID, mcpSlug)
+	logger.InfoContext(ctx, "oauth flow completed")
+	return nil
 }
 
 // handleTokenRefreshTokenGrant implements RFC 6749 §6 (and OAuth 2.1's
