@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
   workos_id TEXT, -- links to an organization in WorkOS to sync metadata like users and groups
   workos_updated_at timestamptz,
   workos_last_event_id TEXT,
-  
+
   svix_app_id TEXT, -- links to a svix consumer application for sending webhooks
   webhooks_enabled boolean,
 
@@ -1732,6 +1732,9 @@ CREATE TABLE IF NOT EXISTS directory_user_group_memberships (
 CREATE UNIQUE INDEX IF NOT EXISTS directory_user_group_memberships_current_key
 ON directory_user_group_memberships (directory_user_id, directory_group_id);
 
+CREATE INDEX IF NOT EXISTS directory_user_group_memberships_directory_group_id_idx
+ON directory_user_group_memberships (directory_group_id);
+
 -- global_roles stores environment-level WorkOS roles (e.g. "admin", "member").
 -- These are not scoped to any organization.
 CREATE TABLE IF NOT EXISTS global_roles (
@@ -2447,7 +2450,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   actor_type TEXT NOT NULL,
   actor_display_name TEXT,
   actor_slug TEXT,
-  
+
   action TEXT NOT NULL,
 
   subject_id TEXT NOT NULL,

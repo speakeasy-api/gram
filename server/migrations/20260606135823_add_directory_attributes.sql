@@ -69,3 +69,5 @@ CREATE TABLE "directory_user_group_memberships" (
 );
 -- Create index "directory_user_group_memberships_current_key" to table: "directory_user_group_memberships"
 CREATE UNIQUE INDEX "directory_user_group_memberships_current_key" ON "directory_user_group_memberships" ("directory_user_id", "directory_group_id");
+-- Create index "directory_user_group_memberships_directory_group_id_idx" to table: "directory_user_group_memberships"
+CREATE INDEX "directory_user_group_memberships_directory_group_id_idx" ON "directory_user_group_memberships" ("directory_group_id");
