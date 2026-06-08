@@ -99,8 +99,11 @@ type CreateRiskPolicyBypassRequestRequestBody struct {
 // ApproveRiskPolicyBypassRequestRequestBody is the type of the "risk" service
 // "approveRiskPolicyBypassRequest" endpoint HTTP request body.
 type ApproveRiskPolicyBypassRequestRequestBody struct {
-	// The resource ID.
+	// The bypass request ID.
 	ID string `form:"id" json:"id" xml:"id"`
+	// When true, grant this bypass to every active user in the organization
+	// instead of only the requester.
+	GrantToAllUsers *bool `form:"grant_to_all_users,omitempty" json:"grant_to_all_users,omitempty" xml:"grant_to_all_users,omitempty"`
 }
 
 // DenyRiskPolicyBypassRequestRequestBody is the type of the "risk" service
@@ -6759,7 +6762,8 @@ func NewCreateRiskPolicyBypassRequestRequestBody(p *risk.CreateRiskPolicyBypassR
 // "risk" service.
 func NewApproveRiskPolicyBypassRequestRequestBody(p *risk.ApproveRiskPolicyBypassRequestPayload) *ApproveRiskPolicyBypassRequestRequestBody {
 	body := &ApproveRiskPolicyBypassRequestRequestBody{
-		ID: p.ID,
+		ID:              p.ID,
+		GrantToAllUsers: p.GrantToAllUsers,
 	}
 	return body
 }

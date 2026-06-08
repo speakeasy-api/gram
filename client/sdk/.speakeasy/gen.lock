@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: cd9aec54276ca03f56c3cc5c9580c20c
+  docChecksum: 67275e480583126d991bdc005399aa9b
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -816,6 +816,8 @@ trackedFiles:
     last_write_checksum: sha1:3729eadfe620fd4d1c367a384ab82ea55ab8b2d3
   docs/models/components/riskpolicybypassrequest.md:
     last_write_checksum: sha1:0410a2bb27b22069c2f9736d689ab591fe3e1174
+  docs/models/components/riskpolicybypassrequestapprovalbody.md:
+    last_write_checksum: sha1:853aafb43a15ea9e0120e14f790edfd13d7c18ae
   docs/models/components/riskpolicybypassrequeststatus.md:
     last_write_checksum: sha1:7b5d61ac685a8db465d91537188bdd37d394effe
   docs/models/components/riskpolicystatus.md:
@@ -1213,7 +1215,7 @@ trackedFiles:
   docs/models/operations/addpluginserversecurity.md:
     last_write_checksum: sha1:5dc9e273ba9eab30b9edbb75fdeccd3fd4ec59ec
   docs/models/operations/approveriskpolicybypassrequestrequest.md:
-    last_write_checksum: sha1:595caeb44ee18437d66607edf3d54d9a0e5399a2
+    last_write_checksum: sha1:f3728e09c80da6a2d9ace5fe506da1b6890eafd0
   docs/models/operations/approveriskpolicybypassrequestsecurity.md:
     last_write_checksum: sha1:6af75a1ed76845f139604005c3c35ab6f13a3f07
   docs/models/operations/approveriskpolicybypassrequestsecurityoption1.md:
@@ -1517,7 +1519,7 @@ trackedFiles:
   docs/models/operations/deletecollectionsecurity.md:
     last_write_checksum: sha1:7be058c104a8fa28260afe87020b6f8e22ed08ae
   docs/models/operations/deletecustomdetectionrulerequest.md:
-    last_write_checksum: sha1:1b7b7dee35ccc7b8eede45311bacc00ae8e41004
+    last_write_checksum: sha1:ca7f92a6becaee84a6c24f835c98cfcb46b8790d
   docs/models/operations/deletecustomdetectionrulesecurity.md:
     last_write_checksum: sha1:ff7025be64bce26fd107035a6fec57a24b0a24d9
   docs/models/operations/deletecustomdetectionrulesecurityoption1.md:
@@ -1661,7 +1663,7 @@ trackedFiles:
   docs/models/operations/deleteusersessionissuersecurityoption2.md:
     last_write_checksum: sha1:0d34fc439eb3e809b8ee02be63e9add63033dc01
   docs/models/operations/denyriskpolicybypassrequestrequest.md:
-    last_write_checksum: sha1:ffcd2212a701c44255ca33c377a4229d85ae9b6f
+    last_write_checksum: sha1:b416152bc4cb99e9699640b09114a8ca471a2ce4
   docs/models/operations/denyriskpolicybypassrequestsecurity.md:
     last_write_checksum: sha1:602014d0a656980caac7142c2dc3015d1802a3e3
   docs/models/operations/denyriskpolicybypassrequestsecurityoption1.md:
@@ -2671,7 +2673,7 @@ trackedFiles:
   docs/models/operations/revokeremotesessionsecurityoption2.md:
     last_write_checksum: sha1:6a889af9ea71a41902f767b6652c34dc47160fbc
   docs/models/operations/revokeriskpolicybypassrequestrequest.md:
-    last_write_checksum: sha1:ac9ed2acb05746ab6fb43ac3764d4d804c428799
+    last_write_checksum: sha1:253c90cad8ecabb1c7441ec5570ad8f52512abd7
   docs/models/operations/revokeriskpolicybypassrequestsecurity.md:
     last_write_checksum: sha1:31caae75835992841a793a61c9dd18a393423503
   docs/models/operations/revokeriskpolicybypassrequestsecurityoption1.md:
@@ -3195,7 +3197,7 @@ trackedFiles:
   docs/sdks/policies/README.md:
     last_write_checksum: sha1:cdd3f7dc142798bd13cfe0fb5c109301a47c5e16
   docs/sdks/policybypassrequests/README.md:
-    last_write_checksum: sha1:b3288c13bf6c678f3577bad60691a5ba5d90deb5
+    last_write_checksum: sha1:fe0d25f09f76ec5f25adcc20982d278c867576ea
   docs/sdks/projects/README.md:
     last_write_checksum: sha1:69eaa9d9ecba768b0e979a00aa5e77ebe1a4e23b
   docs/sdks/remotemcp/README.md:
@@ -3707,7 +3709,7 @@ trackedFiles:
   src/funcs/riskPoliciesUpdate.ts:
     last_write_checksum: sha1:a837a34d87bcdc48af1ae9b78862c425fedf3bc2
   src/funcs/riskPolicyBypassRequestsApprove.ts:
-    last_write_checksum: sha1:d67e5775676ff5544e1dbaaadecc6e33e96750a1
+    last_write_checksum: sha1:1ae8bca70b821834be97b194ae2ef0cd52722771
   src/funcs/riskPolicyBypassRequestsCreate.ts:
     last_write_checksum: sha1:52e497f82fe5040b125622b39ad7850350c7c297
   src/funcs/riskPolicyBypassRequestsDeny.ts:
@@ -4209,7 +4211,7 @@ trackedFiles:
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:eb0b5ac6752c73ee1169361f9e6e025cc5a3c76d
+    last_write_checksum: sha1:7fa9c0586899f41b6b0ffa5cf13bbde813153869
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     last_write_checksum: sha1:549d388111333748195b4791e63fd64f4a6e7140
@@ -4554,6 +4556,8 @@ trackedFiles:
     last_write_checksum: sha1:068fb5118d6436ea1ccb09d9567648204ba2c4bd
   src/models/components/riskpolicybypassrequest.ts:
     last_write_checksum: sha1:2122c00738588a12062d99b729d63b1717829575
+  src/models/components/riskpolicybypassrequestapprovalbody.ts:
+    last_write_checksum: sha1:2a55fbd3e0f3d55536a91691933599087e54cb4a
   src/models/components/riskpolicystatus.ts:
     last_write_checksum: sha1:478a39101a4d8c9d51b31417839ef68b5b727e77
   src/models/components/riskresult.ts:
@@ -4849,7 +4853,7 @@ trackedFiles:
   src/models/operations/addpluginserver.ts:
     last_write_checksum: sha1:8ce67b498b8440173396ead76686e6ea2aeb6223
   src/models/operations/approveriskpolicybypassrequest.ts:
-    last_write_checksum: sha1:9592f543650273e2be3c34534ccf7b2ceaab2762
+    last_write_checksum: sha1:4e6a82f8bf585564025709bb39199afd91774d13
   src/models/operations/approveshadowmcp.ts:
     last_write_checksum: sha1:77064ec7391c7ca3366e5cb8d3bef6d67dcd2c32
   src/models/operations/approveshadowmcpapprovalrequest.ts:

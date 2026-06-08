@@ -13,7 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/risk"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestCreateApproveAndRevokePolicyBypassRequest_AddsAndRemovesServerURLGrant(t *testing.T) {
@@ -103,6 +102,47 @@ func TestCreateApproveAndRevokePolicyBypassRequest_AddsAndRemovesServerURLGrant(
 	revokeRecord, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionRiskPolicyBypassRequestRevoke)
 	require.NoError(t, err)
 	assert.Equal(t, policy.Name, revokeRecord.SubjectDisplay)
+}
+
+func TestApprovePolicyBypassRequest_CanGrantAllOrganizationUsers(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name: new("Policy Bypass All Users"),
+	})
+	require.NoError(t, err)
+
+	fullURL := "https://mcp.example.com/all-users"
+	token := riskPolicyBypassRequestToken(t, authCtx, policy.ID, fullURL)
+	request, err := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
+		RequestToken: token,
+	})
+	require.NoError(t, err)
+
+	grantToAllUsers := true
+	approved, err := ti.service.ApproveRiskPolicyBypassRequest(ctx, &gen.ApproveRiskPolicyBypassRequestPayload{
+		ID:              request.ID,
+		GrantToAllUsers: &grantToAllUsers,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "approved", approved.Status)
+	require.Equal(t, []string{authz.AllUsersPrincipal().String()}, approved.GrantedPrincipalUrns)
+	assert.True(t, userHasRiskPolicyBypassGrant(t, ti, authCtx.ActiveOrganizationID, authCtx.UserID, policy.ID, fullURL))
+
+	revoked, err := ti.service.RevokeRiskPolicyBypassRequest(ctx, &gen.RevokeRiskPolicyBypassRequestPayload{
+		ID: request.ID,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "revoked", revoked.Status)
+	assert.Empty(t, revoked.GrantedPrincipalUrns)
+	assert.False(t, userHasRiskPolicyBypassGrant(t, ti, authCtx.ActiveOrganizationID, authCtx.UserID, policy.ID, fullURL))
 }
 
 func TestCreatePolicyBypassRequest_AfterDeny_ResetsExistingRequestToRequested(t *testing.T) {
@@ -245,9 +285,10 @@ func riskPolicyBypassRequestToken(t *testing.T, authCtx *contextvalues.AuthConte
 func userHasRiskPolicyBypassGrant(t *testing.T, ti *testInstance, organizationID, userID, policyID, serverURL string) bool {
 	t.Helper()
 
-	grants, err := authz.LoadGrants(t.Context(), ti.conn, organizationID, []urn.Principal{
-		urn.NewPrincipal(urn.PrincipalTypeUser, userID),
-	})
+	principals, err := authz.ResolveUserPrincipals(t.Context(), ti.conn, organizationID, userID)
+	require.NoError(t, err)
+
+	grants, err := authz.LoadGrants(t.Context(), ti.conn, organizationID, principals)
 	require.NoError(t, err)
 
 	for _, grant := range grants {

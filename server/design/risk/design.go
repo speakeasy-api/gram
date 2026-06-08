@@ -660,6 +660,7 @@ var _ = Service("risk", func() {
 			Attribute("id", String, "The bypass request ID.", func() {
 				Format(FormatUUID)
 			})
+			Attribute("grant_to_all_users", Boolean, "When true, grant this bypass to every active user in the organization instead of only the requester.")
 			Required("id")
 		})
 
@@ -670,7 +671,7 @@ var _ = Service("risk", func() {
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
-			Body(RiskIDRequestBody)
+			Body(RiskPolicyBypassRequestApprovalBody)
 			Response(StatusOK)
 		})
 
@@ -1191,6 +1192,16 @@ var RiskIDRequestBody = Type("RiskIDRequestBody", func() {
 	Attribute("id", String, "The resource ID.", func() {
 		Format(FormatUUID)
 	})
+	Required("id")
+})
+
+var RiskPolicyBypassRequestApprovalBody = Type("RiskPolicyBypassRequestApprovalBody", func() {
+	Meta("openapi:typename", "RiskPolicyBypassRequestApprovalBody")
+
+	Attribute("id", String, "The bypass request ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("grant_to_all_users", Boolean, "When true, grant this bypass to every active user in the organization instead of only the requester.")
 	Required("id")
 })
 

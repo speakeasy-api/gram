@@ -320,6 +320,7 @@ export * from "./riskoverviewtimeseriesfinding.js";
 export * from "./riskoverviewuser.js";
 export * from "./riskpolicy.js";
 export * from "./riskpolicybypassrequest.js";
+export * from "./riskpolicybypassrequestapprovalbody.js";
 export * from "./riskpolicystatus.js";
 export * from "./riskresult.js";
 export * from "./riskresultredacted.js";
