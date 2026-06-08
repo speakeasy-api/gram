@@ -55,7 +55,7 @@ export function OverviewTab({
   isLoadingEndpoints,
   onShowEndpoints,
   onShowAuthentication,
-}: OverviewTabProps) {
+}: OverviewTabProps): JSX.Element {
   // The parent redirects on error, so an undefined `mcpServer` here always means
   // the top-level fetch is still in flight; show skeletons in place until then.
   return (
@@ -493,14 +493,14 @@ function SourceOverviewRow({ source }: { source: SourceOverview }) {
     source.ready && remoteMcpServer ? (
       <Button
         variant="secondary"
-        onClick={() =>
-          navigate(
+        onClick={() => {
+          void navigate(
             routes.sources.source.href(
               "remotemcp",
               remoteMcpRouteParam(remoteMcpServer),
             ),
-          )
-        }
+          );
+        }}
       >
         <Button.Text>View source</Button.Text>
         <Button.RightIcon>
@@ -542,7 +542,9 @@ function ToolsOverviewRow({ toolsetId }: { toolsetId: string | undefined }) {
   const actions = toolset ? (
     <Button
       variant="secondary"
-      onClick={() => navigate(routes.mcp.details.href(toolset.slug))}
+      onClick={() => {
+        void navigate(routes.mcp.details.href(toolset.slug));
+      }}
     >
       <Button.Text>View tools</Button.Text>
       <Button.RightIcon>
