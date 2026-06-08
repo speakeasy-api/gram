@@ -10,7 +10,7 @@ export function VerifyRemoteMcpUrlButton({
   state: VerifyRemoteMcpUrlState;
   url: string;
   disabled?: boolean;
-}) {
+}): JSX.Element {
   const buttonDisabled = disabled || state.isPending || !url.trim();
 
   return (
@@ -45,7 +45,7 @@ export function VerifyRemoteMcpUrlAlert({
   state,
 }: {
   state: VerifyRemoteMcpUrlState;
-}) {
+}): JSX.Element | null {
   if (!state.result) return null;
   return (
     <Alert

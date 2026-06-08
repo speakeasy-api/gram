@@ -17,7 +17,9 @@ interface SwitchOrgProps {
   gate?: boolean;
 }
 
-export default function SwitchOrg({ gate = false }: SwitchOrgProps) {
+export default function SwitchOrg({
+  gate = false,
+}: SwitchOrgProps): JSX.Element {
   const client = useSdkClient();
   const { session } = useSessionData();
 
@@ -53,7 +55,7 @@ export default function SwitchOrg({ gate = false }: SwitchOrgProps) {
         topRight={
           gate ? (
             <button
-              onClick={handleLogout}
+              onClick={() => void handleLogout()}
               className="flex items-center gap-1.5 text-xs text-[#8B8684] transition-colors hover:text-slate-600"
             >
               <LogOutIcon className="h-3.5 w-3.5" />
@@ -109,7 +111,7 @@ export default function SwitchOrg({ gate = false }: SwitchOrgProps) {
           <Button
             variant="brand"
             className="w-full"
-            onClick={handleSwitch}
+            onClick={() => void handleSwitch()}
             disabled={
               !selectedOrgId ||
               selectedOrgId === session?.activeOrganizationId ||

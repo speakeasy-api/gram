@@ -74,7 +74,7 @@ export const PromptInput = ({
   onSubmit,
   children,
   ...props
-}: PromptInputProps) => {
+}: PromptInputProps): JSX.Element => {
   // Try to use a provider controller if present
   const controller = useOptionalPromptInputController();
   const usingProvider = !!controller;
@@ -334,7 +334,7 @@ export const PromptInput = ({
     }
 
     // Convert blob URLs to data URLs asynchronously
-    Promise.all(
+    void Promise.all(
       files.map(async ({ id, ...item }) => {
         if (item.url && item.url.startsWith("blob:")) {
           return {
@@ -411,7 +411,7 @@ export type PromptInputBodyProps = HTMLAttributes<HTMLDivElement>;
 export const PromptInputBody = ({
   className,
   ...props
-}: PromptInputBodyProps) => (
+}: PromptInputBodyProps): JSX.Element => (
   <div className={cn("contents", className)} {...props} />
 );
 
@@ -424,7 +424,7 @@ export const PromptInputTextarea = ({
   className,
   placeholder = "What would you like to know?",
   ...props
-}: PromptInputTextareaProps) => {
+}: PromptInputTextareaProps): JSX.Element => {
   const controller = useOptionalPromptInputController();
   const attachments = usePromptInputAttachments();
   const [isComposing, setIsComposing] = useState(false);
@@ -526,7 +526,7 @@ export type PromptInputFooterProps = Omit<
 export const PromptInputFooter = ({
   className,
   ...props
-}: PromptInputFooterProps) => (
+}: PromptInputFooterProps): JSX.Element => (
   <InputGroupAddon
     align="block-end"
     className={cn("justify-between gap-1 p-3", className)}
@@ -539,7 +539,7 @@ export type PromptInputToolsProps = HTMLAttributes<HTMLDivElement>;
 export const PromptInputTools = ({
   className,
   ...props
-}: PromptInputToolsProps) => (
+}: PromptInputToolsProps): JSX.Element => (
   <div className={cn("flex items-center gap-1", className)} {...props} />
 );
 
@@ -557,7 +557,7 @@ export const PromptInputSubmit = ({
   status,
   children,
   ...props
-}: PromptInputSubmitProps) => {
+}: PromptInputSubmitProps): JSX.Element => {
   let Icon = <ArrowUpIcon className="size-3.5" />;
 
   if (status === "submitted") {

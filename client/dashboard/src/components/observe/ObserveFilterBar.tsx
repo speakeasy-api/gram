@@ -73,7 +73,7 @@ export function ObserveFilterBar({
   projectSlug?: string;
   className?: string;
   serverNameMappings?: ReturnType<typeof useServerNameMappings>;
-}) {
+}): JSX.Element {
   const selectedServers = useMemo(
     () =>
       activeFilters
@@ -168,7 +168,7 @@ export function MCPServerFilter({
   toolsets: Array<{ slug: string; name: string }>;
   isLoading?: boolean;
   disabled?: boolean;
-}) {
+}): JSX.Element {
   const [open, setOpen] = useState(false);
 
   const selectedToolset = toolsets.find((t) => t.slug === selectedServer);

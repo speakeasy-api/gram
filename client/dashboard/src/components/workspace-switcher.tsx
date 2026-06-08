@@ -15,7 +15,7 @@ import {
 } from "./ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 
-export function WorkspaceSwitcher() {
+export function WorkspaceSwitcher(): JSX.Element {
   const organization = useOrganization();
   const project = useProject();
   const { projectSlug } = useSlugs();

@@ -42,6 +42,7 @@ function getSeverityVariant(
     case "ERROR":
     case "FATAL":
       return "destructive";
+    case undefined:
     default:
       return "secondary";
   }
@@ -80,7 +81,7 @@ export function PlaygroundLogsPanel({
   chatId: _chatId,
   toolsetSlug,
   onClose,
-}: PlaygroundLogsPanelProps) {
+}: PlaygroundLogsPanelProps): JSX.Element {
   const [selectedLog, setSelectedLog] = useState<TelemetryLogRecord | null>(
     null,
   );
@@ -138,7 +139,9 @@ export function PlaygroundLogsPanel({
           <Button
             size="sm"
             variant="ghost"
-            onClick={() => fetchLogs()}
+            onClick={() => {
+              void fetchLogs();
+            }}
             disabled={isPending}
             className="h-7 w-7 p-0"
           >

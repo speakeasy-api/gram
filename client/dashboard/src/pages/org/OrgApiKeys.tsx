@@ -22,7 +22,7 @@ import { CheckCircle2, Copy } from "lucide-react";
 import { useMemo, useState } from "react";
 import { RequireScope } from "@/components/require-scope";
 
-export default function OrgApiKeys() {
+export default function OrgApiKeys(): JSX.Element {
   // We need an outer component wrapping the inner as the key fetching request
   // will return a forbidden error if the user does not have the org:admin scope
   return (
@@ -263,7 +263,7 @@ function OrgApiKeysInner() {
                 <Button
                   variant="tertiary"
                   size="sm"
-                  onClick={handleCopyToken}
+                  onClick={() => void handleCopyToken()}
                   className="shrink-0"
                 >
                   {isCopied ? (
@@ -355,7 +355,9 @@ function OrgApiKeysInner() {
 
       <Dialog
         open={!!keyToRevoke}
-        onOpenChange={(open) => !open && setKeyToRevoke(null)}
+        onOpenChange={(open) => {
+          void (!open && setKeyToRevoke(null));
+        }}
       >
         <Dialog.Content>
           <Dialog.Header>

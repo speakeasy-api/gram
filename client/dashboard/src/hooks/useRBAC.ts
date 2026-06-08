@@ -48,7 +48,7 @@ export function selectorMatches(
  * When RBAC is disabled via feature flag (and no dev override is active),
  * every scope check returns `true` so existing behaviour is preserved.
  */
-export function useRBAC() {
+function useRBACImpl() {
   const telemetry = useTelemetry();
   const isAdmin = useIsAdmin();
   const productTier = useProductTier();
@@ -190,4 +190,8 @@ export function useRBAC() {
       error,
     ],
   );
+}
+
+export function useRBAC(): ReturnType<typeof useRBACImpl> {
+  return useRBACImpl();
 }

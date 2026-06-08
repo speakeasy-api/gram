@@ -8,7 +8,7 @@ export function ViewToggle({
 }: {
   value: ViewMode;
   onChange: (value: ViewMode) => void;
-}) {
+}): JSX.Element {
   return (
     <ToggleGroup
       type="single"

@@ -62,7 +62,7 @@ const TAB_TRIGGER_CLASS = cn(
   "data-[state=active]:after:bg-primary after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-transparent",
 );
 
-export function BuiltInMCPDetailPage() {
+export function BuiltInMCPDetailPage(): JSX.Element {
   const { orgSlug } = useSlugs();
   const [activeTab, setActiveTab] = useState("overview");
 
@@ -95,7 +95,7 @@ export function BuiltInMCPDetailPage() {
                   variant="tertiary"
                   size="sm"
                   onClick={() => {
-                    navigator.clipboard.writeText(mcpUrl);
+                    void navigator.clipboard.writeText(mcpUrl);
                     toast.success("URL copied to clipboard");
                   }}
                   className="text-muted-foreground hover:text-foreground shrink-0"

@@ -11,7 +11,7 @@ export function PortalContainerProvider({
 }: {
   containerRef: RefObject<HTMLElement | null>;
   children: React.ReactNode;
-}) {
+}): React.JSX.Element {
   return (
     <PortalContainerContext.Provider value={containerRef}>
       {children}

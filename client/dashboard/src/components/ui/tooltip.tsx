@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 function TooltipProvider({
   delayDuration = 0,
   ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Provider>) {
+}: React.ComponentProps<typeof TooltipPrimitive.Provider>): React.JSX.Element {
   return (
     <TooltipPrimitive.Provider
       data-slot="tooltip-provider"
@@ -18,13 +18,13 @@ function TooltipProvider({
 
 function Tooltip({
   ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Root>) {
+}: React.ComponentProps<typeof TooltipPrimitive.Root>): React.JSX.Element {
   return <TooltipPrimitive.Root data-slot="tooltip" {...props} />;
 }
 
 function TooltipTrigger({
   ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Trigger>) {
+}: React.ComponentProps<typeof TooltipPrimitive.Trigger>): React.JSX.Element {
   return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />;
 }
 
@@ -36,7 +36,7 @@ function TooltipContent({
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Content> & {
   inverted?: boolean;
-}) {
+}): React.JSX.Element {
   return (
     <TooltipPrimitive.Portal container={document.body}>
       <TooltipPrimitive.Content
@@ -65,7 +65,7 @@ function SimpleTooltip({
 }: {
   tooltip: string;
   children: React.ReactNode;
-}) {
+}): React.JSX.Element {
   return (
     <Tooltip>
       <TooltipTrigger asChild>{children}</TooltipTrigger>

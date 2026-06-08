@@ -65,7 +65,14 @@ const VALID_UPDATED_RANGES: readonly UpdatedRange[] = [
  * - updated: "any" | "week" | "month" | "year"
  * - minTools: number
  */
-export function useFilterState() {
+export interface UseFilterStateReturn extends FilterState {
+  setCategory: (category: Category) => void;
+  setSort: (sort: SortOption) => void;
+  setFilters: (filters: FilterValues) => void;
+  clearFilters: () => void;
+}
+
+export function useFilterState(): UseFilterStateReturn {
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Parse current filter state from URL

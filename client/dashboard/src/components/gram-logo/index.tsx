@@ -9,7 +9,7 @@ export const GramLogo = ({
 }: {
   variant?: "horizontal" | "vertical" | "icon";
   className?: string;
-}) => {
+}): JSX.Element => {
   const variantsMap = {
     horizontal: GramLogoHorizontal,
     vertical: GramLogoVertical,

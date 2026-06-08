@@ -11,7 +11,7 @@ export function InputField({
   hint,
   error,
   ...props
-}: InputFieldProps) {
+}: InputFieldProps): React.JSX.Element {
   return (
     <AnyField
       id={id}

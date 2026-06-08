@@ -34,7 +34,7 @@ import {
 import { useEffect, useState } from "react";
 import { RequireScope } from "@/components/require-scope";
 
-export default function OrgDomains() {
+export default function OrgDomains(): JSX.Element {
   return (
     <Page>
       <Page.Header>
@@ -56,7 +56,7 @@ function validateIPEntry(entry: string): string {
   // CIDR notation
   const cidrRegex = /^(\d{1,3}\.){3}\d{1,3}\/(\d|[1-2]\d|3[0-2])$/;
   if (cidrRegex.test(trimmed)) {
-    const octets = trimmed.split("/")[0].split(".").map(Number);
+    const octets = trimmed.split("/")[0]!.split(".").map(Number);
     if (octets.every((o) => o >= 0 && o <= 255)) return "";
     return "Octet out of range (0–255)";
   }
@@ -235,7 +235,7 @@ function OrgDomainsInner() {
       setPendingIPs([]);
       setIsAllowlistExpanded(false);
       setTimeout(() => {
-        domainRefetch();
+        void domainRefetch();
       }, 2000);
     },
     onError: (error) => {
@@ -305,7 +305,7 @@ function OrgDomainsInner() {
   useEffect(() => {
     if (!domain?.isUpdating) return;
     const interval = setInterval(() => {
-      domainRefetch();
+      void domainRefetch();
     }, 30000);
     return () => clearInterval(interval);
   }, [domain?.isUpdating, domainRefetch]);
@@ -574,7 +574,7 @@ function OrgDomainsInner() {
                 <Button
                   variant="tertiary"
                   size="sm"
-                  onClick={handleCopyCname}
+                  onClick={() => void handleCopyCname()}
                   className="shrink-0"
                 >
                   {isCnameCopied ? (
@@ -602,7 +602,7 @@ function OrgDomainsInner() {
                 <Button
                   variant="tertiary"
                   size="sm"
-                  onClick={handleCopyTxt}
+                  onClick={() => void handleCopyTxt()}
                   className="shrink-0"
                 >
                   {isTxtCopied ? (

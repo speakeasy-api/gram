@@ -657,7 +657,7 @@ function ToolRow({
             >
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={isUpdating}>
+            <Button onClick={() => void handleSave()} disabled={isUpdating}>
               Save
             </Button>
           </Dialog.Footer>
@@ -761,7 +761,7 @@ export function ToolList({
   selectedUrns = [],
   onSelectionChange,
   onToolClick,
-}: ToolListProps) {
+}: ToolListProps): JSX.Element {
   const { data: deployment } = useLatestDeployment();
 
   const documentIdToName = useMemo(() => {
@@ -1038,10 +1038,14 @@ export function ToolList({
       const next = new Set(selectedUrns);
       if (allSelected) {
         // Deselect all in group
-        groupToolIds.forEach((id) => next.delete(id));
+        groupToolIds.forEach((id) => {
+          void next.delete(id);
+        });
       } else {
         // Select all in group
-        groupToolIds.forEach((id) => next.add(id));
+        groupToolIds.forEach((id) => {
+          void next.add(id);
+        });
       }
       onSelectionChange(Array.from(next));
     } else {
@@ -1050,10 +1054,14 @@ export function ToolList({
         const next = new Set(prev);
         if (allSelected) {
           // Deselect all in group
-          groupToolIds.forEach((id) => next.delete(id));
+          groupToolIds.forEach((id) => {
+            void next.delete(id);
+          });
         } else {
           // Select all in group
-          groupToolIds.forEach((id) => next.add(id));
+          groupToolIds.forEach((id) => {
+            void next.add(id);
+          });
         }
         return next;
       });

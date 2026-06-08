@@ -59,7 +59,9 @@ function ScopeGatedTopLevelItem({
   );
 }
 
-export function OrgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+export function OrgSidebar({
+  ...props
+}: React.ComponentProps<typeof Sidebar>): React.JSX.Element {
   const orgRoutes = useOrgRoutes();
   const isAdmin = useIsAdmin();
   const { isRbacEnabled, isLoading: rbacLoading } = useRBAC();

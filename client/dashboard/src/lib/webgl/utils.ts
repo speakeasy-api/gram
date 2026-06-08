@@ -1,1 +1,1 @@
-export const glsl = (x: TemplateStringsArray) => x[0]!;
+export const glsl = (x: TemplateStringsArray): string => x[0]!;

@@ -1,7 +1,7 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
-export function cn(...inputs: ClassValue[]) {
+export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));
 }
 
@@ -28,7 +28,7 @@ export function buildLoginRedirectURL(redirectTo: string | null): string {
   return href;
 }
 
-export function capitalize(str: string) {
+export function capitalize(str: string): string {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
@@ -38,7 +38,7 @@ export function capitalize(str: string) {
  * of a route path — not for dynamic slug params like toolset or user
  * identifiers, which should keep their original casing.
  */
-export function titleCaseSlug(slug: string) {
+export function titleCaseSlug(slug: string): string {
   return slug.split("-").filter(Boolean).map(capitalize).join(" ");
 }
 

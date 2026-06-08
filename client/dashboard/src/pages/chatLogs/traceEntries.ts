@@ -157,7 +157,7 @@ export function getVisibleMessages({
   enabledEntryTypes: FilterableTraceEntryType[];
   riskOnly: boolean;
   riskResultsByMessage: ReadonlyMap<string, readonly unknown[]>;
-}) {
+}): ChatMessage[] {
   return messages.filter((message) =>
     isMessageVisibleWithRisk({
       message,
@@ -171,7 +171,7 @@ export function getVisibleMessages({
 export function getRiskEntryCount(
   messages: ChatMessage[],
   riskResultsByMessage: ReadonlyMap<string, readonly unknown[]>,
-) {
+): number {
   return messages.filter((message) =>
     messageHasRiskResults(message, riskResultsByMessage),
   ).length;

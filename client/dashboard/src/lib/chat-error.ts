@@ -43,7 +43,7 @@ export const extractStreamError = (event: {
         return parsedBody.message;
       }
     } catch (e) {
-      console.error(`Error parsing model error: ${e}`);
+      console.error(`Error parsing model error: ${String(e)}`);
     }
     return undefined;
   }

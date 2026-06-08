@@ -23,7 +23,10 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
 /**
  * Sort dropdown for ordering server listings.
  */
-export function SortDropdown({ value, onChange }: SortDropdownProps) {
+export function SortDropdown({
+  value,
+  onChange,
+}: SortDropdownProps): JSX.Element {
   return (
     <Select value={value} onValueChange={(v) => onChange(v as SortOption)}>
       <SelectTrigger className="bg-background !h-10 w-[164px]">

@@ -80,7 +80,7 @@ export function ShareButton({
   size = "sm",
   className,
   children,
-}: ShareButtonProps) {
+}: ShareButtonProps): React.JSX.Element {
   const { threadId } = useThreadId();
 
   const handleShare = useCallback(async () => {
@@ -118,7 +118,9 @@ export function ShareButton({
         <Button
           variant={variant}
           size={size}
-          onClick={handleShare}
+          onClick={() => {
+            void handleShare();
+          }}
           disabled={!threadId}
           className={cn("aui-share-button", className)}
           aria-label="Share chat"

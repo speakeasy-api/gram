@@ -65,7 +65,7 @@ function buildActiveFilters(searchParams: URLSearchParams): FilterChip[] {
   ].filter((filter): filter is FilterChip => filter !== null);
 }
 
-export function useObserveFilters() {
+function useObserveFiltersImpl() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const activeFilters = useMemo(
@@ -342,4 +342,8 @@ export function useObserveFilters() {
     handleRoleSelectionChange,
     roleFilterPending,
   };
+}
+
+export function useObserveFilters(): ReturnType<typeof useObserveFiltersImpl> {
+  return useObserveFiltersImpl();
 }

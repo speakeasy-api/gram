@@ -82,7 +82,11 @@ function ModeCard({
   );
 }
 
-export function MCPPerformanceTab({ toolset }: { toolset: Toolset }) {
+export function MCPPerformanceTab({
+  toolset,
+}: {
+  toolset: Toolset;
+}): JSX.Element {
   const { hasScope } = useRBAC();
   const canWrite = hasScope("mcp:write");
   const queryClient = useQueryClient();
@@ -90,7 +94,7 @@ export function MCPPerformanceTab({ toolset }: { toolset: Toolset }) {
 
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => {
-      invalidateAllToolset(queryClient);
+      void invalidateAllToolset(queryClient);
       toast.success("Tool selection mode updated");
       telemetry.capture("mcp_event", {
         action: "tool_selection_mode_changed",

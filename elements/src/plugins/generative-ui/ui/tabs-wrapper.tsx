@@ -21,7 +21,7 @@ export function TabsWrapper({
   defaultValue,
   tabs,
   children,
-}: TabsWrapperProps) {
+}: TabsWrapperProps): React.JSX.Element {
   const defaultTab = defaultValue ?? tabs[0]?.value;
 
   return (
@@ -46,6 +46,9 @@ export interface TabContentWrapperProps {
 /**
  * TabContent wrapper - passes through to TabsContent.
  */
-export function TabContentWrapper({ value, children }: TabContentWrapperProps) {
+export function TabContentWrapper({
+  value,
+  children,
+}: TabContentWrapperProps): React.JSX.Element {
   return <TabsContentPrimitive value={value}>{children}</TabsContentPrimitive>;
 }

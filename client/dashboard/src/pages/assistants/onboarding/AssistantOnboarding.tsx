@@ -25,7 +25,7 @@ import {
 } from "./systemPrompt";
 import { useOnboardingTools } from "./tools/useOnboardingTools";
 
-export function NewAssistantOnboarding() {
+export function NewAssistantOnboarding(): JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialId = searchParams.get("id");
 
@@ -53,7 +53,7 @@ export function NewAssistantOnboarding() {
   );
 }
 
-export function EditAssistantOnboarding() {
+export function EditAssistantOnboarding(): JSX.Element {
   const { assistantId = "" } = useParams();
   return (
     <AssistantDraftProvider initialAssistantId={assistantId}>

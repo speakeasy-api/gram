@@ -5,7 +5,7 @@ import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useOrgRoutes } from "@/routes";
 import { Users } from "lucide-react";
 
-export function MembersTab() {
+export function MembersTab(): JSX.Element {
   const orgRoutes = useOrgRoutes();
   const { data: membersData } = useMembers();
   const memberCount = membersData?.members?.length ?? 0;

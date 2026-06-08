@@ -25,7 +25,7 @@ export function ServerTableRow({
   externalMcps,
   isSelected,
   onToggleSelect,
-}: ServerTableRowProps) {
+}: ServerTableRowProps): JSX.Element {
   const metadata = useMemo(() => parseServerMetadata(server), [server]);
   const displayName = server.title ?? server.registrySpecifier;
 
@@ -35,8 +35,7 @@ export function ServerTableRow({
   const isAdded = !!existingMcp;
 
   const toolNames = useMemo(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const tools = (server.tools ?? []) as any[];
+    const tools = server.tools ?? [];
     return tools.map((t) => t.name || "Unknown tool");
   }, [server.tools]);
 

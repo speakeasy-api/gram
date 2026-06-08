@@ -37,7 +37,7 @@ function validateRemoteMcpUrl(value: string): string | null {
   return null;
 }
 
-export default function CreateRemoteMcp() {
+export default function CreateRemoteMcp(): JSX.Element {
   return (
     <Page>
       <Page.Header>
@@ -108,7 +108,12 @@ function CreateRemoteMcpForm() {
         </Type>
       </Stack>
 
-      <form onSubmit={handleSubmit} noValidate>
+      <form
+        onSubmit={(e) => {
+          void handleSubmit(e);
+        }}
+        noValidate
+      >
         <Stack gap={4}>
           <Stack gap={1}>
             <label

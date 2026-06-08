@@ -23,7 +23,7 @@ export function CategoryLabel({
 }: {
   source?: string;
   ruleId?: string;
-}) {
+}): JSX.Element {
   const category = getCategoryForFinding(source, ruleId);
   const meta = category
     ? RULE_CATEGORY_META[category]
@@ -44,7 +44,12 @@ export function CategoryLabel({
 // hasn't seen this rule before. The backend may roll out new gitleaks,
 // presidio, or prompt_injection rules independently of the dashboard, so
 // every snake_case id needs to display legibly without a code change.
-export function RuleLabel({ ruleId }: { source?: string; ruleId?: string }) {
+export function RuleLabel({
+  ruleId,
+}: {
+  source?: string;
+  ruleId?: string;
+}): JSX.Element {
   const label = ruleId ? getRuleTitleFallback(ruleId) : "-";
   return (
     <span className="font-mono text-xs" title={ruleId}>
@@ -53,7 +58,11 @@ export function RuleLabel({ ruleId }: { source?: string; ruleId?: string }) {
   );
 }
 
-export function RevealAllProvider({ children }: { children: ReactNode }) {
+export function RevealAllProvider({
+  children,
+}: {
+  children: ReactNode;
+}): JSX.Element {
   const [revealAll, setRevealAllState] = useState(false);
   const [generation, setGeneration] = useState(0);
   const setRevealAll = useCallback((next: boolean) => {
@@ -71,7 +80,11 @@ export function RevealAllProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function RevealAllToggle({ className }: { className?: string }) {
+export function RevealAllToggle({
+  className,
+}: {
+  className?: string;
+}): JSX.Element | null {
   const ctx = useRevealAll();
   if (!ctx) return null;
   const { revealAll, setRevealAll } = ctx;
@@ -96,7 +109,11 @@ export function RevealAllToggle({ className }: { className?: string }) {
   );
 }
 
-export function MaskedMatch({ value }: { value: string | undefined }) {
+export function MaskedMatch({
+  value,
+}: {
+  value: string | undefined;
+}): JSX.Element {
   const ctx = useRevealAll();
   const generation = ctx?.generation;
   const revealAll = ctx?.revealAll ?? false;

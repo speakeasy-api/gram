@@ -50,7 +50,7 @@ function blankRow(): EditableHeader {
   };
 }
 
-export function OtelForwardingSection() {
+export function OtelForwardingSection(): JSX.Element {
   const { data, isLoading } = useOtelForwardingConfig();
   const queryClient = useQueryClient();
   const { mutate: upsert, status: upsertStatus } =

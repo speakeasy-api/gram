@@ -44,7 +44,7 @@ export function AddVariableSheet({
   availableEnvVarsFromAttached,
   onAddVariables,
   onLoadFromEnvironment,
-}: AddVariableSheetProps) {
+}: AddVariableSheetProps): JSX.Element {
   const emptyEntry = { key: "", value: "" };
   const [entries, setEntries] = useState([{ ...emptyEntry }]);
 

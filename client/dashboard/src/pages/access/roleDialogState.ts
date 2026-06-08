@@ -135,7 +135,7 @@ export function computeRuleLabel(
 
   const tools = selectors.filter((s) => s.tool);
   if (tools.length > 0) {
-    if (tools.length === 1) return tools[0].tool!;
+    if (tools.length === 1) return tools[0]!.tool!;
     return `${tools.length} tools`;
   }
 
@@ -143,7 +143,7 @@ export function computeRuleLabel(
   if (projectSels.length > 0) {
     if (projectSels.length === 1) {
       const name = projects.find(
-        (p) => p.id === projectSels[0].projectId,
+        (p) => p.id === projectSels[0]!.projectId!,
       )?.name;
       return name ? `Project: ${name}` : "1 project";
     }
@@ -180,7 +180,7 @@ export function computeRuleTooltip(
 
   const tools = selectors.filter((s) => s.tool);
   if (tools.length > 0) {
-    if (tools.length === 1) return `${verb} access to ${tools[0].tool}`;
+    if (tools.length === 1) return `${verb} access to ${tools[0]!.tool!}`;
     return `${verb} access to ${tools.length} tools`;
   }
 
@@ -188,7 +188,7 @@ export function computeRuleTooltip(
   if (projectSels.length > 0) {
     if (projectSels.length === 1) {
       const name = projects.find(
-        (p) => p.id === projectSels[0].projectId,
+        (p) => p.id === projectSels[0]!.projectId!,
       )?.name;
       return name
         ? `${verb} access to all servers in ${name}`

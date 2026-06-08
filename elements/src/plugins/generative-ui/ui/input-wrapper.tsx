@@ -20,7 +20,7 @@ export function InputWrapper({
   placeholder,
   type = "text",
   valuePath,
-}: InputWrapperProps) {
+}: InputWrapperProps): React.JSX.Element {
   const id = React.useId();
 
   return (

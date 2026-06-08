@@ -90,7 +90,7 @@ export class ErrorBoundary extends Component<
     this.props.onError?.(error, errorInfo);
   }
 
-  handleRetry = () => {
+  handleRetry = (): void => {
     // Increment resetKey to force remount of children, reinitializing the chat
     this.setState((state) => ({
       hasError: false,

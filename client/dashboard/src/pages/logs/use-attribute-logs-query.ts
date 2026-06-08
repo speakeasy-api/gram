@@ -213,7 +213,7 @@ function toSdkFilters(filters: ActiveLogFilter[]): LogFilter[] {
  * Hook that fetches logs via searchLogs with attribute filters and
  * returns data shaped like the searchToolCalls query for transparent swapping.
  */
-export function useAttributeLogsQuery({
+function useAttributeLogsQueryImpl({
   logFilters,
   extraFilters = [],
   gramUrn,
@@ -266,4 +266,10 @@ export function useAttributeLogsQuery({
     enabled,
     throwOnError: false,
   });
+}
+
+export function useAttributeLogsQuery(
+  args: Parameters<typeof useAttributeLogsQueryImpl>[0],
+): ReturnType<typeof useAttributeLogsQueryImpl> {
+  return useAttributeLogsQueryImpl(args);
 }

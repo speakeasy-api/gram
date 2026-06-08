@@ -78,7 +78,7 @@ export function AttachRemoteIdentityProviderSheet({
   // in "new" mode and runs RFC 8414 discovery against this URL to prefill the
   // upstream endpoints.
   initialIssuerUrl?: string;
-}) {
+}): JSX.Element {
   const client = useSdkClient();
   const { fetch: authedFetch } = useFetcher();
   const queryClient = useQueryClient();
@@ -359,7 +359,7 @@ export function AttachRemoteIdentityProviderSheet({
   // explicit "Discover" button in the Endpoints section.
   useEffect(() => {
     if (!open || !initialIssuerUrl) return;
-    void runDiscover(initialIssuerUrl);
+    runDiscover(initialIssuerUrl);
   }, [open, initialIssuerUrl, runDiscover]);
 
   // When discovery completes, auto-select the best supported auth method.
@@ -497,7 +497,9 @@ export function AttachRemoteIdentityProviderSheet({
                 onTokenEndpointChange={setTokenEndpoint}
                 onRegistrationEndpointChange={setRegistrationEndpoint}
                 onJwksUriChange={setJwksUri}
-                onDiscover={() => runDiscover(issuerUrl)}
+                onDiscover={() => {
+                  runDiscover(issuerUrl);
+                }}
                 onResetEndpoints={handleResetEndpoints}
               />
             </Stack>

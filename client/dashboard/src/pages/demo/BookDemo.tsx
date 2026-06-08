@@ -6,7 +6,7 @@ import { JourneyDemo } from "@/pages/login/components/journey-demo";
 import { DemoBookingFlow } from "@/pages/demo/components/DemoBookingFlow";
 import { LogOutIcon } from "lucide-react";
 
-export default function BookDemo() {
+export default function BookDemo(): JSX.Element {
   const client = useSdkClient();
   const { session } = useSessionData();
 
@@ -30,7 +30,7 @@ export default function BookDemo() {
         contentClassName="max-w-2xl"
         topRight={
           <button
-            onClick={handleLogout}
+            onClick={() => void handleLogout()}
             className="flex items-center gap-1.5 text-xs text-[#8B8684] transition-colors hover:text-slate-600"
           >
             <LogOutIcon className="h-3.5 w-3.5" />

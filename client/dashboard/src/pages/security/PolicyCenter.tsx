@@ -265,7 +265,7 @@ function messageTypesSummary(
   return `${selectedMessageTypes.size} of ${ALL_POLICY_MESSAGE_TYPES.length} types selected`;
 }
 
-export default function PolicyCenter() {
+export default function PolicyCenter(): JSX.Element {
   return (
     <RequireScope scope="org:admin" level="page">
       <PolicyCenterContent />
@@ -301,8 +301,8 @@ function PolicyCenterContent() {
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
 
   const invalidate = useCallback(() => {
-    invalidateAllRiskListPolicies(queryClient);
-    invalidateAllRiskPoliciesStatus(queryClient);
+    void invalidateAllRiskListPolicies(queryClient);
+    void invalidateAllRiskPoliciesStatus(queryClient);
   }, [queryClient]);
 
   const createMutation = useRiskCreatePolicyMutation({
@@ -636,7 +636,9 @@ function PolicyCenterContent() {
             <DropdownMenuContent align="end">
               <DropdownMenuItem
                 className="cursor-pointer"
-                onSelect={() => setTimeout(() => setRunPanelPolicy(policy), 0)}
+                onSelect={() => {
+                  void setTimeout(() => setRunPanelPolicy(policy), 0);
+                }}
               >
                 View Progress
               </DropdownMenuItem>
@@ -1292,7 +1294,9 @@ function RunPanel({ policy }: { policy: RiskPolicy }) {
                 <div className="flex items-center gap-2">
                   <Button
                     variant="tertiary"
-                    onClick={() => refetch()}
+                    onClick={() => {
+                      void refetch();
+                    }}
                     disabled={isFetching}
                     className="h-6 w-6"
                   >
@@ -1427,9 +1431,13 @@ function CustomRulesPicker({
             onCheckedChange={(checked) => {
               const next = new Set(selectedCustomRuleIds);
               if (checked) {
-                customRules.forEach((r) => next.add(r.id));
+                customRules.forEach((r) => {
+                  void next.add(r.id);
+                });
               } else {
-                customRules.forEach((r) => next.delete(r.id));
+                customRules.forEach((r) => {
+                  void next.delete(r.id);
+                });
               }
               setSelectedCustomRuleIds(next);
             }}

@@ -30,7 +30,7 @@ function resolveToolAnnotations(tool: Tool): ResolvedToolAnnotations | null {
   };
 }
 
-export function AnnotationBadges({ tool }: { tool: Tool }) {
+export function AnnotationBadges({ tool }: { tool: Tool }): JSX.Element | null {
   const annotations = resolveToolAnnotations(tool);
   if (!annotations) return null;
 

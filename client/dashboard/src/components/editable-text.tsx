@@ -24,7 +24,7 @@ export function EditableText({
   disabled,
   placeholder = label,
   children,
-}: EditableTextProps) {
+}: EditableTextProps): JSX.Element {
   const [isEditing, setIsEditing] = useState(false);
   const [editedValue, setEditedValue] = useState(value);
 
@@ -74,7 +74,7 @@ export function EditableText({
           value: editedValue ?? (!placeholder ? "Loading..." : ""),
           disabled,
           onChange: setEditedValue,
-          onSubmit: handleSubmit,
+          onSubmit: () => void handleSubmit(),
           validate: validate ?? (() => true),
           lines,
         }}

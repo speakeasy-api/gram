@@ -7,7 +7,10 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { TextArea as Textarea } from "@/components/ui/textarea";
 
-function InputGroup({ className, ...props }: React.ComponentProps<"div">) {
+function InputGroup({
+  className,
+  ...props
+}: React.ComponentProps<"div">): React.JSX.Element {
   return (
     <div
       data-slot="input-group"
@@ -60,7 +63,8 @@ function InputGroupAddon({
   className,
   align = "inline-start",
   ...props
-}: React.ComponentProps<"div"> & VariantProps<typeof inputGroupAddonVariants>) {
+}: React.ComponentProps<"div"> &
+  VariantProps<typeof inputGroupAddonVariants>): React.JSX.Element {
   return (
     <div
       role="group"
@@ -104,7 +108,7 @@ function InputGroupButton({
   size = "xs",
   ...props
 }: Omit<React.ComponentProps<typeof Button>, "size"> &
-  VariantProps<typeof inputGroupButtonVariants>) {
+  VariantProps<typeof inputGroupButtonVariants>): React.JSX.Element {
   return (
     <Button
       type={type}
@@ -119,7 +123,7 @@ function InputGroupButton({
 function InputGroupTextarea({
   className,
   ...props
-}: React.ComponentProps<typeof Textarea>) {
+}: React.ComponentProps<typeof Textarea>): React.JSX.Element {
   return (
     <Textarea
       data-slot="input-group-control"

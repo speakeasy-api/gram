@@ -13,7 +13,9 @@ import type { Telemetry } from "./Telemetry";
 // Set this to true to test telemetry locally
 const AM_TESTING_TELEMETRY = false;
 
-export const TelemetryProvider = (props: { children: ReactNode }) => {
+export const TelemetryProvider = (props: {
+  children: ReactNode;
+}): JSX.Element => {
   const serverURL = getServerURL();
   const isProd = serverURL.includes("app.getgram.ai");
   const ph = posthog.init(

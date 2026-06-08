@@ -113,7 +113,9 @@ describe("NavButton click loading state", () => {
 
   it("invokes the onClick callback the consumer passed in", () => {
     const onClick = vi.fn();
-    render(<NavButton title="Home" Icon={TestIcon} onClick={onClick} />);
+    render(
+      <NavButton title="Home" Icon={TestIcon} onClick={() => void onClick()} />,
+    );
 
     fireEvent.click(screen.getByTestId("nav-button"));
 

@@ -41,7 +41,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Outlet } from "react-router";
 
-export function TriggersRoot() {
+export function TriggersRoot(): JSX.Element {
   return <Outlet />;
 }
 
@@ -112,7 +112,7 @@ function WebhookUrlPill({ url }: { url: string }) {
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    navigator.clipboard.writeText(url);
+    void navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
@@ -510,8 +510,8 @@ function TriggerDialog({
     targetDisplay.trim().length > 0;
 
   const invalidateAll = () => {
-    invalidateAllTriggers(queryClient);
-    invalidateAllTrigger(queryClient);
+    void invalidateAllTriggers(queryClient);
+    void invalidateAllTrigger(queryClient);
   };
 
   const handleCreate = async () => {
@@ -747,7 +747,7 @@ function TriggerDialog({
                 <Stack direction="horizontal" gap={2}>
                   <Button
                     variant="destructive-primary"
-                    onClick={handleDelete}
+                    onClick={() => void handleDelete()}
                     disabled={isPending}
                   >
                     {deleteMutation.isPending
@@ -778,7 +778,7 @@ function TriggerDialog({
             Cancel
           </Button>
           <Button
-            onClick={isEditing ? handleUpdate : handleCreate}
+            onClick={() => void (isEditing ? handleUpdate() : handleCreate())}
             disabled={!isValid || isPending}
           >
             {isPending
@@ -795,7 +795,7 @@ function TriggerDialog({
   );
 }
 
-export default function TriggersIndex() {
+export default function TriggersIndex(): JSX.Element {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTrigger, setEditingTrigger] = useState<TriggerInstance | null>(
     null,

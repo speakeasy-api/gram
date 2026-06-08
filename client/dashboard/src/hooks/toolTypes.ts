@@ -41,7 +41,7 @@ function detectToolsetKind(tools: GeneratedTool[]): ToolsetKind {
   return hasExternalMcpProxy ? "external-mcp-proxy" : "default";
 }
 
-export function useToolset(
+function useToolsetImpl(
   toolsetSlug: string | undefined,
   options?: QueryHookOptions<ToolsetQueryData, ToolsetQueryError>,
 ) {
@@ -67,7 +67,14 @@ export function useToolset(
   };
 }
 
-export function useListTools(
+export function useToolset(
+  toolsetSlug: string | undefined,
+  options?: QueryHookOptions<ToolsetQueryData, ToolsetQueryError>,
+): ReturnType<typeof useToolsetImpl> {
+  return useToolsetImpl(toolsetSlug, options);
+}
+
+function useListToolsImpl(
   request?: ListToolsRequest,
   security?: ListToolsSecurity,
   options?: QueryHookOptions<ListToolsQueryData, ListToolsQueryError>,
@@ -85,7 +92,15 @@ export function useListTools(
   };
 }
 
-export function useListResources(
+export function useListTools(
+  request?: ListToolsRequest,
+  security?: ListToolsSecurity,
+  options?: QueryHookOptions<ListToolsQueryData, ListToolsQueryError>,
+): ReturnType<typeof useListToolsImpl> {
+  return useListToolsImpl(request, security, options);
+}
+
+function useListResourcesImpl(
   request?: ListResourcesRequest,
   security?: ListResourcesSecurity,
   options?: QueryHookOptions<ListResourcesQueryData, ListResourcesQueryError>,
@@ -103,6 +118,14 @@ export function useListResources(
   };
 }
 
+export function useListResources(
+  request?: ListResourcesRequest,
+  security?: ListResourcesSecurity,
+  options?: QueryHookOptions<ListResourcesQueryData, ListResourcesQueryError>,
+): ReturnType<typeof useListResourcesImpl> {
+  return useListResourcesImpl(request, security, options);
+}
+
 /**
  * Hook for fetching the latest deployment with a 1-hour stale time.
  * Use this when you need deployment data that doesn't need to be
@@ -113,7 +136,7 @@ export function useLatestDeployment(
     LatestDeploymentQueryData,
     LatestDeploymentQueryError
   >,
-) {
+): ReturnType<typeof useLatestDeploymentQuery> {
   return useLatestDeploymentQuery(undefined, undefined, {
     staleTime: 1000 * 60 * 60, // 1 hour
     ...options,

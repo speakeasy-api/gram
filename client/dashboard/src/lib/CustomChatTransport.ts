@@ -3,28 +3,35 @@ import {
   convertToModelMessages,
   UIMessage,
   smoothStream,
+  type ChatTransport,
+  type LanguageModel,
+  type ToolSet,
+  type UIMessageChunk,
 } from "ai";
 
 export interface CustomChatTransportConfig {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  model: any;
+  model: LanguageModel;
   temperature: number;
   maxGeneratedTokens?: number;
   getTools: (messages: UIMessage[]) => Promise<{
-    tools: Record<string, { description?: string; inputSchema: unknown }>;
+    tools: ToolSet;
     systemPrompt: string;
   }>;
   onError?: (error: { error: unknown }) => void;
 }
 
-export class CustomChatTransport {
+export class CustomChatTransport implements ChatTransport<UIMessage> {
   private config: CustomChatTransportConfig;
 
   constructor(config: CustomChatTransportConfig) {
     this.config = config;
   }
 
-  async sendMessages({ messages }: { messages: UIMessage[] }) {
+  async sendMessages({
+    messages,
+  }: {
+    messages: UIMessage[];
+  }): Promise<ReadableStream<UIMessageChunk>> {
     // Get tools and system prompt dynamically per request
     const { tools, systemPrompt } = await this.config.getTools(messages);
 
@@ -34,12 +41,10 @@ export class CustomChatTransport {
     );
     console.log("CustomChatTransport: Tool count:", Object.keys(tools).length);
 
-    const result = await streamText({
+    const result = streamText({
       model: this.config.model,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      messages: convertToModelMessages(messages) as any,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      tools: tools as any,
+      messages: convertToModelMessages(messages),
+      tools,
       temperature: this.config.temperature,
       maxOutputTokens: this.config.maxGeneratedTokens,
       system: systemPrompt,
@@ -50,7 +55,13 @@ export class CustomChatTransport {
     return result.toUIMessageStream();
   }
 
-  updateConfig(config: Partial<CustomChatTransportConfig>) {
+  reconnectToStream(): Promise<ReadableStream<UIMessageChunk> | null> {
+    // Custom transport does not support stream reconnection — return null
+    // to signal that there is no active stream to resume.
+    return Promise.resolve(null);
+  }
+
+  updateConfig(config: Partial<CustomChatTransportConfig>): void {
     this.config = { ...this.config, ...config };
   }
 }

@@ -6,13 +6,13 @@ import { usePortalContainer } from "@/hooks/usePortalContainer";
 
 function Popover({
   ...props
-}: React.ComponentProps<typeof PopoverPrimitive.Root>) {
+}: React.ComponentProps<typeof PopoverPrimitive.Root>): React.JSX.Element {
   return <PopoverPrimitive.Root data-slot="popover" {...props} />;
 }
 
 function PopoverTrigger({
   ...props
-}: React.ComponentProps<typeof PopoverPrimitive.Trigger>) {
+}: React.ComponentProps<typeof PopoverPrimitive.Trigger>): React.JSX.Element {
   return <PopoverPrimitive.Trigger data-slot="popover-trigger" {...props} />;
 }
 
@@ -24,7 +24,7 @@ function PopoverContent({
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Content> & {
   container?: HTMLElement | null;
-}) {
+}): React.JSX.Element {
   const portalContainer = usePortalContainer();
   return (
     <PopoverPrimitive.Portal container={container ?? portalContainer}>
@@ -44,7 +44,7 @@ function PopoverContent({
 
 function PopoverAnchor({
   ...props
-}: React.ComponentProps<typeof PopoverPrimitive.Anchor>) {
+}: React.ComponentProps<typeof PopoverPrimitive.Anchor>): React.JSX.Element {
   return <PopoverPrimitive.Anchor data-slot="popover-anchor" {...props} />;
 }
 

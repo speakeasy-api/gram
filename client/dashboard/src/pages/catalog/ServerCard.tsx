@@ -36,7 +36,7 @@ export function ServerCard({
   externalMcps,
   isSelected,
   onToggleSelect,
-}: ServerCardProps) {
+}: ServerCardProps): JSX.Element {
   const displayName = server.title ?? server.registrySpecifier;
 
   const isSpeakeasyServer = server.registrySpecifier.startsWith(
@@ -50,8 +50,7 @@ export function ServerCard({
 
   // Get tool names for the badge tooltip
   const toolNames = useMemo(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const tools = (server.tools ?? []) as any[];
+    const tools = server.tools ?? [];
     return tools.map((t) => t.name || "Unknown tool");
   }, [server.tools]);
 
