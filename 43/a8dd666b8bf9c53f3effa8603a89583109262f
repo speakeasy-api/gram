@@ -1,0 +1,29 @@
+server/internal/risk/scanner.go
+  s_058bec79386ff2::t_05cc59bddb5d86 219
+server/internal/authz/principal_test.go
+  s_058bec79386ff2::t_0ba47475496827 86-88
+server/internal/authz/resource_grants.go
+  s_058bec79386ff2::t_03c7ffa29d5177 79-81
+  h_2620cc60cfd1e9 82-94,121-124
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "43a8dd666b8bf9c53f3effa8603a89583109262f",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_058bec79386ff2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea681-42e0-7600-a211-b5c402bb3615",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
