@@ -23,7 +23,7 @@ import { Check, Loader2 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
-import { isDisplayableBucket } from "./challengeHelpers";
+import { isDisplayableBucket, principalDisplayName } from "./challengeHelpers";
 import { useChallengeRowColumns } from "./useChallengeRowColumns";
 import { useGrantFlow } from "./useGrantFlow";
 
@@ -31,6 +31,16 @@ export type { ChallengeBucket } from "@gram/client/models/components/challengebu
 
 type BucketOutcome = ChallengeBucket["outcome"];
 type OutcomeFilter = "all" | "deny" | "allow" | "resolved";
+
+function principalFilterLabel(value: string): string {
+  switch (value) {
+    case "all":
+    case "user:all":
+      return "All users";
+    default:
+      return value;
+  }
+}
 
 /** Map an individual AuthzChallenge to a ChallengeBucket shape so the same table columns render it. */
 function challengeToBucket(c: AuthzChallenge): ChallengeBucket {
@@ -331,8 +341,16 @@ export function ChallengesTab() {
 
   // Unique values for filter dropdowns (from loaded data).
   const uniquePrincipals = useMemo(() => {
-    const set = new Set(accumulated.map((b) => b.userEmail ?? b.principalUrn));
-    return [...set].filter(Boolean).sort();
+    const principals = new Map<string, string>();
+    for (const bucket of accumulated) {
+      const value = bucket.userEmail ?? bucket.principalUrn;
+      if (!value) continue;
+      principals.set(
+        value,
+        principalDisplayName(bucket.userEmail, bucket.principalUrn),
+      );
+    }
+    return [...principals.entries()].sort((a, b) => a[1].localeCompare(b[1]));
   }, [accumulated]);
 
   const uniqueScopes = useMemo(() => {
@@ -426,15 +444,13 @@ export function ChallengesTab() {
             size="sm"
             className="h-8 w-auto max-w-[280px] min-w-fit"
           >
-            <SelectValue>
-              {principalFilter === "all" ? "All users" : principalFilter}
-            </SelectValue>
+            <SelectValue>{principalFilterLabel(principalFilter)}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All users</SelectItem>
-            {uniquePrincipals.map((p) => (
-              <SelectItem key={p} value={p}>
-                {p}
+            {uniquePrincipals.map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
               </SelectItem>
             ))}
           </SelectContent>

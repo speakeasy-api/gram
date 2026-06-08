@@ -2097,6 +2097,50 @@ func (q *Queries) UpdateRiskPolicy(ctx context.Context, arg UpdateRiskPolicyPara
 	return i, err
 }
 
+const updateRiskPolicyAudienceType = `-- name: UpdateRiskPolicyAudienceType :one
+UPDATE risk_policies
+SET audience_type = $1
+  , updated_at = clock_timestamp()
+WHERE id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+RETURNING id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, action, audience_type, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateRiskPolicyAudienceTypeParams struct {
+	AudienceType string
+	ID           uuid.UUID
+	ProjectID    uuid.UUID
+}
+
+func (q *Queries) UpdateRiskPolicyAudienceType(ctx context.Context, arg UpdateRiskPolicyAudienceTypeParams) (RiskPolicy, error) {
+	row := q.db.QueryRow(ctx, updateRiskPolicyAudienceType, arg.AudienceType, arg.ID, arg.ProjectID)
+	var i RiskPolicy
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Enabled,
+		&i.Name,
+		&i.Sources,
+		&i.PresidioEntities,
+		&i.PromptInjectionRules,
+		&i.DisabledRules,
+		&i.CustomRuleIds,
+		&i.MessageTypes,
+		&i.Action,
+		&i.AudienceType,
+		&i.AutoName,
+		&i.UserMessage,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const updateRiskPolicyBypassRequestStatus = `-- name: UpdateRiskPolicyBypassRequestStatus :one
 UPDATE risk_policy_bypass_requests
 SET status = $1

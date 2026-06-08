@@ -30,7 +30,8 @@ var principalTypes = map[PrincipalType]struct{}{
 
 // Principal is a 2-segment URN that identifies a principal in the RBAC system.
 // Format: "type:id" where type is "user", "role", or "email" and id is the
-// principal identifier (e.g. "user:user_01abc", "role:admin", "email:dev@acme.corp").
+// principal identifier (e.g. "user:user_01abc", "user:all", "role:admin",
+// "email:dev@acme.corp").
 type Principal struct {
 	Type PrincipalType
 	ID   string

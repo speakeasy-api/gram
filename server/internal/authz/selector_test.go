@@ -315,12 +315,29 @@ func TestValidateSelector_riskPolicyAllowsServerURL(t *testing.T) {
 
 	withServerURL := Selector{"resource_kind": ResourceKindRiskPolicy, "resource_id": "policy_123", "server_url": "https://api.example.com"}
 	require.NoError(t, ValidateSelector(ScopeRiskPolicyBypass, withServerURL))
+	require.NoError(t, ValidateSelector(ScopeRiskPolicyEvaluate, withServerURL))
 
 	withHostOnlyServerURL := Selector{"resource_kind": ResourceKindRiskPolicy, "resource_id": "policy_123", "server_url": "api.example.com"}
 	require.ErrorContains(t, ValidateSelector(ScopeRiskPolicyBypass, withHostOnlyServerURL), "must include URI scheme and host")
 
 	withExtraKey := Selector{"resource_kind": ResourceKindRiskPolicy, "resource_id": "policy_123", "tool": "search"}
 	require.ErrorContains(t, ValidateSelector(ScopeRiskPolicyEvaluate, withExtraKey), "not allowed")
+}
+
+func TestRiskPolicyEvaluateCheck_injectsServerURL(t *testing.T) {
+	t.Parallel()
+
+	check := RiskPolicyEvaluateCheck("policy_123", RiskPolicyEvaluateDimensions{ServerURL: "https://api.example.com"})
+	require.Equal(t, ScopeRiskPolicyEvaluate, check.Scope)
+	require.Equal(t, "policy_123", check.ResourceID)
+	require.Equal(t, "https://api.example.com", check.Dimensions[SelectorKeyServerURL])
+}
+
+func TestRiskPolicyEvaluateCheck_emptyServerURLOmitsDimension(t *testing.T) {
+	t.Parallel()
+
+	check := RiskPolicyEvaluateCheck("policy_123", RiskPolicyEvaluateDimensions{ServerURL: ""})
+	require.Nil(t, check.Dimensions)
 }
 
 func TestRiskPolicyBypassCheck_injectsServerURL(t *testing.T) {

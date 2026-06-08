@@ -37,6 +37,18 @@ type RiskPolicyBypassDimensions struct {
 	ServerURL string
 }
 
+type RiskPolicyEvaluateDimensions struct {
+	ServerURL string
+}
+
+func RiskPolicyEvaluateCheck(policyID string, dims RiskPolicyEvaluateDimensions) Check {
+	var dimensions map[string]string
+	if dims.ServerURL != "" {
+		dimensions = map[string]string{SelectorKeyServerURL: dims.ServerURL}
+	}
+	return Check{Scope: ScopeRiskPolicyEvaluate, ResourceKind: "", ResourceID: policyID, Dimensions: dimensions, expanded: false}
+}
+
 func RiskPolicyBypassCheck(policyID string, dims RiskPolicyBypassDimensions) Check {
 	var dimensions map[string]string
 	if dims.ServerURL != "" {

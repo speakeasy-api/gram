@@ -149,6 +149,43 @@ func (q *Queries) DeletePrincipalGrantByIdentity(ctx context.Context, arg Delete
 	return result.RowsAffected(), nil
 }
 
+const deleteMatchingPrincipalGrantsByType = `-- name: DeleteMatchingPrincipalGrantsByType :execrows
+DELETE FROM principal_grants
+WHERE organization_id = $1
+  AND principal_urn <> $2
+  AND principal_type = ANY($3::text[])
+  AND scope = $4
+  AND COALESCE(effect, 'allow') = COALESCE($5::text, 'allow')
+  AND selectors = $6
+`
+
+type DeleteMatchingPrincipalGrantsByTypeParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	PrincipalTypes []string
+	Scope          string
+	Effect         string
+	Selectors      []byte
+}
+
+// Removes equivalent grant rows for other principal types. Used to keep
+// user:all and narrower user:/role: grants canonical without touching other
+// scopes, effects, resources, or selector dimensions.
+func (q *Queries) DeleteMatchingPrincipalGrantsByType(ctx context.Context, arg DeleteMatchingPrincipalGrantsByTypeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMatchingPrincipalGrantsByType,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.PrincipalTypes,
+		arg.Scope,
+		arg.Effect,
+		arg.Selectors,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deletePrincipalGrantsByPrincipal = `-- name: DeletePrincipalGrantsByPrincipal :execrows
 DELETE FROM principal_grants
 WHERE organization_id = $1

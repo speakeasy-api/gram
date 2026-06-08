@@ -17,12 +17,15 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
+
+const riskPolicyAudienceTargeted = "targeted"
 
 // RiskScanner checks text against blocking risk policies.
 type RiskScanner interface {
@@ -175,6 +178,9 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, projectID uuid.UUID, t
 		if len(p.MessageTypes) > 0 && !slices.Contains(p.MessageTypes, messageType) {
 			continue
 		}
+		if !riskPolicyApplies(ctx, p, "") {
+			continue
+		}
 
 		g.Go(func() error {
 			result, scanErr := s.scanPolicy(gctx, p, text, messageType)
@@ -216,7 +222,7 @@ func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, projectID u
 		return nil, fmt.Errorf("list shadow_mcp policies: %w", err)
 	}
 	for _, p := range policies {
-		if p.Action == "block" {
+		if p.Action == "block" && riskPolicyApplies(ctx, p, "") {
 			return &ShadowMCPPolicy{
 				ID:          p.ID.String(),
 				Name:        p.Name,
@@ -226,6 +232,29 @@ func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, projectID u
 		}
 	}
 	return nil, nil
+}
+
+func riskPolicyApplies(ctx context.Context, policy repo.RiskPolicy, serverURL string) bool {
+	if policy.AudienceType != riskPolicyAudienceTargeted {
+		return true
+	}
+
+	grants, ok := authz.GrantsFromContext(ctx)
+	if !ok {
+		return false
+	}
+
+	checkServerURL := serverURL
+	if checkServerURL == "" {
+		checkServerURL = authz.WildcardResource
+	}
+
+	policyID := policy.ID.String()
+	if authz.GrantsPermit(grants, authz.RiskPolicyBypassCheck(policyID, authz.RiskPolicyBypassDimensions{ServerURL: checkServerURL})) {
+		return false
+	}
+
+	return authz.GrantsPermit(grants, authz.RiskPolicyEvaluateCheck(policyID, authz.RiskPolicyEvaluateDimensions{ServerURL: checkServerURL}))
 }
 
 // HasEnabledShadowMCPPolicy reports whether the project has at least one

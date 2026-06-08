@@ -453,6 +453,13 @@ func evaluateGrants(grants []Grant, checks []Check) (allowGrant *Grant, allowChe
 	return nil, nil, false
 }
 
+// GrantsPermit reports whether the loaded grant set permits the check using
+// the same scope expansion and deny-wins semantics as Engine.Require.
+func GrantsPermit(grants []Grant, check Check) bool {
+	allowGrant, _, denied := evaluateGrants(grants, check.expand())
+	return allowGrant != nil && !denied
+}
+
 // allScopeGrants returns wildcard grants for every defined scope. Used to give
 // superadmins (e.g. during org impersonation) unrestricted access.
 func allScopeGrants() []Grant {

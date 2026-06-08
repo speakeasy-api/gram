@@ -38,6 +38,7 @@ func TestResolveKnownUserPrincipals_resolvesUserAndRolesForOrgMember(t *testing.
 		principalURNs = append(principalURNs, principal.String())
 	}
 	require.Contains(t, principalURNs, urn.NewPrincipal(urn.PrincipalTypeUser, userID).String())
+	require.Contains(t, principalURNs, AllUsersPrincipal().String())
 	require.Contains(t, principalURNs, "role:member")
 	require.True(t, slices.ContainsFunc(principalURNs, func(principalURN string) bool {
 		return strings.HasPrefix(principalURN, "role:global:")
@@ -62,6 +63,27 @@ func TestResolveKnownUserPrincipals_unidentifiedWhenUserMissingOrNotInOrg(t *tes
 		require.ErrorIs(t, err, ErrPrincipalNotFound)
 		require.Empty(t, principals)
 	}
+}
+
+func TestResolveKnownUserPrincipals_allUsersGrantAuthorizesOrgMember(t *testing.T) {
+	t.Parallel()
+
+	ctx := enterpriseTestCtx(t.Context())
+	conn := newTestDB(t)
+	organizationID := "org_resolve_all_users"
+	userID := "user_all_users"
+	policyID := "policy_123"
+
+	seedOrganization(t, ctx, conn, organizationID)
+	seedActiveOrganizationUser(t, ctx, conn, organizationID, userID)
+	seedGrant(t, ctx, conn, organizationID, AllUsersPrincipal(), ScopeRiskPolicyEvaluate, policyID)
+
+	principals, err := ResolveUserPrincipals(ctx, conn, organizationID, userID)
+	require.NoError(t, err)
+	grants, err := LoadGrants(ctx, conn, organizationID, principals)
+	require.NoError(t, err)
+
+	require.True(t, GrantsPermit(grants, RiskPolicyEvaluateCheck(policyID, RiskPolicyEvaluateDimensions{ServerURL: ""})))
 }
 
 func seedActiveOrganizationUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, userID string) {
