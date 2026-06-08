@@ -14,14 +14,6 @@ import (
 // active in-organization principal.
 var ErrPrincipalNotFound = errors.New("principal not found")
 
-func AllUsersPrincipal() urn.Principal {
-	return urn.NewPrincipal(urn.PrincipalTypeUser, "all")
-}
-
-func isAllUsersPrincipal(principal urn.Principal) bool {
-	return principal.String() == AllUsersPrincipal().String()
-}
-
 // ResolveUserPrincipals resolves user:<id> plus assigned role principals
 // only when the Gram user is an active member of the organization. Missing or
 // cross-org users return ErrPrincipalNotFound.
@@ -117,6 +109,10 @@ func PatchPrincipalGrants(ctx context.Context, dbtx repo.DBTX, orgID string, pri
 	}
 
 	return nil
+}
+
+func AllUsersPrincipal() urn.Principal {
+	return urn.NewPrincipal(urn.PrincipalTypeUser, "all")
 }
 
 // rolePrincipals owns the canonical write principal and all principals that
@@ -266,4 +262,8 @@ func principalURNStrings(principals []urn.Principal) ([]string, error) {
 	}
 
 	return principalURNs, nil
+}
+
+func isAllUsersPrincipal(principal urn.Principal) bool {
+	return principal.String() == AllUsersPrincipal().String()
 }
