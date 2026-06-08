@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 import type { PolicyAction, PolicyMessageType } from "./policy-data";
 
@@ -17,21 +17,38 @@ export type PromptPolicy = {
 };
 
 type CreateInput = Omit<PromptPolicy, "id" | "createdAt" | "updatedAt">;
-type UpdateInput = Partial<Omit<PromptPolicy, "id" | "createdAt">>;
+type UpdateInput = Partial<
+  Omit<PromptPolicy, "id" | "createdAt" | "updatedAt">
+>;
 
 function storageKey(orgId: string) {
   return `gram-prompt-policies-${orgId}`;
 }
 
-function safe(prev: PromptPolicy[]): PromptPolicy[] {
-  return Array.isArray(prev) ? prev : [];
+function isValidPolicy(p: unknown): p is PromptPolicy {
+  return (
+    p !== null &&
+    typeof p === "object" &&
+    typeof (p as Record<string, unknown>).id === "string"
+  );
+}
+
+function safe(prev: unknown): PromptPolicy[] {
+  return Array.isArray(prev) ? prev.filter(isValidPolicy) : [];
 }
 
 function usePromptPoliciesStoreImpl(orgId: string) {
-  const [policies, setPolicies] = useLocalStorageState<PromptPolicy[]>(
-    storageKey(orgId),
-    [],
-  );
+  const key = storageKey(orgId);
+  const [policies, setPolicies] = useLocalStorageState<PromptPolicy[]>(key, []);
+
+  useEffect(() => {
+    try {
+      const item = window.localStorage.getItem(key);
+      setPolicies(item !== null ? (JSON.parse(item) as PromptPolicy[]) : []);
+    } catch {
+      setPolicies([]);
+    }
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const create = useCallback(
     (input: CreateInput) => {

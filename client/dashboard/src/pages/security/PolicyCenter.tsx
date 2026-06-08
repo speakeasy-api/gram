@@ -1292,7 +1292,7 @@ function PromptPolicyMessageTypesPicker() {
                 key={type}
                 type={type}
                 checked={selectedMessageTypes.has(type)}
-                disabled={type !== "tool_request"}
+                disabled={true}
                 onCheckedChange={() => undefined}
               />
             ))}
