@@ -437,8 +437,8 @@ type DirectoryUser struct {
 
 type DirectoryUserGroupMembership struct {
 	ID                     uuid.UUID
-	UserID                 string
-	GroupID                uuid.UUID
+	DirectoryUserID        uuid.UUID
+	DirectoryGroupID       uuid.UUID
 	WorkosDirectoryUserID  string
 	WorkosDirectoryGroupID string
 	CreatedAt              pgtype.Timestamptz

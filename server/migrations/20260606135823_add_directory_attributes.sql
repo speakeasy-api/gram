@@ -55,15 +55,15 @@ CREATE UNIQUE INDEX "directory_users_workos_directory_user_id_key" ON "directory
 -- Create "directory_user_group_memberships" table
 CREATE TABLE "directory_user_group_memberships" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
-  "user_id" text NOT NULL,
-  "group_id" uuid NOT NULL,
+  "directory_user_id" uuid NOT NULL,
+  "directory_group_id" uuid NOT NULL,
   "workos_directory_user_id" text NOT NULL,
   "workos_directory_group_id" text NOT NULL,
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY ("id"),
-  CONSTRAINT "directory_user_group_memberships_group_id_fkey" FOREIGN KEY ("group_id") REFERENCES "directory_groups" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
-  CONSTRAINT "directory_user_group_memberships_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
+  CONSTRAINT "directory_user_group_memberships_directory_group_id_fkey" FOREIGN KEY ("directory_group_id") REFERENCES "directory_groups" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "directory_user_group_memberships_directory_user_id_fkey" FOREIGN KEY ("directory_user_id") REFERENCES "directory_users" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
 -- Create index "directory_user_group_memberships_current_key" to table: "directory_user_group_memberships"
-CREATE UNIQUE INDEX "directory_user_group_memberships_current_key" ON "directory_user_group_memberships" ("user_id", "group_id");
+CREATE UNIQUE INDEX "directory_user_group_memberships_current_key" ON "directory_user_group_memberships" ("directory_user_id", "directory_group_id");

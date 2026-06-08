@@ -1714,8 +1714,8 @@ ON directory_users (workos_directory_user_id);
 
 CREATE TABLE IF NOT EXISTS directory_user_group_memberships (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  user_id TEXT NOT NULL,
-  group_id uuid NOT NULL,
+  directory_user_id uuid NOT NULL,
+  directory_group_id uuid NOT NULL,
   workos_directory_user_id TEXT NOT NULL,
   workos_directory_group_id TEXT NOT NULL,
 
@@ -1723,12 +1723,12 @@ CREATE TABLE IF NOT EXISTS directory_user_group_memberships (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT directory_user_group_memberships_pkey PRIMARY KEY (id),
-  CONSTRAINT directory_user_group_memberships_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-  CONSTRAINT directory_user_group_memberships_group_id_fkey FOREIGN KEY (group_id) REFERENCES directory_groups (id) ON DELETE CASCADE
+  CONSTRAINT directory_user_group_memberships_directory_user_id_fkey FOREIGN KEY (directory_user_id) REFERENCES directory_users (id) ON DELETE CASCADE,
+  CONSTRAINT directory_user_group_memberships_directory_group_id_fkey FOREIGN KEY (directory_group_id) REFERENCES directory_groups (id) ON DELETE CASCADE
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS directory_user_group_memberships_current_key
-ON directory_user_group_memberships (user_id, group_id);
+ON directory_user_group_memberships (directory_user_id, directory_group_id);
 
 -- global_roles stores environment-level WorkOS roles (e.g. "admin", "member").
 -- These are not scoped to any organization.
