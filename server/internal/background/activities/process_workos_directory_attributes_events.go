@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -32,9 +31,10 @@ const (
 )
 
 type ProcessWorkOSDirectoryAttributesEventsParams struct {
-	EntityType   string  `json:"entity_type"`
-	EntityID     string  `json:"entity_id"`
-	SinceEventID *string `json:"since_event_id,omitempty"`
+	EntityType             string  `json:"entity_type"`
+	WorkOSDirectoryGroupID string  `json:"workos_directory_group_id,omitempty"`
+	WorkOSDirectoryUserID  string  `json:"workos_directory_user_id,omitempty"`
+	SinceEventID           *string `json:"since_event_id,omitempty"`
 }
 
 type ProcessWorkOSDirectoryAttributesEventsResult struct {
@@ -58,19 +58,20 @@ func NewProcessWorkOSDirectoryAttributesEvents(logger *slog.Logger, db *pgxpool.
 }
 
 func (p *ProcessWorkOSDirectoryAttributesEvents) Do(ctx context.Context, params ProcessWorkOSDirectoryAttributesEventsParams) (*ProcessWorkOSDirectoryAttributesEventsResult, error) {
+	syncEntityID, err := directoryAttributesSyncEntityID(params)
 	logger := p.logger.With(
 		attr.SlogWorkOSDirectoryAttributesEntityType(params.EntityType),
-		attr.SlogWorkOSDirectoryAttributesEntityID(params.EntityID),
+		attr.SlogWorkOSDirectoryAttributesEntityID(syncEntityID),
 	)
-	if params.EntityType == "" || params.EntityID == "" {
-		return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("missing directory attributes sync target"), "missing directory attributes sync target").Log(ctx, logger)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "missing directory attributes sync target").Log(ctx, logger)
 	}
 
 	sinceEventID := conv.PtrValOr(params.SinceEventID, "")
 	if sinceEventID == "" {
 		cursor, err := workosrepo.New(p.db).GetDirectoryAttributesSyncLastEventID(ctx, workosrepo.GetDirectoryAttributesSyncLastEventIDParams{
 			EntityType: params.EntityType,
-			EntityID:   params.EntityID,
+			EntityID:   syncEntityID,
 		})
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
@@ -131,6 +132,11 @@ func (p *ProcessWorkOSDirectoryAttributesEvents) handlePage(ctx context.Context,
 }
 
 func (p *ProcessWorkOSDirectoryAttributesEvents) handleEvent(ctx context.Context, logger *slog.Logger, params ProcessWorkOSDirectoryAttributesEventsParams, event events.Event) (string, error) {
+	syncEntityID, err := directoryAttributesSyncEntityID(params)
+	if err != nil {
+		return "", err
+	}
+
 	dbtx, err := p.db.Begin(ctx)
 	if err != nil {
 		return "", fmt.Errorf("begin transaction: %w", err)
@@ -143,7 +149,7 @@ func (p *ProcessWorkOSDirectoryAttributesEvents) handleEvent(ctx context.Context
 
 	if _, err := workosrepo.New(dbtx).SetDirectoryAttributesSyncLastEventID(ctx, workosrepo.SetDirectoryAttributesSyncLastEventIDParams{
 		EntityType:  params.EntityType,
-		EntityID:    params.EntityID,
+		EntityID:    syncEntityID,
 		LastEventID: event.ID,
 	}); err != nil {
 		return "", fmt.Errorf("set directory attributes sync cursor: %w", err)
@@ -185,7 +191,7 @@ func handleDirectoryAttributesEvent(ctx context.Context, logger *slog.Logger, db
 		if err != nil {
 			return err
 		}
-		if params.EntityType != WorkOSDirectoryAttributesEntityTypeGroup || params.EntityID != payload.ID {
+		if params.EntityType != WorkOSDirectoryAttributesEntityTypeGroup || params.WorkOSDirectoryGroupID != payload.ID {
 			return nil
 		}
 		_, err = upsertDirectoryGroup(ctx, dbtx, payload, event.Data)
@@ -196,7 +202,7 @@ func handleDirectoryAttributesEvent(ctx context.Context, logger *slog.Logger, db
 		if err != nil {
 			return err
 		}
-		if params.EntityType != WorkOSDirectoryAttributesEntityTypeGroup || params.EntityID != payload.ID {
+		if params.EntityType != WorkOSDirectoryAttributesEntityTypeGroup || params.WorkOSDirectoryGroupID != payload.ID {
 			return nil
 		}
 		return deleteDirectoryGroup(ctx, dbtx, payload.ID)
@@ -392,11 +398,25 @@ func storeDirectoryUserAttributes(ctx context.Context, logger *slog.Logger, dbtx
 
 func matchesDirectoryGroupMembershipTarget(params ProcessWorkOSDirectoryAttributesEventsParams, payload workosDirectoryGroupMembershipEventPayload) bool {
 	return params.EntityType == WorkOSDirectoryAttributesEntityTypeGroupMembership &&
-		params.EntityID == DirectoryGroupMembershipSyncEntityID(payload.directoryGroupID(), payload.directoryUserID())
+		params.WorkOSDirectoryGroupID == payload.directoryGroupID() &&
+		params.WorkOSDirectoryUserID == payload.directoryUserID()
 }
 
-func DirectoryGroupMembershipSyncEntityID(workosDirectoryGroupID, workosDirectoryUserID string) string {
-	return strings.Join([]string{workosDirectoryGroupID, workosDirectoryUserID}, ":")
+func directoryAttributesSyncEntityID(params ProcessWorkOSDirectoryAttributesEventsParams) (string, error) {
+	switch params.EntityType {
+	case WorkOSDirectoryAttributesEntityTypeGroup:
+		if params.WorkOSDirectoryGroupID == "" {
+			return "", fmt.Errorf("missing WorkOS directory group ID")
+		}
+		return params.WorkOSDirectoryGroupID, nil
+	case WorkOSDirectoryAttributesEntityTypeGroupMembership:
+		if params.WorkOSDirectoryGroupID == "" || params.WorkOSDirectoryUserID == "" {
+			return "", fmt.Errorf("missing WorkOS directory group membership IDs")
+		}
+		return fmt.Sprintf("%s:%s", params.WorkOSDirectoryGroupID, params.WorkOSDirectoryUserID), nil
+	default:
+		return "", fmt.Errorf("unsupported directory attributes entity type %q", params.EntityType)
+	}
 }
 
 func (p workosDirectoryGroupMembershipEventPayload) directoryUserID() string {

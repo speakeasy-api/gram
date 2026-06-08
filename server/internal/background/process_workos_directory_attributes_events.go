@@ -17,12 +17,16 @@ import (
 const processWorkOSDirectoryAttributesEventsWorkflowID = "v1:process-workos-directory-attributes-events"
 
 type ProcessWorkOSDirectoryAttributesEventsWorkflowParams struct {
-	EntityType string `json:"entity_type"`
-	EntityID   string `json:"entity_id"`
+	EntityType             string `json:"entity_type"`
+	WorkOSDirectoryGroupID string `json:"workos_directory_group_id,omitempty"`
+	WorkOSDirectoryUserID  string `json:"workos_directory_user_id,omitempty"`
 }
 
 func processWorkOSDirectoryAttributesEventsWorkflowIDForParams(params ProcessWorkOSDirectoryAttributesEventsWorkflowParams) string {
-	return fmt.Sprintf("%s:%s:%s", processWorkOSDirectoryAttributesEventsWorkflowID, params.EntityType, params.EntityID)
+	if params.WorkOSDirectoryUserID == "" {
+		return fmt.Sprintf("%s:%s:%s", processWorkOSDirectoryAttributesEventsWorkflowID, params.EntityType, params.WorkOSDirectoryGroupID)
+	}
+	return fmt.Sprintf("%s:%s:%s:%s", processWorkOSDirectoryAttributesEventsWorkflowID, params.EntityType, params.WorkOSDirectoryGroupID, params.WorkOSDirectoryUserID)
 }
 
 func processWorkOSDirectoryAttributesEventsDebounceSignal(ProcessWorkOSDirectoryAttributesEventsWorkflowParams) string {
@@ -81,9 +85,10 @@ func ProcessWorkOSDirectoryAttributesEventsWorkflow(ctx workflow.Context, params
 
 	var processRes activities.ProcessWorkOSDirectoryAttributesEventsResult
 	if err := workflow.ExecuteActivity(ctx, a.ProcessWorkOSDirectoryAttributesEvents, activities.ProcessWorkOSDirectoryAttributesEventsParams{
-		EntityType:   params.EntityType,
-		EntityID:     params.EntityID,
-		SinceEventID: nil,
+		EntityType:             params.EntityType,
+		WorkOSDirectoryGroupID: params.WorkOSDirectoryGroupID,
+		WorkOSDirectoryUserID:  params.WorkOSDirectoryUserID,
+		SinceEventID:           nil,
 	}).Get(ctx, &processRes); err != nil {
 		return nil, fmt.Errorf("process WorkOS directory attributes events: %w", err)
 	}

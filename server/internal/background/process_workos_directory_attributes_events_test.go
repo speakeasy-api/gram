@@ -16,8 +16,8 @@ func TestProcessWorkOSDirectoryAttributesEventsWorkflowID(t *testing.T) {
 	t.Parallel()
 
 	params := ProcessWorkOSDirectoryAttributesEventsWorkflowParams{
-		EntityType: activities.WorkOSDirectoryAttributesEntityTypeGroup,
-		EntityID:   "directory_group_123",
+		EntityType:             activities.WorkOSDirectoryAttributesEntityTypeGroup,
+		WorkOSDirectoryGroupID: "directory_group_123",
 	}
 	require.Equal(t, "v1:process-workos-directory-attributes-events", processWorkOSDirectoryAttributesEventsWorkflowID)
 	require.Equal(t, "v1:process-workos-directory-attributes-events:group:directory_group_123", processWorkOSDirectoryAttributesEventsWorkflowIDForParams(params))
@@ -33,7 +33,8 @@ func TestProcessWorkOSDirectoryAttributesEventsWorkflow_CompletesWhenNoMore(t *t
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, params activities.ProcessWorkOSDirectoryAttributesEventsParams) (*activities.ProcessWorkOSDirectoryAttributesEventsResult, error) {
 			require.Equal(t, activities.WorkOSDirectoryAttributesEntityTypeGroup, params.EntityType)
-			require.Equal(t, "directory_group_workflow", params.EntityID)
+			require.Equal(t, "directory_group_workflow", params.WorkOSDirectoryGroupID)
+			require.Empty(t, params.WorkOSDirectoryUserID)
 			return &activities.ProcessWorkOSDirectoryAttributesEventsResult{
 				SinceEventID: "",
 				LastEventID:  "event_group",
@@ -44,8 +45,8 @@ func TestProcessWorkOSDirectoryAttributesEventsWorkflow_CompletesWhenNoMore(t *t
 	)
 
 	env.ExecuteWorkflow(ProcessWorkOSDirectoryAttributesEventsWorkflow, ProcessWorkOSDirectoryAttributesEventsWorkflowParams{
-		EntityType: activities.WorkOSDirectoryAttributesEntityTypeGroup,
-		EntityID:   "directory_group_workflow",
+		EntityType:             activities.WorkOSDirectoryAttributesEntityTypeGroup,
+		WorkOSDirectoryGroupID: "directory_group_workflow",
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
@@ -70,8 +71,9 @@ func TestProcessWorkOSDirectoryAttributesEventsWorkflowDebounced_ContinuesAsNewO
 	)
 
 	env.ExecuteWorkflow(ProcessWorkOSDirectoryAttributesEventsWorkflowDebounced, ProcessWorkOSDirectoryAttributesEventsWorkflowParams{
-		EntityType: activities.WorkOSDirectoryAttributesEntityTypeGroupMembership,
-		EntityID:   "directory_group_123:directory_user_123",
+		EntityType:             activities.WorkOSDirectoryAttributesEntityTypeGroupMembership,
+		WorkOSDirectoryGroupID: "directory_group_123",
+		WorkOSDirectoryUserID:  "directory_user_123",
 	})
 
 	require.True(t, env.IsWorkflowCompleted())

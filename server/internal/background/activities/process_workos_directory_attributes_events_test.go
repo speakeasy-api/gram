@@ -85,8 +85,8 @@ func TestProcessWorkOSDirectoryAttributesEvents_UpsertsGroupAndAdvancesCursor(t 
 
 	activity := activities.NewProcessWorkOSDirectoryAttributesEvents(logger, conn, workosClient)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSDirectoryAttributesEventsParams{
-		EntityType: activities.WorkOSDirectoryAttributesEntityTypeGroup,
-		EntityID:   groupID,
+		EntityType:             activities.WorkOSDirectoryAttributesEntityTypeGroup,
+		WorkOSDirectoryGroupID: groupID,
 	})
 	require.NoError(t, err)
 	require.Equal(t, "event_seed", res.SinceEventID)
@@ -130,7 +130,6 @@ func TestProcessWorkOSDirectoryAttributesEvents_OpensAndClosesMembership(t *test
 	_, err := usersrepo.New(conn).UpsertUser(ctx, localUserParams(gramUserID, email, "Directory Member"))
 	require.NoError(t, err)
 
-	entityID := activities.DirectoryGroupMembershipSyncEntityID(groupID, directoryUserID)
 	workosClient := workos.NewStubClient()
 	workosClient.SetEventPages([][]events.Event{{
 		{ID: "event_membership_added", Event: "dsync.group.user_added", CreatedAt: time.Now(), Data: directoryGroupMembershipEventData(workosOrgID, groupID, directoryUserID, email)},
@@ -138,8 +137,9 @@ func TestProcessWorkOSDirectoryAttributesEvents_OpensAndClosesMembership(t *test
 
 	activity := activities.NewProcessWorkOSDirectoryAttributesEvents(logger, conn, workosClient)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSDirectoryAttributesEventsParams{
-		EntityType: activities.WorkOSDirectoryAttributesEntityTypeGroupMembership,
-		EntityID:   entityID,
+		EntityType:             activities.WorkOSDirectoryAttributesEntityTypeGroupMembership,
+		WorkOSDirectoryGroupID: groupID,
+		WorkOSDirectoryUserID:  directoryUserID,
 	})
 	require.NoError(t, err)
 	require.Equal(t, "event_membership_added", res.LastEventID)
@@ -153,8 +153,9 @@ func TestProcessWorkOSDirectoryAttributesEvents_OpensAndClosesMembership(t *test
 		{ID: "event_membership_removed", Event: "dsync.group.user_removed", CreatedAt: time.Now(), Data: directoryGroupMembershipEventData(workosOrgID, groupID, directoryUserID, email)},
 	}})
 	res, err = activity.Do(ctx, activities.ProcessWorkOSDirectoryAttributesEventsParams{
-		EntityType: activities.WorkOSDirectoryAttributesEntityTypeGroupMembership,
-		EntityID:   entityID,
+		EntityType:             activities.WorkOSDirectoryAttributesEntityTypeGroupMembership,
+		WorkOSDirectoryGroupID: groupID,
+		WorkOSDirectoryUserID:  directoryUserID,
 	})
 	require.NoError(t, err)
 	require.Equal(t, "event_membership_added", res.SinceEventID)
@@ -204,8 +205,8 @@ func TestProcessWorkOSDirectoryAttributesEvents_DeleteGroupClosesMemberships(t *
 
 	activity := activities.NewProcessWorkOSDirectoryAttributesEvents(logger, conn, workosClient)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSDirectoryAttributesEventsParams{
-		EntityType: activities.WorkOSDirectoryAttributesEntityTypeGroup,
-		EntityID:   groupID,
+		EntityType:             activities.WorkOSDirectoryAttributesEntityTypeGroup,
+		WorkOSDirectoryGroupID: groupID,
 	})
 	require.NoError(t, err)
 	require.Equal(t, "event_group_deleted", res.LastEventID)
