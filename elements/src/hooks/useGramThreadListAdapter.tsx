@@ -10,6 +10,7 @@ import { createAssistantStream, type AssistantStream } from "assistant-stream";
 import {
   GramChatOverview,
   GramChat,
+  GramChatMessage,
   convertGramMessagesToExported,
   convertGramMessagesToUIMessages,
 } from "@/lib/messageConverter";
@@ -60,6 +61,14 @@ async function waitForMappedId(
   }
 }
 
+/**
+ * Transforms or drops a persisted chat message before it is rendered from
+ * history. Return the (possibly rewritten) message, or `null` to omit it.
+ */
+export type ChatMessageTransform = (
+  message: GramChatMessage,
+) => GramChatMessage | null;
+
 export interface ThreadListAdapterOptions {
   apiUrl: string;
   headers: Record<string, string>;
@@ -78,6 +87,13 @@ export interface ThreadListAdapterOptions {
    * `crypto.randomUUID()`. Use this when the backend owns chat-id creation.
    */
   deferThreadIdMinting?: boolean;
+  /**
+   * Optional hook to transform or drop each persisted message before it is
+   * converted for rendering. Return a message to render it (possibly rewritten),
+   * or `null` to omit it. Keeps product-specific transcript conventions out of
+   * the library — see {@link HistoryConfig.transformChatMessage}.
+   */
+  transformChatMessage?: ChatMessageTransform;
 }
 
 interface ListChatsResponse {
@@ -93,15 +109,41 @@ class GramThreadHistoryAdapter {
   private apiUrl: string;
   private headers: Record<string, string>;
   private store: AssistantApi;
+  // Read lazily rather than captured: the adapter is constructed once, but the
+  // consumer may swap `transformChatMessage` across renders, so resolve it from
+  // the live options on every load instead of snapshotting it here.
+  private getTransformChatMessage?: () => ChatMessageTransform | undefined;
 
   constructor(
     apiUrl: string,
     headers: Record<string, string>,
     store: AssistantApi,
+    getTransformChatMessage?: () => ChatMessageTransform | undefined,
   ) {
     this.apiUrl = apiUrl;
     this.headers = headers;
     this.store = store;
+    this.getTransformChatMessage = getTransformChatMessage;
+  }
+
+  /**
+   * Applies the consumer-supplied `transformChatMessage` hook to a loaded
+   * transcript: rewrites each message and drops any the hook returns `null` for.
+   * Without a hook configured the messages pass through untouched.
+   */
+  private applyTransform(messages: GramChatMessage[]): GramChatMessage[] {
+    const transform = this.getTransformChatMessage?.();
+    if (!transform) {
+      return messages;
+    }
+    const result: GramChatMessage[] = [];
+    for (const message of messages) {
+      const transformed = transform(message);
+      if (transformed) {
+        result.push(transformed);
+      }
+    }
+    return result;
   }
 
   async load() {
@@ -122,7 +164,7 @@ class GramThreadHistoryAdapter {
       }
 
       const chat = (await response.json()) as GramChat;
-      return convertGramMessagesToExported(chat.messages);
+      return convertGramMessagesToExported(this.applyTransform(chat.messages));
     } catch (error) {
       console.error("Error loading chat:", error);
       return { messages: [], headId: null };
@@ -156,7 +198,9 @@ class GramThreadHistoryAdapter {
         }
 
         const chat = (await response.json()) as GramChat;
-        return convertGramMessagesToUIMessages(chat.messages);
+        return convertGramMessagesToUIMessages(
+          this.applyTransform(chat.messages),
+        );
 
         // // Filter out system messages (assistant-ui doesn't support them in the import path)
         // const filteredMessages = chat.messages.filter(
@@ -211,6 +255,7 @@ function useGramThreadHistoryAdapter(
         optionsRef.current.apiUrl,
         optionsRef.current.headers,
         store,
+        () => optionsRef.current.transformChatMessage,
       ),
   );
   // Cast to ThreadHistoryAdapter - the withFormat generic doesn't match but works at runtime

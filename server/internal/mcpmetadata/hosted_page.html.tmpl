@@ -854,6 +854,50 @@
       * {
         box-sizing: border-box;
       }
+
+      /****************
+       * Tool Scopes *
+       ****************/
+      .scope-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+      }
+
+      .scope-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        padding: 0.375rem 0.75rem;
+        border-radius: 999px;
+        border: solid 1px var(--border-neutral-softest);
+        background: var(--fill-neutral-default-inverse);
+        color: var(--text-default);
+        font-size: 0.8125rem;
+        cursor: pointer;
+        transition: background-color 200ms var(--ease-in-out-quad);
+      }
+
+      .scope-chip:hover {
+        background: var(--fill-neutral-highlight-inverse);
+      }
+
+      .scope-chip.active,
+      .scope-chip.active:visited {
+        border-color: var(--color-link-default);
+        color: var(--color-link-default);
+      }
+
+      .scope-chip:visited {
+        color: var(--text-default);
+      }
+
+      .scope-chip-count {
+        font-family: var(--font-diatype-mono);
+        font-size: 0.6875rem;
+        opacity: 0.7;
+      }
     </style>
     <template id="modal-template">
       <div class="modal">
@@ -908,7 +952,7 @@
                 </svg>
               </button>
               <!-- prettier-ignore -->
-              <code class="code-snippet language-sh">claude mcp add --transport http "{{ .MCPSlug }}" \
+              <code class="code-snippet language-sh" data-scope-url-text>claude mcp add --transport http "{{ .MCPSlug }}" \
     "{{ .MCPURL }}"{{- range .SecurityInputs }} \
     --header '{{ .SystemName | asHTTPHeader }}:{{ printf "${%s}" (.DisplayName | asPosixName) }}'{{- end }}</code>            </div>
           </li>
@@ -981,7 +1025,7 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
                 </svg>
               </button>
               <!-- prettier-ignore -->
-              <code class="code-snippet language-sh">gemini mcp add --transport http "{{ .MCPSlug }}" "{{ .MCPURL }}"{{- range .SecurityInputs }} \
+              <code class="code-snippet language-sh" data-scope-url-text>gemini mcp add --transport http "{{ .MCPSlug }}" "{{ .MCPURL }}"{{- range .SecurityInputs }} \
   --header '{{ .SystemName | asHTTPHeader }}:{{ printf "${%s}" (.DisplayName | asPosixName) }}'{{- end }}</code>
             </div>
           </li>
@@ -1060,7 +1104,7 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
                 </svg>
               </button>
               <!-- prettier-ignore -->
-              <code class="code-snippet language-json">{
+              <code class="code-snippet language-json" data-scope-url-text>{
   "mcpServers": {
     "{{ .MCPSlug }}": {
       "command": "npx",
@@ -1124,7 +1168,7 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
                 </svg>
               </button>
               <!-- prettier-ignore -->
-              <code class="code-snippet">{{ .MCPURL }}</code>
+              <code class="code-snippet" data-scope-url-text>{{ .MCPURL }}</code>
             </div>
           </li>
           <li class="instruction-item">
@@ -1173,7 +1217,7 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
                 </svg>
               </button>
               <!-- prettier-ignore -->
-              <code class="code-snippet language-toml">[mcp_servers.{{ .MCPSlug }}]
+              <code class="code-snippet language-toml" data-scope-url-text>[mcp_servers.{{ .MCPSlug }}]
 url = "{{ .MCPURL }}"
 http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }}"{{ $input.SystemName | asHTTPHeader }}" = "your-{{ $input.DisplayName | asPosixName }}-value"{{- end }} }</code>
             </div>
@@ -1282,6 +1326,7 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
                     class="popover-button install-link"
                     href="{{ .CursorInstallLink }}"
                     data-install-target="cursor"
+                    data-scope-cursor
                   >
                     Cursor
                   </a>
@@ -1303,6 +1348,7 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
                     class="popover-button install-link"
                     href="{{ .VSCodeInstallLink }}"
                     data-install-target="vscode"
+                    data-scope-vscode
                   >
                     VS Code
                   </a>
@@ -1328,6 +1374,29 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
           <div class="badge private-badge">private</div>
           {{- end }}
         </section>
+        {{- if .FilteringEnabled }}
+        <section class="scopes container">
+          <header class="section-title">Tool Groups</header>
+          <div class="section-description">
+            This server supports limiting the available tools given to your agent. By
+            default, all tools are returned. Select a group to reduce the
+            returned tools.
+          </div>
+          <div class="scope-chips">
+            <a class="scope-chip active" href="?" data-scope-tag="">All tools</a>
+            {{- range .Scopes }}
+            <a
+              class="scope-chip"
+              href="?tags={{ .Tag }}"
+              data-scope-tag="{{ .Tag }}"
+            >
+              {{ .Tag }}
+              <span class="scope-chip-count">{{ .ToolCount }}</span>
+            </a>
+            {{- end }}
+          </div>
+        </section>
+        {{- end }}
         <section class="install container">
           <header>
             <h1 class="section-title">Install</h1>
@@ -1340,6 +1409,7 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
               tabindex="0"
               class="card install-target install-link"
               href="{{ .CursorInstallLink }}"
+              data-scope-cursor
             >
               <div class="target">
                 <img src="https://cursor.com/assets/images/logo.svg" />
@@ -1394,6 +1464,7 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
               tabindex="0"
               class="card install-target install-link"
               href="{{ .VSCodeInstallLink }}"
+              data-scope-vscode
             >
               <div class="target">
                 <svg
@@ -1626,7 +1697,7 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
           {{- end }}
           <div class="tools-table{{ if gt (len .Tools) 20 }} scrollable{{ end }}">
             {{- range $i, $tool := .Tools }}
-            <div class="tool-row" data-tool-name="{{ $tool.Name }}">
+            <div class="tool-row" data-tool-name="{{ $tool.Name }}" data-tool-tags="{{ join $tool.Tags "," }}">
               <span class="tool-name">{{ $tool.Name }}</span>
               <span class="tool-desc">{{ $tool.Description }}</span>
               <span class="tool-chevron">&#9662;</span>
@@ -1692,7 +1763,7 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
                 <use href="#icon-copy-check"></use>
               </svg>
             </button>
-            <code class="code-snippet mcp-url">{{ .MCPURL }}</code>
+            <code class="code-snippet mcp-url" data-scope-url>{{ .MCPURL }}</code>
           </div>
         </section>
         <section class="raw-configuration container">
@@ -1724,7 +1795,7 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
                 <use href="#icon-copy-check"></use>
               </svg>
             </button>
-            <code class="code-snippet language-json">{{- .MCPConfig -}}</code>
+            <code class="code-snippet language-json" data-scope-config>{{- .MCPConfig -}}</code>
           </div>
         </section>
       </div>
@@ -1794,6 +1865,9 @@ http_headers = { {{ range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }
         </symbol>
       </defs>
     </svg>
+    {{- if .FilteringEnabled }}
+    <div id="scope-variants" data-variants="{{ .ScopeVariantsJSON }}" hidden></div>
+    {{- end }}
     <script
       type="module"
       src="{{ .ScriptURL }}"

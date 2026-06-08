@@ -15,13 +15,10 @@ import { XYFade } from "./ui/xy-fade.tsx";
 
 function PageLayout({ children }: { children: React.ReactNode }) {
   return (
-    // Height accounts for the AppLayout chrome above us (TopHeader = 3.5rem,
-    // content-wrapper pt-2 = 0.5rem), the SidebarInset visual gutter (m-2
-    // top+bottom = 1rem), and the impersonation banner via --banner-offset.
-    // Without subtracting the TopHeader + pt-2, fullHeight pages overflow the
-    // visible area and SidebarInset's overflow-auto silently scrolls them
-    // (clipping things like the chat composer below the fold).
-    <div className="flex h-[calc(100vh-5rem-var(--banner-offset,0px))] flex-col overflow-hidden">
+    // Height accounts for the SidebarInset visual gutter (m-2 top+bottom = 1rem)
+    // and the impersonation banner via --banner-offset. The top bar is gone, so
+    // there's no header/pt-2 term to subtract.
+    <div className="flex h-[calc(100vh-1rem-var(--banner-offset,0px))] flex-col overflow-hidden">
       <ContentErrorBoundary>{children}</ContentErrorBoundary>
     </div>
   );
@@ -116,11 +113,16 @@ function PageSectionComponent({ children }: { children: PageSectionChild[] }) {
           align="center"
           className="mb-6"
         >
-          <Stack gap={2}>
+          <Stack gap={2} className="min-w-0">
             {slots.title}
             {slots.description}
           </Stack>
-          <Stack direction="horizontal" gap={2} align="center">
+          <Stack
+            direction="horizontal"
+            gap={2}
+            align="center"
+            className="shrink-0"
+          >
             {slots.ctas.map((cta) => cta)}
             {slots.moreActions}
           </Stack>

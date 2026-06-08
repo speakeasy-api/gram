@@ -717,6 +717,7 @@ const ElementsProviderWithHistory = ({
     localIdToUuidMap,
     threadListFilters: contextValue?.config.history?.threadListFilters,
     deferThreadIdMinting: contextValue?.config.history?.deferThreadIdMinting,
+    transformChatMessage: contextValue?.config.history?.transformChatMessage,
   });
   const initialThreadId = contextValue?.config.history?.initialThreadId;
 

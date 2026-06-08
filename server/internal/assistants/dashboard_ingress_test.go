@@ -2,6 +2,7 @@ package assistants
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -29,6 +30,45 @@ func TestDashboardAdapterDecodeTurn(t *testing.T) {
 	require.Contains(t, got, "evt-1")
 	require.Contains(t, got, "user-1")
 	require.Contains(t, got, "what are my top errors?")
+	// No event timestamp → no Timestamp line (zero value is omitted).
+	require.NotContains(t, got, "Timestamp:")
+}
+
+func TestDashboardAdapterDecodeTurnStampsTimestamp(t *testing.T) {
+	t.Parallel()
+
+	event := assistantThreadEventRecord{
+		EventID:               "evt-1",
+		CreatedAt:             time.Date(2026, time.June, 6, 23, 36, 22, 0, time.UTC),
+		NormalizedPayloadJSON: []byte(`{"text":"what are my top errors?","user_id":"user-1"}`),
+	}
+
+	got, err := dashboardAdapter{}.DecodeTurn(event)
+	require.NoError(t, err)
+	require.Contains(t, got, "Timestamp: 2026-06-06T23:36:22Z")
+
+	// Re-decoding the same event must be byte-identical: the capture matcher
+	// compares stored content against replayed content, so a non-deterministic
+	// decode would open a spurious new generation on every retry/replay.
+	again, err := dashboardAdapter{}.DecodeTurn(event)
+	require.NoError(t, err)
+	require.Equal(t, got, again)
+}
+
+// A non-UTC event clock is normalized to UTC in the stamp.
+func TestDashboardAdapterDecodeTurnStampsTimestampInUTC(t *testing.T) {
+	t.Parallel()
+
+	loc := time.FixedZone("west", -3*60*60)
+	event := assistantThreadEventRecord{
+		EventID:               "evt-1",
+		CreatedAt:             time.Date(2026, time.June, 6, 23, 36, 22, 0, loc),
+		NormalizedPayloadJSON: []byte(`{"text":"hi"}`),
+	}
+
+	got, err := dashboardAdapter{}.DecodeTurn(event)
+	require.NoError(t, err)
+	require.Contains(t, got, "Timestamp: 2026-06-07T02:36:22Z")
 }
 
 // Dashboard messages reach the assistant through the trigger dispatch path, so

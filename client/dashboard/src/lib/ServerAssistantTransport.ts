@@ -13,6 +13,20 @@ const DEFAULT_POLL_INTERVAL_MS = 1500;
 const DEFAULT_POLL_TIMEOUT_MS = 600_000;
 const MAX_CONSECUTIVE_POLL_FAILURES = 3;
 
+// Adaptive polling: a short turn (a one-line answer, no tool calls) often lands
+// within a couple of seconds, where a flat 1.5s interval adds up to a full
+// poll's worth of dead air. Poll quickly for the first few iterations to catch
+// those fast turns, then ramp toward the steady-state interval so long,
+// tool-heavy turns don't hammer chat.load. The ceiling is the configured
+// `pollIntervalMs`, so callers can still tune the upper bound.
+const FAST_POLL_INTERVAL_MS = 350;
+const POLL_BACKOFF_FACTOR = 1.6;
+
+function nextPollDelay(attempt: number, ceilingMs: number): number {
+  const delay = FAST_POLL_INTERVAL_MS * POLL_BACKOFF_FACTOR ** attempt;
+  return Math.min(Math.round(delay), ceilingMs);
+}
+
 export interface ServerAssistantTransportDeps {
   /** SDK client (from useGramContext) — already authenticated. */
   client: GramCore;
@@ -170,6 +184,7 @@ async function pollForReplies(args: {
   // undefined for the first iteration, then pin to the response's generation.
   let pinnedGeneration: number | undefined = snapshot?.generation;
   let consecutiveFailures = 0;
+  let attempt = 0;
 
   for (;;) {
     if (abortSignal?.aborted) {
@@ -219,7 +234,8 @@ async function pollForReplies(args: {
     if (Date.now() >= deadline) {
       throw new Error("Timed out waiting for the assistant's reply.");
     }
-    await sleep(pollIntervalMs, abortSignal);
+    await sleep(nextPollDelay(attempt, pollIntervalMs), abortSignal);
+    attempt++;
   }
 }
 

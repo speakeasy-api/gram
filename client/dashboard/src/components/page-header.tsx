@@ -7,6 +7,7 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { cn, titleCaseSlug } from "@/lib/utils.ts";
 import React from "react";
 import { Link, useLocation, useParams } from "react-router";
+import { BrandGradientLine } from "./brand-gradient-line.tsx";
 import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge.tsx";
 import { Heading } from "./ui/heading.tsx";
 
@@ -18,26 +19,31 @@ function PageHeaderComponent({
   children: React.ReactNode;
 }) {
   return (
-    <header
-      className={cn(
-        "flex h-(--header-height) shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)",
-        className,
-      )}
-    >
-      <div className="flex w-full items-center gap-3 px-3">
-        <SidebarTrigger className="mx-0 -ml-1 px-0" />
-        <Separator
-          orientation="vertical"
-          className="data-[orientation=vertical]:h-4"
-        />
-        {children}
-        {/* Insights trigger is pinned to the far right of the bar,
-            outside the breadcrumb's max-width container so it lands at
-            the true right edge on wide viewports. Self-hides when no
-            InsightsSidebar ancestor exists. */}
-        <InsightsTrigger className="ml-auto shrink-0" />
-      </div>
-    </header>
+    <>
+      <header
+        className={cn(
+          "flex h-(--header-height) shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)",
+          className,
+        )}
+      >
+        <div className="flex w-full items-center gap-3 px-3">
+          <SidebarTrigger className="mx-0 -ml-1 px-0" />
+          <Separator
+            orientation="vertical"
+            className="data-[orientation=vertical]:h-4"
+          />
+          {children}
+          {/* Insights trigger is pinned to the far right of the bar,
+              outside the breadcrumb's max-width container so it lands at
+              the true right edge on wide viewports. Self-hides when no
+              InsightsSidebar ancestor exists. */}
+          <InsightsTrigger className="ml-auto shrink-0" />
+        </div>
+      </header>
+      {/* Brand gradient signature, relocated here from the old top bar — it now
+          divides the main panel's header from its content on the right side. */}
+      <BrandGradientLine />
+    </>
   );
 }
 
@@ -222,7 +228,22 @@ function PageHeaderBreadcrumbs({
   );
 }
 
+function PageHeaderActions({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={cn("ml-auto flex shrink-0 items-center gap-2", className)}>
+      {children}
+    </div>
+  );
+}
+
 export const PageHeader = Object.assign(PageHeaderComponent, {
   Title: PageHeaderTitle,
   Breadcrumbs: PageHeaderBreadcrumbs,
+  Actions: PageHeaderActions,
 });

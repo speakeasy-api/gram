@@ -179,7 +179,7 @@ SET
   updated_at = clock_timestamp()
 FROM next_event
 WHERE e.id = next_event.id
-RETURNING e.id, e.assistant_thread_id, e.assistant_id, e.project_id, e.trigger_instance_id, e.event_id, e.correlation_id, e.status, e.normalized_payload_json, e.source_payload_json, e.attempts, e.last_error
+RETURNING e.id, e.assistant_thread_id, e.assistant_id, e.project_id, e.trigger_instance_id, e.event_id, e.correlation_id, e.status, e.normalized_payload_json, e.source_payload_json, e.attempts, e.last_error, e.created_at
 `
 
 type ClaimNextPendingEventParams struct {
@@ -202,6 +202,7 @@ type ClaimNextPendingEventRow struct {
 	SourcePayloadJson     []byte
 	Attempts              int64
 	LastError             pgtype.Text
+	CreatedAt             pgtype.Timestamptz
 }
 
 func (q *Queries) ClaimNextPendingEvent(ctx context.Context, arg ClaimNextPendingEventParams) (ClaimNextPendingEventRow, error) {
@@ -225,6 +226,7 @@ func (q *Queries) ClaimNextPendingEvent(ctx context.Context, arg ClaimNextPendin
 		&i.SourcePayloadJson,
 		&i.Attempts,
 		&i.LastError,
+		&i.CreatedAt,
 	)
 	return i, err
 }

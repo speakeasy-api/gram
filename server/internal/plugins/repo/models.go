@@ -46,7 +46,8 @@ type PluginGithubConnection struct {
 type PluginServer struct {
 	ID          uuid.UUID
 	PluginID    uuid.UUID
-	ToolsetID   uuid.UUID
+	ToolsetID   uuid.NullUUID
+	McpServerID uuid.NullUUID
 	DisplayName string
 	Policy      string
 	SortOrder   int32
