@@ -690,6 +690,7 @@ jobs:
     if: needs.changes.outputs.infra == 'true'
     env:
       GOMAXPROCS: 4
+      PUBSUB_EMULATOR_HOST: 127.0.0.1:8085
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
@@ -727,6 +728,29 @@ jobs:
 
       - name: Run code generators
         run: mise run gen:infra
+
+      - name: Start Pub/Sub emulator
+        run: |
+          docker run -d --rm \
+            --name pubsub-emulator \
+            -p 8085:8085 \
+            gcr.io/google.com/cloudsdktool/google-cloud-cli:570.0.0-emulators@sha256:55ff6adfca42dae15d8d58034167e87e822e1a9816780820ed60d8b3ec343b11 \
+            gcloud beta emulators pubsub start --host-port=0.0.0.0:8085
+
+          for _ in {1..30}; do
+            if timeout 1 bash -c "</dev/tcp/127.0.0.1/8085" 2>/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+
+          docker logs pubsub-emulator
+          exit 1
+
+      - name: Validate Pub/Sub resources against emulator
+        env:
+          GRAM_TEST_PUBSUB_EMULATOR: "1"
+        run: go test ./infra/internal/gcp -run TestPubSubTopologyCreatableWithEmulator -count=1 -v
 
       - name: Check for dirty files
         run: mise run git:porcelain
