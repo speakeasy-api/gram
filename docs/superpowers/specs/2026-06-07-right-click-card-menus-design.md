@@ -11,17 +11,23 @@ opens a menu of that card's actions — the **same** actions already shown by th
 visible `⋯` (`MoreActions`) button. Right-click is an _enhancement_ layered on the
 existing visible affordance, never the only path to an action.
 
-v1 wires two cards that already define an actions array — `PluginCard` and `SourceCard` —
-and ships a reusable `<CardContextMenu>` primitive so any other card can opt in later (one
-line) once its actions are defined.
+v1 wires every card that already defines an actions array — `PluginCard`, `SourceCard`,
+`EnvironmentCard`, `AssistantCard`, `CustomToolCard`, `PromptTemplateCard`, and
+`ResourceCard` — and ships a reusable `<CardContextMenu>` primitive so any other card can
+opt in later (one line) once its actions are defined. The right-click menu honors the same
+RBAC gating as the card's `⋯` (scope-gated actions are excluded from both).
+
+> Scope note: the initial draft scoped v1 to just `PluginCard`/`SourceCard`. It was widened
+> during implementation to cover all cards that already had an action menu, since that's the
+> same rule ("cards with existing actions") with no new product decisions required.
 
 ## Decisions captured during brainstorming
 
-| Topic             | Decision                                                                                                                                                            |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Card scope (v1)   | Cards that already define a `MoreActions` actions array — `PluginCard`, `SourceCard` — plus a reusable primitive. No new actions invented for cards that lack them. |
-| Affordance model  | A single `Action[]` drives BOTH the visible `⋯` menu and the right-click menu, so they never drift. The visible `⋯` stays (discoverability / touch).                |
-| Out of scope (v1) | MCP / Collections / Catalog cards (they have no actions today — adopting them is a later, per-card product decision). Backend. New action types.                    |
+| Topic             | Decision                                                                                                                                                                                                             |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Card scope (v1)   | Every card that already defines a `MoreActions` actions array — Plugin, Source, Environment, Assistant, Custom Tool, Prompt, Resource — plus a reusable primitive. No new actions invented for cards that lack them. |
+| Affordance model  | A single `Action[]` drives BOTH the visible `⋯` menu and the right-click menu, so they never drift. The visible `⋯` stays (discoverability / touch).                                                                 |
+| Out of scope (v1) | MCP / Collections / Catalog cards (they have no actions today — adopting them is a later, per-card product decision). Backend. New action types.                                                                     |
 
 ## Current state
 

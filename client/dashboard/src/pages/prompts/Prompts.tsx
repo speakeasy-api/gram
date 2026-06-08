@@ -117,7 +117,9 @@ export function PromptTemplateCard({
         <Card>
           <Card.Header>
             <Card.Title className="normal-case">{template.name}</Card.Title>
-            <MoreActions actions={actions} />
+            <div onClick={(e) => e.stopPropagation()}>
+              <MoreActions actions={actions} />
+            </div>
           </Card.Header>
           <Card.Content>
             <Card.Description>

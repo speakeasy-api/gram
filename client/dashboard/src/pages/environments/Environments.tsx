@@ -6,6 +6,7 @@ import { DotCard } from "@/components/ui/dot-card";
 import { Action, MoreActions } from "@/components/ui/more-actions";
 import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useRoutes } from "@/routes";
 import { Environment } from "@gram/client/models/components/environment.js";
 import { useCreateEnvironmentMutation } from "@gram/client/react-query/index.js";
@@ -167,14 +168,21 @@ function EnvironmentCard({
   onClone: (environment: Environment) => void;
 }) {
   const routes = useRoutes();
+  const { hasScope } = useRBAC();
+  const canWrite = hasScope("environment:write");
 
-  const actions: Action[] = [
-    {
-      label: "Clone",
-      onClick: () => onClone(environment),
-      icon: "copy",
-    },
-  ];
+  // Gate the actions by scope so the right-click menu honors the same
+  // environment:write guard as the visible ⋯ button (which is wrapped in
+  // RequireScope). Empty actions → CardContextMenu renders children unwrapped.
+  const actions: Action[] = canWrite
+    ? [
+        {
+          label: "Clone",
+          onClick: () => onClone(environment),
+          icon: "copy",
+        },
+      ]
+    : [];
 
   return (
     <routes.environments.environment.Link

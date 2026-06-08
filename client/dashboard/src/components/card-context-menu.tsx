@@ -45,7 +45,7 @@ export function CardContextMenu({
           >
             {action.label}
             {action.icon && (
-              <Icon name={action.icon} className="size-3.5 shrink-0" />
+              <Icon name={action.icon} className="size-3 shrink-0" />
             )}
           </ContextMenuItem>
         ))}
