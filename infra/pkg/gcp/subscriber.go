@@ -3,8 +3,11 @@ package gcp
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"runtime/debug"
 
 	"cloud.google.com/go/pubsub/v2"
+	"github.com/speakeasy-api/gram/infra/internal/attr"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -14,11 +17,22 @@ type SubscriberBroker interface {
 
 type psSubscriberOptions struct {
 	receiveSettings *pubsub.ReceiveSettings
+	logger          *slog.Logger
 }
 
 func WithPubSubReceiveSettings(settings *pubsub.ReceiveSettings) func(*psSubscriberOptions) {
 	return func(opts *psSubscriberOptions) {
 		opts.receiveSettings = settings
+	}
+}
+
+// WithSubscriberLogger sets the logger used to report panics recovered while
+// processing messages. When unset the subscriber falls back to slog.Default().
+func WithSubscriberLogger(logger *slog.Logger) func(*psSubscriberOptions) {
+	return func(opts *psSubscriberOptions) {
+		if logger != nil {
+			opts.logger = logger
+		}
 	}
 }
 
@@ -45,28 +59,36 @@ type Subscriber[M proto.Message] interface {
 	Receive(context.Context, func(context.Context, M, MessageMetadata) error) error
 }
 
+// incomingMessage decouples per-message processing from the concrete
+// *pubsub.Message so the handling logic (including panic recovery) can be
+// exercised in tests without a live subscriber.
+type incomingMessage struct {
+	id              string
+	data            []byte
+	attributes      map[string]string
+	deliveryAttempt *int
+	ack             func()
+	nack            func()
+}
+
 type psSubscriber[M proto.Message] struct {
-	sub *pubsub.Subscriber
-	new func() M
+	sub                   *pubsub.Subscriber
+	new                   func() M
+	logger                *slog.Logger
+	topicProtoName        string
+	subscriptionProtoName string
 }
 
 func (s *psSubscriber[M]) Receive(ctx context.Context, f func(context.Context, M, MessageMetadata) error) error {
 	err := s.sub.Receive(ctx, func(ctx context.Context, m *pubsub.Message) {
-		defer m.Ack()
-
-		msg := s.new()
-		if err := proto.Unmarshal(m.Data, msg); err != nil {
-			m.Nack()
-			return
-		}
-		if err := f(ctx, msg, MessageMetadata{
-			ID:              m.ID,
-			Attributes:      m.Attributes,
-			DeliveryAttempt: m.DeliveryAttempt,
-		}); err != nil {
-			m.Nack()
-			return
-		}
+		s.handle(ctx, incomingMessage{
+			id:              m.ID,
+			data:            m.Data,
+			attributes:      m.Attributes,
+			deliveryAttempt: m.DeliveryAttempt,
+			ack:             m.Ack,
+			nack:            m.Nack,
+		}, f)
 	})
 	if err != nil {
 		return fmt.Errorf("receive: %w", err)
@@ -75,7 +97,51 @@ func (s *psSubscriber[M]) Receive(ctx context.Context, f func(context.Context, M
 	return nil
 }
 
-func PubSubSubscriberForMessage[M proto.Message](ctx context.Context, broker SubscriberBroker, msg M, subscription proto.Message, options ...func(*psSubscriberOptions)) (Subscriber[M], error) {
+func (s *psSubscriber[M]) handle(ctx context.Context, m incomingMessage, f func(context.Context, M, MessageMetadata) error) {
+	defer m.ack()
+
+	// Recover from panics in the handler so a single bad message does not take
+	// down the receive goroutine. Log with diagnostic context so the crash is
+	// visible instead of becoming a silent redelivery loop, then nack so the
+	// message is redelivered (and eventually dead-lettered if it keeps
+	// panicking).
+	defer func() {
+		if r := recover(); r != nil {
+			deliveryAttempt := 0
+			if m.deliveryAttempt != nil {
+				deliveryAttempt = *m.deliveryAttempt
+			}
+
+			s.logger.ErrorContext(ctx, "panic recovered while processing pubsub message",
+				attr.SlogErrorMessage(fmt.Sprintf("%v", r)),
+				attr.SlogErrorStack(string(debug.Stack())),
+				attr.SlogTopicProtoName(s.topicProtoName),
+				attr.SlogSubscriptionProtoName(s.subscriptionProtoName),
+				slog.String("message_id", m.id),
+				slog.Int("delivery_attempt", deliveryAttempt),
+			)
+			m.nack()
+		}
+	}()
+
+	msg := s.new()
+	if err := proto.Unmarshal(m.data, msg); err != nil {
+		m.nack()
+		return
+	}
+	if err := f(ctx, msg, MessageMetadata{
+		ID:              m.id,
+		Attributes:      m.attributes,
+		DeliveryAttempt: m.deliveryAttempt,
+	}); err != nil {
+		m.nack()
+		return
+	}
+}
+
+type SubscriberOption func(*psSubscriberOptions)
+
+func PubSubSubscriberForMessage[M proto.Message](ctx context.Context, broker SubscriberBroker, msg M, subscription proto.Message, options ...SubscriberOption) (Subscriber[M], error) {
 	if isNilMessage(msg) {
 		return nil, fmt.Errorf("message must not be nil")
 	}
@@ -102,10 +168,17 @@ func PubSubSubscriberForMessage[M proto.Message](ctx context.Context, broker Sub
 	if opts.receiveSettings != nil {
 		sub.ReceiveSettings = *opts.receiveSettings
 	}
+	logger := opts.logger
+	if logger == nil {
+		logger = slog.Default()
+	}
 
 	mt := msgref.Type()
 	return &psSubscriber[M]{
-		sub: sub,
-		new: func() M { return mt.New().Interface().(M) },
+		sub:                   sub,
+		new:                   func() M { return mt.New().Interface().(M) },
+		logger:                logger,
+		topicProtoName:        string(msgref.Descriptor().FullName()),
+		subscriptionProtoName: string(descriptor.FullName()),
 	}, nil
 }

@@ -276,6 +276,7 @@ linters:
         # pattern.
         - '^github\.com/speakeasy-api/gram/server/internal/risk/categories\.Definition$'
         - '^github\.com/speakeasy-api/gram/server/internal/risk/categories\.Filter$'
+        - '^github\.com/speakeasy-api/gram/infra/gen/gram/.+'
     exhaustive:
       check:
         - switch

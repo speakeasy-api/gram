@@ -98,6 +98,9 @@ const (
 	AuthUserIDKey           = attribute.Key("gram.auth.user_id")
 	AuthUserExternalIDKey   = attribute.Key("gram.auth.external_user_id")
 
+	TopicProtoNameKey        = attribute.Key("gram.topic.proto_name")
+	SubscriptionProtoNameKey = attribute.Key("gram.subscription.proto_name")
+
 	AssetIDKey                     = attribute.Key("gram.asset.id")
 	AssetURLKey                    = attribute.Key("gram.asset.url")
 	ChatIDKey                      = attribute.Key("gram.chat.id")
@@ -651,6 +654,18 @@ func SlogAuthUserID(v string) slog.Attr      { return slog.String(string(AuthUse
 
 func AuthUserExternalID(v string) attribute.KeyValue { return AuthUserExternalIDKey.String(v) }
 func SlogAuthUserExternalID(v string) slog.Attr      { return slog.String(string(AuthUserExternalIDKey), v) }
+
+func TopicProtoName[S ~string](v S) attribute.KeyValue { return TopicProtoNameKey.String(string(v)) }
+func SlogTopicProtoName[S ~string](v S) slog.Attr {
+	return slog.String(string(TopicProtoNameKey), string(v))
+}
+
+func SubscriptionProtoName[S ~string](v S) attribute.KeyValue {
+	return SubscriptionProtoNameKey.String(string(v))
+}
+func SlogSubscriptionProtoName[S ~string](v S) slog.Attr {
+	return slog.String(string(SubscriptionProtoNameKey), string(v))
+}
 
 func AssetID(v string) attribute.KeyValue { return AssetIDKey.String(v) }
 func SlogAssetID(v string) slog.Attr      { return slog.String(string(AssetIDKey), v) }
