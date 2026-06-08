@@ -130,31 +130,12 @@ export function ExclusionsTab({
       width: "0.3fr",
       render: (exclusion) => (
         <div onClick={(e) => e.stopPropagation()}>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="tertiary" size="sm">
-                <Button.Icon>
-                  <Ellipsis className="h-4 w-4" />
-                </Button.Icon>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                className="cursor-pointer"
-                onSelect={() => onSheetChange({ mode: "edit", exclusion })}
-              >
-                Edit
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive cursor-pointer"
-                onSelect={() =>
-                  deleteMutation.mutate({ request: { id: exclusion.id } })
-                }
-              >
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <ExclusionActionsMenu
+            onEdit={() => onSheetChange({ mode: "edit", exclusion })}
+            onDelete={() =>
+              deleteMutation.mutate({ request: { id: exclusion.id } })
+            }
+          />
         </div>
       ),
     },
@@ -190,6 +171,40 @@ export function ExclusionsTab({
         }}
       />
     </>
+  );
+}
+
+function ExclusionActionsMenu({
+  onEdit,
+  onDelete,
+}: {
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <Button variant="tertiary" size="sm">
+          <Button.Icon>
+            <Ellipsis className="h-4 w-4" />
+          </Button.Icon>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem
+          className="cursor-pointer"
+          onSelect={() => setTimeout(onEdit, 0)}
+        >
+          Edit
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          className="text-destructive focus:text-destructive cursor-pointer"
+          onSelect={() => setTimeout(onDelete, 0)}
+        >
+          Delete
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
