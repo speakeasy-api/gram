@@ -93,6 +93,7 @@ type Activities struct {
 	processWorkOSOrganizationEvents *activities.ProcessWorkOSOrganizationEvents
 	processWorkOSGlobalRoleEvents   *activities.ProcessWorkOSGlobalRoleEvents
 	processWorkOSUserEvents         *activities.ProcessWorkOSUserEvents
+	processWorkOSDirectoryAttrs     *activities.ProcessWorkOSDirectoryAttributesEvents
 	cancelAssistantsSubscription    *activities.CancelAssistantsSubscription
 	outboxRelay                     *outbox_relay.Relay
 	outboxGC                        *outbox_relay.GC
@@ -188,6 +189,7 @@ func NewActivities(
 		processWorkOSOrganizationEvents: activities.NewProcessWorkOSOrganizationEvents(logger, db, workosClient),
 		processWorkOSGlobalRoleEvents:   activities.NewProcessWorkOSGlobalRoleEvents(logger, db, workosClient),
 		processWorkOSUserEvents:         activities.NewProcessWorkOSUserEvents(logger, db, workosClient),
+		processWorkOSDirectoryAttrs:     activities.NewProcessWorkOSDirectoryAttributesEvents(logger, db, workosClient),
 		cancelAssistantsSubscription:    activities.NewCancelAssistantsSubscription(logger, billingRepo),
 		outboxRelay:                     outbox_relay.New(logger, tracerProvider, db, svixClient, productFeatures),
 		outboxGC:                        outbox_relay.NewGC(logger, meterProvider, db),
@@ -217,6 +219,10 @@ func (a *Activities) ProcessWorkOSGlobalRoleEvents(ctx context.Context, params a
 
 func (a *Activities) ProcessWorkOSUserEvents(ctx context.Context, params activities.ProcessWorkOSUserEventsParams) (*activities.ProcessWorkOSUserEventsResult, error) {
 	return a.processWorkOSUserEvents.Do(ctx, params)
+}
+
+func (a *Activities) ProcessWorkOSDirectoryAttributesEvents(ctx context.Context, params activities.ProcessWorkOSDirectoryAttributesEventsParams) (*activities.ProcessWorkOSDirectoryAttributesEventsResult, error) {
+	return a.processWorkOSDirectoryAttrs.Do(ctx, params)
 }
 
 func (a *Activities) TransitionDeployment(ctx context.Context, projectID uuid.UUID, deploymentID uuid.UUID, status string) (*activities.TransitionDeploymentResult, error) {

@@ -17,6 +17,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/external/server"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background"
+	bgactivities "github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -77,8 +78,22 @@ func AttachWebhookHandler(mux goahttp.Muxer, h *WebhookHandler) {
 // webhook payload. ID and OrganizationID are populated differently per event
 // type; see workOSOrganizationIDFromWebhook for the mapping.
 type webhookEventData struct {
-	ID             string `json:"id"`
-	OrganizationID string `json:"organization_id"`
+	ID                     string                 `json:"id"`
+	OrganizationID         string                 `json:"organization_id"`
+	DirectoryUserID        string                 `json:"directory_user_id"`
+	DirectoryGroupID       string                 `json:"directory_group_id"`
+	WorkOSDirectoryUserID  string                 `json:"workos_directory_user_id"`
+	WorkOSDirectoryGroupID string                 `json:"workos_directory_group_id"`
+	UserID                 string                 `json:"user_id"`
+	GroupID                string                 `json:"group_id"`
+	User                   webhookDirectoryEntity `json:"user"`
+	DirectoryUser          webhookDirectoryEntity `json:"directory_user"`
+	Group                  webhookDirectoryEntity `json:"group"`
+	DirectoryGroup         webhookDirectoryEntity `json:"directory_group"`
+}
+
+type webhookDirectoryEntity struct {
+	ID string `json:"id"`
 }
 
 type webhookEvent struct {
@@ -154,7 +169,10 @@ func (h *WebhookHandler) dispatch(ctx context.Context, logger *slog.Logger, even
 
 	case string(workos.EventKindUserCreated),
 		string(workos.EventKindUserUpdated),
-		string(workos.EventKindUserDeleted):
+		string(workos.EventKindUserDeleted),
+		string(workos.EventKindDirectorySyncUserCreated),
+		string(workos.EventKindDirectorySyncUserUpdated),
+		string(workos.EventKindDirectorySyncUserDeleted):
 		if _, err := background.ExecuteProcessWorkOSUserEventsWorkflowDebounced(ctx, h.temporalEnv, background.ProcessWorkOSUserEventsWorkflowParams{
 			WorkOSUserID: event.Data.ID,
 		}); err != nil {
@@ -162,9 +180,37 @@ func (h *WebhookHandler) dispatch(ctx context.Context, logger *slog.Logger, even
 		}
 		return nil
 
+	case string(workos.EventKindDirectorySyncGroupCreated),
+		string(workos.EventKindDirectorySyncGroupUpdated),
+		string(workos.EventKindDirectorySyncGroupDeleted):
+		if event.Data.ID == "" {
+			return oops.E(oops.CodeBadRequest, errors.New("missing WorkOS directory group ID"), "missing WorkOS directory group ID").Log(ctx, logger)
+		}
+		if _, err := background.ExecuteProcessWorkOSDirectoryAttributesEventsWorkflowDebounced(ctx, h.temporalEnv, background.ProcessWorkOSDirectoryAttributesEventsWorkflowParams{
+			EntityType: bgactivities.WorkOSDirectoryAttributesEntityTypeGroup,
+			EntityID:   event.Data.ID,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to enqueue WorkOS directory group sync").Log(ctx, logger)
+		}
+		return nil
+
+	case string(workos.EventKindDirectorySyncGroupUserAdded),
+		string(workos.EventKindDirectorySyncGroupUserRemoved):
+		groupID := event.Data.directoryGroupID()
+		userID := event.Data.directoryUserID()
+		if groupID == "" || userID == "" {
+			return oops.E(oops.CodeBadRequest, errors.New("missing WorkOS directory membership IDs"), "missing WorkOS directory membership IDs").Log(ctx, logger)
+		}
+		if _, err := background.ExecuteProcessWorkOSDirectoryAttributesEventsWorkflowDebounced(ctx, h.temporalEnv, background.ProcessWorkOSDirectoryAttributesEventsWorkflowParams{
+			EntityType: bgactivities.WorkOSDirectoryAttributesEntityTypeGroupMembership,
+			EntityID:   bgactivities.DirectoryGroupMembershipSyncEntityID(groupID, userID),
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to enqueue WorkOS directory group membership sync").Log(ctx, logger)
+		}
+		return nil
+
 	default:
-		// Remaining dsync.* sub-events and any new event types are accepted
-		// so WorkOS stops retrying, but they are not processed yet.
+		// Unknown event types are accepted so WorkOS stops retrying them.
 		return nil
 	}
 }
@@ -180,4 +226,22 @@ func parseOrganizationID(event webhookEvent) string {
 		return event.Data.ID
 	}
 	return event.Data.OrganizationID
+}
+
+func (d webhookEventData) directoryUserID() string {
+	for _, candidate := range []string{d.DirectoryUserID, d.WorkOSDirectoryUserID, d.UserID, d.User.ID, d.DirectoryUser.ID} {
+		if candidate != "" {
+			return candidate
+		}
+	}
+	return ""
+}
+
+func (d webhookEventData) directoryGroupID() string {
+	for _, candidate := range []string{d.DirectoryGroupID, d.WorkOSDirectoryGroupID, d.GroupID, d.Group.ID, d.DirectoryGroup.ID} {
+		if candidate != "" {
+			return candidate
+		}
+	}
+	return ""
 }

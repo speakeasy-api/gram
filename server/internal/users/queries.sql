@@ -34,6 +34,14 @@ SET workos_updated_at = @workos_updated_at,
 WHERE workos_id = @workos_id
   AND (workos_updated_at IS NULL OR @workos_updated_at >= workos_updated_at);
 
+-- name: UpdateUserDirectoryAttributesByID :execrows
+UPDATE users
+SET attributes = @attributes,
+  attributes_content_hash = @attributes_content_hash,
+  updated_at = clock_timestamp()
+WHERE id = @id
+  AND (attributes_content_hash IS DISTINCT FROM @attributes_content_hash);
+
 -- name: GetUser :one
 SELECT * FROM users
 WHERE id = $1;

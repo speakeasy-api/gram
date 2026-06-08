@@ -339,6 +339,29 @@ func (q *Queries) SetUserWorkosID(ctx context.Context, arg SetUserWorkosIDParams
 	return err
 }
 
+const updateUserDirectoryAttributesByID = `-- name: UpdateUserDirectoryAttributesByID :execrows
+UPDATE users
+SET attributes = $1,
+  attributes_content_hash = $2,
+  updated_at = clock_timestamp()
+WHERE id = $3
+  AND (attributes_content_hash IS DISTINCT FROM $2)
+`
+
+type UpdateUserDirectoryAttributesByIDParams struct {
+	Attributes            []byte
+	AttributesContentHash pgtype.Text
+	ID                    string
+}
+
+func (q *Queries) UpdateUserDirectoryAttributesByID(ctx context.Context, arg UpdateUserDirectoryAttributesByIDParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateUserDirectoryAttributesByID, arg.Attributes, arg.AttributesContentHash, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const upsertSyncedUser = `-- name: UpsertSyncedUser :execrows
 INSERT INTO users (id, email, display_name, photo_url, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, NULL)

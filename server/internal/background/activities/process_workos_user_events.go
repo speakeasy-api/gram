@@ -75,6 +75,9 @@ func (p *ProcessWorkOSUserEvents) Do(ctx context.Context, params ProcessWorkOSUs
 			string(workos.EventKindUserCreated),
 			string(workos.EventKindUserUpdated),
 			string(workos.EventKindUserDeleted),
+			string(workos.EventKindDirectorySyncUserCreated),
+			string(workos.EventKindDirectorySyncUserUpdated),
+			string(workos.EventKindDirectorySyncUserDeleted),
 		},
 		Limit:          workosUserEventsPageSize,
 		After:          sinceEventID,
@@ -166,7 +169,25 @@ type workosUserEventPayload struct {
 	DeletedAt         time.Time `json:"deleted_at"`
 }
 
+type workosDirectoryUserEventPayload struct {
+	ID     string `json:"id"`
+	Email  string `json:"email"`
+	Emails []struct {
+		Value   string `json:"value"`
+		Primary bool   `json:"primary"`
+	} `json:"emails"`
+	Username  string    `json:"username"`
+	FirstName string    `json:"first_name"`
+	LastName  string    `json:"last_name"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 func (p *ProcessWorkOSUserEvents) handleUserEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, workosUserID string, event events.Event) (*workosUserExternalIDUpdate, error) {
+	switch workos.EventKind(event.Event) {
+	case workos.EventKindDirectorySyncUserCreated, workos.EventKindDirectorySyncUserUpdated, workos.EventKindDirectorySyncUserDeleted:
+		return nil, p.handleDirectoryUserEvent(ctx, logger, dbtx, workosUserID, event)
+	}
+
 	var payload workosUserEventPayload
 
 	if err := json.Unmarshal(event.Data, &payload); err != nil {
@@ -188,6 +209,15 @@ func (p *ProcessWorkOSUserEvents) handleUserEvent(ctx context.Context, logger *s
 	default:
 		return nil, nil
 	}
+}
+
+func (p *ProcessWorkOSUserEvents) handleDirectoryUserEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, workosDirectoryUserID string, event events.Event) error {
+	var payload workosDirectoryUserEventPayload
+	if err := json.Unmarshal(event.Data, &payload); err != nil {
+		return oops.Permanent(fmt.Errorf("unmarshal directory user event payload: %w", err))
+	}
+	_, err := storeDirectoryUserAttributes(ctx, logger, dbtx, workosDirectoryUserID, payload, event.Data)
+	return err
 }
 
 func (p *ProcessWorkOSUserEvents) handleUserUpsert(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, payload workosUserEventPayload) (*workosUserExternalIDUpdate, error) {
@@ -357,4 +387,21 @@ func displayNameFromWorkOSUser(payload workosUserEventPayload) string {
 		return displayName
 	}
 	return payload.Email
+}
+
+func directoryUserEmail(payload workosDirectoryUserEventPayload) string {
+	if payload.Email != "" {
+		return strings.ToLower(strings.TrimSpace(payload.Email))
+	}
+	for _, email := range payload.Emails {
+		if email.Primary && email.Value != "" {
+			return strings.ToLower(strings.TrimSpace(email.Value))
+		}
+	}
+	for _, email := range payload.Emails {
+		if email.Value != "" {
+			return strings.ToLower(strings.TrimSpace(email.Value))
+		}
+	}
+	return ""
 }
