@@ -1085,8 +1085,8 @@ limited_chats AS (
     fc.risk_findings_count
   FROM filtered_chats fc
   ORDER BY
-    CASE WHEN $9 = 'created_at' AND $10 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
-    CASE WHEN $9 = 'created_at' AND $10 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
+    CASE WHEN $9 = 'last_message_timestamp' AND $10 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
+    CASE WHEN $9 = 'last_message_timestamp' AND $10 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
     CASE WHEN $9 = 'num_messages' AND $10 = 'desc' THEN fc.num_messages END DESC NULLS LAST,
     CASE WHEN $9 = 'num_messages' AND $10 = 'asc' THEN fc.num_messages END ASC NULLS LAST,
     fc.last_message_timestamp DESC,

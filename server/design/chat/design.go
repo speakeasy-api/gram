@@ -44,9 +44,9 @@ var _ = Service("chat", func() {
 				Default(0)
 				Minimum(0)
 			})
-			Attribute("sort_by", String, "Field to sort by. created_at sorts by latest chat message activity.", func() {
-				Enum("created_at", "num_messages")
-				Default("created_at")
+			Attribute("sort_by", String, "Field to sort by", func() {
+				Enum("last_message_timestamp", "num_messages")
+				Default("last_message_timestamp")
 			})
 			Attribute("sort_order", String, "Sort order", func() {
 				Enum("asc", "desc")

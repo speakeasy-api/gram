@@ -42,7 +42,7 @@ type SortOrder = "asc" | "desc";
 function toApiSortBy(field: SortField): SortBy {
   switch (field) {
     case "chronological":
-      return SortBy.CreatedAt;
+      return SortBy.LastMessageTimestamp;
     case "messageCount":
       return SortBy.NumMessages;
   }

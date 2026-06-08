@@ -223,7 +223,7 @@ type ListChatsPayload struct {
 	Limit int
 	// Pagination offset
 	Offset int
-	// Field to sort by. created_at sorts by latest chat message activity.
+	// Field to sort by
 	SortBy string
 	// Sort order
 	SortOrder string

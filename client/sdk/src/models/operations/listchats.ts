@@ -34,14 +34,14 @@ export const HasRisk = {
 export type HasRisk = ClosedEnum<typeof HasRisk>;
 
 /**
- * Field to sort by. created_at sorts by latest chat message activity.
+ * Field to sort by
  */
 export const SortBy = {
-  CreatedAt: "created_at",
+  LastMessageTimestamp: "last_message_timestamp",
   NumMessages: "num_messages",
 } as const;
 /**
- * Field to sort by. created_at sorts by latest chat message activity.
+ * Field to sort by
  */
 export type SortBy = ClosedEnum<typeof SortBy>;
 
@@ -91,7 +91,7 @@ export type ListChatsRequest = {
    */
   offset?: number | undefined;
   /**
-   * Field to sort by. created_at sorts by latest chat message activity.
+   * Field to sort by
    */
   sortBy?: SortBy | undefined;
   /**
@@ -249,7 +249,7 @@ export const ListChatsRequest$outboundSchema: z.ZodMiniType<
     to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     limit: z._default(z.int(), 50),
     offset: z._default(z.int(), 0),
-    sortBy: z._default(SortBy$outboundSchema, "created_at"),
+    sortBy: z._default(SortBy$outboundSchema, "last_message_timestamp"),
     sortOrder: z._default(SortOrder$outboundSchema, "desc"),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),

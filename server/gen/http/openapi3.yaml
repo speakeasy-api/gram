@@ -6784,14 +6784,14 @@ paths:
                     minimum: 0
                     type: integer
                 - allowEmptyValue: true
-                  description: Field to sort by. created_at sorts by latest chat message activity.
+                  description: Field to sort by
                   in: query
                   name: sort_by
                   schema:
-                    default: created_at
-                    description: Field to sort by. created_at sorts by latest chat message activity.
+                    default: last_message_timestamp
+                    description: Field to sort by
                     enum:
-                        - created_at
+                        - last_message_timestamp
                         - num_messages
                     type: string
                 - allowEmptyValue: true

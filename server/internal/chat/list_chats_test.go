@@ -25,7 +25,7 @@ func defaultPayload() *gen.ListChatsPayload {
 	return &gen.ListChatsPayload{
 		Limit:     50,
 		Offset:    0,
-		SortBy:    "created_at",
+		SortBy:    "last_message_timestamp",
 		SortOrder: "desc",
 	}
 }
@@ -427,7 +427,7 @@ func TestListChats_DateRangeAndSortUseLastMessageTimestamp(t *testing.T) {
 	payload := defaultPayload()
 	payload.From = &from
 	payload.To = &to
-	payload.SortBy = "created_at"
+	payload.SortBy = "last_message_timestamp"
 	payload.SortOrder = "desc"
 
 	result, err := ti.service.ListChats(ctx, payload)
@@ -436,6 +436,38 @@ func TestListChats_DateRangeAndSortUseLastMessageTimestamp(t *testing.T) {
 	require.Len(t, result.Chats, 2)
 	require.Equal(t, resumedOldChat.String(), result.Chats[0].ID)
 	require.Equal(t, newerCreatedChat.String(), result.Chats[1].ID)
+}
+
+func TestListChats_SortByLastMessageTimestampAscending(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := externalUserCtx(t, ti, "ext-activity-asc")
+
+	firstActiveChat := seedChat(t, ctx, ti, "", "ext-activity-asc", "first active")
+	_, err := repo.New(ti.conn).SeedChatMessage(ctx, repo.SeedChatMessageParams{
+		ChatID:    firstActiveChat,
+		ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	time.Sleep(10 * time.Millisecond)
+
+	lastActiveChat := seedChat(t, ctx, ti, "", "ext-activity-asc", "last active")
+	_, err = repo.New(ti.conn).SeedChatMessage(ctx, repo.SeedChatMessageParams{
+		ChatID:    lastActiveChat,
+		ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	payload := defaultPayload()
+	payload.SortBy = "last_message_timestamp"
+	payload.SortOrder = "asc"
+
+	result, err := ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Len(t, result.Chats, 2)
+	require.Equal(t, firstActiveChat.String(), result.Chats[0].ID)
+	require.Equal(t, lastActiveChat.String(), result.Chats[1].ID)
 }
 
 // TestListChats_Pagination verifies that limit/offset correctly pages through results and that
@@ -450,7 +482,7 @@ func TestListChats_Pagination(t *testing.T) {
 	}
 
 	payload := defaultPayload()
-	payload.SortBy = "created_at"
+	payload.SortBy = "last_message_timestamp"
 	payload.SortOrder = "asc"
 	payload.Limit = 2
 	payload.Offset = 0
