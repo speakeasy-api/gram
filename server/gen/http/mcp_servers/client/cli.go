@@ -250,6 +250,54 @@ func BuildUpdateMcpServerPayload(mcpServersUpdateMcpServerBody string, mcpServer
 	return v, nil
 }
 
+// BuildListToolFiltersPayload builds the payload for the mcpServers
+// listToolFilters endpoint from CLI flags.
+func BuildListToolFiltersPayload(mcpServersListToolFiltersID string, mcpServersListToolFiltersSlug string, mcpServersListToolFiltersSessionToken string, mcpServersListToolFiltersApikeyToken string, mcpServersListToolFiltersProjectSlugInput string) (*mcpservers.ListToolFiltersPayload, error) {
+	var err error
+	var id *string
+	{
+		if mcpServersListToolFiltersID != "" {
+			id = &mcpServersListToolFiltersID
+			err = goa.MergeErrors(err, goa.ValidateFormat("id", *id, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var slug *string
+	{
+		if mcpServersListToolFiltersSlug != "" {
+			slug = &mcpServersListToolFiltersSlug
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpServersListToolFiltersSessionToken != "" {
+			sessionToken = &mcpServersListToolFiltersSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpServersListToolFiltersApikeyToken != "" {
+			apikeyToken = &mcpServersListToolFiltersApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpServersListToolFiltersProjectSlugInput != "" {
+			projectSlugInput = &mcpServersListToolFiltersProjectSlugInput
+		}
+	}
+	v := &mcpservers.ListToolFiltersPayload{}
+	v.ID = id
+	v.Slug = slug
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildDeleteMcpServerPayload builds the payload for the mcpServers
 // deleteMcpServer endpoint from CLI flags.
 func BuildDeleteMcpServerPayload(mcpServersDeleteMcpServerID string, mcpServersDeleteMcpServerSessionToken string, mcpServersDeleteMcpServerApikeyToken string, mcpServersDeleteMcpServerProjectSlugInput string) (*mcpservers.DeleteMcpServerPayload, error) {

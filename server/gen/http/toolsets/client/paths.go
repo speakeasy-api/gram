@@ -37,6 +37,11 @@ func GetToolsetToolsetsPath() string {
 	return "/rpc/toolsets.get"
 }
 
+// ListToolFiltersToolsetsPath returns the URL path to the toolsets service listToolFilters HTTP endpoint.
+func ListToolFiltersToolsetsPath() string {
+	return "/rpc/toolsets.listToolFilters"
+}
+
 // CheckMCPSlugAvailabilityToolsetsPath returns the URL path to the toolsets service checkMCPSlugAvailability HTTP endpoint.
 func CheckMCPSlugAvailabilityToolsetsPath() string {
 	return "/rpc/toolsets.checkMCPSlugAvailability"

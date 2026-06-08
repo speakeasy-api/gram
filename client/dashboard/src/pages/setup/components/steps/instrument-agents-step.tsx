@@ -594,7 +594,7 @@ export function InstrumentAgentsStep({
         </div>
       }
       title="Instrument agent platforms"
-      description="Set up Gram hooks for each AI coding assistant your team uses. Each platform has its own configuration steps."
+      description="Set up Speakeasy hooks for each AI coding assistant your team uses. Each platform has its own configuration steps."
       onContinue={onComplete}
       continueLabel="Continue"
       showBack

@@ -1,7 +1,6 @@
 import { cn } from "@/lib/utils";
 
-export const textAreaClassNames =
-  "w-full border-2 rounded-lg py-1 px-2 resize-y";
+const textAreaClassNames = "w-full border-2 rounded-lg py-1 px-2 resize-y";
 
 export function TextArea({
   id,

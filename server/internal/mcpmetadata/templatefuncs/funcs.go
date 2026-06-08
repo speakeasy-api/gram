@@ -13,6 +13,7 @@ func FuncMap() template.FuncMap {
 		"indent":       Indent,
 		"asPosixName":  toolconfig.ToPosixName,
 		"asHTTPHeader": toolconfig.ToHTTPHeader,
+		"join":         strings.Join,
 	}
 }
 

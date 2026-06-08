@@ -1,6 +1,7 @@
 import {
   ArrowDownIcon,
   ArrowUpIcon,
+  AtSign,
   CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -8,8 +9,10 @@ import {
   CopyIcon,
   DownloadIcon,
   PencilIcon,
+  Search,
   Settings2,
   Square,
+  Wrench,
 } from "lucide-react";
 
 import {
@@ -20,6 +23,7 @@ import {
   ImageMessagePartProps,
   MessagePrimitive,
   ThreadPrimitive,
+  useAssistantApi,
   useAssistantState,
 } from "@assistant-ui/react";
 
@@ -68,6 +72,10 @@ import { useToolMentions } from "@/hooks/useToolMentions";
 import { getApiUrl } from "@/lib/api";
 import { EASE_OUT_QUINT } from "@/lib/easing";
 import { MODELS } from "@/lib/models";
+import {
+  type MentionableTool,
+  toolSetToMentionableTools,
+} from "@/lib/tool-mentions";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import {
@@ -262,7 +270,7 @@ const ThreadScrollToBottom: FC = () => {
 const ThreadWelcome: FC = () => {
   const { config } = useElements();
   const d = useDensity();
-  const { title, subtitle } = config.welcome ?? {};
+  const { logo, title, subtitle } = config.welcome ?? {};
   const isStandalone = config.variant === "standalone";
 
   return (
@@ -288,6 +296,19 @@ const ThreadWelcome: FC = () => {
             !isStandalone && d("py-md"),
           )}
         >
+          {logo && (
+            <m.img
+              src={logo}
+              alt=""
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              transition={{ duration: 0.25, ease: EASE_OUT_QUINT }}
+              className={cn(
+                "aui-thread-welcome-logo mb-2 size-12 object-contain",
+              )}
+            />
+          )}
           <m.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -794,6 +815,218 @@ const ComposerCassetteRecorder: FC = () => {
   );
 };
 
+// Sentinel for the "All" pseudo-category in the tool-mention picker.
+const TOOL_MENTION_ALL_CATEGORY = "__all__";
+
+function humanizeToolCategory(raw: string): string {
+  const cleaned = raw.replace(/[-_]+/g, " ").trim();
+  if (!cleaned) return "Tools";
+  return cleaned.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// Derive a grouping label for a tool. Tools from multiple MCP servers are
+// namespaced as `<server>__<tool>`; otherwise group by the first
+// underscore-delimited segment (e.g. `platform_search_logs` -> "Platform"),
+// falling back to a single "Tools" bucket.
+function deriveToolCategory(name: string): string {
+  const namespaceIdx = name.indexOf("__");
+  if (namespaceIdx > 0)
+    return humanizeToolCategory(name.slice(0, namespaceIdx));
+  const underscoreIdx = name.indexOf("_");
+  if (underscoreIdx > 0)
+    return humanizeToolCategory(name.slice(0, underscoreIdx));
+  return "Tools";
+}
+
+interface ToolCategory {
+  name: string;
+  tools: MentionableTool[];
+}
+
+// A discoverable counterpart to the type-`@` autocomplete: a composer button
+// that opens a searchable, category-grouped picker of the available tools and
+// inserts an @mention for the chosen one. Inserts through the composer runtime
+// so it stays in sync with the autocomplete's own textarea handling. Hidden when
+// tool mentions are disabled or there are no tools.
+const ComposerToolMentionPicker: FC = () => {
+  const { config, mcpTools, mcpToolsLoading } = useElements();
+  const api = useAssistantApi();
+  // Read the composer text from the same reactive source the tool-mention
+  // badges parse, so an inserted mention renders a pill just like the type-`@`
+  // autocomplete does.
+  const composerText = useAssistantState(({ composer }) => composer.text);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [activeCategory, setActiveCategory] = useState(
+    TOOL_MENTION_ALL_CATEGORY,
+  );
+
+  const composerConfig = config.composer;
+  const toolMentionsEnabled =
+    composerConfig?.toolMentions === undefined ||
+    composerConfig.toolMentions === true ||
+    (typeof composerConfig.toolMentions === "object" &&
+      composerConfig.toolMentions.enabled !== false);
+
+  const tools = useMemo(() => toolSetToMentionableTools(mcpTools), [mcpTools]);
+
+  const categories = useMemo<ToolCategory[]>(() => {
+    const grouped = new Map<string, MentionableTool[]>();
+    for (const tool of tools) {
+      const category = deriveToolCategory(tool.name);
+      const existing = grouped.get(category);
+      if (existing) {
+        existing.push(tool);
+      } else {
+        grouped.set(category, [tool]);
+      }
+    }
+    return [...grouped.entries()]
+      .map(([name, categoryTools]) => ({ name, tools: categoryTools }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [tools]);
+
+  // Show the button while tools are still loading (so it appears immediately
+  // rather than popping in once the async MCP list resolves) or once there are
+  // tools — but hide it when the list has loaded and is empty, so we don't
+  // expose a dead-end control.
+  if (!toolMentionsEnabled || (!mcpToolsLoading && tools.length === 0)) {
+    return null;
+  }
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const inActiveCategory =
+    activeCategory === TOOL_MENTION_ALL_CATEGORY
+      ? tools
+      : (categories.find((c) => c.name === activeCategory)?.tools ?? []);
+  const visibleTools = normalizedQuery
+    ? inActiveCategory.filter(
+        (tool) =>
+          tool.name.toLowerCase().includes(normalizedQuery) ||
+          (tool.description?.toLowerCase().includes(normalizedQuery) ?? false),
+      )
+    : inActiveCategory;
+
+  const insertMention = (toolName: string) => {
+    const base =
+      composerText && !/\s$/.test(composerText)
+        ? `${composerText} `
+        : composerText;
+    api.composer().setText(`${base}@${toolName} `);
+    setOpen(false);
+    setQuery("");
+  };
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) {
+      setQuery("");
+      setActiveCategory(TOOL_MENTION_ALL_CATEGORY);
+    }
+  };
+
+  return (
+    <Popover open={open} onOpenChange={handleOpenChange}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          data-state={open ? "open" : "closed"}
+          className="aui-composer-tool-mention-picker flex w-fit items-center gap-2 rounded-full px-2.5 py-1 text-xs font-semibold data-[state=open]:bg-muted-foreground/15 dark:border-muted-foreground/15 dark:hover:bg-muted-foreground/30"
+          aria-label="Mention a tool"
+        >
+          <AtSign className="size-5 stroke-[1.5px]" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        align="start"
+        className="aui-composer-tool-mention-popover w-[420px] overflow-hidden p-0"
+      >
+        <div className="flex items-center gap-2 border-b border-input px-3 py-2">
+          <Search className="size-4 shrink-0 text-muted-foreground" />
+          <input
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search tools…"
+            className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            aria-label="Search tools"
+          />
+        </div>
+        <div className="flex h-72">
+          <div className="w-36 shrink-0 overflow-y-auto border-r border-input p-2">
+            <div className="px-2 pb-1 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+              Categories
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveCategory(TOOL_MENTION_ALL_CATEGORY)}
+              className={cn(
+                "flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs transition-colors",
+                activeCategory === TOOL_MENTION_ALL_CATEGORY
+                  ? "bg-muted font-medium text-foreground"
+                  : "text-muted-foreground hover:bg-muted/60",
+              )}
+            >
+              <span className="truncate">All</span>
+              <span className="ml-2 shrink-0 tabular-nums opacity-60">
+                {tools.length}
+              </span>
+            </button>
+            {categories.map((category) => (
+              <button
+                key={category.name}
+                type="button"
+                onClick={() => setActiveCategory(category.name)}
+                className={cn(
+                  "flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs transition-colors",
+                  activeCategory === category.name
+                    ? "bg-muted font-medium text-foreground"
+                    : "text-muted-foreground hover:bg-muted/60",
+                )}
+              >
+                <span className="truncate">{category.name}</span>
+                <span className="ml-2 shrink-0 tabular-nums opacity-60">
+                  {category.tools.length}
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="min-w-0 flex-1 overflow-y-auto p-2">
+            {visibleTools.length === 0 ? (
+              <div className="px-2 py-6 text-center text-xs text-muted-foreground">
+                {mcpToolsLoading ? "Loading tools…" : "No tools found"}
+              </div>
+            ) : (
+              visibleTools.map((tool) => (
+                <button
+                  key={tool.id}
+                  type="button"
+                  onClick={() => insertMention(tool.name)}
+                  className="flex w-full items-start gap-2 rounded px-2 py-1.5 text-left transition-colors hover:bg-muted"
+                >
+                  <Wrench className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-foreground">
+                      {tool.name}
+                    </span>
+                    {tool.description && (
+                      <span className="line-clamp-2 text-xs text-muted-foreground">
+                        {tool.description}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
 const ComposerAction: FC = () => {
   const { config } = useElements();
   const r = useRadius();
@@ -806,6 +1039,8 @@ const ComposerAction: FC = () => {
         ) : (
           <div className="aui-composer-add-attachment-placeholder" />
         )}
+
+        <ComposerToolMentionPicker />
 
         {config.model?.showModelPicker && !config.languageModel && (
           <ComposerModelPicker />
@@ -950,6 +1185,8 @@ const AssistantActionBar: FC = () => {
 
 const UserMessage: FC = () => {
   const r = useRadius();
+  const { config } = useElements();
+  const allowEdit = config.allowMessageEdit !== false;
   return (
     <MessagePrimitive.Root asChild>
       <div
@@ -967,9 +1204,11 @@ const UserMessage: FC = () => {
           >
             <MessagePrimitive.Parts />
           </div>
-          <div className="aui-user-action-bar-wrapper absolute top-1/2 left-0 -translate-x-full -translate-y-1/2 pr-2">
-            <UserActionBar />
-          </div>
+          {allowEdit && (
+            <div className="aui-user-action-bar-wrapper absolute top-1/2 left-0 -translate-x-full -translate-y-1/2 pr-2">
+              <UserActionBar />
+            </div>
+          )}
         </div>
 
         <BranchPicker className="aui-user-branch-picker col-span-full col-start-1 row-start-3 -mr-1 justify-end" />

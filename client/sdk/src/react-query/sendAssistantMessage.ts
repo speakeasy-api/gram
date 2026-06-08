@@ -51,7 +51,7 @@ export type SendAssistantMessageMutationError =
  * sendMessage assistants
  *
  * @remarks
- * Send a message from the dashboard to an assistant as the calling user. The reply is delivered asynchronously; poll the returned chat to read it.
+ * Send a message from the dashboard to an assistant as the calling user. Continue an existing conversation by passing its chat_id (from listChats), or omit chat_id to start a new conversation — the server mints and returns a fresh chat id. The reply is delivered asynchronously; poll the chat service (loadChat) to read it.
  */
 export function useSendAssistantMessageMutation(
   options?: MutationHookOptions<

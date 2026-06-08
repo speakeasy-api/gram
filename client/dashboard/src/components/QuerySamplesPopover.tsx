@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { Info } from "lucide-react";
 import { useState } from "react";
 
-export interface QuerySample {
+interface QuerySample {
   value: string;
   label: string;
   description?: string;

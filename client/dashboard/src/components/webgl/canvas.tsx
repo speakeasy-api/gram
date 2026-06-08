@@ -99,7 +99,7 @@ const Scene = memo(() => {
 });
 Scene.displayName = "Scene";
 
-export const InnerCanvas = memo(
+const InnerCanvas = memo(
   ({ containerRef }: { containerRef: RefObject<HTMLDivElement | null> }) => {
     return (
       <>

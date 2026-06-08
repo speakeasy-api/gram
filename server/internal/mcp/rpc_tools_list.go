@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
@@ -61,9 +62,19 @@ func handleToolsList(
 ) (json.RawMessage, error) {
 	projectID := mv.ProjectID(payload.projectID)
 
-	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), toolsetCache, platformExtras...)
+	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), toolsetCache, payload.toolVariationsGroupID, platformExtras...)
 	if err != nil {
 		return nil, err
+	}
+
+	// Apply the ?tags= filter before building any tool list (static or
+	// dynamic). Filtering toolset.Tools here also restricts dynamic-mode
+	// search_tools/describe_tools, which resolve results back through this same
+	// slice.
+	if len(payload.tags) > 0 {
+		before := len(toolset.Tools)
+		toolset.Tools = toolfilter.FilterToolsByTags(toolset.Tools, payload.tags)
+		recordToolFilterSpan(ctx, len(toolset.Tools), before-len(toolset.Tools))
 	}
 
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {

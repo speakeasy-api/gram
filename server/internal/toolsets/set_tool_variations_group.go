@@ -31,7 +31,7 @@ func (s *Service) SetToolVariationsGroup(ctx context.Context, payload *gen.SetTo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	beforeView, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()))
+	beforeView, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +81,7 @@ func (s *Service) SetToolVariationsGroup(ctx context.Context, payload *gen.SetTo
 		return nil, oops.E(oops.CodeUnexpected, err, "update toolset tool_variations_group").Log(ctx, s.logger)
 	}
 
-	afterView, err := mv.DescribeToolset(ctx, s.logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()))
+	afterView, err := mv.DescribeToolset(ctx, s.logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()), nil)
 	if err != nil {
 		return nil, err
 	}

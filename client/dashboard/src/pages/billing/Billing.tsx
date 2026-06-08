@@ -39,7 +39,7 @@ export default function Billing() {
   );
 }
 
-export function BillingInner() {
+function BillingInner() {
   const productTier = useProductTier();
 
   return (

@@ -29,20 +29,6 @@ export interface FilterState {
   filters: FilterValues;
 }
 
-const defaultFilterValues: FilterValues = {
-  authTypes: [],
-  toolBehaviors: [],
-  minUsers: 0,
-  updatedRange: "any",
-  minTools: 0,
-};
-
-const defaultFilterState: FilterState = {
-  category: "all",
-  sort: "popular",
-  filters: defaultFilterValues,
-};
-
 const VALID_SORT_OPTIONS: readonly SortOption[] = [
   "popular",
   "recent",
@@ -265,5 +251,3 @@ export function useFilterState() {
     clearFilters,
   };
 }
-
-export { defaultFilterState, defaultFilterValues, VALID_SORT_OPTIONS };

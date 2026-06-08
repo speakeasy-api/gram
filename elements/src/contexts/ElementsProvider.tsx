@@ -67,6 +67,19 @@ import { ElementsContext } from "./contexts";
 import { ToolApprovalProvider } from "./ToolApprovalContext";
 import { ToolExecutionProvider } from "./ToolExecutionContext";
 
+// Reads the active local thread id from the runtime's threads store. Reaches
+// into an assistant-ui internal that isn't part of the public type, so it's
+// isolated here as the single point of breakage if the API moves.
+function getActiveLocalThreadId(
+  runtimeRef: React.RefObject<ReturnType<typeof useChatRuntime> | null>,
+): string | undefined {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const threadsState = (runtimeRef.current as any)?.threads?.getState?.();
+  return (threadsState?.mainThreadId ?? threadsState?.threadIds?.[0]) as
+    | string
+    | undefined;
+}
+
 /**
  * Extracts executable tools from frontend tool definitions.
  * Frontend tools created via defineFrontendTool have an unstable_tool property
@@ -214,7 +227,11 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   // State to expose the current chat ID via context
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
 
-  const { data: mcpTools, mcpHeaders } = useMCPTools({
+  const {
+    data: mcpTools,
+    mcpHeaders,
+    isLoading: mcpQueryLoading,
+  } = useMCPTools({
     auth,
     mcp: config.mcp,
     mcps: config.mcps,
@@ -222,6 +239,11 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     toolsToInclude: config.tools?.toolsToInclude,
     gramEnvironment: config.gramEnvironment,
   });
+  // Treat auth-loading as "tools not yet resolved" too — the MCP query is
+  // disabled (and so not "loading") until auth settles, so without this a
+  // tool-list consumer would briefly see an empty, settled state before tools
+  // arrive.
+  const mcpToolsLoading = auth.isLoading || mcpQueryLoading;
 
   // Store approval helpers in ref so they can be used in async contexts
   const approvalHelpersRef = useRef<ApprovalHelpers>({
@@ -276,8 +298,10 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   // in a way that's accessible from the transport's sendMessages function.
   const currentRemoteIdRef = useRef<string | null>(null);
 
-  // Create chat transport configuration
-  const transport = useMemo<ChatTransport<UIMessage>>(
+  // Create chat transport configuration. This is the built-in client-side
+  // streaming transport; a consumer can override it via config.transport (see
+  // below) to route the conversation through a server-side assistant instead.
+  const defaultTransport = useMemo<ChatTransport<UIMessage>>(
     () => ({
       sendMessages: async ({ messages, abortSignal }) => {
         const usingCustomModel = !!config.languageModel;
@@ -298,12 +322,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           // chatId is already set correctly from the synced ref
         } else if (isLocalThreadId(chatId) || !chatId) {
           // For local thread IDs or no ID, check/generate UUID mapping
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const runtimeAny = runtimeRef.current as any;
-          const threadsState = runtimeAny?.threads?.getState?.();
-          const localThreadId = (threadsState?.mainThreadId ??
-            threadsState?.threadIds?.[0]) as string | undefined;
-
+          const localThreadId = getActiveLocalThreadId(runtimeRef);
           const lookupKey = chatId ?? localThreadId;
           if (lookupKey) {
             const existingUuid = localIdToUuidMapRef.current.get(lookupKey);
@@ -521,6 +540,43 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     ],
   );
 
+  // A consumer-supplied transport (e.g. a server-side assistant transport) takes
+  // precedence over the built-in client-side one. It may be a ChatTransport or a
+  // factory: a factory is invoked here, inside the provider, with a getChatId()
+  // sourced from the synced thread state, so the transport can read the active
+  // chat id at send time without reaching into Elements internals. Local
+  // (unpersisted) thread ids read as null so the transport can treat them as a
+  // brand-new conversation.
+  const getChatId = useCallback(() => {
+    const id = currentRemoteIdRef.current;
+    return id && !isLocalThreadId(id) ? id : null;
+  }, []);
+  // Capture the active local thread identity now and return a bind function
+  // closing over it. Consumer transports call this at the start of
+  // `sendMessages`; once a server-minted chat id is known, invoking the
+  // returned function reconciles the captured thread to it — the same
+  // reconciliation the built-in transport does inline when it generates an id.
+  // Closing over the captured id (instead of re-reading active state at bind
+  // time) is what makes a thread switch or a parallel send on another thread
+  // during the round-trip safe.
+  const adoptChatId = useCallback(() => {
+    const capturedLocalThreadId = getActiveLocalThreadId(runtimeRef);
+    return (chatId: string) => {
+      if (capturedLocalThreadId) {
+        localIdToUuidMapRef.current.set(capturedLocalThreadId, chatId);
+      }
+      currentRemoteIdRef.current = chatId;
+      mcpHeaders["Gram-Chat-ID"] = chatId;
+      setCurrentChatId(chatId);
+    };
+  }, [mcpHeaders, setCurrentChatId]);
+  const transport = useMemo<ChatTransport<UIMessage>>(() => {
+    if (typeof config.transport === "function") {
+      return config.transport({ getChatId, adoptChatId });
+    }
+    return config.transport ?? defaultTransport;
+  }, [config.transport, defaultTransport, getChatId, adoptChatId]);
+
   const historyEnabled = config.history?.enabled ?? false;
 
   // Shared context value for ElementsContext
@@ -535,8 +591,9 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
       setIsOpen,
       plugins,
       mcpTools,
+      mcpToolsLoading,
     }),
-    [config, model, isExpanded, isOpen, plugins, mcpTools],
+    [config, model, isExpanded, isOpen, plugins, mcpTools, mcpToolsLoading],
   );
 
   const frontendTools = config.tools?.frontendTools ?? {};
@@ -658,6 +715,9 @@ const ElementsProviderWithHistory = ({
     apiUrl,
     headers,
     localIdToUuidMap,
+    threadListFilters: contextValue?.config.history?.threadListFilters,
+    deferThreadIdMinting: contextValue?.config.history?.deferThreadIdMinting,
+    transformChatMessage: contextValue?.config.history?.transformChatMessage,
   });
   const initialThreadId = contextValue?.config.history?.initialThreadId;
 

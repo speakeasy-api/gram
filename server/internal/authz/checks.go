@@ -32,3 +32,15 @@ func MCPCheck(scope Scope, resourceID, projectID string) Check {
 	}
 	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, expanded: false}
 }
+
+type RiskPolicyBypassDimensions struct {
+	ServerURL string
+}
+
+func RiskPolicyBypassCheck(policyID string, dims RiskPolicyBypassDimensions) Check {
+	var dimensions map[string]string
+	if dims.ServerURL != "" {
+		dimensions = map[string]string{SelectorKeyServerURL: dims.ServerURL}
+	}
+	return Check{Scope: ScopeRiskPolicyBypass, ResourceKind: "", ResourceID: policyID, Dimensions: dimensions, expanded: false}
+}

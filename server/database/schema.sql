@@ -2648,11 +2648,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS plugins_organization_id_project_id_slug_key
   ON plugins (organization_id, project_id, slug)
   WHERE deleted IS FALSE;
 
--- Links a plugin to a toolset-backed MCP server.
+-- Links a plugin to an MCP server, backed by either a toolset or an
+-- mcp_servers row (exactly one, enforced by the exclusivity check below).
 CREATE TABLE IF NOT EXISTS plugin_servers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   plugin_id uuid NOT NULL,
-  toolset_id uuid NOT NULL,
+  toolset_id uuid,
+  mcp_server_id uuid,
   display_name TEXT NOT NULL CHECK (display_name <> ''),
   policy TEXT NOT NULL DEFAULT 'required',
   sort_order INT NOT NULL DEFAULT 0,
@@ -2669,7 +2671,13 @@ CREATE TABLE IF NOT EXISTS plugin_servers (
   -- If a hard-delete path is added later, it must purge soft-deleted
   -- plugin_servers referencing the target first.
   CONSTRAINT plugin_servers_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE RESTRICT,
-  CONSTRAINT plugin_servers_policy_check CHECK (policy IN ('required', 'optional'))
+  -- RESTRICT mirrors the toolset_id FK above (not the CASCADE used by the
+  -- collections attachment table): mcp_servers soft-delete, so RESTRICT only
+  -- blocks manual hard deletes. SET NULL is not viable under the XOR check.
+  CONSTRAINT plugin_servers_mcp_server_id_fkey FOREIGN KEY (mcp_server_id) REFERENCES mcp_servers (id) ON DELETE RESTRICT,
+  CONSTRAINT plugin_servers_policy_check CHECK (policy IN ('required', 'optional')),
+  -- Exactly one backend must be set: either a toolset or an mcp_server.
+  CONSTRAINT plugin_servers_backend_exclusivity_check CHECK ((toolset_id IS NULL) != (mcp_server_id IS NULL))
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_servers_plugin_id_display_name_key
@@ -2678,6 +2686,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS plugin_servers_plugin_id_display_name_key
 
 CREATE UNIQUE INDEX IF NOT EXISTS plugin_servers_plugin_id_toolset_id_key
   ON plugin_servers (plugin_id, toolset_id)
+  WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS plugin_servers_plugin_id_mcp_server_id_key
+  ON plugin_servers (plugin_id, mcp_server_id)
   WHERE deleted IS FALSE;
 
 -- Controls who receives a plugin. Reuses the RBAC principal URN pattern
@@ -2836,6 +2848,47 @@ CREATE UNIQUE INDEX IF NOT EXISTS risk_custom_detection_rules_project_rule_id_ke
 ON risk_custom_detection_rules (project_id, rule_id)
 WHERE deleted IS FALSE;
 
+-- Exclusions suppress false-positive risk findings. They are applied going
+-- forward (the scanner drops matching findings) and retroactively (a sweep
+-- flags matching rows in risk_results so the dashboard hides them).
+-- risk_policy_id is nullable: NULL = global (applies across every policy in the
+-- project); non-NULL = bound to a single policy.
+CREATE TABLE IF NOT EXISTS risk_exclusions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  risk_policy_id uuid,
+
+  -- How match_value is interpreted against a finding:
+  --   exact       -> finding.match = match_value
+  --   regex       -> finding.match ~ match_value
+  --   rule_id     -> finding.rule_id = match_value
+  --   source      -> finding.source = match_value
+  --   entity_type -> finding.rule_id = 'pii.' || match_value
+  match_type TEXT NOT NULL,
+  match_value TEXT NOT NULL,
+  -- Optional narrowing: an exact/regex exclusion only applies within this
+  -- rule_id and/or source. NULL means "any".
+  rule_id_filter TEXT,
+  source_filter TEXT,
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT risk_exclusions_pkey PRIMARY KEY (id),
+  CONSTRAINT risk_exclusions_match_type_check CHECK (match_type IN ('exact', 'regex', 'rule_id', 'source', 'entity_type')),
+  CONSTRAINT risk_exclusions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  CONSTRAINT risk_exclusions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE,
+  CONSTRAINT risk_exclusions_risk_policy_id_fkey FOREIGN KEY (risk_policy_id) REFERENCES risk_policies(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS risk_exclusions_project_policy_idx
+ON risk_exclusions (project_id, risk_policy_id)
+WHERE deleted IS FALSE;
+
 -- Individual findings produced by scanning a chat message against a risk policy.
 -- No soft delete: results are regenerated when the policy version changes.
 CREATE TABLE IF NOT EXISTS risk_results (
@@ -2860,6 +2913,12 @@ CREATE TABLE IF NOT EXISTS risk_results (
   -- after exhausting its retry budget
   dead_letter_reason TEXT,
 
+  -- Set when an exclusion suppresses this finding. excluded_exclusion_id records
+  -- which exclusion flagged it so the flag can be reversed when that exclusion
+  -- is removed. Dashboard reads filter on excluded_at IS NULL.
+  excluded_at timestamptz,
+  excluded_exclusion_id uuid,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT risk_results_pkey PRIMARY KEY (id),
@@ -2877,7 +2936,19 @@ ON risk_results (project_id, chat_message_id);
 
 CREATE INDEX IF NOT EXISTS risk_results_project_found_idx
 ON risk_results (project_id, created_at DESC)
-WHERE found IS TRUE;
+WHERE found IS TRUE AND excluded_at IS NULL;
+
+-- Narrows the exclusion sweeps (exact/rule_id/source) by project + policy +
+-- rule. The verbatim match column is intentionally NOT indexed: it can exceed
+-- the btree row-size limit (2704 bytes), and the sweep queries apply
+-- match = value as a recheck filter over this narrowed set.
+CREATE INDEX IF NOT EXISTS risk_results_policy_match_idx
+ON risk_results (project_id, risk_policy_id, rule_id);
+
+-- Reversal lookup: unflag rows previously excluded by a given exclusion.
+CREATE INDEX IF NOT EXISTS risk_results_excluded_exclusion_idx
+ON risk_results (excluded_exclusion_id)
+WHERE excluded_exclusion_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS authz_challenge_resolutions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -2912,6 +2983,51 @@ ON authz_challenge_resolutions (organization_id, challenge_id);
 
 CREATE INDEX IF NOT EXISTS authz_challenge_resolutions_org_principal_idx
 ON authz_challenge_resolutions (organization_id, principal_urn);
+
+CREATE TABLE IF NOT EXISTS risk_policy_bypass_requests (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+
+  risk_policy_id uuid NOT NULL,
+  target_kind TEXT,
+  target_label TEXT,
+  target_key TEXT,
+  target_dimensions JSONB NOT NULL DEFAULT '{}'::jsonb,
+
+  requester_user_id TEXT NOT NULL,
+  requester_email TEXT,
+  note TEXT,
+
+  status TEXT NOT NULL DEFAULT 'requested',
+  decided_by TEXT,
+  granted_principal_urns TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  decided_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT risk_policy_bypass_requests_pkey PRIMARY KEY (id),
+  CONSTRAINT risk_policy_bypass_requests_target_dimensions_check CHECK (jsonb_typeof(target_dimensions) = 'object'),
+  CONSTRAINT risk_policy_bypass_requests_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT risk_policy_bypass_requests_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT risk_policy_bypass_requests_risk_policy_id_fkey FOREIGN KEY (risk_policy_id) REFERENCES risk_policies (id) ON DELETE CASCADE
+);
+
+COMMENT ON TABLE risk_policy_bypass_requests IS 'Risk-policy bypass request workflow. A block records a request here; an admin approves by granting risk_policy:bypass.';
+COMMENT ON COLUMN risk_policy_bypass_requests.target_kind IS 'Generic target namespace for the bypass request, such as server_url. Empty means the whole policy.';
+COMMENT ON COLUMN risk_policy_bypass_requests.target_key IS 'Stable canonical key for deduplicating bypass requests within the target namespace.';
+COMMENT ON COLUMN risk_policy_bypass_requests.target_dimensions IS 'Selector dimensions for the target, such as {"server_url":"mcp.example.com"}.';
+
+CREATE UNIQUE INDEX IF NOT EXISTS risk_policy_bypass_requests_current_key
+ON risk_policy_bypass_requests (project_id, requester_user_id, risk_policy_id, target_kind, target_key) NULLS NOT DISTINCT
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS risk_policy_bypass_requests_project_status_updated_idx
+ON risk_policy_bypass_requests (project_id, status, updated_at DESC)
+WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS outbox (
   id BIGINT NOT NULL GENERATED BY DEFAULT AS IDENTITY,

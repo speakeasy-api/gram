@@ -36,7 +36,17 @@ import SlackRegister from "./pages/slackapp/SlackRegister";
 import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
 
 export default function App() {
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  // Initialize from storage so React/Moonshine match the theme the pre-paint
+  // inline script (in index.html) already applied to <html> — avoids a flash.
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    try {
+      return localStorage.getItem(PREFERRED_THEME_STORAGE_KEY) === "dark"
+        ? "dark"
+        : "light";
+    } catch {
+      return "light";
+    }
+  });
 
   const applyTheme = (theme: "light" | "dark") => {
     const root = document.documentElement;
@@ -68,11 +78,10 @@ export default function App() {
       | "light"
       | "dark"
       | null;
-    const systemPrefersDark = window.matchMedia(
-      "(prefers-color-scheme: dark)",
-    ).matches;
 
-    const initialTheme = savedTheme || (systemPrefersDark ? "dark" : "light");
+    // Light mode is the default; only honor an explicit prior choice. The
+    // system color-scheme preference no longer forces dark on first load.
+    const initialTheme = savedTheme || "light";
     applyTheme(initialTheme);
   }, []);
 

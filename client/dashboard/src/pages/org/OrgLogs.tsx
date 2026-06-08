@@ -27,7 +27,7 @@ export default function OrgLogs() {
   );
 }
 
-export function OrgLogsInner() {
+function OrgLogsInner() {
   const { data: featuresData, isLoading: featuresLoading } =
     useProductFeatures();
   const [logsEnabled, setLogsEnabled] = useState<boolean | null>(null);

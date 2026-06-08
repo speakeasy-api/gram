@@ -334,15 +334,21 @@ type DashboardSendResult struct {
 // status/filter/delivery path with every other ingress source. Returns
 // pgx.ErrNoRows when the assistant does not exist in the project.
 //
-// userID is the calling user (attribution); correlationID keys the conversation
-// thread (pass a fresh value to start over). idempotencyKey may be empty — a
-// fresh one is minted so the ingest still succeeds, but callers that want
+// userID is the calling user (attribution). chatID identifies the conversation:
+// pass uuid.Nil to start a new one (a fresh chat id is minted server-side and
+// returned), or an existing chat id to continue it. idempotencyKey may be empty
+// — a fresh one is minted so the ingest still succeeds, but callers that want
 // retry-safe dedupe should pass a stable key.
-func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assistantID uuid.UUID, userID, correlationID, text, idempotencyKey string) (DashboardSendResult, error) {
+func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assistantID uuid.UUID, userID string, chatID uuid.UUID, text, idempotencyKey string) (DashboardSendResult, error) {
 	assistant, err := s.GetAssistant(ctx, projectID, assistantID)
 	if err != nil {
 		return DashboardSendResult{}, err
 	}
+
+	if chatID == uuid.Nil {
+		chatID = uuid.New()
+	}
+	correlationID := chatID.String()
 
 	instanceID, err := s.resolveDashboardTriggerInstance(ctx, assistant.OrganizationID, projectID, assistant.ID, assistant.Name)
 	if err != nil {
@@ -367,7 +373,7 @@ func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assis
 	}
 
 	result := DashboardSendResult{
-		ChatID:   deterministicChatID(assistant.ID, correlationID),
+		ChatID:   chatID,
 		ThreadID: uuid.Nil,
 		Accepted: task != nil,
 	}

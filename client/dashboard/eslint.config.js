@@ -1,6 +1,7 @@
 import js from "@eslint/js";
 import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
+import unusedImports from "eslint-plugin-unused-imports";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
@@ -19,6 +20,7 @@ export default tseslint.config(
     plugins: {
       "react-hooks": reactHooks,
       "react-refresh": reactRefresh,
+      "unused-imports": unusedImports,
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
@@ -27,7 +29,12 @@ export default tseslint.config(
         "error",
         { allowConstantExport: true },
       ],
-      "@typescript-eslint/no-unused-vars": [
+      // Auto-removable unused imports (eslint --fix strips them).
+      // The ts-eslint rule reports but cannot autofix imports, so we hand
+      // imports to unused-imports and let it own all unused-var reporting.
+      "@typescript-eslint/no-unused-vars": "off",
+      "unused-imports/no-unused-imports": "error",
+      "unused-imports/no-unused-vars": [
         "error",
         {
           args: "all",

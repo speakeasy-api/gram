@@ -12,7 +12,7 @@ export type MigrationStepKey =
   | "remoteSessionIssuer"
   | "remoteSessionClient";
 
-export type StepStatus = "pending" | "running" | "done" | "error";
+type StepStatus = "pending" | "running" | "done" | "error";
 
 export type MigrationParadigm = "gram" | "custom";
 

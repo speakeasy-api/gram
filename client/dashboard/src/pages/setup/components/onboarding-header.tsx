@@ -18,7 +18,7 @@ export function OnboardingHeader({ onLeave }: OnboardingHeaderProps) {
           <GramLogo variant="horizontal" className="w-32" />
           <div className="bg-border h-5 w-px" />
           <span className="text-foreground text-sm font-medium">
-            Set up workspace
+            Setup organization
           </span>
         </div>
         <div className="flex items-center gap-2">

@@ -32,9 +32,27 @@ export function narrowTokenEndpointAuthMethod(
     value ===
       CreateRemoteSessionClientFormTokenEndpointAuthMethod.ClientSecretBasic ||
     value ===
-      CreateRemoteSessionClientFormTokenEndpointAuthMethod.ClientSecretPost
+      CreateRemoteSessionClientFormTokenEndpointAuthMethod.ClientSecretPost ||
+    value === CreateRemoteSessionClientFormTokenEndpointAuthMethod.None
   ) {
     return value;
   }
   return undefined;
+}
+
+// Picks the preferred auth method from the issuer's advertised list.
+// Preference order: client_secret_basic > client_secret_post > none.
+// Falls back to client_secret_basic when the issuer advertises no recognized
+// method, so DCR always sends one — upstreams that require an explicit method
+// reject a registration that omits it ("No supported Token Endpoint Auth
+// Method provided."). This fallback was the pre-#2910 server-side default.
+export function pickPreferredAuthMethod(
+  supported: string[],
+): CreateRemoteSessionClientFormTokenEndpointAuthMethod {
+  const { ClientSecretBasic, ClientSecretPost, None } =
+    CreateRemoteSessionClientFormTokenEndpointAuthMethod;
+  for (const preferred of [ClientSecretBasic, ClientSecretPost, None]) {
+    if (supported.includes(preferred)) return preferred;
+  }
+  return ClientSecretBasic;
 }

@@ -208,6 +208,11 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		}
 	}
 
+	// An assistant principal is set only on the assistant runtime path and
+	// only the managed-assistant platform toolset surfaces chat tools, so
+	// treat it as admin-equivalent for project-wide visibility.
+	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
+
 	var fromTime, toTime pgtype.Timestamptz
 	if payload.From != nil {
 		t, err := time.Parse(time.RFC3339, *payload.From)
@@ -228,13 +233,14 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	assistantID := conv.PtrValOr(payload.AssistantID, "")
 	hasRiskFilter := conv.PtrValOr(payload.HasRisk, "")
 
-	// Determine user scope based on auth context; payload filters only apply for admin users.
+	// Payload filters only apply for admin users and the managed-assistant runtime.
 	var externalUserID, userID string
-	if authCtx.ExternalUserID != "" {
+	switch {
+	case authCtx.ExternalUserID != "":
 		externalUserID = authCtx.ExternalUserID
-	} else if userInfo != nil && userInfo.Admin {
+	case userInfo != nil && userInfo.Admin, isAssistantCall:
 		externalUserID = conv.PtrValOr(payload.ExternalUserID, "")
-	} else {
+	default:
 		if authCtx.UserID == "" {
 			return nil, oops.C(oops.CodeUnauthorized)
 		}
@@ -331,10 +337,13 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	// If this isn't coming from the dashboard, make sure the external user ID matches
+	// Off-dashboard callers must match the chat owner unless they're the
+	// managed-assistant runtime (see ListChats).
 	if authCtx.SessionID == nil {
-		if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
-			return nil, oops.C(oops.CodeUnauthorized)
+		if _, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx); !isAssistantCall {
+			if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
+				return nil, oops.C(oops.CodeUnauthorized)
+			}
 		}
 	}
 

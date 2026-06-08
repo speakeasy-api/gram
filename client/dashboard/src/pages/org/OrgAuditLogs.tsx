@@ -608,7 +608,7 @@ export default function OrgAuditLogs() {
   return <AuditLogsInsightsWrapper>{page}</AuditLogsInsightsWrapper>;
 }
 
-export function OrgAuditLogsInner() {
+function OrgAuditLogsInner() {
   const organization = useOrganization();
   const { orgSlug } = useSlugs();
   const [selectedProjectSlug, setSelectedProjectSlug] = useQueryState(

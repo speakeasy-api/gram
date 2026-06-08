@@ -1,4 +1,4 @@
-export type CollectionVisibility = "public" | "private";
+type CollectionVisibility = "public" | "private";
 
 export interface CollectionServer {
   registrySpecifier: string;

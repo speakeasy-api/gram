@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { Users, ExternalLink, Loader2 } from "lucide-react";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query";
+import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { toast } from "sonner";
 import { StepContainer } from "../step-container";
 import { getServerURL } from "@/lib/utils";
@@ -13,6 +15,10 @@ export function DirectorySyncStep({
   onComplete,
   onBack,
 }: DirectorySyncStepProps) {
+  const [portalOpened, setPortalOpened] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const { refetch: refetchOnboardingStatus } = useOnboardingStatus();
+
   const generatePortalLink = useGenerateWorkOSAdminPortalLinkMutation({
     onError: (error) => {
       toast.error(
@@ -30,16 +36,44 @@ export function DirectorySyncStep({
           generateWorkOSAdminPortalLinkRequestBody: {
             intent: "dsync",
             successUrl: `${getServerURL()}/v1/setup/callback?intent=dsync`,
+            returnUrl: window.location.href,
           },
         },
       },
       {
         onSuccess: (data) => {
-          window.location.href = data.url;
+          window.open(data.url, "_blank", "noopener,noreferrer");
+          setPortalOpened(true);
         },
       },
     );
   };
+
+  const handleVerify = async () => {
+    setVerifying(true);
+    try {
+      const result = await refetchOnboardingStatus();
+      if (result.data?.dsyncConfigured) {
+        onComplete();
+      } else {
+        toast.error(
+          "Directory sync not detected yet. Finish setup in the WorkOS tab, then try again.",
+        );
+      }
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const continueAction = portalOpened ? handleVerify : handleConnect;
+  const continueLabel = portalOpened
+    ? verifying
+      ? "Verifying..."
+      : "Continue"
+    : generatePortalLink.isPending
+      ? "Opening..."
+      : "Connect directory";
+  const isLoading = generatePortalLink.isPending || verifying;
 
   return (
     <StepContainer
@@ -49,12 +83,10 @@ export function DirectorySyncStep({
         </div>
       }
       title="Directory sync"
-      description="Connect your identity provider's directory to automatically sync users, groups, and roles. Changes in your IdP will be reflected in Gram."
-      onContinue={handleConnect}
-      continueLabel={
-        generatePortalLink.isPending ? "Opening..." : "Connect directory"
-      }
-      isLoading={generatePortalLink.isPending}
+      description="Connect your identity provider's directory to automatically sync users, groups, and roles. Changes in your IdP will be reflected in Speakeasy."
+      onContinue={continueAction}
+      continueLabel={continueLabel}
+      isLoading={isLoading}
       showBack
       onBack={onBack}
       onSkip={onComplete}
@@ -68,12 +100,12 @@ export function DirectorySyncStep({
             </div>
             <div>
               <p className="text-foreground text-sm font-medium">
-                {"You'll"} be redirected to complete setup
+                Setup opens in a new tab
               </p>
               <p className="text-muted-foreground mt-1 text-sm">
-                After clicking Connect directory, you will be redirected to
-                configure your directory sync connection. Once complete, you
-                will be returned to the next step automatically.
+                After clicking Connect directory, the WorkOS portal opens in a
+                new browser tab. Finish configuring the connection there, then
+                return here and click Continue.
               </p>
             </div>
           </div>

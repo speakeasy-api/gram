@@ -29,7 +29,7 @@ export const Tool = ({ className, ...props }: ToolProps) => (
   />
 );
 
-export type ToolAnnotations = {
+type ToolAnnotations = {
   title?: string;
   readOnlyHint?: boolean;
   destructiveHint?: boolean;

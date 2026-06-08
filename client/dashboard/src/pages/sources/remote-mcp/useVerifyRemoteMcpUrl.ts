@@ -1,7 +1,7 @@
 import { useVerifyRemoteMcpURLMutation } from "@gram/client/react-query/index.js";
 import { useEffect, useRef, useState } from "react";
 
-export type VerifyResult = {
+type VerifyResult = {
   verified: boolean;
   message: string;
 };

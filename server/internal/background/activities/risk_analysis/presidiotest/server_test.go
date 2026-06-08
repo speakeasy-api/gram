@@ -41,7 +41,7 @@ func TestMockServer_DetectsEmail(t *testing.T) {
 	_, client := newClient(t)
 
 	results, err := client.AnalyzeBatch(t.Context(), []string{
-		"contact me at john.smith@acmecorp.com",
+		"contact me at john.smith@globex.com",
 	}, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
@@ -50,7 +50,7 @@ func TestMockServer_DetectsEmail(t *testing.T) {
 	require.Contains(t, ids, "pii.email_address")
 	for _, f := range results[0] {
 		if f.RuleID == "pii.email_address" {
-			require.Equal(t, "john.smith@acmecorp.com", f.Match)
+			require.Equal(t, "john.smith@globex.com", f.Match)
 			require.Equal(t, "presidio", f.Source)
 		}
 	}
@@ -135,7 +135,7 @@ func TestMockServer_EntityFilterRespected(t *testing.T) {
 	_, client := newClient(t)
 
 	results, err := client.AnalyzeBatch(t.Context(), []string{
-		"call 425-882-8080 or email alice@example.com",
+		"call 425-882-8080 or email alice@globex.com",
 	}, []string{"EMAIL_ADDRESS"}, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
@@ -153,7 +153,7 @@ func TestMockServer_BatchResultsMapBackToInputIndexes(t *testing.T) {
 	emails := make([]string, n)
 	messages := make([]string, n)
 	for i := range messages {
-		emails[i] = "user" + strconv.Itoa(i) + "@example.com"
+		emails[i] = "user" + strconv.Itoa(i) + "@globex.com"
 		messages[i] = "message " + strconv.Itoa(i) + " contact " + emails[i] + " end"
 	}
 

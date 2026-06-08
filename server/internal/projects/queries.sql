@@ -40,6 +40,13 @@ FROM projects
 WHERE id = @id
   AND deleted IS FALSE;
 
+-- name: GetProjectByIDAndOrganizationID :one
+SELECT *
+FROM projects
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE;
+
 -- name: GetProjectWithOrganizationMetadata :one
 SELECT 
     -- Project fields
@@ -106,4 +113,3 @@ UPDATE organization_metadata
 SET whitelisted = @whitelisted,
     updated_at = clock_timestamp()
 WHERE id = @organization_id;
-

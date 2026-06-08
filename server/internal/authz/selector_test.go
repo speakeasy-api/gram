@@ -211,6 +211,7 @@ func TestResourceKindForScope_riskPolicyScope(t *testing.T) {
 	t.Parallel()
 
 	require.Equal(t, ResourceKindRiskPolicy, ResourceKindForScope(ScopeRiskPolicyEvaluate))
+	require.Equal(t, ResourceKindRiskPolicy, ResourceKindForScope(ScopeRiskPolicyBypass))
 }
 
 func TestNewSelector_includesResourceKind(t *testing.T) {
@@ -306,21 +307,44 @@ func TestValidateSelector_mcpProjectIDAllowed(t *testing.T) {
 	require.NoError(t, ValidateSelector(ScopeMCPWrite, sel))
 }
 
-func TestValidateSelector_riskPolicyAllowsOnlyResourceKeys(t *testing.T) {
+func TestValidateSelector_riskPolicyAllowsServerURL(t *testing.T) {
 	t.Parallel()
 
 	valid := Selector{"resource_kind": ResourceKindRiskPolicy, "resource_id": "policy_123"}
 	require.NoError(t, ValidateSelector(ScopeRiskPolicyEvaluate, valid))
 
+	withServerURL := Selector{"resource_kind": ResourceKindRiskPolicy, "resource_id": "policy_123", "server_url": "https://api.example.com"}
+	require.NoError(t, ValidateSelector(ScopeRiskPolicyBypass, withServerURL))
+
+	withHostOnlyServerURL := Selector{"resource_kind": ResourceKindRiskPolicy, "resource_id": "policy_123", "server_url": "api.example.com"}
+	require.ErrorContains(t, ValidateSelector(ScopeRiskPolicyBypass, withHostOnlyServerURL), "must include URI scheme and host")
+
 	withExtraKey := Selector{"resource_kind": ResourceKindRiskPolicy, "resource_id": "policy_123", "tool": "search"}
 	require.ErrorContains(t, ValidateSelector(ScopeRiskPolicyEvaluate, withExtraKey), "not allowed")
 }
 
-func TestIsInternalScope(t *testing.T) {
+func TestRiskPolicyBypassCheck_injectsServerURL(t *testing.T) {
 	t.Parallel()
 
-	require.True(t, IsInternalScope(ScopeRiskPolicyEvaluate))
-	require.False(t, IsInternalScope(ScopeProjectRead))
+	check := RiskPolicyBypassCheck("policy_123", RiskPolicyBypassDimensions{ServerURL: "https://api.example.com"})
+	require.Equal(t, ScopeRiskPolicyBypass, check.Scope)
+	require.Equal(t, "policy_123", check.ResourceID)
+	require.Equal(t, "https://api.example.com", check.Dimensions[SelectorKeyServerURL])
+}
+
+func TestRiskPolicyBypassCheck_emptyServerURLOmitsDimension(t *testing.T) {
+	t.Parallel()
+
+	check := RiskPolicyBypassCheck("policy_123", RiskPolicyBypassDimensions{ServerURL: ""})
+	require.Nil(t, check.Dimensions)
+}
+
+func TestSelector_Matches_riskPolicyServerURL(t *testing.T) {
+	t.Parallel()
+
+	grant := Selector{"resource_kind": "risk_policy", "resource_id": "policy_123", "server_url": "https://api.example.com"}
+	require.True(t, grant.Matches(Selector{"resource_kind": "risk_policy", "resource_id": "policy_123", "server_url": "https://api.example.com"}))
+	require.False(t, grant.Matches(Selector{"resource_kind": "risk_policy", "resource_id": "policy_123", "server_url": "https://api.other.com"}))
 }
 
 func TestMCPCheck_injectsProjectID(t *testing.T) {

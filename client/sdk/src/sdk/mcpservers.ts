@@ -6,6 +6,7 @@ import { mcpServersCreate } from "../funcs/mcpServersCreate.js";
 import { mcpServersDelete } from "../funcs/mcpServersDelete.js";
 import { mcpServersGet } from "../funcs/mcpServersGet.js";
 import { mcpServersList } from "../funcs/mcpServersList.js";
+import { mcpServersListToolFilters } from "../funcs/mcpServersListToolFilters.js";
 import { mcpServersUpdate } from "../funcs/mcpServersUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -82,6 +83,25 @@ export class McpServers extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListMcpServersResult> {
     return unwrapAsync(mcpServersList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listToolFilters mcpServers
+   *
+   * @remarks
+   * List the tool filter scopes (tags) available on an MCP server and the tools under each, including tools excluded from all filters. Exactly one of id or slug must be provided. Read-only; reflects the explicit tool variations group resolved from the chain (mcp_servers then toolsets), deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.
+   */
+  async listToolFilters(
+    request?: operations.ListMcpServerToolFiltersRequest | undefined,
+    security?: operations.ListMcpServerToolFiltersSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListToolFiltersResult> {
+    return unwrapAsync(mcpServersListToolFilters(
       this,
       request,
       security,

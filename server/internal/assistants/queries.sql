@@ -85,50 +85,20 @@ WHERE project_id = @project_id
   AND correlation_id = @correlation_id
   AND deleted IS FALSE;
 
--- name: GetDashboardThreadTarget :one
--- Resolves where a dashboard egress reply goes: the thread's chat id (the log
--- key) and the conversation's owner user id (stamped on every log row). The
--- egress tool knows only its thread id, from the assistant principal.
-SELECT chat_id, COALESCE(source_ref_json->>'user_id', '')::TEXT AS user_id
-FROM assistant_threads
-WHERE id = @thread_id
-  AND project_id = @project_id
-  AND deleted IS FALSE;
-
--- name: InsertDashboardMessage :one
--- Appends a message to a dashboard assistant chat's conversation log. role is
--- 'user' (recorded at ingest) or 'assistant' (written by the egress tool).
--- user_id is the conversation owner, stamped on every row so reads scope to it.
-INSERT INTO assistant_dashboard_messages (project_id, chat_id, user_id, role, content)
-VALUES (@project_id, @chat_id, @user_id, @role, @content)
-RETURNING id, seq, created_at;
-
--- name: ListDashboardMessages :many
--- Reads a dashboard chat's conversation log in send order, optionally only
--- messages newer than a cursor (after_seq) for incremental polling. Scoped to
--- the caller's own rows: chat_id is a hash of the client-chosen correlation id
--- and is not user-namespaced, so a single chat_id can hold more than one user's
--- messages — filtering by user_id keeps a reader to their own conversation.
-SELECT id, chat_id, role, content, seq, created_at
-FROM assistant_dashboard_messages
-WHERE chat_id = @chat_id
-  AND project_id = @project_id
-  AND user_id = @user_id
-  AND seq > @after_seq
-ORDER BY seq;
-
 -- name: CallerOwnsDashboardChat :one
--- Read gate for a dashboard conversation: returns a row only when the caller has
--- at least one message in the chat. The conversation key (correlation id) is
--- client-chosen and not user-namespaced, so a chat_id can hold rows for more
--- than one user; scoping by user_id keeps each caller to their own conversation.
--- No row means the caller has nothing here (chat doesn't exist for them), which
--- the handler surfaces as not-found so existence isn't disclosed.
+-- Read gate for a dashboard conversation: returns a row only when the caller
+-- owns the chat. The conversation key (chat id) is client-chosen and not
+-- user-namespaced, so without scoping by user_id one caller could read or
+-- continue another's chat. Ownership is stamped on the chats row at
+-- UpsertAssistantChat time; no row means the caller has nothing here (chat
+-- doesn't exist for them), which the handler surfaces as not-found so existence
+-- isn't disclosed.
 SELECT 1 AS ok
-FROM assistant_dashboard_messages
-WHERE chat_id = @chat_id
+FROM chats
+WHERE id = @chat_id
   AND project_id = @project_id
   AND user_id = @user_id
+  AND deleted IS FALSE
 LIMIT 1;
 
 -- name: ResolveToolsetsForWrite :many
@@ -305,9 +275,18 @@ WHERE id = @assistant_id
   AND deleted IS FALSE;
 
 -- name: UpsertAssistantChat :exec
+-- user_id is the conversation owner — stamped on first insert so reads can
+-- scope to the user who started the chat. The dashboard source passes the
+-- Gram user id; external-source turns (Slack/cron/wake) pass NULL. On conflict
+-- the existing user_id is preserved when already set so a later NULL-user-id
+-- retry doesn't unclaim the chat; pre-existing rows with NULL user_id are
+-- backfilled on first owned send so dashboard ownership checks accept the
+-- legitimate owner.
 INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at)
-VALUES (@chat_id, @project_id, @organization_id, NULL, NULL, @title, NOW(), NOW())
-ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id;
+VALUES (@chat_id, @project_id, @organization_id, sqlc.narg('user_id')::TEXT, NULL, @title, NOW(), NOW())
+ON CONFLICT (id) DO UPDATE SET
+  user_id = COALESCE(chats.user_id, EXCLUDED.user_id),
+  updated_at = NOW();
 
 -- name: UpsertAssistantThread :one
 INSERT INTO assistant_threads (
@@ -705,7 +684,7 @@ SET
   updated_at = clock_timestamp()
 FROM next_event
 WHERE e.id = next_event.id
-RETURNING e.id, e.assistant_thread_id, e.assistant_id, e.project_id, e.trigger_instance_id, e.event_id, e.correlation_id, e.status, e.normalized_payload_json, e.source_payload_json, e.attempts, e.last_error;
+RETURNING e.id, e.assistant_thread_id, e.assistant_id, e.project_id, e.trigger_instance_id, e.event_id, e.correlation_id, e.status, e.normalized_payload_json, e.source_payload_json, e.attempts, e.last_error, e.created_at;
 
 -- name: CompleteAssistantThreadEvent :exec
 UPDATE assistant_thread_events

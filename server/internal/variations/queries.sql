@@ -113,6 +113,20 @@ WHERE
   AND src_tool_urn = ANY(@tool_urns::text[])
   AND deleted IS FALSE;
 
+-- name: ListByGroupIDAndToolURNs :many
+-- Resolves variation overrides from an explicit variation group, scoped to the
+-- owning project. Unlike FindGlobalVariationsByToolURNs (which resolves the
+-- project-default group), the caller supplies the group id directly.
+SELECT tool_variations.*
+FROM tool_variations
+INNER JOIN tool_variations_groups
+  ON tool_variations.group_id = tool_variations_groups.id
+WHERE
+  tool_variations.group_id = @group_id
+  AND tool_variations_groups.project_id = @project_id
+  AND tool_variations.src_tool_urn = ANY(@tool_urns::text[])
+  AND tool_variations.deleted IS FALSE;
+
 -- name: FindGlobalVariationsForProjects :many
 -- Batch-resolves variation name overrides across multiple projects.
 WITH global_groups AS (

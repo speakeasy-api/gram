@@ -1,4 +1,4 @@
-import { SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar";
+import { SidebarMenuItem } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { AppRoute } from "@/routes";
@@ -10,40 +10,6 @@ import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge";
 import { Type } from "./ui/type";
 
 export const NAV_LOADING_DURATION_MS = 600;
-
-export function NavMenu({
-  items,
-  className,
-  children,
-}: {
-  items: AppRoute[];
-  className?: string;
-  children?: React.ReactNode;
-}) {
-  return (
-    <SidebarMenu className={className}>
-      {items.map((item) => (
-        <SidebarMenuItem key={item.title}>
-          <NavMenuButton item={item} />
-        </SidebarMenuItem>
-      ))}
-      {children}
-    </SidebarMenu>
-  );
-}
-
-function NavMenuButton({ item }: { item: AppRoute }) {
-  return (
-    <NavButton
-      title={item.title}
-      href={item.href()}
-      active={item.active}
-      Icon={item.Icon}
-      target={item.external ? "_blank" : undefined}
-      stage={item.stage}
-    />
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Sliding highlight context
@@ -421,7 +387,7 @@ export function NavButton({
         target={target}
         onClick={handleClick}
         className={cn(
-          "relative z-[1] flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors hover:no-underline",
+          "relative z-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors hover:no-underline",
           "group-data-[collapsible=icon]:min-w-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:p-2!",
           active
             ? "text-foreground font-semibold"
@@ -450,9 +416,8 @@ export function NavButton({
         {stage && (
           <ReleaseStageBadge
             stage={stage}
-            size="xs"
             noTooltip
-            className="-my-1 origin-left scale-75 group-data-[collapsible=icon]:hidden"
+            className="group-data-[collapsible=icon]:hidden"
           />
         )}
       </Link>
@@ -502,7 +467,7 @@ export function CollapsibleNavGroup({
             to={defaultHref ?? "#"}
             onClick={handleClick}
             className={cn(
-              "relative z-[1] flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition-colors hover:no-underline",
+              "relative z-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition-colors hover:no-underline",
               "group-data-[collapsible=icon]:min-w-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:p-2!",
               "cursor-pointer outline-hidden",
               isOpen
@@ -523,7 +488,7 @@ export function CollapsibleNavGroup({
               <ReleaseStageBadge
                 stage={stage}
                 noTooltip
-                className="-my-1 origin-left scale-75 transition-opacity duration-150 ease-out group-data-[collapsible=icon]:hidden group-data-[collapsible=icon]:opacity-0"
+                className="transition-opacity duration-150 ease-out group-data-[collapsible=icon]:hidden group-data-[collapsible=icon]:opacity-0"
               />
             )}
           </Link>
@@ -605,7 +570,7 @@ export function CollapsibleNavItem({
           to={item.href()}
           onClick={handleClick}
           className={cn(
-            "relative z-[1] flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:no-underline",
+            "relative z-1 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:no-underline",
             item.active
               ? "text-foreground font-semibold"
               : "text-muted-foreground hover:text-foreground",
@@ -616,12 +581,7 @@ export function CollapsibleNavItem({
           </span>
           {item.title === "Billing" && <ProductTierBadge />}
           {(stage ?? item.stage) && (
-            <ReleaseStageBadge
-              stage={(stage ?? item.stage)!}
-              size="xs"
-              noTooltip
-              className="-my-1 origin-left scale-75"
-            />
+            <ReleaseStageBadge stage={(stage ?? item.stage)!} noTooltip />
           )}
         </Link>
       </div>

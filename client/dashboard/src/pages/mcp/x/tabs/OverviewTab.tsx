@@ -40,14 +40,12 @@ export function OverviewTab({
   endpoints,
   isLoadingEndpoints,
   onShowEndpoints,
-  showAuthentication,
   onShowAuthentication,
 }: {
   mcpServer: McpServer | undefined;
   endpoints: McpEndpoint[];
   isLoadingEndpoints: boolean;
   onShowEndpoints: () => void;
-  showAuthentication: boolean;
   onShowAuthentication: () => void;
 }) {
   return (
@@ -60,7 +58,7 @@ export function OverviewTab({
           onShowEndpoints={onShowEndpoints}
         />
       ) : null}
-      {showAuthentication && mcpServer && (
+      {mcpServer && (
         <AuthenticationOverviewSection
           mcpServer={mcpServer}
           onNavigate={onShowAuthentication}

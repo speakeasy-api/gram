@@ -50,7 +50,7 @@ export function OnboardingStepper({
                 /* Completed step: dark circle with checkmark */
                 <button
                   onClick={() => onStepClick?.(index)}
-                  className="flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded-full bg-[#1a1a1a] text-white transition-colors hover:bg-[#333]"
+                  className="flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded-full bg-[#1a1a1a] text-white transition-all duration-200 ease-out hover:scale-[1.2] hover:bg-[#333]"
                 >
                   <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
                 </button>

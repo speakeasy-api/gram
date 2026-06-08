@@ -127,7 +127,7 @@ function ScopeDisabled({
 /**
  * Full-page unauthorized state. Used as the default fallback for page-level RequireScope.
  */
-export function Unauthorized({
+function Unauthorized({
   title = "Access restricted",
   description = "You don't have permission to view this page. Contact your organization admin to request access.",
 }: {
