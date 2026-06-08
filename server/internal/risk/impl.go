@@ -13,7 +13,6 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
@@ -54,33 +53,6 @@ import (
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
-
-type promptPolicyStub struct {
-	ID                uuid.UUID
-	ProjectID         uuid.UUID
-	Name              string
-	PromptInstruction string
-	MessageTypes      []string
-	Enabled           bool
-	Action            string
-	AutoName          bool
-	Version           int64
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
-}
-
-var promptPolicyStore = struct {
-	sync.Mutex
-	byProject map[uuid.UUID][]promptPolicyStub
-}{
-	Mutex:     sync.Mutex{},
-	byProject: map[uuid.UUID][]promptPolicyStub{},
-}
-
-var promptPolicyFixtureIDs = []uuid.UUID{
-	uuid.MustParse("019b0160-0000-7000-8000-000000000001"),
-	uuid.MustParse("019b0160-0000-7000-8000-000000000002"),
-}
 
 // RiskAnalysisSignaler signals the per-project risk analysis coordinator workflow.
 type RiskAnalysisSignaler interface {
@@ -350,74 +322,6 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	return s.policyToType(ctx, row)
 }
 
-func (s *Service) CreatePromptPolicy(ctx context.Context, payload *gen.CreatePromptPolicyPayload) (*types.RiskPolicy, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
-	}
-	if err := validatePromptInstruction(payload.PromptInstruction); err != nil {
-		return nil, err
-	}
-	if err := validatePromptPolicyMessageTypes(payload.MessageTypes); err != nil {
-		return nil, err
-	}
-
-	action := payload.Action
-	if action == "" {
-		action = "flag"
-	}
-	if err := validateAction(action); err != nil {
-		return nil, err
-	}
-
-	autoName := payload.Name == nil
-	if payload.AutoName != nil {
-		autoName = *payload.AutoName
-	}
-
-	name := ""
-	if payload.Name != nil {
-		name = *payload.Name
-	}
-	if autoName {
-		name = promptPolicyName(payload.PromptInstruction)
-	}
-	if err := validatePolicyName(name); err != nil {
-		return nil, err
-	}
-
-	id, err := uuid.NewV7()
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "generate prompt policy id").Log(ctx, s.logger)
-	}
-
-	now := time.Now().UTC()
-	policy := promptPolicyStub{
-		ID:                id,
-		ProjectID:         *authCtx.ProjectID,
-		Name:              name,
-		PromptInstruction: strings.TrimSpace(payload.PromptInstruction),
-		MessageTypes:      promptPolicyMessageTypes(),
-		Enabled:           true,
-		Action:            action,
-		AutoName:          autoName,
-		Version:           1,
-		CreatedAt:         now,
-		UpdatedAt:         now,
-	}
-
-	promptPolicyStore.Lock()
-	ensurePromptPolicyFixturesLocked(*authCtx.ProjectID)
-	promptPolicyStore.byProject[*authCtx.ProjectID] = append(promptPolicyStore.byProject[*authCtx.ProjectID], policy)
-	promptPolicyStore.Unlock()
-
-	return promptPolicyToType(policy), nil
-}
-
 func (s *Service) ListRiskPolicies(ctx context.Context, payload *gen.ListRiskPoliciesPayload) (*gen.ListRiskPoliciesResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -442,13 +346,6 @@ func (s *Service) ListRiskPolicies(ctx context.Context, payload *gen.ListRiskPol
 		policies = append(policies, p)
 	}
 
-	promptPolicyStore.Lock()
-	ensurePromptPolicyFixturesLocked(*authCtx.ProjectID)
-	for _, promptPolicy := range promptPolicyStore.byProject[*authCtx.ProjectID] {
-		policies = append(policies, promptPolicyToType(promptPolicy))
-	}
-	promptPolicyStore.Unlock()
-
 	return &gen.ListRiskPoliciesResult{Policies: policies}, nil
 }
 
@@ -466,16 +363,6 @@ func (s *Service) GetRiskPolicy(ctx context.Context, payload *gen.GetRiskPolicyP
 	if err != nil {
 		return nil, oops.C(oops.CodeInvalid)
 	}
-
-	promptPolicyStore.Lock()
-	ensurePromptPolicyFixturesLocked(*authCtx.ProjectID)
-	for _, promptPolicy := range promptPolicyStore.byProject[*authCtx.ProjectID] {
-		if promptPolicy.ID == id {
-			promptPolicyStore.Unlock()
-			return promptPolicyToType(promptPolicy), nil
-		}
-	}
-	promptPolicyStore.Unlock()
 
 	row, err := s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
 		ID:        id,
@@ -656,74 +543,6 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	return s.policyToType(ctx, row)
 }
 
-func (s *Service) UpdatePromptPolicy(ctx context.Context, payload *gen.UpdatePromptPolicyPayload) (*types.RiskPolicy, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
-	id, err := uuid.Parse(payload.ID)
-	if err != nil {
-		return nil, oops.C(oops.CodeInvalid)
-	}
-
-	promptPolicyStore.Lock()
-	defer promptPolicyStore.Unlock()
-	ensurePromptPolicyFixturesLocked(*authCtx.ProjectID)
-
-	policies := promptPolicyStore.byProject[*authCtx.ProjectID]
-	for i, policy := range policies {
-		if policy.ID != id {
-			continue
-		}
-
-		if payload.PromptInstruction != nil {
-			if err := validatePromptInstruction(*payload.PromptInstruction); err != nil {
-				return nil, err
-			}
-			policy.PromptInstruction = strings.TrimSpace(*payload.PromptInstruction)
-		}
-		if payload.MessageTypes != nil {
-			if err := validatePromptPolicyMessageTypes(payload.MessageTypes); err != nil {
-				return nil, err
-			}
-		}
-		policy.MessageTypes = promptPolicyMessageTypes()
-		if payload.Enabled != nil {
-			policy.Enabled = *payload.Enabled
-		}
-		if payload.Action != nil {
-			if err := validateAction(*payload.Action); err != nil {
-				return nil, err
-			}
-			policy.Action = *payload.Action
-		}
-		if payload.AutoName != nil {
-			policy.AutoName = *payload.AutoName
-		}
-		if payload.Name != nil && strings.TrimSpace(*payload.Name) != "" {
-			policy.Name = *payload.Name
-		}
-		if policy.AutoName {
-			policy.Name = promptPolicyName(policy.PromptInstruction)
-		}
-		if err := validatePolicyName(policy.Name); err != nil {
-			return nil, err
-		}
-
-		policy.Version++
-		policy.UpdatedAt = time.Now().UTC()
-		promptPolicyStore.byProject[*authCtx.ProjectID][i] = policy
-		return promptPolicyToType(policy), nil
-	}
-
-	return nil, oops.E(oops.CodeNotFound, nil, "prompt policy not found")
-}
-
 func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskPolicyPayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -738,19 +557,6 @@ func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskP
 	if err != nil {
 		return oops.C(oops.CodeInvalid)
 	}
-
-	promptPolicyStore.Lock()
-	ensurePromptPolicyFixturesLocked(*authCtx.ProjectID)
-	promptPolicies := promptPolicyStore.byProject[*authCtx.ProjectID]
-	for i, promptPolicy := range promptPolicies {
-		if promptPolicy.ID != id {
-			continue
-		}
-		promptPolicyStore.byProject[*authCtx.ProjectID] = slices.Delete(promptPolicies, i, i+1)
-		promptPolicyStore.Unlock()
-		return nil
-	}
-	promptPolicyStore.Unlock()
 
 	// Fetch before delete so we can log the policy name.
 	existing, err := s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
@@ -1877,27 +1683,6 @@ func validateMessageTypes(messageTypes []string) error {
 	return nil
 }
 
-func validatePromptInstruction(promptInstruction string) error {
-	if strings.TrimSpace(promptInstruction) == "" {
-		return oops.E(oops.CodeInvalid, nil, "prompt_instruction must not be empty")
-	}
-	return nil
-}
-
-func promptPolicyMessageTypes() []string {
-	return []string{message.ToolRequest}
-}
-
-func validatePromptPolicyMessageTypes(messageTypes []string) error {
-	for _, messageType := range messageTypes {
-		if messageType == message.ToolRequest {
-			continue
-		}
-		return oops.E(oops.CodeInvalid, nil, "prompt policies only apply to %s", message.ToolRequest)
-	}
-	return nil
-}
-
 func validateCustomDetectionRule(ruleID, title, regexPattern, severity string) error {
 	if !customRuleIDPattern.MatchString(ruleID) {
 		return oops.E(oops.CodeInvalid, nil, "rule_id must match custom.[a-z0-9_]+")
@@ -2219,9 +2004,7 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 	return &types.RiskPolicy{
 		ID:                   row.ID.String(),
 		ProjectID:            row.ProjectID.String(),
-		Kind:                 "risk",
 		Name:                 row.Name,
-		PromptInstruction:    nil,
 		Sources:              row.Sources,
 		PresidioEntities:     row.PresidioEntities,
 		PromptInjectionRules: row.PromptInjectionRules,
@@ -2240,84 +2023,6 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 	}, nil
 }
 
-func ensurePromptPolicyFixturesLocked(projectID uuid.UUID) {
-	if _, ok := promptPolicyStore.byProject[projectID]; ok {
-		return
-	}
-
-	now := time.Now().UTC()
-	promptPolicyStore.byProject[projectID] = []promptPolicyStub{
-		{
-			ID:                promptPolicyFixtureIDs[0],
-			ProjectID:         projectID,
-			Name:              "No production deletes",
-			PromptInstruction: "Any tool call that performs a destructive operation (DELETE, DROP, TRUNCATE) against a production resource.",
-			MessageTypes:      promptPolicyMessageTypes(),
-			Enabled:           true,
-			Action:            "block",
-			AutoName:          false,
-			Version:           1,
-			CreatedAt:         now.Add(-2 * time.Hour),
-			UpdatedAt:         now.Add(-2 * time.Hour),
-		},
-		{
-			ID:                promptPolicyFixtureIDs[1],
-			ProjectID:         projectID,
-			Name:              "Data exfiltration",
-			PromptInstruction: "Tool-call sequences where sensitive data is read and then transmitted to an external destination.",
-			MessageTypes:      promptPolicyMessageTypes(),
-			Enabled:           false,
-			Action:            "flag",
-			AutoName:          false,
-			Version:           1,
-			CreatedAt:         now.Add(-1 * time.Hour),
-			UpdatedAt:         now.Add(-1 * time.Hour),
-		},
-	}
-}
-
-func promptPolicyName(promptInstruction string) string {
-	trimmed := strings.TrimSpace(promptInstruction)
-	if trimmed == "" {
-		return "Prompt-based policy"
-	}
-	words := strings.Fields(trimmed)
-	if len(words) > 5 {
-		words = words[:5]
-	}
-	name := strings.Trim(strings.Join(words, " "), ".,:;!?")
-	if name == "" {
-		return "Prompt-based policy"
-	}
-	return name
-}
-
-func promptPolicyToType(policy promptPolicyStub) *types.RiskPolicy {
-	promptInstruction := policy.PromptInstruction
-	return &types.RiskPolicy{
-		ID:                   policy.ID.String(),
-		ProjectID:            policy.ProjectID.String(),
-		Kind:                 "prompt",
-		Name:                 policy.Name,
-		PromptInstruction:    &promptInstruction,
-		Sources:              []string{},
-		PresidioEntities:     nil,
-		PromptInjectionRules: nil,
-		DisabledRules:        nil,
-		CustomRuleIds:        nil,
-		MessageTypes:         append([]string(nil), policy.MessageTypes...),
-		Enabled:              policy.Enabled,
-		Action:               policy.Action,
-		AutoName:             policy.AutoName,
-		UserMessage:          nil,
-		Version:              policy.Version,
-		CreatedAt:            policy.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:            policy.UpdatedAt.Format(time.RFC3339),
-		PendingMessages:      0,
-		TotalMessages:        0,
-	}
-}
-
 // policyRowSnapshot returns a *types.RiskPolicy suitable for audit log
 // snapshots. Unlike policyToType it skips the extra DB queries for message
 // counts, keeping transactions short. Count fields are set to -1 to indicate
@@ -2326,9 +2031,7 @@ func policyRowSnapshot(row repo.RiskPolicy) *types.RiskPolicy {
 	return &types.RiskPolicy{
 		ID:                   row.ID.String(),
 		ProjectID:            row.ProjectID.String(),
-		Kind:                 "risk",
 		Name:                 row.Name,
-		PromptInstruction:    nil,
 		Sources:              row.Sources,
 		PresidioEntities:     row.PresidioEntities,
 		PromptInjectionRules: row.PromptInjectionRules,

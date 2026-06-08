@@ -21,10 +21,6 @@ type Client struct {
 	// createRiskPolicy endpoint.
 	CreateRiskPolicyDoer goahttp.Doer
 
-	// CreatePromptPolicy Doer is the HTTP client used to make requests to the
-	// createPromptPolicy endpoint.
-	CreatePromptPolicyDoer goahttp.Doer
-
 	// ListRiskPolicies Doer is the HTTP client used to make requests to the
 	// listRiskPolicies endpoint.
 	ListRiskPoliciesDoer goahttp.Doer
@@ -40,10 +36,6 @@ type Client struct {
 	// UpdateRiskPolicy Doer is the HTTP client used to make requests to the
 	// updateRiskPolicy endpoint.
 	UpdateRiskPolicyDoer goahttp.Doer
-
-	// UpdatePromptPolicy Doer is the HTTP client used to make requests to the
-	// updatePromptPolicy endpoint.
-	UpdatePromptPolicyDoer goahttp.Doer
 
 	// DeleteRiskPolicy Doer is the HTTP client used to make requests to the
 	// deleteRiskPolicy endpoint.
@@ -166,12 +158,10 @@ func NewClient(
 ) *Client {
 	return &Client{
 		CreateRiskPolicyDoer:               doer,
-		CreatePromptPolicyDoer:             doer,
 		ListRiskPoliciesDoer:               doer,
 		GetRiskCapabilitiesDoer:            doer,
 		GetRiskPolicyDoer:                  doer,
 		UpdateRiskPolicyDoer:               doer,
-		UpdatePromptPolicyDoer:             doer,
 		DeleteRiskPolicyDoer:               doer,
 		ListRiskResultsDoer:                doer,
 		ListRiskResultsForAgentDoer:        doer,
@@ -224,30 +214,6 @@ func (c *Client) CreateRiskPolicy() goa.Endpoint {
 		resp, err := c.CreateRiskPolicyDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "createRiskPolicy", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// CreatePromptPolicy returns an endpoint that makes HTTP requests to the risk
-// service createPromptPolicy server.
-func (c *Client) CreatePromptPolicy() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeCreatePromptPolicyRequest(c.encoder)
-		decodeResponse = DecodeCreatePromptPolicyResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildCreatePromptPolicyRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.CreatePromptPolicyDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("risk", "createPromptPolicy", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -344,30 +310,6 @@ func (c *Client) UpdateRiskPolicy() goa.Endpoint {
 		resp, err := c.UpdateRiskPolicyDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "updateRiskPolicy", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// UpdatePromptPolicy returns an endpoint that makes HTTP requests to the risk
-// service updatePromptPolicy server.
-func (c *Client) UpdatePromptPolicy() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeUpdatePromptPolicyRequest(c.encoder)
-		decodeResponse = DecodeUpdatePromptPolicyResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildUpdatePromptPolicyRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.UpdatePromptPolicyDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("risk", "updatePromptPolicy", err)
 		}
 		return decodeResponse(resp)
 	}

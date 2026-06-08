@@ -113,7 +113,7 @@ func UsageCommands() []string {
 		"organization-remote-session-issuers (create-organization-remote-session-issuer|update-organization-remote-session-issuer|list-organization-remote-session-issuers|get-organization-remote-session-issuer|delete-organization-remote-session-issuer)",
 		"remote-sessions (list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
-		"risk (create-risk-policy|create-prompt-policy|list-risk-policies|get-risk-capabilities|get-risk-policy|update-risk-policy|update-prompt-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|list-risk-results-by-chat|get-risk-overview|list-risk-categories|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|list-shadow-mcp-approvals|approve-shadow-mcp|revoke-shadow-mcp-approval|create-risk-policy-bypass-request|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|suggest-custom-detection-rule|test-detection-rule)",
+		"risk (create-risk-policy|list-risk-policies|get-risk-capabilities|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|list-risk-results-by-chat|get-risk-overview|list-risk-categories|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|list-shadow-mcp-approvals|approve-shadow-mcp|revoke-shadow-mcp-approval|create-risk-policy-bypass-request|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|suggest-custom-detection-rule|test-detection-rule)",
 		"slack (create-slack-app|list-slack-apps|get-slack-app|configure-slack-app|update-slack-app|delete-slack-app)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-project-overview|list-filter-options|list-attribute-keys|get-hooks-summary|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
@@ -1381,12 +1381,6 @@ func ParseEndpoint(
 		riskCreateRiskPolicySessionTokenFlag     = riskCreateRiskPolicyFlags.String("session-token", "", "")
 		riskCreateRiskPolicyProjectSlugInputFlag = riskCreateRiskPolicyFlags.String("project-slug-input", "", "")
 
-		riskCreatePromptPolicyFlags                = flag.NewFlagSet("create-prompt-policy", flag.ExitOnError)
-		riskCreatePromptPolicyBodyFlag             = riskCreatePromptPolicyFlags.String("body", "REQUIRED", "")
-		riskCreatePromptPolicyApikeyTokenFlag      = riskCreatePromptPolicyFlags.String("apikey-token", "", "")
-		riskCreatePromptPolicySessionTokenFlag     = riskCreatePromptPolicyFlags.String("session-token", "", "")
-		riskCreatePromptPolicyProjectSlugInputFlag = riskCreatePromptPolicyFlags.String("project-slug-input", "", "")
-
 		riskListRiskPoliciesFlags                = flag.NewFlagSet("list-risk-policies", flag.ExitOnError)
 		riskListRiskPoliciesApikeyTokenFlag      = riskListRiskPoliciesFlags.String("apikey-token", "", "")
 		riskListRiskPoliciesSessionTokenFlag     = riskListRiskPoliciesFlags.String("session-token", "", "")
@@ -1408,12 +1402,6 @@ func ParseEndpoint(
 		riskUpdateRiskPolicyApikeyTokenFlag      = riskUpdateRiskPolicyFlags.String("apikey-token", "", "")
 		riskUpdateRiskPolicySessionTokenFlag     = riskUpdateRiskPolicyFlags.String("session-token", "", "")
 		riskUpdateRiskPolicyProjectSlugInputFlag = riskUpdateRiskPolicyFlags.String("project-slug-input", "", "")
-
-		riskUpdatePromptPolicyFlags                = flag.NewFlagSet("update-prompt-policy", flag.ExitOnError)
-		riskUpdatePromptPolicyBodyFlag             = riskUpdatePromptPolicyFlags.String("body", "REQUIRED", "")
-		riskUpdatePromptPolicyApikeyTokenFlag      = riskUpdatePromptPolicyFlags.String("apikey-token", "", "")
-		riskUpdatePromptPolicySessionTokenFlag     = riskUpdatePromptPolicyFlags.String("session-token", "", "")
-		riskUpdatePromptPolicyProjectSlugInputFlag = riskUpdatePromptPolicyFlags.String("project-slug-input", "", "")
 
 		riskDeleteRiskPolicyFlags                = flag.NewFlagSet("delete-risk-policy", flag.ExitOnError)
 		riskDeleteRiskPolicyIDFlag               = riskDeleteRiskPolicyFlags.String("id", "REQUIRED", "")
@@ -2335,12 +2323,10 @@ func ParseEndpoint(
 
 	riskFlags.Usage = riskUsage
 	riskCreateRiskPolicyFlags.Usage = riskCreateRiskPolicyUsage
-	riskCreatePromptPolicyFlags.Usage = riskCreatePromptPolicyUsage
 	riskListRiskPoliciesFlags.Usage = riskListRiskPoliciesUsage
 	riskGetRiskCapabilitiesFlags.Usage = riskGetRiskCapabilitiesUsage
 	riskGetRiskPolicyFlags.Usage = riskGetRiskPolicyUsage
 	riskUpdateRiskPolicyFlags.Usage = riskUpdateRiskPolicyUsage
-	riskUpdatePromptPolicyFlags.Usage = riskUpdatePromptPolicyUsage
 	riskDeleteRiskPolicyFlags.Usage = riskDeleteRiskPolicyUsage
 	riskListRiskResultsFlags.Usage = riskListRiskResultsUsage
 	riskListRiskResultsForAgentFlags.Usage = riskListRiskResultsForAgentUsage
@@ -3411,9 +3397,6 @@ func ParseEndpoint(
 			case "create-risk-policy":
 				epf = riskCreateRiskPolicyFlags
 
-			case "create-prompt-policy":
-				epf = riskCreatePromptPolicyFlags
-
 			case "list-risk-policies":
 				epf = riskListRiskPoliciesFlags
 
@@ -3425,9 +3408,6 @@ func ParseEndpoint(
 
 			case "update-risk-policy":
 				epf = riskUpdateRiskPolicyFlags
-
-			case "update-prompt-policy":
-				epf = riskUpdatePromptPolicyFlags
 
 			case "delete-risk-policy":
 				epf = riskDeleteRiskPolicyFlags
@@ -4623,9 +4603,6 @@ func ParseEndpoint(
 			case "create-risk-policy":
 				endpoint = c.CreateRiskPolicy()
 				data, err = riskc.BuildCreateRiskPolicyPayload(*riskCreateRiskPolicyBodyFlag, *riskCreateRiskPolicyApikeyTokenFlag, *riskCreateRiskPolicySessionTokenFlag, *riskCreateRiskPolicyProjectSlugInputFlag)
-			case "create-prompt-policy":
-				endpoint = c.CreatePromptPolicy()
-				data, err = riskc.BuildCreatePromptPolicyPayload(*riskCreatePromptPolicyBodyFlag, *riskCreatePromptPolicyApikeyTokenFlag, *riskCreatePromptPolicySessionTokenFlag, *riskCreatePromptPolicyProjectSlugInputFlag)
 			case "list-risk-policies":
 				endpoint = c.ListRiskPolicies()
 				data, err = riskc.BuildListRiskPoliciesPayload(*riskListRiskPoliciesApikeyTokenFlag, *riskListRiskPoliciesSessionTokenFlag, *riskListRiskPoliciesProjectSlugInputFlag)
@@ -4638,9 +4615,6 @@ func ParseEndpoint(
 			case "update-risk-policy":
 				endpoint = c.UpdateRiskPolicy()
 				data, err = riskc.BuildUpdateRiskPolicyPayload(*riskUpdateRiskPolicyBodyFlag, *riskUpdateRiskPolicyApikeyTokenFlag, *riskUpdateRiskPolicySessionTokenFlag, *riskUpdateRiskPolicyProjectSlugInputFlag)
-			case "update-prompt-policy":
-				endpoint = c.UpdatePromptPolicy()
-				data, err = riskc.BuildUpdatePromptPolicyPayload(*riskUpdatePromptPolicyBodyFlag, *riskUpdatePromptPolicyApikeyTokenFlag, *riskUpdatePromptPolicySessionTokenFlag, *riskUpdatePromptPolicyProjectSlugInputFlag)
 			case "delete-risk-policy":
 				endpoint = c.DeleteRiskPolicy()
 				data, err = riskc.BuildDeleteRiskPolicyPayload(*riskDeleteRiskPolicyIDFlag, *riskDeleteRiskPolicyApikeyTokenFlag, *riskDeleteRiskPolicySessionTokenFlag, *riskDeleteRiskPolicyProjectSlugInputFlag)
@@ -10489,12 +10463,10 @@ func riskUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] risk COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create-risk-policy: Create a new risk analysis policy for the current project.`)
-	fmt.Fprintln(os.Stderr, `    create-prompt-policy: Create a new prompt-based policy for the current project.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-policies: List all risk analysis policies for the current project.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-capabilities: Get server-side risk analysis capabilities for the current project.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-policy: Get a risk analysis policy by ID.`)
 	fmt.Fprintln(os.Stderr, `    update-risk-policy: Update a risk analysis policy.`)
-	fmt.Fprintln(os.Stderr, `    update-prompt-policy: Update a prompt-based policy.`)
 	fmt.Fprintln(os.Stderr, `    delete-risk-policy: Delete a risk analysis policy.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-results: List risk analysis results for the current project.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-results-for-agent: List risk analysis results with the `+"`"+`match`+"`"+` field redacted to an opaque length+sha256-prefix fingerprint. Matches the payload and pagination semantics of listRiskResults. Designed for AI assistant / MCP consumption so secret content (gitleaks captures, presidio entities, prompt-injection payloads) never reaches the model context. For shadow_mcp findings the `+"`"+`match`+"`"+` value — a non-sensitive server URL or command identifier — is passed through verbatim.`)
@@ -10546,30 +10518,6 @@ func riskCreateRiskPolicyUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy --body '{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func riskCreatePromptPolicyUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] risk create-prompt-policy", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Create a new prompt-based policy for the current project.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-prompt-policy --body '{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\",\n      \"prompt_instruction\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskListRiskPoliciesUsage() {
@@ -10662,30 +10610,6 @@ func riskUpdateRiskPolicyUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk update-risk-policy --body '{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func riskUpdatePromptPolicyUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] risk update-prompt-policy", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Update a prompt-based policy.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk update-prompt-policy --body '{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\",\n      \"prompt_instruction\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskDeleteRiskPolicyUsage() {

@@ -12,11 +12,6 @@ func CreateRiskPolicyRiskPath() string {
 	return "/rpc/risk.policies.create"
 }
 
-// CreatePromptPolicyRiskPath returns the URL path to the risk service createPromptPolicy HTTP endpoint.
-func CreatePromptPolicyRiskPath() string {
-	return "/rpc/risk.promptPolicies.create"
-}
-
 // ListRiskPoliciesRiskPath returns the URL path to the risk service listRiskPolicies HTTP endpoint.
 func ListRiskPoliciesRiskPath() string {
 	return "/rpc/risk.policies.list"
@@ -35,11 +30,6 @@ func GetRiskPolicyRiskPath() string {
 // UpdateRiskPolicyRiskPath returns the URL path to the risk service updateRiskPolicy HTTP endpoint.
 func UpdateRiskPolicyRiskPath() string {
 	return "/rpc/risk.policies.update"
-}
-
-// UpdatePromptPolicyRiskPath returns the URL path to the risk service updatePromptPolicy HTTP endpoint.
-func UpdatePromptPolicyRiskPath() string {
-	return "/rpc/risk.promptPolicies.update"
 }
 
 // DeleteRiskPolicyRiskPath returns the URL path to the risk service deleteRiskPolicy HTTP endpoint.

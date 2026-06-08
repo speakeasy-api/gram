@@ -49,11 +49,9 @@ import { useState, useCallback, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   invalidateAllRiskListPolicies,
-  useRiskCreatePromptPolicyMutation,
   useRiskCreatePolicyMutation,
   useRiskListPolicies,
   useRiskPoliciesDeleteMutation,
-  useRiskUpdatePromptPolicyMutation,
   useRiskPoliciesUpdateMutation,
 } from "@gram/client/react-query/index.js";
 import {
@@ -73,6 +71,10 @@ import { cn } from "@/lib/utils";
 import { ruleIdToPresidioEntity } from "./rule-ids";
 import { useDetectionRulesStore } from "./detection-rules-data";
 import { useTelemetry } from "@/contexts/Telemetry";
+import {
+  usePromptPoliciesStore,
+  type PromptPolicy,
+} from "./prompt-policies-store";
 import { PROMPT_POLICY_TEMPLATES } from "./prompt-policy-templates";
 
 /** Presidio-backed categories */
@@ -117,7 +119,7 @@ type PolicyKind = "risk" | "prompt";
 
 type PolicyRow =
   | { kind: "risk"; policy: RiskPolicy }
-  | { kind: "prompt"; policy: RiskPolicy };
+  | { kind: "prompt"; policy: PromptPolicy };
 
 const TOOL_CALL_MESSAGE_TYPES = new Set<PolicyMessageType>([
   "tool_request",
@@ -318,15 +320,6 @@ function truncatePrompt(prompt: string, maxLength = 40): string {
   return `${singleLine.slice(0, maxLength - 1)}…`;
 }
 
-function policyKind(policy: RiskPolicy): PolicyKind {
-  return policy.kind === "prompt" ? "prompt" : "risk";
-}
-
-function policyToRow(policy: RiskPolicy): PolicyRow {
-  const kind = policyKind(policy);
-  return { kind, policy };
-}
-
 function promptTemplateNameForInstruction(prompt: string): string | undefined {
   return PROMPT_POLICY_TEMPLATES.find((template) => template.prompt === prompt)
     ?.name;
@@ -345,20 +338,38 @@ function PolicyCenterContent() {
   const telemetry = useTelemetry();
   const { data, isLoading } = useRiskListPolicies();
   const nlEnabled = telemetry.isFeatureEnabled("gram-prompt-policies") ?? false;
-  const rawPolicies = data?.policies ?? [];
-  const policies = useMemo(
-    () =>
-      rawPolicies
-        .filter((policy) => nlEnabled || policyKind(policy) === "risk")
-        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
-    [nlEnabled, rawPolicies],
+  const promptStore = usePromptPoliciesStore();
+
+  const serverRows = useMemo(
+    (): PolicyRow[] =>
+      (data?.policies ?? []).map((policy) => ({ kind: "risk", policy })),
+    [data?.policies],
   );
-  const policyRows = useMemo(() => policies.map(policyToRow), [policies]);
+  const promptRows = useMemo(
+    (): PolicyRow[] =>
+      nlEnabled
+        ? promptStore.policies.map((policy) => ({ kind: "prompt", policy }))
+        : [],
+    [nlEnabled, promptStore.policies],
+  );
+  const policyRows = useMemo(
+    () =>
+      [...serverRows, ...promptRows].sort((a, b) => {
+        const ta =
+          a.kind === "risk" ? a.policy.createdAt.getTime() : a.policy.createdAt;
+        const tb =
+          b.kind === "risk" ? b.policy.createdAt.getTime() : b.policy.createdAt;
+        return tb - ta;
+      }),
+    [serverRows, promptRows],
+  );
 
   const { customRules } = useDetectionRulesStore();
 
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [editingPolicy, setEditingPolicy] = useState<RiskPolicy | null>(null);
+  const [editingPolicy, setEditingPolicy] = useState<
+    RiskPolicy | PromptPolicy | null
+  >(null);
   const [createStep, setCreateStep] = useState<"type" | "details">("details");
   const [formPolicyKind, setFormPolicyKind] = useState<PolicyKind>("risk");
   const [formName, setFormName] = useState("");
@@ -393,20 +404,6 @@ function PolicyCenterContent() {
   });
 
   const updateMutation = useRiskPoliciesUpdateMutation({
-    onSuccess: () => {
-      invalidate();
-      setSheetOpen(false);
-    },
-  });
-
-  const createPromptMutation = useRiskCreatePromptPolicyMutation({
-    onSuccess: () => {
-      invalidate();
-      setSheetOpen(false);
-    },
-  });
-
-  const updatePromptMutation = useRiskUpdatePromptPolicyMutation({
     onSuccess: () => {
       invalidate();
       setSheetOpen(false);
@@ -458,22 +455,24 @@ function PolicyCenterContent() {
     setCreateStep("details");
   };
 
-  const handleEdit = (policy: RiskPolicy) => {
-    const kind = policyKind(policy);
-    const customRuleIds = policy.customRuleIds ?? [];
+  const handleEdit = (policy: RiskPolicy | PromptPolicy) => {
+    const isPrompt = !("sources" in policy);
+    const kind: PolicyKind = isPrompt ? "prompt" : "risk";
     setEditingPolicy(policy);
     setCreateStep("details");
     setFormPolicyKind(kind);
     setFormName(policy.name);
     setFormEnabled(policy.enabled);
-    setFormPromptInstruction(policy.promptInstruction ?? "");
-    if (kind === "prompt") {
+    if (isPrompt) {
+      setFormPromptInstruction(policy.promptInstruction);
       setSelectedMessageTypes(promptPolicyMessageTypes());
       setFormAction((policy.action as PolicyAction) ?? "flag");
       setFormAutoName(policy.autoName ?? false);
       setSheetOpen(true);
       return;
     }
+    setFormPromptInstruction("");
+    const customRuleIds = policy.customRuleIds ?? [];
     const categories = policyToCategories(
       policy.sources,
       policy.presidioEntities,
@@ -493,34 +492,30 @@ function PolicyCenterContent() {
 
   const handleSave = () => {
     if (formPolicyKind === "prompt") {
-      const messageTypes = PROMPT_POLICY_MESSAGE_TYPES;
-      if (editingPolicy) {
-        updatePromptMutation.mutate({
-          request: {
-            updatePromptPolicyRequestBody: {
-              id: editingPolicy.id,
-              name: formName,
-              enabled: formEnabled,
-              promptInstruction: formPromptInstruction,
-              messageTypes,
-              action: formAction,
-              autoName: formAutoName,
-            },
-          },
+      const name = formAutoName
+        ? formPromptInstruction.trim().replace(/\s+/g, " ").slice(0, 60) ||
+          "Prompt Policy"
+        : formName;
+      if (editingPolicy && !("sources" in editingPolicy)) {
+        promptStore.update(editingPolicy.id, {
+          name,
+          enabled: formEnabled,
+          promptInstruction: formPromptInstruction,
+          messageTypes: PROMPT_POLICY_MESSAGE_TYPES,
+          action: formAction,
+          autoName: formAutoName,
         });
       } else {
-        createPromptMutation.mutate({
-          request: {
-            createPromptPolicyRequestBody: {
-              ...(formAutoName ? {} : { name: formName }),
-              promptInstruction: formPromptInstruction,
-              messageTypes,
-              action: formAction,
-              autoName: formAutoName,
-            },
-          },
+        promptStore.create({
+          name,
+          enabled: formEnabled,
+          promptInstruction: formPromptInstruction,
+          messageTypes: PROMPT_POLICY_MESSAGE_TYPES,
+          action: formAction,
+          autoName: formAutoName,
         });
       }
+      setSheetOpen(false);
       return;
     }
 
@@ -533,7 +528,11 @@ function PolicyCenterContent() {
     } = categoriesToPayload(
       selectedCategories,
       disabledRules,
-      pinnedHiddenRuleIds(editingPolicy?.presidioEntities),
+      pinnedHiddenRuleIds(
+        editingPolicy && "sources" in editingPolicy
+          ? editingPolicy.presidioEntities
+          : undefined,
+      ),
     );
     const action =
       sources.includes("destructive_tool") && formAction === "block"
@@ -579,20 +578,20 @@ function PolicyCenterContent() {
     }
   };
 
-  const handleDelete = (id: string) => {
-    deleteMutation.mutate({ request: { id } });
+  const handleDelete = (row: PolicyRow) => {
+    if (row.kind === "prompt") {
+      promptStore.remove(row.policy.id);
+      return;
+    }
+    deleteMutation.mutate({ request: { id: row.policy.id } });
   };
 
-  const handleToggle = (policy: RiskPolicy, enabled: boolean) => {
-    if (policyKind(policy) === "prompt") {
-      updatePromptMutation.mutate({
-        request: {
-          updatePromptPolicyRequestBody: {
-            id: policy.id,
-            enabled,
-          },
-        },
-      });
+  const handleToggle = (
+    policy: RiskPolicy | PromptPolicy,
+    enabled: boolean,
+  ) => {
+    if (!("sources" in policy)) {
+      promptStore.update(policy.id, { enabled });
       return;
     }
 
@@ -623,7 +622,7 @@ function PolicyCenterContent() {
     );
   }
 
-  if (policies.length === 0 && !sheetOpen) {
+  if (policyRows.length === 0 && !sheetOpen) {
     return (
       <Page>
         <Page.Header>
@@ -650,11 +649,11 @@ function PolicyCenterContent() {
     );
   }
 
-  const enabledPolicies = policies.filter((p) => p.enabled);
+  const enabledPolicies = policyRows.filter((r) => r.policy.enabled);
   const insightsContext = [
     "Page: Policy Center.",
-    `Total policies: ${policies.length}, enabled: ${enabledPolicies.length}.`,
-    `Policy actions: ${policies.map((p) => `${p.name} (${p.action})`).join(", ") || "none"}.`,
+    `Total policies: ${policyRows.length}, enabled: ${enabledPolicies.length}.`,
+    `Policy actions: ${policyRows.map((r) => `${r.policy.name} (${r.policy.action})`).join(", ") || "none"}.`,
     "Available risk tools: listRiskPolicies, getRiskPolicy, getRiskCapabilities, getRiskPolicyStatus, listRiskResultsForAgent (finding-level with match redaction), listRiskResultsByChat, listShadowMCPApprovals.",
     "Never echo match_redacted values verbatim. Refer to findings by rule_id and source.",
   ].join(" ");
@@ -718,9 +717,8 @@ function PolicyCenterContent() {
       header: nlEnabled ? "Categories / Prompt" : "Categories",
       width: "2fr",
       render: (row) => {
-        const policy = row.policy;
         if (row.kind === "prompt") {
-          const prompt = policy.promptInstruction ?? "";
+          const prompt = row.policy.promptInstruction ?? "";
           return (
             <SimpleTooltip tooltip={prompt}>
               <span className="text-muted-foreground block max-w-full truncate text-sm italic">
@@ -730,11 +728,12 @@ function PolicyCenterContent() {
           );
         }
 
+        const riskPolicy = row.policy;
         const categories = sourcesToCategories(
-          policy.sources,
-          policy.presidioEntities,
+          riskPolicy.sources,
+          riskPolicy.presidioEntities,
         );
-        if (policy.customRuleIds?.length) {
+        if (riskPolicy.customRuleIds?.length) {
           categories.push("custom");
         }
 
@@ -826,14 +825,17 @@ function PolicyCenterContent() {
               <DropdownMenuItem
                 className="cursor-pointer"
                 onSelect={() =>
-                  setTimeout(() => setRunPanelPolicy(row.policy), 0)
+                  setTimeout(
+                    () => row.kind === "risk" && setRunPanelPolicy(row.policy),
+                    0,
+                  )
                 }
               >
                 View Progress
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive cursor-pointer"
-                onSelect={() => handleDelete(row.policy.id)}
+                onSelect={() => handleDelete(row)}
               >
                 Delete
               </DropdownMenuItem>
@@ -972,24 +974,16 @@ function PolicyCenterContent() {
                     (!formAutoName && !formName.trim()) ||
                     selectedMessageTypes.size === 0 ||
                     createMutation.isPending ||
-                    updateMutation.isPending ||
-                    createPromptMutation.isPending ||
-                    updatePromptMutation.isPending
+                    updateMutation.isPending
                   }
                 >
-                  {(createMutation.isPending ||
-                    updateMutation.isPending ||
-                    createPromptMutation.isPending ||
-                    updatePromptMutation.isPending) && (
+                  {(createMutation.isPending || updateMutation.isPending) && (
                     <Button.LeftIcon>
                       <Loader2 className="h-4 w-4 animate-spin" />
                     </Button.LeftIcon>
                   )}
                   <Button.Text>
-                    {createMutation.isPending ||
-                    updateMutation.isPending ||
-                    createPromptMutation.isPending ||
-                    updatePromptMutation.isPending
+                    {createMutation.isPending || updateMutation.isPending
                       ? "Saving..."
                       : editingPolicy
                         ? "Update"

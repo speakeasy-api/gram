@@ -13,12 +13,8 @@ type RiskPolicy struct {
 	ID string
 	// The project ID.
 	ProjectID string
-	// Policy kind: 'risk' (default) or 'prompt'.
-	Kind string
 	// The policy name.
 	Name string
-	// Natural-language judge instruction (prompt-based policies only).
-	PromptInstruction *string
 	// Detection sources enabled for this policy.
 	Sources []string
 	// Presidio entity types to scan for. When empty, scans all entities.

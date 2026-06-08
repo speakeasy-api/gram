@@ -102,66 +102,6 @@ func BuildCreateRiskPolicyPayload(riskCreateRiskPolicyBody string, riskCreateRis
 	return v, nil
 }
 
-// BuildCreatePromptPolicyPayload builds the payload for the risk
-// createPromptPolicy endpoint from CLI flags.
-func BuildCreatePromptPolicyPayload(riskCreatePromptPolicyBody string, riskCreatePromptPolicyApikeyToken string, riskCreatePromptPolicySessionToken string, riskCreatePromptPolicyProjectSlugInput string) (*risk.CreatePromptPolicyPayload, error) {
-	var err error
-	var body CreatePromptPolicyRequestBody
-	{
-		err = json.Unmarshal([]byte(riskCreatePromptPolicyBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\",\n      \"prompt_instruction\": \"abc123\"\n   }'")
-		}
-		if !(body.Action == "flag" || body.Action == "block") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", body.Action, []any{"flag", "block"}))
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-	var apikeyToken *string
-	{
-		if riskCreatePromptPolicyApikeyToken != "" {
-			apikeyToken = &riskCreatePromptPolicyApikeyToken
-		}
-	}
-	var sessionToken *string
-	{
-		if riskCreatePromptPolicySessionToken != "" {
-			sessionToken = &riskCreatePromptPolicySessionToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if riskCreatePromptPolicyProjectSlugInput != "" {
-			projectSlugInput = &riskCreatePromptPolicyProjectSlugInput
-		}
-	}
-	v := &risk.CreatePromptPolicyPayload{
-		Name:              body.Name,
-		PromptInstruction: body.PromptInstruction,
-		Action:            body.Action,
-		AutoName:          body.AutoName,
-	}
-	if body.MessageTypes != nil {
-		v.MessageTypes = make([]string, len(body.MessageTypes))
-		for i, val := range body.MessageTypes {
-			v.MessageTypes[i] = val
-		}
-	}
-	{
-		var zero string
-		if v.Action == zero {
-			v.Action = "flag"
-		}
-	}
-	v.ApikeyToken = apikeyToken
-	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
 // BuildListRiskPoliciesPayload builds the payload for the risk
 // listRiskPolicies endpoint from CLI flags.
 func BuildListRiskPoliciesPayload(riskListRiskPoliciesApikeyToken string, riskListRiskPoliciesSessionToken string, riskListRiskPoliciesProjectSlugInput string) (*risk.ListRiskPoliciesPayload, error) {
@@ -334,65 +274,6 @@ func BuildUpdateRiskPolicyPayload(riskUpdateRiskPolicyBody string, riskUpdateRis
 		for i, val := range body.CustomRuleIds {
 			v.CustomRuleIds[i] = val
 		}
-	}
-	if body.MessageTypes != nil {
-		v.MessageTypes = make([]string, len(body.MessageTypes))
-		for i, val := range body.MessageTypes {
-			v.MessageTypes[i] = val
-		}
-	}
-	v.ApikeyToken = apikeyToken
-	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
-// BuildUpdatePromptPolicyPayload builds the payload for the risk
-// updatePromptPolicy endpoint from CLI flags.
-func BuildUpdatePromptPolicyPayload(riskUpdatePromptPolicyBody string, riskUpdatePromptPolicyApikeyToken string, riskUpdatePromptPolicySessionToken string, riskUpdatePromptPolicyProjectSlugInput string) (*risk.UpdatePromptPolicyPayload, error) {
-	var err error
-	var body UpdatePromptPolicyRequestBody
-	{
-		err = json.Unmarshal([]byte(riskUpdatePromptPolicyBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\",\n      \"prompt_instruction\": \"abc123\"\n   }'")
-		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
-		if body.Action != nil {
-			if !(*body.Action == "flag" || *body.Action == "block") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block"}))
-			}
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-	var apikeyToken *string
-	{
-		if riskUpdatePromptPolicyApikeyToken != "" {
-			apikeyToken = &riskUpdatePromptPolicyApikeyToken
-		}
-	}
-	var sessionToken *string
-	{
-		if riskUpdatePromptPolicySessionToken != "" {
-			sessionToken = &riskUpdatePromptPolicySessionToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if riskUpdatePromptPolicyProjectSlugInput != "" {
-			projectSlugInput = &riskUpdatePromptPolicyProjectSlugInput
-		}
-	}
-	v := &risk.UpdatePromptPolicyPayload{
-		ID:                body.ID,
-		Name:              body.Name,
-		PromptInstruction: body.PromptInstruction,
-		Enabled:           body.Enabled,
-		Action:            body.Action,
-		AutoName:          body.AutoName,
 	}
 	if body.MessageTypes != nil {
 		v.MessageTypes = make([]string, len(body.MessageTypes))

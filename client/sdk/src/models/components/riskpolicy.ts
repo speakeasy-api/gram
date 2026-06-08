@@ -21,18 +21,6 @@ export const RiskPolicyAction = {
  */
 export type RiskPolicyAction = ClosedEnum<typeof RiskPolicyAction>;
 
-/**
- * Policy kind: 'risk' (default) or 'prompt'.
- */
-export const RiskPolicyKind = {
-  Risk: "risk",
-  Prompt: "prompt",
-} as const;
-/**
- * Policy kind: 'risk' (default) or 'prompt'.
- */
-export type RiskPolicyKind = ClosedEnum<typeof RiskPolicyKind>;
-
 export type RiskPolicy = {
   /**
    * Policy action: flag (log only) or block (deny in real-time).
@@ -63,10 +51,6 @@ export type RiskPolicy = {
    */
   id: string;
   /**
-   * Policy kind: 'risk' (default) or 'prompt'.
-   */
-  kind: RiskPolicyKind;
-  /**
    * Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message.
    */
   messageTypes?: Array<string> | undefined;
@@ -90,10 +74,6 @@ export type RiskPolicy = {
    * Prompt-injection detection rule ids enabled in addition to the heuristic baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.
    */
   promptInjectionRules?: Array<string> | undefined;
-  /**
-   * Natural-language judge instruction (prompt-based policies only).
-   */
-  promptInstruction?: string | undefined;
   /**
    * Detection sources enabled for this policy.
    */
@@ -122,11 +102,6 @@ export const RiskPolicyAction$inboundSchema: z.ZodMiniEnum<
 > = z.enum(RiskPolicyAction);
 
 /** @internal */
-export const RiskPolicyKind$inboundSchema: z.ZodMiniEnum<
-  typeof RiskPolicyKind
-> = z.enum(RiskPolicyKind);
-
-/** @internal */
 export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
   .pipe(
     z.object({
@@ -140,14 +115,12 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
       disabled_rules: z.optional(z.array(z.string())),
       enabled: z.boolean(),
       id: z.string(),
-      kind: z._default(RiskPolicyKind$inboundSchema, "risk"),
       message_types: z.optional(z.array(z.string())),
       name: z.string(),
       pending_messages: z.int(),
       presidio_entities: z.optional(z.array(z.string())),
       project_id: z.string(),
       prompt_injection_rules: z.optional(z.array(z.string())),
-      prompt_instruction: z.optional(z.string()),
       sources: z.array(z.string()),
       total_messages: z.int(),
       updated_at: z.pipe(
@@ -168,7 +141,6 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
         "presidio_entities": "presidioEntities",
         "project_id": "projectId",
         "prompt_injection_rules": "promptInjectionRules",
-        "prompt_instruction": "promptInstruction",
         "total_messages": "totalMessages",
         "updated_at": "updatedAt",
         "user_message": "userMessage",

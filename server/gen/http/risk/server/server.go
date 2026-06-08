@@ -20,12 +20,10 @@ import (
 type Server struct {
 	Mounts                         []*MountPoint
 	CreateRiskPolicy               http.Handler
-	CreatePromptPolicy             http.Handler
 	ListRiskPolicies               http.Handler
 	GetRiskCapabilities            http.Handler
 	GetRiskPolicy                  http.Handler
 	UpdateRiskPolicy               http.Handler
-	UpdatePromptPolicy             http.Handler
 	DeleteRiskPolicy               http.Handler
 	ListRiskResults                http.Handler
 	ListRiskResultsForAgent        http.Handler
@@ -81,12 +79,10 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"CreateRiskPolicy", "POST", "/rpc/risk.policies.create"},
-			{"CreatePromptPolicy", "POST", "/rpc/risk.promptPolicies.create"},
 			{"ListRiskPolicies", "GET", "/rpc/risk.policies.list"},
 			{"GetRiskCapabilities", "GET", "/rpc/risk.capabilities.get"},
 			{"GetRiskPolicy", "GET", "/rpc/risk.policies.get"},
 			{"UpdateRiskPolicy", "PUT", "/rpc/risk.policies.update"},
-			{"UpdatePromptPolicy", "PUT", "/rpc/risk.promptPolicies.update"},
 			{"DeleteRiskPolicy", "DELETE", "/rpc/risk.policies.delete"},
 			{"ListRiskResults", "GET", "/rpc/risk.results.list"},
 			{"ListRiskResultsForAgent", "GET", "/rpc/risk.results.listForAgent"},
@@ -114,12 +110,10 @@ func New(
 			{"TestDetectionRule", "POST", "/rpc/risk.rules.test"},
 		},
 		CreateRiskPolicy:               NewCreateRiskPolicyHandler(e.CreateRiskPolicy, mux, decoder, encoder, errhandler, formatter),
-		CreatePromptPolicy:             NewCreatePromptPolicyHandler(e.CreatePromptPolicy, mux, decoder, encoder, errhandler, formatter),
 		ListRiskPolicies:               NewListRiskPoliciesHandler(e.ListRiskPolicies, mux, decoder, encoder, errhandler, formatter),
 		GetRiskCapabilities:            NewGetRiskCapabilitiesHandler(e.GetRiskCapabilities, mux, decoder, encoder, errhandler, formatter),
 		GetRiskPolicy:                  NewGetRiskPolicyHandler(e.GetRiskPolicy, mux, decoder, encoder, errhandler, formatter),
 		UpdateRiskPolicy:               NewUpdateRiskPolicyHandler(e.UpdateRiskPolicy, mux, decoder, encoder, errhandler, formatter),
-		UpdatePromptPolicy:             NewUpdatePromptPolicyHandler(e.UpdatePromptPolicy, mux, decoder, encoder, errhandler, formatter),
 		DeleteRiskPolicy:               NewDeleteRiskPolicyHandler(e.DeleteRiskPolicy, mux, decoder, encoder, errhandler, formatter),
 		ListRiskResults:                NewListRiskResultsHandler(e.ListRiskResults, mux, decoder, encoder, errhandler, formatter),
 		ListRiskResultsForAgent:        NewListRiskResultsForAgentHandler(e.ListRiskResultsForAgent, mux, decoder, encoder, errhandler, formatter),
@@ -154,12 +148,10 @@ func (s *Server) Service() string { return "risk" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateRiskPolicy = m(s.CreateRiskPolicy)
-	s.CreatePromptPolicy = m(s.CreatePromptPolicy)
 	s.ListRiskPolicies = m(s.ListRiskPolicies)
 	s.GetRiskCapabilities = m(s.GetRiskCapabilities)
 	s.GetRiskPolicy = m(s.GetRiskPolicy)
 	s.UpdateRiskPolicy = m(s.UpdateRiskPolicy)
-	s.UpdatePromptPolicy = m(s.UpdatePromptPolicy)
 	s.DeleteRiskPolicy = m(s.DeleteRiskPolicy)
 	s.ListRiskResults = m(s.ListRiskResults)
 	s.ListRiskResultsForAgent = m(s.ListRiskResultsForAgent)
@@ -193,12 +185,10 @@ func (s *Server) MethodNames() []string { return risk.MethodNames[:] }
 // Mount configures the mux to serve the risk endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateRiskPolicyHandler(mux, h.CreateRiskPolicy)
-	MountCreatePromptPolicyHandler(mux, h.CreatePromptPolicy)
 	MountListRiskPoliciesHandler(mux, h.ListRiskPolicies)
 	MountGetRiskCapabilitiesHandler(mux, h.GetRiskCapabilities)
 	MountGetRiskPolicyHandler(mux, h.GetRiskPolicy)
 	MountUpdateRiskPolicyHandler(mux, h.UpdateRiskPolicy)
-	MountUpdatePromptPolicyHandler(mux, h.UpdatePromptPolicy)
 	MountDeleteRiskPolicyHandler(mux, h.DeleteRiskPolicy)
 	MountListRiskResultsHandler(mux, h.ListRiskResults)
 	MountListRiskResultsForAgentHandler(mux, h.ListRiskResultsForAgent)
@@ -261,59 +251,6 @@ func NewCreateRiskPolicyHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "createRiskPolicy")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountCreatePromptPolicyHandler configures the mux to serve the "risk"
-// service "createPromptPolicy" endpoint.
-func MountCreatePromptPolicyHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/rpc/risk.promptPolicies.create", f)
-}
-
-// NewCreatePromptPolicyHandler creates a HTTP handler which loads the HTTP
-// request and calls the "risk" service "createPromptPolicy" endpoint.
-func NewCreatePromptPolicyHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeCreatePromptPolicyRequest(mux, decoder)
-		encodeResponse = EncodeCreatePromptPolicyResponse(encoder)
-		encodeError    = EncodeCreatePromptPolicyError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "createPromptPolicy")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -526,59 +463,6 @@ func NewUpdateRiskPolicyHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "updateRiskPolicy")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountUpdatePromptPolicyHandler configures the mux to serve the "risk"
-// service "updatePromptPolicy" endpoint.
-func MountUpdatePromptPolicyHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("PUT", "/rpc/risk.promptPolicies.update", f)
-}
-
-// NewUpdatePromptPolicyHandler creates a HTTP handler which loads the HTTP
-// request and calls the "risk" service "updatePromptPolicy" endpoint.
-func NewUpdatePromptPolicyHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeUpdatePromptPolicyRequest(mux, decoder)
-		encodeResponse = EncodeUpdatePromptPolicyResponse(encoder)
-		encodeError    = EncodeUpdatePromptPolicyError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "updatePromptPolicy")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
 		payload, err := decodeRequest(r)
 		if err != nil {

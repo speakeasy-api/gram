@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: b2e8e04f74888e6474cf9994ca11bb91
+  docChecksum: cd9aec54276ca03f56c3cc5c9580c20c
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -190,10 +190,6 @@ trackedFiles:
     last_write_checksum: sha1:2e6b34ca055f9c45cb5bdfbdd7c57c412a4765d9
   docs/models/components/createprojectresult.md:
     last_write_checksum: sha1:d3cc6d9bfa7e30c328ebfec2d9b8e4cb502eace6
-  docs/models/components/createpromptpolicyrequestbody.md:
-    last_write_checksum: sha1:8bd2a319daba8a07e6427f1b7b308d8398956f67
-  docs/models/components/createpromptpolicyrequestbodyaction.md:
-    last_write_checksum: sha1:ccb9b656b2a9bd96ee8f63cf4ce15ebe54dee998
   docs/models/components/createprompttemplateform.md:
     last_write_checksum: sha1:c4aaac91308335054ae84a23963aa322d6e0d945
   docs/models/components/createprompttemplateformengine.md:
@@ -815,15 +811,13 @@ trackedFiles:
   docs/models/components/riskoverviewuser.md:
     last_write_checksum: sha1:e27f5822bf1197b237ac5f37aab0c8d439d3dfa0
   docs/models/components/riskpolicy.md:
-    last_write_checksum: sha1:ec50a25ab034e12a49dd805681e278162841cbc6
+    last_write_checksum: sha1:22ca1cd63ba2f674c93fb821570c829f6138cd59
   docs/models/components/riskpolicyaction.md:
     last_write_checksum: sha1:3729eadfe620fd4d1c367a384ab82ea55ab8b2d3
   docs/models/components/riskpolicybypassrequest.md:
     last_write_checksum: sha1:0410a2bb27b22069c2f9736d689ab591fe3e1174
   docs/models/components/riskpolicybypassrequeststatus.md:
     last_write_checksum: sha1:7b5d61ac685a8db465d91537188bdd37d394effe
-  docs/models/components/riskpolicykind.md:
-    last_write_checksum: sha1:891135db435063ab594987c333f12086e11f099a
   docs/models/components/riskpolicystatus.md:
     last_write_checksum: sha1:516633e7ddae4a15c8060c4cbcccbab4f9485352
   docs/models/components/riskresult.md:
@@ -1086,10 +1080,6 @@ trackedFiles:
     last_write_checksum: sha1:baacccd02a2cc6f551cfea99592ff1b553a4398a
   docs/models/components/updatepluginserverformpolicy.md:
     last_write_checksum: sha1:a3c1c31ef8ff5c29e31965e4e8e248683e9e57d5
-  docs/models/components/updatepromptpolicyrequestbody.md:
-    last_write_checksum: sha1:c6c9757cdf769c9a56e388198d356df7e5baf483
-  docs/models/components/updatepromptpolicyrequestbodyaction.md:
-    last_write_checksum: sha1:a899cbd08db66e109d693e70e8132ca6ed44d4f3
   docs/models/components/updateprompttemplateform.md:
     last_write_checksum: sha1:783351b401f225e4d70b8715b123edb860b56849
   docs/models/components/updateprompttemplateformengine.md:
@@ -1408,14 +1398,6 @@ trackedFiles:
     last_write_checksum: sha1:e36ac7be68048f1f388965e9a3648ca1a2acd274
   docs/models/operations/createprojectsecurity.md:
     last_write_checksum: sha1:023abd7a1844696d0539351dfa25aebe38970a38
-  docs/models/operations/createpromptpolicyrequest.md:
-    last_write_checksum: sha1:1ed89c67981605026993dba1a0fc7b15f251f239
-  docs/models/operations/createpromptpolicysecurity.md:
-    last_write_checksum: sha1:e862f205c1796caeb9e5adfa601caa7547849fea
-  docs/models/operations/createpromptpolicysecurityoption1.md:
-    last_write_checksum: sha1:a7342e6dd258c1b7bb0dc50dd7851841f1c87e83
-  docs/models/operations/createpromptpolicysecurityoption2.md:
-    last_write_checksum: sha1:f24a0b20f4dbdbea40d0af3d0396c7ca6bc6a9eb
   docs/models/operations/createremotemcpserverrequest.md:
     last_write_checksum: sha1:dc3e1555be9ffe44c46259c20e228ebc5b273244
   docs/models/operations/createremotemcpserversecurity.md:
@@ -2986,14 +2968,6 @@ trackedFiles:
     last_write_checksum: sha1:79f772cf108c6dcbdf78648fba2ee970ba9b88be
   docs/models/operations/updatepluginserversecurity.md:
     last_write_checksum: sha1:f8a3c53bd653179cc26853ca847944720bcff13f
-  docs/models/operations/updatepromptpolicyrequest.md:
-    last_write_checksum: sha1:91b7599b0680889a194a748ff8f06db1b1280a7d
-  docs/models/operations/updatepromptpolicysecurity.md:
-    last_write_checksum: sha1:73d4066de66d3807c3fc19c082853013aadc69c3
-  docs/models/operations/updatepromptpolicysecurityoption1.md:
-    last_write_checksum: sha1:6ea7cb3461e3a5dae420294e369e185faaf2d637
-  docs/models/operations/updatepromptpolicysecurityoption2.md:
-    last_write_checksum: sha1:6088011eb0e3eeb4457cc4eda6f00ba91501fc25
   docs/models/operations/updateremotemcpserverrequest.md:
     last_write_checksum: sha1:9c43caba8858690cc507e38a0e128d2571ce5b49
   docs/models/operations/updateremotemcpserversecurity.md:
@@ -3224,8 +3198,6 @@ trackedFiles:
     last_write_checksum: sha1:b3288c13bf6c678f3577bad60691a5ba5d90deb5
   docs/sdks/projects/README.md:
     last_write_checksum: sha1:69eaa9d9ecba768b0e979a00aa5e77ebe1a4e23b
-  docs/sdks/promptpolicies/README.md:
-    last_write_checksum: sha1:26e8673a62fb6c923f7ef108cf0fdf1dcce6911d
   docs/sdks/remotemcp/README.md:
     last_write_checksum: sha1:2f1b92facb854536c2c73faa46d0bbaabb31896e
   docs/sdks/remotesessionclients/README.md:
@@ -3744,10 +3716,6 @@ trackedFiles:
     last_write_checksum: sha1:3e23f3ce661bddefb79f8dd180a2413410bd9434
   src/funcs/riskPolicyBypassRequestsRevoke.ts:
     last_write_checksum: sha1:82e6e318b928bda7c60edd40762017168f0d8ab2
-  src/funcs/riskPromptPoliciesCreatePromptPolicy.ts:
-    last_write_checksum: sha1:61003acb2dd418c71d4ca6e2c0ac6410571d91de
-  src/funcs/riskPromptPoliciesUpdatePromptPolicy.ts:
-    last_write_checksum: sha1:e1f23a6e8d7ee48aca4eed5c73a4b499993ed2a4
   src/funcs/riskResultsByChat.ts:
     last_write_checksum: sha1:f7d08096a2f620fa96470b83b8a47d483c202da7
   src/funcs/riskResultsList.ts:
@@ -4052,8 +4020,6 @@ trackedFiles:
     last_write_checksum: sha1:b5356ce28ea4d407957f928d9cac425b96a9e800
   src/models/components/createprojectresult.ts:
     last_write_checksum: sha1:b1d1a0fe3229d7997ebfab04f0fd130b6b0bc6f2
-  src/models/components/createpromptpolicyrequestbody.ts:
-    last_write_checksum: sha1:b15dd032ee3c0034121ade81bb4d1aa47d54a459
   src/models/components/createprompttemplateform.ts:
     last_write_checksum: sha1:bef2ef28770d74762ab67e26f2d8abea27513307
   src/models/components/createprompttemplateresult.ts:
@@ -4243,7 +4209,7 @@ trackedFiles:
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:553ceb8fdf6c39a3bd98f07c1526145578015e1a
+    last_write_checksum: sha1:eb0b5ac6752c73ee1169361f9e6e025cc5a3c76d
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     last_write_checksum: sha1:549d388111333748195b4791e63fd64f4a6e7140
@@ -4585,7 +4551,7 @@ trackedFiles:
   src/models/components/riskoverviewuser.ts:
     last_write_checksum: sha1:eb4da626d8348818266f75b28ae1dac267441b5d
   src/models/components/riskpolicy.ts:
-    last_write_checksum: sha1:91df15bed4b3167258c1bda0e74bb30e7554c769
+    last_write_checksum: sha1:068fb5118d6436ea1ccb09d9567648204ba2c4bd
   src/models/components/riskpolicybypassrequest.ts:
     last_write_checksum: sha1:2122c00738588a12062d99b729d63b1717829575
   src/models/components/riskpolicystatus.ts:
@@ -4784,8 +4750,6 @@ trackedFiles:
     last_write_checksum: sha1:6cb5b9e522d17bc27eeca84121f06c454c7f5843
   src/models/components/updatepluginserverform.ts:
     last_write_checksum: sha1:279766c9600743d8d59cebb1c9c84abd6fa0538e
-  src/models/components/updatepromptpolicyrequestbody.ts:
-    last_write_checksum: sha1:e38217fe9739c730829cd52ca1f2c97d3a500cd6
   src/models/components/updateprompttemplateform.ts:
     last_write_checksum: sha1:d82cb580318d084f713ebd16a34b93f1241731bd
   src/models/components/updateprompttemplateresult.ts:
@@ -4946,8 +4910,6 @@ trackedFiles:
     last_write_checksum: sha1:6c520e4bc6a5501628c799c7459def093dd38b8b
   src/models/operations/createproject.ts:
     last_write_checksum: sha1:fa92b1cb1df3220c455eff34ef55012b36163171
-  src/models/operations/createpromptpolicy.ts:
-    last_write_checksum: sha1:df9f0b7535e6aa558517b1e19db305bbf1c164e4
   src/models/operations/createremotemcpserver.ts:
     last_write_checksum: sha1:1fcf92dd3a74f91d4da0d3c91905289e73f23970
   src/models/operations/createremotesessionclient.ts:
@@ -5186,7 +5148,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:30d545c2871098c5175905b1d292fbca260ed762
+    last_write_checksum: sha1:a7500bde36e7183444e5609cf23e1d9b2b5cdc93
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     last_write_checksum: sha1:082b8a2ed705b0b42b924e676b651e9431e8fddc
@@ -5456,8 +5418,6 @@ trackedFiles:
     last_write_checksum: sha1:207d539388bb6bb4deb89280da6461b55a640e1c
   src/models/operations/updatepluginserver.ts:
     last_write_checksum: sha1:9e163c97aaaa1b03df179c7940c81c99398a10b0
-  src/models/operations/updatepromptpolicy.ts:
-    last_write_checksum: sha1:181daa26bbe1b91bb193473ae158cd445f59a370
   src/models/operations/updateremotemcpserver.ts:
     last_write_checksum: sha1:a07fa9bec355cb71eeb6866762a924e146402b0c
   src/models/operations/updateremotesessionclient.ts:
@@ -5834,7 +5794,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:cac2ffe2aabc362057bfde8aaa5304631f925d29
+    last_write_checksum: sha1:dad9abc9915eb1bc3519d519773a6f1ee6005e40
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     last_write_checksum: sha1:34d434d40565d270fde497f4cec6bb9befffb505
@@ -6132,8 +6092,6 @@ trackedFiles:
     last_write_checksum: sha1:2d83fedbc097151e6ddbf9b7f80182ee63ae458a
   src/react-query/riskCreatePolicyBypassRequest.ts:
     last_write_checksum: sha1:b61d78a2616ae906ca9a6705eb5118e9223f5cab
-  src/react-query/riskCreatePromptPolicy.ts:
-    last_write_checksum: sha1:e4dfadc1838f13805a1e9638ec5ec9de90298b0f
   src/react-query/riskDeleteCustomDetectionRule.ts:
     last_write_checksum: sha1:8dcd06194b990aecdfcd6d5fd377c22e172e5aad
   src/react-query/riskDenyPolicyBypassRequest.ts:
@@ -6200,8 +6158,6 @@ trackedFiles:
     last_write_checksum: sha1:04114e2e82d2f7e8937c9cff67520c37b710e06e
   src/react-query/riskUpdateCustomDetectionRule.ts:
     last_write_checksum: sha1:d8c4a2053dc0a206688abf131ddf98b586df88be
-  src/react-query/riskUpdatePromptPolicy.ts:
-    last_write_checksum: sha1:d22765dcaa3b7be669fc507bdde1784577c1526d
   src/react-query/riskUserBreakdown.core.ts:
     last_write_checksum: sha1:7c85b66341262c046ec720d4b1d210ff6f8ec836
   src/react-query/riskUserBreakdown.ts:
@@ -6480,8 +6436,6 @@ trackedFiles:
     last_write_checksum: sha1:13024b3bc367f47e308ad59ddde6e4e0434cd9f9
   src/sdk/projects.ts:
     last_write_checksum: sha1:a80e20f3e6686ec35437d4054d5f1ff74b78c346
-  src/sdk/promptpolicies.ts:
-    last_write_checksum: sha1:c9e60c711ec3331dc2ef4b04faab320871e1316b
   src/sdk/remotemcp.ts:
     last_write_checksum: sha1:98005b1f5a4586c627371aaa95769cf43fbb27ee
   src/sdk/remotesessionclients.ts:
@@ -6495,7 +6449,7 @@ trackedFiles:
   src/sdk/results.ts:
     last_write_checksum: sha1:220552d21499d1871f15ca050009d2ec7646bbad
   src/sdk/risk.ts:
-    last_write_checksum: sha1:322a44bb66c525c79652804e265539647f406f5b
+    last_write_checksum: sha1:73d6a159ef49945803ccfd659ebd28df1ec6ea81
   src/sdk/rules.ts:
     last_write_checksum: sha1:c09a7e791d89ef5b985c765b533bf61c1b6b0e9d
   src/sdk/sdk.ts:
@@ -8525,7 +8479,7 @@ examples:
         application/json: {"action": "flag"}
       responses:
         "200":
-          application/json: {"action": "flag", "auto_name": false, "created_at": "2026-11-27T08:06:34.693Z", "enabled": true, "id": "8fa1564d-044e-4c61-89b8-7bbe97a778ca", "kind": "risk", "name": "<value>", "pending_messages": 291308, "project_id": "e48ffff0-4e01-4690-a5b9-223e3363e5a2", "sources": ["<value 1>"], "total_messages": 415653, "updated_at": "2026-02-03T05:39:04.851Z", "version": 985427}
+          application/json: {"action": "flag", "auto_name": false, "created_at": "2026-11-27T08:06:34.693Z", "enabled": true, "id": "8fa1564d-044e-4c61-89b8-7bbe97a778ca", "name": "<value>", "pending_messages": 291308, "project_id": "e48ffff0-4e01-4690-a5b9-223e3363e5a2", "sources": ["<value 1>"], "total_messages": 415653, "updated_at": "2026-02-03T05:39:04.851Z", "version": 985427}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -8547,7 +8501,7 @@ examples:
           id: "8fbf5ca1-aa4d-403a-a226-2071123a9a6b"
       responses:
         "200":
-          application/json: {"action": "flag", "auto_name": true, "created_at": "2024-02-15T21:20:30.313Z", "enabled": true, "id": "0f8bca1d-18d7-471f-8408-5b7191c93c99", "kind": "risk", "name": "<value>", "pending_messages": 267392, "project_id": "7b79acf3-929f-4814-9cda-ff0d4f950b72", "sources": ["<value 1>", "<value 2>"], "total_messages": 752197, "updated_at": "2026-10-17T00:54:10.479Z", "version": 138155}
+          application/json: {"action": "flag", "auto_name": true, "created_at": "2024-02-15T21:20:30.313Z", "enabled": true, "id": "0f8bca1d-18d7-471f-8408-5b7191c93c99", "name": "<value>", "pending_messages": 267392, "project_id": "7b79acf3-929f-4814-9cda-ff0d4f950b72", "sources": ["<value 1>", "<value 2>"], "total_messages": 752197, "updated_at": "2026-10-17T00:54:10.479Z", "version": 138155}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -8556,7 +8510,7 @@ examples:
     speakeasy-default-list-risk-policies:
       responses:
         "200":
-          application/json: {"policies": [{"action": "flag", "auto_name": false, "created_at": "2026-08-06T06:28:44.327Z", "enabled": false, "id": "7b0becde-53bf-4685-a74f-3cb84422ca25", "kind": "risk", "name": "<value>", "pending_messages": 203949, "project_id": "198766cc-028d-4e70-8fc4-d9ef15fb1a6a", "sources": ["<value 1>", "<value 2>"], "total_messages": 276564, "updated_at": "2025-08-21T17:12:52.240Z", "version": 358057}]}
+          application/json: {"policies": [{"action": "flag", "auto_name": false, "created_at": "2026-08-06T06:28:44.327Z", "enabled": false, "id": "7b0becde-53bf-4685-a74f-3cb84422ca25", "name": "<value>", "pending_messages": 203949, "project_id": "198766cc-028d-4e70-8fc4-d9ef15fb1a6a", "sources": ["<value 1>", "<value 2>"], "total_messages": 276564, "updated_at": "2025-08-21T17:12:52.240Z", "version": 358057}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -8588,7 +8542,7 @@ examples:
         application/json: {"id": "843674e6-50ce-48e3-8373-0f97e164413d", "name": "<value>"}
       responses:
         "200":
-          application/json: {"action": "flag", "auto_name": true, "created_at": "2024-08-16T09:14:30.128Z", "enabled": false, "id": "8cfa981a-1dce-4a60-b3a5-be6272d6685f", "kind": "risk", "name": "<value>", "pending_messages": 625941, "project_id": "7cc9a5e0-4efa-4e61-87ad-977f4945e432", "sources": ["<value 1>", "<value 2>", "<value 3>"], "total_messages": 272683, "updated_at": "2025-10-31T18:54:42.086Z", "version": 171926}
+          application/json: {"action": "flag", "auto_name": true, "created_at": "2024-08-16T09:14:30.128Z", "enabled": false, "id": "8cfa981a-1dce-4a60-b3a5-be6272d6685f", "name": "<value>", "pending_messages": 625941, "project_id": "7cc9a5e0-4efa-4e61-87ad-977f4945e432", "sources": ["<value 1>", "<value 2>", "<value 3>"], "total_messages": 272683, "updated_at": "2025-10-31T18:54:42.086Z", "version": 171926}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -9806,27 +9760,5 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  createPromptPolicy:
-    speakeasy-default-create-prompt-policy:
-      requestBody:
-        application/json: {"action": "flag", "prompt_instruction": "<value>"}
-      responses:
-        "200":
-          application/json: {"action": "flag", "auto_name": true, "created_at": "2026-07-28T23:36:34.479Z", "enabled": false, "id": "fed49179-3559-440b-86b8-7b2121c28a67", "kind": "risk", "name": "<value>", "pending_messages": 617964, "project_id": "d3e12c13-0857-4ba0-9a34-054c0393a104", "sources": ["<value 1>", "<value 2>", "<value 3>"], "total_messages": 338847, "updated_at": "2026-02-22T06:21:06.178Z", "version": 459460}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  updatePromptPolicy:
-    speakeasy-default-update-prompt-policy:
-      requestBody:
-        application/json: {"id": "041fda26-e982-47d0-88fb-261750f9862b"}
-      responses:
-        "200":
-          application/json: {"action": "flag", "auto_name": false, "created_at": "2024-12-12T21:32:54.488Z", "enabled": false, "id": "cc4423a4-16e1-4a90-b722-89c0054e397b", "kind": "risk", "name": "<value>", "pending_messages": 508210, "project_id": "5c3e3c0d-02a7-4b33-b611-3a4ea2f2ced2", "sources": ["<value 1>"], "total_messages": 598413, "updated_at": "2026-09-14T06:53:56.634Z", "version": 288778}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}
