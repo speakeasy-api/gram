@@ -389,9 +389,6 @@ export function ConfigurePoliciesStep({ onBack }: ConfigurePoliciesStepProps) {
     ? (CATEGORY_ICONS[activeCategory] ?? ShieldCheck)
     : ShieldCheck;
   const isShadowMcp = activeCategory === "shadow_mcp";
-  const activeRuleCount = activeCategory
-    ? (DETECTION_RULES[activeCategory]?.length ?? 0)
-    : 0;
   return (
     <StepContainer
       icon={
@@ -617,17 +614,6 @@ export function ConfigurePoliciesStep({ onBack }: ConfigurePoliciesStepProps) {
                     })}
                   </div>
                 </section>
-
-                {!isShadowMcp && activeRuleCount > 0 && (
-                  <section className="space-y-3">
-                    <p className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
-                      Rules
-                    </p>
-                    <p className="text-muted-foreground text-sm leading-relaxed">
-                      Rules can be managed in the Policy Center.
-                    </p>
-                  </section>
-                )}
               </div>
 
               <div className="border-border flex items-center justify-end border-t px-6 py-4">
