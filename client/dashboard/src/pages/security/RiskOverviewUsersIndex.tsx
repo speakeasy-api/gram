@@ -82,7 +82,7 @@ function RiskOverviewUsersIndexContent() {
 
   return (
     <Page.Section>
-      <Page.Section.Title stage="beta">Users</Page.Section.Title>
+      <Page.Section.Title>Users</Page.Section.Title>
       <Page.Section.Description>
         All users with finding counts
         {rangeLabel && ` across ${rangeLabel}.`}

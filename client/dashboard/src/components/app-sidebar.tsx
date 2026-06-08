@@ -246,7 +246,6 @@ export function AppSidebar({
                 label="Secure"
                 Icon={(p) => <Icon {...p} name="shield" />}
                 defaultHref={routes.riskOverview.href()}
-                stage="beta"
               >
                 <ScopeGatedNavItem
                   item={routes.riskOverview}

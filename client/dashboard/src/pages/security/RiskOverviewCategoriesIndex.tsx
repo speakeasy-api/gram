@@ -83,7 +83,7 @@ function RiskOverviewCategoriesIndexContent() {
 
   return (
     <Page.Section>
-      <Page.Section.Title stage="beta">Risk categories</Page.Section.Title>
+      <Page.Section.Title>Risk categories</Page.Section.Title>
       <Page.Section.Description>
         All categories with finding counts
         {rangeLabel && ` across ${rangeLabel}.`}

@@ -79,7 +79,7 @@ function RiskOverviewRulesIndexContent() {
 
   return (
     <Page.Section>
-      <Page.Section.Title stage="beta">Rules</Page.Section.Title>
+      <Page.Section.Title>Rules</Page.Section.Title>
       <Page.Section.Description>
         All rules with finding counts
         {rangeLabel && ` across ${rangeLabel}.`}

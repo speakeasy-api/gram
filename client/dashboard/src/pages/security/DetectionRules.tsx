@@ -108,7 +108,7 @@ function DetectionRulesContent() {
   return (
     <>
       <Page.Section>
-        <Page.Section.Title stage="beta">Detection Rules</Page.Section.Title>
+        <Page.Section.Title>Detection Rules</Page.Section.Title>
         <Page.Section.Description>
           Built-in detection rules grouped by category. Click a rule to view its
           description and try it against pasted text, or add your own custom

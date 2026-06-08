@@ -194,7 +194,7 @@ function RiskOverviewCategoryDetailContent() {
   return (
     <RevealAllProvider>
       <Page.Section>
-        <Page.Section.Title stage="beta">{categoryLabel}</Page.Section.Title>
+        <Page.Section.Title>{categoryLabel}</Page.Section.Title>
         <Page.Section.Description>
           {categoryMeta?.description ?? "Risk findings in this category"}
           {rangeLabel && ` across ${rangeLabel}.`}

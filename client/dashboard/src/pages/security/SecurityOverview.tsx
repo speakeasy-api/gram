@@ -132,7 +132,7 @@ function RiskOverviewShell({
 }) {
   return (
     <Page.Section>
-      <Page.Section.Title stage="beta">Risk Overview</Page.Section.Title>
+      <Page.Section.Title>Risk Overview</Page.Section.Title>
       <Page.Section.Description>
         Risk analysis summary for policy findings
         {rangeLabel && ` across ${rangeLabel}.`}

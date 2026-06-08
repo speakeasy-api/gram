@@ -14,9 +14,7 @@ export default function ApprovalRequests(): JSX.Element {
       <Page.Body>
         <RequireScope scope="org:admin" level="page">
           <Page.Section>
-            <Page.Section.Title stage="beta">
-              Approval Requests
-            </Page.Section.Title>
+            <Page.Section.Title>Approval Requests</Page.Section.Title>
             <Page.Section.Description>
               Review blocked resource access requests and manage project-scoped
               access rules.

@@ -131,7 +131,7 @@ function RiskOverviewUserDetailContent() {
   return (
     <>
       <Page.Section>
-        <Page.Section.Title stage="beta" className="normal-case">
+        <Page.Section.Title className="normal-case">
           {userLabel}
         </Page.Section.Title>
         <Page.Section.Description>
