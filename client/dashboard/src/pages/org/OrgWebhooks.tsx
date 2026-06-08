@@ -23,7 +23,7 @@ import "svix-react/style.css";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useSessionData } from "@/contexts/Auth";
 
-export default function OrgWebhooks() {
+export default function OrgWebhooks(): React.JSX.Element {
   const { data: features, isLoading } = useProductFeatures();
 
   let content: JSX.Element | null = null;

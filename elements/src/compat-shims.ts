@@ -39,6 +39,7 @@ function createUseSyncExternalStoreShim(R: ReactLike) {
       inst.value = value;
       inst.getSnapshot = getSnapshot;
       if (snapshotChanged(inst)) forceUpdate({ inst });
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [subscribe, value, getSnapshot]);
 
     R.useEffect(() => {
@@ -46,6 +47,7 @@ function createUseSyncExternalStoreShim(R: ReactLike) {
       return subscribe(() => {
         if (snapshotChanged(inst)) forceUpdate({ inst });
       });
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [subscribe]);
 
     return value;
@@ -61,14 +63,26 @@ function createUseIdShim(R: ReactLike) {
   };
 }
 
+export interface ReactShims {
+  useSyncExternalStore: <T>(
+    subscribe: (cb: () => void) => () => void,
+    getSnapshot: () => T,
+  ) => T;
+  useId: () => string;
+  useInsertionEffect: typeof import("react").useLayoutEffect;
+  startTransition: (cb: () => void) => void;
+  useTransition: () => [boolean, (cb: () => void) => void];
+  useDeferredValue: <T>(value: T) => T;
+}
+
 /** Build polyfills for a React instance. Native APIs take precedence via ??. */
-export function createShims(R: ReactLike) {
+export function createShims(R: ReactLike): ReactShims {
   return {
     useSyncExternalStore:
       R.useSyncExternalStore ?? createUseSyncExternalStoreShim(R),
     useId: R.useId ?? createUseIdShim(R),
     useInsertionEffect: R.useInsertionEffect ?? R.useLayoutEffect,
-    startTransition: R.startTransition ?? ((cb: () => void) => cb()),
+    startTransition: R.startTransition ?? ((cb: () => void): void => cb()),
     useTransition:
       R.useTransition ??
       ((): [boolean, (cb: () => void) => void] => [false, (cb) => cb()]),

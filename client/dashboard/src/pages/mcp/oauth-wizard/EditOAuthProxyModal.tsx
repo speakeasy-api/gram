@@ -25,7 +25,7 @@ export function EditOAuthProxyModal({
   onClose: () => void;
   toolsetSlug: string;
   proxyServer: ProxyServer;
-}) {
+}): JSX.Element {
   // Parent keeps this modal mounted whenever a proxy exists, so without a
   // resetKey-based remount, useState initializers would only run on the very
   // first open and dirty form values would survive cancel-and-reopen cycles.
@@ -84,7 +84,7 @@ function EditOAuthProxyForm({
 
   const updateMutation = useUpdateOAuthProxyServerMutation({
     onSuccess: () => {
-      invalidateAllToolset(queryClient);
+      void invalidateAllToolset(queryClient);
       telemetry.capture("mcp_event", {
         action: "oauth_proxy_updated",
         slug: toolsetSlug,

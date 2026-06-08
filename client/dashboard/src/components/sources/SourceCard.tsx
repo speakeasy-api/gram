@@ -74,7 +74,7 @@ export function SourceCard({
   handleRemove: (assetId: string) => void;
   handleViewAsset: (assetId: string) => void;
   setChangeDocumentTargetSlug: (slug: string) => void;
-}) {
+}): JSX.Element {
   const routes = useRoutes();
   const { hasScope } = useRBAC();
   const canWrite = hasScope("project:write");
@@ -213,7 +213,7 @@ export function SourceCard({
   );
 }
 
-export function SourceCardSkeleton() {
+export function SourceCardSkeleton(): JSX.Element {
   return (
     <div className="bg-card text-card-foreground flex flex-row overflow-hidden rounded-xl border">
       {/* Dot pattern sidebar placeholder */}

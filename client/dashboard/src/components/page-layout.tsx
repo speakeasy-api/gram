@@ -1,3 +1,4 @@
+// oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
 import { useTelemetry } from "@/contexts/Telemetry.tsx";
 import { cn } from "@/lib/utils.ts";
 import { useIsProjectEmpty } from "@/pages/onboarding/upload-openapi-utils";
@@ -209,7 +210,7 @@ export function EmptyState({
   nonEmptyProjectCTA?: React.ReactNode;
   graphic: React.ReactNode;
   graphicClassName?: string;
-}) {
+}): React.JSX.Element {
   const routes = useRoutes();
   const telemetry = useTelemetry();
   const { isEmpty, isLoading } = useIsProjectEmpty();

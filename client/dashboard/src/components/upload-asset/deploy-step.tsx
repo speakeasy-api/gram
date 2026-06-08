@@ -18,7 +18,7 @@ import { Type } from "../ui/type";
 import { useStep } from "./step/use-step";
 import { useStepper } from "./stepper/use-stepper";
 
-export default function DeployStep() {
+export default function DeployStep(): React.JSX.Element | null {
   const stepper = useStepper();
   const step = useStep();
   const telemetry = useTelemetry();
@@ -108,7 +108,7 @@ export default function DeployStep() {
       }
     };
 
-    createToolset();
+    void createToolset();
   }, [step.state, toolUrns, client.toolsets, stepper.meta, telemetry]);
 
   const deploymentLogs = useDeploymentLogs(
@@ -333,7 +333,9 @@ const useCreateDeployment = (): (() => Promise<Deployment>) => {
       if (++attempts >= maxAttempts) {
         throw new Error("Deployment timed out waiting for completion");
       }
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise((resolve) => {
+        void setTimeout(resolve, 500);
+      });
       deployment = (await client.deployments.getById({
         id: deployment.id,
       })) as Deployment;

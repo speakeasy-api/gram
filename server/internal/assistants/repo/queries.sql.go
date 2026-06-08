@@ -1367,39 +1367,6 @@ func (q *Queries) ListInactiveAssistantRuntimesForReap(ctx context.Context, arg 
 	return items, nil
 }
 
-const listProjectMCPToolsetSlugs = `-- name: ListProjectMCPToolsetSlugs :many
-SELECT slug
-FROM toolsets
-WHERE project_id = $1
-  AND mcp_slug IS NOT NULL
-  AND deleted IS FALSE
-ORDER BY created_at
-`
-
-// Slugs of every MCP-reachable toolset in a project, used to attach all of a
-// project's toolsets to its managed assistant at provisioning time. Toolsets
-// without an mcp_slug can't be addressed by the runtime, so they're excluded
-// (mirrors the guard in EnableMCPForToolsets).
-func (q *Queries) ListProjectMCPToolsetSlugs(ctx context.Context, projectID uuid.UUID) ([]string, error) {
-	rows, err := q.db.Query(ctx, listProjectMCPToolsetSlugs, projectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []string
-	for rows.Next() {
-		var slug string
-		if err := rows.Scan(&slug); err != nil {
-			return nil, err
-		}
-		items = append(items, slug)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listWarmPendingThreads = `-- name: ListWarmPendingThreads :many
 SELECT DISTINCT t.id
 FROM assistant_threads t

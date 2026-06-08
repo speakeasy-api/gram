@@ -16,11 +16,11 @@ import { Plus } from "lucide-react";
 import { Outlet } from "react-router";
 import { PromptsEmptyState } from "./PromptsEmptyState";
 
-export function PromptsRoot() {
+export function PromptsRoot(): JSX.Element {
   return <Outlet />;
 }
 
-export default function Prompts() {
+export default function Prompts(): JSX.Element {
   return (
     <Page>
       <Page.Header>
@@ -80,13 +80,13 @@ export function PromptTemplateCard({
   template: PromptTemplate;
   onDelete?: () => void;
   deleteLabel?: string;
-}) {
+}): JSX.Element {
   const routes = useRoutes();
   const queryClient = useQueryClient();
 
   const deleteTemplate = useDeleteTemplateMutation({
     onSuccess: () => {
-      invalidateAllTemplates(queryClient);
+      void invalidateAllTemplates(queryClient);
     },
   });
 

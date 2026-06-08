@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Type } from "@/components/ui/type";
 import { Icon } from "@speakeasy-api/moonshine";
 
-export default function CLIs() {
+export default function CLIs(): JSX.Element {
   return (
     <Page>
       <Page.Header>

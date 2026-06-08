@@ -12,7 +12,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useAssistantDraft } from "./useAssistantDraft";
 
-export function AssistantDraftPanel() {
+export function AssistantDraftPanel(): JSX.Element {
   const draft = useAssistantDraft();
   const routes = useRoutes();
   const queryClient = useQueryClient();
@@ -29,7 +29,7 @@ export function AssistantDraftPanel() {
 
   const del = useAssistantsDeleteMutation({
     onSuccess: () => {
-      invalidateAllAssistantsList(queryClient);
+      void invalidateAllAssistantsList(queryClient);
       routes.assistants.goTo();
     },
   });

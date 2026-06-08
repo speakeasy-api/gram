@@ -29,7 +29,7 @@ import { useCallback, useState } from "react";
 import { useNavigate } from "react-router";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 
-export function SidebarUserMenu() {
+export function SidebarUserMenu(): JSX.Element {
   const user = useUser();
   const session = useSession();
   const isAdmin = useIsAdmin();
@@ -154,7 +154,11 @@ export function SidebarUserMenu() {
               </DropdownMenuItem>
             )}
             {isMultiOrg && (
-              <DropdownMenuItem onClick={() => navigate("/switch-org")}>
+              <DropdownMenuItem
+                onClick={() => {
+                  void navigate("/switch-org");
+                }}
+              >
                 <BuildingIcon className="mr-2 h-4 w-4" />
                 Switch Organization
               </DropdownMenuItem>
@@ -207,9 +211,11 @@ export function SidebarUserMenu() {
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuItem
-            onClick={async () => {
-              await client.auth.logout();
-              window.location.href = "/login";
+            onClick={() => {
+              void (async () => {
+                await client.auth.logout();
+                window.location.href = "/login";
+              })();
             }}
           >
             <LogOutIcon className="mr-2 h-4 w-4" />

@@ -53,7 +53,7 @@ const errResult = (
   message: string,
   extra?: Record<string, unknown>,
 ): ToolResult =>
-  stripUndefined({ ok: false, error: message, ...(extra ?? {}) }) as ToolResult;
+  stripUndefined({ ok: false, error: message, ...extra }) as ToolResult;
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -1830,10 +1830,10 @@ function buildAssistantTools(deps: ToolDeps) {
                 triggerId = existingSlackTrigger.id;
                 webhookUrl = existingSlackTrigger.webhookUrl;
                 const mergedConfig: Record<string, unknown> = {
-                  ...((existingSlackTrigger.config as Record<
+                  ...(existingSlackTrigger.config as Record<
                     string,
                     unknown
-                  > | null) ?? {}),
+                  > | null),
                   event_types: eventTypes,
                 };
                 await sdk.triggers.update({

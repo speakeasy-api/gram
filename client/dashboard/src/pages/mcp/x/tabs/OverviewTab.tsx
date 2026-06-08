@@ -47,7 +47,7 @@ export function OverviewTab({
   isLoadingEndpoints: boolean;
   onShowEndpoints: () => void;
   onShowAuthentication: () => void;
-}) {
+}): JSX.Element {
   return (
     <div className="mx-auto w-full max-w-[1270px] space-y-8 px-8 py-8">
       {mcpServer ? (

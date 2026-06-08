@@ -57,7 +57,11 @@ const SLUG_EXEMPT_PATHS = [
   "/shadow-mcp/request",
 ];
 
-export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+export const AuthProvider = ({
+  children,
+}: {
+  children: React.ReactNode;
+}): JSX.Element => {
   return (
     <ErrorBoundary FallbackComponent={FullPageError}>
       <AuthHandler>{children}</AuthHandler>
@@ -138,7 +142,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const isProjectSlug = session.organization?.projects.some(
     (p) => p.slug === pathParts[1],
   );
-  const isOrgRoutePath = ORG_ROUTE_PATHS.includes(pathParts[1]);
+  const isOrgRoutePath = ORG_ROUTE_PATHS.includes(pathParts[1] ?? "");
   // Redirect if: (1) it's a project slug and not an org route, OR
   // (2) it's both a project slug and an org route but has sub-paths (org routes don't have sub-paths)
   // Never redirect if pathParts[1] is "projects" to avoid infinite redirect loops
@@ -203,7 +207,7 @@ export const ProjectProvider = ({
   children,
 }: {
   children: React.ReactNode;
-}) => {
+}): JSX.Element => {
   const organization = useOrganization();
   const user = useUser();
   const navigate = useNavigate();
@@ -260,7 +264,7 @@ export const ProjectProvider = ({
 
   const switchProject = async (slug: string) => {
     client.clear();
-    navigate(`/${organization.slug}/projects/${slug}`);
+    void navigate(`/${organization.slug}/projects/${slug}`);
   };
 
   const value = Object.assign(currentProject, {

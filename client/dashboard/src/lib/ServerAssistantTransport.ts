@@ -66,7 +66,7 @@ export function createServerAssistantTransport(
     async sendMessages({ messages, abortSignal }) {
       let latest: UIMessage | undefined;
       for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i].role === "user") {
+        if (messages[i]!.role === "user") {
           latest = messages[i];
           break;
         }

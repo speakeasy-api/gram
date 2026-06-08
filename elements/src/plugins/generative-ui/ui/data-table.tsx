@@ -25,7 +25,7 @@ export function DataTable({
   rows,
   className,
   ...props
-}: DataTableProps) {
+}: DataTableProps): React.JSX.Element {
   return (
     <div className={cn(className)} {...props}>
       <Table>

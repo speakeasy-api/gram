@@ -183,7 +183,7 @@ function SwitchField({
   );
 }
 
-export default function ChatElements() {
+export default function ChatElements(): JSX.Element {
   return (
     <Page>
       <Page.Header>
@@ -304,7 +304,7 @@ function ChatElementsInner() {
       }
     };
 
-    createSession();
+    void createSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- createSessionMutation is unstable; trigger on previewKey, auth, and user identity changes only
   }, [previewKey, project.slug, session.session, session.user.id]);
 

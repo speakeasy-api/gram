@@ -3,7 +3,12 @@ import { useCallback, useMemo } from "react";
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 import { PROJECT_FAVORITES_STORAGE_PREFIX } from "@/lib/local-storage-keys";
 
-export function useProjectFavorites(orgId: string) {
+export function useProjectFavorites(orgId: string): {
+  favoriteIds: string[];
+  favoriteSet: Set<string>;
+  isFavorite: (projectId: string) => boolean;
+  toggleFavorite: (projectId: string) => void;
+} {
   const [favoriteIds, setFavoriteIds] = useLocalStorageState<string[]>(
     `${PROJECT_FAVORITES_STORAGE_PREFIX}${orgId}`,
     [],

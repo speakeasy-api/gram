@@ -30,7 +30,7 @@ export function StepContainer({
   showBack = false,
   isLoading = false,
   canContinue = true,
-}: StepContainerProps) {
+}: StepContainerProps): JSX.Element {
   return (
     <div className="flex h-full flex-col">
       {/* Icon */}

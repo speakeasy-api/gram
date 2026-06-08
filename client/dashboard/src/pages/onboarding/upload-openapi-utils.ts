@@ -17,7 +17,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { useParams } from "react-router";
 
-export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
+function useUploadOpenAPIStepsImpl(checkDocumentSlugUnique = true) {
   const project = useProject();
   const session = useSession();
   const client = useSdkClient();
@@ -62,6 +62,7 @@ export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
       case "yaml":
       case "yml":
         return "application/yaml";
+      case undefined:
       default:
         return "application/octet-stream";
     }
@@ -206,7 +207,9 @@ export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
         if (++attempts >= maxAttempts) {
           throw new Error("Deployment timed out waiting for completion");
         }
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        await new Promise((resolve) => {
+          void setTimeout(resolve, 500);
+        });
         deployment = await client.deployments.getById({
           id: deployment.id,
         });
@@ -260,7 +263,13 @@ export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
   };
 }
 
-export function useIsProjectEmpty() {
+export function useUploadOpenAPISteps(
+  checkDocumentSlugUnique = true,
+): ReturnType<typeof useUploadOpenAPIStepsImpl> {
+  return useUploadOpenAPIStepsImpl(checkDocumentSlugUnique);
+}
+
+export function useIsProjectEmpty(): { isLoading: boolean; isEmpty: boolean } {
   const { projectSlug } = useParams();
 
   const { data: deployment, isLoading: isDeploymentLoading } =

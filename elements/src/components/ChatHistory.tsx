@@ -7,7 +7,9 @@ interface ChatHistoryProps {
   className?: string;
 }
 
-export const ChatHistory = ({ className }: ChatHistoryProps) => {
+export const ChatHistory = ({
+  className,
+}: ChatHistoryProps): React.JSX.Element => {
   return (
     <ShadowRoot hostStyle={{ height: "inherit", width: "inherit" }}>
       <ThreadList className={className} />

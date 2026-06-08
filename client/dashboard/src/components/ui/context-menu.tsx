@@ -5,13 +5,15 @@ import { cn } from "@/lib/utils";
 
 function ContextMenu({
   ...props
-}: React.ComponentProps<typeof ContextMenuPrimitive.Root>) {
+}: React.ComponentProps<typeof ContextMenuPrimitive.Root>): React.JSX.Element {
   return <ContextMenuPrimitive.Root data-slot="context-menu" {...props} />;
 }
 
 function ContextMenuTrigger({
   ...props
-}: React.ComponentProps<typeof ContextMenuPrimitive.Trigger>) {
+}: React.ComponentProps<
+  typeof ContextMenuPrimitive.Trigger
+>): React.JSX.Element {
   return (
     <ContextMenuPrimitive.Trigger data-slot="context-menu-trigger" {...props} />
   );
@@ -20,7 +22,9 @@ function ContextMenuTrigger({
 function ContextMenuContent({
   className,
   ...props
-}: React.ComponentProps<typeof ContextMenuPrimitive.Content>) {
+}: React.ComponentProps<
+  typeof ContextMenuPrimitive.Content
+>): React.JSX.Element {
   return (
     <ContextMenuPrimitive.Portal>
       <ContextMenuPrimitive.Content
@@ -41,7 +45,7 @@ function ContextMenuItem({
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Item> & {
   variant?: "default" | "destructive";
-}) {
+}): React.JSX.Element {
   return (
     <ContextMenuPrimitive.Item
       data-slot="context-menu-item"
@@ -59,7 +63,9 @@ function ContextMenuItem({
 function ContextMenuSeparator({
   className,
   ...props
-}: React.ComponentProps<typeof ContextMenuPrimitive.Separator>) {
+}: React.ComponentProps<
+  typeof ContextMenuPrimitive.Separator
+>): React.JSX.Element {
   return (
     <ContextMenuPrimitive.Separator
       data-slot="context-menu-separator"

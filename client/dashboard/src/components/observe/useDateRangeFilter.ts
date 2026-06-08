@@ -11,7 +11,16 @@ const DEFAULT_PRESET: DateRangePreset = "7d";
 
 export function useDateRangeFilter(
   defaultPreset: DateRangePreset = DEFAULT_PRESET,
-) {
+): {
+  dateRange: DateRangePreset;
+  customRange: { from: Date; to: Date } | null;
+  customRangeLabel: string | null;
+  from: Date;
+  to: Date;
+  setDateRangeParam: (preset: DateRangePreset) => void;
+  setCustomRangeParam: (from: Date, to: Date, label?: string) => void;
+  clearCustomRange: () => void;
+} {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const urlRange = searchParams.get("range");

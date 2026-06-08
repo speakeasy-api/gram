@@ -19,7 +19,11 @@ const LABEL_WIDTHS = [
  * after switching projects, when the query cache is cleared). Keeps the nav's
  * shape so it doesn't collapse/flash to empty before the gated items resolve.
  */
-export function SidebarNavSkeleton({ rows = 7 }: { rows?: number }) {
+export function SidebarNavSkeleton({
+  rows = 7,
+}: {
+  rows?: number;
+}): JSX.Element {
   return (
     <SidebarMenu
       aria-hidden

@@ -2,7 +2,7 @@ import { Page } from "@/components/page-layout";
 import { Type } from "@/components/ui/type";
 import { Network } from "lucide-react";
 
-export function MCPEmptyState({ cta }: { cta?: React.ReactNode }) {
+export function MCPEmptyState({ cta }: { cta?: React.ReactNode }): JSX.Element {
   return (
     <Page.Section>
       <Page.Section.Title>MCP Servers</Page.Section.Title>

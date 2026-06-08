@@ -177,7 +177,7 @@ function mapCustomDetectionRule(rule: {
   };
 }
 
-export function useDetectionRulesStore() {
+function useDetectionRulesStoreImpl() {
   const queryClient = useQueryClient();
   const rulesQuery = useRiskListCustomDetectionRules();
 
@@ -243,13 +243,19 @@ export function useDetectionRulesStore() {
       if (!rule) return;
       deleteMutation.mutate({
         request: {
-          deleteCustomDetectionRuleRequestBody: {
+          riskIDRequestBody: {
             id: rule.dbId,
           },
         },
       });
     },
   };
+}
+
+export function useDetectionRulesStore(): ReturnType<
+  typeof useDetectionRulesStoreImpl
+> {
+  return useDetectionRulesStoreImpl();
 }
 
 /** Validate a proposed custom rule id. Returns an error message if the id

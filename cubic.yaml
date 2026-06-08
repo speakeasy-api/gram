@@ -29,6 +29,8 @@ reviews:
       - "**/*_gen.go"
       - "**/*_gen.yaml"
       - "**/*_gen.yml"
+      - "**/*.pb"
+      - "**/*.pb.go"
     head_branches:
       - changeset-release/main
       - dependabot/*

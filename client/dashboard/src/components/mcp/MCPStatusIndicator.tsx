@@ -31,7 +31,7 @@ export function MCPStatusIndicator({
   mcpIsPublic,
   size = "md",
   className,
-}: MCPStatusIndicatorProps) {
+}: MCPStatusIndicatorProps): JSX.Element {
   const status = getStatusConfig(mcpEnabled, mcpIsPublic);
   const dotSize = size === "sm" ? "h-2 w-2" : "h-2.5 w-2.5";
 

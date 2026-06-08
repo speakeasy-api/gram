@@ -261,7 +261,7 @@ function hasDiff(log: AuditLog): boolean {
   return log.beforeSnapshot != null || log.afterSnapshot != null;
 }
 
-export function ActionBadge({ action }: { action: string }) {
+export function ActionBadge({ action }: { action: string }): React.JSX.Element {
   const category = getActionCategory(action);
   const colors = getActionColorConfig(category);
   return (
@@ -277,7 +277,7 @@ export function ActionBadge({ action }: { action: string }) {
   );
 }
 
-export function ActionDot({ action }: { action: string }) {
+export function ActionDot({ action }: { action: string }): React.JSX.Element {
   const category = getActionCategory(action);
   const colors = getActionColorConfig(category);
   return (
@@ -582,7 +582,7 @@ function AuditLogsInsightsWrapper({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function OrgAuditLogs() {
+export default function OrgAuditLogs(): React.JSX.Element {
   const { hasAnyScope } = useRBAC();
   const organization = useOrganization();
   // Only wrap with InsightsProvider when user has org:read or org:admin
@@ -663,8 +663,7 @@ function OrgAuditLogsInner() {
       selectedProjectSlug === "all" ? undefined : selectedProjectSlug,
     action: selectedAction === "all" ? undefined : selectedAction,
     actorId: selectedActor === "all" ? undefined : selectedActor,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } as any);
+  });
 
   const logs = useMemo(
     () => data?.pages.flatMap((page) => page.result.logs) ?? [],
@@ -693,8 +692,8 @@ function OrgAuditLogsInner() {
     }
     parts.push(`Currently showing ${logs.length} audit log entries.`);
     if (dateGroups.length > 0) {
-      const firstDate = dateGroups[0].date;
-      const lastDate = dateGroups[dateGroups.length - 1].date;
+      const firstDate = dateGroups[0]!.date!;
+      const lastDate = dateGroups[dateGroups.length - 1]!.date!;
       parts.push(
         `Date range: ${formatDateHeader(lastDate, tsMode)} to ${formatDateHeader(firstDate, tsMode)}`,
       );
@@ -978,7 +977,9 @@ function OrgAuditLogsInner() {
         <FacetSelect
           label="Project"
           value={selectedProjectSlug}
-          onValueChange={setSelectedProjectSlug}
+          onValueChange={(value) => {
+            void setSelectedProjectSlug(value);
+          }}
           placeholder="All projects"
           allLabel="All projects"
           options={projects.map((project) => ({
@@ -989,7 +990,9 @@ function OrgAuditLogsInner() {
         <FacetSelect
           label="Action"
           value={selectedAction}
-          onValueChange={setSelectedAction}
+          onValueChange={(value) => {
+            void setSelectedAction(value);
+          }}
           placeholder="All actions"
           allLabel="All actions"
           options={actionOptions}
@@ -997,7 +1000,9 @@ function OrgAuditLogsInner() {
         <FacetSelect
           label="Actor"
           value={selectedActor}
-          onValueChange={setSelectedActor}
+          onValueChange={(value) => {
+            void setSelectedActor(value);
+          }}
           placeholder="All actors"
           allLabel="All actors"
           options={actorOptions}
@@ -1011,7 +1016,7 @@ function OrgAuditLogsInner() {
             size="sm"
             disabled={!hasActiveFilters}
             onClick={() => {
-              Promise.allSettled([
+              void Promise.allSettled([
                 setSelectedProjectSlug("all"),
                 setSelectedAction("all"),
                 setSelectedActor("all"),
@@ -1201,7 +1206,7 @@ function OrgAuditLogsInner() {
                       <AuditLogRow
                         key={log.id}
                         log={log}
-                        orgSlug={orgSlug}
+                        orgSlug={orgSlug ?? ""}
                         timestampMode={tsMode}
                         isOdd={rowIndex % 2 === 1}
                         isHighlighted={idx === currentLogIndex}
@@ -1232,7 +1237,9 @@ function OrgAuditLogsInner() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => fetchNextPage()}
+                onClick={() => {
+                  void fetchNextPage();
+                }}
                 disabled={isFetchingNextPage}
               >
                 {isFetchingNextPage ? (

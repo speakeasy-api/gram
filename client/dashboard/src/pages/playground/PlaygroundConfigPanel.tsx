@@ -41,12 +41,7 @@ interface ToolsetInfo {
 
 interface ToolGroup {
   type: "package" | "function" | "custom" | "higher_order" | "platform";
-  icon:
-    | typeof FileCode
-    | typeof SquareFunction
-    | typeof PencilRuler
-    | typeof Layers
-    | typeof McpIcon;
+  icon: typeof FileCode;
   title: string;
   tools: Tool[];
   packageName?: string;
@@ -265,7 +260,7 @@ export function PlaygroundConfigPanel({
   onOpenToolsModal,
   onOpenGroupModal: _onOpenGroupModal,
   onToolClick,
-}: ToolsetSectionProps) {
+}: ToolsetSectionProps): JSX.Element {
   const [toolsOpen, setToolsOpen] = useState(true);
   const [configOpen, setConfigOpen] = useState(true);
   const [authOpen, setAuthOpen] = useState(true);

@@ -4,7 +4,11 @@ import { workerFactory } from "./worker";
 
 // Create a client component that wraps children with the worker pool.
 // Import this in your layout to provide the worker pool to all pages.
-export function HighlightProvider({ children }: { children: ReactNode }) {
+export function HighlightProvider({
+  children,
+}: {
+  children: ReactNode;
+}): JSX.Element {
   return (
     <WorkerPoolContextProvider
       poolOptions={{ workerFactory }}

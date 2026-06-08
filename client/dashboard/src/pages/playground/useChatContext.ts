@@ -21,10 +21,18 @@ export const ChatContext = createContext<{
   setAppendMessage: () => {},
 });
 
-export const useChatContext = () => {
+export const useChatContext = (): {
+  id: string;
+  setId: (id: string) => void;
+  url: string;
+  messages: UIMessage[];
+  setMessages: (messages: UIMessage[]) => void;
+  appendMessage: AppendFn;
+  setAppendMessage: (appendMessage: AppendFn) => void;
+} => {
   return useContext(ChatContext);
 };
 
-export const useChatMessages = () => {
+export const useChatMessages = (): UIMessage[] => {
   return useChatContext().messages;
 };

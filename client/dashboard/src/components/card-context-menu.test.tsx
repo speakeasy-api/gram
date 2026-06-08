@@ -42,8 +42,19 @@ describe("CardContextMenu", () => {
     render(
       <CardContextMenu
         actions={[
-          { label: "Edit", onClick: edit },
-          { label: "Delete", onClick: del, destructive: true },
+          {
+            label: "Edit",
+            onClick: () => {
+              edit();
+            },
+          },
+          {
+            label: "Delete",
+            onClick: () => {
+              del();
+            },
+            destructive: true,
+          },
         ]}
       >
         <div>card</div>

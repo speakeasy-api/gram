@@ -66,7 +66,7 @@ describe("scopeChallenges", () => {
   it("filters by both principal and scope", () => {
     const result = scopeChallenges(challenges, "alice@acme.com", "org:admin");
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("3");
+    expect(result[0]!.id).toBe("3");
   });
 
   it("returns empty when no matches", () => {
@@ -89,7 +89,7 @@ describe("scopeChallenges", () => {
     ];
     const result = scopeChallenges(noEmail, "api_key:k1", "all");
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("5");
+    expect(result[0]!.id).toBe("5");
   });
 });
 

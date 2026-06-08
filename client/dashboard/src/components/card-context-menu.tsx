@@ -22,7 +22,7 @@ export function CardContextMenu({
   actions: Action[];
   children: React.ReactNode;
   className?: string;
-}) {
+}): React.JSX.Element {
   if (actions.length === 0) {
     return <>{children}</>;
   }

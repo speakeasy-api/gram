@@ -36,7 +36,7 @@ export function Stack({
   justify,
   className,
   ...props
-}: StackProps) {
+}: StackProps): React.JSX.Element {
   return (
     <div
       data-slot="stack"

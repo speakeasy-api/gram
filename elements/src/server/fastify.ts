@@ -33,7 +33,7 @@ export function createFastifyHandler(
     | ((
         request: FastifyRequest,
       ) => SessionHandlerOptions | Promise<SessionHandlerOptions>),
-) {
+): (request: FastifyRequest, reply: FastifyReply) => Promise<void> {
   return async (request: FastifyRequest, reply: FastifyReply) => {
     const projectSlug = Array.isArray(request.headers["gram-project"])
       ? request.headers["gram-project"][0]

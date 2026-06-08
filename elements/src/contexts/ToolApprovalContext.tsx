@@ -26,7 +26,11 @@ interface ToolApprovalContextType {
   getPendingApproval: (toolCallId: string) => PendingApproval | undefined;
 }
 
-export function ToolApprovalProvider({ children }: { children: ReactNode }) {
+export function ToolApprovalProvider({
+  children,
+}: {
+  children: ReactNode;
+}): React.JSX.Element {
   const [pendingApprovals, setPendingApprovals] = useState<
     Map<string, PendingApproval>
   >(new Map());

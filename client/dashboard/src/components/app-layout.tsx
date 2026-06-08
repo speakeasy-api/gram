@@ -12,7 +12,7 @@ import { OrgSidebar } from "./org-sidebar.tsx";
 import { SidebarInset, SidebarProvider } from "./ui/sidebar.tsx";
 
 // Layout to handle unauthenticated landing pages and the authenticated webapp experience
-export const LoginCheck = () => {
+export const LoginCheck = (): JSX.Element => {
   const session = useSession();
   const location = useLocation();
 
@@ -29,7 +29,7 @@ export const LoginCheck = () => {
   return <Outlet />;
 };
 
-export const AppLayout = () => {
+export const AppLayout = (): JSX.Element => {
   const isAdmin = useIsAdmin();
   const overrideSlug = useMemo(() => getAdminOverrideCookie(), []);
   const isImpersonating = isAdmin && !!overrideSlug;
@@ -73,10 +73,12 @@ const ImpersonationBanner = () => {
       <button
         type="button"
         className="ml-2 rounded bg-white/20 px-2 py-0.5 text-xs font-medium transition-colors hover:bg-white/30"
-        onClick={async () => {
-          document.cookie = "gram_admin_override=; path=/; max-age=0;";
-          await client.auth.logout();
-          window.location.href = "/login";
+        onClick={() => {
+          void (async () => {
+            document.cookie = "gram_admin_override=; path=/; max-age=0;";
+            await client.auth.logout();
+            window.location.href = "/login";
+          })();
         }}
       >
         Stop impersonating
@@ -178,9 +180,11 @@ const MembershipSyncGuard = ({ children }: { children: React.ReactNode }) => {
         <button
           type="button"
           className="bg-primary text-primary-foreground hover:bg-primary/90 mt-2 rounded-md px-4 py-2 text-sm font-medium"
-          onClick={async () => {
-            await client.auth.logout();
-            window.location.href = "/login";
+          onClick={() => {
+            void (async () => {
+              await client.auth.logout();
+              window.location.href = "/login";
+            })();
           }}
         >
           Log out
@@ -190,7 +194,7 @@ const MembershipSyncGuard = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-export const OrgLayout = () => {
+export const OrgLayout = (): JSX.Element => {
   const isAdmin = useIsAdmin();
   const overrideSlug = useMemo(() => getAdminOverrideCookie(), []);
   const isImpersonating = isAdmin && !!overrideSlug;

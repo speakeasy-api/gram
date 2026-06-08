@@ -16,7 +16,7 @@ export function PluginCard({
 }: {
   plugin: Plugin;
   onDelete: (plugin: Plugin) => void;
-}) {
+}): JSX.Element {
   const routes = useRoutes();
   const navigate = useNavigate();
   const detailHref = routes.plugins.detail.href(plugin.id);
@@ -35,7 +35,9 @@ export function PluginCard({
     <CardContextMenu actions={actions}>
       <DotCard
         className="cursor-pointer"
-        onClick={() => navigate(detailHref)}
+        onClick={() => {
+          void navigate(detailHref);
+        }}
         icon={<Puzzle className="text-muted-foreground h-10 w-10 opacity-60" />}
       >
         <div className="mb-2 flex items-start justify-between gap-2">

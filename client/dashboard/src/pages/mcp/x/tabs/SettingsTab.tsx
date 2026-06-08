@@ -27,7 +27,7 @@ export function SettingsTab({
 }: {
   mcpServer: McpServer;
   endpoints: McpEndpoint[];
-}) {
+}): JSX.Element {
   return (
     <div className="mx-auto w-full max-w-[1270px] space-y-8 px-8 py-8">
       <GeneralSection mcpServer={mcpServer} />
@@ -78,7 +78,7 @@ function GeneralSection({ mcpServer }: { mcpServer: McpServer }) {
       // invalidating queries so the refetch uses the new lookup args and the
       // page-level not-found guard doesn't bounce the user back to /mcp.
       const nextParam = mcpServerRouteParam(updated);
-      navigate(routes.mcp.x.href(nextParam), { replace: true });
+      void navigate(routes.mcp.x.href(nextParam), { replace: true });
       await Promise.all([
         invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
@@ -108,7 +108,7 @@ function GeneralSection({ mcpServer }: { mcpServer: McpServer }) {
                 variant="primary"
                 size="md"
                 disabled={saveDisabled}
-                onClick={handleSave}
+                onClick={() => void handleSave()}
               >
                 {update.isPending ? (
                   <>
@@ -175,7 +175,7 @@ function DangerZoneSection({
             onClose={() => setDeleteDialogOpen(false)}
             onSuccess={() => {
               setDeleteDialogOpen(false);
-              navigate(routes.mcp.href());
+              void navigate(routes.mcp.href());
             }}
           />
         </Dialog.Content>

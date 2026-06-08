@@ -1,7 +1,13 @@
 import { useParams } from "react-router";
 import { useEnvironments } from "./useEnvironments";
 
-export function useEnvironment(slug?: string) {
+type EnvironmentItem = ReturnType<typeof useEnvironments>[number];
+
+export function useEnvironment(slug?: string):
+  | (EnvironmentItem & {
+      refetch: ReturnType<typeof useEnvironments>["refetch"];
+    })
+  | null {
   let { environmentSlug } = useParams();
   if (slug) environmentSlug = slug;
 

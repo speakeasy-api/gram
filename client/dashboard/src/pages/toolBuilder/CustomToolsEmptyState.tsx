@@ -6,7 +6,7 @@ export function CustomToolsEmptyState({
   onCreateCustomTool,
 }: {
   onCreateCustomTool: () => void;
-}) {
+}): JSX.Element {
   const cta = (
     <Button size="sm" onClick={onCreateCustomTool}>
       CREATE A CUSTOM TOOL
