@@ -60,14 +60,11 @@ WHERE organization_id = @organization_id
   AND COALESCE(effect, 'allow') = COALESCE(sqlc.arg(effect)::text, 'allow')
   AND selectors = @selectors;
 
--- name: DeleteMatchingPrincipalGrantsByType :execrows
--- Removes equivalent grant rows for other principal types. Used to keep
--- user:all and narrower user:/role: grants canonical without touching other
--- scopes, effects, resources, or selector dimensions.
+-- name: DeletePrincipalGrantsByTarget :execrows
+-- Removes every principal row for one exact grant target. Used by audience
+-- replacement writes where the caller supplies the full desired principal set.
 DELETE FROM principal_grants
 WHERE organization_id = @organization_id
-  AND principal_urn <> @principal_urn
-  AND principal_type = ANY(sqlc.arg(principal_types)::text[])
   AND scope = @scope
   AND COALESCE(effect, 'allow') = COALESCE(sqlc.arg(effect)::text, 'allow')
   AND selectors = @selectors;

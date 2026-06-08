@@ -19,6 +19,7 @@ func testResource(organizationID string, scope Scope, resourceID string) Resourc
 func testResourceGrant(organizationID string, principals []urn.Principal, scope Scope, resourceID string, selector Selector) ResourceGrant {
 	return ResourceGrant{
 		Resource:   testResource(organizationID, scope, resourceID),
+		Effect:     PolicyEffectAllow,
 		Principals: principals,
 		Selector:   selector,
 	}
@@ -302,7 +303,7 @@ func TestPatchPrincipalGrantsAddsAndRemovesExactGrants(t *testing.T) {
 	require.Equal(t, otherPrincipal.String(), grants[0].PrincipalUrn)
 }
 
-func TestPatchPrincipalGrantsCanonicalizesAllUsersToNarrowGrant(t *testing.T) {
+func TestReplaceGrantAudienceReplacesAllUsersWithNarrowGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -313,16 +314,18 @@ func TestPatchPrincipalGrantsCanonicalizesAllUsersToNarrowGrant(t *testing.T) {
 	selector := NewSelector(ScopeRiskPolicyEvaluate, policyID)
 
 	seedOrganization(t, ctx, conn, organizationID)
-	require.NoError(t, PatchPrincipalGrants(ctx, conn, organizationID, AllUsersPrincipal(), []*RoleGrant{{
-		Scope:     string(ScopeRiskPolicyEvaluate),
-		Effect:    PolicyEffectAllow,
-		Selectors: []Selector{selector},
-	}}, nil))
-	require.NoError(t, PatchPrincipalGrants(ctx, conn, organizationID, userPrincipal, []*RoleGrant{{
-		Scope:     string(ScopeRiskPolicyEvaluate),
-		Effect:    PolicyEffectAllow,
-		Selectors: []Selector{selector},
-	}}, nil))
+	require.NoError(t, ReplaceGrantAudience(ctx, conn, ResourceGrant{
+		Resource:   testResource(organizationID, ScopeRiskPolicyEvaluate, policyID),
+		Effect:     PolicyEffectAllow,
+		Selector:   selector,
+		Principals: []urn.Principal{AllUsersPrincipal()},
+	}))
+	require.NoError(t, ReplaceGrantAudience(ctx, conn, ResourceGrant{
+		Resource:   testResource(organizationID, ScopeRiskPolicyEvaluate, policyID),
+		Effect:     PolicyEffectAllow,
+		Selector:   selector,
+		Principals: []urn.Principal{userPrincipal},
+	}))
 
 	grants, err := ListGrantsForResource(ctx, conn, testResource(organizationID, ScopeRiskPolicyEvaluate, policyID))
 	require.NoError(t, err)
@@ -330,7 +333,7 @@ func TestPatchPrincipalGrantsCanonicalizesAllUsersToNarrowGrant(t *testing.T) {
 	require.Equal(t, userPrincipal.String(), grants[0].PrincipalUrn)
 }
 
-func TestPatchPrincipalGrantsCanonicalizesNarrowGrantToAllUsers(t *testing.T) {
+func TestReplaceGrantAudienceReplacesNarrowGrantWithAllUsers(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -341,16 +344,18 @@ func TestPatchPrincipalGrantsCanonicalizesNarrowGrantToAllUsers(t *testing.T) {
 	selector := NewSelector(ScopeRiskPolicyEvaluate, policyID)
 
 	seedOrganization(t, ctx, conn, organizationID)
-	require.NoError(t, PatchPrincipalGrants(ctx, conn, organizationID, userPrincipal, []*RoleGrant{{
-		Scope:     string(ScopeRiskPolicyEvaluate),
-		Effect:    PolicyEffectAllow,
-		Selectors: []Selector{selector},
-	}}, nil))
-	require.NoError(t, PatchPrincipalGrants(ctx, conn, organizationID, AllUsersPrincipal(), []*RoleGrant{{
-		Scope:     string(ScopeRiskPolicyEvaluate),
-		Effect:    PolicyEffectAllow,
-		Selectors: []Selector{selector},
-	}}, nil))
+	require.NoError(t, ReplaceGrantAudience(ctx, conn, ResourceGrant{
+		Resource:   testResource(organizationID, ScopeRiskPolicyEvaluate, policyID),
+		Effect:     PolicyEffectAllow,
+		Selector:   selector,
+		Principals: []urn.Principal{userPrincipal},
+	}))
+	require.NoError(t, ReplaceGrantAudience(ctx, conn, ResourceGrant{
+		Resource:   testResource(organizationID, ScopeRiskPolicyEvaluate, policyID),
+		Effect:     PolicyEffectAllow,
+		Selector:   selector,
+		Principals: []urn.Principal{AllUsersPrincipal()},
+	}))
 
 	grants, err := ListGrantsForResource(ctx, conn, testResource(organizationID, ScopeRiskPolicyEvaluate, policyID))
 	require.NoError(t, err)
@@ -358,7 +363,7 @@ func TestPatchPrincipalGrantsCanonicalizesNarrowGrantToAllUsers(t *testing.T) {
 	require.Equal(t, AllUsersPrincipal().String(), grants[0].PrincipalUrn)
 }
 
-func TestPatchPrincipalGrantsCanonicalizationPreservesUnrelatedSelectorAndResource(t *testing.T) {
+func TestReplaceGrantAudiencePreservesUnrelatedSelectorAndResource(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -376,28 +381,30 @@ func TestPatchPrincipalGrantsCanonicalizationPreservesUnrelatedSelectorAndResour
 	}
 
 	seedOrganization(t, ctx, conn, organizationID)
-	require.NoError(t, PatchPrincipalGrants(ctx, conn, organizationID, AllUsersPrincipal(), []*RoleGrant{
-		{
-			Scope:     string(ScopeRiskPolicyEvaluate),
-			Effect:    PolicyEffectAllow,
-			Selectors: []Selector{selector},
-		},
-		{
-			Scope:     string(ScopeRiskPolicyEvaluate),
-			Effect:    PolicyEffectAllow,
-			Selectors: []Selector{otherSelector},
-		},
-		{
-			Scope:     string(ScopeRiskPolicyEvaluate),
-			Effect:    PolicyEffectAllow,
-			Selectors: []Selector{serverSelector},
-		},
-	}, nil))
-	require.NoError(t, PatchPrincipalGrants(ctx, conn, organizationID, userPrincipal, []*RoleGrant{{
-		Scope:     string(ScopeRiskPolicyEvaluate),
-		Effect:    PolicyEffectAllow,
-		Selectors: []Selector{selector},
-	}}, nil))
+	require.NoError(t, ReplaceGrantAudience(ctx, conn, ResourceGrant{
+		Resource:   testResource(organizationID, ScopeRiskPolicyEvaluate, policyID),
+		Effect:     PolicyEffectAllow,
+		Selector:   selector,
+		Principals: []urn.Principal{AllUsersPrincipal()},
+	}))
+	require.NoError(t, ReplaceGrantAudience(ctx, conn, ResourceGrant{
+		Resource:   testResource(organizationID, ScopeRiskPolicyEvaluate, otherPolicyID),
+		Effect:     PolicyEffectAllow,
+		Selector:   otherSelector,
+		Principals: []urn.Principal{AllUsersPrincipal()},
+	}))
+	require.NoError(t, ReplaceGrantAudience(ctx, conn, ResourceGrant{
+		Resource:   testResource(organizationID, ScopeRiskPolicyEvaluate, policyID),
+		Effect:     PolicyEffectAllow,
+		Selector:   serverSelector,
+		Principals: []urn.Principal{AllUsersPrincipal()},
+	}))
+	require.NoError(t, ReplaceGrantAudience(ctx, conn, ResourceGrant{
+		Resource:   testResource(organizationID, ScopeRiskPolicyEvaluate, policyID),
+		Effect:     PolicyEffectAllow,
+		Selector:   selector,
+		Principals: []urn.Principal{userPrincipal},
+	}))
 
 	grants, err := ListGrantsForResource(ctx, conn, testResource(organizationID, ScopeRiskPolicyEvaluate, policyID))
 	require.NoError(t, err)
@@ -408,6 +415,21 @@ func TestPatchPrincipalGrantsCanonicalizationPreservesUnrelatedSelectorAndResour
 	require.NoError(t, err)
 	require.Len(t, otherGrants, 1)
 	require.Equal(t, AllUsersPrincipal().String(), otherGrants[0].PrincipalUrn)
+}
+
+func TestReplaceGrantAudienceRejectsAllUsersWithNarrowPrincipals(t *testing.T) {
+	t.Parallel()
+
+	err := ReplaceGrantAudience(t.Context(), nil, ResourceGrant{
+		Resource: testResource("org_replace_audience_invalid", ScopeRiskPolicyEvaluate, "policy_123"),
+		Effect:   PolicyEffectAllow,
+		Selector: NewSelector(ScopeRiskPolicyEvaluate, "policy_123"),
+		Principals: []urn.Principal{
+			AllUsersPrincipal(),
+			urn.NewPrincipal(urn.PrincipalTypeUser, "user_123"),
+		},
+	})
+	require.ErrorContains(t, err, "user:all cannot be combined")
 }
 
 func TestGrantAndRevokeResourcePrincipalGrantRequirePrincipals(t *testing.T) {

@@ -190,9 +190,6 @@ func (rp rolePrincipals) upsertGrants(ctx context.Context, q *repo.Queries, orgI
 
 func upsertPrincipalGrants(ctx context.Context, q *repo.Queries, orgID string, principal urn.Principal, rows []roleGrantRow) error {
 	for _, row := range rows {
-		if err := deleteCanonicalGrantConflicts(ctx, q, orgID, principal, row); err != nil {
-			return err
-		}
 		if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
 			OrganizationID: orgID,
 			PrincipalUrn:   principal,
@@ -202,40 +199,6 @@ func upsertPrincipalGrants(ctx context.Context, q *repo.Queries, orgID string, p
 		}); err != nil {
 			return fmt.Errorf("upsert grant %q for %s: %w", row.Scope, principal.Label(), err)
 		}
-	}
-
-	return nil
-}
-
-func deleteCanonicalGrantConflicts(ctx context.Context, q *repo.Queries, orgID string, principal urn.Principal, row roleGrantRow) error {
-	allUsers := AllUsersPrincipal()
-	if isAllUsersPrincipal(principal) {
-		if _, err := q.DeleteMatchingPrincipalGrantsByType(ctx, repo.DeleteMatchingPrincipalGrantsByTypeParams{
-			OrganizationID: orgID,
-			PrincipalUrn:   principal,
-			PrincipalTypes: []string{string(urn.PrincipalTypeUser), string(urn.PrincipalTypeRole)},
-			Scope:          string(row.Scope),
-			Effect:         string(row.Effect),
-			Selectors:      row.SelectorRaw,
-		}); err != nil {
-			return fmt.Errorf("delete narrower grants matching %q for %s: %w", row.Scope, principal.Label(), err)
-		}
-		return nil
-	}
-
-	switch principal.Type {
-	case urn.PrincipalTypeUser, urn.PrincipalTypeRole:
-		if _, err := q.DeletePrincipalGrantByIdentity(ctx, repo.DeletePrincipalGrantByIdentityParams{
-			OrganizationID: orgID,
-			PrincipalUrn:   allUsers,
-			Scope:          string(row.Scope),
-			Effect:         string(row.Effect),
-			Selectors:      row.SelectorRaw,
-		}); err != nil {
-			return fmt.Errorf("delete all-users grant matching %q for %s: %w", row.Scope, principal.Label(), err)
-		}
-	case urn.PrincipalTypeEmail:
-		return nil
 	}
 
 	return nil
