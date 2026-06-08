@@ -443,6 +443,8 @@ type DirectoryUserGroupMembership struct {
 	WorkosDirectoryGroupID string
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
 }
 
 type Environment struct {

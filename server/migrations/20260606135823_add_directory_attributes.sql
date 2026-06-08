@@ -61,6 +61,8 @@ CREATE TABLE "directory_user_group_memberships" (
   "workos_directory_group_id" text NOT NULL,
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
+  "deleted_at" timestamptz NULL,
+  "deleted" boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
   PRIMARY KEY ("id"),
   CONSTRAINT "directory_user_group_memberships_directory_group_id_fkey" FOREIGN KEY ("directory_group_id") REFERENCES "directory_groups" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "directory_user_group_memberships_directory_user_id_fkey" FOREIGN KEY ("directory_user_id") REFERENCES "directory_users" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
