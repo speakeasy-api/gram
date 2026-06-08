@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
-import type { PolicyAction } from "./policy-data";
+import type { PolicyAction, PolicyMessageType } from "./policy-data";
 
 export type PromptPolicy = {
   id: string;
@@ -9,7 +9,7 @@ export type PromptPolicy = {
   enabled: boolean;
   action: PolicyAction;
   promptInstruction: string;
-  messageTypes: string[];
+  messageTypes: PolicyMessageType[];
   autoName: boolean;
   /** Unix timestamp (ms) — JSON-safe. */
   createdAt: number;
@@ -19,11 +19,17 @@ export type PromptPolicy = {
 type CreateInput = Omit<PromptPolicy, "id" | "createdAt" | "updatedAt">;
 type UpdateInput = Partial<Omit<PromptPolicy, "id" | "createdAt">>;
 
-const STORAGE_KEY = "gram-prompt-policies";
+function storageKey(orgId: string) {
+  return `gram-prompt-policies-${orgId}`;
+}
 
-function usePromptPoliciesStoreImpl() {
+function safe(prev: PromptPolicy[]): PromptPolicy[] {
+  return Array.isArray(prev) ? prev : [];
+}
+
+function usePromptPoliciesStoreImpl(orgId: string) {
   const [policies, setPolicies] = useLocalStorageState<PromptPolicy[]>(
-    STORAGE_KEY,
+    storageKey(orgId),
     [],
   );
 
@@ -35,7 +41,7 @@ function usePromptPoliciesStoreImpl() {
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
-      setPolicies((prev) => [policy, ...prev]);
+      setPolicies((prev) => [policy, ...safe(prev)]);
     },
     [setPolicies],
   );
@@ -43,7 +49,7 @@ function usePromptPoliciesStoreImpl() {
   const update = useCallback(
     (id: string, input: UpdateInput) => {
       setPolicies((prev) =>
-        prev.map((p) =>
+        safe(prev).map((p) =>
           p.id === id ? { ...p, ...input, updatedAt: Date.now() } : p,
         ),
       );
@@ -53,16 +59,16 @@ function usePromptPoliciesStoreImpl() {
 
   const remove = useCallback(
     (id: string) => {
-      setPolicies((prev) => prev.filter((p) => p.id !== id));
+      setPolicies((prev) => safe(prev).filter((p) => p.id !== id));
     },
     [setPolicies],
   );
 
-  return { policies, create, update, remove };
+  return { policies: safe(policies), create, update, remove };
 }
 
-export function usePromptPoliciesStore(): ReturnType<
-  typeof usePromptPoliciesStoreImpl
-> {
-  return usePromptPoliciesStoreImpl();
+export function usePromptPoliciesStore(
+  orgId: string,
+): ReturnType<typeof usePromptPoliciesStoreImpl> {
+  return usePromptPoliciesStoreImpl(orgId);
 }

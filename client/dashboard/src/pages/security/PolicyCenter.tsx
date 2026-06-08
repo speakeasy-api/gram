@@ -71,6 +71,7 @@ import { cn } from "@/lib/utils";
 import { ruleIdToPresidioEntity } from "./rule-ids";
 import { useDetectionRulesStore } from "./detection-rules-data";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useOrganization } from "@/contexts/Auth";
 import {
   usePromptPoliciesStore,
   type PromptPolicy,
@@ -312,7 +313,7 @@ function messageTypesSummary(
   return `${selectedMessageTypes.size} of ${ALL_POLICY_MESSAGE_TYPES.length} types selected`;
 }
 
-function truncatePrompt(prompt: string, maxLength = 40): string {
+function truncatePrompt(prompt: string, maxLength = 60): string {
   const singleLine = prompt.trim().replace(/\s+/g, " ");
   if (singleLine.length <= maxLength) {
     return singleLine;
@@ -338,7 +339,8 @@ function PolicyCenterContent() {
   const telemetry = useTelemetry();
   const { data, isLoading } = useRiskListPolicies();
   const nlEnabled = telemetry.isFeatureEnabled("gram-prompt-policies") ?? false;
-  const promptStore = usePromptPoliciesStore();
+  const { id: orgId } = useOrganization();
+  const promptStore = usePromptPoliciesStore(orgId);
 
   const serverRows = useMemo(
     (): PolicyRow[] =>
