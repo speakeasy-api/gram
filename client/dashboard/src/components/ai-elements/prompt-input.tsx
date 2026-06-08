@@ -32,8 +32,6 @@ import {
   usePromptInputAttachments,
 } from "./prompt-input-utils";
 
-export type { AttachmentsContext } from "./prompt-input-utils";
-
 type PromptInputMessage = {
   text?: string;
   files?: FileUIPart[];

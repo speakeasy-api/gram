@@ -30,7 +30,7 @@ import {
   useToolset as useToolsetQuery,
 } from "@gram/client/react-query/toolset.js";
 
-export type ToolsetKind = "default" | "external-mcp-proxy";
+type ToolsetKind = "default" | "external-mcp-proxy";
 
 function detectToolsetKind(tools: GeneratedTool[]): ToolsetKind {
   const hasExternalMcpProxy = tools.some(

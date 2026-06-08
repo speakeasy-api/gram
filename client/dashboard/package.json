@@ -104,7 +104,6 @@
     "@types/react-dom": "catalog:",
     "@types/three": "^0.181.0",
     "@vitejs/plugin-react": "^5.1.1",
-    "globals": "^16.5.0",
     "oxlint": "^1.67.0",
     "oxlint-tsgolint": "^0.23.0",
     "happy-dom": "^20.5.5",

@@ -27,8 +27,6 @@ import { isDisplayableBucket } from "./challengeHelpers";
 import { useChallengeRowColumns } from "./useChallengeRowColumns";
 import { useGrantFlow } from "./useGrantFlow";
 
-export type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
-
 type BucketOutcome = ChallengeBucket["outcome"];
 type OutcomeFilter = "all" | "deny" | "allow" | "resolved";
 

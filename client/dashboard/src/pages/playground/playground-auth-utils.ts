@@ -9,7 +9,7 @@ const ExternalMcpOAuthStatusResponseSchema = z.object({
   expires_at: z.string().optional(),
 });
 
-export type ExternalOAuthStatusResponse = z.infer<
+type ExternalOAuthStatusResponse = z.infer<
   typeof ExternalMcpOAuthStatusResponseSchema
 >;
 
