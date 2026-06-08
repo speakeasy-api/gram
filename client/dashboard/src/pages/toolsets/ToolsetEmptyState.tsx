@@ -7,7 +7,7 @@ export function ToolsetEmptyState({
 }: {
   toolsetSlug: string;
   onAddTools?: () => void;
-}) {
+}): JSX.Element {
   const cta = onAddTools ? (
     <Button size="sm" onClick={onAddTools}>
       ADD TOOLS

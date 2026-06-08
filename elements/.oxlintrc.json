@@ -1,0 +1,75 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "react", "import"],
+  "env": {
+    "browser": true,
+    "es2022": true,
+    "node": true
+  },
+  "ignorePatterns": [
+    "dist",
+    "node_modules",
+    "storybook-static",
+    "examples",
+    "test-apps",
+    "scripts",
+    "bin",
+    ".storybook",
+    "src/lib.d.ts"
+  ],
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "no-unused-vars": [
+      "error",
+      {
+        "args": "all",
+        "argsIgnorePattern": "^_",
+        "caughtErrors": "all",
+        "caughtErrorsIgnorePattern": "^_",
+        "destructuredArrayIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "ignoreRestSiblings": true
+      }
+    ],
+
+    "typescript/no-explicit-any": "error",
+    "typescript/no-inferrable-types": "error",
+    "typescript/no-empty-object-type": "error",
+    "typescript/explicit-module-boundary-types": [
+      "error",
+      {
+        "allowTypedFunctionExpressions": true,
+        "allowHigherOrderFunctions": true,
+        "allowDirectConstAssertionInArrowFunctions": true
+      }
+    ],
+    "typescript/switch-exhaustiveness-check": "error",
+    "typescript/strict-void-return": "error",
+
+    "react/exhaustive-deps": "error",
+    "react/rules-of-hooks": "error",
+    "react/only-export-components": "error"
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/*.config.{ts,js,mts,mjs}",
+        "vite.config.ts",
+        "src/**/*.stories.{ts,tsx}",
+        "src/**/*.test.{ts,tsx}",
+        "src/**/*.spec.{ts,tsx}"
+      ],
+      "rules": {
+        "typescript/explicit-module-boundary-types": "off"
+      }
+    },
+    {
+      "files": ["src/contexts/**/*.{ts,tsx}"],
+      "rules": {
+        "react/only-export-components": "off"
+      }
+    }
+  ]
+}

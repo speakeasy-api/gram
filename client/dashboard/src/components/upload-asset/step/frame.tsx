@@ -7,7 +7,7 @@ type FrameProps = {
   children: React.ReactNode;
 };
 
-export default function Frame({ children }: FrameProps) {
+export default function Frame({ children }: FrameProps): React.JSX.Element {
   const step = useStep();
 
   const header = React.Children.toArray(children).find(

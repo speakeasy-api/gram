@@ -82,7 +82,7 @@ export function EditToolDialog({
   functionIdToName,
   onSave,
   onRemove,
-}: EditToolDialogProps) {
+}: EditToolDialogProps): JSX.Element | null {
   const [name, setName] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -141,7 +141,7 @@ export function EditToolDialog({
       // Cmd+Enter or Ctrl+Enter to save
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
         e.preventDefault();
-        handleSave();
+        void handleSave();
       }
     };
 
@@ -359,7 +359,10 @@ export function EditToolDialog({
             <Button variant="secondary" onClick={handleClose}>
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={!hasChanges || saving}>
+            <Button
+              onClick={() => void handleSave()}
+              disabled={!hasChanges || saving}
+            >
               {saving ? "Saving..." : "Save"}
               {hasChanges && !saving && (
                 <span className="ml-2 text-xs opacity-60">⌘⏎</span>

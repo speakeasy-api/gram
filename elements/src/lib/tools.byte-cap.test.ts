@@ -114,7 +114,7 @@ describe("wrapToolsWithByteCap", () => {
       t: { description: "", inputSchema: { type: "object" }, execute } as never,
     };
     const wrapped = wrapToolsWithByteCap(tools, 256);
-    const wrappedExecute = wrapped.t.execute!;
+    const wrappedExecute = wrapped.t!.execute!;
     const out = (await wrappedExecute({}, { toolCallId: "id" } as never)) as {
       content: Array<{ text: string }>;
     };

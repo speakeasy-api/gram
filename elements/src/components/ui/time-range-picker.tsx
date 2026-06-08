@@ -155,7 +155,7 @@ const BADGE_WIDTH = "min-w-10";
 
 export function getPresetRange(preset: DateRangePreset): TimeRange {
   const p = PRESETS.find((p) => p.value === preset);
-  return p ? p.getRange() : PRESETS[5].getRange(); // Default to 3d
+  return p ? p.getRange() : PRESETS[5]!.getRange(); // Default to 3d
 }
 
 function getPresetByValue(value: DateRangePreset): TimeRangePreset | undefined {
@@ -188,11 +188,15 @@ function parseAsLocalDate(isoString: string): Date {
   // Try to extract just the date part and create a local date
   const dateMatch = isoString.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (dateMatch) {
-    const [, year, month, day] = dateMatch;
+    const year = dateMatch[1]!;
+    const month = dateMatch[2]!;
+    const day = dateMatch[3]!;
     // Check if there's a time component
     const timeMatch = isoString.match(/T(\d{2}):(\d{2}):?(\d{2})?/);
     if (timeMatch) {
-      const [, hours, minutes, seconds = "0"] = timeMatch;
+      const hours = timeMatch[1]!;
+      const minutes = timeMatch[2]!;
+      const seconds = timeMatch[3] ?? "0";
       return new Date(
         parseInt(year),
         parseInt(month) - 1,
@@ -372,7 +376,7 @@ function TimeRangePicker({
   projectSlug,
   authHeaders,
   className,
-}: TimeRangePickerProps) {
+}: TimeRangePickerProps): React.JSX.Element {
   const [isOpen, setIsOpen] = React.useState(false);
   const [showCalendar, setShowCalendar] = React.useState(false);
   const [inputValue, setInputValue] = React.useState("");
@@ -585,7 +589,9 @@ function TimeRangePicker({
             onClick={handleInputClick}
             onFocus={handleInputFocus}
             onBlur={handleInputBlur}
-            onKeyDown={handleInputKeyDown}
+            onKeyDown={(e) => {
+              void handleInputKeyDown(e);
+            }}
             placeholder="e.g., 3 days ago, last week..."
             disabled={disabled}
             className={cn(

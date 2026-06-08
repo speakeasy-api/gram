@@ -7,7 +7,7 @@ import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
-export function RegistryCacheSection() {
+export function RegistryCacheSection(): JSX.Element {
   const { data, isLoading } = useListMCPRegistries();
   const [clearingId, setClearingId] = useState<string | null>(null);
 

@@ -39,7 +39,7 @@ export function GrantDrawer({
   challengeIds: challengeIdsProp,
   onCreateNew,
   onResolved,
-}: GrantDrawerProps) {
+}: GrantDrawerProps): JSX.Element | null {
   const [step, setStep] = useState<Step>("choose");
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const queryClient = useQueryClient();

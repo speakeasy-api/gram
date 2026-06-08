@@ -50,14 +50,24 @@ describe("PublicMcpWarningDialog", () => {
 
   it("fires onConfirm when the destructive action is clicked", () => {
     const onConfirm = vi.fn();
-    render(<PublicMcpWarningDialog {...defaultProps} onConfirm={onConfirm} />);
+    render(
+      <PublicMcpWarningDialog
+        {...defaultProps}
+        onConfirm={() => void onConfirm()}
+      />,
+    );
     fireEvent.click(screen.getByRole("button", { name: /Make public anyway/ }));
     expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 
   it("fires onClose when Cancel is clicked", () => {
     const onClose = vi.fn();
-    render(<PublicMcpWarningDialog {...defaultProps} onClose={onClose} />);
+    render(
+      <PublicMcpWarningDialog
+        {...defaultProps}
+        onClose={() => void onClose()}
+      />,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });

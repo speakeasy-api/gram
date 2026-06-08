@@ -9,7 +9,7 @@ export function getTokenExpiry(token: string): number | null {
     if (parts.length !== 3) return null;
 
     // base64url → base64 → decode
-    let payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    let payload = parts[1]!.replace(/-/g, "+").replace(/_/g, "/");
     while (payload.length % 4) payload += "=";
 
     const json = atob(payload);
@@ -29,10 +29,7 @@ export function getTokenExpiry(token: string): number | null {
  * of expiry. Fails open (returns false) for non-JWT tokens or tokens
  * without an `exp` claim so they pass through unchanged.
  */
-export function isTokenExpired(
-  token: string,
-  bufferMs: number = 30_000,
-): boolean {
+export function isTokenExpired(token: string, bufferMs = 30_000): boolean {
   const exp = getTokenExpiry(token);
   if (exp === null) return false; // fail-open for non-JWT tokens
   return Date.now() >= exp * 1000 - bufferMs;

@@ -13,7 +13,7 @@ function shouldPreserveLocalStorageKey(key: string) {
   );
 }
 
-export function clearStorageForLogout() {
+export function clearStorageForLogout(): void {
   const local = typeof window !== "undefined" ? window.localStorage : undefined;
   const session =
     typeof window !== "undefined" ? window.sessionStorage : undefined;

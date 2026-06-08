@@ -22,7 +22,7 @@ export function RemoveRemoteMcpDialogContent({
   linkedMcpServers,
   onClose,
   onSuccess,
-}: RemoveRemoteMcpDialogContentProps) {
+}: RemoveRemoteMcpDialogContentProps): JSX.Element {
   const deleteSource = useDeleteRemoteMcpSource();
   // Require typing the URL to enable the destructive action — same shape the
   // existing RemoveSourceDialogContent uses, but keyed on the URL since remote
@@ -103,7 +103,7 @@ export function RemoveRemoteMcpDialogContent({
         <Button
           variant="destructive-primary"
           disabled={!inputMatches || deleteSource.isPending}
-          onClick={handleConfirm}
+          onClick={() => void handleConfirm()}
         >
           {deleteSource.isPending ? (
             <>

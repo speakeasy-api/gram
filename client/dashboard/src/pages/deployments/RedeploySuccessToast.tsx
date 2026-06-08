@@ -1,4 +1,8 @@
-const RedeploySuccessToast = ({ href }: { href: string | undefined }) => {
+const RedeploySuccessToast = ({
+  href,
+}: {
+  href: string | undefined;
+}): JSX.Element => {
   if (!href) return <p>Successfully redeployed!</p>;
 
   return (

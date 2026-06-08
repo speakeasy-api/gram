@@ -17,7 +17,7 @@ export function ProjectAvatar({
 }: {
   project: Pick<ProjectEntry, "id">;
   className?: string;
-}) {
+}): React.JSX.Element {
   const colors = getProjectColors(project.id);
   return (
     <div
@@ -29,7 +29,7 @@ export function ProjectAvatar({
   );
 }
 
-export function ProjectSelector() {
+export function ProjectSelector(): React.JSX.Element {
   const organization = useOrganization();
   const project = useProject();
   const client = useSdkClient();
@@ -105,7 +105,7 @@ export function ProjectSelector() {
           title="Create New Project"
           description="Create a new project to get started"
           onSubmit={() => {
-            createProject(newProjectName);
+            void createProject(newProjectName);
           }}
           inputs={[
             {

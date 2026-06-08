@@ -1,3 +1,4 @@
+import { ReactElement } from "react";
 import { useIsAdmin, useOrganization, useSession } from "@/contexts/Auth";
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
 import { Switch } from "./ui/switch";
@@ -200,7 +201,7 @@ const GROUP_ORDER: { key: ResourceType; label: string }[] = [
   { key: "mcp", label: "MCP" },
 ];
 
-export function RBACDevToolbar() {
+export function RBACDevToolbar(): ReactElement | null {
   const { session } = useSession();
   const isAdmin = useIsAdmin();
   const [hidden, setHidden] = useState(
@@ -388,7 +389,7 @@ function RBACDevToolbarInner({ onHide }: { onHide: () => void }) {
 
   const invalidate = useCallback(() => {
     setTimeout(() => {
-      queryClient.invalidateQueries();
+      void queryClient.invalidateQueries();
       window.dispatchEvent(new Event("rbac-override-change"));
     }, 0);
   }, [queryClient]);

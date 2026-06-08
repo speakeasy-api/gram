@@ -40,7 +40,7 @@ export const ScrollSyncPlane = ({
   scrollOffset,
   fragmentShader,
   customUniforms,
-}: CustomShaderProps) => {
+}: CustomShaderProps): JSX.Element => {
   const meshRef = useRef<THREE.Mesh>(null);
   const materialRef = useRef<THREE.ShaderMaterial>(null);
 

@@ -72,7 +72,7 @@ function relativeTime(nowMs: number, timeUnixNano: string): string {
 export function ConfirmTrafficStep({
   onComplete,
   onBack,
-}: ConfirmTrafficStepProps) {
+}: ConfirmTrafficStepProps): JSX.Element {
   // Wizard session starts now — only count events that arrive after configuration.
   const sessionStartNanoRef = useRef<string>(
     String(BigInt(Date.now()) * 1_000_000n),

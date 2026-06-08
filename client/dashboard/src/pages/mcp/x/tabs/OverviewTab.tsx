@@ -88,7 +88,7 @@ function OverviewRows({
   isLoadingEndpoints: boolean;
   onShowEndpoints: () => void;
   onShowAuthentication: () => void;
-}) {
+}): JSX.Element {
   const serverAddress = useServerAddressOverview(endpoints, isLoadingEndpoints);
   const authentication = useAuthenticationOverview(mcpServer);
   const source = useSourceOverview(mcpServer.remoteMcpServerId);

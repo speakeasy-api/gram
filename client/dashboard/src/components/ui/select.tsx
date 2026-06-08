@@ -8,13 +8,13 @@ import { cn } from "@/lib/utils";
 
 function Select({
   ...props
-}: React.ComponentProps<typeof SelectPrimitive.Root>) {
+}: React.ComponentProps<typeof SelectPrimitive.Root>): React.JSX.Element {
   return <SelectPrimitive.Root data-slot="select" {...props} />;
 }
 
 function SelectValue({
   ...props
-}: React.ComponentProps<typeof SelectPrimitive.Value>) {
+}: React.ComponentProps<typeof SelectPrimitive.Value>): React.JSX.Element {
   return <SelectPrimitive.Value data-slot="select-value" {...props} />;
 }
 
@@ -25,7 +25,7 @@ function SelectTrigger({
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Trigger> & {
   size?: "sm" | "default";
-}) {
+}): React.JSX.Element {
   return (
     <SelectPrimitive.Trigger
       data-slot="select-trigger"
@@ -49,7 +49,7 @@ function SelectContent({
   children,
   position = "popper",
   ...props
-}: React.ComponentProps<typeof SelectPrimitive.Content>) {
+}: React.ComponentProps<typeof SelectPrimitive.Content>): React.JSX.Element {
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Content
@@ -86,7 +86,7 @@ function SelectItem({
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Item> & {
   description?: string;
-}) {
+}): React.JSX.Element {
   return (
     <SelectPrimitive.Item
       data-slot="select-item"

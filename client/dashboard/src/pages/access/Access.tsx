@@ -28,7 +28,7 @@ const tabDisplayNames: Record<string, string> = {
   challenges: "Roles & Permissions",
 };
 
-export default function Access() {
+export default function Access(): JSX.Element {
   const location = useLocation();
   const telemetry = useTelemetry();
   const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
@@ -71,7 +71,7 @@ function AccessInner() {
   const memberCount = membersData?.members?.length;
 
   const pathSegments = location.pathname.split("/");
-  const lastSegment = pathSegments[pathSegments.length - 1];
+  const lastSegment = pathSegments[pathSegments.length - 1] ?? "";
   const currentTab = tabFromPath[lastSegment] || "roles";
 
   const basePath = pathSegments
@@ -79,7 +79,7 @@ function AccessInner() {
     .join("/");
 
   const handleTabChange = (value: string) => {
-    navigate(`${basePath}/${value}`);
+    void navigate(`${basePath}/${value}`);
   };
 
   return (

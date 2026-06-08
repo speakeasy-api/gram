@@ -35,7 +35,7 @@ function SidebarProvider({
   defaultOpen?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-}) {
+}): React.JSX.Element {
   const isMobile = useIsMobile();
   const [openMobile, setOpenMobile] = React.useState(false);
 
@@ -104,7 +104,7 @@ function SidebarProvider({
           {
             "--sidebar-width": SIDEBAR_WIDTH,
             "--sidebar-width-icon": SIDEBAR_WIDTH_ICON,
-            "--header-offset": "3.5rem",
+            "--header-offset": "0px",
             ...style,
           } as React.CSSProperties
         }
@@ -131,7 +131,7 @@ function Sidebar({
   side?: "left" | "right";
   variant?: "sidebar" | "floating" | "inset";
   collapsible?: "offcanvas" | "icon" | "none";
-}) {
+}): React.JSX.Element {
   const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
 
   if (collapsible === "none") {
@@ -226,7 +226,7 @@ function SidebarTrigger({
   className,
   onClick,
   ...props
-}: React.ComponentProps<typeof Button>) {
+}: React.ComponentProps<typeof Button>): React.JSX.Element {
   const { toggleSidebar } = useSidebar();
 
   return (
@@ -253,7 +253,10 @@ function SidebarTrigger({
   );
 }
 
-function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
+function SidebarInset({
+  className,
+  ...props
+}: React.ComponentProps<"main">): React.JSX.Element {
   return (
     <main
       data-slot="sidebar-inset"
@@ -267,7 +270,10 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
   );
 }
 
-function SidebarFooter({ className, ...props }: React.ComponentProps<"div">) {
+function SidebarFooter({
+  className,
+  ...props
+}: React.ComponentProps<"div">): React.JSX.Element {
   return (
     <div
       data-slot="sidebar-footer"
@@ -278,7 +284,24 @@ function SidebarFooter({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
-function SidebarContent({ className, ...props }: React.ComponentProps<"div">) {
+function SidebarHeader({
+  className,
+  ...props
+}: React.ComponentProps<"div">): React.JSX.Element {
+  return (
+    <div
+      data-slot="sidebar-header"
+      data-sidebar="header"
+      className={cn("flex flex-col gap-2 p-2", className)}
+      {...props}
+    />
+  );
+}
+
+function SidebarContent({
+  className,
+  ...props
+}: React.ComponentProps<"div">): React.JSX.Element {
   return (
     <div
       data-slot="sidebar-content"
@@ -292,7 +315,10 @@ function SidebarContent({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
-function SidebarMenu({ className, ...props }: React.ComponentProps<"ul">) {
+function SidebarMenu({
+  className,
+  ...props
+}: React.ComponentProps<"ul">): React.JSX.Element {
   return (
     <ul
       data-slot="sidebar-menu"
@@ -303,7 +329,10 @@ function SidebarMenu({ className, ...props }: React.ComponentProps<"ul">) {
   );
 }
 
-function SidebarMenuItem({ className, ...props }: React.ComponentProps<"li">) {
+function SidebarMenuItem({
+  className,
+  ...props
+}: React.ComponentProps<"li">): React.JSX.Element {
   return (
     <li
       data-slot="sidebar-menu-item"
@@ -318,6 +347,7 @@ export {
   Sidebar,
   SidebarContent,
   SidebarFooter,
+  SidebarHeader,
   SidebarInset,
   SidebarMenu,
   SidebarMenuItem,

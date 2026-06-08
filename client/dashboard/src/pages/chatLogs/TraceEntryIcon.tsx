@@ -12,7 +12,7 @@ export function TraceEntryIcon({
   className?: string;
   iconClassName?: string;
   disabled?: boolean;
-}) {
+}): JSX.Element {
   const entryMeta = ENTRY_TYPE_META[entryType];
 
   return (

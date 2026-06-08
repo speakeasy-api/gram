@@ -7,7 +7,7 @@ export type ProductTier =
   | "__deprecated__pro"
   | "enterprise";
 
-export const useProductTier = () => {
+export const useProductTier = (): ProductTier => {
   const session = useSession();
 
   const productTier = useMemo(() => {

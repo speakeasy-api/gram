@@ -23,7 +23,7 @@ export const ToolifyProvider = ({
   children,
 }: {
   children: React.ReactNode;
-}) => {
+}): JSX.Element => {
   const [state, setState] = useState(emptyCtx);
 
   return (
@@ -39,7 +39,7 @@ export const ToolifyDialog = ({
 }: {
   open: boolean;
   setOpen: (open: boolean) => void;
-}) => {
+}): JSX.Element => {
   const routes = useRoutes();
 
   const [inProgress, setInProgress] = useState(false);
@@ -61,8 +61,7 @@ export const ToolifyDialog = ({
     setInProgress(true);
 
     const res = await generateObject({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      model: model as any,
+      model,
       mode: "json",
       prompt: `
       You are a composite tool builder. You are given a purpose for a tool and a list of available tools.
@@ -185,7 +184,10 @@ export const ToolifyDialog = ({
             >
               Skip
             </Button>
-            <Button onClick={onSubmit} disabled={!purpose || inProgress}>
+            <Button
+              onClick={() => void onSubmit()}
+              disabled={!purpose || inProgress}
+            >
               {inProgress && <Spinner />}
               {inProgress ? "Generating..." : "Toolify"}
             </Button>

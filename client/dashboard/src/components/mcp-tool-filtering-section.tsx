@@ -44,7 +44,7 @@ export function MCPToolFilteringSection({
 }: {
   target: MCPToolFilteringTarget;
   className?: string;
-}) {
+}): JSX.Element {
   const queryClient = useQueryClient();
   const groupsQuery = useToolVariationGroups();
   const groups = groupsQuery.data?.groups ?? [];

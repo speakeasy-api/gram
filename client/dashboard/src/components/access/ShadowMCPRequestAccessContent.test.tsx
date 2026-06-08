@@ -94,6 +94,7 @@ describe("ShadowMCPRequestAccessContent", () => {
     Object.defineProperty(window, "location", {
       configurable: true,
       value: {
+        // oxlint-disable-next-line typescript/no-misused-spread -- jsdom Location is plain enough for tests
         ...location,
         pathname: "/shadow-mcp/request",
         hash: "#request_token=smar1.secret-token",

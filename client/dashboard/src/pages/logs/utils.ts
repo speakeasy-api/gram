@@ -51,6 +51,7 @@ export function getSeverityColorClass(severity?: string): string {
     case "DEBUG":
       return "text-muted-foreground";
     case "INFO":
+    case undefined:
     default:
       return "text-foreground";
   }

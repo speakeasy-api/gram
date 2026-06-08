@@ -33,7 +33,7 @@ export function AssistantDraftProvider({
   initialAssistantId: string | null;
   onAssistantCreated?: (id: string) => void;
   children: ReactNode;
-}) {
+}): JSX.Element {
   const queryClient = useQueryClient();
   const [assistantId, setAssistantIdState] = useState<string | null>(
     initialAssistantId,
@@ -78,12 +78,12 @@ export function AssistantDraftProvider({
   );
 
   const invalidateAll = useCallback(() => {
-    invalidateAllAssistantsGet(queryClient);
-    invalidateAllAssistantsList(queryClient);
-    invalidateAllListEnvironments(queryClient);
-    invalidateAllListToolsets(queryClient);
-    invalidateAllTriggers(queryClient);
-    invalidateAllTrigger(queryClient);
+    void invalidateAllAssistantsGet(queryClient);
+    void invalidateAllAssistantsList(queryClient);
+    void invalidateAllListEnvironments(queryClient);
+    void invalidateAllListToolsets(queryClient);
+    void invalidateAllTriggers(queryClient);
+    void invalidateAllTrigger(queryClient);
   }, [queryClient]);
 
   const registerPending = useCallback(

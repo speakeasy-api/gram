@@ -347,7 +347,7 @@ function IdentitySection({
   );
 }
 
-export default function OrgIdentity() {
+export default function OrgIdentity(): JSX.Element {
   return (
     <Page>
       <Page.Header>

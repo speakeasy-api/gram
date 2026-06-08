@@ -12,7 +12,7 @@ import { AIIntegrationsSection } from "./AIIntegrationsSection";
 import { OtelForwardingSection } from "./OtelForwardingSection";
 import { useProductFeatures } from "@gram/client/react-query";
 
-export default function OrgLogs() {
+export default function OrgLogs(): JSX.Element {
   return (
     <Page>
       <Page.Header>

@@ -17,7 +17,7 @@ export const AgentifyProvider = ({
   children,
 }: {
   children: React.ReactNode;
-}) => {
+}): JSX.Element => {
   const project = useProject();
   const messages = useChatMessages();
   const telemetry = useTelemetry();
@@ -65,8 +65,7 @@ export const AgentifyProvider = ({
     const example = await fetch(exampleUrl!).then((res) => res.text());
 
     const result = await generateObject({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      model: model as any,
+      model,
       mode: "json",
       prompt: `
 <instructions>

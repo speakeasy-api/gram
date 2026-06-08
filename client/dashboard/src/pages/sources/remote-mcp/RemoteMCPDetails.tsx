@@ -91,7 +91,7 @@ function validateRemoteMcpUrl(value: string): string | null {
   return null;
 }
 
-export default function RemoteMCPDetails() {
+export default function RemoteMCPDetails(): JSX.Element {
   const { sourceSlug } = useParams<{ sourceSlug: string }>();
   const routes = useRoutes();
   const idOrSlug = sourceSlug ?? "";
@@ -464,7 +464,7 @@ function McpServersEmptyState({
         <Button
           variant="primary"
           disabled={!remoteMcpServer || link.isPending}
-          onClick={handleAdd}
+          onClick={() => void handleAdd()}
         >
           <Button.LeftIcon>
             {link.isPending ? (
@@ -597,7 +597,7 @@ function NameSection({
             <Button
               variant="primary"
               disabled={saveDisabled}
-              onClick={handleSave}
+              onClick={() => void handleSave()}
             >
               {update.isPending ? (
                 <>
@@ -667,7 +667,7 @@ function UrlSection({
       // to the Sources index. Replace (not push) avoids a dead history entry
       // pointing at the now-stale slug.
       const nextParam = remoteMcpRouteParam(updated);
-      navigate(routes.sources.source.href("remotemcp", nextParam), {
+      void navigate(routes.sources.source.href("remotemcp", nextParam), {
         replace: true,
       });
       // Invalidate every consumer of the remote MCP server: the per-id detail
@@ -738,7 +738,7 @@ function UrlSection({
             <Button
               variant="primary"
               disabled={saveDisabled}
-              onClick={handleSave}
+              onClick={() => void handleSave()}
             >
               {update.isPending ? (
                 <>
@@ -802,7 +802,7 @@ function DangerZoneSection({
             onClose={() => setDeleteDialogOpen(false)}
             onSuccess={() => {
               setDeleteDialogOpen(false);
-              navigate(routes.sources.href());
+              void navigate(routes.sources.href());
             }}
           />
         </Dialog.Content>

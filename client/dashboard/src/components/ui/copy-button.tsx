@@ -19,14 +19,14 @@ export const CopyButton = ({
   tooltip?: string;
   onCopy?: () => void; // Extra callback to do something when the code is copied
   icon?: LucideIcon;
-}) => {
+}): JSX.Element => {
   const [recentlyCopied, setRecentlyCopied] = useState(false);
 
   const handleCopy = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
     e.preventDefault();
 
-    navigator.clipboard.writeText(text);
+    void navigator.clipboard.writeText(text);
     setRecentlyCopied(true);
     setTimeout(() => {
       setRecentlyCopied(false);

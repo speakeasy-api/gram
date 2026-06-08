@@ -3847,7 +3847,8 @@ func unmarshalPluginServerResponseBodyToPluginsPluginServer(v *PluginServerRespo
 	}
 	res := &plugins.PluginServer{
 		ID:          *v.ID,
-		ToolsetID:   *v.ToolsetID,
+		ToolsetID:   v.ToolsetID,
+		McpServerID: v.McpServerID,
 		DisplayName: *v.DisplayName,
 		Policy:      *v.Policy,
 		SortOrder:   *v.SortOrder,

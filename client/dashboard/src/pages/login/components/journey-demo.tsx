@@ -25,7 +25,7 @@ function MovingDotBackground() {
   );
 }
 
-export function JourneyDemo() {
+export function JourneyDemo(): JSX.Element {
   return (
     <div className="login-pane relative hidden min-h-screen w-full flex-col items-center justify-center overflow-y-auto bg-slate-50 md:flex md:w-1/2">
       {/* Moving dot background — same pattern as MCP cards */}

@@ -7,7 +7,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { PromptEditor } from "./PromptEditor";
 
-export default function NewPromptPage() {
+export default function NewPromptPage(): JSX.Element {
   const queryClient = useQueryClient();
   const routes = useRoutes();
   const {
@@ -19,7 +19,7 @@ export default function NewPromptPage() {
       routes.prompts.goTo();
     },
     onSettled: () => {
-      invalidateAllTemplates(queryClient);
+      void invalidateAllTemplates(queryClient);
     },
   });
 

@@ -6,17 +6,17 @@ function RedirectPreservingLocation({ to }: { to: string }) {
   return <Navigate to={`${to}${location.search}${location.hash}`} replace />;
 }
 
-export function RedirectToInsightsTools() {
+export function RedirectToInsightsTools(): JSX.Element {
   const routes = useRoutes();
   return <RedirectPreservingLocation to={routes.insights.tools.href()} />;
 }
 
-export function RedirectToLogTools() {
+export function RedirectToLogTools(): JSX.Element {
   const routes = useRoutes();
   return <RedirectPreservingLocation to={routes.logs.tools.href()} />;
 }
 
-export function RedirectToLogAgents() {
+export function RedirectToLogAgents(): JSX.Element {
   const routes = useRoutes();
   return <RedirectPreservingLocation to={routes.logs.agents.href()} />;
 }

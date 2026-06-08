@@ -130,7 +130,7 @@ function Calendar({
   minDate,
   maxDate,
   className,
-}: CalendarProps) {
+}: CalendarProps): React.JSX.Element {
   const [viewDate, setViewDate] = React.useState(() => {
     if (selected.start) return new Date(selected.start);
     return new Date();

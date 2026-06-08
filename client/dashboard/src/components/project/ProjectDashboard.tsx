@@ -38,7 +38,7 @@ import {
 import { ActivityTimelineCard } from "./ActivityTimelineCard";
 import { ProjectOnboardingBanner } from "./ProjectOnboarding";
 
-export function ProjectDashboard() {
+export function ProjectDashboard(): JSX.Element {
   const { projectSlug } = useSlugs();
   const project = useProject();
   const routes = useRoutes();

@@ -103,7 +103,7 @@ export function PlaygroundMcpAppsProvider({
   mcpUrl: string;
   theme: "dark" | "light";
   toolset: Toolset | undefined;
-}>) {
+}>): JSX.Element {
   const value = useMemo<PlaygroundMcpAppsValue>(() => {
     const toolBindings = new Map<string, McpAppToolBinding>();
     for (const tool of toolset?.rawTools ?? []) {
@@ -190,7 +190,9 @@ function PlaygroundMcpAppRenderer({
       "playground-mcp-app-resource",
       mcpUrl,
       tool.resourceUri,
-      JSON.stringify(Object.entries(headers ?? {}).sort()),
+      JSON.stringify(
+        Object.entries(headers ?? {}).sort(([a], [b]) => a.localeCompare(b)),
+      ),
     ],
     queryFn: async () => {
       if (!headers) {
@@ -363,9 +365,12 @@ function McpAppFrame({
       }
     };
 
-    window.addEventListener("message", handleMessage);
+    const listener = (event: MessageEvent): void => {
+      void handleMessage(event);
+    };
+    window.addEventListener("message", listener);
     return () => {
-      window.removeEventListener("message", handleMessage);
+      window.removeEventListener("message", listener);
     };
   }, [theme, tool, transport, uiMeta]);
 

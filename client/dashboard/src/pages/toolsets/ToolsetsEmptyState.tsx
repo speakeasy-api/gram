@@ -2,7 +2,11 @@ import { cn } from "@/lib/utils";
 import { motion } from "motion/react";
 import { useState } from "react";
 
-export function ToolsetsGraphic({ className }: { className?: string }) {
+export function ToolsetsGraphic({
+  className,
+}: {
+  className?: string;
+}): JSX.Element {
   const [isHovered, setIsHovered] = useState(false);
 
   const toolsets = [

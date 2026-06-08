@@ -15,12 +15,14 @@ export function normalizeRuleMatchBreadth(
       return "full_url";
     case "url_host":
       return "url_host";
+    case undefined:
+      return "full_url";
     default:
       return "full_url";
   }
 }
 
-export function getMatchBreadthLabel(matchBreadth: string | undefined) {
+export function getMatchBreadthLabel(matchBreadth: string | undefined): string {
   switch (normalizeRuleMatchBreadth(matchBreadth)) {
     case "full_url":
       return "Full URL";
@@ -29,15 +31,15 @@ export function getMatchBreadthLabel(matchBreadth: string | undefined) {
   }
 }
 
-export function getDispositionLabel(disposition: ShadowMCPDisposition) {
+export function getDispositionLabel(disposition: ShadowMCPDisposition): string {
   return disposition === "allowed" ? "Allowed" : "Denied";
 }
 
-export function getAccessScopeLabel(accessScope: ShadowMCPAccessScope) {
+export function getAccessScopeLabel(accessScope: ShadowMCPAccessScope): string {
   return accessScope === "organization" ? "Organization" : "Project";
 }
 
-export function getResourceTypeLabel(resourceType: string | undefined) {
+export function getResourceTypeLabel(resourceType: string | undefined): string {
   switch (resourceType) {
     case "shadow_mcp":
       return "Shadow MCP";
@@ -50,7 +52,7 @@ export function getResourceTypeLabel(resourceType: string | undefined) {
 
 export function getRequestStatusLabel(
   status: ShadowMCPApprovalRequest["status"],
-) {
+): string {
   switch (status) {
     case "requested":
       return "Requested";
@@ -61,7 +63,7 @@ export function getRequestStatusLabel(
   }
 }
 
-export function formatShortDate(value: Date | string | undefined) {
+export function formatShortDate(value: Date | string | undefined): string {
   if (!value) return "Never";
 
   return new Intl.DateTimeFormat(undefined, {
@@ -72,7 +74,9 @@ export function formatShortDate(value: Date | string | undefined) {
   }).format(new Date(value));
 }
 
-export function getRequestDisplayName(request: ShadowMCPApprovalRequest) {
+export function getRequestDisplayName(
+  request: ShadowMCPApprovalRequest,
+): string {
   return (
     request.observedName ??
     request.observedServerIdentity ??
@@ -82,7 +86,7 @@ export function getRequestDisplayName(request: ShadowMCPApprovalRequest) {
   );
 }
 
-export function getRuleDisplayName(rule: ShadowMCPAccessRule) {
+export function getRuleDisplayName(rule: ShadowMCPAccessRule): string {
   return (
     rule.displayName ||
     rule.observedServerIdentity ||
@@ -91,7 +95,9 @@ export function getRuleDisplayName(rule: ShadowMCPAccessRule) {
   );
 }
 
-export function getRequestServerDetail(request: ShadowMCPApprovalRequest) {
+export function getRequestServerDetail(
+  request: ShadowMCPApprovalRequest,
+): string | undefined {
   if (request.observedFullUrl) return request.observedFullUrl;
   if (request.observedUrlHost) return request.observedUrlHost;
   if (request.observedServerIdentity) {
@@ -100,7 +106,9 @@ export function getRequestServerDetail(request: ShadowMCPApprovalRequest) {
   return undefined;
 }
 
-export function getRuleServerDetail(rule: ShadowMCPAccessRule) {
+export function getRuleServerDetail(
+  rule: ShadowMCPAccessRule,
+): string | undefined {
   if (rule.matchValue) {
     return `${getMatchBreadthLabel(rule.matchBreadth)}: ${rule.matchValue}`;
   }
@@ -112,7 +120,7 @@ export function getRuleServerDetail(rule: ShadowMCPAccessRule) {
   return undefined;
 }
 
-export function getRequesterLabel(request: ShadowMCPApprovalRequest) {
+export function getRequesterLabel(request: ShadowMCPApprovalRequest): string {
   return (
     request.requesterDisplayName ??
     request.requesterEmail ??
@@ -121,7 +129,9 @@ export function getRequesterLabel(request: ShadowMCPApprovalRequest) {
   );
 }
 
-export function getRequesterDetail(request: ShadowMCPApprovalRequest) {
+export function getRequesterDetail(
+  request: ShadowMCPApprovalRequest,
+): string | undefined {
   if (request.requesterDisplayName && request.requesterEmail) {
     return request.requesterEmail;
   }
@@ -146,7 +156,7 @@ export function getMatchValue(
     "observedFullUrl" | "observedUrlHost" | "observedServerIdentity"
   >,
   matchBreadth: ShadowMCPMatchBreadth,
-) {
+): string {
   switch (matchBreadth) {
     case "full_url":
       return source.observedFullUrl ?? "";
