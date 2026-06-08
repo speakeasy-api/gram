@@ -1,7 +1,8 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { CardContextMenu } from "@/components/card-context-menu";
 import { Card, Cards } from "@/components/ui/card";
-import { MoreActions } from "@/components/ui/more-actions";
+import { Action, MoreActions } from "@/components/ui/more-actions";
 import { UpdatedAt } from "@/components/updated-at";
 import { useRoutes } from "@/routes";
 import { PromptTemplate } from "@gram/client/models/components";
@@ -90,45 +91,45 @@ export function PromptTemplateCard({
     },
   });
 
+  const actions: Action[] = [
+    {
+      label: deleteLabel ?? "Delete",
+      destructive: true,
+      icon: "trash",
+      onClick: () => {
+        if (onDelete) {
+          onDelete();
+        } else if (
+          confirm("Are you sure you want to delete this prompt template?")
+        ) {
+          deleteTemplate.mutate({ request: { name: template.name } });
+        }
+      },
+    },
+  ];
+
   return (
     <routes.prompts.prompt.Link
       params={[template.name]}
       className="hover:no-underline"
     >
-      <Card>
-        <Card.Header>
-          <Card.Title className="normal-case">{template.name}</Card.Title>
-          <MoreActions
-            actions={[
-              {
-                label: deleteLabel ?? "Delete",
-                destructive: true,
-                icon: "trash",
-                onClick: () => {
-                  if (onDelete) {
-                    onDelete();
-                  } else if (
-                    confirm(
-                      "Are you sure you want to delete this prompt template?",
-                    )
-                  ) {
-                    deleteTemplate.mutate({ request: { name: template.name } });
-                  }
-                },
-              },
-            ]}
-          />
-        </Card.Header>
-        <Card.Content>
-          <Card.Description>
-            {template.description || "No description"}
-          </Card.Description>
-        </Card.Content>
-        <Card.Footer>
-          <div />
-          <UpdatedAt date={new Date(template.updatedAt)} />
-        </Card.Footer>
-      </Card>
+      <CardContextMenu actions={actions}>
+        <Card>
+          <Card.Header>
+            <Card.Title className="normal-case">{template.name}</Card.Title>
+            <MoreActions actions={actions} />
+          </Card.Header>
+          <Card.Content>
+            <Card.Description>
+              {template.description || "No description"}
+            </Card.Description>
+          </Card.Content>
+          <Card.Footer>
+            <div />
+            <UpdatedAt date={new Date(template.updatedAt)} />
+          </Card.Footer>
+        </Card>
+      </CardContextMenu>
     </routes.prompts.prompt.Link>
   );
 }
