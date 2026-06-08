@@ -67,6 +67,17 @@ type Service interface {
 	ApproveShadowMCP(context.Context, *ApproveShadowMCPPayload) (res *types.ShadowMCPApproval, err error)
 	// Remove a previously-approved shadow-MCP server for a policy.
 	RevokeShadowMCPApproval(context.Context, *RevokeShadowMCPApprovalPayload) (err error)
+	// Create or refresh a risk policy bypass request from a signed request URL
+	// token.
+	CreateRiskPolicyBypassRequest(context.Context, *CreateRiskPolicyBypassRequestPayload) (res *RiskPolicyBypassRequest, err error)
+	// List current risk policy bypass request workflow records.
+	ListRiskPolicyBypassRequests(context.Context, *ListRiskPolicyBypassRequestsPayload) (res *ListRiskPolicyBypassRequestsResult, err error)
+	// Approve a risk policy bypass request for the requested policy target.
+	ApproveRiskPolicyBypassRequest(context.Context, *ApproveRiskPolicyBypassRequestPayload) (res *RiskPolicyBypassRequest, err error)
+	// Deny a risk policy bypass request, updating workflow state.
+	DenyRiskPolicyBypassRequest(context.Context, *DenyRiskPolicyBypassRequestPayload) (res *RiskPolicyBypassRequest, err error)
+	// Revoke a previously approved risk policy bypass request.
+	RevokeRiskPolicyBypassRequest(context.Context, *RevokeRiskPolicyBypassRequestPayload) (res *RiskPolicyBypassRequest, err error)
 	// Manually trigger risk analysis for a policy, starting or signaling the drain
 	// workflow. Defaults to the most recent 100 unanalyzed messages; pass
 	// `limit=0` to backfill every unanalyzed message.
@@ -123,7 +134,17 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [29]string{"createRiskPolicy", "listRiskPolicies", "getRiskCapabilities", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "listShadowMCPApprovals", "approveShadowMCP", "revokeShadowMCPApproval", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule"}
+var MethodNames = [34]string{"createRiskPolicy", "listRiskPolicies", "getRiskCapabilities", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "listShadowMCPApprovals", "approveShadowMCP", "revokeShadowMCPApproval", "createRiskPolicyBypassRequest", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule"}
+
+// ApproveRiskPolicyBypassRequestPayload is the payload type of the risk
+// service approveRiskPolicyBypassRequest method.
+type ApproveRiskPolicyBypassRequestPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The bypass request ID.
+	ID string
+}
 
 // ApproveShadowMCPPayload is the payload type of the risk service
 // approveShadowMCP method.
@@ -176,6 +197,14 @@ type CreateRiskExclusionPayload struct {
 	SourceFilter string
 	// Whether the exclusion is active.
 	Enabled bool
+}
+
+// CreateRiskPolicyBypassRequestPayload is the payload type of the risk service
+// createRiskPolicyBypassRequest method.
+type CreateRiskPolicyBypassRequestPayload struct {
+	SessionToken *string
+	// Signed request token generated when a risk policy blocks an action.
+	RequestToken string
 }
 
 // CreateRiskPolicyPayload is the payload type of the risk service
@@ -239,6 +268,16 @@ type DeleteRiskPolicyPayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
 	// The policy ID.
+	ID string
+}
+
+// DenyRiskPolicyBypassRequestPayload is the payload type of the risk service
+// denyRiskPolicyBypassRequest method.
+type DenyRiskPolicyBypassRequestPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The bypass request ID.
 	ID string
 }
 
@@ -379,6 +418,25 @@ type ListRiskPoliciesResult struct {
 	Policies []*types.RiskPolicy
 }
 
+// ListRiskPolicyBypassRequestsPayload is the payload type of the risk service
+// listRiskPolicyBypassRequests method.
+type ListRiskPolicyBypassRequestsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Optional risk policy ID filter.
+	PolicyID *string
+	// Optional request status filter.
+	Status *string
+}
+
+// ListRiskPolicyBypassRequestsResult is the result type of the risk service
+// listRiskPolicyBypassRequests method.
+type ListRiskPolicyBypassRequestsResult struct {
+	// Current risk policy bypass request records.
+	Requests []*RiskPolicyBypassRequest
+}
+
 // ListRiskResultsByChatPayload is the payload type of the risk service
 // listRiskResultsByChat method.
 type ListRiskResultsByChatPayload struct {
@@ -503,6 +561,16 @@ type ListShadowMCPApprovalsResult struct {
 	Approvals []*types.ShadowMCPApproval
 }
 
+// RevokeRiskPolicyBypassRequestPayload is the payload type of the risk service
+// revokeRiskPolicyBypassRequest method.
+type RevokeRiskPolicyBypassRequestPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The bypass request ID.
+	ID string
+}
+
 // RevokeShadowMCPApprovalPayload is the payload type of the risk service
 // revokeShadowMCPApproval method.
 type RevokeShadowMCPApprovalPayload struct {
@@ -600,6 +668,41 @@ type RiskOverviewUser struct {
 	ExternalUserID string
 	// Finding count for this user.
 	Findings int64
+}
+
+// RiskPolicyBypassRequest is the result type of the risk service
+// createRiskPolicyBypassRequest method.
+type RiskPolicyBypassRequest struct {
+	// The bypass request ID.
+	ID string
+	// The risk policy ID.
+	PolicyID string
+	// Optional target namespace for the request, such as server_url.
+	TargetKind *string
+	// Optional display label for the target.
+	TargetLabel *string
+	// Canonical key for the target.
+	TargetKey *string
+	// Selector dimensions for the request target.
+	TargetDimensions map[string]string
+	// Requester user ID.
+	RequesterUserID string
+	// Requester email when known.
+	RequesterEmail *string
+	// Requester note.
+	Note *string
+	// Current request status.
+	Status string
+	// User ID that approved, denied, or revoked the request.
+	DecidedBy *string
+	// Principal URNs granted when approved.
+	GrantedPrincipalUrns []string
+	// Decision timestamp.
+	DecidedAt *string
+	// Creation timestamp.
+	CreatedAt string
+	// Last update timestamp.
+	UpdatedAt string
 }
 
 type RiskRuleBreakdownEntry struct {

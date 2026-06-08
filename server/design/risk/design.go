@@ -593,6 +593,153 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "delete")
 	})
 
+	Method("createRiskPolicyBypassRequest", func() {
+		Description("Create or refresh a risk policy bypass request from a signed request URL token.")
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("request_token", String, "Signed request token generated when a risk policy blocks an action.")
+			Required("request_token")
+		})
+
+		Result(RiskPolicyBypassRequest)
+
+		HTTP(func() {
+			POST("/rpc/risk.createPolicyBypassRequest")
+			security.SessionHeader()
+			Response(StatusCreated)
+		})
+
+		Meta("openapi:operationId", "createRiskPolicyBypassRequest")
+		Meta("openapi:extension:x-speakeasy-group", "risk.policyBypassRequests")
+		Meta("openapi:extension:x-speakeasy-name-override", "create")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCreatePolicyBypassRequest", "type": "mutation"}`)
+	})
+
+	Method("listRiskPolicyBypassRequests", func() {
+		Description("List current risk policy bypass request workflow records.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("policy_id", String, "Optional risk policy ID filter.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("status", String, "Optional request status filter.", func() {
+				Enum("requested", "approved", "denied", "revoked")
+			})
+		})
+
+		Result(ListRiskPolicyBypassRequestsResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.listPolicyBypassRequests")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("policy_id")
+			Param("status")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listRiskPolicyBypassRequests")
+		Meta("openapi:extension:x-speakeasy-group", "risk.policyBypassRequests")
+		Meta("openapi:extension:x-speakeasy-name-override", "list")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListPolicyBypassRequests"}`)
+	})
+
+	Method("approveRiskPolicyBypassRequest", func() {
+		Description("Approve a risk policy bypass request for the requested policy target.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The bypass request ID.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+		})
+
+		Result(RiskPolicyBypassRequest)
+
+		HTTP(func() {
+			POST("/rpc/risk.approvePolicyBypassRequest")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Body(RiskIDRequestBody)
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "approveRiskPolicyBypassRequest")
+		Meta("openapi:extension:x-speakeasy-group", "risk.policyBypassRequests")
+		Meta("openapi:extension:x-speakeasy-name-override", "approve")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskApprovePolicyBypassRequest", "type": "mutation"}`)
+	})
+
+	Method("denyRiskPolicyBypassRequest", func() {
+		Description("Deny a risk policy bypass request, updating workflow state.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The bypass request ID.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+		})
+
+		Result(RiskPolicyBypassRequest)
+
+		HTTP(func() {
+			POST("/rpc/risk.denyPolicyBypassRequest")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Body(RiskIDRequestBody)
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "denyRiskPolicyBypassRequest")
+		Meta("openapi:extension:x-speakeasy-group", "risk.policyBypassRequests")
+		Meta("openapi:extension:x-speakeasy-name-override", "deny")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskDenyPolicyBypassRequest", "type": "mutation"}`)
+	})
+
+	Method("revokeRiskPolicyBypassRequest", func() {
+		Description("Revoke a previously approved risk policy bypass request.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The bypass request ID.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+		})
+
+		Result(RiskPolicyBypassRequest)
+
+		HTTP(func() {
+			POST("/rpc/risk.revokePolicyBypassRequest")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Body(RiskIDRequestBody)
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "revokeRiskPolicyBypassRequest")
+		Meta("openapi:extension:x-speakeasy-group", "risk.policyBypassRequests")
+		Meta("openapi:extension:x-speakeasy-name-override", "revoke")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskRevokePolicyBypassRequest", "type": "mutation"}`)
+	})
+
 	Method("triggerRiskAnalysis", func() {
 		Description("Manually trigger risk analysis for a policy, starting or signaling the drain workflow. Defaults to the most recent 100 unanalyzed messages; pass `limit=0` to backfill every unanalyzed message.")
 
@@ -765,6 +912,7 @@ var _ = Service("risk", func() {
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
+			Body(RiskIDRequestBody)
 			Response(StatusOK)
 		})
 
@@ -1153,4 +1301,49 @@ var RiskOverviewTimeSeriesFinding = Type("RiskOverviewTimeSeriesFinding", func()
 var ListShadowMCPApprovalsResult = Type("ListShadowMCPApprovalsResult", func() {
 	Attribute("approvals", ArrayOf(shared.ShadowMCPApproval), "The approved shadow-MCP servers for the policy (URL- or command-keyed).")
 	Required("approvals")
+})
+
+var RiskPolicyBypassRequest = Type("RiskPolicyBypassRequest", func() {
+	Attribute("id", String, "The bypass request ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("policy_id", String, "The risk policy ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("target_kind", String, "Optional target namespace for the request, such as server_url.")
+	Attribute("target_label", String, "Optional display label for the target.")
+	Attribute("target_key", String, "Canonical key for the target.")
+	Attribute("target_dimensions", MapOf(String, String), "Selector dimensions for the request target.")
+	Attribute("requester_user_id", String, "Requester user ID.")
+	Attribute("requester_email", String, "Requester email when known.")
+	Attribute("note", String, "Requester note.")
+	Attribute("status", String, "Current request status.", func() {
+		Enum("requested", "approved", "denied", "revoked")
+	})
+	Attribute("decided_by", String, "User ID that approved, denied, or revoked the request.")
+	Attribute("granted_principal_urns", ArrayOf(String), "Principal URNs granted when approved.")
+	Attribute("decided_at", String, "Decision timestamp.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("created_at", String, "Creation timestamp.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, "Last update timestamp.", func() {
+		Format(FormatDateTime)
+	})
+	Required("id", "policy_id", "target_dimensions", "requester_user_id", "status", "granted_principal_urns", "created_at", "updated_at")
+})
+
+var RiskIDRequestBody = Type("RiskIDRequestBody", func() {
+	Meta("openapi:typename", "RiskIDRequestBody")
+
+	Attribute("id", String, "The resource ID.", func() {
+		Format(FormatUUID)
+	})
+	Required("id")
+})
+
+var ListRiskPolicyBypassRequestsResult = Type("ListRiskPolicyBypassRequestsResult", func() {
+	Attribute("requests", ArrayOf(RiskPolicyBypassRequest), "Current risk policy bypass request records.")
+	Required("requests")
 })
