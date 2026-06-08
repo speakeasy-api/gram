@@ -15,6 +15,11 @@ export interface ElementsParameters {
    * Use this to override specific config values per-story.
    */
   config?: Partial<ElementsConfig>;
+  /**
+   * When true, the global ElementsProvider decorator is skipped — useful for
+   * stories that render their own provider (e.g. `<Replay>`).
+   */
+  skipProvider?: boolean;
 }
 
 declare module "storybook/internal/csf" {

@@ -49,12 +49,12 @@ VALUES (
   $4,
   $5
 )
-RETURNING id, plugin_id, toolset_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
+RETURNING id, plugin_id, toolset_id, mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
 `
 
 type AddPluginServerParams struct {
 	PluginID    uuid.UUID
-	ToolsetID   uuid.UUID
+	ToolsetID   uuid.NullUUID
 	DisplayName string
 	Policy      string
 	SortOrder   int32
@@ -73,6 +73,7 @@ func (q *Queries) AddPluginServer(ctx context.Context, arg AddPluginServerParams
 		&i.ID,
 		&i.PluginID,
 		&i.ToolsetID,
+		&i.McpServerID,
 		&i.DisplayName,
 		&i.Policy,
 		&i.SortOrder,
@@ -345,7 +346,7 @@ func (q *Queries) ListPluginPublishCandidates(ctx context.Context, arg ListPlugi
 }
 
 const listPluginServers = `-- name: ListPluginServers :many
-SELECT id, plugin_id, toolset_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
+SELECT id, plugin_id, toolset_id, mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
 FROM plugin_servers
 WHERE plugin_id = $1
   AND deleted IS FALSE
@@ -365,6 +366,7 @@ func (q *Queries) ListPluginServers(ctx context.Context, pluginID uuid.UUID) ([]
 			&i.ID,
 			&i.PluginID,
 			&i.ToolsetID,
+			&i.McpServerID,
 			&i.DisplayName,
 			&i.Policy,
 			&i.SortOrder,
@@ -481,7 +483,7 @@ type ListPluginsWithServersForProjectRow struct {
 	ServerDisplayName   string
 	ServerPolicy        string
 	ServerSortOrder     int32
-	ToolsetID           uuid.UUID
+	ToolsetID           uuid.NullUUID
 	ToolsetMcpSlug      pgtype.Text
 	ToolsetIsPublic     bool
 	ToolsetIsOauth      bool
@@ -626,7 +628,7 @@ SET display_name = $1,
 WHERE id = $4
   AND plugin_id = $5
   AND deleted IS FALSE
-RETURNING id, plugin_id, toolset_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
+RETURNING id, plugin_id, toolset_id, mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdatePluginServerParams struct {
@@ -650,6 +652,7 @@ func (q *Queries) UpdatePluginServer(ctx context.Context, arg UpdatePluginServer
 		&i.ID,
 		&i.PluginID,
 		&i.ToolsetID,
+		&i.McpServerID,
 		&i.DisplayName,
 		&i.Policy,
 		&i.SortOrder,

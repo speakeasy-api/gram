@@ -129,14 +129,14 @@ function RBACManagementSection() {
 
   const enableMutation = useEnableRBACMutation({
     onSuccess: () => {
-      invalidateAllRbacStatus(queryClient);
+      void invalidateAllRbacStatus(queryClient);
       setConfirmAction(null);
     },
   });
 
   const disableMutation = useDisableRBACMutation({
     onSuccess: () => {
-      invalidateAllRbacStatus(queryClient);
+      void invalidateAllRbacStatus(queryClient);
       setConfirmAction(null);
     },
   });
@@ -272,7 +272,7 @@ function ProductFeaturesTab() {
     variables,
   } = useFeaturesSetMutation({
     onSuccess: () => {
-      invalidateAllProductFeatures(queryClient);
+      void invalidateAllProductFeatures(queryClient);
     },
   });
 
@@ -467,7 +467,7 @@ function OnboardingTab() {
   );
 }
 
-export default function OrgAdminSettings() {
+export default function OrgAdminSettings(): JSX.Element {
   const isAdmin = useIsAdmin();
 
   if (!isAdmin) {
@@ -495,7 +495,7 @@ export default function OrgAdminSettings() {
   );
 }
 
-export function OrgAdminSettingsInner() {
+function OrgAdminSettingsInner() {
   const organization = useOrganization();
   const client = useSdkClient();
 
@@ -558,17 +558,19 @@ export function OrgAdminSettingsInner() {
             </Type>
           </Stack>
           <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              const formData = new FormData(e.currentTarget);
-              const val = formData.get("gram_admin_override");
-              if (typeof val !== "string" || !val.trim()) {
-                return;
-              }
+            onSubmit={(e) => {
+              void (async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                const val = formData.get("gram_admin_override");
+                if (typeof val !== "string" || !val.trim()) {
+                  return;
+                }
 
-              await client.auth.logout();
-              document.cookie = `gram_admin_override=${val.trim()}; path=/; max-age=31536000;`;
-              window.location.href = "/login";
+                await client.auth.logout();
+                document.cookie = `gram_admin_override=${val.trim()}; path=/; max-age=31536000;`;
+                window.location.href = "/login";
+              })(e);
             }}
             className="ml-6 flex max-w-md gap-2"
           >
@@ -582,10 +584,12 @@ export function OrgAdminSettingsInner() {
             <Button
               variant="secondary"
               type="button"
-              onClick={async () => {
-                document.cookie = `gram_admin_override=; path=/; max-age=0;`;
-                await client.auth.logout();
-                window.location.href = "/login";
+              onClick={() => {
+                void (async () => {
+                  document.cookie = `gram_admin_override=; path=/; max-age=0;`;
+                  await client.auth.logout();
+                  window.location.href = "/login";
+                })();
               }}
             >
               Clear override

@@ -38,10 +38,7 @@ export type PulseMCPServer = Omit<ExternalMCPServer, "meta"> & {
   meta: ServerMeta;
 };
 
-export function useInfiniteListMCPCatalog(
-  search?: string,
-  registryId?: string,
-) {
+function useInfiniteListMCPCatalogImpl(search?: string, registryId?: string) {
   const client = useSdkClient();
   const [debouncedSearch, setDebouncedSearch] = useState(search);
 
@@ -75,4 +72,11 @@ export function useInfiniteListMCPCatalog(
   // Return both the query result and the debounced search value
   // so consumers can check if the query state matches their expected search
   return { ...query, debouncedSearch };
+}
+
+export function useInfiniteListMCPCatalog(
+  search?: string,
+  registryId?: string,
+): ReturnType<typeof useInfiniteListMCPCatalogImpl> {
+  return useInfiniteListMCPCatalogImpl(search, registryId);
 }

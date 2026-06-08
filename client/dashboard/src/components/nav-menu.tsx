@@ -1,4 +1,4 @@
-import { SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar";
+import { SidebarMenuItem } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { AppRoute } from "@/routes";
@@ -10,40 +10,6 @@ import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge";
 import { Type } from "./ui/type";
 
 export const NAV_LOADING_DURATION_MS = 600;
-
-export function NavMenu({
-  items,
-  className,
-  children,
-}: {
-  items: AppRoute[];
-  className?: string;
-  children?: React.ReactNode;
-}) {
-  return (
-    <SidebarMenu className={className}>
-      {items.map((item) => (
-        <SidebarMenuItem key={item.title}>
-          <NavMenuButton item={item} />
-        </SidebarMenuItem>
-      ))}
-      {children}
-    </SidebarMenu>
-  );
-}
-
-function NavMenuButton({ item }: { item: AppRoute }) {
-  return (
-    <NavButton
-      title={item.title}
-      href={item.href()}
-      active={item.active}
-      Icon={item.Icon}
-      target={item.external ? "_blank" : undefined}
-      stage={item.stage}
-    />
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Sliding highlight context
@@ -90,7 +56,7 @@ export function NavGroupProvider({
   defaultOpenGroups?: string[];
   activeItem?: string;
   children: React.ReactNode;
-}) {
+}): React.JSX.Element {
   const defaultsRef = React.useRef(new Set(defaultOpenGroups ?? []));
   const [openGroups, _setOpenGroups] = React.useState<Set<string>>(() => {
     const initial = new Set(defaultOpenGroups ?? []);
@@ -385,7 +351,7 @@ export function NavButton({
   active?: boolean;
   Icon?: React.ComponentType<{ className?: string }>;
   stage?: ReleaseStage;
-}) {
+}): React.JSX.Element {
   const itemId = id ?? title;
   const navItem = useNavItem(itemId);
   const [isLoading, setIsLoading] = React.useState(false);
@@ -475,7 +441,7 @@ export function CollapsibleNavGroup({
   defaultHref?: string;
   stage?: ReleaseStage;
   children: React.ReactNode;
-}) {
+}): React.JSX.Element {
   const { openGroups, toggleGroup, openGroup } =
     React.useContext(NavGroupContext);
   const navItem = useNavItem(label);
@@ -562,7 +528,7 @@ export function CollapsibleNavItem({
 }: {
   item: AppRoute;
   stage?: ReleaseStage;
-}) {
+}): React.JSX.Element {
   const navItem = useNavItem(item.title);
   const [isLoading, setIsLoading] = React.useState(false);
   const timeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);

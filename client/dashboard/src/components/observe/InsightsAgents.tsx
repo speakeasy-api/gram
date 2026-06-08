@@ -39,6 +39,7 @@ import {
   LinearScale,
   PointElement,
   Tooltip,
+  type ChartDataset,
   type ChartOptions,
 } from "chart.js";
 import {
@@ -49,7 +50,7 @@ import {
   sortTableData,
 } from "@speakeasy-api/moonshine";
 import { useMemo, useState } from "react";
-import { Bar } from "react-chartjs-2";
+import { Bar, Chart } from "react-chartjs-2";
 import { toast } from "sonner";
 
 ChartJS.register(
@@ -150,7 +151,7 @@ function ValueModeToggle({
   );
 }
 
-export function InsightsAgentsContent() {
+export function InsightsAgentsContent(): JSX.Element {
   const client = useGramContext();
   const { isExpanded: isInsightsOpen } = useInsightsState();
   const mcpConfig = useObservabilityMcpConfig({
@@ -668,7 +669,15 @@ function TokenTimeSeriesChart({
         : b.totalInputTokens + b.totalOutputTokens) > 0,
   );
 
-  const chartData = useMemo(() => {
+  // Mixed bar+line chart. Each dataset can override its `type` (chart.js
+  // supports per-dataset type overrides on a bar chart), so the dataset
+  // array is a union of bar and line dataset shapes.
+  const chartData = useMemo<{
+    labels: string[];
+    datasets: Array<
+      ChartDataset<"bar", number[]> | ChartDataset<"line", number[]>
+    >;
+  }>(() => {
     const labels = timeSeries.map((b) =>
       formatChartLabel(unixNanoToDate(b.bucketTimeUnixNano), timeRangeMs),
     );
@@ -717,10 +726,10 @@ function TokenTimeSeriesChart({
     );
     const trendData = smoothData(rawTotal);
 
-    const trendDataset = {
+    const trendDataset: ChartDataset<"line", number[]> = {
       label: valueMode === "cost" ? "Cost Trend" : "Token Trend",
       data: trendData,
-      type: "line" as const,
+      type: "line",
       borderColor: valueMode === "cost" ? "#818cf8" : "#3b82f6",
       backgroundColor: "transparent",
       pointRadius: 0,
@@ -805,8 +814,16 @@ function TokenTimeSeriesChart({
         </div>
       ) : (
         <div style={{ height }}>
-          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- mixed bar+line chart requires type widening */}
-          <Bar data={chartData as any} options={options} />
+          {/* `<Chart>` (rather than `<Bar>`) is used here because react-chartjs-2's
+              typed `<Bar>` only accepts `ChartData<"bar">` datasets, but this
+              chart mixes a bar stack with a line trend overlay. Passing the
+              `"bar" | "line"` generic explicitly widens `<Chart>` to accept
+              the union dataset shape. */}
+          <Chart<"bar" | "line", number[], string>
+            type="bar"
+            data={chartData}
+            options={options}
+          />
         </div>
       )}
     </ChartCard>

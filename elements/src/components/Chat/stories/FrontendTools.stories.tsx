@@ -29,7 +29,7 @@ const FetchTool = defineFrontendTool<{ url: string }, string>(
         const text = await response.text();
         return text;
       } catch (error) {
-        return `Error fetching ${url}: ${error instanceof Error ? error.message : "Unknown error"}. Note: URL must support CORS for browser requests.`;
+        return `Error fetching ${String(url)}: ${error instanceof Error ? error.message : "Unknown error"}. Note: URL must support CORS for browser requests.`;
       }
     },
   },

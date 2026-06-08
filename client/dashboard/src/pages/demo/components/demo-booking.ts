@@ -9,7 +9,7 @@ export const PRODUCT_OPTIONS = [
   "Terraform Generation",
 ] as const;
 
-export type ProductInterest = (typeof PRODUCT_OPTIONS)[number];
+type ProductInterest = (typeof PRODUCT_OPTIONS)[number];
 
 export interface DemoFormData {
   firstName: string;

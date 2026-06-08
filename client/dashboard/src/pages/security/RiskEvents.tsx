@@ -41,7 +41,7 @@ import {
 const RISK_EVENTS_GRID =
   "grid grid-cols-[172px_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1.1fr)_110px] gap-3";
 
-export default function RiskEvents() {
+export default function RiskEvents(): JSX.Element {
   const client = useSdkClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedChatId = searchParams.get("chat_id");
@@ -211,7 +211,7 @@ export default function RiskEvents() {
       if (!resultsQuery.hasNextPage) return;
 
       if (distanceFromBottom < 200) {
-        resultsQuery.fetchNextPage();
+        void resultsQuery.fetchNextPage();
       }
     },
     [resultsQuery],
@@ -228,7 +228,9 @@ export default function RiskEvents() {
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => resultsQuery.refetch()}
+              onClick={() => {
+                void resultsQuery.refetch();
+              }}
               disabled={resultsQuery.isFetching}
               aria-label="Refresh risk events"
             >
@@ -306,7 +308,9 @@ export default function RiskEvents() {
               totalCount={totalCount}
               hasNextPage={resultsQuery.hasNextPage}
               isFetchingNextPage={resultsQuery.isFetchingNextPage}
-              onLoadMore={() => resultsQuery.fetchNextPage()}
+              onLoadMore={() => {
+                void resultsQuery.fetchNextPage();
+              }}
             />
           ) : null
         }
@@ -593,7 +597,9 @@ function RiskEventsRow({
         {result.chatId ? (
           <button
             type="button"
-            onClick={handleShare}
+            onClick={(e) => {
+              void handleShare(e);
+            }}
             onKeyDown={(e) => e.stopPropagation()}
             className="text-muted-foreground hover:text-foreground inline-flex items-center transition-colors"
             aria-label="Copy link to this event"

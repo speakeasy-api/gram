@@ -58,23 +58,19 @@ function isValidTab(value: string): value is TabValue {
   return (VALID_TABS as readonly string[]).includes(value);
 }
 
-export default function MCPServerDetails() {
+export default function MCPServerDetails(): JSX.Element {
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
   const routes = useRoutes();
   const telemetry = useTelemetry();
   const isRemoteMcpEnabled =
     telemetry.isFeatureEnabled("gram-remote-mcp") ?? false;
   const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
-  const isUserSessionManagementEnabled =
-    telemetry.isFeatureEnabled("gram-user-session-management") ?? false;
   const idOrSlug = mcpServerSlug ?? "";
 
   const [activeTab, setActiveTab] = useState<TabValue>(() => {
     const hash = window.location.hash.replace("#", "");
     if (!isValidTab(hash)) return "overview";
     if (hash === "team-access" && !isRbacEnabled) return "overview";
-    if (hash === "authentication" && !isUserSessionManagementEnabled)
-      return "overview";
     return hash;
   });
 
@@ -142,11 +138,9 @@ export default function MCPServerDetails() {
                   Endpoints
                   {endpoints.length > 0 && ` (${endpoints.length})`}
                 </PageTabsTrigger>
-                {isUserSessionManagementEnabled && (
-                  <PageTabsTrigger value="authentication">
-                    Authentication
-                  </PageTabsTrigger>
-                )}
+                <PageTabsTrigger value="authentication">
+                  Authentication
+                </PageTabsTrigger>
                 {isRbacEnabled && (
                   <PageTabsTrigger value="team-access">
                     Team Access
@@ -166,7 +160,6 @@ export default function MCPServerDetails() {
               endpoints={endpoints}
               isLoadingEndpoints={isLoadingEndpoints}
               onShowEndpoints={() => handleTabChange("endpoints")}
-              showAuthentication={isUserSessionManagementEnabled}
               onShowAuthentication={() => handleTabChange("authentication")}
             />
           </TabsContent>
@@ -184,7 +177,7 @@ export default function MCPServerDetails() {
             )}
           </TabsContent>
 
-          {isUserSessionManagementEnabled && mcpServer && (
+          {mcpServer && (
             <TabsContent
               value="authentication"
               className="mt-0 min-h-0 flex-1 overflow-y-auto"

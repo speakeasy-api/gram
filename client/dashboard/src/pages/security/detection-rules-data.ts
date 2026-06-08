@@ -21,41 +21,6 @@ export const SEVERITY_LEVELS = [
 
 export type SeverityLevel = (typeof SEVERITY_LEVELS)[number];
 
-export const SEVERITY_META: Record<
-  SeverityLevel,
-  { label: string; description: string; badgeClass: string }
-> = {
-  info: {
-    label: "Info",
-    description: "Informational signal, no action recommended",
-    badgeClass: "bg-muted text-muted-foreground border-border",
-  },
-  low: {
-    label: "Low",
-    description: "Minor risk, review periodically",
-    badgeClass:
-      "bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/30",
-  },
-  medium: {
-    label: "Medium",
-    description: "Notable risk, review when surfaced",
-    badgeClass:
-      "bg-yellow-500/10 text-yellow-800 dark:text-yellow-300 border-yellow-500/30",
-  },
-  high: {
-    label: "High",
-    description: "Serious risk, investigate promptly",
-    badgeClass:
-      "bg-orange-500/10 text-orange-800 dark:text-orange-300 border-orange-500/30",
-  },
-  critical: {
-    label: "Critical",
-    description: "Highest risk, immediate response required",
-    badgeClass:
-      "bg-red-500/10 text-red-700 dark:text-red-300 border-red-500/30",
-  },
-};
-
 /** Default severity for builtin rules. Driven by category since the
  *  underlying detectors are uniform within a category. Individual rules
  *  can override via the Detection Rules page (stored locally for now). */
@@ -172,7 +137,7 @@ export const BUILTIN_RULES_BY_CATEGORY: Record<RuleCategory, BuiltinRule[]> = (
 /** All builtin rule ids, used for custom rule id collision checks. Includes
  *  hidden/deprecated rule ids (which BUILTIN_RULES_BY_CATEGORY omits) so a
  *  custom rule can never reuse an id that legacy findings still resolve. */
-export const BUILTIN_RULE_IDS = new Set<string>([
+const BUILTIN_RULE_IDS = new Set<string>([
   ...Object.values(BUILTIN_RULES_BY_CATEGORY).flatMap((rules) =>
     rules.map((r) => r.id),
   ),
@@ -212,7 +177,7 @@ function mapCustomDetectionRule(rule: {
   };
 }
 
-export function useDetectionRulesStore() {
+function useDetectionRulesStoreImpl() {
   const queryClient = useQueryClient();
   const rulesQuery = useRiskListCustomDetectionRules();
 
@@ -278,13 +243,19 @@ export function useDetectionRulesStore() {
       if (!rule) return;
       deleteMutation.mutate({
         request: {
-          deleteCustomDetectionRuleRequestBody: {
+          riskIDRequestBody: {
             id: rule.dbId,
           },
         },
       });
     },
   };
+}
+
+export function useDetectionRulesStore(): ReturnType<
+  typeof useDetectionRulesStoreImpl
+> {
+  return useDetectionRulesStoreImpl();
 }
 
 /** Validate a proposed custom rule id. Returns an error message if the id

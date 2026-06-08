@@ -9,7 +9,7 @@ import { useStep } from "./step/use-step";
 import { useStepper } from "./stepper/use-stepper";
 import type { UploadOpenAPIv3Result } from "@gram/client/models/components";
 
-export default function UploadFileStep() {
+export default function UploadFileStep(): JSX.Element {
   const project = useProject();
   const session = useSession();
   const stepper = useStepper();
@@ -25,6 +25,8 @@ export default function UploadFileStep() {
       case "yaml":
       case "yml":
         return "application/yaml";
+      case undefined:
+        return "application/octet-stream";
       default:
         return "application/octet-stream";
     }
@@ -81,7 +83,9 @@ export default function UploadFileStep() {
   } else {
     return (
       <OpenApiSourceInput
-        onUpload={handleUpload}
+        onUpload={(file) => {
+          void handleUpload(file);
+        }}
         onUrlUpload={handleUrlUpload}
         isLoading={isUploading}
       />

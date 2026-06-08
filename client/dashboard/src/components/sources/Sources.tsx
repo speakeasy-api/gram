@@ -67,7 +67,7 @@ const useDialogStore = create<DialogStore>((set) => ({
   closeDialog: () => set({ dialogState: { type: "closed" } }),
 }));
 
-export default function Sources() {
+export default function Sources(): JSX.Element {
   const client = useSdkClient();
   const routes = useRoutes();
   const telemetry = useTelemetry();
@@ -235,7 +235,9 @@ export default function Sources() {
         {/* Render remove dialog in empty state to allow graceful close animation when deleting last source */}
         <Dialog
           open={dialogState.type === "remove-source"}
-          onOpenChange={(open) => !open && closeDialog()}
+          onOpenChange={(open) => {
+            void (!open && closeDialog());
+          }}
         >
           <Dialog.Content className="max-w-2xl!">
             {dialogState.type === "remove-source" &&
@@ -254,8 +256,8 @@ export default function Sources() {
 
   const handleDialogSuccess = () => {
     closeDialog();
-    refetch();
-    refetchAssets();
+    void refetch();
+    void refetchAssets();
   };
 
   return (
@@ -413,7 +415,9 @@ export default function Sources() {
           )}
           <Dialog
             open={dialogState.type !== "closed"}
-            onOpenChange={(open) => !open && closeDialog()}
+            onOpenChange={(open) => {
+              void (!open && closeDialog());
+            }}
           >
             <Dialog.Content
               className={

@@ -14,7 +14,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/speakeasy-api/gram/server/gen/types"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -56,9 +55,9 @@ func managedAssistantName(projectName string) string {
 }
 
 // EnableManagedAssistant turns on the managed assistant for a project: it
-// creates the assistant (attaching every MCP-reachable project toolset) and
-// records it in project_managed_assistants. The managed assistant exists only
-// while this mapping row does — disabling or removing the project tears it down.
+// creates the assistant (with no toolsets attached) and records it in
+// project_managed_assistants. The managed assistant exists only while this
+// mapping row does — disabling or removing the project tears it down.
 //
 // Idempotent and safe under concurrency: the fast path returns the existing
 // managed assistant, and an enable that loses a race is recovered by re-reading
@@ -216,8 +215,10 @@ func (s *ServiceCore) ensureDashboardTrigger(ctx context.Context, db triggerrepo
 	return nil
 }
 
-// createManagedAssistant inserts the assistant, records the managed mapping, and
-// attaches all of the project's MCP-reachable toolsets in a single transaction.
+// createManagedAssistant inserts the assistant and records the managed mapping in
+// a single transaction. It attaches no toolsets: a new managed assistant starts
+// with only the built-in and platform tools, and an admin adds project MCP
+// servers deliberately afterwards.
 func (s *ServiceCore) createManagedAssistant(
 	ctx context.Context,
 	organizationID string,
@@ -225,20 +226,6 @@ func (s *ServiceCore) createManagedAssistant(
 	name string,
 	createdByUserID string,
 ) (assistantRecord, error) {
-	slugs, err := assistantrepo.New(s.db).ListProjectMCPToolsetSlugs(ctx, projectID)
-	if err != nil {
-		return assistantRecord{}, fmt.Errorf("list project toolsets for managed assistant: %w", err)
-	}
-	refs := make([]*types.AssistantToolsetRef, 0, len(slugs))
-	for _, slug := range slugs {
-		refs = append(refs, &types.AssistantToolsetRef{ToolsetSlug: slug, EnvironmentSlug: nil})
-	}
-
-	resolved, err := s.resolveToolsetRefsForWrite(ctx, projectID, refs)
-	if err != nil {
-		return assistantRecord{}, err
-	}
-
 	var createdBy pgtype.Text
 	if createdByUserID != "" {
 		createdBy = conv.ToPGText(createdByUserID)
@@ -278,19 +265,10 @@ func (s *ServiceCore) createManagedAssistant(
 		return assistantRecord{}, err
 	}
 
-	if err := writeAssistantToolsets(ctx, tx, record.ID, projectID, resolved); err != nil {
-		return assistantRecord{}, err
-	}
-
 	if err := tx.Commit(ctx); err != nil {
 		return assistantRecord{}, fmt.Errorf("commit managed assistant tx: %w", err)
 	}
 
-	refs2, err := s.loadAssistantToolsets(ctx, projectID, []uuid.UUID{record.ID})
-	if err != nil {
-		return assistantRecord{}, err
-	}
-	record.Toolsets = refs2[record.ID]
 	return record, nil
 }
 
@@ -334,15 +312,21 @@ type DashboardSendResult struct {
 // status/filter/delivery path with every other ingress source. Returns
 // pgx.ErrNoRows when the assistant does not exist in the project.
 //
-// userID is the calling user (attribution); correlationID keys the conversation
-// thread (pass a fresh value to start over). idempotencyKey may be empty — a
-// fresh one is minted so the ingest still succeeds, but callers that want
+// userID is the calling user (attribution). chatID identifies the conversation:
+// pass uuid.Nil to start a new one (a fresh chat id is minted server-side and
+// returned), or an existing chat id to continue it. idempotencyKey may be empty
+// — a fresh one is minted so the ingest still succeeds, but callers that want
 // retry-safe dedupe should pass a stable key.
-func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assistantID uuid.UUID, userID, correlationID, text, idempotencyKey string) (DashboardSendResult, error) {
+func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assistantID uuid.UUID, userID string, chatID uuid.UUID, text, idempotencyKey string) (DashboardSendResult, error) {
 	assistant, err := s.GetAssistant(ctx, projectID, assistantID)
 	if err != nil {
 		return DashboardSendResult{}, err
 	}
+
+	if chatID == uuid.Nil {
+		chatID = uuid.New()
+	}
+	correlationID := chatID.String()
 
 	instanceID, err := s.resolveDashboardTriggerInstance(ctx, assistant.OrganizationID, projectID, assistant.ID, assistant.Name)
 	if err != nil {
@@ -367,7 +351,7 @@ func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assis
 	}
 
 	result := DashboardSendResult{
-		ChatID:   deterministicChatID(assistant.ID, correlationID),
+		ChatID:   chatID,
 		ThreadID: uuid.Nil,
 		Accepted: task != nil,
 	}

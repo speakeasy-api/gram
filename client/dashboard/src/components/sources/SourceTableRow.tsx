@@ -40,7 +40,7 @@ export function SourceTableRow({
   handleRemove: (assetId: string) => void;
   handleViewAsset: (assetId: string) => void;
   setChangeDocumentTargetSlug: (slug: string) => void;
-}) {
+}): JSX.Element {
   const routes = useRoutes();
   const { hasScope } = useRBAC();
   const canWrite = hasScope("project:write");

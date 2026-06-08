@@ -15,7 +15,7 @@ export function ChatComposerWrapper({
   tools,
   onToolsSelected,
   onInputChange,
-}: ChatComposerWrapperProps) {
+}: ChatComposerWrapperProps): JSX.Element {
   const [inputValue, setInputValue] = useState("");
   const [mentionedToolIds, setMentionedToolIds] = useState<string[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -108,6 +108,7 @@ export function ChatComposerWrapper({
     setInputValue(value);
     if (textareaRef.current) {
       // Use the native setter to trigger React's change detection
+      // oxlint-disable-next-line typescript/unbound-method -- intentional unbound setter to use with .call
       const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
         window.HTMLTextAreaElement.prototype,
         "value",

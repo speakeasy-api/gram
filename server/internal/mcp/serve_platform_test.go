@@ -1,7 +1,7 @@
-// Asserts the managed-assistant platform toolset (carrying the dashboard egress
-// tool) is reachable only by a project's managed assistant. Any other assistant
-// token for the same project is rejected at the entrypoint as if the toolset did
-// not exist, rather than relying on downstream tools to refuse the call.
+// Asserts the managed-assistant platform toolset is reachable only by a
+// project's managed assistant. Any other assistant token for the same project
+// is rejected at the entrypoint as if the toolset did not exist, rather than
+// relying on downstream tools to refuse the call.
 package mcp_test
 
 import (
@@ -26,7 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 )
 
-func TestServePlatformToolset_ManagedAssistantReachesDashboardToolset(t *testing.T) {
+func TestServePlatformToolset_ManagedAssistantReachesManagedToolset(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -46,7 +46,7 @@ func TestServePlatformToolset_ManagedAssistantReachesDashboardToolset(t *testing
 	w, err := servePlatformHTTP(t, ti, platformtools.ManagedAssistantPlatformToolsetSlug, toolsListBody(), token)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, "managed assistant must reach the managed toolset: %s", w.Body.String())
-	require.Contains(t, w.Body.String(), platformtools.ToolNameDashboardSendMessage)
+	require.Contains(t, w.Body.String(), platformtools.ToolNameSearchLogs)
 }
 
 func TestServePlatformToolset_NonManagedAssistantRejected(t *testing.T) {

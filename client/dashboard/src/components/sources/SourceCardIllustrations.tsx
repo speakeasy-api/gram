@@ -52,7 +52,7 @@ const PATTERN_IMAGES = [
  * MCP card illustration using pattern images
  * Deterministically selects a pattern based on the toolset slug
  */
-export function MCPPatternIllustration({
+function MCPPatternIllustration({
   className,
   toolsetSlug,
 }: IllustrationProps & { toolsetSlug: string }) {
@@ -60,8 +60,10 @@ export function MCPPatternIllustration({
   const random = seededRandom(seed);
 
   const colorIndex = Math.floor(random() * PATTERN_IMAGES.length);
-  const patternIndex = Math.floor(random() * PATTERN_IMAGES[colorIndex].length);
-  const patternImage = PATTERN_IMAGES[colorIndex][patternIndex];
+  const patternIndex = Math.floor(
+    random() * PATTERN_IMAGES[colorIndex]!.length,
+  );
+  const patternImage = PATTERN_IMAGES[colorIndex]![patternIndex]!;
 
   return (
     <img
@@ -92,7 +94,7 @@ export function ExternalMCPIllustration({
   logoUrl?: string;
   name?: string;
   slug: string;
-}) {
+}): JSX.Element {
   const saturationClass =
     saturationClassName ?? "saturate-[.3] group-hover:saturate-100";
 

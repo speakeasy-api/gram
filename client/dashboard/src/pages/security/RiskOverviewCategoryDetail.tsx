@@ -47,7 +47,7 @@ const RISK_OVERVIEW_PRESETS: DateRangePreset[] = [
   "30d",
 ];
 
-export default function RiskOverviewCategoryDetail() {
+export default function RiskOverviewCategoryDetail(): JSX.Element {
   return (
     <RequireScope scope="org:admin" level="page">
       <Page>
@@ -170,7 +170,7 @@ function RiskOverviewCategoryDetailContent() {
       if (resultsQuery.isFetchingNextPage || resultsQuery.isFetching) return;
       if (!resultsQuery.hasNextPage) return;
       if (distanceFromBottom < 200) {
-        resultsQuery.fetchNextPage();
+        void resultsQuery.fetchNextPage();
       }
     },
     [resultsQuery],

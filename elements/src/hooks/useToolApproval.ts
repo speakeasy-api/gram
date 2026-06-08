@@ -1,11 +1,12 @@
 import { useContext } from "react";
 import { ToolApprovalContext } from "@/contexts/contexts";
+import type { ToolApprovalContextType } from "@/contexts/ToolApprovalContext";
 
 /**
  * Hook to access the tool approval context for managing human-in-the-loop
  * tool execution approval.
  */
-export const useToolApproval = () => {
+export const useToolApproval = (): ToolApprovalContextType => {
   const context = useContext(ToolApprovalContext);
   if (!context) {
     throw new Error(

@@ -40,16 +40,14 @@ export function OverviewTab({
   endpoints,
   isLoadingEndpoints,
   onShowEndpoints,
-  showAuthentication,
   onShowAuthentication,
 }: {
   mcpServer: McpServer | undefined;
   endpoints: McpEndpoint[];
   isLoadingEndpoints: boolean;
   onShowEndpoints: () => void;
-  showAuthentication: boolean;
   onShowAuthentication: () => void;
-}) {
+}): JSX.Element {
   return (
     <div className="mx-auto w-full max-w-[1270px] space-y-8 px-8 py-8">
       {mcpServer ? (
@@ -60,7 +58,7 @@ export function OverviewTab({
           onShowEndpoints={onShowEndpoints}
         />
       ) : null}
-      {showAuthentication && mcpServer && (
+      {mcpServer && (
         <AuthenticationOverviewSection
           mcpServer={mcpServer}
           onNavigate={onShowAuthentication}

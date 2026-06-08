@@ -7,7 +7,11 @@ export interface ListProps {
   className?: string;
 }
 
-export function List({ items, ordered = false, className }: ListProps) {
+export function List({
+  items,
+  ordered = false,
+  className,
+}: ListProps): React.JSX.Element {
   const listClasses = cn(
     "space-y-1 pl-4 text-foreground",
     ordered ? "list-decimal" : "list-disc",

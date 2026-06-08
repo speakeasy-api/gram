@@ -10,9 +10,11 @@ import { createAssistantStream, type AssistantStream } from "assistant-stream";
 import {
   GramChatOverview,
   GramChat,
+  GramChatMessage,
   convertGramMessagesToExported,
   convertGramMessagesToUIMessages,
 } from "@/lib/messageConverter";
+import { sleep } from "@/lib/utils";
 import {
   useCallback,
   useEffect,
@@ -37,11 +39,61 @@ export function isLocalThreadId(threadId: string | null | undefined): boolean {
   return !!threadId?.startsWith(LOCAL_THREAD_ID_PREFIX);
 }
 
+/**
+ * Polls the shared local→remote id map until the transport assigns an id for
+ * `threadId`, or a deadline passes. Used in deferred-minting mode so a new
+ * thread adopts the backend-minted chat id instead of a client-generated one.
+ * The timeout is generous to tolerate cold serverless boots on the first send.
+ */
+async function waitForMappedId(
+  map: Map<string, string> | undefined,
+  threadId: string,
+  timeoutMs = 30_000,
+  intervalMs = 50,
+): Promise<string | undefined> {
+  if (!map) return undefined;
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const id = map.get(threadId);
+    if (id) return id;
+    if (Date.now() >= deadline) return undefined;
+    await sleep(intervalMs);
+  }
+}
+
+/**
+ * Transforms or drops a persisted chat message before it is rendered from
+ * history. Return the (possibly rewritten) message, or `null` to omit it.
+ */
+export type ChatMessageTransform = (
+  message: GramChatMessage,
+) => GramChatMessage | null;
+
 export interface ThreadListAdapterOptions {
   apiUrl: string;
   headers: Record<string, string>;
   /** Map to translate local thread IDs to UUIDs (shared with transport) */
   localIdToUuidMap?: Map<string, string>;
+  /**
+   * Extra query parameters forwarded to `chat.list` to filter which threads are
+   * listed. Opaque to the adapter — the consumer chooses the keys.
+   */
+  threadListFilters?: Record<string, string>;
+  /**
+   * Don't client-mint a chat id for a brand-new thread. When true, `initialize`
+   * waits for the transport to assign the id (via the shared `localIdToUuidMap`,
+   * e.g. a server-minted id reported through the transport context's
+   * `adoptChatId` bind closure) instead of generating one with
+   * `crypto.randomUUID()`. Use this when the backend owns chat-id creation.
+   */
+  deferThreadIdMinting?: boolean;
+  /**
+   * Optional hook to transform or drop each persisted message before it is
+   * converted for rendering. Return a message to render it (possibly rewritten),
+   * or `null` to omit it. Keeps product-specific transcript conventions out of
+   * the library — see {@link HistoryConfig.transformChatMessage}.
+   */
+  transformChatMessage?: ChatMessageTransform;
 }
 
 interface ListChatsResponse {
@@ -57,15 +109,41 @@ class GramThreadHistoryAdapter {
   private apiUrl: string;
   private headers: Record<string, string>;
   private store: AssistantApi;
+  // Read lazily rather than captured: the adapter is constructed once, but the
+  // consumer may swap `transformChatMessage` across renders, so resolve it from
+  // the live options on every load instead of snapshotting it here.
+  private getTransformChatMessage?: () => ChatMessageTransform | undefined;
 
   constructor(
     apiUrl: string,
     headers: Record<string, string>,
     store: AssistantApi,
+    getTransformChatMessage?: () => ChatMessageTransform | undefined,
   ) {
     this.apiUrl = apiUrl;
     this.headers = headers;
     this.store = store;
+    this.getTransformChatMessage = getTransformChatMessage;
+  }
+
+  /**
+   * Applies the consumer-supplied `transformChatMessage` hook to a loaded
+   * transcript: rewrites each message and drops any the hook returns `null` for.
+   * Without a hook configured the messages pass through untouched.
+   */
+  private applyTransform(messages: GramChatMessage[]): GramChatMessage[] {
+    const transform = this.getTransformChatMessage?.();
+    if (!transform) {
+      return messages;
+    }
+    const result: GramChatMessage[] = [];
+    for (const message of messages) {
+      const transformed = transform(message);
+      if (transformed) {
+        result.push(transformed);
+      }
+    }
+    return result;
   }
 
   async load() {
@@ -86,7 +164,7 @@ class GramThreadHistoryAdapter {
       }
 
       const chat = (await response.json()) as GramChat;
-      return convertGramMessagesToExported(chat.messages);
+      return convertGramMessagesToExported(this.applyTransform(chat.messages));
     } catch (error) {
       console.error("Error loading chat:", error);
       return { messages: [], headId: null };
@@ -120,7 +198,9 @@ class GramThreadHistoryAdapter {
         }
 
         const chat = (await response.json()) as GramChat;
-        return convertGramMessagesToUIMessages(chat.messages);
+        return convertGramMessagesToUIMessages(
+          this.applyTransform(chat.messages),
+        );
 
         // // Filter out system messages (assistant-ui doesn't support them in the import path)
         // const filteredMessages = chat.messages.filter(
@@ -175,6 +255,7 @@ function useGramThreadHistoryAdapter(
         optionsRef.current.apiUrl,
         optionsRef.current.headers,
         store,
+        () => optionsRef.current.transformChatMessage,
       ),
   );
   // Cast to ThreadHistoryAdapter - the withFormat generic doesn't match but works at runtime
@@ -213,12 +294,14 @@ export function useGramThreadListAdapter(
 
       async list() {
         try {
-          const response = await fetch(
-            `${optionsRef.current.apiUrl}/rpc/chat.list`,
-            {
-              headers: optionsRef.current.headers,
-            },
-          );
+          const { apiUrl, headers, threadListFilters } = optionsRef.current;
+          const qs = threadListFilters
+            ? new URLSearchParams(threadListFilters).toString()
+            : "";
+          const listUrl = qs
+            ? `${apiUrl}/rpc/chat.list?${qs}`
+            : `${apiUrl}/rpc/chat.list`;
+          const response = await fetch(listUrl, { headers });
 
           if (!response.ok) {
             console.error("Failed to list chats:", response.status);
@@ -251,6 +334,30 @@ export function useGramThreadListAdapter(
               remoteId: existingUuid,
               externalId: existingUuid,
             };
+          }
+          // When the backend owns chat-id creation, don't client-mint: wait for
+          // the transport to report the server-minted id (it assigns it during
+          // the first send via the adoptChatId bind closure, populating the
+          // shared map — the same path the built-in transport uses).
+          if (optionsRef.current.deferThreadIdMinting) {
+            const mappedUuid = await waitForMappedId(
+              optionsRef.current.localIdToUuidMap,
+              threadId,
+            );
+            if (mappedUuid) {
+              return {
+                remoteId: mappedUuid,
+                externalId: mappedUuid,
+              };
+            }
+            // Falling through to crypto.randomUUID() here would defeat deferred
+            // minting: the client id would race the server-minted one reported
+            // later via the adoptChatId bind closure, leaving runtime state
+            // and the local→remote map disagreeing. Surface the failure to
+            // the user instead.
+            throw new Error(
+              "Backend did not mint a chat id in time — first send may have failed or is still in flight. Retry the send.",
+            );
           }
           // Otherwise generate a new one and store it
           const uuid = crypto.randomUUID();
@@ -298,7 +405,9 @@ export function useGramThreadListAdapter(
         // Title generation happens async server-side via Temporal after first completion.
         // This delay allows the OpenRouter LLM call to complete before we fetch the title.
         const TITLE_GENERATION_DELAY_MS = 2000;
-        await new Promise((r) => setTimeout(r, TITLE_GENERATION_DELAY_MS));
+        await new Promise((r) => {
+          setTimeout(r, TITLE_GENERATION_DELAY_MS);
+        });
 
         try {
           // TODO: rename generateTitle endpoint to getTitle

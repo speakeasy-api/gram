@@ -1,3 +1,4 @@
+import { ReactElement } from "react";
 import { cn } from "@/lib/utils";
 import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
 import { TelemetryLogRecord } from "@gram/client/models/components";
@@ -70,6 +71,7 @@ function getSeverityColors(severity?: string) {
       return severityColors.WARN;
     case "DEBUG":
       return severityColors.DEBUG;
+    case undefined:
     default:
       return severityColors.INFO;
   }
@@ -89,7 +91,7 @@ export function TraceLogsList({
   isExpanded,
   onLogClick,
   parentTimestamp,
-}: TraceLogsListProps) {
+}: TraceLogsListProps): ReactElement | null {
   const client = useGramContext();
   const isStandaloneTriggerLog = traceId.startsWith(TRIGGER_LOG_PREFIX);
 

@@ -1,14 +1,17 @@
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import type { UIMessage } from "ai";
 import { cva, type VariantProps } from "class-variance-authority";
-import type { ComponentProps, HTMLAttributes } from "react";
+import type { HTMLAttributes } from "react";
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];
 };
 
-export const Message = ({ className, from, ...props }: MessageProps) => (
+export const Message = ({
+  className,
+  from,
+  ...props
+}: MessageProps): JSX.Element => (
   <div
     className={cn(
       "group flex w-full items-end justify-end gap-2 py-4",
@@ -49,28 +52,11 @@ export const MessageContent = ({
   className,
   variant,
   ...props
-}: MessageContentProps) => (
+}: MessageContentProps): JSX.Element => (
   <div
     className={cn(messageContentVariants({ variant, className }))}
     {...props}
   >
     {children}
   </div>
-);
-
-export type MessageAvatarProps = ComponentProps<typeof Avatar> & {
-  src: string;
-  name?: string;
-};
-
-export const MessageAvatar = ({
-  src,
-  name,
-  className,
-  ...props
-}: MessageAvatarProps) => (
-  <Avatar className={cn("ring-border size-8 ring-1", className)} {...props}>
-    <AvatarImage alt="" className="mt-0 mb-0" src={src} />
-    <AvatarFallback>{name?.slice(0, 2) || "ME"}</AvatarFallback>
-  </Avatar>
 );

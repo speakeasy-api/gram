@@ -52,9 +52,9 @@ export const TelemetryContext = createContext<Telemetry>(
   import.meta.env.DEV ? devTelemetry : nullTelemetry,
 );
 
-export const useTelemetry = () => useContext(TelemetryContext);
+export const useTelemetry = (): Telemetry => useContext(TelemetryContext);
 
-export function useIdentifyUserForTelemetry(user: User | undefined) {
+export function useIdentifyUserForTelemetry(user: User | undefined): void {
   const telemetry = useTelemetry();
 
   useEffect(() => {
@@ -79,7 +79,7 @@ export function useCaptureUserAuthorizationEvent({
   projectSlug: string;
   organizationSlug: string;
   email: string;
-}) {
+}): void {
   const telemetry = useTelemetry();
 
   useEffect(() => {
@@ -108,7 +108,7 @@ export function useCaptureEnterpriseGateViewed({
   organizationId: string;
   organizationName: string;
   organizationSlug: string;
-}) {
+}): void {
   const telemetry = useTelemetry();
 
   useEffect(() => {
@@ -129,7 +129,7 @@ export function useRegisterChatTelemetry({
 }: {
   chatId: string;
   chatUrl: string;
-}) {
+}): void {
   const telemetry = useTelemetry();
 
   useEffect(() => {
@@ -148,7 +148,7 @@ export function useRegisterEnvironmentTelemetry({
   environmentSlug,
 }: {
   environmentSlug: string;
-}) {
+}): void {
   const telemetry = useTelemetry();
 
   useEffect(() => {
@@ -163,7 +163,7 @@ export function useRegisterToolsetTelemetry({
   toolsetSlug,
 }: {
   toolsetSlug: string;
-}) {
+}): void {
   const telemetry = useTelemetry();
 
   useEffect(() => {
@@ -183,7 +183,7 @@ export function useRegisterProjectForTelemetry({
   projectId: string;
   projectSlug: string;
   organizationSlug: string;
-}) {
+}): void {
   const telemetry = useTelemetry();
 
   useEffect(() => {

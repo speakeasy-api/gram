@@ -323,6 +323,48 @@ func BuildGetToolsetPayload(toolsetsGetToolsetSlug string, toolsetsGetToolsetSes
 	return v, nil
 }
 
+// BuildListToolFiltersPayload builds the payload for the toolsets
+// listToolFilters endpoint from CLI flags.
+func BuildListToolFiltersPayload(toolsetsListToolFiltersSlug string, toolsetsListToolFiltersSessionToken string, toolsetsListToolFiltersApikeyToken string, toolsetsListToolFiltersProjectSlugInput string) (*toolsets.ListToolFiltersPayload, error) {
+	var err error
+	var slug string
+	{
+		slug = toolsetsListToolFiltersSlug
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
+		if utf8.RuneCountInString(slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if toolsetsListToolFiltersSessionToken != "" {
+			sessionToken = &toolsetsListToolFiltersSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if toolsetsListToolFiltersApikeyToken != "" {
+			apikeyToken = &toolsetsListToolFiltersApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if toolsetsListToolFiltersProjectSlugInput != "" {
+			projectSlugInput = &toolsetsListToolFiltersProjectSlugInput
+		}
+	}
+	v := &toolsets.ListToolFiltersPayload{}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildCheckMCPSlugAvailabilityPayload builds the payload for the toolsets
 // checkMCPSlugAvailability endpoint from CLI flags.
 func BuildCheckMCPSlugAvailabilityPayload(toolsetsCheckMCPSlugAvailabilitySlug string, toolsetsCheckMCPSlugAvailabilitySessionToken string, toolsetsCheckMCPSlugAvailabilityApikeyToken string, toolsetsCheckMCPSlugAvailabilityProjectSlugInput string) (*toolsets.CheckMCPSlugAvailabilityPayload, error) {

@@ -18,7 +18,11 @@ import { RemoteIdentityProvidersTable } from "./RemoteIdentityProvidersTable";
 import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
 import { useProtectedResourceMetadata } from "./useProtectedResourceMetadata";
 
-export function AuthenticationTab({ mcpServer }: { mcpServer: McpServer }) {
+export function AuthenticationTab({
+  mcpServer,
+}: {
+  mcpServer: McpServer;
+}): JSX.Element {
   const userSessionIssuerId = mcpServer.userSessionIssuerId;
   const issuerConfigured = !!userSessionIssuerId;
 

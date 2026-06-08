@@ -86,7 +86,7 @@ function getMemberColors(id: string) {
   };
 }
 
-export default function Team() {
+export default function Team(): JSX.Element {
   return (
     <Page>
       <Page.Header>
@@ -101,7 +101,7 @@ export default function Team() {
   );
 }
 
-export function TeamInner() {
+function TeamInner() {
   const organization = useOrganization();
   const user = useUser();
   const { isRbacEnabled } = useRBAC();
@@ -244,13 +244,15 @@ export function TeamInner() {
         },
       },
       {
-        onSuccess: async () => {
-          await invalidateTeamData();
-          toast.success(`Invite sent to ${submittedEmail}`);
-          setInviteEmail("");
-          setInviteEmailTouched(false);
-          setInviteRoleId(undefined);
-          setIsInviteDialogOpen(false);
+        onSuccess: () => {
+          void (async () => {
+            await invalidateTeamData();
+            toast.success(`Invite sent to ${submittedEmail}`);
+            setInviteEmail("");
+            setInviteEmailTouched(false);
+            setInviteRoleId(undefined);
+            setIsInviteDialogOpen(false);
+          })();
         },
       },
     );
@@ -267,10 +269,12 @@ export function TeamInner() {
         },
       },
       {
-        onSuccess: async () => {
-          await invalidateTeamData();
-          toast.success(`${displayName} has been removed`);
-          setMemberToRemove(null);
+        onSuccess: () => {
+          void (async () => {
+            await invalidateTeamData();
+            toast.success(`${displayName} has been removed`);
+            setMemberToRemove(null);
+          })();
         },
       },
     );
@@ -287,10 +291,12 @@ export function TeamInner() {
         },
       },
       {
-        onSuccess: async () => {
-          await invalidateTeamData();
-          toast.success(`Invite to ${email} has been cancelled`);
-          setInviteToCancel(null);
+        onSuccess: () => {
+          void (async () => {
+            await invalidateTeamData();
+            toast.success(`Invite to ${email} has been cancelled`);
+            setInviteToCancel(null);
+          })();
         },
       },
     );
@@ -313,9 +319,11 @@ export function TeamInner() {
         },
       },
       {
-        onSuccess: async () => {
-          await invalidateAllListInvites(queryClient);
-          toast.success(`Invite role changed to ${getRoleName(roleId)}`);
+        onSuccess: () => {
+          void (async () => {
+            await invalidateAllListInvites(queryClient);
+            toast.success(`Invite role changed to ${getRoleName(roleId)}`);
+          })();
         },
       },
     );
@@ -343,15 +351,19 @@ export function TeamInner() {
               },
             },
             {
-              onSuccess: async () => {
-                await invalidateTeamData();
-                toast.success(`Invite resent to ${invite.email}`);
+              onSuccess: () => {
+                void (async () => {
+                  await invalidateTeamData();
+                  toast.success(`Invite resent to ${invite.email}`);
+                })();
               },
-              onError: async () => {
-                await invalidateTeamData();
-                toast.error(
-                  `Failed to resend invite to ${invite.email}. The previous invite was revoked — please send a new invite.`,
-                );
+              onError: () => {
+                void (async () => {
+                  await invalidateTeamData();
+                  toast.error(
+                    `Failed to resend invite to ${invite.email}. The previous invite was revoked — please send a new invite.`,
+                  );
+                })();
               },
             },
           );
@@ -513,9 +525,9 @@ export function TeamInner() {
               {isRbacEnabled && accessMember && !organization.scimEnabled && (
                 <RequireScope scope="org:admin" level="component">
                   <DropdownMenuItem
-                    onSelect={() =>
-                      setTimeout(() => setChangingMember(accessMember), 0)
-                    }
+                    onSelect={() => {
+                      void setTimeout(() => setChangingMember(accessMember), 0);
+                    }}
                   >
                     Manage roles
                   </DropdownMenuItem>
@@ -523,15 +535,13 @@ export function TeamInner() {
               )}
               {isRbacEnabled && (
                 <DropdownMenuItem
-                  onSelect={() =>
-                    setTimeout(
-                      () =>
-                        navigate(
-                          `${orgRoutes.access.challenges.href()}?identity=${encodeURIComponent(member.email)}`,
-                        ),
-                      0,
-                    )
-                  }
+                  onSelect={() => {
+                    void setTimeout(() => {
+                      void navigate(
+                        `${orgRoutes.access.challenges.href()}?identity=${encodeURIComponent(member.email)}`,
+                      );
+                    }, 0);
+                  }}
                 >
                   View challenges
                 </DropdownMenuItem>
@@ -542,9 +552,9 @@ export function TeamInner() {
                   <RequireScope scope="org:admin" level="component">
                     <DropdownMenuItem
                       className="text-destructive focus:text-destructive"
-                      onSelect={() =>
-                        setTimeout(() => setMemberToRemove(member), 0)
-                      }
+                      onSelect={() => {
+                        void setTimeout(() => setMemberToRemove(member), 0);
+                      }}
                     >
                       Remove member
                     </DropdownMenuItem>
@@ -1005,7 +1015,9 @@ export function TeamInner() {
       {/* Remove Member Dialog */}
       <Dialog
         open={!!memberToRemove}
-        onOpenChange={(open) => !open && setMemberToRemove(null)}
+        onOpenChange={(open) => {
+          void (!open && setMemberToRemove(null));
+        }}
       >
         <Dialog.Content>
           <Dialog.Header>
@@ -1042,7 +1054,9 @@ export function TeamInner() {
       {/* Cancel Invite Dialog */}
       <Dialog
         open={!!inviteToCancel}
-        onOpenChange={(open) => !open && setInviteToCancel(null)}
+        onOpenChange={(open) => {
+          void (!open && setInviteToCancel(null));
+        }}
       >
         <Dialog.Content>
           <Dialog.Header>

@@ -1,7 +1,10 @@
 import { cn } from "@/lib/utils";
 import { Column, Stack, Table } from "@speakeasy-api/moonshine";
 
-function Skeleton({ className, ...props }: React.ComponentProps<"span">) {
+function Skeleton({
+  className,
+  ...props
+}: React.ComponentProps<"span">): JSX.Element {
   return (
     <span
       data-slot="skeleton"
@@ -14,7 +17,7 @@ function Skeleton({ className, ...props }: React.ComponentProps<"span">) {
   );
 }
 
-export function SkeletonTable() {
+export function SkeletonTable(): JSX.Element {
   const columns: Column<{ a: string }>[] = [
     {
       header: "Name",
@@ -45,7 +48,11 @@ export function SkeletonTable() {
   );
 }
 
-export function SkeletonParagraph({ lines = 3 }: { lines?: number }) {
+export function SkeletonParagraph({
+  lines = 3,
+}: {
+  lines?: number;
+}): JSX.Element {
   return (
     <Stack gap={2}>
       {Array.from({ length: lines - 1 }).map((_, i) => (
@@ -56,7 +63,7 @@ export function SkeletonParagraph({ lines = 3 }: { lines?: number }) {
   );
 }
 
-export function SkeletonCode({ lines = 24 }: { lines?: number }) {
+export function SkeletonCode({ lines = 24 }: { lines?: number }): JSX.Element {
   const importLines = Math.floor(lines / 4);
   const codeLines = lines - importLines;
 

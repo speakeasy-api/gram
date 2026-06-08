@@ -40,7 +40,7 @@ import type {
 import { useSdkClient } from "@/contexts/Sdk";
 import { toast } from "sonner";
 
-export default function PluginDetail() {
+export default function PluginDetail(): JSX.Element | null {
   const { pluginId } = useParams<{ pluginId: string }>();
   const queryClient = useQueryClient();
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -65,14 +65,14 @@ export default function PluginDetail() {
   const updateMutation = useUpdatePluginMutation({
     onSuccess: () => {
       setIsEditOpen(false);
-      invalidateAll();
+      void invalidateAll();
     },
   });
 
   const addServerMutation = useAddPluginServerMutation({
     onSuccess: () => {
       setIsAddServerOpen(false);
-      invalidateAll();
+      void invalidateAll();
     },
   });
 
@@ -254,13 +254,25 @@ export default function PluginDetail() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
-              <DropdownMenuItem onClick={() => handleDownload("claude")}>
+              <DropdownMenuItem
+                onClick={() => {
+                  void handleDownload("claude");
+                }}
+              >
                 Claude
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleDownload("cursor")}>
+              <DropdownMenuItem
+                onClick={() => {
+                  void handleDownload("cursor");
+                }}
+              >
                 Cursor
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleDownload("codex")}>
+              <DropdownMenuItem
+                onClick={() => {
+                  void handleDownload("codex");
+                }}
+              >
                 Codex
               </DropdownMenuItem>
             </DropdownMenuContent>

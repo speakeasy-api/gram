@@ -10,7 +10,7 @@ export function CreateThingCard({
   onClick?: () => void;
   className?: string;
   children: React.ReactNode;
-}) {
+}): JSX.Element {
   return (
     <Card
       className={cn(

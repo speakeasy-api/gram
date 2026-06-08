@@ -746,7 +746,7 @@ function FleetIdentity() {
   );
 }
 
-export default function DeviceAgent() {
+export default function DeviceAgent(): React.JSX.Element {
   const telemetry = useTelemetry();
   const isDeviceAgentEnabled =
     telemetry.isFeatureEnabled("gram-device-agent") ?? false;

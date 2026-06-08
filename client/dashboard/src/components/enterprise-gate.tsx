@@ -15,7 +15,7 @@ export function EnterpriseGate({
   icon = "lock",
   title = "Enterprise Feature",
   description = "This feature is available on the Enterprise plan. Book a time to get started.",
-}: EnterpriseGateProps) {
+}: EnterpriseGateProps): React.JSX.Element {
   const productTier = useProductTier();
 
   if (productTier === "enterprise") {

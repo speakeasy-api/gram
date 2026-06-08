@@ -18,7 +18,7 @@ export function BuiltInMCPCard({
   name,
   description,
   slug,
-}: BuiltInMCPCardProps) {
+}: BuiltInMCPCardProps): JSX.Element {
   const routes = useRoutes();
 
   return (

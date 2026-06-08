@@ -1,7 +1,7 @@
 import { EmptyState } from "@/components/page-layout";
 import { ToolsetsGraphic } from "../toolsets/ToolsetsEmptyState";
 
-export function DeploymentsEmptyState() {
+export function DeploymentsEmptyState(): JSX.Element {
   return (
     <EmptyState
       heading="No deployments yet"

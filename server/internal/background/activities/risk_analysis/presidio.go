@@ -9,8 +9,6 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"net/http"
-	"net/netip"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -633,35 +631,42 @@ func convertPresidioFindings(text string, results []presidioResult) []Finding {
 	return findings
 }
 
-// ipv6ShortFormFP matches IPv6 strings of the form "<hex>::" — a single
-// hex group of up to four chars followed immediately by "::" and nothing
-// else (e.g. "b::", "dead::", "1::"). Production risk_results analysis
-// showed Presidio greedily flagging these as IP_ADDRESS whenever the
-// pattern appeared in code, hex dumps, or text, and none of them
-// represent an address anyone meaningfully uses.
-var ipv6ShortFormFP = regexp.MustCompile(`(?i)^[0-9a-f]{1,4}::$`)
-
 // isPresidioFalsePositive filters Presidio matches the policy author
-// would treat as noise. It currently drops:
-//   - the IPv6/IPv4 unspecified address in any spelling (`::`, `::0`,
-//     `0:0:0:0:0:0:0:0`, `0.0.0.0`), via net/netip;
-//   - loopback addresses (`127.0.0.0/8`, `::1`), via net/netip;
-//   - IPv6 short-form strings of shape "<hex>::" (e.g. "b::", "dead::"),
-//     which dominate Presidio's IP_ADDRESS noise on prod.
+// would treat as noise. It dispatches per entity type to the
+// per-category catalogs:
+//
+//   - IP_ADDRESS → nonPIIIPReason in falsepositives_ip.go, covering
+//     IANA-reserved space (RFC1918, loopback, link-local, multicast,
+//     CGNAT, documentation, 6to4 deprecated, class E, benchmarking,
+//     this-network, limited broadcast), well-known public DNS resolvers
+//     (Cloudflare, Google, Quad9, OpenDNS, AdGuard, etc.), common
+//     placeholder IPs (1.2.3.4 et al.), and shape heuristics
+//     (X.0.0.0 /8 network address, sparse IPv6 like 1::, b::, dead::).
+//   - EMAIL_ADDRESS → nonPIIEmailReason in falsepositives_email.go,
+//     primarily covering well-known fixture / placeholder domains
+//     (`@example.com`, `@acme.com`, `@acmecorp.com`, etc.), two
+//     RFC-shape sanity checks (any `/` in the candidate; trailing
+//     digit on the domain — catches `pkg@v1.2.3` and other
+//     version-suffixed module paths), and template-only / automated
+//     local-parts (`first.last`, `firstname.lastname`, `noreply`,
+//     `no-reply`).
+//
+// Cloud / CDN attribution by AS organisation (the fp_infra_asn bucket
+// in the offline IP classifier) and lower-confidence email buckets
+// (GCP service-account machine identities, KV / env wrappers like
+// `DB_USERNAME=…`, JSON-escaped angle brackets, ANSI colour codes,
+// Faker localparts, fictional company domains, generic role aliases,
+// hashed noreply addresses) are deliberately out of scope; they need
+// a runtime ASN lookup or a per-customer policy decision respectively.
 func isPresidioFalsePositive(entityType, match string) bool {
-	if entityType != "IP_ADDRESS" {
+	switch entityType {
+	case "IP_ADDRESS":
+		return nonPIIIPReason(strings.TrimSpace(match)) != ""
+	case "EMAIL_ADDRESS":
+		return nonPIIEmailReason(match) != ""
+	default:
 		return false
 	}
-	trimmed := strings.TrimSpace(match)
-	if addr, err := netip.ParseAddr(trimmed); err == nil {
-		if addr.IsUnspecified() || addr.IsLoopback() {
-			return true
-		}
-	}
-	if ipv6ShortFormFP.MatchString(trimmed) {
-		return true
-	}
-	return false
 }
 
 // computeRetryBackoff returns a full-jittered exponential backoff for the

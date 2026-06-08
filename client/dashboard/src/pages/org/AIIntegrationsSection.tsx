@@ -28,7 +28,7 @@ import { CursorIcon } from "../hooks/HookSourceIcon";
 
 const CURSOR_PROVIDER = "cursor";
 
-export function AIIntegrationsSection() {
+export function AIIntegrationsSection(): JSX.Element {
   const { data, isLoading } = useAiIntegrationConfig({
     provider: CURSOR_PROVIDER,
   });

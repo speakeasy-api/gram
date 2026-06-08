@@ -39,7 +39,10 @@ function prepareSnapshot(
   }
 }
 
-export function StaticDiff(props: { log: AuditLog; lang?: string }) {
+export function StaticDiff(props: {
+  log: AuditLog;
+  lang?: string;
+}): React.JSX.Element {
   const { theme } = useMoonshineConfig();
 
   const { log, lang } = props;

@@ -91,7 +91,7 @@ export function AuthLayout({
   children: React.ReactNode;
   topRight?: React.ReactNode;
   contentClassName?: string;
-}) {
+}): JSX.Element {
   return (
     <div className="login-right-pane relative flex min-h-screen w-full flex-col items-center justify-center overflow-hidden bg-[#FAFAFA] p-8 md:w-1/2 md:p-16">
       {/* Moving dot background — scrolls on hover */}
@@ -161,7 +161,7 @@ export type LoginSectionProps = {
   redirectTo: string | null;
 };
 
-export function LoginSection(props: LoginSectionProps) {
+export function LoginSection(props: LoginSectionProps): JSX.Element {
   const [searchParams] = useSearchParams();
   const signinError = searchParams.get("signin_error");
 
@@ -180,7 +180,7 @@ export function LoginSection(props: LoginSectionProps) {
       )}
 
       <div className="relative z-10">
-        <Button variant="brand" onClick={handleLogin}>
+        <Button variant="brand" onClick={() => void handleLogin()}>
           Login
         </Button>
       </div>
@@ -188,7 +188,7 @@ export function LoginSection(props: LoginSectionProps) {
   );
 }
 
-export function RegisterSection() {
+export function RegisterSection(): JSX.Element {
   const [searchParams] = useSearchParams();
   const signinError = searchParams.get("signin_error");
   const telemetry = useTelemetry();

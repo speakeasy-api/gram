@@ -33,6 +33,7 @@ import (
 	domainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	deploymentsRepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpmetadataRepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -605,6 +606,53 @@ func (s *Service) GetToolset(ctx context.Context, payload *gen.GetToolsetPayload
 	}
 
 	return toolset, nil
+}
+
+func (s *Service) ListToolFilters(ctx context.Context, payload *gen.ListToolFiltersPayload) (*types.ListToolFiltersResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	toolset, err := s.repo.GetToolset(ctx, repo.GetToolsetParams{
+		Slug:      conv.ToLower(string(payload.Slug)),
+		ProjectID: *authCtx.ProjectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "get toolset").Log(ctx, s.logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, toolset.ID.String(), authCtx.ProjectID.String())); err != nil {
+		return nil, err
+	}
+
+	// A toolset-backed legacy MCP server has no mcp_servers row, so the toolset's
+	// own column is the only explicit source in the resolution chain.
+	var toolsetGroupID *uuid.UUID
+	if toolset.ToolVariationsGroupID.Valid {
+		toolsetGroupID = &toolset.ToolVariationsGroupID.UUID
+	}
+	resolved := toolfilter.ResolveGroupID(nil, toolsetGroupID)
+	if resolved == nil {
+		return toolfilter.BuildView(nil, nil, nil), nil
+	}
+
+	// DescribeToolset applies the resolved group's variation overrides to the
+	// tools, so the derived effective tags match the runtime ?tags= result.
+	described, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(toolset.Slug), &s.toolsetCache, resolved)
+	if err != nil {
+		return nil, err
+	}
+
+	groupName, err := mv.ToolVariationsGroupName(ctx, s.logger, s.db, *resolved, *authCtx.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+
+	return toolfilter.BuildView(described.Tools, resolved, groupName), nil
 }
 
 func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPayload) (*types.Toolset, error) {

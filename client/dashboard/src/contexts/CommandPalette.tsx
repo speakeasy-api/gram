@@ -26,7 +26,7 @@ export const CommandPaletteContext = createContext<
   CommandPaletteContextType | undefined
 >(undefined);
 
-export function useCommandPalette() {
+export function useCommandPalette(): CommandPaletteContextType {
   const context = useContext(CommandPaletteContext);
   if (!context) {
     throw new Error(

@@ -95,7 +95,7 @@ export function RequestEnvironmentSecretsComponent({
   status,
   result,
   toolCallId,
-}: ToolCallMessagePartProps) {
+}: ToolCallMessagePartProps): JSX.Element {
   const draft = useAssistantDraft();
   const a = (args ?? {}) as Partial<SecretsArgs>;
   const keys = Array.isArray(a.keys) ? a.keys : [];
@@ -233,7 +233,10 @@ export function RequestEnvironmentSecretsComponent({
         <Button variant="ghost" onClick={cancel} disabled={submitting}>
           Skip
         </Button>
-        <Button onClick={submit} disabled={!anyFilled || submitting}>
+        <Button
+          onClick={() => void submit()}
+          disabled={!anyFilled || submitting}
+        >
           {submitting ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           ) : null}
@@ -250,7 +253,9 @@ type WebhookArgs = {
   instructions?: string;
 };
 
-export function ShowWebhookUrlComponent({ args }: ToolCallMessagePartProps) {
+export function ShowWebhookUrlComponent({
+  args,
+}: ToolCallMessagePartProps): JSX.Element {
   const a = (args ?? {}) as Partial<WebhookArgs>;
   const url = a.webhook_url ?? "";
   const [copied, setCopied] = useState(false);
@@ -275,7 +280,7 @@ export function ShowWebhookUrlComponent({ args }: ToolCallMessagePartProps) {
       )}
       <div className="border-border bg-muted/30 flex items-center gap-2 rounded-md border px-3 py-2">
         <code className="flex-1 truncate font-mono text-xs">{url}</code>
-        <Button size="sm" variant="ghost" onClick={copy}>
+        <Button size="sm" variant="ghost" onClick={() => void copy()}>
           {copied ? (
             <Check className="h-3.5 w-3.5" />
           ) : (
@@ -306,7 +311,7 @@ export function ShowSlackAppGuideComponent({
   status,
   result,
   toolCallId,
-}: ToolCallMessagePartProps) {
+}: ToolCallMessagePartProps): JSX.Element {
   const a = (args ?? {}) as Partial<SlackAppArgs>;
   const draft = useAssistantDraft();
   const assistantName = draft.assistant?.name;
@@ -468,7 +473,7 @@ export function ProposeNameComponent({
   status,
   result,
   toolCallId,
-}: ToolCallMessagePartProps) {
+}: ToolCallMessagePartProps): JSX.Element {
   const draft = useAssistantDraft();
   const a = (args ?? {}) as Partial<ProposeNameArgs>;
   const suggestions = useMemo(
@@ -588,7 +593,7 @@ export function ProposePersonalityComponent({
   status,
   result,
   toolCallId,
-}: ToolCallMessagePartProps) {
+}: ToolCallMessagePartProps): JSX.Element {
   const draft = useAssistantDraft();
   const assistantName = draft.assistant?.name ?? "";
 
@@ -897,7 +902,7 @@ export function ProposeSlackSetupComponent({
   status,
   result,
   toolCallId,
-}: ToolCallMessagePartProps) {
+}: ToolCallMessagePartProps): JSX.Element {
   const draft = useAssistantDraft();
   const a = (args ?? {}) as Partial<SlackSetupArgs>;
   const assistantName = draft.assistant?.name ?? "this assistant";
@@ -1098,32 +1103,13 @@ export function ProposeSlackSetupComponent({
       </div>
 
       <div className="mt-4 flex justify-end gap-2">
-        <Button variant="ghost" onClick={cancel}>
+        <Button variant="ghost" onClick={() => void cancel()}>
           Skip
         </Button>
-        <Button onClick={submit} disabled={!anySelected}>
+        <Button onClick={() => void submit()} disabled={!anySelected}>
           Save
         </Button>
       </div>
     </ToolCard>
   );
-}
-
-export function NoticeOnUnmount({
-  toolCallId,
-  status,
-}: ToolCallMessagePartProps) {
-  const draft = useAssistantDraft();
-  const isPending = isExecuting(status);
-  useEffect(() => {
-    if (!isPending) return;
-    return () => {
-      draft.resolvePending(toolCallId, {
-        success: false,
-        cancelled: true,
-        reason: "Component unmounted before user submitted.",
-      });
-    };
-  }, [draft, toolCallId, isPending]);
-  return null;
 }

@@ -24,7 +24,7 @@ import { CheckIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-export default function Integrations() {
+export default function Integrations(): JSX.Element {
   const { data: integrations, refetch } = useListIntegrations();
 
   const isAdmin = useIsAdmin();
@@ -36,7 +36,7 @@ export default function Integrations() {
 
   useEffect(() => {
     if (!createIntegrationDialogOpen) {
-      refetch();
+      void refetch();
     }
   }, [createIntegrationDialogOpen, refetch]);
 
@@ -80,7 +80,7 @@ export default function Integrations() {
           open={createIntegrationDialogOpen}
           onOpenChange={setCreateIntegrationDialogOpen}
           onNewVersion={() => {
-            refetch();
+            void refetch();
           }}
         />
         <RequestIntegrationDialog
@@ -216,7 +216,7 @@ function CreateIntegrationDialog({
   );
 }
 
-export function IntegrationCard({
+function IntegrationCard({
   integration,
   newVersionCallback,
 }: {
@@ -273,7 +273,7 @@ export function IntegrationCard({
     } else {
       await handleEnable();
     }
-    refetch();
+    void refetch();
   };
 
   const firstParty = packages?.packages.find(
@@ -307,7 +307,7 @@ export function IntegrationCard({
             <Button.Text>New Version</Button.Text>
           </Button>
         ) : (
-          <Button variant="secondary" onClick={toggleEnabled}>
+          <Button variant="secondary" onClick={() => void toggleEnabled()}>
             {isEnabled ? (
               <>
                 <CheckIcon className="h-4 w-4" />

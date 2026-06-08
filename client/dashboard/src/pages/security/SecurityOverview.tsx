@@ -102,7 +102,7 @@ type TrendPoint = {
   findings: number;
 };
 
-export default function SecurityOverview() {
+export default function SecurityOverview(): JSX.Element {
   return (
     <RequireScope scope="org:admin" level="page">
       <Page>
@@ -117,7 +117,7 @@ export default function SecurityOverview() {
   );
 }
 
-export function RiskOverviewRoot() {
+export function RiskOverviewRoot(): JSX.Element {
   return <Outlet />;
 }
 
@@ -505,7 +505,9 @@ function SecurityOverviewContent() {
             title="Risk Events over Time"
             chartId={RISK_TREND_CHART_ID}
             expandedChart={null}
-            onExpand={() => null}
+            onExpand={() => {
+              void null;
+            }}
             hasData={
               hasFindings &&
               overview.timeSeriesFindings.some((point) => point.findings > 0)
@@ -796,7 +798,7 @@ function buildRiskTrendChartData(points: TrendPoint[], from: Date, to: Date) {
     .map(([category, series], index) => {
       const color =
         getRiskCategoryChartColor(category) ??
-        RISK_CATEGORY_CHART_COLORS[index % RISK_CATEGORY_CHART_COLORS.length]
+        RISK_CATEGORY_CHART_COLORS[index % RISK_CATEGORY_CHART_COLORS.length]!
           .color;
       const meta = RULE_CATEGORY_META[category as RuleCategory];
       return {

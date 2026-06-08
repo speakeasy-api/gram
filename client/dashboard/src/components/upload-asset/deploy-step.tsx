@@ -9,10 +9,7 @@ import { useListTools } from "@/hooks/toolTypes";
 import { slugify } from "@/lib/constants";
 import { useRoutes } from "@/routes";
 import { Deployment, DeploymentLogEvent } from "@gram/client/models/components";
-import {
-  useDeploymentLogs,
-  useLatestDeployment,
-} from "@gram/client/react-query";
+import { useDeploymentLogs } from "@gram/client/react-query";
 import { Alert, Stack } from "@speakeasy-api/moonshine";
 import { ChevronDownIcon, ExternalLinkIcon } from "lucide-react";
 import React from "react";
@@ -21,7 +18,7 @@ import { Type } from "../ui/type";
 import { useStep } from "./step/use-step";
 import { useStepper } from "./stepper/use-stepper";
 
-export default function DeployStep() {
+export default function DeployStep(): React.JSX.Element | null {
   const stepper = useStepper();
   const step = useStep();
   const telemetry = useTelemetry();
@@ -111,7 +108,7 @@ export default function DeployStep() {
       }
     };
 
-    createToolset();
+    void createToolset();
   }, [step.state, toolUrns, client.toolsets, stepper.meta, telemetry]);
 
   const deploymentLogs = useDeploymentLogs(
@@ -297,9 +294,7 @@ function DeploymentDetailsCollapsible({
  * deployment state.
  */
 const useCreateDeployment = (): (() => Promise<Deployment>) => {
-  const _latestDeployment = useLatestDeployment();
   const stepper = useStepper();
-  const _step = useStep();
   const client = useSdkClient();
 
   const _do = React.useCallback(async () => {
@@ -338,7 +333,9 @@ const useCreateDeployment = (): (() => Promise<Deployment>) => {
       if (++attempts >= maxAttempts) {
         throw new Error("Deployment timed out waiting for completion");
       }
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise((resolve) => {
+        void setTimeout(resolve, 500);
+      });
       deployment = (await client.deployments.getById({
         id: deployment.id,
       })) as Deployment;

@@ -48,7 +48,7 @@ import {
   perPage,
 } from "@/components/observe/observeFilterUtils";
 
-export function LogsMCPContent() {
+export function LogsMCPContent(): JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams();
   const { projectSlug } = useSlugs();
 
@@ -254,8 +254,8 @@ export function LogsMCPContent() {
 
   const queryClient = useQueryClient();
   const handleRefresh = useCallback(() => {
-    refetch();
-    queryClient.invalidateQueries({ queryKey: ["trace-logs"] });
+    void refetch();
+    void queryClient.invalidateQueries({ queryKey: ["trace-logs"] });
   }, [refetch, queryClient]);
 
   const allTraces = useMemo(() => {
@@ -315,7 +315,7 @@ export function LogsMCPContent() {
       if (!hasNextPage) return;
 
       if (distanceFromBottom < 200) {
-        fetchNextPage();
+        void fetchNextPage();
       }
     },
     [fetchNextPage, hasNextPage, isFetching, isFetchingNextPage],
@@ -381,7 +381,7 @@ export function LogsMCPContent() {
         handleScroll={handleScroll}
         hasNextPage={hasNextPage}
         isFetchingNextPage={isFetchingNextPage}
-        refetch={refetch}
+        refetch={() => void refetch()}
         onRefresh={handleRefresh}
         dateRange={dateRange}
         customRange={customRange}
@@ -643,7 +643,9 @@ function LogsInnerContent({
       <LogDetailSheet
         log={selectedLog}
         open={!!selectedLog}
-        onOpenChange={(open) => !open && setSelectedLog(null)}
+        onOpenChange={(open) => {
+          void (!open && setSelectedLog(null));
+        }}
         onAddFilter={handleAddFilterFromLog}
       />
     </>

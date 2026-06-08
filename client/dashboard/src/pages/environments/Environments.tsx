@@ -16,11 +16,11 @@ import { Type } from "@/components/ui/type";
 import { handleAPIError } from "@/lib/errors";
 import { CloneEnvironmentDialog } from "./CloneEnvironmentDialog";
 import { useEnvironments } from "./useEnvironments";
-export function EnvironmentsRoot() {
+export function EnvironmentsRoot(): JSX.Element {
   return <Outlet />;
 }
 
-export default function Environments() {
+export default function Environments(): JSX.Element {
   return (
     <Page>
       <Page.Header>

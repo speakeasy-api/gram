@@ -45,7 +45,7 @@ export function FailedSourcesSection({
   generalErrors,
   deployment,
   onRemoveSuccess,
-}: FailedSourcesSectionProps) {
+}: FailedSourcesSectionProps): JSX.Element {
   const client = useSdkClient();
   const routes = useRoutes();
   // Auto-select only sources with no toolset references
@@ -105,7 +105,7 @@ export function FailedSourcesSection({
     if (selectedWithTools.length > 0) {
       setConfirmOpen(true);
     } else {
-      doRemove();
+      void doRemove();
     }
   };
 
@@ -132,6 +132,8 @@ export function FailedSourcesSection({
             break;
           case "externalmcp":
             excludeExternalMcps.push(source.slug);
+            break;
+          case "remotemcp":
             break;
         }
       }
@@ -335,7 +337,10 @@ export function FailedSourcesSection({
             <Button variant="tertiary" onClick={() => setConfirmOpen(false)}>
               Cancel
             </Button>
-            <Button variant="destructive-primary" onClick={doRemove}>
+            <Button
+              variant="destructive-primary"
+              onClick={() => void doRemove()}
+            >
               <Button.Text>Remove anyway</Button.Text>
             </Button>
           </Dialog.Footer>

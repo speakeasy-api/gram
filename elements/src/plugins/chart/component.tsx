@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { isJsonRenderTree, type JsonRenderNode } from "@/lib/generative-ui";
 import { SyntaxHighlighterProps } from "@assistant-ui/react-markdown";
 import { AlertCircleIcon } from "lucide-react";
-import { FC, useMemo } from "react";
+import { ElementType, FC, useMemo } from "react";
 import { MacOSWindowFrame } from "../components/MacOSWindowFrame";
 import { PluginLoadingState } from "../components/PluginLoadingState";
 
@@ -27,15 +27,16 @@ const loadingMessages = [
   "Processing data...",
 ];
 
-function getRandomLoadingMessage() {
-  return loadingMessages[Math.floor(Math.random() * loadingMessages.length)];
+function getRandomLoadingMessage(): string {
+  return loadingMessages[Math.floor(Math.random() * loadingMessages.length)]!;
 }
 
 /**
- * Chart components registry
+ * Chart components registry. Each entry accepts the chart-specific prop shape
+ * declared in `./ui`, but the registry erases those generics via `ElementType`
+ * so heterogeneous components can coexist under one key-indexed map.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const chartComponents: Record<string, FC<any>> = {
+const chartComponents: Record<string, ElementType> = {
   BarChart,
   LineChart,
   AreaChart,

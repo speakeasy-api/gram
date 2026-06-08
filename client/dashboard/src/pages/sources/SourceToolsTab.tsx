@@ -265,7 +265,7 @@ export function SourceToolsTab({
   relatedTools: Tool[];
   isOpenAPI: boolean;
   uniqueRuntimes: string[];
-} & ToolActionsProps) {
+} & ToolActionsProps): JSX.Element {
   const [methodFilter, setMethodFilter] = useState<string | null>(null);
   const [runtimeFilter, setRuntimeFilter] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -307,7 +307,7 @@ export function SourceToolsTab({
                   label={method}
                   count={count}
                   active={methodFilter === method}
-                  variant={HTTP_METHOD_VARIANT[method]}
+                  variant={HTTP_METHOD_VARIANT[method] ?? "neutral"}
                   onClick={() =>
                     setMethodFilter(methodFilter === method ? null : method)
                   }

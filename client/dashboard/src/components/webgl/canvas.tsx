@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef } from "react";
+import { memo, useEffect, useMemo, useRef, ReactElement } from "react";
 import type { RefObject } from "react";
 import { ASCIIEffect } from "./components/ascii-effect";
 import { ScrollSyncPlane } from "./components/scroll-sync-plane";
@@ -99,7 +99,7 @@ const Scene = memo(() => {
 });
 Scene.displayName = "Scene";
 
-export const InnerCanvas = memo(
+const InnerCanvas = memo(
   ({ containerRef }: { containerRef: RefObject<HTMLDivElement | null> }) => {
     return (
       <>
@@ -136,7 +136,7 @@ export const InnerCanvas = memo(
 );
 InnerCanvas.displayName = "InnerCanvas";
 
-export const WebGLCanvas = () => {
+export const WebGLCanvas = (): ReactElement | null => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasZIndex = useWebGLStore((state) => state.canvasZIndex);
   const isWebGLAvailable = useWebGLStore((state) => state.isWebGLAvailable);

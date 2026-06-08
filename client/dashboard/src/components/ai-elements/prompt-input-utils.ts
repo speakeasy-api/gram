@@ -14,7 +14,7 @@ export type AttachmentsContext = {
   fileInputRef: RefObject<HTMLInputElement | null>;
 };
 
-export type TextInputContext = {
+type TextInputContext = {
   value: string;
   setInput: (v: string) => void;
   clear: () => void;
@@ -30,42 +30,24 @@ export type PromptInputControllerProps = {
   ) => void;
 };
 
-export const PromptInputController =
-  createContext<PromptInputControllerProps | null>(null);
-export const ProviderAttachmentsContext =
-  createContext<AttachmentsContext | null>(null);
+const PromptInputController = createContext<PromptInputControllerProps | null>(
+  null,
+);
+const ProviderAttachmentsContext = createContext<AttachmentsContext | null>(
+  null,
+);
 export const LocalAttachmentsContext = createContext<AttachmentsContext | null>(
   null,
 );
 
-export const usePromptInputController = () => {
-  const ctx = useContext(PromptInputController);
-  if (!ctx) {
-    throw new Error(
-      "Wrap your component inside <PromptInputProvider> to use usePromptInputController().",
-    );
-  }
-  return ctx;
-};
-
 // Optional variants (do NOT throw). Useful for dual-mode components.
-export const useOptionalPromptInputController = () =>
-  useContext(PromptInputController);
+export const useOptionalPromptInputController =
+  (): PromptInputControllerProps | null => useContext(PromptInputController);
 
-export const useProviderAttachments = () => {
-  const ctx = useContext(ProviderAttachmentsContext);
-  if (!ctx) {
-    throw new Error(
-      "Wrap your component inside <PromptInputProvider> to use useProviderAttachments().",
-    );
-  }
-  return ctx;
-};
-
-export const useOptionalProviderAttachments = () =>
+const useOptionalProviderAttachments = () =>
   useContext(ProviderAttachmentsContext);
 
-export const usePromptInputAttachments = () => {
+export const usePromptInputAttachments = (): AttachmentsContext => {
   // Dual-mode: prefer provider if present, otherwise use local
   const provider = useOptionalProviderAttachments();
   const local = useContext(LocalAttachmentsContext);

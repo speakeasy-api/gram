@@ -658,9 +658,8 @@ func newWorkerCommand() *cli.Command {
 				auditLogger,
 			)
 			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
-			dashboardTools := platformtoolsruntime.DashboardExternalTools(db)
 			// Runner-callable platform tools the runtime must be able to execute.
-			assistantPlatformExtras := append(append([]platformtools.ExternalTool{}, memoryTools...), dashboardTools...)
+			assistantPlatformExtras := append([]platformtools.ExternalTool{}, memoryTools...)
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 
 			remoteChallengeManager := remotesessions.NewChallengeManager(

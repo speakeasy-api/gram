@@ -73,6 +73,11 @@ linters:
         linters:
           - gosec
         text: G101
+      # False positives that audit action constants containing "bypass" are somehow hardcoded credentials.
+      - path: internal/audit/risk\.go
+        linters:
+          - gosec
+        text: G101
       # The guardian package is the only package that is allowed to access
       # http.Client directly since it constructs the safe HTTP clients
       # that are used throughout the codebase. This is tracked by GG002.
@@ -344,6 +349,8 @@ linters:
         - "github.com/speakeasy-api/gram/server/internal/oops.C("
         - "github.com/speakeasy-api/gram/server/internal/oops.E("
         - "github.com/speakeasy-api/gram/server/internal/oops.Permanent("
+        - "github.com/speakeasy-api/gram/server/internal/platformtools/core.DecodeInput("
+        - "github.com/speakeasy-api/gram/server/internal/platformtools/core.EncodeResult("
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).Require("
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).RequireAny("
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).Filter("
@@ -359,6 +366,7 @@ linters:
         - "(*github.com/speakeasy-api/gram/server/internal/auth/sessions.Manager).Authenticate("
         - "(*github.com/speakeasy-api/gram/server/internal/openapi.ToolExtractor).Do("
         - "(*github.com/speakeasy-api/gram/server/internal/functions.ToolExtractor).Do("
+        - "github.com/speakeasy-api/gram/server/internal/mv.ToolVariationsGroupName("
 
       ignore-sig-regexps:
         - "\\(\\*github\\.com\\/speakeasy-api\\/gram\\/server\\/internal\\/background\\/activities\\..+\\)\\.Do\\("

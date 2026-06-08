@@ -196,7 +196,6 @@ run();
 * [ensureManaged](docs/sdks/assistants/README.md#ensuremanaged) - ensureManagedAssistant assistants
 * [get](docs/sdks/assistants/README.md#get) - getAssistant assistants
 * [list](docs/sdks/assistants/README.md#list) - listAssistants assistants
-* [listMessages](docs/sdks/assistants/README.md#listmessages) - listMessages assistants
 * [sendMessage](docs/sdks/assistants/README.md#sendmessage) - sendMessage assistants
 * [update](docs/sdks/assistants/README.md#update) - updateAssistant assistants
 
@@ -338,6 +337,7 @@ run();
 * [delete](docs/sdks/mcpservers/README.md#delete) - deleteMcpServer mcpServers
 * [get](docs/sdks/mcpservers/README.md#get) - getMcpServer mcpServers
 * [list](docs/sdks/mcpservers/README.md#list) - listMcpServers mcpServers
+* [listToolFilters](docs/sdks/mcpservers/README.md#listtoolfilters) - listToolFilters mcpServers
 * [update](docs/sdks/mcpservers/README.md#update) - updateMcpServer mcpServers
 
 ### [OrganizationRemoteSessionIssuers](docs/sdks/organizationremotesessionissuers/README.md)
@@ -485,6 +485,14 @@ run();
 * [trigger](docs/sdks/policies/README.md#trigger) - triggerRiskAnalysis risk
 * [update](docs/sdks/policies/README.md#update) - updateRiskPolicy risk
 
+### [Risk.PolicyBypassRequests](docs/sdks/policybypassrequests/README.md)
+
+* [approve](docs/sdks/policybypassrequests/README.md#approve) - approveRiskPolicyBypassRequest risk
+* [create](docs/sdks/policybypassrequests/README.md#create) - createRiskPolicyBypassRequest risk
+* [deny](docs/sdks/policybypassrequests/README.md#deny) - denyRiskPolicyBypassRequest risk
+* [list](docs/sdks/policybypassrequests/README.md#list) - listRiskPolicyBypassRequests risk
+* [revoke](docs/sdks/policybypassrequests/README.md#revoke) - revokeRiskPolicyBypassRequest risk
+
 ### [Risk.Results](docs/sdks/results/README.md)
 
 * [byChat](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
@@ -546,6 +554,7 @@ run();
 * [getBySlug](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
 * [list](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 * [listForOrg](docs/sdks/toolsets/README.md#listfororg) - listToolsetsForOrg toolsets
+* [listToolFilters](docs/sdks/toolsets/README.md#listtoolfilters) - listToolFilters toolsets
 * [removeOAuthServer](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
 * [setToolVariationsGroup](docs/sdks/toolsets/README.md#settoolvariationsgroup) - setToolVariationsGroup toolsets
 * [setUserSessionIssuer](docs/sdks/toolsets/README.md#setusersessionissuer) - setUserSessionIssuer toolsets
@@ -669,7 +678,6 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`assistantsEnsureManaged`](docs/sdks/assistants/README.md#ensuremanaged) - ensureManagedAssistant assistants
 - [`assistantsGet`](docs/sdks/assistants/README.md#get) - getAssistant assistants
 - [`assistantsList`](docs/sdks/assistants/README.md#list) - listAssistants assistants
-- [`assistantsListMessages`](docs/sdks/assistants/README.md#listmessages) - listMessages assistants
 - [`assistantsSendMessage`](docs/sdks/assistants/README.md#sendmessage) - sendMessage assistants
 - [`assistantsUpdate`](docs/sdks/assistants/README.md#update) - updateAssistant assistants
 - [`auditlogsList`](docs/sdks/auditlogs/README.md#list) - list auditlogs
@@ -754,6 +762,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`mcpServersDelete`](docs/sdks/mcpservers/README.md#delete) - deleteMcpServer mcpServers
 - [`mcpServersGet`](docs/sdks/mcpservers/README.md#get) - getMcpServer mcpServers
 - [`mcpServersList`](docs/sdks/mcpservers/README.md#list) - listMcpServers mcpServers
+- [`mcpServersListToolFilters`](docs/sdks/mcpservers/README.md#listtoolfilters) - listToolFilters mcpServers
 - [`mcpServersUpdate`](docs/sdks/mcpservers/README.md#update) - updateMcpServer mcpServers
 - [`organizationRemoteSessionIssuersCreate`](docs/sdks/organizationremotesessionissuers/README.md#create) - createOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
 - [`organizationRemoteSessionIssuersDelete`](docs/sdks/organizationremotesessionissuers/README.md#delete) - deleteOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
@@ -849,6 +858,11 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskPoliciesStatus`](docs/sdks/policies/README.md#status) - getRiskPolicyStatus risk
 - [`riskPoliciesTrigger`](docs/sdks/policies/README.md#trigger) - triggerRiskAnalysis risk
 - [`riskPoliciesUpdate`](docs/sdks/policies/README.md#update) - updateRiskPolicy risk
+- [`riskPolicyBypassRequestsApprove`](docs/sdks/policybypassrequests/README.md#approve) - approveRiskPolicyBypassRequest risk
+- [`riskPolicyBypassRequestsCreate`](docs/sdks/policybypassrequests/README.md#create) - createRiskPolicyBypassRequest risk
+- [`riskPolicyBypassRequestsDeny`](docs/sdks/policybypassrequests/README.md#deny) - denyRiskPolicyBypassRequest risk
+- [`riskPolicyBypassRequestsList`](docs/sdks/policybypassrequests/README.md#list) - listRiskPolicyBypassRequests risk
+- [`riskPolicyBypassRequestsRevoke`](docs/sdks/policybypassrequests/README.md#revoke) - revokeRiskPolicyBypassRequest risk
 - [`riskResultsByChat`](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
 - [`riskResultsList`](docs/sdks/results/README.md#list) - listRiskResults risk
 - [`riskResultsListForAgent`](docs/sdks/results/README.md#listforagent) - listRiskResultsForAgent risk
@@ -889,6 +903,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`toolsetsGetBySlug`](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
 - [`toolsetsList`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 - [`toolsetsListForOrg`](docs/sdks/toolsets/README.md#listfororg) - listToolsetsForOrg toolsets
+- [`toolsetsListToolFilters`](docs/sdks/toolsets/README.md#listtoolfilters) - listToolFilters toolsets
 - [`toolsetsRemoveOAuthServer`](docs/sdks/toolsets/README.md#removeoauthserver) - removeOAuthServer toolsets
 - [`toolsetsSetToolVariationsGroup`](docs/sdks/toolsets/README.md#settoolvariationsgroup) - setToolVariationsGroup toolsets
 - [`toolsetsSetUserSessionIssuer`](docs/sdks/toolsets/README.md#setusersessionissuer) - setUserSessionIssuer toolsets
@@ -1085,7 +1100,6 @@ To learn about this feature and how to get started, check
 - [`useListAPIKeys`](docs/sdks/keys/README.md#list) - listKeys keys
 - [`useListAssets`](docs/sdks/assets/README.md#listassets) - listAssets assets
 - [`useListAssistantMemories`](docs/sdks/assistantmemories/README.md#list) - listAssistantMemories assistantMemories
-- [`useListAssistantMessages`](docs/sdks/assistants/README.md#listmessages) - listMessages assistants
 - [`useListAttributeKeys`](docs/sdks/telemetry/README.md#listattributekeys) - listAttributeKeys telemetry
 - [`useListChats`](docs/sdks/chat/README.md#list) - listChats chat
 - [`useListCollections`](docs/sdks/collections/README.md#list) - list collections
@@ -1097,6 +1111,7 @@ To learn about this feature and how to get started, check
 - [`useListInvites`](docs/sdks/organizations/README.md#listinvites) - listInvites organizations
 - [`useListMCPCatalog`](docs/sdks/mcpregistries/README.md#listcatalog) - listCatalog mcpRegistries
 - [`useListMCPRegistries`](docs/sdks/mcpregistries/README.md#listregistries) - listRegistries mcpRegistries
+- [`useListMcpServerToolFilters`](docs/sdks/mcpservers/README.md#listtoolfilters) - listToolFilters mcpServers
 - [`useListOrganizationUsers`](docs/sdks/organizations/README.md#listusers) - listUsers organizations
 - [`useListPackages`](docs/sdks/packages/README.md#list) - listPackages packages
 - [`useListProjects`](docs/sdks/projects/README.md#list) - listProjects projects
@@ -1106,6 +1121,7 @@ To learn about this feature and how to get started, check
 - [`useListTools`](docs/sdks/tools/README.md#list) - listTools tools
 - [`useListToolsets`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 - [`useListToolsetsForOrg`](docs/sdks/toolsets/README.md#listfororg) - listToolsetsForOrg toolsets
+- [`useListToolsetToolFilters`](docs/sdks/toolsets/README.md#listtoolfilters) - listToolFilters toolsets
 - [`useListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
 - [`useLoadChat`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth
@@ -1158,15 +1174,19 @@ To learn about this feature and how to get started, check
 - [`useRevokeUserSessionConsentMutation`](docs/sdks/usersessionconsents/README.md#revoke) - revokeUserSessionConsent userSessionConsents
 - [`useRevokeUserSessionMutation`](docs/sdks/usersessions/README.md#revoke) - revokeUserSession userSessions
 - [`useRiskApprovalsDeleteMutation`](docs/sdks/approvals/README.md#delete) - revokeShadowMCPApproval risk
+- [`useRiskApprovePolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#approve) - approveRiskPolicyBypassRequest risk
 - [`useRiskApproveShadowMCPMutation`](docs/sdks/approvals/README.md#create) - approveShadowMCP risk
 - [`useRiskCapabilities`](docs/sdks/capabilities/README.md#get) - getRiskCapabilities risk
 - [`useRiskCategories`](docs/sdks/categories/README.md#list) - listRiskCategories risk
 - [`useRiskCreateCustomDetectionRuleMutation`](docs/sdks/customrules/README.md#create) - createCustomDetectionRule risk
+- [`useRiskCreatePolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#create) - createRiskPolicyBypassRequest risk
 - [`useRiskCreatePolicyMutation`](docs/sdks/policies/README.md#create) - createRiskPolicy risk
 - [`useRiskDeleteCustomDetectionRuleMutation`](docs/sdks/customrules/README.md#delete) - deleteCustomDetectionRule risk
+- [`useRiskDenyPolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#deny) - denyRiskPolicyBypassRequest risk
 - [`useRiskGetCustomDetectionRule`](docs/sdks/customrules/README.md#get) - getCustomDetectionRule risk
 - [`useRiskListCustomDetectionRules`](docs/sdks/customrules/README.md#list) - listCustomDetectionRules risk
 - [`useRiskListPolicies`](docs/sdks/policies/README.md#list) - listRiskPolicies risk
+- [`useRiskListPolicyBypassRequests`](docs/sdks/policybypassrequests/README.md#list) - listRiskPolicyBypassRequests risk
 - [`useRiskListResults`](docs/sdks/results/README.md#list) - listRiskResults risk
 - [`useRiskListResultsByChat`](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
 - [`useRiskListResultsForAgent`](docs/sdks/results/README.md#listforagent) - listRiskResultsForAgent risk
@@ -1177,6 +1197,7 @@ To learn about this feature and how to get started, check
 - [`useRiskPoliciesStatus`](docs/sdks/policies/README.md#status) - getRiskPolicyStatus risk
 - [`useRiskPoliciesTriggerMutation`](docs/sdks/policies/README.md#trigger) - triggerRiskAnalysis risk
 - [`useRiskPoliciesUpdateMutation`](docs/sdks/policies/README.md#update) - updateRiskPolicy risk
+- [`useRiskRevokePolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#revoke) - revokeRiskPolicyBypassRequest risk
 - [`useRiskRuleBreakdown`](docs/sdks/overview/README.md#rules) - getRiskRuleBreakdown risk
 - [`useRiskSuggestCustomRuleMutation`](docs/sdks/customrules/README.md#suggest) - suggestCustomDetectionRule risk
 - [`useRiskTestDetectionRuleMutation`](docs/sdks/rules/README.md#test) - testDetectionRule risk

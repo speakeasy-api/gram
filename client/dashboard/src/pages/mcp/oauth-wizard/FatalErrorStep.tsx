@@ -10,7 +10,7 @@ export function FatalErrorStep({
 }: {
   error: string | null;
   onClose: () => void;
-}) {
+}): JSX.Element {
   const routes = useRoutes();
 
   return (

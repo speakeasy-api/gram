@@ -163,7 +163,7 @@ const SHARED_BAR_SCALES = {
   },
 } satisfies _BarScales;
 
-export function InsightsToolsContent() {
+export function InsightsToolsContent(): JSX.Element {
   const { projectSlug } = useSlugs();
 
   const mcpConfig = useObservabilityMcpConfig({
@@ -274,7 +274,7 @@ export function InsightsToolsContent() {
   });
 
   const refetch = useCallback(() => {
-    refetchLogs();
+    void refetchLogs();
   }, [refetchLogs]);
 
   const isLogsDisabled = isLogsLogsDisabled;
@@ -513,7 +513,9 @@ function HooksInnerContent({
       <LogDetailSheet
         log={selectedLog}
         open={!!selectedLog}
-        onOpenChange={(open) => !open && setSelectedLog(null)}
+        onOpenChange={(open) => {
+          void (!open && setSelectedLog(null));
+        }}
       />
     </>
   );
@@ -596,7 +598,7 @@ function StackedBarChart({
       maintainAspectRatio: false,
       onClick(_, elements) {
         if (!elements.length || !handleFilter) return;
-        const { datasetIndex, index } = elements[0];
+        const { datasetIndex, index } = elements[0]!;
         const datasetLabel = datasets[datasetIndex]?.label;
         const rowLabel = visibleLabels[index];
         if (datasetLabel && rowLabel) handleFilter(datasetLabel, rowLabel);
@@ -712,9 +714,9 @@ function UsersPerServerChart({
       label: user,
       barThickness: 24,
       data: sortedServers.map((s) => s.userCounts.get(user) ?? 0),
-      backgroundColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
+      backgroundColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length]!,
       hoverBackgroundColor:
-        USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length] + "cc",
+        USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length]! + "cc",
     }));
 
     return { labels: chartLabels, datasets: chartDatasets };
@@ -866,9 +868,9 @@ function ServerErrorRateChart({
       label: tool,
       barThickness: BAR_THICKNESS.collapsed,
       data: sortedServers.map((s) => s.toolCounts.get(tool) ?? 0),
-      backgroundColor: BRAND_RED_COLORS[i % BRAND_RED_COLORS.length],
+      backgroundColor: BRAND_RED_COLORS[i % BRAND_RED_COLORS.length]!,
       hoverBackgroundColor:
-        BRAND_RED_COLORS[i % BRAND_RED_COLORS.length] + "cc",
+        BRAND_RED_COLORS[i % BRAND_RED_COLORS.length]! + "cc",
     }));
 
     return { labels: chartLabels, datasets: chartDatasets };
@@ -1006,7 +1008,7 @@ function buildTimeSeriesFromSummary<
 
   const datasets: TimeSeriesDataset[] = Array.from(seriesMap.entries()).map(
     ([key, series], i) => {
-      const color = USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length];
+      const color = USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length]!;
       return {
         label: key,
         data: sortedTs.map((ts) => series.get(ts) ?? 0),
@@ -1298,9 +1300,9 @@ function UsersPerSkillChart({
       label: user,
       barThickness: BAR_THICKNESS.collapsed,
       data: sortedSkills.map((s) => s.userCounts.get(user) ?? 0),
-      backgroundColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length],
+      backgroundColor: USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length]!,
       hoverBackgroundColor:
-        USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length] + "cc",
+        USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length]! + "cc",
     }));
 
     return { labels: chartLabels, datasets: chartDatasets };
