@@ -1042,9 +1042,6 @@ function PolicyKindChoice({
             Catch secrets, PII, and destructive commands using built-in scanners
             and custom regex rules.
           </Type>
-          <Type small muted className="text-muted-foreground/60 mt-1.5 italic">
-            e.g. "Block AWS credentials in tool calls"
-          </Type>
         </div>
         <ChevronRight className="text-muted-foreground mt-2.5 h-4 w-4 shrink-0" />
       </button>
@@ -1066,9 +1063,6 @@ function PolicyKindChoice({
           <Type small muted className="mt-0.5">
             Describe any behavior you want to detect in plain language — no
             scanner configuration needed.
-          </Type>
-          <Type small muted className="text-muted-foreground/60 mt-1.5 italic">
-            e.g. "Flag tool sequences that read then transmit sensitive data"
           </Type>
         </div>
         <ChevronRight className="text-muted-foreground mt-2.5 h-4 w-4 shrink-0" />
@@ -1254,8 +1248,7 @@ function PromptPolicyHowItWorks({ isEditing }: { isEditing: boolean }) {
         <p className="text-muted-foreground text-sm">
           Prompt-based policies use an LLM judge, so each evaluated tool request
           can add latency compared with standard detection rules. The judge sees
-          the tool name and inputs; tool responses are not evaluated in this
-          release.
+          the tool name and inputs.
         </p>
       </CollapsibleContent>
     </Collapsible>
