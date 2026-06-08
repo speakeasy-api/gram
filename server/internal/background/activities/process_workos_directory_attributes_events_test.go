@@ -100,7 +100,7 @@ func TestProcessWorkOSDirectoryAttributesEvents_UpsertsGroupAndAdvancesCursor(t 
 	organizationID, name, attributes, deleted := getDirectoryGroupRow(t, ctx, conn, groupID)
 	require.Equal(t, gramOrgID, organizationID)
 	require.Equal(t, "Platform", name)
-	require.JSONEq(t, `{"id":"directory_group_upsert","organization_id":"org_directory_group","name":"Platform","raw_attributes":{"department":"Engineering"},"created_at":"2026-05-12T10:00:00Z","updated_at":"2026-05-12T10:00:00Z"}`, string(attributes))
+	require.JSONEq(t, `{"department":"Engineering"}`, string(attributes))
 	require.False(t, deleted)
 
 	cursor, err := workosrepo.New(conn).GetDirectoryAttributesSyncLastEventID(ctx, workosrepo.GetDirectoryAttributesSyncLastEventIDParams{
@@ -129,6 +129,14 @@ func TestProcessWorkOSDirectoryAttributesEvents_OpensAndClosesMembership(t *test
 	seedDirectoryAttributesWorkOSOrganization(t, ctx, conn, gramOrgID, workosOrgID)
 	_, err := usersrepo.New(conn).UpsertUser(ctx, localUserParams(gramUserID, email, "Directory Member"))
 	require.NoError(t, err)
+	_, err = workosrepo.New(conn).UpsertDirectoryGroup(ctx, workosrepo.UpsertDirectoryGroupParams{
+		OrganizationID:         gramOrgID,
+		WorkosDirectoryGroupID: groupID,
+		Name:                   "Platform",
+		Attributes:             []byte(`{"id":"directory_group_membership","source":"group-event"}`),
+		AttributesContentHash:  conv.ToPGText("sha256:membership-group-seed"),
+	})
+	require.NoError(t, err)
 
 	workosClient := workos.NewStubClient()
 	workosClient.SetEventPages([][]events.Event{{
@@ -147,7 +155,11 @@ func TestProcessWorkOSDirectoryAttributesEvents_OpensAndClosesMembership(t *test
 
 	user, err := usersrepo.New(conn).GetUser(ctx, gramUserID)
 	require.NoError(t, err)
-	require.JSONEq(t, `{"id":"directory_user_membership","emails":[{"value":"directory.membership@example.com","primary":true}],"first_name":"Ada","last_name":"Lovelace","custom_attributes":{"department":"Engineering","team":"SDK"},"updated_at":"2026-05-12T10:00:00Z"}`, string(user.Attributes))
+	require.JSONEq(t, `{}`, string(user.Attributes))
+
+	_, _, attributes, deleted := getDirectoryGroupRow(t, ctx, conn, groupID)
+	require.JSONEq(t, `{"id":"directory_group_membership","source":"group-event"}`, string(attributes))
+	require.False(t, deleted)
 
 	workosClient.SetEventPages([][]events.Event{{
 		{ID: "event_membership_removed", Event: "dsync.group.user_removed", CreatedAt: time.Now(), Data: directoryGroupMembershipEventData(workosOrgID, groupID, directoryUserID, email)},

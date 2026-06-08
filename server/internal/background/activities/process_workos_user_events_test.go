@@ -40,7 +40,7 @@ func userEventDataWithExternalID(workosUserID, externalID, email, firstName, las
 }
 
 func directoryUserEventData(workosDirectoryUserID, email string) []byte {
-	return []byte(`{"id":"` + workosDirectoryUserID + `","emails":[{"value":"` + email + `","primary":true}],"first_name":"Ada","last_name":"Lovelace","custom_attributes":{"department":"Engineering","team":"SDK"},"updated_at":"2026-05-12T10:00:00Z"}`)
+	return []byte(`{"id":"` + workosDirectoryUserID + `","email":"` + email + `","first_name":"Ada","last_name":"Lovelace","custom_attributes":{"department":"Engineering","team":"SDK"},"updated_at":"2026-05-12T10:00:00Z"}`)
 }
 
 func processWorkOSUserEventsParams(workosUserID string) activities.ProcessWorkOSUserEventsParams {
@@ -140,12 +140,8 @@ func TestProcessWorkOSUserEvents_StoresDirectoryUserAttributes(t *testing.T) {
 	row, err := usersrepo.New(conn).GetUser(ctx, gramID)
 	require.NoError(t, err)
 	require.JSONEq(t, `{
-		"id": "directory_user_attributes",
-		"emails": [{"value": "ada.directory@example.com", "primary": true}],
-		"first_name": "Ada",
-		"last_name": "Lovelace",
-		"custom_attributes": {"department": "Engineering", "team": "SDK"},
-		"updated_at": "2026-05-12T10:00:00Z"
+		"department": "Engineering",
+		"team": "SDK"
 	}`, string(row.Attributes))
 	require.True(t, row.AttributesContentHash.Valid)
 	require.Contains(t, row.AttributesContentHash.String, "sha256:")

@@ -170,16 +170,13 @@ type workosUserEventPayload struct {
 }
 
 type workosDirectoryUserEventPayload struct {
-	ID     string `json:"id"`
-	Email  string `json:"email"`
-	Emails []struct {
-		Value   string `json:"value"`
-		Primary bool   `json:"primary"`
-	} `json:"emails"`
-	Username  string    `json:"username"`
-	FirstName string    `json:"first_name"`
-	LastName  string    `json:"last_name"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID               string          `json:"id"`
+	Email            string          `json:"email"`
+	CustomAttributes json.RawMessage `json:"custom_attributes"`
+	Username         string          `json:"username"`
+	FirstName        string          `json:"first_name"`
+	LastName         string          `json:"last_name"`
+	UpdatedAt        time.Time       `json:"updated_at"`
 }
 
 func (p *ProcessWorkOSUserEvents) handleUserEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, workosUserID string, event events.Event) (*workosUserExternalIDUpdate, error) {
@@ -216,7 +213,7 @@ func (p *ProcessWorkOSUserEvents) handleDirectoryUserEvent(ctx context.Context, 
 	if err := json.Unmarshal(event.Data, &payload); err != nil {
 		return oops.Permanent(fmt.Errorf("unmarshal directory user event payload: %w", err))
 	}
-	_, err := storeDirectoryUserAttributes(ctx, logger, dbtx, workosDirectoryUserID, payload, event.Data)
+	_, err := storeDirectoryUserAttributes(ctx, logger, dbtx, workosDirectoryUserID, payload)
 	return err
 }
 
@@ -392,16 +389,6 @@ func displayNameFromWorkOSUser(payload workosUserEventPayload) string {
 func directoryUserEmail(payload workosDirectoryUserEventPayload) string {
 	if payload.Email != "" {
 		return strings.ToLower(strings.TrimSpace(payload.Email))
-	}
-	for _, email := range payload.Emails {
-		if email.Primary && email.Value != "" {
-			return strings.ToLower(strings.TrimSpace(email.Value))
-		}
-	}
-	for _, email := range payload.Emails {
-		if email.Value != "" {
-			return strings.ToLower(strings.TrimSpace(email.Value))
-		}
 	}
 	return ""
 }
