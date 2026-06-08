@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	managedByLabel = "proto_pubsub_orchestrator"
+	managedByLabel = "proto-pubsub-orchestrator"
 	dlqSuffix      = "-dlq"
 	maxTopicIDLen  = 255
 
