@@ -12,7 +12,7 @@
 // The first match/entity_type/rule_id/source clause is the primary match; an
 // additional `rule_id ==` / `source ==` clause becomes the narrowing filter.
 
-export type ExclusionMatchType =
+type ExclusionMatchType =
   | "exact"
   | "regex"
   | "rule_id"

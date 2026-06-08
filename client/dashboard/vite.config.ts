@@ -10,8 +10,13 @@ let key: Buffer | undefined;
 let cert: Buffer | undefined;
 
 if (process.env["GRAM_SSL_KEY_FILE"] && process.env["GRAM_SSL_CERT_FILE"]) {
-  key = fs.readFileSync(process.env["GRAM_SSL_KEY_FILE"]);
-  cert = fs.readFileSync(process.env["GRAM_SSL_CERT_FILE"]);
+  const keyPath = process.env["GRAM_SSL_KEY_FILE"];
+  const certPath = process.env["GRAM_SSL_CERT_FILE"];
+
+  if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
+    key = fs.readFileSync(keyPath);
+    cert = fs.readFileSync(certPath);
+  }
 }
 
 // https://vite.dev/config/
