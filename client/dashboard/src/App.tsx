@@ -22,6 +22,7 @@ import { AppLayout, LoginCheck, OrgLayout } from "./components/app-layout.tsx";
 import { CommandPalette } from "./components/command-palette";
 import { AuthProvider, ProjectProvider } from "./contexts/AuthProvider.tsx";
 import { useCommandPalette } from "./contexts/CommandPalette";
+import type { CommandAction } from "./contexts/CommandPalette";
 import { CommandPaletteProvider } from "./contexts/CommandPaletteProvider";
 import { useSlugs } from "./contexts/Sdk.tsx";
 import { SdkProvider } from "./contexts/SdkProvider.tsx";
@@ -155,68 +156,17 @@ const RouteProvider = () => {
   // Update document title based on active route
   usePageTitle(routes, orgRoutes);
 
-  // Register global command palette actions
+  // Register global command palette navigation actions, enumerated from the
+  // route definitions so every navigable page is searchable — no hand-kept
+  // list to drift. Project pages only register once a project is selected
+  // (their goTo() needs the :projectSlug); org pages are always available.
   useEffect(() => {
-    // Only register project-scoped navigation actions when a project is selected
-    const globalActions = projectSlug
-      ? [
-          {
-            id: "go-home",
-            label: "Go to Home",
-            icon: "home",
-            onSelect: () => routes.home.goTo(),
-            group: "Navigation",
-          },
-          {
-            id: "go-sources",
-            label: "Go to Sources",
-            icon: "file-code",
-            onSelect: () => routes.sources.goTo(),
-            group: "Navigation",
-          },
-          {
-            id: "go-mcp-servers",
-            label: "Go to MCP Servers",
-            icon: "network",
-            onSelect: () => routes.mcp.goTo(),
-            group: "Navigation",
-          },
-          {
-            id: "go-playground",
-            label: "Go to Playground",
-            icon: "message-square",
-            onSelect: () => routes.playground.goTo(),
-            group: "Navigation",
-          },
-          {
-            id: "go-insights",
-            label: "Go to Insights",
-            icon: "layout-dashboard",
-            onSelect: () => routes.insights.goTo(),
-            group: "Navigation",
-          },
-        ]
+    const projectActions = projectSlug
+      ? routesToNavActions(routes, "Pages", "nav-page")
       : [];
+    const orgActions = routesToNavActions(orgRoutes, "Organization", "nav-org");
 
-    // Always register org-level navigation actions
-    const orgActions = [
-      {
-        id: "go-billing",
-        label: "Go to Billing",
-        icon: "credit-card",
-        onSelect: () => orgRoutes.billing.goTo(),
-        group: "Navigation",
-      },
-      {
-        id: "go-api-keys",
-        label: "Go to API Keys",
-        icon: "key-round",
-        onSelect: () => orgRoutes.apiKeys.goTo(),
-        group: "Navigation",
-      },
-    ];
-
-    const allActions = [...globalActions, ...orgActions];
+    const allActions = [...projectActions, ...orgActions];
     addActions(allActions);
 
     return () => {
@@ -289,6 +239,37 @@ const RouteProvider = () => {
 
   return routeElements;
 };
+
+// Flatten a route map into command-palette navigation actions. Only top-level
+// pages a user can actually land on: external links, unauthenticated pages, and
+// full-screen pages outside the main layout are excluded.
+const routesToNavActions = (
+  routeMap: Record<string, AppRoute>,
+  group: string,
+  idPrefix: string,
+): CommandAction[] =>
+  Object.entries(routeMap)
+    .filter(
+      ([, route]) =>
+        !route.external &&
+        !route.unauthenticated &&
+        !route.outsideMainLayout &&
+        Boolean(route.component) &&
+        Boolean(route.title),
+    )
+    .map(([key, route]) => {
+      // AppRoute type-omits the raw `icon` string (exposing only the <Icon>
+      // component), but the builder spreads it through, so it's present at
+      // runtime. CommandAction renders the string name, so read it back here.
+      const iconName = (route as unknown as { icon?: string }).icon;
+      return {
+        id: `${idPrefix}-${key}`,
+        label: route.title,
+        icon: typeof iconName === "string" ? iconName : undefined,
+        onSelect: () => route.goTo(),
+        group,
+      };
+    });
 
 const routesWithSubroutes = (routes: AppRoute[]) => {
   return routes

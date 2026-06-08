@@ -13,6 +13,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { GramLogo } from "./gram-logo";
+import { CommandPaletteTrigger } from "./command-palette/CommandPaletteTrigger";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 import { SidebarUserMenu } from "./sidebar-user-menu";
 import { useSidebar } from "@/components/ui/sidebar-context";
@@ -150,12 +151,15 @@ export function AppSidebar({
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader className="gap-3 pb-3">
-        <Link
-          to={`/${orgSlug}`}
-          className="flex h-(--header-height) items-center px-1 hover:no-underline group-data-[collapsible=icon]:h-auto group-data-[collapsible=icon]:justify-center"
-        >
-          <GramLogo className="w-28 group-data-[collapsible=icon]:hidden" />
-        </Link>
+        <div className="flex items-center justify-between gap-2 group-data-[collapsible=icon]:justify-center">
+          <Link
+            to={`/${orgSlug}`}
+            className="flex h-(--header-height) items-center px-1 hover:no-underline group-data-[collapsible=icon]:h-auto group-data-[collapsible=icon]:justify-center"
+          >
+            <GramLogo className="w-28 group-data-[collapsible=icon]:hidden" />
+          </Link>
+          <CommandPaletteTrigger />
+        </div>
         <WorkspaceSwitcher />
       </SidebarHeader>
       <SidebarContent className="pt-2">

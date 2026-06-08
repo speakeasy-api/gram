@@ -8,9 +8,18 @@ import {
 } from "@/components/ui/command";
 import { useCommandPalette } from "@/contexts/CommandPalette";
 import { Icon, IconName, Badge } from "@speakeasy-api/moonshine";
+import { useState } from "react";
+import { requestAskAi } from "./askAiBridge";
+import { ResourceResults } from "./ResourceResults";
 
 export function CommandPalette(): JSX.Element {
   const { isOpen, close, actions, contextBadge } = useCommandPalette();
+  const [query, setQuery] = useState("");
+
+  const closeAndReset = () => {
+    setQuery("");
+    close();
+  };
 
   // Group actions by their group property
   const groupedActions = actions.reduce(
@@ -34,11 +43,26 @@ export function CommandPalette(): JSX.Element {
 
   const handleSelect = (action: (typeof actions)[0]) => {
     action.onSelect();
-    close();
+    closeAndReset();
+  };
+
+  const trimmedQuery = query.trim();
+  const askAiLabel = trimmedQuery
+    ? `Ask AI: "${trimmedQuery}"`
+    : "Ask the Project Assistant…";
+
+  const handleAskAi = () => {
+    requestAskAi(trimmedQuery);
+    closeAndReset();
   };
 
   return (
-    <CommandDialog open={isOpen} onOpenChange={close}>
+    <CommandDialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) closeAndReset();
+      }}
+    >
       {contextBadge && (
         <div className="px-3 pt-3 pb-2">
           <Badge variant="neutral">
@@ -46,9 +70,28 @@ export function CommandPalette(): JSX.Element {
           </Badge>
         </div>
       )}
-      <CommandInput placeholder="Type a command or search..." />
+      <CommandInput
+        placeholder="Ask AI or search resources and pages…"
+        value={query}
+        onValueChange={setQuery}
+      />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
+
+        {/* Free-form AI escape hatch — always offered regardless of the filter
+            (forceMount) so the typed query can always be sent to the assistant. */}
+        <CommandGroup heading="Assistant">
+          <CommandItem
+            forceMount
+            value="__ask_ai__"
+            onSelect={handleAskAi}
+            className="flex items-center gap-2"
+          >
+            <Icon name="sparkles" className="size-4 shrink-0" />
+            <span className="truncate">{askAiLabel}</span>
+          </CommandItem>
+        </CommandGroup>
+
         {sortedGroups.map(([groupName, groupActions]) => (
           <CommandGroup key={groupName} heading={groupName}>
             {groupActions.map((action) => (
@@ -72,6 +115,10 @@ export function CommandPalette(): JSX.Element {
             ))}
           </CommandGroup>
         ))}
+
+        {/* Resource search results — only mounted while open, so the list
+            fetches lazily on first open (React Query caches thereafter). */}
+        {isOpen && <ResourceResults onNavigate={closeAndReset} />}
       </CommandList>
     </CommandDialog>
   );
