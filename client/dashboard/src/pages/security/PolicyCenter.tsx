@@ -680,6 +680,7 @@ function PolicyCenterContent() {
       width: "1fr",
       render: (row) => (
         <span className="flex min-w-0 items-center gap-1.5 font-medium">
+          <span className="truncate">{row.policy.name}</span>
           {row.kind === "prompt" && (
             <SimpleTooltip tooltip="Prompt-based policy">
               <Sparkles
@@ -688,7 +689,6 @@ function PolicyCenterContent() {
               />
             </SimpleTooltip>
           )}
-          <span className="truncate">{row.policy.name}</span>
         </span>
       ),
     },
