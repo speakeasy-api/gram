@@ -164,7 +164,12 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	grant, err := s.userSessionGrantCache.GetAndDelete(ctx, grantKey)
 	if err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "code_not_found_or_expired")
-		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageToken)
+		// Deliberately NOT counted as a flow failure: a missing/expired code is
+		// ambiguous. An expired code is closer to abandonment than an errant
+		// config, and a replayed or retried code would double-count an outcome
+		// already recorded on the first redemption. It falls into the
+		// started-without-terminal gap instead, keeping `failed` to unambiguous
+		// config/code/client errors.
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code not found or expired")
 	}
 

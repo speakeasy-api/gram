@@ -211,6 +211,12 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
 	issuerID := endpoint.UserSessionIssuerID.String()
 	mcpSlug := endpoint.Slug
+
+	// The guards below (state-confusion ref check, CSRF, and the unknown-action
+	// default) consume the challenge but are deliberately NOT counted as flow
+	// failures: they are attacker-controllable, so emitting `failed` here would
+	// let crafted requests pollute a config's health signal. A legitimate user
+	// never trips them; the rare case lands in the started-without-terminal gap.
 	if err := endpoint.ValidateRef(challengeState.Endpoint); err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server").Log(ctx, logger)
 	}

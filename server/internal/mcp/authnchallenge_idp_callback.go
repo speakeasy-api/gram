@@ -48,26 +48,42 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	// substitute their own Subject on the victim's in-flight challenge.
 	challengeState, err := s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID)
 	if err != nil {
+		// No challenge in hand (expired / replayed / never existed): nothing to
+		// attribute to an issuer, and an expired state is closer to abandonment
+		// than a flow failure, so it is left to the started-without-terminal gap.
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").Log(ctx, logger)
 	}
 
+	// Challenge in hand: correlate every subsequent log line by flow_id, and
+	// use the cached ref's issuer/slug for flow metrics until the endpoint is
+	// re-resolved below.
+	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
+	issuerID := challengeState.UserSessionIssuerID.String()
 	mcpSlug := challengeState.Endpoint.McpSlug
+
 	if mcpSlug == "" {
+		// Corrupted in-flight state (a code/data integrity failure), terminal
+		// for the flow.
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageIDPCallback)
 		return oops.E(oops.CodeBadRequest, nil, "mcp slug is missing from authn challenge state").Log(ctx, logger)
 	}
 	if routeMcpSlug != "" && routeMcpSlug != mcpSlug {
+		// State-confusion guard (state minted for a different route). Attacker-
+		// controllable, so deliberately NOT counted as a flow failure.
 		return oops.E(oops.CodeUnauthorized, nil, "authn challenge state does not match this MCP server").Log(ctx, logger)
 	}
 
 	endpoint, err := s.loadResolvedMcpEndpointByRef(ctx, challengeState.Endpoint)
 	if err != nil {
+		// The endpoint backing an in-flight challenge could not be re-resolved
+		// (e.g. toolset removed mid-flow) — a config-class terminal failure.
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageIDPCallback)
 		return err
 	}
 
-	logger = endpoint.LogWith(s.logger).With(attr.SlogOAuthFlowID(challengeState.FlowID))
-	issuerID := endpoint.UserSessionIssuerID.String()
-	// mcpSlug was set from the cached ref above; re-point it at the resolved
-	// endpoint's canonical slug for the flow-metric dimension.
+	logger = endpoint.LogWith(logger)
+	// issuerID is unchanged (same issuer the ref resolved to); re-point mcpSlug
+	// at the resolved endpoint's canonical slug for the flow-metric dimension.
 	mcpSlug = endpoint.Slug
 
 	// If the IDP returned an error (user cancelled at the IDP, IDP refused
