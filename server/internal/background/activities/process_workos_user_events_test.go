@@ -108,6 +108,53 @@ func TestProcessWorkOSUserEvents_CreatesUser(t *testing.T) {
 	require.Equal(t, []workos.UserExternalIDUpdate{{WorkOSUserID: workosUserID, ExternalID: gramID}}, workosClient.UserExternalIDUpdates())
 }
 
+func TestProcessWorkOSUserEvents_LinksPendingDirectoryUserByEmail(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newUserEventsTestConn(t, "workos_user_events_link_directory_user")
+	logger := testenv.NewLogger(t)
+
+	const (
+		organizationID        = "org_directory_user_link"
+		workosUserID          = "user_directory_link"
+		workosDirectoryUserID = "directory_user_link"
+		email                 = "directory.link@example.com"
+	)
+	gramID := users.UserIDFromWorkOSID(workosUserID)
+
+	err := orgrepo.New(conn).CreateOrganizationMetadata(ctx, orgrepo.CreateOrganizationMetadataParams{
+		ID:   organizationID,
+		Name: "Directory User Link Org",
+		Slug: "directory-user-link-org",
+	})
+	require.NoError(t, err)
+	_, err = workosrepo.New(conn).UpsertDirectoryUser(ctx, workosrepo.UpsertDirectoryUserParams{
+		OrganizationID:        organizationID,
+		UserID:                conv.ToPGTextEmpty(""),
+		WorkosDirectoryUserID: workosDirectoryUserID,
+		Email:                 conv.ToPGText(email),
+		Attributes:            []byte(`{}`),
+		AttributesContentHash: conv.ToPGText("sha256:empty"),
+	})
+	require.NoError(t, err)
+
+	workosClient := workos.NewStubClient()
+	workosClient.SetEventPages([][]events.Event{{
+		{ID: "event_user_directory_link", Event: "user.created", CreatedAt: time.Now(), Data: userEventData(workosUserID, email, "Directory", "Link", "")},
+	}})
+
+	activity := activities.NewProcessWorkOSUserEvents(logger, conn, workosClient)
+	res, err := activity.Do(ctx, processWorkOSUserEventsParams(workosUserID))
+	require.NoError(t, err)
+	require.Equal(t, "event_user_directory_link", res.LastEventID)
+
+	directoryUser, err := workosrepo.New(conn).GetDirectoryUserByWorkOSID(ctx, workosDirectoryUserID)
+	require.NoError(t, err)
+	require.True(t, directoryUser.UserID.Valid)
+	require.Equal(t, gramID, directoryUser.UserID.String)
+}
+
 func TestProcessWorkOSUserEvents_CreatesUserWithExistingExternalID(t *testing.T) {
 	t.Parallel()
 

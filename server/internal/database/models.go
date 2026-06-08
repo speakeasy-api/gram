@@ -408,6 +408,43 @@ type DeploymentsPackage struct {
 	VersionID    uuid.UUID
 }
 
+type DirectoryGroup struct {
+	ID                     uuid.UUID
+	OrganizationID         string
+	WorkosDirectoryGroupID string
+	Name                   string
+	Attributes             []byte
+	AttributesContentHash  pgtype.Text
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
+}
+
+type DirectoryUser struct {
+	ID                    uuid.UUID
+	OrganizationID        string
+	UserID                pgtype.Text
+	WorkosDirectoryUserID string
+	Email                 pgtype.Text
+	Attributes            []byte
+	AttributesContentHash pgtype.Text
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
+}
+
+type DirectoryUserGroupMembership struct {
+	ID                     uuid.UUID
+	UserID                 string
+	GroupID                uuid.UUID
+	WorkosDirectoryUserID  string
+	WorkosDirectoryGroupID string
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+}
+
 type Environment struct {
 	ID             uuid.UUID
 	OrganizationID string
@@ -590,19 +627,6 @@ type GlobalRole struct {
 	UpdatedAt         pgtype.Timestamptz
 	DeletedAt         pgtype.Timestamptz
 	Deleted           bool
-}
-
-type Group struct {
-	ID                     uuid.UUID
-	OrganizationID         string
-	WorkosDirectoryGroupID string
-	Name                   string
-	Attributes             []byte
-	AttributesContentHash  pgtype.Text
-	CreatedAt              pgtype.Timestamptz
-	UpdatedAt              pgtype.Timestamptz
-	DeletedAt              pgtype.Timestamptz
-	Deleted                bool
 }
 
 type HooksServerNameOverride struct {
@@ -1505,31 +1529,19 @@ type TriggerInstance struct {
 }
 
 type User struct {
-	ID                    string
-	Email                 string
-	DisplayName           string
-	PhotoUrl              pgtype.Text
-	Admin                 bool
-	LastLogin             pgtype.Timestamptz
-	WorkosID              pgtype.Text
-	WorkosCreatedAt       pgtype.Timestamptz
-	WorkosUpdatedAt       pgtype.Timestamptz
-	WorkosDeletedAt       pgtype.Timestamptz
-	Attributes            []byte
-	AttributesContentHash pgtype.Text
-	DeletedAt             pgtype.Timestamptz
-	CreatedAt             pgtype.Timestamptz
-	UpdatedAt             pgtype.Timestamptz
-}
-
-type UserGroupMembership struct {
-	ID                     uuid.UUID
-	UserID                 string
-	GroupID                uuid.UUID
-	WorkosDirectoryUserID  string
-	WorkosDirectoryGroupID string
-	CreatedAt              pgtype.Timestamptz
-	UpdatedAt              pgtype.Timestamptz
+	ID              string
+	Email           string
+	DisplayName     string
+	PhotoUrl        pgtype.Text
+	Admin           bool
+	LastLogin       pgtype.Timestamptz
+	WorkosID        pgtype.Text
+	WorkosCreatedAt pgtype.Timestamptz
+	WorkosUpdatedAt pgtype.Timestamptz
+	WorkosDeletedAt pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
 }
 
 type UserOauthToken struct {
