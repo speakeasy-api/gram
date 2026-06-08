@@ -28,7 +28,7 @@ export function SourceSettingsTab({
 }: {
   isOpenAPI: boolean;
   source: Source | null;
-}) {
+}): JSX.Element {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
@@ -76,7 +76,7 @@ export function SourceSettingsTab({
       await Promise.all([refetch(), refetchAssets()]);
       const typeLabel = type === "openapi" ? "API" : "Function";
       toast.success(`${typeLabel} source deleted successfully`);
-      navigate(routes.sources.href());
+      void navigate(routes.sources.href());
     } catch (error) {
       console.error(`Failed to delete ${type} source:`, error);
       const typeLabel = type === "openapi" ? "API" : "function";

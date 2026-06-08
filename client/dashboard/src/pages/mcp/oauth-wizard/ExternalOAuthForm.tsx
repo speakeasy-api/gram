@@ -13,8 +13,9 @@ export function ExternalOAuthForm({
 }: {
   hasMultipleOAuth2AuthCode: boolean;
   oauth2SecurityCount: number;
-}) {
-  const send = WizardContext.useActorRef().send;
+}): JSX.Element {
+  const actorRef = WizardContext.useActorRef();
+  const send = actorRef.send.bind(actorRef);
   const external = WizardContext.useSelector((s) => s.context.external);
   const discovered = WizardContext.useSelector((s) => {
     const d = s.context.discovered;

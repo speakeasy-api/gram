@@ -4,13 +4,13 @@ import { useElements } from "./useElements";
 /**
  * Hook to get theme-related props including dark mode class
  */
-export const useThemeProps = () => {
+export const useThemeProps = (): {
+  readonly className: string | undefined;
+} => {
   const { config } = useElements();
-  const theme = config.theme ?? {};
+  const colorScheme = config.theme?.colorScheme ?? "light";
 
   return useMemo(() => {
-    const { colorScheme = "light" } = theme;
-
     const isDark =
       colorScheme === "dark" ||
       (colorScheme === "system" &&
@@ -20,5 +20,5 @@ export const useThemeProps = () => {
     return {
       className: isDark ? "dark" : undefined,
     } as const;
-  }, [theme]);
+  }, [colorScheme]);
 };

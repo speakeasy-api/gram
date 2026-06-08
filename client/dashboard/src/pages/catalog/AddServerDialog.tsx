@@ -293,7 +293,7 @@ function useEnrichedServers(servers: PulseMCPServer[], open: boolean) {
       setIsLoading(false);
     };
 
-    fetchServerDetails();
+    void fetchServerDetails();
   }, [open, serversKey, servers, client]);
 
   return { enrichedServers, isLoading, error };
@@ -309,7 +309,7 @@ export function AddServerDialog({
   bulk,
   autoStartDeployment,
   headless,
-}: AddServerDialogProps) {
+}: AddServerDialogProps): JSX.Element | null {
   const telemetry = useTelemetry();
   // Fetch server details (including remotes) when dialog opens
   const {
@@ -880,14 +880,14 @@ function ConfigurePhaseContent({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && releaseState.canDeploy) {
       e.preventDefault();
-      releaseState.startDeployment();
+      void releaseState.startDeployment();
     }
   };
 
   // Auto-deploy when all servers were multi-remote (already configured in selectRemotes)
   useEffect(() => {
     if (!hasOnlySingleRemote && releaseState.canDeploy && needsDeployment) {
-      releaseState.startDeployment();
+      void releaseState.startDeployment();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only trigger on deploy readiness changes, not on every releaseState update
   }, [hasOnlySingleRemote, needsDeployment, releaseState.canDeploy]);
@@ -936,7 +936,9 @@ function ConfigurePhaseContent({
         </div>
         <Button
           disabled={!releaseState.canDeploy}
-          onClick={() => releaseState.startDeployment()}
+          onClick={() => {
+            void releaseState.startDeployment();
+          }}
         >
           <Button.Text>
             {needsDeployment

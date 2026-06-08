@@ -1,3 +1,4 @@
+// oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
 import { cn } from "@/lib/utils";
 import {
   Accordion,

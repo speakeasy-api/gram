@@ -1,6 +1,8 @@
 import { ProductTier } from "@/hooks/useProductTier";
 
-export const productTierColors = (tier: ProductTier) => {
+export const productTierColors = (
+  tier: ProductTier,
+): { bg: string; text: string; ring: string } => {
   return {
     base: {
       bg: "bg-neutral-600",

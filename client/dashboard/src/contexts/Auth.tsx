@@ -59,16 +59,18 @@ export const emptySession: Session = {
   refetch: () => Promise.resolve(emptySession),
 };
 
-export const emptyProject = {
+export const emptyProject: ProjectEntry & {
+  switchProject: (slug: string) => void;
+} = {
   id: "",
   name: "",
   slug: "",
-  switchProject: () => {},
+  switchProject: (_slug: string): void => {},
 };
 
 export const SessionContext = createContext<Session>(emptySession);
 
-export const useSession = () => {
+export const useSession = (): Session => {
   return useContext(SessionContext);
 };
 
@@ -78,7 +80,9 @@ export const ProjectContext = createContext<
   }
 >(emptyProject);
 
-export const useProject = () => {
+export const useProject = (): ProjectEntry & {
+  switchProject: (slug: string) => void;
+} => {
   return useContext(ProjectContext);
 };
 
@@ -100,7 +104,11 @@ export const useOrganization = (): OrganizationEntry & {
   });
 };
 
-export const useSessionData = () => {
+export const useSessionData = (): {
+  session: Session | null;
+  error: unknown;
+  status: ReturnType<typeof useSessionInfo>["status"];
+} => {
   const {
     data: sessionData,
     error,
@@ -147,14 +155,14 @@ export const useSessionData = () => {
   return { session, error, status };
 };
 
-export const useUser = () => {
+export const useUser = (): User => {
   const { user } = useSession();
   return user;
 };
 
 const SUPER_ADMIN_KEY = "gram-dev-super-admin";
 
-export const useIsAdmin = () => {
+export const useIsAdmin = (): boolean => {
   const { isAdmin } = useUser();
   if (import.meta.env.DEV) {
     try {
@@ -168,7 +176,7 @@ export const useIsAdmin = () => {
   return isAdmin;
 };
 
-export function usePylonInAppChat(user: User | undefined) {
+export function usePylonInAppChat(user: User | undefined): void {
   useEffect(() => {
     if (!user || !import.meta.env.PROD) {
       return;
@@ -205,7 +213,10 @@ export function usePylonInAppChat(user: User | undefined) {
  * change. The pixel is gated to production builds so we don't pollute
  * Fermat with local/dev traffic (matching Pylon and PostHog).
  */
-export function useFermatPixel(user: User | undefined, accountId: string) {
+export function useFermatPixel(
+  user: User | undefined,
+  accountId: string,
+): void {
   const location = useLocation();
 
   useEffect(() => {

@@ -36,7 +36,7 @@ function stopLinkNavigation(e: MouseEvent<HTMLDivElement>) {
   e.stopPropagation();
 }
 
-export function AssistantsRoot() {
+export function AssistantsRoot(): JSX.Element {
   return <Outlet />;
 }
 
@@ -48,7 +48,7 @@ function StatusToggle({ assistant }: { assistant: Assistant }) {
 
   const updateAssistant = useAssistantsUpdateMutation({
     onSuccess: () => {
-      invalidateAllAssistantsList(queryClient);
+      void invalidateAllAssistantsList(queryClient);
     },
     onError: () => {
       toast.error("Failed to update assistant status");
@@ -112,7 +112,7 @@ function AssistantsEmptyState({ onCreate }: { onCreate: () => void }) {
   );
 }
 
-export default function AssistantsIndex() {
+export default function AssistantsIndex(): JSX.Element {
   const routes = useRoutes();
   const { data, isLoading } = useAssistantsList(undefined, undefined, {
     retry: false,
@@ -285,7 +285,7 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
 
   const deleteAssistant = useAssistantsDeleteMutation({
     onSuccess: () => {
-      invalidateAllAssistantsList(queryClient);
+      void invalidateAllAssistantsList(queryClient);
     },
   });
 

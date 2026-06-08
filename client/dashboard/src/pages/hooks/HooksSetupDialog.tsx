@@ -429,7 +429,7 @@ export function HooksSetupDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaultProvider?: Provider;
-}) {
+}): JSX.Element {
   const [selected, setSelected] = useState<Provider>(defaultProvider);
   const { data: publishStatus } = usePublishStatus();
   const showPublishedPanel =
@@ -455,7 +455,9 @@ export function HooksSetupDialog({
             const button = (
               <button
                 key={p.id}
-                onClick={() => p.available && setSelected(p.id)}
+                onClick={() => {
+                  void (p.available && setSelected(p.id));
+                }}
                 disabled={!p.available}
                 className={cn(
                   "relative flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors",
@@ -506,7 +508,7 @@ export function HooksSetupDialog({
   );
 }
 
-export function HooksSetupButton() {
+export function HooksSetupButton(): JSX.Element {
   const [open, setOpen] = useState(false);
 
   return (

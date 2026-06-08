@@ -86,7 +86,7 @@ type CustomTool = {
   steps: SerializableStep[];
 };
 
-export function ToolBuilderNew() {
+export function ToolBuilderNew(): React.JSX.Element {
   const ctx = useToolifyContext();
 
   const newTemplate: ToolBuilderState = {
@@ -126,7 +126,7 @@ export function ToolBuilderNew() {
   );
 }
 
-export function ToolBuilderPage() {
+export function ToolBuilderPage(): React.JSX.Element {
   const { toolName } = useParams();
 
   const { data: toolsets } = useListToolsetsSuspense();
@@ -379,8 +379,8 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
 
   const { mutate: updatePrompt } = useUpdateTemplateMutation({
     onSettled: () => {
-      invalidateAllTemplate(queryClient);
-      invalidateAllTemplates(queryClient);
+      void invalidateAllTemplate(queryClient);
+      void invalidateAllTemplates(queryClient);
     },
     onError: (error) => {
       handleAPIError(error, "Failed to update tool");
@@ -390,85 +390,89 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
   const saveButton = (
     <Button
       disabled={!!initial.id && !anyChanges}
-      onClick={async () => {
-        try {
-          const argsJsonSchema = {
-            type: "object",
-            properties: Object.fromEntries(
-              inputs.map((input) => [
-                input.name,
-                {
-                  type: "string",
-                  ...(input.description && {
-                    description: input.description,
-                  }),
+      onClick={() => {
+        void (async () => {
+          try {
+            const argsJsonSchema = {
+              type: "object",
+              properties: Object.fromEntries(
+                inputs.map((input) => [
+                  input.name,
+                  {
+                    type: "string",
+                    ...(input.description && {
+                      description: input.description,
+                    }),
+                  },
+                ]),
+              ),
+              required: inputs.map((input) => input.name),
+            };
+
+            const higherOrderTool: CustomTool = {
+              toolName: name,
+              purpose,
+              inputs,
+              steps,
+            };
+
+            if (initial.id) {
+              updatePrompt({
+                request: {
+                  updatePromptTemplateForm: {
+                    id: initial.id,
+                    name,
+                    description,
+                    prompt: higherOrderToolToJSON(higherOrderTool),
+                    arguments: JSON.stringify(argsJsonSchema),
+                    toolsHint: steps.flatMap(
+                      (step) => step.canonicalTool ?? [],
+                    ),
+                    toolUrnsHint: steps.flatMap((step) => step.toolUrn ?? []),
+                  },
                 },
-              ]),
-            ),
-            required: inputs.map((input) => input.name),
-          };
+              });
 
-          const higherOrderTool: CustomTool = {
-            toolName: name,
-            purpose,
-            inputs,
-            steps,
-          };
-
-          if (initial.id) {
-            updatePrompt({
-              request: {
-                updatePromptTemplateForm: {
-                  id: initial.id,
+              telemetry.capture("tool_builder_event", {
+                event: "update_tool",
+              });
+            } else {
+              const template = await client.templates.create({
+                createPromptTemplateForm: {
                   name,
                   description,
+                  kind: PromptTemplateKind.HigherOrderTool,
                   prompt: higherOrderToolToJSON(higherOrderTool),
                   arguments: JSON.stringify(argsJsonSchema),
                   toolsHint: steps.flatMap((step) => step.canonicalTool ?? []),
-                  toolUrnsHint: steps.flatMap((step) => step.toolUrn ?? []),
+                  engine: "mustache",
                 },
-              },
-            });
+              });
 
-            telemetry.capture("tool_builder_event", {
-              event: "update_tool",
-            });
-          } else {
-            const template = await client.templates.create({
-              createPromptTemplateForm: {
-                name,
-                description,
-                kind: PromptTemplateKind.HigherOrderTool,
-                prompt: higherOrderToolToJSON(higherOrderTool),
-                arguments: JSON.stringify(argsJsonSchema),
-                toolsHint: steps.flatMap((step) => step.canonicalTool ?? []),
-                engine: "mustache",
-              },
-            });
+              telemetry.capture("tool_builder_event", {
+                event: "update_tool",
+              });
 
-            telemetry.capture("tool_builder_event", {
-              event: "update_tool",
-            });
+              // Automatically add to the toolset
+              await client.toolsets.updateBySlug({
+                slug: toolsetFilter?.slug ?? "",
+                updateToolsetRequestBody: {
+                  toolUrns: [
+                    ...(toolsetData?.toolUrns ?? []),
+                    template.template.toolUrn,
+                  ],
+                },
+              });
 
-            // Automatically add to the toolset
-            await client.toolsets.updateBySlug({
-              slug: toolsetFilter?.slug ?? "",
-              updateToolsetRequestBody: {
-                toolUrns: [
-                  ...(toolsetData?.toolUrns ?? []),
-                  template.template.toolUrn,
-                ],
-              },
-            });
+              void invalidateAllListToolsets(queryClient);
+              routes.customTools.toolBuilder.goTo(name);
+            }
 
-            invalidateAllListToolsets(queryClient);
-            routes.customTools.toolBuilder.goTo(name);
+            toast.success("Tool saved successfully");
+          } catch (error) {
+            handleAPIError(error, "Failed to save tool");
           }
-
-          toast.success("Tool saved successfully");
-        } catch (error) {
-          handleAPIError(error, "Failed to save tool");
-        }
+        })();
       }}
     >
       <Button.LeftIcon>
@@ -662,7 +666,7 @@ export const MustacheHighlight = ({
   children,
 }: {
   children: React.ReactNode;
-}) => {
+}): React.JSX.Element => {
   if (typeof children !== "string") return <>{children}</>;
 
   let start = 0;
@@ -684,7 +688,7 @@ export const MustacheHighlight = ({
 
   chunks.push(<span key={`text-${start}`}>{children.slice(start)}</span>);
 
-  return chunks;
+  return <>{chunks}</>;
 };
 
 const StepCard = ({
@@ -968,36 +972,38 @@ function ChatPanel(props: {
     <Button
       size="sm"
       className="h-7"
-      onClick={async () => {
-        telemetry.capture("tool_builder_event", {
-          event: "try_now",
-        });
+      onClick={() => {
+        void (async () => {
+          telemetry.capture("tool_builder_event", {
+            event: "try_now",
+          });
 
-        const inputArgs = Object.fromEntries(
-          inputs.map((input) => [input.name, `{{${input.name}}}`]),
-        );
+          const inputArgs = Object.fromEntries(
+            inputs.map((input) => [input.name, `{{${input.name}}}`]),
+          );
 
-        const higherOrderTool: CustomTool = {
-          toolName: name,
-          purpose,
-          inputs,
-          steps,
-        };
+          const higherOrderTool: CustomTool = {
+            toolName: name,
+            purpose,
+            inputs,
+            steps,
+          };
 
-        const renderResult = await client.templates.render({
-          renderTemplateRequestBody: {
-            prompt: higherOrderToolToJSON(higherOrderTool),
-            arguments: inputArgs,
-            engine: "mustache",
-            kind: PromptTemplateKind.HigherOrderTool,
-          },
-        });
+          const renderResult = await client.templates.render({
+            renderTemplateRequestBody: {
+              prompt: higherOrderToolToJSON(higherOrderTool),
+              arguments: inputArgs,
+              engine: "mustache",
+              kind: PromptTemplateKind.HigherOrderTool,
+            },
+          });
 
-        const renderedPrompt = renderResult.prompt || "";
+          const renderedPrompt = renderResult.prompt || "";
 
-        chat.appendMessage({
-          content: `\`\`\`xml\n${renderedPrompt}\n\`\`\``,
-        });
+          chat.appendMessage({
+            content: `\`\`\`xml\n${renderedPrompt}\n\`\`\``,
+          });
+        })();
       }}
     >
       <Button.LeftIcon>

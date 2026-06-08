@@ -20,7 +20,7 @@ import { DeploymentsEmptyState } from "./DeploymentsEmptyState";
 import { useActiveDeployment } from "./useActiveDeployment";
 import { useRedeployDeployment } from "./useRedeployDeployment";
 
-export default function DeploymentsPage() {
+export default function DeploymentsPage(): JSX.Element {
   return (
     <Page>
       <Page.Header>
@@ -37,7 +37,7 @@ export default function DeploymentsPage() {
   );
 }
 
-export function DeploymentsRoot() {
+export function DeploymentsRoot(): JSX.Element {
   return <Outlet />;
 }
 

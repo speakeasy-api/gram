@@ -1,9 +1,14 @@
+import { ReactElement } from "react";
 import { Tool } from "@/lib/toolTypes";
 import { CanonicalToolAttributes } from "@gram/client/models/components";
 import { Icon } from "@speakeasy-api/moonshine";
 import { SimpleTooltip } from "./ui/tooltip";
 
-export const ToolVariationBadge = ({ tool }: { tool: Tool }) => {
+export const ToolVariationBadge = ({
+  tool,
+}: {
+  tool: Tool;
+}): ReactElement | null => {
   if (!tool.variation) {
     return null;
   }

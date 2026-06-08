@@ -131,7 +131,7 @@ const DATA_FLOW_EDGE_MARKER = {
 const DATA_FLOW_NODE_TYPES = { dataFlow: DataFlowNodeCard };
 const DATA_FLOW_EDGE_TYPES = { dataFlow: DataFlowEdgeLine };
 
-export function InsightsEmployeeDetailContent() {
+export function InsightsEmployeeDetailContent(): JSX.Element {
   const { userSlug } = useParams<{ userSlug: string }>();
   const client = useGramContext();
   const { isExpanded: isInsightsOpen } = useInsightsState();
@@ -1197,7 +1197,9 @@ function buildDataFlowLayout(graph: DataFlowSourceGraph): {
       }
       return b.totalCalls - a.totalCalls || a.label.localeCompare(b.label);
     });
-    tierNodes.forEach((node, index) => rowIndexByNode.set(node.id, index));
+    tierNodes.forEach((node, index) => {
+      void rowIndexByNode.set(node.id, index);
+    });
     orderedNodesByTier.set(tier, tierNodes);
   });
 

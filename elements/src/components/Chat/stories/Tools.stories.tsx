@@ -139,7 +139,9 @@ const ProductCardComponent = ({ result }: ToolCallMessagePartProps) => {
               ${product.price?.toFixed(2)}
             </span>
             <button
-              onClick={handleAddToCart}
+              onClick={() => {
+                void handleAddToCart();
+              }}
               disabled={
                 isLoading || addedToCart || !canAddToCart || !product.inStock
               }
@@ -242,8 +244,10 @@ const ApproveRequestTool = defineFrontendTool<{ id: number }, string>(
     }),
     execute: async ({ id }) => {
       // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      return `Request #${id} has been approved successfully.`;
+      await new Promise((resolve) => {
+        setTimeout(resolve, 500);
+      });
+      return `Request #${String(id)} has been approved successfully.`;
     },
   },
   "approve_request",
@@ -260,8 +264,12 @@ const RejectRequestTool = defineFrontendTool<
       reason: z.string().optional().describe("Reason for rejection"),
     }),
     execute: async ({ id, reason }) => {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      return `Request #${id} has been rejected.${reason ? ` Reason: ${reason}` : ""}`;
+      await new Promise((resolve) => {
+        setTimeout(resolve, 500);
+      });
+      return `Request #${String(id)} has been rejected.${
+        reason ? ` Reason: ${JSON.stringify(reason)}` : ""
+      }`;
     },
   },
   "reject_request",

@@ -3,7 +3,11 @@ import { ToolList } from "@/components/tool-list";
 import { useListTools } from "@/hooks/toolTypes";
 import { useMemo } from "react";
 
-export const ToolsTabContent = ({ deploymentId }: { deploymentId: string }) => {
+export const ToolsTabContent = ({
+  deploymentId,
+}: {
+  deploymentId: string;
+}): JSX.Element => {
   const { data: tools } = useListTools({
     deploymentId: deploymentId,
   });

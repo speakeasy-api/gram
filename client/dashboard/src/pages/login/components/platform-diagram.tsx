@@ -335,7 +335,9 @@ interface PlatformDiagramProps {
   className?: string;
 }
 
-export function PlatformDiagram({ className }: PlatformDiagramProps) {
+export function PlatformDiagram({
+  className,
+}: PlatformDiagramProps): JSX.Element {
   const prefersReducedMotion = useReducedMotion();
   return (
     <div

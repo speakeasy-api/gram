@@ -23,7 +23,7 @@ export function ButtonWrapper({
   variant = "default",
   size = "default",
   disabled = false,
-}: ButtonWrapperProps) {
+}: ButtonWrapperProps): React.JSX.Element {
   return (
     <Button variant={variant} size={size} disabled={disabled}>
       {label}

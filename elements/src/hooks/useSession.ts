@@ -1,7 +1,9 @@
 import { GetSessionFn } from "@/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-export function getChatSessionQueryKey(projectSlug: string) {
+export function getChatSessionQueryKey(
+  projectSlug: string,
+): readonly ["chatSession", string] {
   return ["chatSession", projectSlug] as const;
 }
 

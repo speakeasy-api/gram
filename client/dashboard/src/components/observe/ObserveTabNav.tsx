@@ -15,7 +15,11 @@ type Tab = {
   scope?: Scope | Scope[];
 };
 
-export function ObserveTabNav({ base }: { base: "insights" | "logs" }) {
+export function ObserveTabNav({
+  base,
+}: {
+  base: "insights" | "logs";
+}): JSX.Element {
   const { orgSlug, projectSlug } = useSlugs();
   const location = useLocation();
 

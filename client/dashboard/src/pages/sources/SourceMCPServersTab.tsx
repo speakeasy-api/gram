@@ -66,7 +66,7 @@ export function SourceMCPServersTab({
   associatedToolsets,
 }: {
   associatedToolsets: ToolsetEntry[];
-}) {
+}): JSX.Element {
   const routes = useRoutes();
 
   return (

@@ -17,7 +17,11 @@ import {
 import { ToolCollectionBadge } from "../tool-collection-badge";
 import { Badge } from "@speakeasy-api/moonshine";
 
-export function MCPTableRow({ toolset }: { toolset: ToolsetEntry }) {
+export function MCPTableRow({
+  toolset,
+}: {
+  toolset: ToolsetEntry;
+}): JSX.Element {
   const routes = useRoutes();
   const navigate = useNavigate();
   const { url: mcpUrl } = useMcpUrl(toolset);
@@ -27,7 +31,7 @@ export function MCPTableRow({ toolset }: { toolset: ToolsetEntry }) {
 
   const handleClick = () => {
     if (oauthStatus === "required-unconfigured") {
-      navigate(`${routes.mcp.details.href(toolset.slug)}#authentication`);
+      void navigate(`${routes.mcp.details.href(toolset.slug)}#authentication`);
     } else {
       routes.mcp.details.goTo(toolset.slug);
     }
@@ -153,7 +157,7 @@ export function MCPTableRow({ toolset }: { toolset: ToolsetEntry }) {
   );
 }
 
-export function MCPTableRowSkeleton() {
+export function MCPTableRowSkeleton(): JSX.Element {
   return (
     <DotRow>
       <td className="px-3 py-3">

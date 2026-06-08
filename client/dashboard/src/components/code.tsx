@@ -59,7 +59,7 @@ export function CodeBlock({
   onCopy?: () => void;
   preClassName?: string;
   slots?: Record<string, CodeBlockSlot>;
-}) {
+}): React.JSX.Element {
   const { theme } = useMoonshineConfig();
   const hasSlots = !!slots && Object.keys(slots).length > 0;
   const [highlightedCode, setHighlightedCode] = React.useState<string | null>(
@@ -82,7 +82,7 @@ export function CodeBlock({
   }, [code, slots]);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(copyText);
+    void navigator.clipboard.writeText(copyText);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
     onCopy?.();
@@ -95,14 +95,14 @@ export function CodeBlock({
     if (hasSlots) {
       // codeToTokens types `lang` stricter than codeToHtml's loose string; the
       // prop is a free-form string, so narrow it the same way callers expect.
-      codeToTokens(code, {
+      void codeToTokens(code, {
         lang: language as BundledLanguage,
         theme: DEFAULT_THEME_PER_MODE[theme],
       }).then((res) => {
         if (!cancelled) setTokenResult(res);
       });
     } else {
-      codeToHtml(code, {
+      void codeToHtml(code, {
         lang: language,
         theme: DEFAULT_THEME_PER_MODE[theme],
         transformers: [
@@ -160,7 +160,7 @@ export function CodeBlock({
                 if (slotKey) {
                   return (
                     <React.Fragment key={ti}>
-                      {slots[slotKey].node}
+                      {slots[slotKey]!.node}
                     </React.Fragment>
                   );
                 }

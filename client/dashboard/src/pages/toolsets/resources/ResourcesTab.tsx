@@ -31,7 +31,7 @@ export function ResourcesTabContent({
 }: {
   toolset: Toolset;
   updateToolsetMutation: ReturnType<typeof useUpdateToolsetMutation>;
-}) {
+}): JSX.Element {
   const { data: resourcesResponse } = useListResources({});
   const allResources = resourcesResponse?.resources ?? [];
   const [instructionsOpen, setInstructionsOpen] = useState(false);

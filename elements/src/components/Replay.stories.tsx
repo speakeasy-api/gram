@@ -1,10 +1,9 @@
-import type { StoryFn } from "@storybook/react-vite";
+import type { Meta, StoryFn } from "@storybook/react-vite";
 import { Chat } from "@/components/Chat";
 import { Replay } from "@/components/Replay";
 import type { Cassette } from "@/lib/cassette";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const meta: any = {
+const meta: Meta<typeof Replay> = {
   title: "Misc/Replay",
   component: Replay,
   parameters: {

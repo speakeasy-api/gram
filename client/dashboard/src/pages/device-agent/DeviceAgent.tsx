@@ -745,7 +745,7 @@ function FleetIdentity() {
   );
 }
 
-export default function DeviceAgent() {
+export default function DeviceAgent(): React.JSX.Element {
   return (
     <Page>
       <Page.Header>

@@ -11,7 +11,7 @@ export function MessageHistoryIndicator({
   isNavigating,
   historyIndex,
   totalMessages,
-}: MessageHistoryIndicatorProps) {
+}: MessageHistoryIndicatorProps): JSX.Element | null {
   if (!isNavigating || totalMessages === 0) {
     return null;
   }

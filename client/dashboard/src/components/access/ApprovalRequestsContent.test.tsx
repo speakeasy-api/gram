@@ -711,8 +711,8 @@ describe("ApprovalRequestsContent", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Review" }));
     expect(screen.queryByText("Project")).toBeNull();
-    fireEvent.click(screen.getAllByRole("radio")[1]);
-    fireEvent.change(screen.getAllByLabelText("Rule name")[0], {
+    fireEvent.click(screen.getAllByRole("radio")[1]!);
+    fireEvent.change(screen.getAllByLabelText("Rule name")[0]!, {
       target: { value: "" },
     });
 

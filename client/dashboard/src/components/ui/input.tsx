@@ -28,7 +28,7 @@ function Input({
   requiredPrefix,
   children,
   ...props
-}: InputProps) {
+}: InputProps): React.JSX.Element {
   const v = (val: string) => {
     if (val === "") {
       return null;

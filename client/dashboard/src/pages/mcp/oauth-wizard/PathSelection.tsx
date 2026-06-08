@@ -12,8 +12,9 @@ import { ReactNode } from "react";
 import { canAutoConfigureFromDiscovered, WizardContext } from "./machine";
 import type { DiscoveredOAuth } from "./machine-types";
 
-export function PathSelection() {
-  const send = WizardContext.useActorRef().send;
+export function PathSelection(): JSX.Element {
+  const actorRef = WizardContext.useActorRef();
+  const send = actorRef.send.bind(actorRef);
   const discovered = WizardContext.useSelector((s) => s.context.discovered);
   const canAutoConfigure = canAutoConfigureFromDiscovered(discovered);
 

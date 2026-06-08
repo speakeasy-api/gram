@@ -8,7 +8,9 @@ interface ServerTabContentProps {
   toolset: Toolset;
 }
 
-export function ServerTabContent({ toolset }: ServerTabContentProps) {
+export function ServerTabContent({
+  toolset,
+}: ServerTabContentProps): JSX.Element {
   // Find the external MCP tool to display its metadata
   const externalMcpTool = toolset.rawTools.find(
     (t) => t.externalMcpToolDefinition !== undefined,

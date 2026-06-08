@@ -6,7 +6,9 @@ interface OnboardingHeaderProps {
   onLeave?: () => void;
 }
 
-export function OnboardingHeader({ onLeave }: OnboardingHeaderProps) {
+export function OnboardingHeader({
+  onLeave,
+}: OnboardingHeaderProps): JSX.Element {
   const handleGetSupport = () => {
     window.Pylon?.("show");
   };

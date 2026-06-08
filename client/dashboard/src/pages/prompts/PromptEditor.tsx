@@ -47,7 +47,7 @@ export function PromptEditor({
         arguments?: string;
       }) => void;
     }
-)) {
+)): JSX.Element {
   const isPending = status === "pending";
   const [fullScreenEditor, setFullScreenEditor] = useState(false);
   const parsedArgs = argsSchema.safeParse(

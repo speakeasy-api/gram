@@ -34,7 +34,7 @@ type RadiusSize = "sm" | "md" | "lg" | "xl" | "full";
  * Hook to get radius classes based on theme config
  * Use: const r = useRadius(); then r('lg') returns the appropriate rounded class
  */
-export const useRadius = () => {
+export const useRadius = (): ((size: RadiusSize) => string) => {
   const { config } = useElements();
   const radius = config.theme?.radius ?? "soft";
 

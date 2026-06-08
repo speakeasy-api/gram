@@ -1,7 +1,21 @@
 import { useLoadChat } from "@gram/client/react-query";
 import { UIMessage } from "ai";
 
-export const useChatHistory = (chatId: string) => {
+// Stored tool call shape (OpenAI-style payload persisted as a JSON blob in
+// ChatMessage.toolCalls). We don't import this from the SDK because the SDK
+// only models the surrounding ChatMessage and leaves the toolCalls payload as
+// an opaque JSON string.
+type StoredToolCall = {
+  id: string;
+  function: {
+    name: string;
+    arguments: string | Record<string, unknown>;
+  };
+};
+
+export const useChatHistory = (
+  chatId: string,
+): { chatHistory: UIMessage[]; isLoading: boolean } => {
   const { data: loadedChat, isLoading } = useLoadChat(
     {
       id: chatId,
@@ -22,8 +36,7 @@ export const useChatHistory = (chatId: string) => {
     if (!message) continue;
     if (message.role === "system" || message.role === "tool") continue;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const parts: Array<any> = [];
+    const parts: UIMessage["parts"] = [];
 
     // Handle text content
     if (message.content) {
@@ -35,31 +48,30 @@ export const useChatHistory = (chatId: string) => {
 
     // Handle tool calls
     if (message.toolCalls) {
-      const toolCalls = JSON.parse(message.toolCalls);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      toolCalls.forEach((toolCall: any) => {
+      const toolCalls = JSON.parse(message.toolCalls) as StoredToolCall[];
+      toolCalls.forEach((toolCall: StoredToolCall) => {
         const toolInvocation = getToolInvocation(toolCall.id);
+        const input =
+          typeof toolCall.function.arguments === "string"
+            ? (JSON.parse(toolCall.function.arguments) as unknown)
+            : toolCall.function.arguments;
 
-        // Add tool call part
-        parts.push({
-          type: "tool-call",
-          toolCallId: toolCall.id,
-          tool: toolCall.function.name,
-          input:
-            typeof toolCall.function.arguments === "string"
-              ? JSON.parse(toolCall.function.arguments)
-              : toolCall.function.arguments,
-          state: "output-available",
-        });
-
-        // Add tool result part if available
+        // Replay the tool invocation as a single ToolUIPart with output if
+        // the result is known, or input-available otherwise.
         if (toolInvocation?.content) {
           parts.push({
-            type: "tool-result",
+            type: `tool-${toolCall.function.name}`,
             toolCallId: toolCall.id,
-            tool: toolCall.function.name,
-            output: toolInvocation.content,
             state: "output-available",
+            input,
+            output: toolInvocation.content,
+          });
+        } else {
+          parts.push({
+            type: `tool-${toolCall.function.name}`,
+            toolCallId: toolCall.id,
+            state: "input-available",
+            input,
           });
         }
       });

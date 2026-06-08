@@ -99,22 +99,26 @@ function WizardBody({
       oauthWizardMachine.provide({
         actors: createWizardServices(client, queryClient, authedFetch),
         actions: {
-          invalidateOnExternalSuccess: () => invalidateAllToolset(queryClient),
-          invalidateOnProxyCreate: () => {
-            invalidateAllToolset(queryClient);
-            invalidateAllGetMcpMetadata(queryClient);
-            invalidateAllListEnvironments(queryClient);
+          invalidateOnExternalSuccess: () => {
+            void invalidateAllToolset(queryClient);
           },
-          captureExternalSuccess: () =>
-            telemetry.capture("mcp_event", {
+          invalidateOnProxyCreate: () => {
+            void invalidateAllToolset(queryClient);
+            void invalidateAllGetMcpMetadata(queryClient);
+            void invalidateAllListEnvironments(queryClient);
+          },
+          captureExternalSuccess: () => {
+            void telemetry.capture("mcp_event", {
               action: "external_oauth_configured",
               slug: toolsetSlug,
-            }),
-          captureProxyCreateSuccess: () =>
-            telemetry.capture("mcp_event", {
+            });
+          },
+          captureProxyCreateSuccess: () => {
+            void telemetry.capture("mcp_event", {
               action: "oauth_proxy_configured",
               slug: toolsetSlug,
-            }),
+            });
+          },
         },
       }),
     [client, queryClient, telemetry, toolsetSlug, authedFetch],
@@ -240,7 +244,7 @@ export function ConnectOAuthModal({
   onClose: () => void;
   toolsetSlug: string;
   toolset: Toolset;
-}) {
+}): JSX.Element {
   const productTier = useProductTier();
   const isAccountUpgrade = productTier.includes("base");
 

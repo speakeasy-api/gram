@@ -41,13 +41,13 @@ export const LocalAttachmentsContext = createContext<AttachmentsContext | null>(
 );
 
 // Optional variants (do NOT throw). Useful for dual-mode components.
-export const useOptionalPromptInputController = () =>
-  useContext(PromptInputController);
+export const useOptionalPromptInputController =
+  (): PromptInputControllerProps | null => useContext(PromptInputController);
 
 const useOptionalProviderAttachments = () =>
   useContext(ProviderAttachmentsContext);
 
-export const usePromptInputAttachments = () => {
+export const usePromptInputAttachments = (): AttachmentsContext => {
   // Dual-mode: prefer provider if present, otherwise use local
   const provider = useOptionalProviderAttachments();
   const local = useContext(LocalAttachmentsContext);

@@ -38,7 +38,7 @@ type StepperContextApi = {
 
 export const StepperContext = React.createContext<StepperContextApi>(null!);
 
-export const useStepper = () => {
+export const useStepper = (): StepperContextApi => {
   const ctx = React.useContext(StepperContext);
   if (!ctx) throw new Error("useStep must be used within a Stepper.Provider");
   return ctx;

@@ -22,7 +22,7 @@ export function AnyField({
     id: string;
     "aria-describedby": string;
   }) => React.ReactNode;
-}) {
+}): React.JSX.Element {
   const genid = useId();
   const id = rest.id ?? genid;
   const hintId = `${genid}-hint`;

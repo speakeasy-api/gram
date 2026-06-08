@@ -6,7 +6,7 @@ export function PromptsEmptyState({
   onCreatePrompt,
 }: {
   onCreatePrompt: () => void;
-}) {
+}): JSX.Element {
   const cta = (
     <Button size="sm" onClick={onCreatePrompt}>
       CREATE A PROMPT

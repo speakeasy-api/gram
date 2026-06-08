@@ -35,7 +35,7 @@ import SwitchOrg from "./pages/demo/SwitchOrg";
 import SlackRegister from "./pages/slackapp/SlackRegister";
 import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
 
-export default function App() {
+export default function App(): JSX.Element {
   // Initialize from storage so React/Moonshine match the theme the pre-paint
   // inline script (in index.html) already applied to <html> — avoids a flash.
   const [theme, setTheme] = useState<"light" | "dark">(() => {
