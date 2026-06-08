@@ -21,62 +21,13 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type Processor struct {
-	state         protoimpl.MessageState `protogen:"opaque.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Processor) Reset() {
-	*x = Processor{}
-	mi := &file_gram_ping_v1_processor_proto_msgTypes[0]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Processor) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Processor) ProtoMessage() {}
-
-func (x *Processor) ProtoReflect() protoreflect.Message {
-	mi := &file_gram_ping_v1_processor_proto_msgTypes[0]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-type Processor_builder struct {
-	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
-
-}
-
-func (b0 Processor_builder) Build() *Processor {
-	m0 := &Processor{}
-	b, x := &b0, m0
-	_, _ = b, x
-	return m0
-}
-
 var File_gram_ping_v1_processor_proto protoreflect.FileDescriptor
 
 const file_gram_ping_v1_processor_proto_rawDesc = "" +
 	"\n" +
-	"\x1cgram/ping/v1/processor.proto\x12\fgram.ping.v1\x1a\x1bgcp/pubsub/v1/options.proto\"?\n" +
-	"\tProcessor:2\x92\xb5\x18.\x12\x03\b\x90\x1c\"\x02\b\x1e2\t\n" +
-	"\x02\b\n" +
-	"\x12\x03\b\xd8\x04J\x02\x10\x05R\x14gram.ping.v1.MessageB=Z;github.com/speakeasy-api/gram/infra/gen/gram/ping/v1;pingv1b\beditionsp\xe9\a"
+	"\x1cgram/ping/v1/processor.proto\x12\fgram.ping.v1\x1a\x1bgcp/pubsub/v1/options.protoB=Z;github.com/speakeasy-api/gram/infra/gen/gram/ping/v1;pingv1b\beditionsp\xe9\a"
 
-var file_gram_ping_v1_processor_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
-var file_gram_ping_v1_processor_proto_goTypes = []any{
-	(*Processor)(nil), // 0: gram.ping.v1.Processor
-}
+var file_gram_ping_v1_processor_proto_goTypes = []any{}
 var file_gram_ping_v1_processor_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
 	0, // [0:0] is the sub-list for method input_type
@@ -96,13 +47,12 @@ func file_gram_ping_v1_processor_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_gram_ping_v1_processor_proto_rawDesc), len(file_gram_ping_v1_processor_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   1,
+			NumMessages:   0,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_gram_ping_v1_processor_proto_goTypes,
 		DependencyIndexes: file_gram_ping_v1_processor_proto_depIdxs,
-		MessageInfos:      file_gram_ping_v1_processor_proto_msgTypes,
 	}.Build()
 	File_gram_ping_v1_processor_proto = out.File
 	file_gram_ping_v1_processor_proto_goTypes = nil

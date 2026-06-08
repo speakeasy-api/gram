@@ -2,21 +2,14 @@ package infra
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"cloud.google.com/go/compute/metadata"
 	"cloud.google.com/go/pubsub/v2"
-	"github.com/google/uuid"
-	"github.com/sourcegraph/conc/pool"
-	pingv1 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v1"
 	"github.com/speakeasy-api/gram/infra/internal/attr"
-	gcppub "github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/urfave/cli/v2"
 	"google.golang.org/api/option"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func newDemoCommand() *cli.Command {
@@ -78,89 +71,91 @@ func newDemoCommand() *cli.Command {
 				return fmt.Errorf("failed to create pubsub client: %w", err)
 			}
 
+			_ = client
+
 			// --- DEMO BELOW - INTENDED FOR APPLICATIONS ---
 
-			group := pool.New()
+			// group := pool.New()
 
-			broker := gcppub.NewEmulatedPubSub(logger, projectID, client, descriptors)
+			// broker := gcppub.NewEmulatedPubSub(logger, projectID, client, descriptors)
 
-			// Get a publisher handle so we can publish messages
-			pub, err := gcppub.PubSubPublisherForMessage(ctx, broker, &pingv1.Message{})
-			if err != nil {
-				return fmt.Errorf("failed to get publisher: %w", err)
-			}
-			// Get a subscriber handle to receive messages
-			// Read this as: "Get a handler for the outbox processor subscription to receive pingv1.Message messages"
-			sub1, err := gcppub.PubSubSubscriberForMessage(ctx, broker, &pingv1.Message{}, &pingv1.Processor{})
-			if err != nil {
-				return fmt.Errorf("failed to get subscriber 1: %w", err)
-			}
-			// Get another subscriber handle to receive messages
-			sub2, err := gcppub.PubSubSubscriberForMessage(ctx, broker, &pingv1.Message{}, &pingv1.Processor{})
-			if err != nil {
-				return fmt.Errorf("failed to get subscriber 2: %w", err)
-			}
+			// // Get a publisher handle so we can publish messages
+			// pub, err := gcppub.PubSubPublisherForMessage(ctx, broker, &pingv1.Message{})
+			// if err != nil {
+			// 	return fmt.Errorf("failed to get publisher: %w", err)
+			// }
+			// // Get a subscriber handle to receive messages
+			// // Read this as: "Get a handler for the outbox processor subscription to receive pingv1.Message messages"
+			// sub1, err := gcppub.PubSubSubscriberForMessage(ctx, broker, &pingv1.Message{}, &pingv1.Processor{})
+			// if err != nil {
+			// 	return fmt.Errorf("failed to get subscriber 1: %w", err)
+			// }
+			// // Get another subscriber handle to receive messages
+			// sub2, err := gcppub.PubSubSubscriberForMessage(ctx, broker, &pingv1.Message{}, &pingv1.Processor{})
+			// if err != nil {
+			// 	return fmt.Errorf("failed to get subscriber 2: %w", err)
+			// }
 
-			group.Go(func() {
-				// Cancel the shared context on exit so the subscriber
-				// goroutines blocked in Receive unblock and group.Wait returns
-				// instead of hanging.
-				defer cancel()
-				for {
-					msg := pingv1.Message_builder{
-						Id:        new(uuid.Must(uuid.NewV7()).String()),
-						Type:      new("simulated"),
-						CreatedAt: timestamppb.Now(),
-						Payload:   []byte(`{"msg":"Hello, World!"}`),
-					}.Build()
+			// group.Go(func() {
+			// 	// Cancel the shared context on exit so the subscriber
+			// 	// goroutines blocked in Receive unblock and group.Wait returns
+			// 	// instead of hanging.
+			// 	defer cancel()
+			// 	for {
+			// 		msg := pingv1.Message_builder{
+			// 			Id:        new(uuid.Must(uuid.NewV7()).String()),
+			// 			Type:      new("simulated"),
+			// 			CreatedAt: timestamppb.Now(),
+			// 			Payload:   []byte(`{"msg":"Hello, World!"}`),
+			// 		}.Build()
 
-					_, err := pub.Publish(ctx, msg).Get(ctx)
-					switch {
-					case errors.Is(err, context.Canceled):
-						return
-					case err != nil:
-						logger.ErrorContext(ctx, "publish failed", attr.SlogError(err))
-						return
-					}
-					time.Sleep(1 * time.Second)
-				}
-			})
+			// 		_, err := pub.Publish(ctx, msg).Get(ctx)
+			// 		switch {
+			// 		case errors.Is(err, context.Canceled):
+			// 			return
+			// 		case err != nil:
+			// 			logger.ErrorContext(ctx, "publish failed", attr.SlogError(err))
+			// 			return
+			// 		}
+			// 		time.Sleep(1 * time.Second)
+			// 	}
+			// })
 
-			group.Go(func() {
-				defer cancel()
-				err := sub1.Receive(ctx, func(ctx context.Context, m *pingv1.Message, _ gcppub.MessageMetadata) error {
-					logger.InfoContext(ctx, "sub1: message", attr.SlogValueAny(map[string]any{
-						"id":      m.GetId(),
-						"type":    m.GetType(),
-						"payload": string(m.GetPayload()),
-					}))
+			// group.Go(func() {
+			// 	defer cancel()
+			// 	err := sub1.Receive(ctx, func(ctx context.Context, m *pingv1.Message, _ gcppub.MessageMetadata) error {
+			// 		logger.InfoContext(ctx, "sub1: message", attr.SlogValueAny(map[string]any{
+			// 			"id":      m.GetId(),
+			// 			"type":    m.GetType(),
+			// 			"payload": string(m.GetPayload()),
+			// 		}))
 
-					return nil
-				})
-				if err != nil {
-					logger.ErrorContext(ctx, "sub1: receive failed", attr.SlogError(err))
-					return
-				}
-			})
+			// 		return nil
+			// 	})
+			// 	if err != nil {
+			// 		logger.ErrorContext(ctx, "sub1: receive failed", attr.SlogError(err))
+			// 		return
+			// 	}
+			// })
 
-			group.Go(func() {
-				defer cancel()
-				err := sub2.Receive(ctx, func(ctx context.Context, m *pingv1.Message, _ gcppub.MessageMetadata) error {
-					logger.InfoContext(ctx, "sub2: message", attr.SlogValueAny(map[string]any{
-						"id":      m.GetId(),
-						"type":    m.GetType(),
-						"payload": string(m.GetPayload()),
-					}))
+			// group.Go(func() {
+			// 	defer cancel()
+			// 	err := sub2.Receive(ctx, func(ctx context.Context, m *pingv1.Message, _ gcppub.MessageMetadata) error {
+			// 		logger.InfoContext(ctx, "sub2: message", attr.SlogValueAny(map[string]any{
+			// 			"id":      m.GetId(),
+			// 			"type":    m.GetType(),
+			// 			"payload": string(m.GetPayload()),
+			// 		}))
 
-					return nil
-				})
-				if err != nil {
-					logger.ErrorContext(ctx, "sub2: receive failed", attr.SlogError(err))
-					return
-				}
-			})
+			// 		return nil
+			// 	})
+			// 	if err != nil {
+			// 		logger.ErrorContext(ctx, "sub2: receive failed", attr.SlogError(err))
+			// 		return
+			// 	}
+			// })
 
-			group.Wait()
+			// group.Wait()
 
 			return nil
 		},

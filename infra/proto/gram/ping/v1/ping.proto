@@ -7,15 +7,15 @@ import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/ping/v1;pingv1";
 
-message Message {
-  string id = 1;
-  string type = 2;
-  google.protobuf.Timestamp created_at = 3;
-  bytes payload = 4;
+// message Message {
+//   string id = 1;
+//   string type = 2;
+//   google.protobuf.Timestamp created_at = 3;
+//   bytes payload = 4;
 
-  option (gcp.pubsub.v1.topic) = {
-    retention_hint: {
-      seconds: 86400 /* 1 day */
-    }
-  };
-}
+//   option (gcp.pubsub.v1.topic) = {
+//     retention_hint: {
+//       seconds: 86400 /* 1 day */
+//     }
+//   };
+// }
