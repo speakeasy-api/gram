@@ -29,6 +29,7 @@ import (
 	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	oauthrepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -258,6 +259,44 @@ func createRemoteIssuerInProject(t *testing.T, ctx context.Context, conn *pgxpoo
 	})
 	require.NoError(t, err)
 	return issuer.ID
+}
+
+// seedOrgLevelRemoteIssuer creates an organization-level (cross-project,
+// project_id IS NULL) remote session issuer owned by the supplied organization.
+// Org-level issuers are addressed only by id; pass the caller's active org to
+// mint an inherited issuer or a different org to exercise cross-org isolation.
+func seedOrgLevelRemoteIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, slug string) uuid.UUID {
+	t.Helper()
+	issuer, err := repo.New(conn).CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         uuid.NullUUID{},
+		OrganizationID:                    conv.ToPGText(organizationID),
+		Slug:                              slug,
+		Issuer:                            "https://idp.example.com",
+		AuthorizationEndpoint:             conv.ToPGText("https://idp.example.com/authorize"),
+		TokenEndpoint:                     conv.ToPGText("https://idp.example.com/token"),
+		ScopesSupported:                   []string{"openid"},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
+	})
+	require.NoError(t, err)
+	return issuer.ID
+}
+
+// createOrganization seeds a second organization_metadata row so tests can
+// exercise cross-organization isolation. Returns the new organization id.
+func createOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug string) string {
+	t.Helper()
+	orgID := uuid.NewString()
+	_, err := orgrepo.New(conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
+		ID:          orgID,
+		Name:        slug,
+		Slug:        slug,
+		WorkosID:    pgtype.Text{String: orgID, Valid: true},
+		Whitelisted: pgtype.Bool{Bool: false, Valid: false},
+	})
+	require.NoError(t, err)
+	return orgID
 }
 
 func createRemoteIssuer(t *testing.T, ctx context.Context, svc *testInstance, slug, regEndpoint string) string {
