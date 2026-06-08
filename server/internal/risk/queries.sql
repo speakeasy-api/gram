@@ -93,15 +93,6 @@ WHERE id = @id
   AND deleted IS FALSE
 RETURNING *;
 
--- name: UpdateRiskPolicyAudienceType :one
-UPDATE risk_policies
-SET audience_type = @audience_type
-  , updated_at = clock_timestamp()
-WHERE id = @id
-  AND project_id = @project_id
-  AND deleted IS FALSE
-RETURNING *;
-
 -- name: BumpRiskPolicyVersion :one
 UPDATE risk_policies
 SET version = version + 1

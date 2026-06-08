@@ -83,7 +83,9 @@ func TestResolveKnownUserPrincipals_allUsersGrantAuthorizesOrgMember(t *testing.
 	grants, err := LoadGrants(ctx, conn, organizationID, principals)
 	require.NoError(t, err)
 
-	require.True(t, GrantsPermit(grants, RiskPolicyEvaluateCheck(policyID, RiskPolicyEvaluateDimensions{ServerURL: ""})))
+	allowGrant, _, denied := evaluateGrants(grants, Check{Scope: ScopeRiskPolicyEvaluate, ResourceID: policyID}.expand())
+	require.NotNil(t, allowGrant)
+	require.False(t, denied)
 }
 
 func seedActiveOrganizationUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, userID string) {

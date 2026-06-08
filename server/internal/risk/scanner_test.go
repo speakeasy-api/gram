@@ -13,7 +13,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/message"
@@ -115,40 +114,6 @@ func insertPresidioBlockPolicyWithTypes(t *testing.T, ti *testInstance, ctx cont
 		AutoName:         false,
 	})
 	require.NoError(t, err)
-}
-
-func insertTargetedPresidioBlockPolicy(t *testing.T, ti *testInstance, ctx context.Context, name string, entities []string) riskrepo.RiskPolicy {
-	t.Helper()
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	require.NotNil(t, authCtx.ProjectID)
-	policy, err := riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
-		ID:               uuid.New(),
-		ProjectID:        *authCtx.ProjectID,
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		Name:             name,
-		Sources:          []string{"presidio"},
-		PresidioEntities: entities,
-		Enabled:          true,
-		Action:           "block",
-		AutoName:         false,
-	})
-	require.NoError(t, err)
-
-	policy, err = riskrepo.New(ti.conn).UpdateRiskPolicyAudienceType(ctx, riskrepo.UpdateRiskPolicyAudienceTypeParams{
-		AudienceType: "targeted",
-		ID:           policy.ID,
-		ProjectID:    policy.ProjectID,
-	})
-	require.NoError(t, err)
-	return policy
-}
-
-func riskPolicyGrant(scope authz.Scope, policyID string, serverURL string) authz.Grant {
-	selector := authz.NewSelector(scope, policyID)
-	if serverURL != "" {
-		selector[authz.SelectorKeyServerURL] = serverURL
-	}
-	return authz.NewGrantWithSelector(scope, selector)
 }
 
 // TestScanner_FanOutAcrossPoliciesIsConcurrent verifies that
@@ -317,87 +282,4 @@ func TestScanner_RespectsMessageTypes(t *testing.T) {
 	require.NotNil(t, toolResult)
 	require.Equal(t, "tool only", toolResult.PolicyName)
 	require.Equal(t, message.ToolRequest, toolResult.MessageType)
-}
-
-func TestScanner_TargetedPolicyRequiresEvaluateGrant(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestRiskService(t)
-	policy := insertTargetedPresidioBlockPolicy(t, ti, ctx, "targeted", []string{"FAST"})
-
-	pii := &instrumentedPIIScanner{findOnEntity: "FAST"}
-	scanner, err := risk.NewScanner(
-		testenv.NewLogger(t),
-		ti.conn,
-		pii,
-		nil,
-		testenv.NewMeterProvider(t),
-	)
-	require.NoError(t, err)
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	result, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", message.User)
-	require.NoError(t, err)
-	require.Nil(t, result)
-
-	ctx = authz.GrantsToContext(ctx, []authz.Grant{
-		riskPolicyGrant(authz.ScopeRiskPolicyEvaluate, policy.ID.String(), ""),
-	})
-	result, err = scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", message.User)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Equal(t, "targeted", result.PolicyName)
-}
-
-func TestScanner_TargetedPolicyBypassTrumpsEvaluateGrant(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestRiskService(t)
-	policy := insertTargetedPresidioBlockPolicy(t, ti, ctx, "targeted bypass", []string{"FAST"})
-
-	ctx = authz.GrantsToContext(ctx, []authz.Grant{
-		riskPolicyGrant(authz.ScopeRiskPolicyEvaluate, policy.ID.String(), ""),
-		riskPolicyGrant(authz.ScopeRiskPolicyBypass, policy.ID.String(), ""),
-	})
-
-	pii := &instrumentedPIIScanner{findOnEntity: "FAST"}
-	scanner, err := risk.NewScanner(
-		testenv.NewLogger(t),
-		ti.conn,
-		pii,
-		nil,
-		testenv.NewMeterProvider(t),
-	)
-	require.NoError(t, err)
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	result, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", message.User)
-	require.NoError(t, err)
-	require.Nil(t, result)
-}
-
-func TestScanner_TargetedPolicyIgnoresBypassForDifferentPolicyOrServerURL(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestRiskService(t)
-	policy := insertTargetedPresidioBlockPolicy(t, ti, ctx, "targeted mismatch", []string{"FAST"})
-
-	ctx = authz.GrantsToContext(ctx, []authz.Grant{
-		riskPolicyGrant(authz.ScopeRiskPolicyEvaluate, policy.ID.String(), ""),
-		riskPolicyGrant(authz.ScopeRiskPolicyBypass, uuid.NewString(), ""),
-		riskPolicyGrant(authz.ScopeRiskPolicyBypass, policy.ID.String(), "https://api.example.com"),
-	})
-
-	pii := &instrumentedPIIScanner{findOnEntity: "FAST"}
-	scanner, err := risk.NewScanner(
-		testenv.NewLogger(t),
-		ti.conn,
-		pii,
-		nil,
-		testenv.NewMeterProvider(t),
-	)
-	require.NoError(t, err)
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	result, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", message.User)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Equal(t, "targeted mismatch", result.PolicyName)
 }
