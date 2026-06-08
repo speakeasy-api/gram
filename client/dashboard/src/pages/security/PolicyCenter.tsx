@@ -39,6 +39,7 @@ import {
   Plus,
   Shield,
   Ellipsis,
+  Info,
   Loader2,
   ChevronRight,
   RefreshCw,
@@ -299,6 +300,13 @@ function messageTypesSummary(
     return "Tool Calls";
   }
 
+  if (
+    selectedMessageTypes.size === 1 &&
+    selectedMessageTypes.has("tool_request")
+  ) {
+    return "Tool Requests";
+  }
+
   return `${selectedMessageTypes.size} of ${ALL_POLICY_MESSAGE_TYPES.length} types selected`;
 }
 
@@ -317,6 +325,11 @@ function policyKind(policy: RiskPolicy): PolicyKind {
 function policyToRow(policy: RiskPolicy): PolicyRow {
   const kind = policyKind(policy);
   return { kind, policy };
+}
+
+function promptTemplateNameForInstruction(prompt: string): string | undefined {
+  return PROMPT_POLICY_TEMPLATES.find((template) => template.prompt === prompt)
+    ?.name;
 }
 
 export default function PolicyCenter() {
@@ -842,6 +855,14 @@ function PolicyCenterContent() {
     sheetTitle = "Choose Policy Type";
     sheetDescription =
       "Start with a detector-based policy or define criteria in plain language.";
+  } else if (nlEnabled) {
+    if (formPolicyKind === "prompt") {
+      sheetTitle = "New Prompt-based Policy";
+      sheetDescription = "Describe the tool-call behavior you want to detect.";
+    } else {
+      sheetTitle = "New Standard Policy";
+      sheetDescription = "Configure detection rules to scan agent sessions.";
+    }
   }
 
   return (
@@ -914,6 +935,8 @@ function PolicyCenterContent() {
                   />
                 ) : (
                   <PromptPolicySheetBody
+                    key={editingPolicy?.id ?? "new-prompt-policy"}
+                    isEditing={!!editingPolicy}
                     formName={formName}
                     setFormName={setFormName}
                     formPromptInstruction={formPromptInstruction}
@@ -1008,34 +1031,47 @@ function PolicyKindChoice({
       <button
         type="button"
         onClick={() => onSelect("risk")}
-        className="border-border hover:bg-muted/50 focus-visible:ring-ring flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none"
+        className="border-border hover:bg-muted/50 focus-visible:ring-ring flex w-full items-start gap-3 rounded-lg border p-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none"
       >
-        <div className="bg-muted flex h-9 w-9 shrink-0 items-center justify-center rounded-md">
+        <div className="bg-muted mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md">
           <Shield className="text-muted-foreground h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1">
           <Type className="font-medium">Standard</Type>
-          <Type small muted>
-            Use built-in detectors and custom rules.
+          <Type small muted className="mt-0.5">
+            Catch secrets, PII, and destructive commands using built-in scanners
+            and custom regex rules.
+          </Type>
+          <Type small muted className="text-muted-foreground/60 mt-1.5 italic">
+            e.g. "Block AWS credentials in tool calls"
           </Type>
         </div>
-        <ChevronRight className="text-muted-foreground h-4 w-4 shrink-0" />
+        <ChevronRight className="text-muted-foreground mt-2.5 h-4 w-4 shrink-0" />
       </button>
       <button
         type="button"
         onClick={() => onSelect("prompt")}
-        className="border-border hover:bg-muted/50 focus-visible:ring-ring flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none"
+        className="border-border hover:bg-muted/50 focus-visible:ring-ring flex w-full items-start gap-3 rounded-lg border p-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none"
       >
-        <div className="bg-muted flex h-9 w-9 shrink-0 items-center justify-center rounded-md">
+        <div className="bg-muted mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md">
           <Sparkles className="text-muted-foreground h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1">
-          <Type className="font-medium">Prompt-based</Type>
-          <Type small muted>
-            Describe tool-call criteria in plain language.
+          <div className="flex items-center gap-2">
+            <Type className="font-medium">Prompt-based</Type>
+            <Badge variant="secondary" className="text-[10px]">
+              New
+            </Badge>
+          </div>
+          <Type small muted className="mt-0.5">
+            Describe any behavior you want to detect in plain language — no
+            scanner configuration needed.
+          </Type>
+          <Type small muted className="text-muted-foreground/60 mt-1.5 italic">
+            e.g. "Flag tool sequences that read then transmit sensitive data"
           </Type>
         </div>
-        <ChevronRight className="text-muted-foreground h-4 w-4 shrink-0" />
+        <ChevronRight className="text-muted-foreground mt-2.5 h-4 w-4 shrink-0" />
       </button>
     </div>
   );
@@ -1046,6 +1082,7 @@ function PolicyKindChoice({
 /* -------------------------------------------------------------------------- */
 
 function PromptPolicySheetBody({
+  isEditing,
   formName,
   setFormName,
   formPromptInstruction,
@@ -1057,6 +1094,7 @@ function PromptPolicySheetBody({
   formEnabled,
   setFormEnabled,
 }: {
+  isEditing: boolean;
   formName: string;
   setFormName: (v: string) => void;
   formPromptInstruction: string;
@@ -1068,8 +1106,19 @@ function PromptPolicySheetBody({
   formEnabled: boolean;
   setFormEnabled: (v: boolean) => void;
 }) {
+  const [selectedExampleName, setSelectedExampleName] = useState<
+    string | undefined
+  >(() => promptTemplateNameForInstruction(formPromptInstruction));
+
+  const handlePromptChange = (value: string) => {
+    setSelectedExampleName(undefined);
+    setFormPromptInstruction(value);
+  };
+
   return (
     <div className="space-y-6">
+      <PromptPolicyHowItWorks isEditing={isEditing} />
+
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <Label className="text-sm font-medium">Policy Name</Label>
@@ -1093,32 +1142,25 @@ function PromptPolicySheetBody({
 
       <div className="space-y-2">
         <Label className="text-sm font-medium">Policy Prompt</Label>
+        <PromptExamplesRadioGroup
+          selectedExampleName={selectedExampleName}
+          onSelect={(template) => {
+            setSelectedExampleName(template.name);
+            setFormPromptInstruction(template.prompt);
+            if (!formName.trim()) {
+              setFormName(template.name);
+            }
+          }}
+        />
         <TextArea
           value={formPromptInstruction}
-          onChange={setFormPromptInstruction}
-          placeholder="Describe the tool-call behavior this policy should match…"
+          onChange={handlePromptChange}
+          placeholder="Describe the tool-call behavior this policy should match..."
           rows={5}
         />
-        <div className="flex flex-wrap gap-2 pt-1">
-          {PROMPT_POLICY_TEMPLATES.map((template) => (
-            <button
-              key={template.name}
-              type="button"
-              className="border-border bg-muted/30 hover:bg-muted max-w-full rounded-full border px-3 py-1.5 text-left text-xs transition-colors"
-              onClick={() => {
-                setFormPromptInstruction(template.prompt);
-                if (formAutoName) {
-                  setFormName(template.name);
-                }
-              }}
-            >
-              {template.prompt}
-            </button>
-          ))}
-        </div>
       </div>
 
-      <PromptPolicyScopeSummary />
+      <PromptPolicyMessageTypesPicker />
 
       <ActionPicker formAction={formAction} setFormAction={setFormAction} />
 
@@ -1135,19 +1177,135 @@ function PromptPolicySheetBody({
   );
 }
 
-function PromptPolicyScopeSummary() {
+function PromptExamplesRadioGroup({
+  selectedExampleName,
+  onSelect,
+}: {
+  selectedExampleName: string | undefined;
+  onSelect: (template: (typeof PROMPT_POLICY_TEMPLATES)[number]) => void;
+}) {
   return (
-    <div className="border-border bg-muted/20 flex items-start justify-between gap-4 rounded-md border p-3">
+    <div className="space-y-2">
+      <Label className="text-sm font-medium">Prompt Examples</Label>
+      <RadioGroup
+        value={selectedExampleName}
+        onValueChange={(name) => {
+          const template = PROMPT_POLICY_TEMPLATES.find((t) => t.name === name);
+          if (template) {
+            onSelect(template);
+          }
+        }}
+      >
+        <div className="border-border divide-border divide-y rounded-lg border">
+          {PROMPT_POLICY_TEMPLATES.map((template, index) => {
+            const exampleId = `prompt-example-${index}`;
+
+            return (
+              <label
+                key={template.name}
+                htmlFor={exampleId}
+                className="hover:bg-muted/40 flex cursor-pointer items-start gap-3 px-4 py-3"
+              >
+                <RadioGroupItem
+                  value={template.name}
+                  id={exampleId}
+                  className="mt-0.5"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium">{template.name}</div>
+                  <div className="text-muted-foreground text-xs">
+                    {template.prompt}
+                  </div>
+                </div>
+              </label>
+            );
+          })}
+        </div>
+      </RadioGroup>
+    </div>
+  );
+}
+
+function PromptPolicyHowItWorks({ isEditing }: { isEditing: boolean }) {
+  const [open, setOpen] = useState(!isEditing);
+
+  return (
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      className="border-border rounded-lg border"
+    >
+      <CollapsibleTrigger className="hover:bg-muted/40 flex w-full items-start gap-3 px-4 py-3 text-left transition-colors">
+        <Info className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-medium">How this works</div>
+          <div className="text-muted-foreground text-xs">
+            LLM judging evaluates matching tool requests in real time.
+          </div>
+        </div>
+        <ChevronRight
+          className={cn(
+            "text-muted-foreground mt-0.5 h-4 w-4 shrink-0 transition-transform",
+            open && "rotate-90",
+          )}
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="border-border border-t px-4 py-3">
+        <p className="text-muted-foreground text-sm">
+          Prompt-based policies use an LLM judge, so each evaluated tool request
+          can add latency compared with standard detection rules. The judge sees
+          the tool name and inputs; tool responses are not evaluated in this
+          release.
+        </p>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function PromptPolicyMessageTypesPicker() {
+  const selectedMessageTypes = promptPolicyMessageTypes();
+  const [open, setOpen] = useState(true);
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="space-y-3">
       <div className="space-y-1">
         <Label className="text-sm font-medium">Applies To</Label>
         <p className="text-muted-foreground text-xs">
-          Prompt-based policies evaluate tool requests only.
+          Prompt-based policies currently evaluate tool requests only.
         </p>
       </div>
-      <Badge variant="secondary" className="shrink-0">
-        Tool Requests
-      </Badge>
-    </div>
+      <div className="border-border rounded-lg border">
+        <CollapsibleTrigger className="hover:bg-muted/40 flex w-full items-center gap-3 px-4 py-3 text-left transition-colors">
+          <ChevronRight
+            className={cn(
+              "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
+              open && "rotate-90",
+            )}
+          />
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium">
+              {messageTypesSummary(selectedMessageTypes)}
+            </div>
+            <div className="text-muted-foreground text-xs">
+              Evaluated on each Tool Request in real time
+            </div>
+          </div>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="border-border data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down overflow-hidden border-t">
+          <div className="divide-border divide-y">
+            {ALL_POLICY_MESSAGE_TYPES.map((type) => (
+              <MessageTypeOptionRow
+                key={type}
+                type={type}
+                checked={selectedMessageTypes.has(type)}
+                disabled={type !== "tool_request"}
+                onCheckedChange={() => undefined}
+              />
+            ))}
+          </div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
   );
 }
 
@@ -1679,36 +1837,22 @@ function MessageTypesPicker({
         </CollapsibleTrigger>
         <CollapsibleContent className="border-border data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down overflow-hidden border-t">
           <div className="divide-border divide-y">
-            {ALL_POLICY_MESSAGE_TYPES.map((type) => {
-              const meta = POLICY_MESSAGE_TYPE_META[type];
-              const checked = selectedMessageTypes.has(type);
-
-              return (
-                <label
-                  key={type}
-                  className="hover:bg-muted/40 flex cursor-pointer items-start gap-3 px-4 py-3"
-                >
-                  <Checkbox
-                    checked={checked}
-                    onCheckedChange={(next) => {
-                      const updated = new Set(selectedMessageTypes);
-                      if (next) {
-                        updated.add(type);
-                      } else {
-                        updated.delete(type);
-                      }
-                      setSelectedMessageTypes(updated);
-                    }}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium">{meta.label}</div>
-                    <div className="text-muted-foreground text-xs">
-                      {meta.description}
-                    </div>
-                  </div>
-                </label>
-              );
-            })}
+            {ALL_POLICY_MESSAGE_TYPES.map((type) => (
+              <MessageTypeOptionRow
+                key={type}
+                type={type}
+                checked={selectedMessageTypes.has(type)}
+                onCheckedChange={(next) => {
+                  const updated = new Set(selectedMessageTypes);
+                  if (next) {
+                    updated.add(type);
+                  } else {
+                    updated.delete(type);
+                  }
+                  setSelectedMessageTypes(updated);
+                }}
+              />
+            ))}
           </div>
         </CollapsibleContent>
       </div>
@@ -1719,6 +1863,41 @@ function MessageTypesPicker({
         </p>
       )}
     </Collapsible>
+  );
+}
+
+function MessageTypeOptionRow({
+  type,
+  checked,
+  disabled = false,
+  onCheckedChange,
+}: {
+  type: PolicyMessageType;
+  checked: boolean;
+  disabled?: boolean;
+  onCheckedChange: (checked: boolean | "indeterminate") => void;
+}) {
+  const meta = POLICY_MESSAGE_TYPE_META[type];
+
+  return (
+    <label
+      className={cn(
+        "flex items-start gap-3 px-4 py-3",
+        disabled
+          ? "cursor-not-allowed opacity-60"
+          : "hover:bg-muted/40 cursor-pointer",
+      )}
+    >
+      <Checkbox
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={disabled ? undefined : onCheckedChange}
+      />
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-medium">{meta.label}</div>
+        <div className="text-muted-foreground text-xs">{meta.description}</div>
+      </div>
+    </label>
   );
 }
 

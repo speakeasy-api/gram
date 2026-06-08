@@ -12,11 +12,6 @@ export const PROMPT_POLICY_TEMPLATES: PromptPolicyTemplate[] = [
       "Tool-call sequences where sensitive data is read and then transmitted to an external destination.",
   },
   {
-    name: "MCP tool allowlist",
-    prompt:
-      "Tool calls should use explicitly approved MCP servers; unapproved servers or tools are policy violations.",
-  },
-  {
     name: "PII exposure",
     prompt: "Tool calls that expose personally identifiable information.",
   },
