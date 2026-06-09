@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
+	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -133,6 +134,7 @@ type App struct {
 	serverURL      *url.URL
 	dispatchers    map[string]Dispatcher
 	audit          *audit.Logger
+	slackClient    *slackclient.SlackClient
 }
 
 // InstanceDBHook runs inside the transaction that mutates a trigger instance,
@@ -179,6 +181,7 @@ func NewApp(
 	deliveryLogger DeliveryLogger,
 	auditLogger *audit.Logger,
 	serverURL *url.URL,
+	slackClient *slackclient.SlackClient,
 	dispatchers ...Dispatcher,
 ) *App {
 	logger = logger.With(attr.SlogComponent("background_triggers"))
@@ -198,6 +201,7 @@ func NewApp(
 		serverURL:      serverURL,
 		dispatchers:    dispatcherMap,
 		audit:          auditLogger,
+		slackClient:    slackClient,
 	}
 }
 
@@ -735,11 +739,40 @@ func (a *App) ProcessWebhook(ctx context.Context, instanceID uuid.UUID, body []b
 		return result, nil
 	}
 
+	a.ackSlackThreadStatus(ctx, instance, envMap, *result.Event)
+
 	if err := ExecuteTriggerDispatchWorkflow(ctx, a.temporalEnv, TriggerDispatchWorkflowInput{Task: *task}); err != nil {
 		return nil, fmt.Errorf("execute trigger dispatch workflow: %w", err)
 	}
 
 	return result, nil
+}
+
+// ackSlackThreadStatus shows Slack's native loading indicator on the thread the
+// moment a slack-triggered event is dispatched, so the user sees the assistant
+// is working while its (cold-starting) runtime spins up. The assistant refines
+// the status itself once it's running via the set_thread_status platform tool.
+// Best-effort: a failure here only costs the indicator.
+func (a *App) ackSlackThreadStatus(ctx context.Context, instance triggerrepo.TriggerInstance, env map[string]string, event EventEnvelope) {
+	if a.slackClient == nil || instance.DefinitionSlug != DefinitionSlugSlack {
+		return
+	}
+	channelID, threadTS, ok := slackThreadStatusTarget(event)
+	if !ok {
+		return
+	}
+	token := toolconfig.CIEnvFrom(env).Get("SLACK_BOT_TOKEN")
+	if token == "" {
+		return
+	}
+	if err := a.slackClient.SetThreadStatus(ctx, token, slackclient.SlackSetThreadStatusInput{
+		ChannelID:       channelID,
+		ThreadTS:        threadTS,
+		Status:          slackThinkingStatus,
+		LoadingMessages: slackInitialLoadingMessages,
+	}); err != nil {
+		a.logger.WarnContext(ctx, "set slack thread status", attr.SlogError(err))
+	}
 }
 
 func (a *App) ProcessScheduled(ctx context.Context, input ProcessScheduledInput) (*Task, error) {

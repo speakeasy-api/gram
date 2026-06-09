@@ -1111,6 +1111,31 @@ func validateSlackSignature(body []byte, headers http.Header, signingSecret stri
 	return nil
 }
 
+// slackThinkingStatus and slackInitialLoadingMessages drive the loading
+// indicator shown the moment a slack-triggered event is dispatched, before the
+// assistant runtime is up to refine it via the set_thread_status platform tool.
+const slackThinkingStatus = "is thinking…"
+
+var slackInitialLoadingMessages = []string{"Routing…", "Calling tools…", "Composing…"}
+
+// slackThreadStatusTarget extracts the channel + thread to anchor a loading
+// status on. Returns ok=false for events without a threadable target (e.g.
+// user_change, channel_created).
+func slackThreadStatusTarget(event EventEnvelope) (channelID, threadTS string, ok bool) {
+	evt, isSlack := event.Event.(slackTriggerEvent)
+	if !isSlack {
+		return "", "", false
+	}
+	threadTS = evt.ThreadID
+	if threadTS == "" {
+		threadTS = evt.Timestamp
+	}
+	if evt.ChannelID == "" || threadTS == "" {
+		return "", "", false
+	}
+	return evt.ChannelID, threadTS, true
+}
+
 func parseUnixTimestamp(value string) (int64, error) {
 	parsed, err := strconv.ParseInt(value, 10, 64)
 	if err != nil {
