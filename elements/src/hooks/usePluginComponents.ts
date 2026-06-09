@@ -15,7 +15,9 @@ type ComponentsByLanguage =
     >
   | undefined;
 
-export function useComponentsByLanguage(plugins: Plugin[]) {
+export function useComponentsByLanguage(
+  plugins: Plugin[],
+): ComponentsByLanguage {
   return useMemo(() => {
     return plugins.reduce((acc, plugin) => {
       if (acc?.[plugin.language] && !plugin.overrideExisting) {

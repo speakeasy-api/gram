@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.34.0**](../README.md)
+[**@gram-ai/elements v1.35.0**](../README.md)
 
 ***
 
@@ -7,6 +7,15 @@
 # Interface: WelcomeConfig
 
 ## Properties
+
+### logo?
+
+> `optional` **logo**: `string`
+
+Optional logo image URL shown above the title on the empty-thread welcome
+screen.
+
+***
 
 ### title?
 

@@ -1,23 +1,39 @@
 import { useNoToolsetsConfigured } from "@/hooks/useObservabilityMcpConfig";
 import { useServerAssistantTransport } from "@/hooks/useServerAssistantTransport";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { useRoutes } from "@/routes.tsx";
+import speakeasyIcon from "@/assets/speakeasy-icon.svg";
 import { useAssistantRuntime } from "@assistant-ui/react";
 import type {
   ElementsConfig,
   ElementsTransportFactory,
 } from "@gram-ai/elements";
-import { Chat, GramElementsProvider } from "@gram-ai/elements";
+import { Chat, ChatHistory, GramElementsProvider } from "@gram-ai/elements";
+import { stripMessageContextFraming } from "@/lib/projectAssistantTranscript";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import type { UIMessage } from "ai";
 import {
   ChevronRight,
+  HistoryIcon,
   Loader2,
   Sparkles,
   SquarePen,
   Terminal,
   Wand2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  ReactElement,
+} from "react";
 import type { InsightsConfigOptions } from "./insights-context";
 import { InsightsContext, useInsightsState } from "./insights-context";
 
@@ -38,7 +54,7 @@ export const INSIGHTS_AI_RAINBOW_CLASS = "insights-ai-rainbow";
  * Requires <InsightsRainbowStyles /> in the tree. Works best on elements
  * with a 1px border and a border-radius.
  */
-export const INSIGHTS_AI_RAINBOW_BORDER_CLASS = "insights-ai-rainbow-border";
+const INSIGHTS_AI_RAINBOW_BORDER_CLASS = "insights-ai-rainbow-border";
 
 function InsightsRainbowStyles() {
   return (
@@ -129,7 +145,11 @@ function isMacPlatform(): boolean {
  * single 600ms rotation. Implemented by mounting/unmounting the spin class
  * with a setTimeout rather than `animate-spin` (which is infinite).
  */
-export function InsightsTrigger({ className }: { className?: string }) {
+export function InsightsTrigger({
+  className,
+}: {
+  className?: string;
+}): ReactElement | null {
   const { available, isExpanded, setIsExpanded, triggerSpinKey } =
     useInsightsState();
   const [spinning, setSpinning] = useState(false);
@@ -178,10 +198,12 @@ export function InsightsTrigger({ className }: { className?: string }) {
         startSpin();
         setIsExpanded(!isExpanded);
       }}
-      aria-label={isExpanded ? "Close AI Insights" : "Open AI Insights"}
+      aria-label={
+        isExpanded ? "Close Project Assistant" : "Open Project Assistant"
+      }
       aria-keyshortcuts={shortcutAria}
       aria-pressed={isExpanded}
-      title={`AI Insights (${shortcutKeys.join("+")})`}
+      title={`Project Assistant (${shortcutKeys.join("+")})`}
       className={cn(
         "group border-border hover:bg-accent hover:text-accent-foreground inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors",
         isExpanded && "bg-accent text-accent-foreground",
@@ -192,7 +214,7 @@ export function InsightsTrigger({ className }: { className?: string }) {
       <Wand2
         className={cn("size-3.5", spinning && "insights-trigger-spinning")}
       />
-      <span className="font-medium">AI Insights</span>
+      <span className="font-medium">Project Assistant</span>
       {/* Hover-revealed shortcut hint. The outer wrapper animates between
           0fr and 1fr grid columns so the contents transition cleanly from
           width 0 to their natural width without us hardcoding a pixel value.
@@ -226,7 +248,9 @@ export function InsightsTrigger({ className }: { className?: string }) {
  * to swap in a custom prompt/suggestions/MCP filter. Cleans up on unmount,
  * restoring the provider's defaults.
  */
-export function InsightsConfig(options: InsightsConfigOptions) {
+export function InsightsConfig(
+  options: InsightsConfigOptions,
+): ReactElement | null {
   const { setOverride } = useInsightsState();
   // JSON.stringify is the stable content key; optionsRef is read inside the
   // effect to avoid a stale closure on re-renders that don't change content.
@@ -269,7 +293,7 @@ export function InsightsProvider({
   suggestions: defaultSuggestions = [],
   defaultExpanded = false,
   children,
-}: InsightsProviderProps) {
+}: InsightsProviderProps): ReactElement {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [override, setOverride] = useState<InsightsConfigOptions | null>(null);
   // Bumped whenever the keyboard shortcut fires so the trigger plays its
@@ -286,7 +310,9 @@ export function InsightsProvider({
   // calls in a long-lived runtime throw `tapLookupResources: Resource not
   // found for lookup: __LOCALID_…` during render.
   const [sessionKey, setSessionKey] = useState(0);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const { theme } = useMoonshineConfig();
+  const routes = useRoutes();
 
   // Resolve effective values: per-page override wins, fall back to defaults.
   const mcpConfig = override?.mcpConfig ?? defaultMcpConfig;
@@ -336,7 +362,7 @@ export function InsightsProvider({
           const messages = args.messages;
           let lastUserIdx = -1;
           for (let i = messages.length - 1; i >= 0; i--) {
-            if (messages[i].role === "user") {
+            if (messages[i]!.role === "user") {
               lastUserIdx = i;
               break;
             }
@@ -347,7 +373,7 @@ export function InsightsProvider({
           const original = messages[lastUserIdx];
           const prefix = `<dashboard_context>\n${ctxText}\n</dashboard_context>\n\n`;
           let prefixed = false;
-          const newParts = original.parts.map((p) => {
+          const newParts = original!.parts.map((p) => {
             if (!prefixed && p.type === "text") {
               prefixed = true;
               return { ...p, text: `${prefix}${p.text}` };
@@ -362,7 +388,7 @@ export function InsightsProvider({
           }
           const wrappedMessages: UIMessage[] = [
             ...messages.slice(0, lastUserIdx),
-            { ...original, parts: newParts },
+            { ...original, parts: newParts } as UIMessage,
             ...messages.slice(lastUserIdx + 1),
           ];
           return inner.sendMessages({ ...args, messages: wrappedMessages });
@@ -396,6 +422,10 @@ export function InsightsProvider({
         enabled: true,
         threadListFilters: { assistant_id: managedAssistantId },
         deferThreadIdMinting: true,
+        // The runtime persists each turn with a backend `<message-context>`
+        // framing block (needed for replay, noise for display). Strip it — and
+        // drop framing-only turns — before Elements renders the transcript.
+        transformChatMessage: stripMessageContextFraming,
       },
       api: {
         ...mcpConfig.api,
@@ -405,6 +435,7 @@ export function InsightsProvider({
         },
       },
       welcome: {
+        logo: speakeasyIcon,
         title,
         subtitle,
         suggestions,
@@ -530,28 +561,19 @@ export function InsightsProvider({
         >
           {/* Header */}
           <div className="border-border bg-muted/30 flex items-center justify-between border-b px-4 py-3">
-            <div className="flex items-center gap-2">
+            <routes.assistants.Link className="group flex items-center gap-2">
               <Sparkles className="text-primary size-5" />
-              <span className="font-semibold">Project Assistant</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={handleStartFresh}
-                disabled={!assistantReady}
-                className="hover:bg-muted rounded p-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label="Start a new conversation"
-                title="Start a new conversation"
-              >
-                <SquarePen className="size-[18px]" />
-              </button>
-              <button
-                onClick={() => setIsExpanded(false)}
-                className="hover:bg-muted rounded p-1.5 transition-colors"
-                aria-label="Close Project Assistant"
-              >
-                <ChevronRight className="size-5" />
-              </button>
-            </div>
+              <span className="font-semibold group-hover:underline">
+                Project Assistant
+              </span>
+            </routes.assistants.Link>
+            <button
+              onClick={() => setIsExpanded(false)}
+              className="hover:bg-muted rounded p-1.5 transition-colors"
+              aria-label="Close Project Assistant"
+            >
+              <ChevronRight className="size-5" />
+            </button>
           </div>
 
           {/* Notice when the Project Assistant failed to connect */}
@@ -582,7 +604,44 @@ export function InsightsProvider({
                   pending={pendingPrompt}
                   onConsume={consumePendingPrompt}
                 />
-                <Chat />
+                <div className="flex h-full min-h-0 flex-col">
+                  {/* Thread nav: history picker + new conversation. Lives inside
+                      the Elements provider so <ChatHistory> can read the chat
+                      runtime; the header above (title, close) stays outside so it
+                      doesn't remount when "New" bumps the session key. */}
+                  <div className="border-border flex shrink-0 items-center gap-1 border-b px-2 py-1.5">
+                    <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
+                      <PopoverTrigger asChild>
+                        <button
+                          className="hover:bg-muted text-muted-foreground flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors"
+                          aria-label="Conversation history"
+                        >
+                          <HistoryIcon className="size-3.5" />
+                          History
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        align="start"
+                        className="max-h-96 w-72 overflow-y-auto p-0"
+                      >
+                        <ChatHistory className="max-h-96 overflow-y-auto" />
+                      </PopoverContent>
+                    </Popover>
+                    <button
+                      onClick={handleStartFresh}
+                      disabled={!assistantReady}
+                      className="hover:bg-muted text-muted-foreground flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                      aria-label="Start a new conversation"
+                      title="Start a new conversation"
+                    >
+                      <SquarePen className="size-3.5" />
+                      New
+                    </button>
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-hidden">
+                    <Chat />
+                  </div>
+                </div>
               </GramElementsProvider>
             ) : (
               !assistantError && (
@@ -598,13 +657,6 @@ export function InsightsProvider({
     </InsightsContext.Provider>
   );
 }
-
-/**
- * @deprecated Use <InsightsProvider> at the app shell level + <InsightsConfig>
- * on individual pages that need custom prompts. This alias is kept temporarily
- * to avoid breaking out-of-tree consumers; remove after migration.
- */
-export const InsightsSidebar = InsightsProvider;
 
 /**
  * Lives inside GramElementsProvider so it can access useThreadRuntime().

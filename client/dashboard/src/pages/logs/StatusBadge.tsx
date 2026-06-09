@@ -1,5 +1,3 @@
-import { parseGramUrn } from "./utils";
-
 interface StatusBadgeProps {
   isSuccess: boolean;
   httpStatusCode?: number;
@@ -10,7 +8,7 @@ export function StatusBadge({
   isSuccess,
   httpStatusCode,
   severity,
-}: StatusBadgeProps) {
+}: StatusBadgeProps): JSX.Element {
   // For log entries with severity
   if (severity) {
     return <SeverityBadge severity={severity} />;
@@ -87,41 +85,6 @@ function SeverityBadge({ severity }: { severity: string }) {
       return (
         <span className="bg-primary-softest text-primary-default rounded px-1.5 py-0.5 text-[10px] font-medium">
           INFO
-        </span>
-      );
-  }
-}
-
-interface SpanTypeBadgeProps {
-  urn: string;
-}
-
-export function SpanTypeBadge({ urn }: SpanTypeBadgeProps) {
-  const { kind } = parseGramUrn(urn);
-
-  switch (kind) {
-    case "http":
-      return (
-        <span className="rounded bg-cyan-500/20 px-1.5 py-0.5 text-[10px] font-medium text-cyan-400 uppercase">
-          HTTP
-        </span>
-      );
-    case "function":
-      return (
-        <span className="rounded bg-purple-500/20 px-1.5 py-0.5 text-[10px] font-medium text-purple-400 uppercase">
-          FN
-        </span>
-      );
-    case "prompt":
-      return (
-        <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium text-amber-400 uppercase">
-          PROMPT
-        </span>
-      );
-    default:
-      return (
-        <span className="bg-surface-secondary-default text-muted-foreground rounded px-1.5 py-0.5 text-[10px] font-medium uppercase">
-          {kind || "SPAN"}
         </span>
       );
   }

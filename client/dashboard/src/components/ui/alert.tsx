@@ -71,7 +71,7 @@ const ErrorAlert = ({
   title = "Error",
   onDismiss,
   className,
-}: ErrorAlertProps) => {
+}: ErrorAlertProps): React.JSX.Element => {
   const errorMessage = typeof error === "string" ? error : error.message;
 
   return (

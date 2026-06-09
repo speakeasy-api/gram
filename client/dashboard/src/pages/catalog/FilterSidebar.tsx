@@ -77,7 +77,7 @@ export function FilterSidebar({
   values,
   onChange,
   onClear,
-}: FilterSidebarProps) {
+}: FilterSidebarProps): JSX.Element {
   const [open, setOpen] = useState(false);
   const activeCount = countActiveFilters(values);
 

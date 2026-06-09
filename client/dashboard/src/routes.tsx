@@ -662,7 +662,7 @@ export const useRoutes = (overrides?: {
     };
 
     const goTo = (...params: string[]) => {
-      navigate(resolveUrl(...params));
+      void navigate(resolveUrl(...params));
     };
 
     const linkComponent = ({
@@ -713,7 +713,9 @@ export const useRoutes = (overrides?: {
     };
 
     if (route.url.startsWith("/")) {
-      newRoute.goTo = () => route.url;
+      newRoute.goTo = () => {
+        void route.url;
+      };
     }
 
     return newRoute;
@@ -928,7 +930,7 @@ export const useOrgRoutes = (): OrgRoutesWithGoTo => {
     };
 
     const goTo = (...params: string[]) => {
-      navigate(resolveUrl(...params));
+      void navigate(resolveUrl(...params));
     };
 
     const linkComponent = ({

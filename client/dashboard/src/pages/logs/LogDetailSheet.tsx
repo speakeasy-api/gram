@@ -27,7 +27,7 @@ export function LogDetailSheet({
   open,
   onOpenChange,
   onAddFilter,
-}: LogDetailSheetProps) {
+}: LogDetailSheetProps): JSX.Element {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -93,12 +93,12 @@ function removeNestedKey(
   const parts = path.split(".");
   let current: Record<string, unknown> = clone;
   for (let i = 0; i < parts.length - 1; i++) {
-    const next = current[parts[i]];
+    const next = current[parts[i]!];
     if (next === null || next === undefined || typeof next !== "object")
       return clone;
     current = next as Record<string, unknown>;
   }
-  delete current[parts[parts.length - 1]];
+  delete current[parts[parts.length - 1]!];
   return clone;
 }
 
@@ -491,6 +491,10 @@ function flattenObject(
           filterValue: String(value),
         });
         break;
+      case "bigint":
+      case "function":
+      case "symbol":
+      case "undefined":
       default:
         result.push({
           key: fullKey,

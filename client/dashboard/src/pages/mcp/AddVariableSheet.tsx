@@ -22,7 +22,7 @@ interface Environment {
   name: string;
 }
 
-export interface VariableEntry {
+interface VariableEntry {
   key: string;
   value: string;
   state: EnvVarState;
@@ -44,7 +44,7 @@ export function AddVariableSheet({
   availableEnvVarsFromAttached,
   onAddVariables,
   onLoadFromEnvironment,
-}: AddVariableSheetProps) {
+}: AddVariableSheetProps): JSX.Element {
   const emptyEntry = { key: "", value: "" };
   const [entries, setEntries] = useState([{ ...emptyEntry }]);
 

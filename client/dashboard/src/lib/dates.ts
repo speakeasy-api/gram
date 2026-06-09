@@ -37,7 +37,7 @@ export const dateTimeFormatters = {
       includeSuffix = true,
       includeTime = true,
     } = {},
-  ) {
+  ): string {
     const delta = referenceDate.valueOf() - date.valueOf();
     const suffix = includeSuffix ? "ago" : "";
     // If less than 12 hours: show formatted distance
@@ -103,11 +103,4 @@ export const dateTimeFormatters = {
     second: "2-digit",
     hour12: false,
   }),
-};
-
-export const formatDuration = (ms: number) => {
-  if (ms < 1000) {
-    return `${ms.toFixed(0)}ms`;
-  }
-  return `${(ms / 1000).toFixed(1)}s`;
 };

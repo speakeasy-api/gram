@@ -33,7 +33,7 @@ func TestPresidio_DetectsEmail(t *testing.T) {
 	t.Parallel()
 	client := infra.NewPresidioClient(t)
 	results, err := client.AnalyzeBatch(t.Context(), []string{
-		"Please contact me at john.smith@acmecorp.com for details",
+		"Please contact me at john.smith@globex.com for details",
 	}, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
@@ -44,7 +44,7 @@ func TestPresidio_DetectsEmail(t *testing.T) {
 
 	for _, f := range findings {
 		if f.RuleID == "pii.email_address" {
-			assert.Equal(t, "john.smith@acmecorp.com", f.Match)
+			assert.Equal(t, "john.smith@globex.com", f.Match)
 			assert.InDelta(t, 1.0, f.Confidence, 0.1)
 			assert.Equal(t, "presidio", f.Source)
 		}
@@ -58,7 +58,7 @@ func TestPresidio_BatchResultsMapBackToInputIndexes(t *testing.T) {
 	messages := make([]string, 75)
 	emails := make([]string, len(messages))
 	for i := range messages {
-		emails[i] = fmt.Sprintf("remap%03d@example.com", i)
+		emails[i] = fmt.Sprintf("remap%03d@globex.com", i)
 		messages[i] = fmt.Sprintf("message %03d contact %s end", i, emails[i])
 	}
 
@@ -210,7 +210,7 @@ func TestCombinedScanners_BothSourcesAppear(t *testing.T) {
 	scanner := risk_analysis.NewScanner()
 
 	// Message with both a secret (AWS key) and PII (email)
-	content := "Here is my AWS key: AKIAIOSFODNN7REALKEY and my email is alice@example.com"
+	content := "Here is my AWS key: AKIAIOSFODNN7REALKEY and my email is alice@globex.com"
 
 	gitleaksFindings, err := scanner.Scan(content)
 	require.NoError(t, err)

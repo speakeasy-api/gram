@@ -14,7 +14,7 @@ export function DashboardCard({
   action,
   children,
   tooltip,
-}: DashboardCardProps) {
+}: DashboardCardProps): JSX.Element {
   return (
     <div className="bg-card text-card-foreground relative flex h-full w-full flex-col rounded-lg border">
       <div className="flex w-full flex-row items-center justify-between gap-4 border-b px-6 py-4">

@@ -78,21 +78,12 @@ export function hasFormChanges(input: SaveButtonInput): boolean {
 }
 
 /** Whether the form fields are valid enough to submit */
-export function isFormValid(input: SaveButtonInput): boolean {
+function isFormValid(input: SaveButtonInput): boolean {
   if (input.isSystemRole) return true; // system roles only change members
   return (
     input.name.trim().length > 0 &&
     input.description.trim().length > 0 &&
     effectiveGrantCount(input.grants) > 0
-  );
-}
-
-/** Whether non-member fields (name, description, grants) changed */
-export function hasNonMemberChanges(input: SaveButtonInput): boolean {
-  return (
-    input.name !== input.initial.name ||
-    input.description !== input.initial.description ||
-    grantKeysString(input.grants) !== input.initial.grantKeys
   );
 }
 
@@ -144,7 +135,7 @@ export function computeRuleLabel(
 
   const tools = selectors.filter((s) => s.tool);
   if (tools.length > 0) {
-    if (tools.length === 1) return tools[0].tool!;
+    if (tools.length === 1) return tools[0]!.tool!;
     return `${tools.length} tools`;
   }
 
@@ -152,7 +143,7 @@ export function computeRuleLabel(
   if (projectSels.length > 0) {
     if (projectSels.length === 1) {
       const name = projects.find(
-        (p) => p.id === projectSels[0].projectId,
+        (p) => p.id === projectSels[0]!.projectId!,
       )?.name;
       return name ? `Project: ${name}` : "1 project";
     }
@@ -189,7 +180,7 @@ export function computeRuleTooltip(
 
   const tools = selectors.filter((s) => s.tool);
   if (tools.length > 0) {
-    if (tools.length === 1) return `${verb} access to ${tools[0].tool}`;
+    if (tools.length === 1) return `${verb} access to ${tools[0]!.tool!}`;
     return `${verb} access to ${tools.length} tools`;
   }
 
@@ -197,7 +188,7 @@ export function computeRuleTooltip(
   if (projectSels.length > 0) {
     if (projectSels.length === 1) {
       const name = projects.find(
-        (p) => p.id === projectSels[0].projectId,
+        (p) => p.id === projectSels[0]!.projectId!,
       )?.name;
       return name
         ? `${verb} access to all servers in ${name}`

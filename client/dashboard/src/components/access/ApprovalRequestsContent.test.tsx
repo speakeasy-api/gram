@@ -543,7 +543,7 @@ describe("ApprovalRequestsContent", () => {
       expect(screen.getByText("Denied request")).toBeTruthy();
     });
     fireEvent.click(screen.getByRole("button", { name: "Review" }));
-    fireEvent.click(screen.getAllByRole("radio")[1]);
+    fireEvent.click(screen.getAllByRole("radio")[1]!);
     fireEvent.click(screen.getByRole("button", { name: "Deny request" }));
 
     await waitFor(() => {
@@ -615,7 +615,7 @@ describe("ApprovalRequestsContent", () => {
       expect(screen.getByText("Everyone request")).toBeTruthy();
     });
     fireEvent.click(screen.getByRole("button", { name: "Review" }));
-    fireEvent.click(screen.getAllByRole("radio")[2]);
+    fireEvent.click(screen.getAllByRole("radio")[2]!);
     fireEvent.click(screen.getByRole("button", { name: "Approve request" }));
 
     await waitFor(() => {
@@ -653,7 +653,7 @@ describe("ApprovalRequestsContent", () => {
       expect(screen.getByText("Role request")).toBeTruthy();
     });
     fireEvent.click(screen.getByRole("button", { name: "Review" }));
-    fireEvent.click(screen.getAllByRole("radio")[3]);
+    fireEvent.click(screen.getAllByRole("radio")[3]!);
     expect(screen.getByText("Current")).toBeTruthy();
     const reviewersOption = screen.getByText("Reviewers").closest("button");
     if (!reviewersOption) throw new Error("Reviewers option not found");
@@ -740,7 +740,7 @@ describe("ApprovalRequestsContent", () => {
     fireEvent.click(within(row).getByRole("button", { name: "Edit" }));
 
     expect(screen.getByText("Edit access")).toBeTruthy();
-    fireEvent.click(screen.getAllByRole("radio")[1]);
+    fireEvent.click(screen.getAllByRole("radio")[1]!);
     const reviewersOption = screen.getByText("Reviewers").closest("button");
     if (!reviewersOption) throw new Error("Reviewers option not found");
     fireEvent.click(reviewersOption);

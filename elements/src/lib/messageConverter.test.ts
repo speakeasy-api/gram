@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, expect, it } from "vitest";
 import {
   convertGramMessagesToExported,
@@ -6,6 +5,7 @@ import {
   convertGramMessagePartsToUIMessageParts,
   type GramChatMessage,
 } from "./messageConverter";
+import type { ToolCallMessagePart } from "@assistant-ui/react";
 
 /**
  * Helper to create a minimal GramChatMessage for testing.
@@ -41,10 +41,7 @@ describe("convertGramMessagePartsToUIMessageParts", () => {
       tool_calls: makeToolCallsJSON([{ id: "tc_1", name: "search_deals" }]),
     } as Partial<GramChatMessage> & { role: string });
 
-    const parts = convertGramMessagePartsToUIMessageParts(
-      msg as any,
-      new Map(),
-    );
+    const parts = convertGramMessagePartsToUIMessageParts(msg, new Map());
 
     const toolParts = parts.filter((p) => p.type === "dynamic-tool");
     expect(toolParts).toHaveLength(1);
@@ -66,11 +63,7 @@ describe("convertGramMessagePartsToUIMessageParts", () => {
       ]),
     } as Partial<GramChatMessage> & { role: string });
 
-    const parts = convertGramMessagePartsToUIMessageParts(
-      msg as any,
-      new Map(),
-      seen,
-    );
+    const parts = convertGramMessagePartsToUIMessageParts(msg, new Map(), seen);
 
     const toolParts = parts.filter((p) => p.type === "dynamic-tool");
     expect(toolParts).toHaveLength(1);
@@ -230,10 +223,15 @@ describe("convertGramMessagesToExported - string content with tool calls", () =>
 
     const result = convertGramMessagesToExported(messages);
     const assistantEntry = result.messages.find(
-      (m) => m.message.role === "assistant",
+      (m): m is typeof m & { message: { role: "assistant" } } =>
+        m.message.role === "assistant",
     )!;
-    const toolCallParts = (assistantEntry.message as any).content.filter(
-      (p: any) => p.type === "tool-call",
+    const assistantMessage = assistantEntry.message;
+    if (assistantMessage.role !== "assistant") {
+      throw new Error("expected assistant message");
+    }
+    const toolCallParts = assistantMessage.content.filter(
+      (p): p is ToolCallMessagePart => p.type === "tool-call",
     );
     expect(toolCallParts).toHaveLength(1);
     expect(toolCallParts[0]).toMatchObject({

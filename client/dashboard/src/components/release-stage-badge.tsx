@@ -35,7 +35,7 @@ export function ReleaseStageBadge({
   stage,
   noTooltip = false,
   className,
-}: ReleaseStageBadgeProps) {
+}: ReleaseStageBadgeProps): JSX.Element {
   const pill = (
     <Badge
       size="sm"

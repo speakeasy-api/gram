@@ -73,7 +73,7 @@ const FACEPILE_LIMIT = 10;
 
 type OrgProject = ReturnType<typeof useOrganization>["projects"][number];
 
-export default function OrgHome() {
+export default function OrgHome(): JSX.Element {
   return (
     <Page>
       <Page.Header>
@@ -91,7 +91,7 @@ export default function OrgHome() {
   );
 }
 
-export function OrgHomeInner() {
+function OrgHomeInner() {
   const organization = useOrganization();
   const { orgSlug } = useSlugs();
   const client = useSdkClient();
@@ -202,7 +202,7 @@ export function OrgHomeInner() {
       },
     });
     setNewProjectName("");
-    navigate(`/${orgSlug}/projects/${result.project.slug}`);
+    void navigate(`/${orgSlug}/projects/${result.project.slug}`);
   };
 
   const getFacepileMembers = (projectSlug: string): AccessMember[] => {
@@ -688,17 +688,17 @@ function ProjectRowActions({
             {isFavorite ? "Remove from favorites" : "Add to favorites"}
           </DropdownMenuItem>
           <DropdownMenuItem
-            onClick={closeAnd(() =>
-              navigate(`/${orgSlug}/projects/${project.slug}/settings`),
-            )}
+            onClick={closeAnd(() => {
+              void navigate(`/${orgSlug}/projects/${project.slug}/settings`);
+            })}
           >
             <Settings className="size-4" />
             Project settings
           </DropdownMenuItem>
           <DropdownMenuItem
-            onClick={closeAnd(() =>
-              navigate(`/${orgSlug}/audit-logs?project=${project.slug}`),
-            )}
+            onClick={closeAnd(() => {
+              void navigate(`/${orgSlug}/audit-logs?project=${project.slug}`);
+            })}
           >
             <History className="size-4" />
             View audit logs

@@ -25,7 +25,7 @@ export function OpenApiSourceInput({
   documentSlug,
   className,
   isLoading,
-}: OpenApiSourceInputProps) {
+}: OpenApiSourceInputProps): JSX.Element {
   const [url, setUrl] = useState("");
   const client = useSdkClient();
 

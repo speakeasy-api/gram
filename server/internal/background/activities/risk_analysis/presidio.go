@@ -632,25 +632,41 @@ func convertPresidioFindings(text string, results []presidioResult) []Finding {
 }
 
 // isPresidioFalsePositive filters Presidio matches the policy author
-// would treat as noise. For IP_ADDRESS it delegates to the unified
-// catalog in falsepositives_ip.go, which covers:
-//   - IANA-reserved space (RFC1918, loopback, link-local, multicast,
+// would treat as noise. It dispatches per entity type to the
+// per-category catalogs:
+//
+//   - IP_ADDRESS → nonPIIIPReason in falsepositives_ip.go, covering
+//     IANA-reserved space (RFC1918, loopback, link-local, multicast,
 //     CGNAT, documentation, 6to4 deprecated, class E, benchmarking,
-//     this-network, limited broadcast);
-//   - well-known public DNS resolvers (Cloudflare, Google, Quad9,
-//     OpenDNS, AdGuard, etc.);
-//   - common placeholder IPs (1.2.3.4 et al.);
-//   - shape heuristics (X.0.0.0 /8 network address, sparse IPv6 like
-//     1::, b::, dead::).
+//     this-network, limited broadcast), well-known public DNS resolvers
+//     (Cloudflare, Google, Quad9, OpenDNS, AdGuard, etc.), common
+//     placeholder IPs (1.2.3.4 et al.), and shape heuristics
+//     (X.0.0.0 /8 network address, sparse IPv6 like 1::, b::, dead::).
+//   - EMAIL_ADDRESS → nonPIIEmailReason in falsepositives_email.go,
+//     primarily covering well-known fixture / placeholder domains
+//     (`@example.com`, `@acme.com`, `@acmecorp.com`, etc.), two
+//     RFC-shape sanity checks (any `/` in the candidate; trailing
+//     digit on the domain — catches `pkg@v1.2.3` and other
+//     version-suffixed module paths), and template-only / automated
+//     local-parts (`first.last`, `firstname.lastname`, `noreply`,
+//     `no-reply`).
 //
 // Cloud / CDN attribution by AS organisation (the fp_infra_asn bucket
-// in the offline classifier) requires runtime ASN lookup and is
-// deliberately out of scope here.
+// in the offline IP classifier) and lower-confidence email buckets
+// (GCP service-account machine identities, KV / env wrappers like
+// `DB_USERNAME=…`, JSON-escaped angle brackets, ANSI colour codes,
+// Faker localparts, fictional company domains, generic role aliases,
+// hashed noreply addresses) are deliberately out of scope; they need
+// a runtime ASN lookup or a per-customer policy decision respectively.
 func isPresidioFalsePositive(entityType, match string) bool {
-	if entityType != "IP_ADDRESS" {
+	switch entityType {
+	case "IP_ADDRESS":
+		return nonPIIIPReason(strings.TrimSpace(match)) != ""
+	case "EMAIL_ADDRESS":
+		return nonPIIEmailReason(match) != ""
+	default:
 		return false
 	}
-	return nonPIIIPReason(strings.TrimSpace(match)) != ""
 }
 
 // computeRetryBackoff returns a full-jittered exponential backoff for the

@@ -5,8 +5,9 @@ import { Button, Stack } from "@speakeasy-api/moonshine";
 
 import { WizardContext } from "./machine";
 
-export function ProxyCredentialsForm() {
-  const send = WizardContext.useActorRef().send;
+export function ProxyCredentialsForm(): JSX.Element {
+  const actorRef = WizardContext.useActorRef();
+  const send = actorRef.send.bind(actorRef);
   const proxy = WizardContext.useSelector((s) => s.context.proxy);
   const error = WizardContext.useSelector((s) => s.context.error);
   const submitting = WizardContext.useSelector((s) =>

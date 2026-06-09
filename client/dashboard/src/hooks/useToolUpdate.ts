@@ -39,7 +39,10 @@ export type UseToolUpdateOptions = {
 export function useToolUpdate({
   telemetryEvent,
   onSuccess,
-}: UseToolUpdateOptions) {
+}: UseToolUpdateOptions): {
+  updateTool: (tool: Tool, updates: ToolUpdateFields) => Promise<void>;
+  isUpdating: boolean;
+} {
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
   const client = useSdkClient();
@@ -57,7 +60,7 @@ export function useToolUpdate({
             ...updates,
           },
         });
-        invalidateTemplate(queryClient, [{ name: tool.name }]);
+        void invalidateTemplate(queryClient, [{ name: tool.name }]);
       } else {
         await client.variations.upsertGlobal({
           upsertGlobalToolVariationForm: {

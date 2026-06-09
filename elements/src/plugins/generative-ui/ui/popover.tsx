@@ -7,13 +7,13 @@ import { cn } from "@/lib/utils";
 
 function Popover({
   ...props
-}: React.ComponentProps<typeof PopoverPrimitive.Root>) {
+}: React.ComponentProps<typeof PopoverPrimitive.Root>): React.JSX.Element {
   return <PopoverPrimitive.Root data-slot="popover" {...props} />;
 }
 
 function PopoverTrigger({
   ...props
-}: React.ComponentProps<typeof PopoverPrimitive.Trigger>) {
+}: React.ComponentProps<typeof PopoverPrimitive.Trigger>): React.JSX.Element {
   return <PopoverPrimitive.Trigger data-slot="popover-trigger" {...props} />;
 }
 
@@ -22,7 +22,7 @@ function PopoverContent({
   align = "center",
   sideOffset = 4,
   ...props
-}: React.ComponentProps<typeof PopoverPrimitive.Content>) {
+}: React.ComponentProps<typeof PopoverPrimitive.Content>): React.JSX.Element {
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
@@ -41,11 +41,14 @@ function PopoverContent({
 
 function PopoverAnchor({
   ...props
-}: React.ComponentProps<typeof PopoverPrimitive.Anchor>) {
+}: React.ComponentProps<typeof PopoverPrimitive.Anchor>): React.JSX.Element {
   return <PopoverPrimitive.Anchor data-slot="popover-anchor" {...props} />;
 }
 
-function PopoverHeader({ className, ...props }: React.ComponentProps<"div">) {
+function PopoverHeader({
+  className,
+  ...props
+}: React.ComponentProps<"div">): React.JSX.Element {
   return (
     <div
       data-slot="popover-header"
@@ -55,7 +58,10 @@ function PopoverHeader({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
-function PopoverTitle({ className, ...props }: React.ComponentProps<"h2">) {
+function PopoverTitle({
+  className,
+  ...props
+}: React.ComponentProps<"h2">): React.JSX.Element {
   return (
     <div
       data-slot="popover-title"
@@ -68,7 +74,7 @@ function PopoverTitle({ className, ...props }: React.ComponentProps<"h2">) {
 function PopoverDescription({
   className,
   ...props
-}: React.ComponentProps<"p">) {
+}: React.ComponentProps<"p">): React.JSX.Element {
   return (
     <p
       data-slot="popover-description"

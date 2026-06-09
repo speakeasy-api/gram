@@ -62,7 +62,7 @@ ChartJS.register(
   Legend,
 );
 
-export function LogsTools() {
+export function LogsTools(): JSX.Element {
   const { projectSlug } = useSlugs();
 
   const mcpConfig = useObservabilityMcpConfig({
@@ -160,7 +160,7 @@ export function LogsTools() {
     if (!hasNextPage) return;
 
     if (distanceFromBottom < 200) {
-      fetchNextPage();
+      void fetchNextPage();
     }
   };
 
@@ -173,7 +173,7 @@ export function LogsTools() {
   };
 
   const refetch = useCallback(() => {
-    refetchLogs();
+    void refetchLogs();
   }, [refetchLogs]);
 
   const isLogsDisabled = isLogsLogsDisabled;
@@ -420,13 +420,15 @@ function HooksInnerContent({
       <LogDetailSheet
         log={selectedLog}
         open={!!selectedLog}
-        onOpenChange={(open) => !open && setSelectedLog(null)}
+        onOpenChange={(open) => {
+          void (!open && setSelectedLog(null));
+        }}
       />
     </>
   );
 }
 
-export function LogsToolsContent({
+function LogsToolsContent({
   error,
   isLoading,
   groupedTraces,

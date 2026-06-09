@@ -552,8 +552,6 @@ export const wireUserSessionIssuerMachine = setup({
     complete: {},
   },
 });
-
-export type WireUserSessionIssuerMachine = typeof wireUserSessionIssuerMachine;
 export type WireUserSessionIssuerSnapshot = SnapshotFrom<
   typeof wireUserSessionIssuerMachine
 >;

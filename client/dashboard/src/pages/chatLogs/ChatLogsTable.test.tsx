@@ -49,8 +49,12 @@ describe("ChatLogsTable", () => {
     render(
       <ChatLogsTable
         chats={[makeChat(chatId)]}
-        onDeleteChat={vi.fn()}
-        onSelectChat={vi.fn()}
+        onDeleteChat={() => {
+          /* test stub */
+        }}
+        onSelectChat={() => {
+          /* test stub */
+        }}
         isLoading={false}
         error={null}
       />,

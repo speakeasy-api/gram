@@ -276,6 +276,7 @@ linters:
         # pattern.
         - '^github\.com/speakeasy-api/gram/server/internal/risk/categories\.Definition$'
         - '^github\.com/speakeasy-api/gram/server/internal/risk/categories\.Filter$'
+        - '^github\.com/speakeasy-api/gram/infra/gen/gram/.+'
     exhaustive:
       check:
         - switch
@@ -349,6 +350,8 @@ linters:
         - "github.com/speakeasy-api/gram/server/internal/oops.C("
         - "github.com/speakeasy-api/gram/server/internal/oops.E("
         - "github.com/speakeasy-api/gram/server/internal/oops.Permanent("
+        - "github.com/speakeasy-api/gram/server/internal/platformtools/core.DecodeInput("
+        - "github.com/speakeasy-api/gram/server/internal/platformtools/core.EncodeResult("
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).Require("
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).RequireAny("
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).Filter("

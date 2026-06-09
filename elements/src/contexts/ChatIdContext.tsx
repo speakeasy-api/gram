@@ -12,7 +12,7 @@ export const ChatIdContext = createContext<ChatIdContextValue | null>(null);
  *
  * @returns The current chat ID, or null if not yet initialized
  */
-export const useChatId = () => {
+export const useChatId = (): string | null => {
   const context = useContext(ChatIdContext);
   if (!context) {
     throw new Error("useChatId must be used within ElementsProvider");

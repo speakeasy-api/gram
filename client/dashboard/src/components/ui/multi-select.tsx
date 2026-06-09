@@ -30,7 +30,7 @@ import {
 /**
  * Animation types and configurations
  */
-export interface AnimationConfig {
+interface AnimationConfig {
   /** Badge animation type */
   badgeAnimation?: "bounce" | "pulse" | "wiggle" | "fade" | "slide" | "none";
   /** Popover animation type */
@@ -380,7 +380,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
       (
         opts: MultiSelectOption[] | MultiSelectGroup[],
       ): opts is MultiSelectGroup[] => {
-        return opts.length > 0 && "heading" in opts[0];
+        return opts.length > 0 && "heading" in opts[0]!;
       },
       [],
     );

@@ -1,5 +1,21 @@
 # server
 
+## 0.66.0
+
+### Minor Changes
+
+- ba4f20c: Add backend risk policy bypass request workflow support for the risk-owned request URL flow, backed by current-state request records and principal grants.
+- 77715a2: Grant the project's managed assistant (the dashboard Project Assistant) the full observability and AI Insights tool catalog the old client-side copilot had. It can now search and inspect activity (`search_logs`, `search_tool_calls`, `search_chats`, `search_users`), pull project- and user-level metrics and overviews (`get_project_metrics_summary`, `get_user_metrics_summary`, `get_observability_overview`, `list_attribute_keys`), list and load chats (`platform_list_chats`, `platform_load_chat`), enumerate the organization's user directory (`platform_list_organization_users`), summarize risk findings without exposing secret content (`platform_list_risk_policies`, `platform_list_risk_results_for_agent`, `platform_list_risk_results_by_chat`, `platform_get_risk_policy_status`), and fetch deployment logs (`platform_get_deployment_logs`). Scoped to the managed assistant's platform toolset, so other assistants are unaffected.
+- 5d59ae9: Support adding Remote MCP-backed `mcp_servers` to plugins alongside toolset-backed servers. `plugins.addPluginServer` accepts either `toolset_id` or `mcp_server_id` (exactly one), `PluginServer` exposes `mcp_server_id`, and `display_name` is now optional (defaulting to the backing toolset or mcp_server name). Plugin bundle generation resolves the preferred endpoint for mcp_server-backed servers (custom-domain over platform, then oldest) and emits them as OAuth HTTP servers with no static auth header. In the dashboard, the plugin add-server picker and server cards offer and render Remote MCP-backed servers (gated on the `gram-remote-mcp` feature flag).
+
+### Patch Changes
+
+- edd6834: Give the managed (Project) Assistant temporal grounding by stamping each dashboard turn with its timestamp. `dashboardAdapter.DecodeTurn` now adds a `Timestamp: <RFC3339 UTC>` line to the turn's `<message-context>` envelope, sourced from the event's immutable `created_at`. This restores the relative-time anchoring the old AI Insights sidebar had ("errors since Monday") but does it per-turn and append-only — it rides on the user message instead of the cached system prompt, so it stays fresh across long-lived sessions without busting the prompt cache, and re-decoding on retry/replay is byte-stable.
+- 9703d10: Use device-agent identity in generated and checked-in observability hooks when available, while preserving existing hook attribution fallbacks when the daemon is missing or not running.
+- 4f289ec: The Project Assistant no longer adds all of a project's MCP servers when it's first set up. A new Project Assistant now starts with only its built-in and platform tools; admins attach the project MCP servers they want it to use.
+- 47f6d68: Drop a much larger class of Presidio `IP_ADDRESS` false positives. The filter now consults a unified catalog covering IANA-reserved space (RFC1918, loopback, link-local, multicast, CGNAT, documentation, 6to4 deprecated, class E, benchmarking, this-network, limited broadcast), well-known public DNS resolvers, common placeholder IPs, IPv4 `/8` network addresses and sparse IPv6 shapes, plus a cloud / CDN / managed-hosting bucket resolved against an embedded DB-IP ASN snapshot. On the production sample used to size this change (8,391 events) the new catalog suppresses about 80% of IP findings vs. ~10% under the previous filter.
+- fb3f0ca: Strip `<message-context>` source-adapter framing from chat messages before generating thread titles. The framing (EventID/UserID lines, MCP auth events) is needed by the runner for replay but is noise for title generation — left in, the title model fixated on the boilerplate and produced the same generic title for every project-assistant thread.
+
 ## 0.65.0
 
 ### Minor Changes

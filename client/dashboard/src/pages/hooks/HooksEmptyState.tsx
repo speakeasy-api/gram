@@ -58,7 +58,7 @@ export function HooksEmptyState({
 }: {
   title?: string;
   subtitle?: string;
-} = {}) {
+} = {}): JSX.Element {
   const [showSetupDialog, setShowSetupDialog] = useState(false);
   const [setupProvider, setSetupProvider] = useState<
     "claude" | "cursor" | "codex"

@@ -75,7 +75,7 @@ export function EnvironmentVariableRow({
   onEditHeaderName,
   onHeaderDisplayNameChange,
   onHeaderBlur,
-}: EnvironmentVariableRowProps) {
+}: EnvironmentVariableRowProps): JSX.Element {
   const isEditingHeader = editingHeaderId === envVar.id;
   const headerName = getHeaderDisplayName(
     envVar,

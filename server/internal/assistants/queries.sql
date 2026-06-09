@@ -240,18 +240,6 @@ VALUES (@project_id, @assistant_id);
 DELETE FROM project_managed_assistants
 WHERE project_id = @project_id;
 
--- name: ListProjectMCPToolsetSlugs :many
--- Slugs of every MCP-reachable toolset in a project, used to attach all of a
--- project's toolsets to its managed assistant at provisioning time. Toolsets
--- without an mcp_slug can't be addressed by the runtime, so they're excluded
--- (mirrors the guard in EnableMCPForToolsets).
-SELECT slug
-FROM toolsets
-WHERE project_id = @project_id
-  AND mcp_slug IS NOT NULL
-  AND deleted IS FALSE
-ORDER BY created_at;
-
 -- name: UpdateAssistant :one
 UPDATE assistants
 SET
@@ -684,7 +672,7 @@ SET
   updated_at = clock_timestamp()
 FROM next_event
 WHERE e.id = next_event.id
-RETURNING e.id, e.assistant_thread_id, e.assistant_id, e.project_id, e.trigger_instance_id, e.event_id, e.correlation_id, e.status, e.normalized_payload_json, e.source_payload_json, e.attempts, e.last_error;
+RETURNING e.id, e.assistant_thread_id, e.assistant_id, e.project_id, e.trigger_instance_id, e.event_id, e.correlation_id, e.status, e.normalized_payload_json, e.source_payload_json, e.attempts, e.last_error, e.created_at;
 
 -- name: CompleteAssistantThreadEvent :exec
 UPDATE assistant_thread_events

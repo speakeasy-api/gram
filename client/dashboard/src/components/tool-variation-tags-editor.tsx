@@ -23,7 +23,7 @@ export function TagsVariationEditor({
   value,
   onChange,
   id,
-}: TagsVariationEditorProps) {
+}: TagsVariationEditorProps): JSX.Element {
   const overridden = value !== undefined;
 
   const tagOptions = useMemo(

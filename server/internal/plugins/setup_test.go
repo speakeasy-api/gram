@@ -22,6 +22,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -190,6 +192,67 @@ func createTestToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, na
 	})
 	require.NoError(t, err)
 	return ts
+}
+
+// mcpServerFixture is an mcp_server with (optionally) a single endpoint,
+// created directly via the repos. The plugin publishing path only reads the
+// mcp_server's id/name/slug/visibility and its endpoints, so a toolset-backed
+// server stands in for a Remote MCP-backed one without the remote_mcp_server /
+// user_session_issuer fixture weight.
+type mcpServerFixture struct {
+	id           uuid.UUID
+	idStr        string
+	name         string
+	slug         string
+	endpointSlug string
+}
+
+// createTestMcpServer creates an mcp_server in the active project with a single
+// platform endpoint (no custom domain). visibility controls publishability.
+func createTestMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, name, visibility string) mcpServerFixture {
+	t.Helper()
+	return createTestMcpServerWithEndpoint(t, ctx, conn, name, visibility, true)
+}
+
+func createTestMcpServerWithEndpoint(t *testing.T, ctx context.Context, conn *pgxpool.Pool, name, visibility string, withEndpoint bool) mcpServerFixture {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	// Back the mcp_server with a toolset to satisfy the backend-exclusivity
+	// check; the plugin path does not distinguish remote- vs toolset-backed.
+	backing := createTestToolset(t, ctx, conn, name+"-backing")
+
+	slug := fmt.Sprintf("mcp-%s-%s", name, uuid.New().String()[:8])
+	serverID := uuid.New()
+	_, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                serverID,
+		ProjectID:         *authCtx.ProjectID,
+		Name:              pgtype.Text{String: name, Valid: true},
+		Slug:              pgtype.Text{String: slug, Valid: true},
+		ToolsetID:         uuid.NullUUID{UUID: backing.ID, Valid: true},
+		RemoteMcpServerID: uuid.NullUUID{},
+		Visibility:        visibility,
+	})
+	require.NoError(t, err)
+
+	fixture := mcpServerFixture{id: serverID, idStr: serverID.String(), name: name, slug: slug}
+
+	if withEndpoint {
+		endpointSlug := slug + "-endpoint"
+		_, err = mcpendpointsrepo.New(conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+			ProjectID:      *authCtx.ProjectID,
+			CustomDomainID: uuid.NullUUID{},
+			McpServerID:    serverID,
+			Slug:           endpointSlug,
+		})
+		require.NoError(t, err)
+		fixture.endpointSlug = endpointSlug
+	}
+
+	return fixture
 }
 
 func withauthzGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, grants ...authz.Grant) context.Context {

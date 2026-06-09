@@ -17,7 +17,7 @@ export function UpdatedAt({
   showRecentness?: boolean;
   recentnessThreshold?: Date;
   className?: string;
-}) {
+}): JSX.Element {
   const isRecent = showRecentness && isAfter(date, recentnessThreshold);
   const recentnessClassName = isRecent
     ? "font-normal! text-default-success!"

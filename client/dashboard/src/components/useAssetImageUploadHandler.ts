@@ -3,7 +3,7 @@ import { UploadImageResult } from "@gram/client/models/components";
 
 export function useAssetImageUploadHandler(
   onSuccess: (res: UploadImageResult) => void,
-) {
+): (file: File) => Promise<void> {
   const { fetch } = useFetcher();
 
   return async (file: File) => {

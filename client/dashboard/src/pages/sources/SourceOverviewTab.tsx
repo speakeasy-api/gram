@@ -53,7 +53,7 @@ export function SourceOverviewTab({
   sourceToolMetrics: ToolMetric[];
   isLoadingTelemetry: boolean;
   sourceTelemetrySummary: SourceTelemetrySummary | null;
-}) {
+}): JSX.Element {
   const routes = useRoutes();
 
   const lastUpdated = underlyingAsset?.updatedAt

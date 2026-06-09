@@ -133,6 +133,25 @@ func externalUserCtx(t *testing.T, ti *chatTestInstance, externalUserID string) 
 	return contextvalues.SetAuthContext(t.Context(), authCtx)
 }
 
+// managedAssistantCtx builds a context that mirrors what the assistant runtime
+// installs when the managed assistant invokes a platform tool: a non-admin
+// owner identity, no session, and a registered assistant principal. Chat svc
+// treats that combination as admin-equivalent for project-wide reads.
+func managedAssistantCtx(t *testing.T, ti *chatTestInstance, ownerUserID string) context.Context {
+	t.Helper()
+	authCtx := &contextvalues.AuthContext{
+		UserID:               ownerUserID,
+		ProjectID:            &ti.projectID,
+		ActiveOrganizationID: ti.orgID,
+	}
+	ctx := contextvalues.SetAuthContext(t.Context(), authCtx)
+	ctx = contextvalues.SetAssistantPrincipal(ctx, contextvalues.AssistantPrincipal{
+		AssistantID: uuid.New(),
+		ThreadID:    uuid.New(),
+	})
+	return ctx
+}
+
 // --- Auth / scoping ---
 
 // TestListChats_NoAuthContext verifies that a request with no auth context at all is rejected.
@@ -228,6 +247,39 @@ func TestListChats_AdminUser_SeesAllChats(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, result.Total)
 	require.Len(t, result.Chats, 2)
+}
+
+// TestListChats_ManagedAssistant_SeesAllChats verifies that the managed
+// assistant runtime (no session, non-admin owner, assistant principal
+// installed) gets project-wide chat results — the sidebar contract.
+func TestListChats_ManagedAssistant_SeesAllChats(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := managedAssistantCtx(t, ti, "owner-non-admin")
+
+	seedChat(t, ctx, ti, "", "ext-aaa", "chat A")
+	seedChat(t, ctx, ti, "user-bbb", "", "chat B")
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Total)
+	require.Len(t, result.Chats, 2)
+}
+
+// TestLoadChat_ManagedAssistant_LoadsExternalUserChat verifies that the
+// managed assistant runtime can load chats owned by an external user — the
+// owner-scoped check that fires for non-session callers is skipped when an
+// assistant principal is present.
+func TestLoadChat_ManagedAssistant_LoadsExternalUserChat(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := managedAssistantCtx(t, ti, "owner-non-admin")
+
+	chatID := seedChat(t, ctx, ti, "", "ext-other", "chat owned by external user")
+
+	result, err := ti.service.LoadChat(ctx, &gen.LoadChatPayload{ID: chatID.String()})
+	require.NoError(t, err)
+	require.Equal(t, chatID.String(), result.ID)
 }
 
 // TestListChats_AdminUser_FilterByExternalUserID verifies that an admin can narrow results to a

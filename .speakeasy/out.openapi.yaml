@@ -20900,7 +20900,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RiskIDRequestBody'
+              $ref: '#/components/schemas/RiskPolicyBypassApprovalRequestBody'
         required: true
       responses:
         "200":
@@ -31911,7 +31911,11 @@ components:
       properties:
         display_name:
           type: string
-          description: Display name for the server.
+          description: Display name for the server. Defaults to the backing toolset or mcp_server name when omitted.
+        mcp_server_id:
+          type: string
+          description: Gram MCP server ID for a Remote MCP-backed server. Provide exactly one of toolset_id or mcp_server_id.
+          format: uuid
         plugin_id:
           type: string
           format: uuid
@@ -31927,12 +31931,10 @@ components:
           format: int32
         toolset_id:
           type: string
-          description: Gram toolset ID for the MCP server.
+          description: Gram toolset ID for a toolset-backed MCP server. Provide exactly one of toolset_id or mcp_server_id.
           format: uuid
       required:
         - plugin_id
-        - toolset_id
-        - display_name
     AdminListOrganizationMembersResult:
       type: object
       properties:
@@ -33251,6 +33253,9 @@ components:
         transcript_path:
           type: string
           description: Path to the conversation transcript file
+        user_email:
+          type: string
+          description: Email of the authenticated user from the Speakeasy device agent, if available
       description: Unified payload for all Claude Code hook events
       required:
         - hook_event_name
@@ -39277,6 +39282,10 @@ components:
           type: string
           description: Unique plugin server identifier.
           format: uuid
+        mcp_server_id:
+          type: string
+          description: Gram MCP server ID. Set when this server is Remote MCP-backed (exactly one of toolset_id / mcp_server_id is set).
+          format: uuid
         policy:
           type: string
           description: Whether this server is required or optional.
@@ -39289,11 +39298,10 @@ components:
           format: int32
         toolset_id:
           type: string
-          description: Gram toolset ID.
+          description: Gram toolset ID. Set when this server is toolset-backed (exactly one of toolset_id / mcp_server_id is set).
           format: uuid
       required:
         - id
-        - toolset_id
         - display_name
         - policy
         - sort_order
@@ -40609,6 +40617,20 @@ components:
         - updated_at
         - pending_messages
         - total_messages
+    RiskPolicyBypassApprovalRequestBody:
+      type: object
+      properties:
+        granted_principal_urns:
+          type: array
+          items:
+            type: string
+          description: Principal URNs to grant bypass access to. Use user:all for every user in the organization.
+        id:
+          type: string
+          description: The bypass request ID.
+          format: uuid
+      required:
+        - id
     RiskPolicyBypassRequest:
       type: object
       properties:

@@ -18,9 +18,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	platformchats "github.com/speakeasy-api/gram/server/internal/platformtools/chats"
+	platformdeployments "github.com/speakeasy-api/gram/server/internal/platformtools/deployments"
 	platformlogs "github.com/speakeasy-api/gram/server/internal/platformtools/logs"
 	platformmemory "github.com/speakeasy-api/gram/server/internal/platformtools/memory"
+	platformrisk "github.com/speakeasy-api/gram/server/internal/platformtools/risk"
 	platformtriggers "github.com/speakeasy-api/gram/server/internal/platformtools/triggers"
+	platformusers "github.com/speakeasy-api/gram/server/internal/platformtools/users"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
 
@@ -122,14 +126,56 @@ func TriggerExternalTools(db *pgxpool.Pool, app *bgtriggers.App, auditLogger *au
 	}
 }
 
-// ManagedAssistantLogsTools returns the log-search tool granted only to a
-// project's managed assistant so it can answer "what errors are firing?"
-// questions in the sidebar. Scoped to the managed assistant rather than the
-// universal `assistants` toolset because non-managed assistants have no
-// dashboard surface for the results.
+// ManagedAssistantLogsTools returns telemetry-backed observability tools for
+// the project's managed assistant. Universal assistants don't get them because
+// they have no dashboard surface to display the results.
 func ManagedAssistantLogsTools(telemetrySvc platformtools.TelemetryService) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
 		{Executor: platformlogs.NewSearchLogsTool(telemetrySvc), RequiredFeature: ""},
+		{Executor: platformlogs.NewSearchToolCallsTool(telemetrySvc), RequiredFeature: ""},
+		{Executor: platformlogs.NewSearchChatsTool(telemetrySvc), RequiredFeature: ""},
+		{Executor: platformlogs.NewSearchUsersTool(telemetrySvc), RequiredFeature: ""},
+		{Executor: platformlogs.NewGetProjectMetricsSummaryTool(telemetrySvc), RequiredFeature: ""},
+		{Executor: platformlogs.NewGetUserMetricsSummaryTool(telemetrySvc), RequiredFeature: ""},
+		{Executor: platformlogs.NewGetObservabilityOverviewTool(telemetrySvc), RequiredFeature: ""},
+		{Executor: platformlogs.NewListAttributeKeysTool(telemetrySvc), RequiredFeature: ""},
+	}
+}
+
+// ManagedAssistantChatsTools returns chat-history tools for the project's
+// managed assistant.
+func ManagedAssistantChatsTools(chatSvc platformchats.ChatService) []platformtools.ExternalTool {
+	return []platformtools.ExternalTool{
+		{Executor: platformchats.NewListChatsTool(chatSvc), RequiredFeature: ""},
+		{Executor: platformchats.NewLoadChatTool(chatSvc), RequiredFeature: ""},
+	}
+}
+
+// ManagedAssistantUsersTools returns user-directory tools for the project's
+// managed assistant.
+func ManagedAssistantUsersTools(orgSvc platformusers.OrganizationsService) []platformtools.ExternalTool {
+	return []platformtools.ExternalTool{
+		{Executor: platformusers.NewListOrganizationUsersTool(orgSvc), RequiredFeature: ""},
+	}
+}
+
+// ManagedAssistantRiskTools returns risk/policy tools for the project's
+// managed assistant. listRiskResultsForAgent redacts matches so raw secret
+// content never reaches the model context.
+func ManagedAssistantRiskTools(riskSvc platformrisk.RiskService) []platformtools.ExternalTool {
+	return []platformtools.ExternalTool{
+		{Executor: platformrisk.NewListRiskPoliciesTool(riskSvc), RequiredFeature: ""},
+		{Executor: platformrisk.NewListRiskResultsForAgentTool(riskSvc), RequiredFeature: ""},
+		{Executor: platformrisk.NewListRiskResultsByChatTool(riskSvc), RequiredFeature: ""},
+		{Executor: platformrisk.NewGetRiskPolicyStatusTool(riskSvc), RequiredFeature: ""},
+	}
+}
+
+// ManagedAssistantDeploymentsTools returns deployment-introspection tools for
+// the project's managed assistant.
+func ManagedAssistantDeploymentsTools(deploymentsSvc platformdeployments.DeploymentsService) []platformtools.ExternalTool {
+	return []platformtools.ExternalTool{
+		{Executor: platformdeployments.NewGetDeploymentLogsTool(deploymentsSvc), RequiredFeature: ""},
 	}
 }
 

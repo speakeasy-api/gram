@@ -14,7 +14,7 @@ export function SearchBar({
   placeholder?: string;
   className?: string;
   disabled?: boolean;
-}) {
+}): JSX.Element {
   return (
     <Stack
       direction="horizontal"

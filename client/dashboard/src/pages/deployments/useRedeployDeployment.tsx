@@ -19,7 +19,7 @@ export const useRedeployDeployment = (
     Error,
     RedeployDeploymentMutationVariables
   > = {},
-) => {
+): ReturnType<typeof useRedeployDeploymentMutation> => {
   const queryClient = useQueryClient();
   const routes = useRoutes();
 
@@ -33,7 +33,7 @@ export const useRedeployDeployment = (
     },
     onSuccess: (data, vars, onMutateResult, ctx) => {
       // Invalidate and refetch deployments list
-      queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({
         queryKey: ["@gram/client", "deployments", "list"],
       });
       const href = data.deployment?.id

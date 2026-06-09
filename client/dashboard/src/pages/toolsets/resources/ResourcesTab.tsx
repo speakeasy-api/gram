@@ -1,3 +1,4 @@
+import { CardContextMenu } from "@/components/card-context-menu";
 import { RequireScope } from "@/components/require-scope";
 import { Card, Cards } from "@/components/ui/card";
 import {
@@ -8,7 +9,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { MoreActions } from "@/components/ui/more-actions";
+import { Action, MoreActions } from "@/components/ui/more-actions";
 import {
   Popover,
   PopoverContent,
@@ -31,7 +32,7 @@ export function ResourcesTabContent({
 }: {
   toolset: Toolset;
   updateToolsetMutation: ReturnType<typeof useUpdateToolsetMutation>;
-}) {
+}): JSX.Element {
   const { data: resourcesResponse } = useListResources({});
   const allResources = resourcesResponse?.resources ?? [];
   const [instructionsOpen, setInstructionsOpen] = useState(false);
@@ -139,7 +140,7 @@ function ResourceCard({
 }) {
   const { hasScope } = useRBAC();
   const canWrite = hasScope("mcp:write");
-  const actions = [
+  const actions: Action[] = [
     {
       label: "Remove from MCP server",
       onClick: onDelete,
@@ -150,32 +151,34 @@ function ResourceCard({
   ];
 
   return (
-    <Card>
-      <Card.Header>
-        <Stack direction="horizontal" gap={2} align="center">
-          <div className="bg-muted shrink-0 rounded-md p-2">
-            <Newspaper
-              className="text-muted-foreground size-5"
-              strokeWidth={1.5}
-            />
-          </div>
-          <Card.Title className="normal-case">
-            {resource.name}
-            {functionName && (
-              <span className="text-muted-foreground ml-1 text-xs font-normal">
-                ({functionName})
-              </span>
-            )}
-          </Card.Title>
-        </Stack>
-        <MoreActions actions={actions} />
-      </Card.Header>
-      <Card.Content>
-        <Card.Description className="font-mono">
-          {resource.uri}
-        </Card.Description>
-      </Card.Content>
-    </Card>
+    <CardContextMenu actions={actions}>
+      <Card>
+        <Card.Header>
+          <Stack direction="horizontal" gap={2} align="center">
+            <div className="bg-muted shrink-0 rounded-md p-2">
+              <Newspaper
+                className="text-muted-foreground size-5"
+                strokeWidth={1.5}
+              />
+            </div>
+            <Card.Title className="normal-case">
+              {resource.name}
+              {functionName && (
+                <span className="text-muted-foreground ml-1 text-xs font-normal">
+                  ({functionName})
+                </span>
+              )}
+            </Card.Title>
+          </Stack>
+          <MoreActions actions={actions} />
+        </Card.Header>
+        <Card.Content>
+          <Card.Description className="font-mono">
+            {resource.uri}
+          </Card.Description>
+        </Card.Content>
+      </Card>
+    </CardContextMenu>
   );
 }
 

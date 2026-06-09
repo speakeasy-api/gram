@@ -36,6 +36,9 @@ procs:
   worker:
     cmd: ["mise", "run", "start:worker"]
     stop: SIGTERM
+  streams:
+    cmd: ["mise", "run", "start:streams"]
+    stop: SIGTERM
   dashboard:
     cmd: ["mise", "run", "start:dashboard"]
     stop:

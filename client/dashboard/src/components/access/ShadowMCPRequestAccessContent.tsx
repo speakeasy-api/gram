@@ -18,7 +18,7 @@ type RequestAccessState =
 
 type SubmissionResult = "idle" | "complete" | "error";
 
-export function ShadowMCPRequestAccessContent() {
+export function ShadowMCPRequestAccessContent(): JSX.Element {
   const session = useSession();
   const requestToken = getRequestToken();
   const [submissionResult, setSubmissionResult] =

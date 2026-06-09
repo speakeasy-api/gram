@@ -153,7 +153,7 @@ describe("useObserveFilters", () => {
       "skill",
     ]);
 
-    act(() => result.current.navigate(-1));
+    void act(() => result.current.navigate(-1));
 
     expect(result.current.filters.activeFilters).toEqual([
       {
@@ -204,7 +204,7 @@ describe("useObserveFilters", () => {
 
     expect(result.current.filters.selectedHookTypes).toEqual(["local"]);
 
-    act(() => result.current.navigate("/"));
+    void act(() => result.current.navigate("/"));
 
     expect(result.current.filters.selectedHookTypes).toEqual(
       DEFAULT_HOOK_TYPES,

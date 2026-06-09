@@ -15,7 +15,7 @@ interface ErrorHandlerOptions {
 export function handleError(
   error: Error | string,
   options: ErrorHandlerOptions = {},
-) {
+): void {
   const {
     title = "Error",
     persist = false,
@@ -52,7 +52,7 @@ export function handleError(
   }
 }
 
-export function handleAPIError(error: unknown, defaultMessage?: string) {
+export function handleAPIError(error: unknown, defaultMessage?: string): void {
   let errorMessage = defaultMessage || "An unexpected error occurred";
 
   if (error instanceof Error) {

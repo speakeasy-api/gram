@@ -33,7 +33,7 @@ export function createBunHandler(
     | ((
         request: Request,
       ) => SessionHandlerOptions | Promise<SessionHandlerOptions>),
-) {
+): (request: Request) => Promise<Response> {
   return async (request: Request) => {
     const projectSlug = request.headers.get("gram-project");
 

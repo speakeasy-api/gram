@@ -75,7 +75,7 @@ export function WireUserSessionIssuerModal({
   isOpen: boolean;
   onClose: () => void;
   toolset: Toolset;
-}) {
+}): JSX.Element {
   // Force a fresh machine after the close animation. While the modal is open,
   // keep its generated slugs and in-flight state stable even if the parent
   // refetches the toolset.
@@ -126,13 +126,18 @@ function WireUserSessionIssuerBody({
       wireUserSessionIssuerMachine.provide({
         actors: createMigrationServices(client, authedFetch),
         actions: {
-          invalidateOnUserSessionIssuerCreate: () =>
-            invalidateAllUserSessionIssuers(queryClient),
-          invalidateOnRemoteSessionIssuerCreate: () =>
-            invalidateAllRemoteSessionIssuers(queryClient),
-          invalidateOnRemoteSessionClientCreate: () =>
-            invalidateAllRemoteSessionClients(queryClient),
-          invalidateOnToolsetLink: () => invalidateAllToolset(queryClient),
+          invalidateOnUserSessionIssuerCreate: () => {
+            void invalidateAllUserSessionIssuers(queryClient);
+          },
+          invalidateOnRemoteSessionIssuerCreate: () => {
+            void invalidateAllRemoteSessionIssuers(queryClient);
+          },
+          invalidateOnRemoteSessionClientCreate: () => {
+            void invalidateAllRemoteSessionClients(queryClient);
+          },
+          invalidateOnToolsetLink: () => {
+            void invalidateAllToolset(queryClient);
+          },
         },
       }),
     [client, queryClient, authedFetch],
@@ -223,7 +228,8 @@ function WireUserSessionIssuerSteps({
   onClose: () => void;
 }) {
   const state = WireUserSessionIssuerContext.useSelector((s) => s);
-  const send = WireUserSessionIssuerContext.useActorRef().send;
+  const actorRef = WireUserSessionIssuerContext.useActorRef();
+  const send = actorRef.send.bind(actorRef);
   const steps = selectSteps(state);
   const currentStep = selectCurrentStep(state);
   const isComplete = selectIsComplete(state);

@@ -94,6 +94,7 @@ describe("ShadowMCPRequestAccessContent", () => {
     Object.defineProperty(window, "location", {
       configurable: true,
       value: {
+        // oxlint-disable-next-line typescript/no-misused-spread -- jsdom Location is plain enough for tests
         ...location,
         pathname: "/risk-policy-bypass/request",
         hash: "#request_token=rpbr1.secret-token",

@@ -10,6 +10,7 @@ import (
 	"crypto/subtle"
 	_ "embed"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"html/template"
@@ -35,6 +36,26 @@ var consentTemplateHTML string
 
 var consentTemplate = template.Must(template.New("consent").Parse(consentTemplateHTML))
 
+// consentScriptData is the consent page's client-side script. It is served
+// as an external file (not inlined into the template) because the ingress
+// CSP forbids inline scripts.
+//
+//go:embed consent_script.js
+var consentScriptData []byte
+
+// consentScriptHash is the first 8 hex chars of the SHA-256 of
+// consentScriptData, used to cache-bust the immutable script URL. Matches
+// the install-page script convention in the mcpmetadata package.
+var consentScriptHash = func() string {
+	sum := sha256.Sum256(consentScriptData)
+	return hex.EncodeToString(sum[:])[:8]
+}()
+
+// consentScriptURL is the path the consent template loads the script from.
+// Hardcoded to the /mcp surface (like the install-page script) so the
+// /x/mcp surface reuses the same route rather than registering its own.
+var consentScriptURL = "/mcp/consent-page-" + consentScriptHash + ".js"
+
 // remoteSetHashEmpty is the SHA-256 of an empty remote-set, used by the
 // consent record's remote_set_hash column when the issuer has no remote
 // session clients (the only case today). The empty case is NOT skipped —
@@ -54,6 +75,7 @@ type consentTemplateData struct {
 	CSRFToken          string
 	SubjectDisplay     string
 	RedirectURI        string
+	ScriptURL          string
 	RemoteSessionCards []remoteSessionCard
 	// ConsentEnabled gates the "Give Access" button. True when there are no
 	// remote-session challenges, or when at least one challenge has been
@@ -101,6 +123,24 @@ func (s *Service) HandleConsent(w http.ResponseWriter, r *http.Request) error {
 	return s.ServeConsent(w, r, endpoint)
 }
 
+// ServeConsentScript serves the consent page's client-side script with
+// immutable cache headers. Mounted at `GET /mcp/consent-page-{hash}.js`.
+// The hash in the path is content-derived, so a mismatch is a stale URL.
+func (s *Service) ServeConsentScript(w http.ResponseWriter, r *http.Request) error {
+	if chi.URLParam(r, "hash") != consentScriptHash {
+		w.WriteHeader(http.StatusNotFound)
+		return nil
+	}
+
+	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(consentScriptData); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "write consent script response").Log(r.Context(), s.logger)
+	}
+	return nil
+}
+
 // ServeConsent is the post-resolution entry point for the consent UI
 // (GET) and consent POST handlers, shared by /mcp's HandleConsent
 // (toolset-keyed) and /x/mcp's mcp_endpoint-keyed route registration.
@@ -128,6 +168,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").Log(ctx, logger)
 	}
+	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
 	if err := endpoint.ValidateRef(challengeState.Endpoint); err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server").Log(ctx, logger)
 	}
@@ -170,6 +211,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		CSRFToken:          challengeState.CSRFToken,
 		SubjectDisplay:     subjectDisplay,
 		RedirectURI:        challengeState.RedirectURI,
+		ScriptURL:          consentScriptURL,
 		RemoteSessionCards: cards,
 		ConsentEnabled:     consentEnabled,
 	}
@@ -207,6 +249,15 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").Log(ctx, logger)
 	}
+	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
+	issuerID := endpoint.UserSessionIssuerID.String()
+	mcpSlug := endpoint.Slug
+
+	// The guards below (state-confusion ref check, CSRF, and the unknown-action
+	// default) consume the challenge but are deliberately NOT counted as flow
+	// failures: they are attacker-controllable, so emitting `failed` here would
+	// let crafted requests pollute a config's health signal. A legitimate user
+	// never trips them; the rare case lands in the started-without-terminal gap.
 	if err := endpoint.ValidateRef(challengeState.Endpoint); err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server").Log(ctx, logger)
 	}
@@ -223,8 +274,11 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		// fall through
 	case "deny":
 		// Cancel: 303 (POST → GET) the MCP client back to its redirect_uri
-		// with access_denied per RFC 6749 §4.1.2.1, preserving the
-		// original state.
+		// with access_denied per RFC 6749 §4.1.2.1, preserving the original
+		// state. The user reached the consent screen and chose "no" — a
+		// decline, not an errant config.
+		s.metrics.RecordOAuthFlowDeclined(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
+		logger.InfoContext(ctx, "oauth flow declined at consent", attr.SlogOAuthError("access_denied"))
 		denyURL := buildClientRedirect(challengeState.RedirectURI, "", challengeState.State, "access_denied", "user denied consent")
 		http.Redirect(w, r, denyURL, http.StatusSeeOther)
 		return nil
@@ -233,6 +287,9 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	}
 
 	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
+		// Reaching an approved consent POST with no resolved subject is a code
+		// invariant break, not a user action — a config/code-class failure.
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
 		return oops.E(oops.CodeUnauthorized, nil, "authn challenge subject is not resolved").Log(ctx, logger)
 	}
 	subject := *challengeState.Subject
@@ -243,6 +300,9 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		ClientID:            challengeState.ClientID,
 	})
 	if err != nil {
+		// Client revoked mid-flow (config change) or DB error — either way the
+		// approved flow can't complete.
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeUnauthorized, err, "user session client revoked").Log(ctx, logger)
 		}
@@ -258,16 +318,19 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		UserSessionClientID: clientRow.ID,
 		RemoteSetHash:       remoteSetHashEmpty,
 	}); err != nil && !isUniqueViolation(err) {
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
 		return oops.E(oops.CodeUnexpected, err, "record consent").Log(ctx, logger)
 	}
 
 	code, err := generateOpaqueToken()
 	if err != nil {
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
 		return oops.E(oops.CodeUnexpected, err, "generate authorization code").Log(ctx, logger)
 	}
 
 	grant := UserSessionGrant{
 		Code:                code,
+		FlowID:              challengeState.FlowID,
 		UserSessionIssuerID: endpoint.UserSessionIssuerID,
 		UserSessionClientID: clientRow.ID,
 		ClientID:            challengeState.ClientID,
@@ -278,6 +341,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		CreatedAt:           time.Now(),
 	}
 	if err := s.userSessionGrantCache.Store(ctx, grant); err != nil {
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
 		return oops.E(oops.CodeUnexpected, err, "store user session grant").Log(ctx, logger)
 	}
 

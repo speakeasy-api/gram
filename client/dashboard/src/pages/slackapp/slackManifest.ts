@@ -1,7 +1,7 @@
 import { SlackAppResult } from "@gram/client/models/components/slackappresult.js";
 import { getServerURL } from "@/lib/utils";
 
-export const BOT_SCOPES = [
+const BOT_SCOPES = [
   "app_mentions:read",
   "chat:write",
   "im:history",
@@ -12,13 +12,13 @@ export const BOT_SCOPES = [
   "channels:read",
 ];
 
-export const BOT_EVENTS = ["app_mention", "message.im"];
+const BOT_EVENTS = ["app_mention", "message.im"];
 
 function assetImageUrl(assetId: string): string {
   return `${getServerURL()}/rpc/assets.serveImage?id=${assetId}`;
 }
 
-export function buildSlackManifest(app: SlackAppResult): object {
+function buildSlackManifest(app: SlackAppResult): object {
   return {
     display_information: {
       name: app.name,

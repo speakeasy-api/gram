@@ -41,7 +41,10 @@ interface ConnectIdpStepProps {
 
 const INITIAL_VISIBLE = 6;
 
-export function ConnectIdpStep({ onSkip, onComplete }: ConnectIdpStepProps) {
+export function ConnectIdpStep({
+  onSkip,
+  onComplete,
+}: ConnectIdpStepProps): JSX.Element {
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [query, setQuery] = useState("");

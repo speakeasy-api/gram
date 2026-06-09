@@ -129,6 +129,9 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 
 	principals, err := ResolveUserPrincipals(ctx, e.db, authCtx.ActiveOrganizationID, authCtx.UserID)
 	if err != nil {
+		if errors.Is(err, ErrPrincipalInvalid) {
+			return ctx, oops.E(oops.CodeUnauthorized, err, "invalid user principal")
+		}
 		if errors.Is(err, ErrPrincipalNotFound) {
 			return GrantsToContext(ctx, nil), nil
 		}

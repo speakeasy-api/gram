@@ -17,7 +17,7 @@ export function CreateResourceCard({
   onClick,
   actionLabel = "Create",
   className,
-}: CreateResourceCardProps) {
+}: CreateResourceCardProps): JSX.Element {
   return (
     <button
       type="button"

@@ -61,7 +61,7 @@ export function FilterChips({
   values,
   onChange,
   onClearAll,
-}: FilterChipsProps) {
+}: FilterChipsProps): JSX.Element | null {
   const chips: ChipConfig[] = [];
 
   // Auth type chips

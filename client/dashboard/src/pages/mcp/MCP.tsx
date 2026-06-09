@@ -35,11 +35,11 @@ const BUILT_IN_SERVERS = [
   },
 ];
 
-export function MCPRoot() {
+export function MCPRoot(): JSX.Element {
   return <Outlet />;
 }
 
-export const MCPPage = () => {
+export const MCPPage = (): JSX.Element => {
   return (
     <Page>
       <Page.Header>
@@ -54,7 +54,7 @@ export const MCPPage = () => {
   );
 };
 
-export function MCPOverview() {
+function MCPOverview() {
   const toolsets = useToolsets();
   const routes = useRoutes();
   const navigate = useNavigate();
@@ -143,7 +143,7 @@ export function MCPOverview() {
 
     toast.success(`MCP server "${result.name}" created`);
 
-    navigate(routes.mcp.details.href(result.slug) + "#tools");
+    void navigate(routes.mcp.details.href(result.slug) + "#tools");
   };
 
   const newMcpServerButton = (
@@ -169,7 +169,7 @@ export function MCPOverview() {
         placeholder: "My MCP Server",
         value: newMcpServerName,
         onChange: setNewMcpServerName,
-        onSubmit: handleCreateMcpServerSubmit,
+        onSubmit: () => void handleCreateMcpServerSubmit(),
         validate: (value) => value.length > 0 && value.length <= 40,
         hint: (value) => (
           <div className="flex w-full justify-between">

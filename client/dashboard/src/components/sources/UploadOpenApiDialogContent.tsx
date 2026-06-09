@@ -16,7 +16,7 @@ export function UploadOpenApiDialogContent({
   documentSlug,
   onClose,
   onSuccess,
-}: UploadOpenApiDialogContentProps) {
+}: UploadOpenApiDialogContentProps): React.JSX.Element {
   const {
     handleSpecUpload,
     handleUrlUpload,
@@ -56,7 +56,9 @@ export function UploadOpenApiDialogContent({
       </Dialog.Header>
       {!file ? (
         <OpenApiSourceInput
-          onUpload={handleSpecUpload}
+          onUpload={(file) => {
+            void handleSpecUpload(file);
+          }}
           onUrlUpload={handleUrlUpload}
           documentSlug={documentSlug}
           isLoading={isUploading}
@@ -73,7 +75,7 @@ export function UploadOpenApiDialogContent({
           Back
         </Button>
         <Button
-          onClick={deploySpecUpdate}
+          onClick={() => void deploySpecUpdate()}
           disabled={!file || isDeploying || !documentSlug}
         >
           {isDeploying && <Spinner />}

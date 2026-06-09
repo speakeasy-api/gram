@@ -1,7 +1,14 @@
 import { useListDeployments } from "@gram/client/react-query";
 import { useMemo } from "react";
 
-export const useActiveDeployment = () => {
+type ListDeploymentsResult = ReturnType<typeof useListDeployments>;
+type DeploymentItem = NonNullable<
+  ListDeploymentsResult["data"]
+>["items"][number];
+
+export const useActiveDeployment = (): Omit<ListDeploymentsResult, "data"> & {
+  data: DeploymentItem | undefined;
+} => {
   const { data, ...rest } = useListDeployments({}, {});
 
   const activeDeployment = useMemo(() => {

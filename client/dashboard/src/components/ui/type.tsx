@@ -25,7 +25,7 @@ export function Type({
   destructive?: boolean;
   as?: React.ElementType;
   children?: React.ReactNode;
-} & Omit<React.ComponentProps<"p">, "children">) {
+} & Omit<React.ComponentProps<"p">, "children">): JSX.Element {
   if (children === undefined) {
     const variantHeight = {
       subheading: "h-6",

@@ -3,7 +3,11 @@ import { getServerURL } from "@/lib/utils";
 import { McpEndpoint, ToolsetEntry } from "@gram/client/models/components";
 import { useGetDomain } from "@gram/client/react-query";
 
-export function useCustomDomain(enabled = true) {
+export function useCustomDomain(enabled = true): {
+  domain: ReturnType<typeof useGetDomain>["data"];
+  refetch: ReturnType<typeof useGetDomain>["refetch"];
+  isLoading: boolean;
+} {
   const {
     data: domain,
     isLoading,

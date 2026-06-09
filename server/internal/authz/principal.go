@@ -268,3 +268,7 @@ func principalURNStrings(principals []urn.Principal) ([]string, error) {
 
 	return principalURNs, nil
 }
+
+func isAllUsersPrincipal(principal urn.Principal) bool {
+	return principal.String() == AllUsersPrincipal().String()
+}

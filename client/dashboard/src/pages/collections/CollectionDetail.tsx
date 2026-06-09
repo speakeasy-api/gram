@@ -23,7 +23,7 @@ import {
 import { Button, Input } from "@speakeasy-api/moonshine";
 import { Textarea } from "@/components/moon/textarea";
 import { useMemo, useState } from "react";
-import { useParams, Outlet } from "react-router";
+import { useParams } from "react-router";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useQueries } from "@tanstack/react-query";
 import { Search } from "lucide-react";
@@ -44,11 +44,7 @@ import { buildCollectionMcpJson, formatMcpJson } from "@/lib/mcp-json";
 import { toast } from "sonner";
 import { CollectionInstallDialog } from "./CollectionInstallDialog";
 
-export function CollectionDetailRoot() {
-  return <Outlet />;
-}
-
-export default function CollectionDetail() {
+export default function CollectionDetail(): JSX.Element {
   return (
     <RequireScope scope={["org:read", "org:admin"]} level="page">
       <CollectionDetailInner />
@@ -131,7 +127,7 @@ function CollectionDetailInner() {
           mcpSlug: t.mcpSlug,
           name: t.name,
           description: t.description ?? undefined,
-          projectName: project.name,
+          projectName: project!.name!,
         });
       }
     }
@@ -467,24 +463,26 @@ function CollectionDetailInner() {
                     <Button
                       size="sm"
                       disabled={isSaving || !editName}
-                      onClick={async () => {
-                        setIsSaving(true);
-                        try {
-                          await updateCollection.mutateAsync({
-                            request: {
-                              updateRequestBody: {
-                                collectionId: collection.id,
-                                name: editName,
-                                description: editDescription,
-                                visibility: editVisibility,
+                      onClick={() => {
+                        void (async () => {
+                          setIsSaving(true);
+                          try {
+                            await updateCollection.mutateAsync({
+                              request: {
+                                updateRequestBody: {
+                                  collectionId: collection.id,
+                                  name: editName,
+                                  description: editDescription,
+                                  visibility: editVisibility,
+                                },
                               },
-                            },
-                          });
+                            });
 
-                          setEditing(false);
-                        } finally {
-                          setIsSaving(false);
-                        }
+                            setEditing(false);
+                          } finally {
+                            setIsSaving(false);
+                          }
+                        })();
                       }}
                     >
                       <Button.Text>
@@ -631,44 +629,46 @@ function CollectionDetailInner() {
                       <Button
                         size="sm"
                         disabled={isSaving}
-                        onClick={async () => {
-                          setIsSaving(true);
-                          try {
-                            const toAttach = [
-                              ...selectedServerToolsetIds,
-                            ].filter((id) => !attachedToolsetIds.has(id));
-                            const toDetach = [...attachedToolsetIds].filter(
-                              (id) => !selectedServerToolsetIds.has(id),
-                            );
+                        onClick={() => {
+                          void (async () => {
+                            setIsSaving(true);
+                            try {
+                              const toAttach = [
+                                ...selectedServerToolsetIds,
+                              ].filter((id) => !attachedToolsetIds.has(id));
+                              const toDetach = [...attachedToolsetIds].filter(
+                                (id) => !selectedServerToolsetIds.has(id),
+                              );
 
-                            await Promise.all([
-                              ...toAttach.map((toolsetId) =>
-                                attachServer.mutateAsync({
-                                  request: {
-                                    attachServerRequestBody: {
-                                      collectionId: collection.id,
-                                      toolsetId,
+                              await Promise.all([
+                                ...toAttach.map((toolsetId) =>
+                                  attachServer.mutateAsync({
+                                    request: {
+                                      attachServerRequestBody: {
+                                        collectionId: collection.id,
+                                        toolsetId,
+                                      },
                                     },
-                                  },
-                                }),
-                              ),
-                              ...toDetach.map((toolsetId) =>
-                                detachServer.mutateAsync({
-                                  request: {
-                                    attachServerRequestBody: {
-                                      collectionId: collection.id,
-                                      toolsetId,
+                                  }),
+                                ),
+                                ...toDetach.map((toolsetId) =>
+                                  detachServer.mutateAsync({
+                                    request: {
+                                      attachServerRequestBody: {
+                                        collectionId: collection.id,
+                                        toolsetId,
+                                      },
                                     },
-                                  },
-                                }),
-                              ),
-                            ]);
-                            setEditingServers(false);
-                            setSelectedServerToolsetIds(new Set());
-                            setServerSearch("");
-                          } finally {
-                            setIsSaving(false);
-                          }
+                                  }),
+                                ),
+                              ]);
+                              setEditingServers(false);
+                              setSelectedServerToolsetIds(new Set());
+                              setServerSearch("");
+                            } finally {
+                              setIsSaving(false);
+                            }
+                          })();
                         }}
                       >
                         <Button.Text>
@@ -814,13 +814,15 @@ function CollectionDetailInner() {
                       variant="destructive-primary"
                       size="sm"
                       disabled={deleteCollection.isPending}
-                      onClick={async () => {
-                        await deleteCollection.mutateAsync({
-                          request: {
-                            collectionId: collection.id,
-                          },
-                        });
-                        orgRoutes.collections.goTo();
+                      onClick={() => {
+                        void (async () => {
+                          await deleteCollection.mutateAsync({
+                            request: {
+                              collectionId: collection.id,
+                            },
+                          });
+                          orgRoutes.collections.goTo();
+                        })();
                       }}
                     >
                       <Button.Text>

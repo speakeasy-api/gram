@@ -60,6 +60,38 @@ url = "https://release.ariga.io/atlas/atlas-darwin-amd64-v1.0.0"
 checksum = "sha256:abf36ade639454afe25f646a09eb5c46629b0b06c640b565496fc5d45e56f8ec"
 url = "https://release.ariga.io/atlas/atlas-windows-amd64-v1.0.0.exe"
 
+[[tools.buf]]
+version = "1.69.0"
+backend = "aqua:bufbuild/buf"
+
+[tools.buf."platforms.linux-arm64"]
+checksum = "sha256:28b258cb4ee7a1224a61e1dd91ae5935f1c86c23e8e67bcfa23c8b096b0ad478"
+url = "https://github.com/bufbuild/buf/releases/download/v1.69.0/buf-Linux-aarch64.tar.gz"
+
+[tools.buf."platforms.linux-arm64-musl"]
+checksum = "sha256:28b258cb4ee7a1224a61e1dd91ae5935f1c86c23e8e67bcfa23c8b096b0ad478"
+url = "https://github.com/bufbuild/buf/releases/download/v1.69.0/buf-Linux-aarch64.tar.gz"
+
+[tools.buf."platforms.linux-x64"]
+checksum = "sha256:2b1f9cfb5e17d50c10dea9202979ffd28ca7ff7a6f4e51e801a9463986690b03"
+url = "https://github.com/bufbuild/buf/releases/download/v1.69.0/buf-Linux-x86_64.tar.gz"
+
+[tools.buf."platforms.linux-x64-musl"]
+checksum = "sha256:2b1f9cfb5e17d50c10dea9202979ffd28ca7ff7a6f4e51e801a9463986690b03"
+url = "https://github.com/bufbuild/buf/releases/download/v1.69.0/buf-Linux-x86_64.tar.gz"
+
+[tools.buf."platforms.macos-arm64"]
+checksum = "sha256:246534674239f326dd1ad2642e57865dd56dc4e98c4857d13da6eca4d3a168ad"
+url = "https://github.com/bufbuild/buf/releases/download/v1.69.0/buf-Darwin-arm64.tar.gz"
+
+[tools.buf."platforms.macos-x64"]
+checksum = "sha256:570458723a1e400d654e916cc54a98e78a9c23d72775afde9ef12abcdebd37a1"
+url = "https://github.com/bufbuild/buf/releases/download/v1.69.0/buf-Darwin-x86_64.tar.gz"
+
+[tools.buf."platforms.windows-x64"]
+checksum = "sha256:55ad1b4662003406050d76bc812e5954dd3d3d23a9b62ab6bdbed1670a6292c4"
+url = "https://github.com/bufbuild/buf/releases/download/v1.69.0/buf-Windows-x86_64.zip"
+
 [[tools.flyctl]]
 version = "0.4.6"
 backend = "aqua:superfly/flyctl"
@@ -580,24 +612,32 @@ checksum = "sha256:b2be80531c6babc8d4e0e6ca95773d58118a2e1582ae006aace08dbc55503
 url = "https://github.com/charmbracelet/gum/releases/download/v0.17.0/gum_0.17.0_Windows_x86_64.zip"
 
 [[tools.hk]]
-version = "1.38.0"
+version = "1.46.0"
 backend = "aqua:jdx/hk"
 
 [tools.hk."platforms.linux-arm64"]
-checksum = "sha256:c012fea4a0cd9659088c10601c3ae085c5ac4407eeeaa442ced1913a5f26f8a7"
-url = "https://github.com/jdx/hk/releases/download/v1.38.0/hk-aarch64-unknown-linux-gnu.tar.gz"
+checksum = "sha256:bad1b4e52cce2147646d943baa06a7bdb3d182ae0876853897a72225626411ae"
+url = "https://github.com/jdx/hk/releases/download/v1.46.0/hk-aarch64-unknown-linux-gnu.tar.gz"
+
+[tools.hk."platforms.linux-arm64-musl"]
+checksum = "sha256:ad11b69485096ec5b1822f5bad298d2a44664b85d10d0308c812473b17b1321a"
+url = "https://github.com/jdx/hk/releases/download/v1.46.0/hk-aarch64-unknown-linux-musl.tar.gz"
 
 [tools.hk."platforms.linux-x64"]
-checksum = "sha256:cb34efc1829a1d59c0cd526be494a9f01b36d1c9965087cff09a09f32d129431"
-url = "https://github.com/jdx/hk/releases/download/v1.38.0/hk-x86_64-unknown-linux-gnu.tar.gz"
+checksum = "sha256:85b2cc167443cd27b49e323ef9b9d1a946d4bc18196eccb66112842d30fb90cb"
+url = "https://github.com/jdx/hk/releases/download/v1.46.0/hk-x86_64-unknown-linux-gnu.tar.gz"
+
+[tools.hk."platforms.linux-x64-musl"]
+checksum = "sha256:4ff45e1bfc9672b1b00572b4a50fac3b57e4add622ed56e9e2587745299932eb"
+url = "https://github.com/jdx/hk/releases/download/v1.46.0/hk-x86_64-unknown-linux-musl.tar.gz"
 
 [tools.hk."platforms.macos-arm64"]
-checksum = "sha256:02421d12f8a706d5753eec1652f966c8df90bf810e4153b3a560f4038c784529"
-url = "https://github.com/jdx/hk/releases/download/v1.38.0/hk-aarch64-apple-darwin.tar.gz"
+checksum = "sha256:9db3fac25754cfb929dc3f92b294fffdb966d4e838b8e0adeaf5b9b7eccc4f6c"
+url = "https://github.com/jdx/hk/releases/download/v1.46.0/hk-aarch64-apple-darwin.tar.gz"
 
 [tools.hk."platforms.windows-x64"]
-checksum = "sha256:3850e253ebe3b13b6932e951606eafe56801031c663437d656a49dc0ab9fdbf4"
-url = "https://github.com/jdx/hk/releases/download/v1.38.0/hk-x86_64-pc-windows-msvc.zip"
+checksum = "sha256:5af7e769acb7f70d8630ed53ae1fb2cc4b205117f29df5d83619fa0ff72a3bf1"
+url = "https://github.com/jdx/hk/releases/download/v1.46.0/hk-x86_64-pc-windows-msvc.zip"
 
 [[tools.jq]]
 version = "1.8.1"

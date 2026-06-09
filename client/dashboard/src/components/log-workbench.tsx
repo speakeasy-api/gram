@@ -33,7 +33,7 @@ export function LogWorkbench({
   surfaceClassName,
   contentClassName,
   className,
-}: LogWorkbenchProps) {
+}: LogWorkbenchProps): JSX.Element {
   return (
     <>
       <div className={cn("flex min-h-0 w-full flex-1 flex-col", className)}>

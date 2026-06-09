@@ -29,7 +29,7 @@ const inputStyles = cn(
 const labelStyles = "mb-0.5 text-sm text-gray-700";
 const errorStyles = "mt-0.5 text-xs text-red-500";
 
-export function DemoBookingFlow() {
+export function DemoBookingFlow(): JSX.Element {
   const { session } = useSessionData();
   const telemetry = useTelemetry();
   const [step, setStep] = useState<Step>("form");

@@ -16,7 +16,7 @@ import {
   SdkLanguage,
 } from "./examples";
 
-export default function SDK() {
+export default function SDK(): JSX.Element {
   return (
     <Page>
       <Page.Header>
@@ -40,7 +40,7 @@ export default function SDK() {
   );
 }
 
-export const SdkContent = ({
+const SdkContent = ({
   projectSlug,
   toolset = "my-toolset",
   environment = "default",
@@ -139,7 +139,9 @@ export const SdkContent = ({
           <Stack gap={2}>
             {langFrameworkDropdowns}
             <Button
-              onClick={() => agentify(toolset, environment)}
+              onClick={() => {
+                void agentify(toolset, environment);
+              }}
               variant={outdated || inProgress ? "primary" : "secondary"}
               disabled={inProgress}
             >
@@ -173,7 +175,7 @@ export const SdkContent = ({
   );
 };
 
-export const SdkLanguageDropdown = ({
+const SdkLanguageDropdown = ({
   lang,
   setLang,
 }: {

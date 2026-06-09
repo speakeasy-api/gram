@@ -47,7 +47,7 @@ function ChangedFieldRow({
   );
 }
 
-export function StructuredDiff({ log }: { log: AuditLog }) {
+export function StructuredDiff({ log }: { log: AuditLog }): React.JSX.Element {
   const [showRawDiff, setShowRawDiff] = useState(false);
 
   const changes = useMemo(

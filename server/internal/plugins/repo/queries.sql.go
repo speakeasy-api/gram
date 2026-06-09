@@ -41,29 +41,35 @@ func (q *Queries) AddPluginAssignment(ctx context.Context, arg AddPluginAssignme
 }
 
 const addPluginServer = `-- name: AddPluginServer :one
-INSERT INTO plugin_servers (plugin_id, toolset_id, display_name, policy, sort_order)
+INSERT INTO plugin_servers (plugin_id, toolset_id, mcp_server_id, display_name, policy, sort_order)
 VALUES (
   $1,
   $2,
   $3,
   $4,
-  $5
+  $5,
+  $6
 )
-RETURNING id, plugin_id, toolset_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
+RETURNING id, plugin_id, toolset_id, mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
 `
 
 type AddPluginServerParams struct {
 	PluginID    uuid.UUID
-	ToolsetID   uuid.UUID
+	ToolsetID   uuid.NullUUID
+	McpServerID uuid.NullUUID
 	DisplayName string
 	Policy      string
 	SortOrder   int32
 }
 
+// Inserts a plugin server backed by exactly one of a toolset or an mcp_server.
+// The plugin_servers backend-exclusivity CHECK enforces the XOR; callers must
+// supply exactly one of toolset_id / mcp_server_id.
 func (q *Queries) AddPluginServer(ctx context.Context, arg AddPluginServerParams) (PluginServer, error) {
 	row := q.db.QueryRow(ctx, addPluginServer,
 		arg.PluginID,
 		arg.ToolsetID,
+		arg.McpServerID,
 		arg.DisplayName,
 		arg.Policy,
 		arg.SortOrder,
@@ -73,6 +79,7 @@ func (q *Queries) AddPluginServer(ctx context.Context, arg AddPluginServerParams
 		&i.ID,
 		&i.PluginID,
 		&i.ToolsetID,
+		&i.McpServerID,
 		&i.DisplayName,
 		&i.Policy,
 		&i.SortOrder,
@@ -212,6 +219,52 @@ func (q *Queries) GetMarketplaceSettings(ctx context.Context, projectID uuid.UUI
 	return i, err
 }
 
+const getMcpServerForPluginServer = `-- name: GetMcpServerForPluginServer :one
+SELECT
+  s.id,
+  s.name,
+  s.slug,
+  s.visibility,
+  EXISTS (
+    SELECT 1 FROM mcp_endpoints e
+    WHERE e.mcp_server_id = s.id AND e.deleted IS FALSE
+  ) AS has_endpoint
+FROM mcp_servers s
+WHERE
+  s.id = $1
+  AND s.project_id = $2
+  AND s.deleted IS FALSE
+`
+
+type GetMcpServerForPluginServerParams struct {
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+type GetMcpServerForPluginServerRow struct {
+	ID          uuid.UUID
+	Name        pgtype.Text
+	Slug        pgtype.Text
+	Visibility  string
+	HasEndpoint bool
+}
+
+// Resolve an mcp_server for plugin-server validation, scoped to the project so
+// IDs alone are never trusted. has_endpoint reports whether the server has at
+// least one usable endpoint so the caller can reject unpublishable servers.
+func (q *Queries) GetMcpServerForPluginServer(ctx context.Context, arg GetMcpServerForPluginServerParams) (GetMcpServerForPluginServerRow, error) {
+	row := q.db.QueryRow(ctx, getMcpServerForPluginServer, arg.McpServerID, arg.ProjectID)
+	var i GetMcpServerForPluginServerRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Visibility,
+		&i.HasEndpoint,
+	)
+	return i, err
+}
+
 const getOrganizationName = `-- name: GetOrganizationName :one
 SELECT name FROM organization_metadata WHERE id = $1
 `
@@ -345,7 +398,7 @@ func (q *Queries) ListPluginPublishCandidates(ctx context.Context, arg ListPlugi
 }
 
 const listPluginServers = `-- name: ListPluginServers :many
-SELECT id, plugin_id, toolset_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
+SELECT id, plugin_id, toolset_id, mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
 FROM plugin_servers
 WHERE plugin_id = $1
   AND deleted IS FALSE
@@ -365,6 +418,7 @@ func (q *Queries) ListPluginServers(ctx context.Context, pluginID uuid.UUID) ([]
 			&i.ID,
 			&i.PluginID,
 			&i.ToolsetID,
+			&i.McpServerID,
 			&i.DisplayName,
 			&i.Policy,
 			&i.SortOrder,
@@ -448,6 +502,98 @@ func (q *Queries) ListPlugins(ctx context.Context, arg ListPluginsParams) ([]Lis
 	return items, nil
 }
 
+const listPluginsWithMcpServersForProject = `-- name: ListPluginsWithMcpServersForProject :many
+SELECT
+  p.id AS plugin_id,
+  p.name AS plugin_name,
+  p.slug AS plugin_slug,
+  p.description AS plugin_description,
+  ps.id AS server_id,
+  ps.display_name AS server_display_name,
+  ps.policy AS server_policy,
+  ps.sort_order AS server_sort_order,
+  ps.mcp_server_id,
+  ep.slug AS endpoint_slug,
+  ep.custom_domain AS endpoint_custom_domain
+FROM plugins p
+JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
+JOIN mcp_servers s ON s.id = ps.mcp_server_id AND s.deleted IS FALSE AND s.project_id = p.project_id AND s.visibility <> 'disabled'
+LEFT JOIN LATERAL (
+  SELECT e.slug, cd.domain AS custom_domain, e.created_at
+  FROM mcp_endpoints e
+  LEFT JOIN custom_domains cd
+    ON cd.id = e.custom_domain_id
+    AND cd.activated IS TRUE
+    AND cd.verified IS TRUE
+    AND cd.deleted IS FALSE
+  WHERE e.mcp_server_id = s.id
+    AND e.deleted IS FALSE
+    AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
+  ORDER BY (e.custom_domain_id IS NULL) ASC, e.created_at ASC
+  LIMIT 1
+) ep ON TRUE
+WHERE p.project_id = $1
+  AND p.deleted IS FALSE
+  AND ep.slug IS NOT NULL
+ORDER BY p.slug, ps.sort_order ASC
+`
+
+type ListPluginsWithMcpServersForProjectRow struct {
+	PluginID             uuid.UUID
+	PluginName           string
+	PluginSlug           string
+	PluginDescription    pgtype.Text
+	ServerID             uuid.UUID
+	ServerDisplayName    string
+	ServerPolicy         string
+	ServerSortOrder      int32
+	McpServerID          uuid.NullUUID
+	EndpointSlug         string
+	EndpointCustomDomain pgtype.Text
+}
+
+// Plugin-generation companion to ListPluginsWithServersForProject covering
+// mcp_server-backed (Remote MCP) plugin servers. Each server resolves to a
+// single usable endpoint via a lateral pick: custom-domain endpoints win over
+// platform endpoints, then oldest created_at, limit 1 (mirrors the collections
+// rule; per-plugin endpoint preference is a follow-up). Resolving the host
+// inside the selection keeps endpoint choice and URL-host construction in
+// lockstep, so a dangling custom-domain endpoint is never picked and emitted as
+// a (wrong) platform URL. Servers without a usable endpoint are dropped.
+// Scoped to project_id; the mcp_server must live in the same project as the
+// plugin, and disabled servers are excluded.
+func (q *Queries) ListPluginsWithMcpServersForProject(ctx context.Context, projectID uuid.UUID) ([]ListPluginsWithMcpServersForProjectRow, error) {
+	rows, err := q.db.Query(ctx, listPluginsWithMcpServersForProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPluginsWithMcpServersForProjectRow
+	for rows.Next() {
+		var i ListPluginsWithMcpServersForProjectRow
+		if err := rows.Scan(
+			&i.PluginID,
+			&i.PluginName,
+			&i.PluginSlug,
+			&i.PluginDescription,
+			&i.ServerID,
+			&i.ServerDisplayName,
+			&i.ServerPolicy,
+			&i.ServerSortOrder,
+			&i.McpServerID,
+			&i.EndpointSlug,
+			&i.EndpointCustomDomain,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPluginsWithServersForProject = `-- name: ListPluginsWithServersForProject :many
 SELECT
   p.id AS plugin_id,
@@ -481,7 +627,7 @@ type ListPluginsWithServersForProjectRow struct {
 	ServerDisplayName   string
 	ServerPolicy        string
 	ServerSortOrder     int32
-	ToolsetID           uuid.UUID
+	ToolsetID           uuid.NullUUID
 	ToolsetMcpSlug      pgtype.Text
 	ToolsetIsPublic     bool
 	ToolsetIsOauth      bool
@@ -537,13 +683,14 @@ func (q *Queries) RemoveAllPluginAssignments(ctx context.Context, pluginID uuid.
 	return result.RowsAffected(), nil
 }
 
-const removePluginServer = `-- name: RemovePluginServer :exec
+const removePluginServer = `-- name: RemovePluginServer :one
 UPDATE plugin_servers
 SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE id = $1
   AND plugin_id = $2
   AND deleted IS FALSE
+RETURNING id, plugin_id, toolset_id, mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
 `
 
 type RemovePluginServerParams struct {
@@ -551,9 +698,25 @@ type RemovePluginServerParams struct {
 	PluginID uuid.UUID
 }
 
-func (q *Queries) RemovePluginServer(ctx context.Context, arg RemovePluginServerParams) error {
-	_, err := q.db.Exec(ctx, removePluginServer, arg.ID, arg.PluginID)
-	return err
+// Soft-deletes a plugin server and returns the removed row so the caller can
+// record the correct backend (toolset vs mcp_server) in the audit log.
+func (q *Queries) RemovePluginServer(ctx context.Context, arg RemovePluginServerParams) (PluginServer, error) {
+	row := q.db.QueryRow(ctx, removePluginServer, arg.ID, arg.PluginID)
+	var i PluginServer
+	err := row.Scan(
+		&i.ID,
+		&i.PluginID,
+		&i.ToolsetID,
+		&i.McpServerID,
+		&i.DisplayName,
+		&i.Policy,
+		&i.SortOrder,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const softDeletePluginServers = `-- name: SoftDeletePluginServers :exec
@@ -626,7 +789,7 @@ SET display_name = $1,
 WHERE id = $4
   AND plugin_id = $5
   AND deleted IS FALSE
-RETURNING id, plugin_id, toolset_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
+RETURNING id, plugin_id, toolset_id, mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdatePluginServerParams struct {
@@ -650,6 +813,7 @@ func (q *Queries) UpdatePluginServer(ctx context.Context, arg UpdatePluginServer
 		&i.ID,
 		&i.PluginID,
 		&i.ToolsetID,
+		&i.McpServerID,
 		&i.DisplayName,
 		&i.Policy,
 		&i.SortOrder,
