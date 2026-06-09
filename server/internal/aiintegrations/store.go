@@ -241,17 +241,12 @@ func (s *Store) ListEnabledConfigsByProvider(ctx context.Context, provider strin
 	return configs, nil
 }
 
-func (s *Store) ListUsagePollCandidates(ctx context.Context, provider string, pollDueBefore time.Time, limit int32) ([]UsagePollCandidate, error) {
-	provider, err := normalizeProvider(provider)
-	if err != nil {
-		return nil, err
-	}
+func (s *Store) ListUsagePollCandidates(ctx context.Context, pollDueBefore time.Time, limit int32) ([]UsagePollCandidate, error) {
 	if limit <= 0 {
 		return nil, nil
 	}
 
 	params := repo.ListUsagePollCandidatesParams{
-		Provider:      provider,
 		PollDueBefore: timestamptz(pollDueBefore),
 		LimitCount:    limit,
 	}

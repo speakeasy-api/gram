@@ -46,11 +46,6 @@ const (
 	aiUsagePollerCoordinatorRetryInitialInterval = 5 * time.Second
 )
 
-var aiUsagePollerProviders = []string{
-	aiintegrations.ProviderCursor,
-	aiintegrations.ProviderAnthropicCompliance,
-}
-
 func AIUsagePollerCoordinatorWorkflow(ctx workflow.Context) error {
 	activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: aiUsagePollerCoordinatorActivityTimeout,
@@ -63,60 +58,57 @@ func AIUsagePollerCoordinatorWorkflow(ctx workflow.Context) error {
 
 	var a *Activities
 
-	for _, provider := range aiUsagePollerProviders {
-		for {
-			var candidates []aiintegrations.UsagePollCandidate
-			if err := workflow.ExecuteActivity(activityCtx, a.GetAIIntegrationsCandidates, activities.GetAIIntegrationsCandidatesInput{
-				Provider:      provider,
-				PollDueBefore: workflow.Now(ctx).UTC(),
-				Limit:         aiUsagePollerCoordinatorChildConcurrency,
-			}).Get(activityCtx, &candidates); err != nil {
-				return fmt.Errorf("get ai integrations candidates for %s: %w", provider, err)
-			}
-			if len(candidates) == 0 {
-				break
-			}
+	for {
+		var candidates []aiintegrations.UsagePollCandidate
+		if err := workflow.ExecuteActivity(activityCtx, a.GetAIIntegrationsCandidates, activities.GetAIIntegrationsCandidatesInput{
+			PollDueBefore: workflow.Now(ctx).UTC(),
+			Limit:         aiUsagePollerCoordinatorChildConcurrency,
+		}).Get(activityCtx, &candidates); err != nil {
+			return fmt.Errorf("get ai integrations candidates: %w", err)
+		}
+		if len(candidates) == 0 {
+			break
+		}
 
-			type runningAIUsagePoller struct {
-				candidate aiintegrations.UsagePollCandidate
-				child     workflow.ChildWorkflowFuture
-			}
+		type runningAIUsagePoller struct {
+			candidate aiintegrations.UsagePollCandidate
+			child     workflow.ChildWorkflowFuture
+		}
 
-			batch := make([]runningAIUsagePoller, 0, len(candidates))
-			for _, candidate := range candidates {
-				childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-					WorkflowID:            buildAIUsagePollerWorkflowID(candidate.OrganizationSlug, candidate.ID, candidate.Provider),
-					WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-					WaitForCancellation:   true,
-				})
-				child := workflow.ExecuteChildWorkflow(childCtx, AIUsagePollerWorkflow, candidate.ID.String())
-				if err := child.GetChildWorkflowExecution().Get(ctx, nil); err != nil {
-					if !temporal.IsWorkflowExecutionAlreadyStartedError(err) {
-						return fmt.Errorf("start ai integration usage poll child: %w", err)
-					}
-					continue
+		batch := make([]runningAIUsagePoller, 0, len(candidates))
+		for _, candidate := range candidates {
+			childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
+				WorkflowID:            buildAIUsagePollerWorkflowID(candidate.OrganizationSlug, candidate.ID, candidate.Provider),
+				WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+				WaitForCancellation:   true,
+			})
+			child := workflow.ExecuteChildWorkflow(childCtx, AIUsagePollerWorkflow, candidate.ID.String())
+			if err := child.GetChildWorkflowExecution().Get(ctx, nil); err != nil {
+				if !temporal.IsWorkflowExecutionAlreadyStartedError(err) {
+					return fmt.Errorf("start ai integration usage poll child: %w", err)
 				}
-				batch = append(batch, runningAIUsagePoller{
-					candidate: candidate,
-					child:     child,
-				})
+				continue
 			}
+			batch = append(batch, runningAIUsagePoller{
+				candidate: candidate,
+				child:     child,
+			})
+		}
 
-			if len(batch) == 0 {
-				break
-			}
+		if len(batch) == 0 {
+			break
+		}
 
-			selector := workflow.NewSelector(ctx)
-			remaining := len(batch)
-			for _, run := range batch {
-				selector.AddFuture(run.child, func(f workflow.Future) {
-					remaining--
-				})
-			}
+		selector := workflow.NewSelector(ctx)
+		remaining := len(batch)
+		for _, run := range batch {
+			selector.AddFuture(run.child, func(f workflow.Future) {
+				remaining--
+			})
+		}
 
-			for remaining > 0 {
-				selector.Select(ctx)
-			}
+		for remaining > 0 {
+			selector.Select(ctx)
 		}
 	}
 
@@ -135,7 +127,7 @@ func AIUsagePollerWorkflow(ctx workflow.Context, configID string) error {
 	})
 
 	var a *Activities
-	if err := workflow.ExecuteActivity(ctx, a.PollAIUsage, configID).Get(ctx, nil); err != nil {
+	if err := workflow.ExecuteActivity(ctx, a.PollAIData, configID).Get(ctx, nil); err != nil {
 		return fmt.Errorf("poll and persist ai integration usage: %w", err)
 	}
 

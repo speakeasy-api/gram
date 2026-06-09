@@ -21,13 +21,13 @@ import (
 	cursorapi "github.com/speakeasy-api/gram/server/internal/thirdparty/cursor"
 )
 
-type PollAIUsage struct {
+type PollAIData struct {
 	integrations       *aiintegrations.Store
 	cursorUsagePoller  *aiintegrations.UsagePollService
 	complianceImporter *aiintegrations.ComplianceImportService
 }
 
-func NewPollAIUsage(
+func NewPollAIData(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
 	encryptionClient *encryption.Client,
@@ -35,8 +35,8 @@ func NewPollAIUsage(
 	guardianPolicy *guardian.Policy,
 	chatWriter *chat.ChatMessageWriter,
 	assetStorage assets.BlobStore,
-) *PollAIUsage {
-	p := &PollAIUsage{
+) *PollAIData {
+	p := &PollAIData{
 		integrations: aiintegrations.NewStore(logger, db, encryptionClient),
 		cursorUsagePoller: aiintegrations.NewUsagePollService(db, telemetryLogger, guardianPolicy, func(ctx context.Context, page int) {
 			activity.RecordHeartbeat(ctx, map[string]any{
@@ -46,7 +46,7 @@ func NewPollAIUsage(
 		}),
 	}
 	if guardianPolicy != nil && chatWriter != nil && assetStorage != nil {
-		p.complianceImporter = aiintegrations.NewComplianceImportService(logger, db, guardianPolicy, chatWriter, assetStorage, func(ctx context.Context, scope string, page int) {
+		p.complianceImporter = aiintegrations.NewComplianceImportService(logger, db, guardianPolicy, chatWriter, func(ctx context.Context, scope string, page int) {
 			activity.RecordHeartbeat(ctx, map[string]any{
 				"provider": aiintegrations.ProviderAnthropicCompliance,
 				"scope":    scope,
@@ -59,7 +59,7 @@ func NewPollAIUsage(
 
 // Do polls an AI integration provider and persists the provider-specific data.
 // It records provider-visible failure state only on the final Temporal retry.
-func (p *PollAIUsage) Do(ctx context.Context, configID string) (err error) {
+func (p *PollAIData) Do(ctx context.Context, configID string) (err error) {
 	id, err := uuid.Parse(configID)
 	if err != nil {
 		return oops.E(oops.CodeInvalid, err, "invalid ai integration config id")
@@ -94,9 +94,6 @@ func (p *PollAIUsage) Do(ctx context.Context, configID string) (err error) {
 			return oops.E(oops.CodeUnexpected, err, "fetch cursor usage window")
 		}
 	case aiintegrations.ProviderAnthropicCompliance:
-		if p.complianceImporter == nil {
-			return oops.E(oops.CodeUnexpected, nil, "anthropic compliance importer is not configured")
-		}
 		if err := p.complianceImporter.SyncAnthropicCompliance(ctx, cfg, endTime); err != nil {
 			if aiintegrations.IsAnthropicComplianceUnauthorized(err) {
 				return oops.E(oops.CodeUnauthorized, err, "anthropic rejected the configured compliance api key")

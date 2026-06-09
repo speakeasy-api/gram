@@ -35,6 +35,10 @@ export type AIIntegrationConfig = {
    */
   enabled: boolean;
   /**
+   * Provider organization identifier. Required for anthropic_compliance; omitted for providers that do not need one.
+   */
+  externalOrganizationId?: string | undefined;
+  /**
    * Whether an API key is currently stored. The key itself is never returned.
    */
   hasApiKey: boolean;
@@ -95,6 +99,7 @@ export const AIIntegrationConfig$inboundSchema: z.ZodMiniType<
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
     enabled: z.boolean(),
+    external_organization_id: z.optional(z.string()),
     has_api_key: z.boolean(),
     id: z.optional(z.string()),
     last_poll_error: z.optional(z.string()),
@@ -118,6 +123,7 @@ export const AIIntegrationConfig$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "created_at": "createdAt",
+      "external_organization_id": "externalOrganizationId",
       "has_api_key": "hasApiKey",
       "last_poll_error": "lastPollError",
       "last_poll_failed_at": "lastPollFailedAt",

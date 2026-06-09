@@ -917,8 +917,10 @@ VALUES (
     $1
   , $2
 )
-ON CONFLICT (ai_integration_config_id, chat_id)
-DO UPDATE SET updated_at = clock_timestamp()
+ON CONFLICT (chat_id)
+DO UPDATE SET
+    ai_integration_config_id = EXCLUDED.ai_integration_config_id
+  , updated_at = clock_timestamp()
 `
 
 type LinkAIIntegrationConfigChatParams struct {

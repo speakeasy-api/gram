@@ -393,17 +393,15 @@ SELECT
 FROM ai_integration_syncs s
 JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
 JOIN organization_metadata om ON om.id = c.organization_id
-WHERE c.provider = $1
-  AND c.enabled IS TRUE
+WHERE c.enabled IS TRUE
   AND c.deleted IS FALSE
   AND c.api_key_encrypted IS NOT NULL
-  AND s.next_poll_after <= $2
+  AND s.next_poll_after <= $1
 ORDER BY s.next_poll_after ASC, c.organization_id ASC, c.provider ASC
-LIMIT $3
+LIMIT $2
 `
 
 type ListUsagePollCandidatesParams struct {
-	Provider      string
 	PollDueBefore pgtype.Timestamptz
 	LimitCount    int32
 }
@@ -416,7 +414,7 @@ type ListUsagePollCandidatesRow struct {
 }
 
 func (q *Queries) ListUsagePollCandidates(ctx context.Context, arg ListUsagePollCandidatesParams) ([]ListUsagePollCandidatesRow, error) {
-	rows, err := q.db.Query(ctx, listUsagePollCandidates, arg.Provider, arg.PollDueBefore, arg.LimitCount)
+	rows, err := q.db.Query(ctx, listUsagePollCandidates, arg.PollDueBefore, arg.LimitCount)
 	if err != nil {
 		return nil, err
 	}

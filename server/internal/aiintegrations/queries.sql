@@ -124,8 +124,7 @@ SELECT
 FROM ai_integration_syncs s
 JOIN ai_integration_configs c ON c.id = s.ai_integration_config_id
 JOIN organization_metadata om ON om.id = c.organization_id
-WHERE c.provider = @provider
-  AND c.enabled IS TRUE
+WHERE c.enabled IS TRUE
   AND c.deleted IS FALSE
   AND c.api_key_encrypted IS NOT NULL
   AND s.next_poll_after <= @poll_due_before

@@ -1,16 +1,10 @@
 package aiintegrations
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
 	"log/slog"
-	"path"
 	"strings"
 	"time"
 
@@ -18,7 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
@@ -35,7 +28,6 @@ const (
 	anthropicComplianceSource          = "anthropic_compliance"
 	anthropicCompliancePageLimit       = 1000
 	maxInlineExternalContentSize       = 128 * 1024
-	maxComplianceAssetBytes            = 100 * 1024 * 1024
 )
 
 type ComplianceImportService struct {
@@ -44,30 +36,16 @@ type ComplianceImportService struct {
 	chatRepo       *chatrepo.Queries
 	users          *usersrepo.Queries
 	writer         *chat.ChatMessageWriter
-	assetStorage   assets.BlobStore
 	heartbeat      func(ctx context.Context, scope string, page int)
 }
 
-func NewComplianceImportService(logger *slog.Logger, db *pgxpool.Pool, guardianPolicy *guardian.Policy, writer *chat.ChatMessageWriter, assetStorage assets.BlobStore, heartbeat func(ctx context.Context, scope string, page int)) *ComplianceImportService {
-	if guardianPolicy == nil {
-		panic("anthropic compliance import service requires guardian policy")
-	}
-	if writer == nil {
-		panic("anthropic compliance import service requires chat message writer")
-	}
-	if assetStorage == nil {
-		panic("anthropic compliance import service requires asset storage")
-	}
-	if heartbeat == nil {
-		panic("anthropic compliance import service requires heartbeat")
-	}
+func NewComplianceImportService(logger *slog.Logger, db *pgxpool.Pool, guardianPolicy *guardian.Policy, writer *chat.ChatMessageWriter, heartbeat func(ctx context.Context, scope string, page int)) *ComplianceImportService {
 	return &ComplianceImportService{
 		logger:         logger.With(attr.SlogComponent("aiintegrations.anthropic_compliance")),
 		guardianPolicy: guardianPolicy,
 		chatRepo:       chatrepo.New(db),
 		users:          usersrepo.New(db),
 		writer:         writer,
-		assetStorage:   assetStorage,
 		heartbeat:      heartbeat,
 	}
 }
@@ -118,7 +96,7 @@ func (s *ComplianceImportService) discoverChatActivities(ctx context.Context, cl
 				anthropicComplianceActivityUpdated,
 			},
 			OrganizationIDs: []string{cfg.ExternalOrganizationID},
-			CreatedAtGTE:    cfg.PollWatermarkAt,
+			CreatedAtGTE:    cfg.PollWatermarkAt.Add(-time.Hour * 24),
 			AfterID:         afterID,
 			Limit:           5000,
 		})
@@ -258,10 +236,7 @@ func (s *ComplianceImportService) buildExternalMessageRows(ctx context.Context, 
 		if createdAt.IsZero() {
 			createdAt = time.Now().UTC()
 		}
-		assetsURL, err := s.storeMessageAssets(ctx, client, cfg, page.ID, msg)
-		if err != nil {
-			return nil, err
-		}
+
 		content := renderComplianceContent(msg.Content)
 		var contentRaw []byte
 		if len(msg.Content) > 0 && len(msg.Content) <= maxInlineExternalContentSize {
@@ -281,7 +256,7 @@ func (s *ComplianceImportService) buildExternalMessageRows(ctx context.Context, 
 			UserID:                       conv.ToPGText(userID),
 			ExternalUserID:               conv.ToPGText(page.User.ID),
 			ExternalMessageID:            conv.ToPGText(msg.ID),
-			ExternalChatMessageAssetsUrl: conv.ToPGText(assetsURL),
+			ExternalChatMessageAssetsUrl: pgtype.Text{},
 			FinishReason:                 pgtype.Text{},
 			ToolCalls:                    nil,
 			PromptTokens:                 0,
@@ -297,132 +272,6 @@ func (s *ComplianceImportService) buildExternalMessageRows(ctx context.Context, 
 		})
 	}
 	return rows, nil
-}
-
-func (s *ComplianceImportService) storeMessageAssets(ctx context.Context, client *anthropicapi.Client, cfg Config, claudeChatID string, msg anthropicapi.ChatMessage) (string, error) {
-	totalAssets := len(msg.Files) + len(msg.GeneratedFiles) + len(msg.Artifacts)
-	if totalAssets == 0 {
-		return "", nil
-	}
-	manifest := complianceAssetsManifest{
-		Provider:  anthropicComplianceSource,
-		ChatID:    claudeChatID,
-		MessageID: msg.ID,
-		Assets:    make([]complianceAssetManifestEntry, 0, totalAssets),
-	}
-	for _, file := range msg.Files {
-		entry := s.downloadAndStoreAsset(ctx, cfg, claudeChatID, msg.ID, "file", file.ID, file.Filename, file.MIMEType, func(ctx context.Context) (*anthropicapi.DownloadedContent, error) {
-			return client.DownloadChatFile(ctx, file.ID)
-		})
-		manifest.Assets = append(manifest.Assets, entry)
-	}
-	for _, file := range msg.GeneratedFiles {
-		entry := s.downloadAndStoreAsset(ctx, cfg, claudeChatID, msg.ID, "generated_file", file.ID, file.Filename, file.MIMEType, func(ctx context.Context) (*anthropicapi.DownloadedContent, error) {
-			return client.DownloadGeneratedFile(ctx, file.ID)
-		})
-		manifest.Assets = append(manifest.Assets, entry)
-	}
-	for _, artifact := range msg.Artifacts {
-		entry := s.downloadAndStoreAsset(ctx, cfg, claudeChatID, msg.ID, "artifact", artifact.VersionID, artifact.Title, artifact.ArtifactType, func(ctx context.Context) (*anthropicapi.DownloadedContent, error) {
-			return client.DownloadArtifact(ctx, artifact.VersionID)
-		})
-		entry.ArtifactID = artifact.ID
-		entry.VersionID = artifact.VersionID
-		manifest.Assets = append(manifest.Assets, entry)
-	}
-
-	data, err := json.Marshal(manifest)
-	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "marshal anthropic compliance asset manifest")
-	}
-	hash := sha256.Sum256(data)
-	manifestPath := path.Join(cfg.ProjectID.String(), "ai-integrations", anthropicComplianceSource, claudeChatID, msg.ID, hex.EncodeToString(hash[:])+".manifest.json")
-	writer, assetURL, err := s.assetStorage.Write(ctx, manifestPath, "application/json", int64(len(data)))
-	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "create anthropic compliance asset manifest")
-	}
-	if _, err := io.Copy(writer, bytes.NewReader(data)); err != nil {
-		_ = writer.Close()
-		return "", oops.E(oops.CodeUnexpected, err, "write anthropic compliance asset manifest")
-	}
-	if err := writer.Close(); err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "finalize anthropic compliance asset manifest")
-	}
-	return assetURL.String(), nil
-}
-
-func (s *ComplianceImportService) downloadAndStoreAsset(ctx context.Context, cfg Config, claudeChatID, messageID, kind, id, filename, mimeType string, download func(context.Context) (*anthropicapi.DownloadedContent, error)) complianceAssetManifestEntry {
-	entry := complianceAssetManifestEntry{
-		Kind:     kind,
-		ID:       id,
-		Filename: filename,
-		MIMEType: mimeType,
-	}
-	if id == "" {
-		entry.Error = "missing asset id"
-		return entry
-	}
-	downloaded, err := download(ctx)
-	if err != nil {
-		entry.Error = err.Error()
-		return entry
-	}
-	defer func() {
-		_ = downloaded.Body.Close()
-	}()
-	if downloaded.Filename != "" {
-		entry.Filename = downloaded.Filename
-	}
-	if downloaded.ContentType != "" {
-		entry.MIMEType = downloaded.ContentType
-	}
-	data, err := io.ReadAll(io.LimitReader(downloaded.Body, maxComplianceAssetBytes+1))
-	if err != nil {
-		entry.Error = err.Error()
-		return entry
-	}
-	if len(data) > maxComplianceAssetBytes {
-		entry.Error = fmt.Sprintf("asset exceeds %d byte import limit", maxComplianceAssetBytes)
-		return entry
-	}
-	hash := sha256.Sum256(data)
-	entry.SHA256 = hex.EncodeToString(hash[:])
-	assetPath := path.Join(cfg.ProjectID.String(), "ai-integrations", anthropicComplianceSource, claudeChatID, messageID, kind, id, entry.SHA256)
-	writer, assetURL, err := s.assetStorage.Write(ctx, assetPath, entry.MIMEType, int64(len(data)))
-	if err != nil {
-		entry.Error = err.Error()
-		return entry
-	}
-	if _, err := io.Copy(writer, bytes.NewReader(data)); err != nil {
-		_ = writer.Close()
-		entry.Error = err.Error()
-		return entry
-	}
-	if err := writer.Close(); err != nil {
-		entry.Error = err.Error()
-		return entry
-	}
-	entry.AssetURL = assetURL.String()
-	return entry
-}
-
-type complianceAssetsManifest struct {
-	Provider  string                         `json:"provider"`
-	ChatID    string                         `json:"chat_id"`
-	MessageID string                         `json:"message_id"`
-	Assets    []complianceAssetManifestEntry `json:"assets"`
-}
-
-type complianceAssetManifestEntry struct {
-	Kind       string `json:"kind"`
-	ID         string `json:"id"`
-	ArtifactID string `json:"artifact_id,omitempty"`
-	VersionID  string `json:"version_id,omitempty"`
-	Filename   string `json:"filename,omitempty"`
-	MIMEType   string `json:"mime_type,omitempty"`
-	AssetURL   string `json:"asset_url,omitempty"`
-	SHA256     string `json:"sha256,omitempty"`
-	Error      string `json:"error,omitempty"`
 }
 
 type complianceContentBlock struct {

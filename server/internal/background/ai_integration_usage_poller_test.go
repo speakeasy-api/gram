@@ -84,19 +84,14 @@ func TestAIUsagePollerCoordinatorWorkflowListsCandidatesAndStartsChildren(t *tes
 		},
 	}
 
-	listCallsByProvider := map[string]int{}
+	listCalls := 0
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, input activities.GetAIIntegrationsCandidatesInput) ([]aiintegrations.UsagePollCandidate, error) {
-			listCallsByProvider[input.Provider]++
+			listCalls++
 			require.False(t, input.PollDueBefore.Before(start))
 			require.Equal(t, int32(aiUsagePollerCoordinatorChildConcurrency), input.Limit)
 
-			if input.Provider == aiintegrations.ProviderAnthropicCompliance {
-				require.Equal(t, 1, listCallsByProvider[input.Provider])
-				return nil, nil
-			}
-			require.Equal(t, aiintegrations.ProviderCursor, input.Provider)
-			switch listCallsByProvider[input.Provider] {
+			switch listCalls {
 			case 1:
 				return candidates[:aiUsagePollerCoordinatorChildConcurrency], nil
 			case 2:
@@ -104,7 +99,7 @@ func TestAIUsagePollerCoordinatorWorkflowListsCandidatesAndStartsChildren(t *tes
 			case 3:
 				return nil, nil
 			default:
-				t.Fatalf("unexpected candidate list call %d", listCallsByProvider[input.Provider])
+				t.Fatalf("unexpected candidate list call %d", listCalls)
 				return nil, nil
 			}
 		},
@@ -124,8 +119,7 @@ func TestAIUsagePollerCoordinatorWorkflowListsCandidatesAndStartsChildren(t *tes
 
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
-	require.Equal(t, 3, listCallsByProvider[aiintegrations.ProviderCursor])
-	require.Equal(t, 1, listCallsByProvider[aiintegrations.ProviderAnthropicCompliance])
+	require.Equal(t, 3, listCalls)
 	require.ElementsMatch(t, candidateIDs(candidates), synced)
 }
 
@@ -157,19 +151,14 @@ func TestAIUsagePollerCoordinatorWorkflowContinuesAfterChildFailure(t *testing.T
 		Provider:         aiintegrations.ProviderCursor,
 	}
 
-	listCallsByProvider := map[string]int{}
+	listCalls := 0
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, input activities.GetAIIntegrationsCandidatesInput) ([]aiintegrations.UsagePollCandidate, error) {
-			listCallsByProvider[input.Provider]++
+			listCalls++
 			require.False(t, input.PollDueBefore.Before(start))
 			require.Equal(t, int32(aiUsagePollerCoordinatorChildConcurrency), input.Limit)
 
-			if input.Provider == aiintegrations.ProviderAnthropicCompliance {
-				require.Equal(t, 1, listCallsByProvider[input.Provider])
-				return nil, nil
-			}
-			require.Equal(t, aiintegrations.ProviderCursor, input.Provider)
-			switch listCallsByProvider[input.Provider] {
+			switch listCalls {
 			case 1:
 				return []aiintegrations.UsagePollCandidate{failedCandidate, successCandidate}, nil
 			case 2:
@@ -177,7 +166,7 @@ func TestAIUsagePollerCoordinatorWorkflowContinuesAfterChildFailure(t *testing.T
 			case 3:
 				return nil, nil
 			default:
-				t.Fatalf("unexpected candidate list call %d", listCallsByProvider[input.Provider])
+				t.Fatalf("unexpected candidate list call %d", listCalls)
 				return nil, nil
 			}
 		},
@@ -202,8 +191,7 @@ func TestAIUsagePollerCoordinatorWorkflowContinuesAfterChildFailure(t *testing.T
 
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
-	require.Equal(t, 3, listCallsByProvider[aiintegrations.ProviderCursor])
-	require.Equal(t, 1, listCallsByProvider[aiintegrations.ProviderAnthropicCompliance])
+	require.Equal(t, 3, listCalls)
 	require.Equal(t, activities.PollUsageMaxAttempts, attemptsByConfigID[failedCandidate.ID.String()])
 	require.ElementsMatch(t, []string{successCandidate.ID.String(), nextBatchCandidate.ID.String()}, synced)
 }

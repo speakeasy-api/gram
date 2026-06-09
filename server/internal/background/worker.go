@@ -338,7 +338,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.PublishPluginProject)
 
 	// AI integration usage syncing runs on its own worker and task queue.
-	aiUsageWorker.RegisterActivity(activities.PollAIUsage)
+	aiUsageWorker.RegisterActivity(activities.PollAIData)
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)

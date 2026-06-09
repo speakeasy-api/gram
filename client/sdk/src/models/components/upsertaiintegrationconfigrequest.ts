@@ -15,6 +15,10 @@ export type UpsertAIIntegrationConfigRequest = {
    */
   enabled: boolean;
   /**
+   * Provider organization identifier. Required for anthropic_compliance.
+   */
+  externalOrganizationId?: string | undefined;
+  /**
    * AI provider identifier. Initially only cursor is supported.
    */
   provider: string;
@@ -24,6 +28,7 @@ export type UpsertAIIntegrationConfigRequest = {
 export type UpsertAIIntegrationConfigRequest$Outbound = {
   api_key: string;
   enabled: boolean;
+  external_organization_id?: string | undefined;
   provider: string;
 };
 
@@ -35,11 +40,13 @@ export const UpsertAIIntegrationConfigRequest$outboundSchema: z.ZodMiniType<
   z.object({
     apiKey: z.string(),
     enabled: z.boolean(),
+    externalOrganizationId: z.optional(z.string()),
     provider: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
       apiKey: "api_key",
+      externalOrganizationId: "external_organization_id",
     });
   }),
 );

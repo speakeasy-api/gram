@@ -73,8 +73,10 @@ VALUES (
     @ai_integration_config_id
   , @chat_id
 )
-ON CONFLICT (ai_integration_config_id, chat_id)
-DO UPDATE SET updated_at = clock_timestamp();
+ON CONFLICT (chat_id)
+DO UPDATE SET
+    ai_integration_config_id = EXCLUDED.ai_integration_config_id
+  , updated_at = clock_timestamp();
 
 -- name: GetLastExternalMessageIDForChat :one
 SELECT external_message_id
