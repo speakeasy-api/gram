@@ -1,0 +1,25 @@
+server/internal/authz/principal_test.go
+  s_bfcdcec2fc12dd::t_0cef6bb209a0e7 41,61-67
+server/internal/authz/principal.go
+  s_bfcdcec2fc12dd::t_26f65bbba1f8cc 17-20,23-24,29-30,44-51,119-120
+server/internal/urn/principal_test.go
+  s_bfcdcec2fc12dd::t_029e23a4500002 28-32,107-110
+server/internal/urn/principal.go
+  s_bfcdcec2fc12dd::t_71281c9b2db4ff 25-28,37-38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "8bbf94006a17ec070405d33d31677bd20437eb74",
+  "prompts": {},
+  "sessions": {
+    "s_bfcdcec2fc12dd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e978b-d153-7f13-a173-e4e397dcc332",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
