@@ -54,6 +54,7 @@ type WorkerOptions struct {
 	FeatureProvider                feature.Provider
 	AssetStorage                   assets.BlobStore
 	SlackClient                    *slack_client.SlackClient
+	ChatMessageWriter              *chat.ChatMessageWriter
 	ChatClient                     *chat.Client
 	OpenRouter                     openrouter.Provisioner
 	K8sClient                      *k8s.KubernetesClients
@@ -105,6 +106,7 @@ func ForDeploymentProcessing(
 		MCPRegistryClient:              mcpRegistryClient,
 		AuditLogger:                    auditLogger,
 		SlackClient:                    nil,
+		ChatMessageWriter:              nil,
 		ChatClient:                     nil,
 		OpenRouter:                     nil,
 		K8sClient:                      nil,
@@ -184,6 +186,7 @@ func NewTemporalWorker(
 			FeatureProvider:                conv.Default(o.FeatureProvider, opts.FeatureProvider),
 			AssetStorage:                   conv.Default(o.AssetStorage, opts.AssetStorage),
 			SlackClient:                    conv.Default(o.SlackClient, opts.SlackClient),
+			ChatMessageWriter:              conv.Default(o.ChatMessageWriter, opts.ChatMessageWriter),
 			OpenRouter:                     conv.Default(o.OpenRouter, opts.OpenRouter),
 			ChatClient:                     conv.Default(o.ChatClient, opts.ChatClient),
 			K8sClient:                      conv.Default(o.K8sClient, opts.K8sClient),
@@ -272,6 +275,7 @@ func NewTemporalWorker(
 		opts.SvixClient,
 		opts.ProductFeatures,
 		opts.PluginPublisher,
+		opts.ChatMessageWriter,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)

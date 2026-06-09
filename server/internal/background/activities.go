@@ -48,7 +48,7 @@ type Activities struct {
 	collectOpenRouterCreditsMetrics *activities.CollectOpenRouterCreditsMetrics
 	collectPlatformUsageMetrics     *activities.CollectPlatformUsageMetrics
 	getAIIntegrationsCandidates     *activities.GetAIIntegrationsCandidates
-	pollCursorUsageMetrics          *activities.PollCursorUsageMetrics
+	pollAIUsage                     *activities.PollAIUsage
 	customDomainIngress             *activities.CustomDomainIngress
 	defaultCustomDomainProvisioner  k8s.ProvisionerKind
 	fallbackModelUsageTracking      *activities.FallbackModelUsageTracking
@@ -136,6 +136,7 @@ func NewActivities(
 	svixClient *svix.Svix,
 	productFeatures *productfeatures.Client,
 	pluginPublisher activities.PluginPublishClient,
+	chatWriter *chat.ChatMessageWriter,
 ) *Activities {
 	usageTrackingStrategy := chat.NewDefaultUsageTrackingStrategy(db, logger, openrouterProvisioner, billingTracker, nil)
 
@@ -143,7 +144,7 @@ func NewActivities(
 		collectOpenRouterCreditsMetrics: activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner),
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
 		getAIIntegrationsCandidates:     activities.NewGetAIIntegrationsCandidates(logger, db, encryption),
-		pollCursorUsageMetrics:          activities.NewPollCursorUsageMetrics(logger, db, encryption, telemetryLogger, guardianPolicy),
+		pollAIUsage:                     activities.NewPollAIUsage(logger, db, encryption, telemetryLogger, guardianPolicy, chatWriter, assetStorage),
 		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient, defaultCustomDomainProvisioner),
 		defaultCustomDomainProvisioner:  defaultCustomDomainProvisioner,
 		fallbackModelUsageTracking:      activities.NewFallbackModelUsageTracking(usageTrackingStrategy),
@@ -276,7 +277,7 @@ func (a *Activities) GetAIIntegrationsCandidates(ctx context.Context, input acti
 }
 
 func (a *Activities) PollAIUsage(ctx context.Context, configID string) error {
-	return a.pollCursorUsageMetrics.Do(ctx, configID)
+	return a.pollAIUsage.Do(ctx, configID)
 }
 
 func (a *Activities) RefreshBillingUsage(ctx context.Context, orgIDs []string) error {

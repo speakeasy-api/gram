@@ -134,6 +134,10 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 		}
 		apiKey = before.APIKey
 	}
+	externalOrganizationID := strings.TrimSpace(providerExternalOrganizationID(payload.ExternalOrganizationID))
+	if externalOrganizationID == "" && beforeRow != nil {
+		externalOrganizationID = before.ExternalOrganizationID
+	}
 	var resetPollWatermarkAt *time.Time
 	if shouldResetUsagePollWatermark(beforeRow != nil, apiKeySupplied) {
 		watermark := initialUsagePollWatermark(time.Now())
@@ -146,7 +150,7 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	result, err := s.store.upsertWithTx(ctx, dbtx, authCtx.ActiveOrganizationID, provider, apiKey, apiKeySupplied, payload.Enabled, resetPollWatermarkAt)
+	result, err := s.store.upsertWithTx(ctx, dbtx, authCtx.ActiveOrganizationID, provider, apiKey, apiKeySupplied, payload.Enabled, externalOrganizationID, resetPollWatermarkAt)
 	if err != nil {
 		return nil, err
 	}
@@ -308,20 +312,36 @@ func buildView(cfg Config, idValue uuid.UUID) *gen.AIIntegrationConfig {
 		nextPollAfter = &formatted
 	}
 	return &gen.AIIntegrationConfig{
-		ID:               &id,
-		OrganizationID:   cfg.OrganizationID,
-		Provider:         cfg.Provider,
-		ProjectID:        &projectID,
-		Enabled:          cfg.Enabled,
-		HasAPIKey:        cfg.APIKey != "",
-		LastPolledAt:     lastPolledAt,
-		LastPollStatus:   &lastPollStatus,
-		LastPollError:    lastPollError,
-		LastPollFailedAt: lastPollFailedAt,
-		NextPollAfter:    nextPollAfter,
-		CreatedAt:        &createdAt,
-		UpdatedAt:        &updatedAt,
+		ID:                     &id,
+		OrganizationID:         cfg.OrganizationID,
+		Provider:               cfg.Provider,
+		ProjectID:              &projectID,
+		ExternalOrganizationID: providerExternalOrganizationIDPtr(cfg.ExternalOrganizationID),
+		Enabled:                cfg.Enabled,
+		HasAPIKey:              cfg.APIKey != "",
+		LastPolledAt:           lastPolledAt,
+		LastPollStatus:         &lastPollStatus,
+		LastPollError:          lastPollError,
+		LastPollFailedAt:       lastPollFailedAt,
+		NextPollAfter:          nextPollAfter,
+		CreatedAt:              &createdAt,
+		UpdatedAt:              &updatedAt,
 	}
+}
+
+func providerExternalOrganizationID(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func providerExternalOrganizationIDPtr(value string) *string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	return &value
 }
 
 func deriveLastPollStatus(cfg Config) string {

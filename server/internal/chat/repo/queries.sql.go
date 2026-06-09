@@ -265,6 +265,131 @@ func (q *Queries) CreateChatMessageWithToolCalls(ctx context.Context, arg Create
 	return err
 }
 
+const createExternalChatMessage = `-- name: CreateExternalChatMessage :execrows
+INSERT INTO chat_messages (
+    chat_id
+  , role
+  , project_id
+  , content
+  , content_raw
+  , content_asset_url
+  , storage_error
+  , model
+  , message_id
+  , tool_call_id
+  , user_id
+  , external_user_id
+  , external_message_id
+  , external_chat_message_assets_url
+  , finish_reason
+  , tool_calls
+  , prompt_tokens
+  , completion_tokens
+  , total_tokens
+  , origin
+  , user_agent
+  , ip_address
+  , source
+  , content_hash
+  , generation
+  , created_at
+)
+VALUES (
+    $1
+  , $2
+  , $3::uuid
+  , $4
+  , $5
+  , $6
+  , $7
+  , $8
+  , $9
+  , $10
+  , $11
+  , $12
+  , $13
+  , $14
+  , $15
+  , $16
+  , $17
+  , $18
+  , $19
+  , $20
+  , $21
+  , $22
+  , $23
+  , $24
+  , $25
+  , $26
+)
+ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
+DO NOTHING
+`
+
+type CreateExternalChatMessageParams struct {
+	ChatID                       uuid.UUID
+	Role                         string
+	ProjectID                    uuid.UUID
+	Content                      string
+	ContentRaw                   []byte
+	ContentAssetUrl              pgtype.Text
+	StorageError                 pgtype.Text
+	Model                        pgtype.Text
+	MessageID                    pgtype.Text
+	ToolCallID                   pgtype.Text
+	UserID                       pgtype.Text
+	ExternalUserID               pgtype.Text
+	ExternalMessageID            pgtype.Text
+	ExternalChatMessageAssetsUrl pgtype.Text
+	FinishReason                 pgtype.Text
+	ToolCalls                    []byte
+	PromptTokens                 int64
+	CompletionTokens             int64
+	TotalTokens                  int64
+	Origin                       pgtype.Text
+	UserAgent                    pgtype.Text
+	IpAddress                    pgtype.Text
+	Source                       pgtype.Text
+	ContentHash                  []byte
+	Generation                   int32
+	CreatedAt                    pgtype.Timestamptz
+}
+
+func (q *Queries) CreateExternalChatMessage(ctx context.Context, arg CreateExternalChatMessageParams) (int64, error) {
+	result, err := q.db.Exec(ctx, createExternalChatMessage,
+		arg.ChatID,
+		arg.Role,
+		arg.ProjectID,
+		arg.Content,
+		arg.ContentRaw,
+		arg.ContentAssetUrl,
+		arg.StorageError,
+		arg.Model,
+		arg.MessageID,
+		arg.ToolCallID,
+		arg.UserID,
+		arg.ExternalUserID,
+		arg.ExternalMessageID,
+		arg.ExternalChatMessageAssetsUrl,
+		arg.FinishReason,
+		arg.ToolCalls,
+		arg.PromptTokens,
+		arg.CompletionTokens,
+		arg.TotalTokens,
+		arg.Origin,
+		arg.UserAgent,
+		arg.IpAddress,
+		arg.Source,
+		arg.ContentHash,
+		arg.Generation,
+		arg.CreatedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteChatResolutions = `-- name: DeleteChatResolutions :exec
 DELETE FROM chat_resolutions WHERE chat_id = $1
 `
@@ -539,6 +664,22 @@ func (q *Queries) GetLLMClientBreakdownByMessages(ctx context.Context, arg GetLL
 	return items, nil
 }
 
+const getLastExternalMessageIDForChat = `-- name: GetLastExternalMessageIDForChat :one
+SELECT external_message_id
+FROM chat_messages
+WHERE chat_id = $1
+  AND external_message_id IS NOT NULL
+ORDER BY created_at DESC, seq DESC
+LIMIT 1
+`
+
+func (q *Queries) GetLastExternalMessageIDForChat(ctx context.Context, chatID uuid.UUID) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, getLastExternalMessageIDForChat, chatID)
+	var external_message_id pgtype.Text
+	err := row.Scan(&external_message_id)
+	return external_message_id, err
+}
+
 const getMaxGenerationForChat = `-- name: GetMaxGenerationForChat :one
 SELECT COALESCE(MAX(generation), 0)::integer AS generation FROM chat_messages WHERE chat_id = $1
 `
@@ -765,6 +906,29 @@ func (q *Queries) InsertUserFeedback(ctx context.Context, arg InsertUserFeedback
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const linkAIIntegrationConfigChat = `-- name: LinkAIIntegrationConfigChat :exec
+INSERT INTO ai_integration_config_chats (
+    ai_integration_config_id
+  , chat_id
+)
+VALUES (
+    $1
+  , $2
+)
+ON CONFLICT (ai_integration_config_id, chat_id)
+DO UPDATE SET updated_at = clock_timestamp()
+`
+
+type LinkAIIntegrationConfigChatParams struct {
+	AiIntegrationConfigID uuid.UUID
+	ChatID                uuid.UUID
+}
+
+func (q *Queries) LinkAIIntegrationConfigChat(ctx context.Context, arg LinkAIIntegrationConfigChatParams) error {
+	_, err := q.db.Exec(ctx, linkAIIntegrationConfigChat, arg.AiIntegrationConfigID, arg.ChatID)
+	return err
 }
 
 const listChatMessages = `-- name: ListChatMessages :many
@@ -1436,6 +1600,68 @@ func (q *Queries) UpsertChat(ctx context.Context, arg UpsertChatParams) (uuid.UU
 		arg.UserID,
 		arg.ExternalUserID,
 		arg.Title,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const upsertExternalChat = `-- name: UpsertExternalChat :one
+INSERT INTO chats (
+    id
+  , project_id
+  , organization_id
+  , user_id
+  , external_user_id
+  , external_chat_id
+  , title
+  , created_at
+  , updated_at
+)
+VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+  , $8
+  , $9
+)
+ON CONFLICT (organization_id, external_chat_id) WHERE external_chat_id IS NOT NULL
+DO UPDATE SET
+    project_id = EXCLUDED.project_id
+  , user_id = COALESCE(EXCLUDED.user_id, chats.user_id)
+  , external_user_id = COALESCE(EXCLUDED.external_user_id, chats.external_user_id)
+  , title = COALESCE(EXCLUDED.title, chats.title)
+  , updated_at = GREATEST(chats.updated_at, EXCLUDED.updated_at)
+RETURNING id
+`
+
+type UpsertExternalChatParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	UserID         pgtype.Text
+	ExternalUserID pgtype.Text
+	ExternalChatID pgtype.Text
+	Title          pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) UpsertExternalChat(ctx context.Context, arg UpsertExternalChatParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, upsertExternalChat,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserID,
+		arg.ExternalUserID,
+		arg.ExternalChatID,
+		arg.Title,
+		arg.CreatedAt,
+		arg.UpdatedAt,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)

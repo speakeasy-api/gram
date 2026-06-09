@@ -116,7 +116,7 @@ func upsertConfigWithTx(
 	var result UpsertResult
 	require.NoError(t, pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
 		var err error
-		result, err = store.upsertWithTx(ctx, tx, orgID, provider, apiKey, apiKeySupplied, enabled, resetPollWatermarkAt)
+		result, err = store.upsertWithTx(ctx, tx, orgID, provider, apiKey, apiKeySupplied, enabled, "", resetPollWatermarkAt)
 		return err
 	}))
 	return result

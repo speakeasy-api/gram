@@ -250,6 +250,7 @@ INSERT INTO ai_integration_configs (
     organization_id
   , provider
   , project_id
+  , external_organization_id
   , api_key_encrypted
   , enabled
 ) VALUES (
@@ -258,16 +259,18 @@ INSERT INTO ai_integration_configs (
   , $3
   , $4
   , $5
+  , $6
 )
 RETURNING created_at, deleted_at, updated_at, organization_id, provider, project_id, external_organization_id, api_key_encrypted, enabled, id, deleted
 `
 
 type InsertConfigParams struct {
-	OrganizationID  string
-	Provider        string
-	ProjectID       uuid.UUID
-	ApiKeyEncrypted string
-	Enabled         bool
+	OrganizationID         string
+	Provider               string
+	ProjectID              uuid.UUID
+	ExternalOrganizationID pgtype.Text
+	ApiKeyEncrypted        string
+	Enabled                bool
 }
 
 func (q *Queries) InsertConfig(ctx context.Context, arg InsertConfigParams) (AiIntegrationConfig, error) {
@@ -275,6 +278,7 @@ func (q *Queries) InsertConfig(ctx context.Context, arg InsertConfigParams) (AiI
 		arg.OrganizationID,
 		arg.Provider,
 		arg.ProjectID,
+		arg.ExternalOrganizationID,
 		arg.ApiKeyEncrypted,
 		arg.Enabled,
 	)
@@ -524,24 +528,27 @@ func (q *Queries) SoftDeleteConfig(ctx context.Context, arg SoftDeleteConfigPara
 const updateConfigSettings = `-- name: UpdateConfigSettings :one
 UPDATE ai_integration_configs
 SET project_id = $1,
-    enabled = $2,
+    external_organization_id = $2,
+    enabled = $3,
     updated_at = clock_timestamp()
-WHERE organization_id = $3
-  AND provider = $4
+WHERE organization_id = $4
+  AND provider = $5
   AND deleted IS FALSE
 RETURNING created_at, deleted_at, updated_at, organization_id, provider, project_id, external_organization_id, api_key_encrypted, enabled, id, deleted
 `
 
 type UpdateConfigSettingsParams struct {
-	ProjectID      uuid.UUID
-	Enabled        bool
-	OrganizationID string
-	Provider       string
+	ProjectID              uuid.UUID
+	ExternalOrganizationID pgtype.Text
+	Enabled                bool
+	OrganizationID         string
+	Provider               string
 }
 
 func (q *Queries) UpdateConfigSettings(ctx context.Context, arg UpdateConfigSettingsParams) (AiIntegrationConfig, error) {
 	row := q.db.QueryRow(ctx, updateConfigSettings,
 		arg.ProjectID,
+		arg.ExternalOrganizationID,
 		arg.Enabled,
 		arg.OrganizationID,
 		arg.Provider,
