@@ -3,40 +3,6 @@ import * as React from "react";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
-function FieldSet({
-  className,
-  ...props
-}: React.ComponentProps<"fieldset">): React.JSX.Element {
-  return (
-    <fieldset
-      data-slot="field-set"
-      className={cn("flex flex-col gap-6", className)}
-      {...props}
-    />
-  );
-}
-
-function FieldLegend({
-  className,
-  variant = "legend",
-  ...props
-}: React.ComponentProps<"legend"> & {
-  variant?: "legend" | "label";
-}): React.JSX.Element {
-  return (
-    <legend
-      data-slot="field-legend"
-      data-variant={variant}
-      className={cn(
-        "mb-3 font-medium",
-        variant === "legend" ? "text-base" : "text-sm",
-        className,
-      )}
-      {...props}
-    />
-  );
-}
-
 function FieldGroup({
   className,
   ...props
@@ -74,19 +40,6 @@ function Field({
   );
 }
 
-function FieldContent({
-  className,
-  ...props
-}: React.ComponentProps<"div">): React.JSX.Element {
-  return (
-    <div
-      data-slot="field-content"
-      className={cn("flex flex-col gap-1.5", className)}
-      {...props}
-    />
-  );
-}
-
 function FieldLabel({
   className,
   ...props
@@ -98,19 +51,6 @@ function FieldLabel({
         "group-data-[invalid=true]/field:text-destructive",
         className,
       )}
-      {...props}
-    />
-  );
-}
-
-function FieldTitle({
-  className,
-  ...props
-}: React.ComponentProps<"div">): React.JSX.Element {
-  return (
-    <div
-      data-slot="field-title"
-      className={cn("text-sm font-medium", className)}
       {...props}
     />
   );
@@ -165,28 +105,4 @@ function FieldError({
   );
 }
 
-function FieldSeparator({
-  className,
-  ...props
-}: React.ComponentProps<"div">): React.JSX.Element {
-  return (
-    <div
-      data-slot="field-separator"
-      className={cn("bg-border h-px w-full", className)}
-      {...props}
-    />
-  );
-}
-
-export {
-  Field,
-  FieldContent,
-  FieldDescription,
-  FieldError,
-  FieldGroup,
-  FieldLabel,
-  FieldLegend,
-  FieldSeparator,
-  FieldSet,
-  FieldTitle,
-};
+export { Field, FieldDescription, FieldError, FieldGroup, FieldLabel };
