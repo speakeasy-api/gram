@@ -414,7 +414,6 @@ type DirectoryGroup struct {
 	WorkosDirectoryGroupID string
 	Name                   string
 	Attributes             []byte
-	AttributesContentHash  pgtype.Text
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
@@ -428,7 +427,6 @@ type DirectoryUser struct {
 	WorkosDirectoryUserID string
 	Email                 pgtype.Text
 	Attributes            []byte
-	AttributesContentHash pgtype.Text
 	CreatedAt             pgtype.Timestamptz
 	UpdatedAt             pgtype.Timestamptz
 	DeletedAt             pgtype.Timestamptz
@@ -1621,15 +1619,6 @@ type UserSessionIssuer struct {
 	UpdatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz
 	Deleted            bool
-}
-
-type WorkosDirectoryAttributesSync struct {
-	ID          uuid.UUID
-	EntityID    string
-	EntityType  string
-	LastEventID string
-	CreatedAt   pgtype.Timestamptz
-	UpdatedAt   pgtype.Timestamptz
 }
 
 type WorkosOrganizationSync struct {
