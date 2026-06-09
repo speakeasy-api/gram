@@ -22,6 +22,7 @@ import { AppLayout, LoginCheck, OrgLayout } from "./components/app-layout.tsx";
 import { CommandPalette } from "./components/command-palette";
 import { recordVisit } from "./components/command-palette/recentlyVisited";
 import { useProjectNavRoutes } from "./hooks/useProjectNavRoutes";
+import { useRBAC } from "./hooks/useRBAC";
 import { AuthProvider, ProjectProvider } from "./contexts/AuthProvider.tsx";
 import { useCommandPalette } from "./contexts/CommandPalette";
 import type { CommandAction } from "./contexts/CommandPalette";
@@ -156,6 +157,7 @@ const RouteProvider = () => {
   const { orgSlug, projectSlug } = useSlugs();
   const location = useLocation();
   const projectNavRoutes = useProjectNavRoutes();
+  const { hasAnyScope } = useRBAC();
 
   // Update document title based on active route
   usePageTitle(routes, orgRoutes);
@@ -174,10 +176,19 @@ const RouteProvider = () => {
     const iconName = (active as unknown as { icon?: string }).icon;
     recordVisit(orgSlug, projectSlug, {
       label: pageLabel(active.title, active.href(), location.pathname),
-      href: location.pathname,
+      // Preserve the query string so deep-linked items (e.g. a policy opened via
+      // ?policy=<id>) reopen correctly when picked from Recently Visited.
+      href: `${location.pathname}${location.search}`,
       icon: typeof iconName === "string" ? iconName : undefined,
     });
-  }, [location.pathname, routes, orgRoutes, orgSlug, projectSlug]);
+  }, [
+    location.pathname,
+    location.search,
+    routes,
+    orgRoutes,
+    orgSlug,
+    projectSlug,
+  ]);
 
   // Register command palette navigation actions. Project "Pages" mirror the
   // left sidebar exactly (same source, same order) so the palette only offers
@@ -187,8 +198,16 @@ const RouteProvider = () => {
   useEffect(() => {
     const projectActions = projectSlug
       ? projectNavRoutes
-          .filter((route) => !route.external && route.component && route.title)
-          .map((route) =>
+          .filter(
+            ({ route, scope }) =>
+              !route.external &&
+              route.component &&
+              route.title &&
+              // Mirror the sidebar's per-page scope gating so the palette never
+              // offers (nor navigates to) pages the user can't access.
+              hasAnyScope(scope),
+          )
+          .map(({ route }) =>
             routeToNavAction(route, "Pages", `nav-page-${route.url || "home"}`),
           )
       : [];
@@ -200,7 +219,14 @@ const RouteProvider = () => {
     return () => {
       removeActions(allActions.map((a) => a.id));
     };
-  }, [projectNavRoutes, orgRoutes, projectSlug, addActions, removeActions]);
+  }, [
+    projectNavRoutes,
+    orgRoutes,
+    projectSlug,
+    hasAnyScope,
+    addActions,
+    removeActions,
+  ]);
 
   const routeElements = useMemo(() => {
     const allRoutes = Object.values(routes);

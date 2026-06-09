@@ -1,14 +1,15 @@
 import { CommandGroup, CommandItem } from "@/components/ui/command";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useEnvironments } from "@/pages/environments/useEnvironments";
-import { useToolsets } from "@/pages/toolsets/useToolsets";
+import { BUILTIN_RULES_BY_CATEGORY } from "@/pages/security/detection-rules-data";
 import { useRoutes } from "@/routes";
 import {
-  useAssistantsList,
-  useLatestDeployment,
+  useAssistantsListSuspense,
+  useLatestDeploymentSuspense,
   useListDeploymentsSuspense,
-  useRiskListCustomDetectionRules,
-  useRiskListPolicies,
+  useListToolsetsSuspense,
+  useRiskListCustomDetectionRulesSuspense,
+  useRiskListPoliciesSuspense,
 } from "@gram/client/react-query/index.js";
 import { usePluginsSuspense } from "@gram/client/react-query/plugins";
 import { useShadowMCPApprovalRequestsSuspense } from "@gram/client/react-query/shadowMCPApprovalRequests.js";
@@ -80,7 +81,8 @@ function ResultItem({
 
 function McpServersGroup({ onNavigate }: GroupProps) {
   const routes = useRoutes();
-  const toolsets = useToolsets();
+  const { data } = useListToolsetsSuspense();
+  const toolsets = data.toolsets ?? [];
   if (!toolsets.length) return null;
   return (
     <CommandGroup heading="MCP Servers">
@@ -103,7 +105,7 @@ function McpServersGroup({ onNavigate }: GroupProps) {
 
 function SourcesGroup({ onNavigate }: GroupProps) {
   const routes = useRoutes();
-  const { data } = useLatestDeployment();
+  const { data } = useLatestDeploymentSuspense();
   const deployment = data?.deployment;
 
   const sources = useMemo(() => {
@@ -196,9 +198,8 @@ function EnvironmentsGroup({ onNavigate }: GroupProps) {
 
 function AssistantsGroup({ onNavigate }: GroupProps) {
   const routes = useRoutes();
-  const { data } = useAssistantsList(undefined, undefined, {
+  const { data } = useAssistantsListSuspense(undefined, undefined, {
     retry: false,
-    throwOnError: false,
   });
   const assistants = data?.assistants ?? [];
   if (!assistants.length) return null;
@@ -248,7 +249,7 @@ function PluginsGroup({ onNavigate }: GroupProps) {
 function RiskPoliciesGroup({ onNavigate }: GroupProps) {
   const routes = useRoutes();
   const navigate = useNavigate();
-  const { data } = useRiskListPolicies();
+  const { data } = useRiskListPoliciesSuspense();
   const policies = data?.policies ?? [];
   if (!policies.length) return null;
   return (
@@ -275,8 +276,27 @@ function RiskPoliciesGroup({ onNavigate }: GroupProps) {
 function DetectionRulesGroup({ onNavigate }: GroupProps) {
   const routes = useRoutes();
   const navigate = useNavigate();
-  const { data } = useRiskListCustomDetectionRules();
-  const rules = data?.rules ?? [];
+  const { data } = useRiskListCustomDetectionRulesSuspense();
+
+  // Surface both built-in rules (static) and custom rules (from the API). The
+  // detail page's `?rule=<id>` deep link tells them apart via the `custom.` id
+  // prefix, so a single param drives both.
+  const rules = useMemo(() => {
+    const builtin = Object.values(BUILTIN_RULES_BY_CATEGORY)
+      .flat()
+      .map((rule) => ({
+        id: rule.id,
+        title: rule.title,
+        severity: rule.defaultSeverity as string,
+      }));
+    const custom = (data?.rules ?? []).map((rule) => ({
+      id: rule.id,
+      title: rule.title,
+      severity: rule.severity as string,
+    }));
+    return [...builtin, ...custom];
+  }, [data]);
+
   if (!rules.length) return null;
   return (
     <CommandGroup heading="Detection Rules">

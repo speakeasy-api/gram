@@ -1,4 +1,4 @@
-import { Component, type ReactNode } from "react";
+import { Component, type ErrorInfo, type ReactNode } from "react";
 
 /**
  * Minimal error boundary for command-palette resource groups. Each group fetches
@@ -17,6 +17,15 @@ export class CommandErrorBoundary extends Component<
 
   static getDerivedStateFromError(): { hasError: boolean } {
     return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo): void {
+    // We deliberately drop the group from the UI rather than surface an error,
+    // but log it so a failing resource endpoint is still debuggable rather than
+    // silently swallowed.
+    console.error("Command palette resource group failed to render", error, {
+      componentStack: info.componentStack,
+    });
   }
 
   render(): ReactNode {

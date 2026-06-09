@@ -126,7 +126,7 @@ export function AppSidebar({
   // Find the specific active route title for the sliding highlight. Shared with
   // the command palette via useProjectNavRoutes so the two stay in sync.
   const allNavRoutes = useProjectNavRoutes();
-  const activeRoute = allNavRoutes.find((r) => r.active);
+  const activeRoute = allNavRoutes.find((entry) => entry.route.active)?.route;
   // In collapsed mode, sub-items are hidden — fall back to group highlight.
   // Top-level items (Home, Settings) have no activeGroup, so keep activeItem for those.
   const activeItem =

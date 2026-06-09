@@ -3,10 +3,13 @@ import { useEffect, useState } from "react";
 /**
  * Recently-visited pages for the command palette.
  *
- * Kept entirely in localStorage — recents are per-user, per-device ephemeral
- * state, so no backend is involved. Entries are scoped by org/project so the
- * list stays relevant when switching workspaces. Cross-device sync would be the
- * only reason to move this server-side; that's intentionally out of scope.
+ * Kept entirely in localStorage — recents are per-device, ephemeral state, so no
+ * backend is involved. Entries store only page labels/paths (no sensitive data)
+ * and are scoped by org/project so the list stays relevant when switching
+ * workspaces. They are NOT scoped per authenticated user: anyone using the same
+ * browser profile shares the list, which is acceptable for non-sensitive
+ * navigation history. Cross-device (or per-user) sync would be the only reason
+ * to move this server-side; that's intentionally out of scope.
  */
 export interface RecentEntry {
   label: string;

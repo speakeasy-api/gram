@@ -117,8 +117,10 @@ function DetectionRulesContent() {
     if (ruleParam.startsWith(CUSTOM_RULE_ID_PREFIX)) {
       if (customRulesLoading) return;
       const rule = customRules.find((r) => r.id === ruleParam);
+      // Mark handled regardless of match so a stale/invalid id doesn't re-run
+      // the lookup on every `customRules` re-render (it's a fresh array ref).
+      openedRuleRef.current = ruleParam;
       if (rule) {
-        openedRuleRef.current = ruleParam;
         setSelected({ kind: "custom", rule });
         setExpanded("custom");
       }
@@ -126,8 +128,8 @@ function DetectionRulesContent() {
       const rule = Object.values(BUILTIN_RULES_BY_CATEGORY)
         .flat()
         .find((r) => r.id === ruleParam);
+      openedRuleRef.current = ruleParam;
       if (rule) {
-        openedRuleRef.current = ruleParam;
         setSelected({ kind: "builtin", rule });
         setExpanded(rule.category);
       }

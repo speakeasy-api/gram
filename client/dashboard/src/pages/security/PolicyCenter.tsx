@@ -301,6 +301,17 @@ function PolicyCenterContent() {
 
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
 
+  // Deep-link support: `?policy=<id>` opens that policy's edit sheet. The
+  // command palette uses this since policies have no per-item route. Declared
+  // here (above the mutations) so save handlers can clear it on programmatic
+  // close — Radix's onOpenChange only fires for user-initiated closes.
+  const [policyParam, setPolicyParam] = useQueryState("policy");
+  const openedPolicyRef = useRef<string | null>(null);
+  const clearPolicyDeepLink = useCallback(() => {
+    openedPolicyRef.current = null;
+    void setPolicyParam(null);
+  }, [setPolicyParam]);
+
   const invalidate = useCallback(() => {
     void invalidateAllRiskListPolicies(queryClient);
     void invalidateAllRiskPoliciesStatus(queryClient);
@@ -310,6 +321,7 @@ function PolicyCenterContent() {
     onSuccess: () => {
       invalidate();
       setSheetOpen(false);
+      clearPolicyDeepLink();
     },
   });
 
@@ -317,6 +329,7 @@ function PolicyCenterContent() {
     onSuccess: () => {
       invalidate();
       setSheetOpen(false);
+      clearPolicyDeepLink();
     },
   });
 
@@ -360,19 +373,18 @@ function PolicyCenterContent() {
     setSheetOpen(true);
   }, []);
 
-  // Deep-link support: `?policy=<id>` opens that policy's edit sheet. The
-  // command palette uses this since policies have no per-item route. Guarded by
-  // a ref so it fires once per id (not on every policies re-fetch).
-  const [policyParam, setPolicyParam] = useQueryState("policy");
-  const openedPolicyRef = useRef<string | null>(null);
+  // Open the deep-linked policy once its data has loaded. Guarded by a ref so it
+  // fires once per id (not on every policies re-fetch). The ref is marked as
+  // handled even when the id doesn't resolve, so a stale/invalid id doesn't
+  // re-trigger the lookup on every subsequent `data` change.
   useEffect(() => {
     if (!policyParam || isLoading) return;
     if (openedPolicyRef.current === policyParam) return;
     // Read from the stable react-query `data` (not the per-render `policies`
     // array) so the effect doesn't re-run every render.
     const policy = data?.policies?.find((p) => p.id === policyParam);
+    openedPolicyRef.current = policyParam;
     if (policy) {
-      openedPolicyRef.current = policyParam;
       handleEdit(policy);
     }
   }, [policyParam, isLoading, data, handleEdit]);
@@ -713,12 +725,9 @@ function PolicyCenterContent() {
           open={sheetOpen}
           onOpenChange={(open) => {
             setSheetOpen(open);
-            if (!open) {
-              // Drop the deep-link param so the sheet doesn't reopen and the
-              // same id can be deep-linked again later.
-              openedPolicyRef.current = null;
-              void setPolicyParam(null);
-            }
+            // Drop the deep-link param so the sheet doesn't reopen and the same
+            // id can be deep-linked again later.
+            if (!open) clearPolicyDeepLink();
           }}
         >
           <SheetContent className="flex flex-col overflow-y-auto sm:max-w-lg">

@@ -121,6 +121,15 @@ export function CommandPalette(): JSX.Element {
         }
         value={query}
         onValueChange={setQuery}
+        onKeyDown={(e) => {
+          // Two-step Escape: first clears the query, then (when already empty)
+          // bubbles up to close the palette.
+          if (e.key === "Escape" && query) {
+            e.preventDefault();
+            e.stopPropagation();
+            setQuery("");
+          }
+        }}
       />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
