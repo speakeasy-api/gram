@@ -772,9 +772,14 @@ function PolicyCenterContent() {
         ) {
           return (
             <SimpleTooltip tooltip={tooltip}>
-              <Badge variant="neutral">
-                <Badge.Text>{messageTypesSummary(typeSet)}</Badge.Text>
-              </Badge>
+              <span
+                className={cn(
+                  "text-muted-foreground text-sm",
+                  dimIfDisabled(row),
+                )}
+              >
+                {messageTypesSummary(typeSet)}
+              </span>
             </SimpleTooltip>
           );
         }
@@ -1151,6 +1156,12 @@ function PromptPolicySheetBody({
 
       <div className="space-y-2">
         <Label className="text-sm font-medium">Policy Prompt</Label>
+        <TextArea
+          value={formPromptInstruction}
+          onChange={handlePromptChange}
+          placeholder="Describe the tool-call behavior this policy should match..."
+          rows={5}
+        />
         <PromptExamplesRadioGroup
           selectedExampleName={selectedExampleName}
           onSelect={(template) => {
@@ -1160,12 +1171,6 @@ function PromptPolicySheetBody({
               setFormName(template.name);
             }
           }}
-        />
-        <TextArea
-          value={formPromptInstruction}
-          onChange={handlePromptChange}
-          placeholder="Describe the tool-call behavior this policy should match..."
-          rows={5}
         />
       </div>
 
