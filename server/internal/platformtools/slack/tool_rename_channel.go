@@ -60,7 +60,7 @@ func callRenameChannel(ctx context.Context, client *apiClient, env toolconfig.To
 		"name":    name,
 	}
 
-	body, err := client.call(ctx, "conversations.rename", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "conversations.rename", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

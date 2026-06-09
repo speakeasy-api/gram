@@ -54,7 +54,7 @@ func callListPins(ctx context.Context, client *apiClient, env toolconfig.ToolCal
 		"channel": channelID,
 	}
 
-	body, err := client.call(ctx, "pins.list", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "pins.list", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

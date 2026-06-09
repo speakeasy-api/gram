@@ -83,7 +83,7 @@ func callSetThreadStatus(ctx context.Context, client *apiClient, env toolconfig.
 		request["loading_messages"] = string(encoded)
 	}
 
-	body, err := client.call(ctx, "assistant.threads.setStatus", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "assistant.threads.setStatus", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

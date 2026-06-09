@@ -78,7 +78,7 @@ func callAddBookmark(ctx context.Context, client *apiClient, env toolconfig.Tool
 	setOptionalString(request, "entity_id", input.EntityID)
 	setOptionalString(request, "parent_id", input.ParentID)
 
-	body, err := client.call(ctx, "bookmarks.add", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "bookmarks.add", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

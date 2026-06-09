@@ -87,7 +87,7 @@ func callPostEphemeral(ctx context.Context, client *apiClient, env toolconfig.To
 		request["blocks"] = input.Blocks
 	}
 
-	body, err := client.call(ctx, "chat.postEphemeral", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "chat.postEphemeral", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

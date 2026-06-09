@@ -70,7 +70,7 @@ func callInviteToChannel(ctx context.Context, client *apiClient, env toolconfig.
 	}
 	setOptionalBool(request, "force", input.Force)
 
-	body, err := client.call(ctx, "conversations.invite", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "conversations.invite", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}
