@@ -1,4 +1,4 @@
-h1:iy+JUfIklQ2U68XmbzBqRhNYteVk1rJfP0MWH4mDNM0=
+h1:CCcQRr9+rj8h2SVsudX4UtS8UvD5McgU/y2QQIRU/QA=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -211,3 +211,4 @@ h1:iy+JUfIklQ2U68XmbzBqRhNYteVk1rJfP0MWH4mDNM0=
 20260605174513_risk-results-drop-verbatim-match-index-column.sql h1:Ans/oK8EWrCsPWdbfL9v/66RrUgIMYdlwEDEx9hwscc=
 20260605200300_plugin_servers_mcp_server_id.sql h1:3NUyToGuksyCGuOgltiB60ob8++hRSAKYDdrUHesOzg=
 20260609101753_add_directory_attributes.sql h1:7AYW4VSIpTe3zZ5jUYEZil/TXBAU6gGT+P8VJB0bc8U=
+20260609141801_compliance-api-chat-messages.sql h1:6QUEgqnY1i9K72AutWq2Yl0P45bQlb4BGKJk9MwGn0s=

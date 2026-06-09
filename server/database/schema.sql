@@ -1125,6 +1125,7 @@ CREATE TABLE IF NOT EXISTS chats (
   organization_id TEXT NOT NULL,
   user_id TEXT,
   external_user_id TEXT,
+  external_chat_id TEXT,
   title TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1135,6 +1136,10 @@ CREATE TABLE IF NOT EXISTS chats (
   CONSTRAINT chats_pkey PRIMARY KEY (id),
   CONSTRAINT chats_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS chats_org_external_chat_id_key
+ON chats (organization_id, external_chat_id)
+WHERE external_chat_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS assistants (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -1365,6 +1370,8 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 
   user_id TEXT,
   external_user_id TEXT,
+  external_message_id TEXT,
+  external_chat_message_assets_url TEXT,
   origin TEXT,
   user_agent TEXT,
   ip_address TEXT,
@@ -1404,6 +1411,10 @@ CREATE INDEX IF NOT EXISTS chat_messages_chat_id_generation_seq_idx ON chat_mess
 CREATE INDEX IF NOT EXISTS chat_messages_project_id_id_idx
 ON chat_messages (project_id, id)
 WHERE project_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS chat_messages_chat_id_external_message_id_key
+ON chat_messages (chat_id, external_message_id)
+WHERE external_message_id IS NOT NULL;
 
 -- Partial index over unanalyzed messages only. Shrinks toward zero at steady
 -- state, making FetchUnanalyzedMessageIDs an index-only scan on a tiny set.
@@ -2359,6 +2370,19 @@ CREATE TABLE IF NOT EXISTS ai_integration_configs (
 CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_configs_org_provider_key
   ON ai_integration_configs (organization_id, provider)
   WHERE deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS ai_integration_config_chats (
+  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+  ai_integration_config_id uuid NOT NULL,
+  chat_id uuid NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT ai_integration_config_chats_config_chat_key UNIQUE (ai_integration_config_id, chat_id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_config_chats_chat_id_key
+  ON ai_integration_config_chats (chat_id);
 
 -- AI integration syncs: provider-specific query cursors, scheduler state,
 -- and failure metadata.
