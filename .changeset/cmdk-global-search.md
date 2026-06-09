@@ -2,8 +2,6 @@
 "dashboard": minor
 ---
 
-feat(dashboard): evolve the command palette into global application search (POC)
-
 `Cmd+K` — and a new magnifying-glass trigger beside the logo — now searches
 across resources (MCP servers, sources, deployments, environments, assistants,
 plugins, and admin-only risk policies, detection rules and approval requests),
