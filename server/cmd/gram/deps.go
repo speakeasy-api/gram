@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/pubsub/v2"
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/exaring/otelpgx"
@@ -39,6 +40,9 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/contrib/opentelemetry"
 	"go.temporal.io/sdk/interceptor"
+	"google.golang.org/api/option"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/admin"
@@ -63,6 +67,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	sv "github.com/speakeasy-api/gram/server/internal/thirdparty/svix"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tracking"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -752,6 +757,7 @@ func newTriggersApp(
 	telemetryLogger *telemetry.Logger,
 	auditLogger *audit.Logger,
 	serverURL *url.URL,
+	slackClient *slack_client.SlackClient,
 ) *bgtriggers.App {
 	envEntries := environments.NewEnvironmentEntries(logger, db, enc, nil)
 	return bgtriggers.NewApp(
@@ -781,6 +787,7 @@ func newTriggersApp(
 		}),
 		auditLogger,
 		serverURL,
+		slackClient,
 		bgtriggers.NewNoopDispatcher(logger),
 	)
 }
@@ -873,4 +880,31 @@ func newSvixClient(c *cli.Context, logger *slog.Logger, guardianPolicy *guardian
 	}
 
 	return svixClient, shutdownFunc, nil
+}
+
+func newPubSubClient(ctx context.Context, c *cli.Context, logger *slog.Logger) (*pubsub.Client, func(ctx context.Context) error, error) {
+	var projectID string
+	opts := []option.ClientOption{option.WithLogger(logger)}
+	switch {
+	case c.String("pubsub-emulator-host") != "":
+		// The emulator speaks plaintext gRPC, so we must use insecure transport
+		// credentials. The pubsub library only injects these automatically when
+		// the PUBSUB_EMULATOR_HOST env var is set; supplying the host via the CLI
+		// flag alone would otherwise default to TLS and fail the handshake.
+		opts = append(opts,
+			option.WithEndpoint(c.String("pubsub-emulator-host")),
+			option.WithoutAuthentication(),
+			option.WithGRPCDialOption(grpc.WithTransportCredentials(insecure.NewCredentials())),
+		)
+		projectID = conv.Default(c.String("gcp-project-id"), "my-project-id")
+	default:
+		projectID = conv.Default(c.String("gcp-project-id"), pubsub.DetectProjectID)
+	}
+
+	client, err := pubsub.NewClient(ctx, projectID, opts...)
+	if err != nil {
+		return nil, func(context.Context) error { return nil }, fmt.Errorf("failed to create pubsub client: %w", err)
+	}
+
+	return client, func(context.Context) error { return client.Close() }, nil
 }

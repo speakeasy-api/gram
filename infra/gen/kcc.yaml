@@ -16,7 +16,7 @@ pubsub:
           name: gram-ping-v1-processor-dlq
         maxDeliveryAttempts: 5
       messageRetentionDuration: 3600s
-      retainAckedMessages: false
+      retainAckedMessages: true
       retryPolicy:
         maximumBackoff: 600s
         minimumBackoff: 10s

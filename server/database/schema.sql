@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
   workos_id TEXT, -- links to an organization in WorkOS to sync metadata like users and groups
   workos_updated_at timestamptz,
   workos_last_event_id TEXT,
-  
+
   svix_app_id TEXT, -- links to a svix consumer application for sending webhooks
   webhooks_enabled boolean,
 
@@ -1645,6 +1645,79 @@ ON users (email);
 CREATE UNIQUE INDEX IF NOT EXISTS users_workos_id_key
 ON users (workos_id);
 
+CREATE TABLE IF NOT EXISTS directory_groups (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  workos_directory_group_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  attributes JSONB NOT NULL DEFAULT '{}'::jsonb,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT directory_groups_pkey PRIMARY KEY (id),
+  CONSTRAINT directory_groups_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS directory_groups_organization_id_idx
+ON directory_groups (organization_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS directory_groups_workos_directory_group_id_key
+ON directory_groups (workos_directory_group_id);
+
+CREATE TABLE IF NOT EXISTS directory_users (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  user_id TEXT,
+  workos_directory_user_id TEXT NOT NULL,
+  email TEXT,
+  attributes JSONB NOT NULL DEFAULT '{}'::jsonb,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT directory_users_pkey PRIMARY KEY (id),
+  CONSTRAINT directory_users_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS directory_users_organization_id_idx
+ON directory_users (organization_id);
+
+CREATE INDEX IF NOT EXISTS directory_users_user_id_idx
+ON directory_users (user_id)
+WHERE user_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS directory_users_workos_directory_user_id_key
+ON directory_users (workos_directory_user_id);
+
+CREATE TABLE IF NOT EXISTS directory_user_group_memberships (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  directory_user_id uuid NOT NULL,
+  directory_group_id uuid NOT NULL,
+  workos_directory_user_id TEXT NOT NULL,
+  workos_directory_group_id TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT directory_user_group_memberships_pkey PRIMARY KEY (id),
+  CONSTRAINT directory_user_group_memberships_directory_user_id_fkey FOREIGN KEY (directory_user_id) REFERENCES directory_users (id) ON DELETE CASCADE,
+  CONSTRAINT directory_user_group_memberships_directory_group_id_fkey FOREIGN KEY (directory_group_id) REFERENCES directory_groups (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS directory_user_group_memberships_current_key
+ON directory_user_group_memberships (directory_user_id, directory_group_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS directory_user_group_memberships_directory_group_id_idx
+ON directory_user_group_memberships (directory_group_id);
+
 -- global_roles stores environment-level WorkOS roles (e.g. "admin", "member").
 -- These are not scoped to any organization.
 CREATE TABLE IF NOT EXISTS global_roles (
@@ -2360,7 +2433,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   actor_type TEXT NOT NULL,
   actor_display_name TEXT,
   actor_slug TEXT,
-  
+
   action TEXT NOT NULL,
 
   subject_id TEXT NOT NULL,

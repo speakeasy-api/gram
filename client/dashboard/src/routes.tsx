@@ -359,6 +359,24 @@ const ROUTE_STRUCTURE = {
         title: "MCP Server Details",
         url: "x/:mcpServerSlug",
         component: MCPServerDetails,
+        subPages: {
+          overview: {
+            title: "MCP Server Overview",
+            url: "overview",
+          },
+          authentication: {
+            title: "MCP Server Authentication",
+            url: "authentication",
+          },
+          teamAccess: {
+            title: "MCP Server Team Access",
+            url: "team-access",
+          },
+          settings: {
+            title: "MCP Server Settings",
+            url: "settings",
+          },
+        },
       },
       details: {
         title: "MCP Details",

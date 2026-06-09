@@ -25,8 +25,10 @@ const (
 	DataDogSpanIDKey                = attribute.Key("dd.span_id")
 	SpanIDKey                       = attribute.Key("span.id")
 	TraceIDKey                      = attribute.Key("trace.id")
-	GCPTopicQualifiedNameKey        = attribute.Key("gram.gcp_pubsub_topic.qualified_name")
-	GCPSubscriptionQualifiedNameKey = attribute.Key("gram.gcp_pubsub_subscription.qualified_name")
+	GCPTopicQualifiedNameKey        = attribute.Key("gram.topic.qualified_name")
+	GCPSubscriptionQualifiedNameKey = attribute.Key("gram.subscription.qualified_name")
+	TopicProtoNameKey               = attribute.Key("gram.topic.proto_name")
+	SubscriptionProtoNameKey        = attribute.Key("gram.subscription.proto_name")
 )
 
 func Error(v error) attribute.KeyValue { return ErrorMessageKey.String(v.Error()) }
@@ -91,4 +93,16 @@ func GCPSubscriptionQualifiedName(v string) attribute.KeyValue {
 }
 func SlogGCPSubscriptionQualifiedName(v string) slog.Attr {
 	return slog.String(string(GCPSubscriptionQualifiedNameKey), v)
+}
+
+func TopicProtoName[S ~string](v S) attribute.KeyValue { return TopicProtoNameKey.String(string(v)) }
+func SlogTopicProtoName[S ~string](v S) slog.Attr {
+	return slog.String(string(TopicProtoNameKey), string(v))
+}
+
+func SubscriptionProtoName[S ~string](v S) attribute.KeyValue {
+	return SubscriptionProtoNameKey.String(string(v))
+}
+func SlogSubscriptionProtoName[S ~string](v S) slog.Attr {
+	return slog.String(string(SubscriptionProtoNameKey), string(v))
 }

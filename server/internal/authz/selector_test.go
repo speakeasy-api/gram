@@ -315,7 +315,6 @@ func TestValidateSelector_riskPolicyAllowsServerURL(t *testing.T) {
 
 	withServerURL := Selector{"resource_kind": ResourceKindRiskPolicy, "resource_id": "policy_123", "server_url": "https://api.example.com"}
 	require.NoError(t, ValidateSelector(ScopeRiskPolicyBypass, withServerURL))
-
 	withHostOnlyServerURL := Selector{"resource_kind": ResourceKindRiskPolicy, "resource_id": "policy_123", "server_url": "api.example.com"}
 	require.ErrorContains(t, ValidateSelector(ScopeRiskPolicyBypass, withHostOnlyServerURL), "must include URI scheme and host")
 

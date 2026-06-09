@@ -62,6 +62,7 @@ const (
 	AdminSessionTokenContextKey contextKey = "adminSessionTokenKey"
 	AdminAuthContextKey         contextKey = "adminAuthKey"
 	RPCContextKey               contextKey = "rpcContextKey"
+	pubsubSubscriberContextKey  contextKey = "pubsubSubscriberKey"
 )
 
 func SetSessionTokenInContext(ctx context.Context, value string) context.Context {
@@ -153,4 +154,18 @@ func SetAdminAuthContext(ctx context.Context, value *AdminAuthContext) context.C
 func GetAdminAuthContext(ctx context.Context) (*AdminAuthContext, bool) {
 	value, ok := ctx.Value(AdminAuthContextKey).(*AdminAuthContext)
 	return value, ok && value != nil
+}
+
+type PubSubSubscriberContext struct {
+	TopicProtoName        string
+	SubscriptionProtoName string
+}
+
+func SetPubSubSubscriberContext(ctx context.Context, value PubSubSubscriberContext) context.Context {
+	return context.WithValue(ctx, pubsubSubscriberContextKey, &value)
+}
+
+func GetPubSubSubscriberContext(ctx context.Context) (*PubSubSubscriberContext, bool) {
+	value, ok := ctx.Value(pubsubSubscriberContextKey).(*PubSubSubscriberContext)
+	return value, ok
 }
