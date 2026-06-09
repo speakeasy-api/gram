@@ -1135,6 +1135,12 @@ func BuildApproveRiskPolicyBypassRequestPayload(riskApproveRiskPolicyBypassReque
 	v := &risk.ApproveRiskPolicyBypassRequestPayload{
 		ID: body.ID,
 	}
+	if body.GrantedPrincipalUrns != nil {
+		v.GrantedPrincipalUrns = make([]string, len(body.GrantedPrincipalUrns))
+		for i, val := range body.GrantedPrincipalUrns {
+			v.GrantedPrincipalUrns[i] = val
+		}
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

@@ -1,6 +1,13 @@
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import {
   Sheet,
@@ -13,7 +20,10 @@ import {
 import { Type } from "@/components/ui/type";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
+import type { AccessMember } from "@gram/client/models/components/accessmember.js";
+import type { Role } from "@gram/client/models/components/role.js";
 import type { RiskPolicyBypassRequest } from "@gram/client/models/components/riskpolicybypassrequest.js";
+import { useMembers } from "@gram/client/react-query/members.js";
 import {
   invalidateAllRiskListPolicyBypassRequests,
   useRiskListPolicyBypassRequests,
@@ -21,6 +31,7 @@ import {
 import { useRiskApprovePolicyBypassRequestMutation } from "@gram/client/react-query/riskApprovePolicyBypassRequest.js";
 import { useRiskDenyPolicyBypassRequestMutation } from "@gram/client/react-query/riskDenyPolicyBypassRequest.js";
 import { useRiskRevokePolicyBypassRequestMutation } from "@gram/client/react-query/riskRevokePolicyBypassRequest.js";
+import { useRoles } from "@gram/client/react-query/roles.js";
 import { Badge, Button, Column, Dialog, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Inbox, Loader2, ShieldCheck } from "lucide-react";
@@ -30,8 +41,168 @@ import { toast } from "sonner";
 import { formatShortDate } from "./shadow-mcp-utils";
 
 type ReviewAction = "approve" | "deny";
+type ApprovalAudience = "everyone" | "role" | "user";
 
 const SERVER_URL_TARGET_DIMENSION = "server_url";
+const ALL_USERS_PRINCIPAL_URN = "user:all";
+
+function userPrincipalUrn(userId: string) {
+  return `user:${userId}`;
+}
+
+function rolePrincipalUrn(role: Role) {
+  const roleKind = role.isSystem ? "global" : "organization";
+  return `role:${roleKind}:${role.id}`;
+}
+
+function approvalPrincipalUrns({
+  audience,
+  selectedRoleId,
+  selectedUserId,
+  roles,
+}: {
+  audience: ApprovalAudience;
+  selectedRoleId: string;
+  selectedUserId: string;
+  roles: Role[];
+}) {
+  switch (audience) {
+    case "everyone":
+      return [ALL_USERS_PRINCIPAL_URN];
+    case "role": {
+      const role = roles.find((item) => item.id === selectedRoleId);
+      return role ? [rolePrincipalUrn(role)] : [];
+    }
+    case "user":
+      return selectedUserId ? [userPrincipalUrn(selectedUserId)] : [];
+  }
+}
+
+function memberDisplayName(member: AccessMember) {
+  if (member.name && member.name !== member.email) {
+    return `${member.name} (${member.email})`;
+  }
+  return member.email;
+}
+
+function principalDisplayName(
+  principalUrn: string,
+  roles: Role[],
+  members: AccessMember[],
+) {
+  if (principalUrn === ALL_USERS_PRINCIPAL_URN) {
+    return "Everyone";
+  }
+
+  const userPrefix = "user:";
+  if (principalUrn.startsWith(userPrefix)) {
+    const userId = principalUrn.slice(userPrefix.length);
+    const member = members.find((item) => item.id === userId);
+    return member ? memberDisplayName(member) : principalUrn;
+  }
+
+  const role = roles.find((item) => rolePrincipalUrn(item) === principalUrn);
+  return role?.name ?? principalUrn;
+}
+
+function principalSummary(
+  principalUrns: string[],
+  roles: Role[],
+  members: AccessMember[],
+) {
+  if (principalUrns.length === 0) {
+    return "None";
+  }
+
+  const names = principalUrns.map((principalUrn) =>
+    principalDisplayName(principalUrn, roles, members),
+  );
+  if (names.length <= 2) {
+    return names.join(", ");
+  }
+
+  return `${names.slice(0, 2).join(", ")} +${names.length - 2}`;
+}
+
+function approvalAudienceFromPrincipalUrns(
+  principalUrns: string[],
+  request: RiskPolicyBypassRequest,
+  roles: Role[],
+) {
+  const principalUrn =
+    principalUrns[0] ?? userPrincipalUrn(request.requesterUserId);
+  if (principalUrn === ALL_USERS_PRINCIPAL_URN) {
+    return {
+      audience: "everyone" as const,
+      selectedRoleId: "",
+      selectedUserId: request.requesterUserId,
+    };
+  }
+
+  const role = roles.find((item) => rolePrincipalUrn(item) === principalUrn);
+  if (role) {
+    return {
+      audience: "role" as const,
+      selectedRoleId: role.id,
+      selectedUserId: request.requesterUserId,
+    };
+  }
+
+  const userPrefix = "user:";
+  if (principalUrn.startsWith(userPrefix)) {
+    return {
+      audience: "user" as const,
+      selectedRoleId: "",
+      selectedUserId: principalUrn.slice(userPrefix.length),
+    };
+  }
+
+  return {
+    audience: "user" as const,
+    selectedRoleId: "",
+    selectedUserId: request.requesterUserId,
+  };
+}
+
+function firstRequesterRoleId(requesterRoleIds: string[], roles: Role[]) {
+  return roles.find((role) => requesterRoleIds.includes(role.id))?.id ?? "";
+}
+
+function reviewRequestSubmitLabel(
+  isEditingAccess: boolean,
+  action: ReviewAction,
+) {
+  if (isEditingAccess) {
+    return "Save changes";
+  }
+  if (action === "approve") {
+    return "Approve request";
+  }
+  return "Deny request";
+}
+
+function approvalSuccessMessage(status: RiskPolicyBypassRequest["status"]) {
+  if (status === "approved") {
+    return "Access updated";
+  }
+  return "Request approved";
+}
+
+function reviewRequestSheetCopy(isEditingAccess: boolean) {
+  if (isEditingAccess) {
+    return {
+      title: "Edit access",
+      description: "Change who this bypass applies to.",
+      help: "Saving changes updates the principals that receive bypass access for this policy target.",
+    };
+  }
+
+  return {
+    title: "Review request",
+    description: "Decide how this access request should be handled.",
+    help: "Approving grants bypass access for the requested policy target. Denying leaves the policy block in place.",
+  };
+}
 
 function TableEmptyState({
   title,
@@ -187,6 +358,8 @@ function getPolicyBypassRequesterDetail(request: RiskPolicyBypassRequest) {
 function ReviewRequestSheet({
   request,
   projectId,
+  roles,
+  members,
   open,
   isSubmitting,
   onOpenChange,
@@ -195,29 +368,77 @@ function ReviewRequestSheet({
 }: {
   request: RiskPolicyBypassRequest | null;
   projectId: string;
+  roles: Role[];
+  members: AccessMember[];
   open: boolean;
   isSubmitting: boolean;
   onOpenChange: (open: boolean) => void;
-  onApprove: () => Promise<void>;
+  onApprove: (principalUrns: string[]) => Promise<void>;
   onDeny: () => Promise<void>;
 }) {
   const [action, setAction] = useState<ReviewAction>("approve");
+  const [approvalAudience, setApprovalAudience] =
+    useState<ApprovalAudience>("user");
+  const [selectedRoleId, setSelectedRoleId] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const requesterRoleIds = useMemo(() => {
+    if (!request) return [];
+    return (
+      members.find((member) => member.id === request.requesterUserId)
+        ?.roleIds ?? []
+    );
+  }, [members, request]);
+  const requesterRoleIdSet = useMemo(
+    () => new Set(requesterRoleIds),
+    [requesterRoleIds],
+  );
+  const defaultRequesterRoleId = firstRequesterRoleId(requesterRoleIds, roles);
 
   useEffect(() => {
     if (!request || !open) return;
 
+    const initial = approvalAudienceFromPrincipalUrns(
+      request.grantedPrincipalUrns,
+      request,
+      roles,
+    );
     setAction("approve");
-  }, [request, open]);
+    setApprovalAudience(initial.audience);
+    setSelectedRoleId(initial.selectedRoleId || defaultRequesterRoleId);
+    setSelectedUserId(initial.selectedUserId);
+  }, [defaultRequesterRoleId, request, roles, open]);
 
   if (!request) return null;
 
-  const canSubmit = projectId.length > 0;
-  const submitLabel = action === "approve" ? "Approve request" : "Deny request";
+  const isEditingAccess = request.status === "approved";
+  const principalUrns = approvalPrincipalUrns({
+    audience: approvalAudience,
+    selectedRoleId,
+    selectedUserId,
+    roles,
+  });
+  const approveReady = action !== "approve" || principalUrns.length > 0;
+  const canSubmit = projectId.length > 0 && approveReady;
+  const submitLabel = reviewRequestSubmitLabel(isEditingAccess, action);
+  const sheetCopy = reviewRequestSheetCopy(isEditingAccess);
+  const selectApprovalAudience = (audience: ApprovalAudience) => {
+    setApprovalAudience(audience);
+    if (
+      audience === "role" &&
+      selectedRoleId === "" &&
+      defaultRequesterRoleId
+    ) {
+      setSelectedRoleId(defaultRequesterRoleId);
+    }
+    if (audience === "user" && selectedUserId === "") {
+      setSelectedUserId(request.requesterUserId);
+    }
+  };
 
   const submit = async () => {
     try {
-      if (action === "approve") {
-        await onApprove();
+      if (isEditingAccess || action === "approve") {
+        await onApprove(principalUrns);
       } else {
         await onDeny();
       }
@@ -230,10 +451,8 @@ function ReviewRequestSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="sm:max-w-xl">
         <SheetHeader>
-          <SheetTitle>Review request</SheetTitle>
-          <SheetDescription>
-            Decide how this access request should be handled.
-          </SheetDescription>
+          <SheetTitle>{sheetCopy.title}</SheetTitle>
+          <SheetDescription>{sheetCopy.description}</SheetDescription>
         </SheetHeader>
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4">
@@ -281,48 +500,166 @@ function ReviewRequestSheet({
             </div>
           </section>
 
-          <RadioGroup
-            value={action}
-            onValueChange={(value) => setAction(value as ReviewAction)}
-            className="border-border grid grid-cols-2 gap-4 rounded-md border p-3"
-          >
-            <label
-              className={cn(
-                "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
-                action === "approve" && "border-border bg-card shadow-xs",
-              )}
+          {!isEditingAccess && (
+            <RadioGroup
+              value={action}
+              onValueChange={(value) => setAction(value as ReviewAction)}
+              className="border-border grid grid-cols-2 gap-4 rounded-md border p-3"
             >
-              <RadioGroupItem value="approve" className="mt-1.5" />
-              <span>
-                <Badge variant="success">
-                  <Badge.Text>Approve</Badge.Text>
-                </Badge>
-                <Type muted small>
-                  Allow matching access.
-                </Type>
-              </span>
-            </label>
-            <label
-              className={cn(
-                "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
-                action === "deny" && "border-border bg-card shadow-xs",
-              )}
-            >
-              <RadioGroupItem value="deny" className="mt-1.5" />
-              <span>
-                <Badge variant="destructive">
-                  <Badge.Text>Deny</Badge.Text>
-                </Badge>
-                <Type muted small>
-                  Reject the request.
-                </Type>
-              </span>
-            </label>
-          </RadioGroup>
+              <label
+                className={cn(
+                  "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
+                  action === "approve" && "border-border bg-card shadow-xs",
+                )}
+              >
+                <RadioGroupItem value="approve" className="mt-1.5" />
+                <span>
+                  <Badge variant="success">
+                    <Badge.Text>Approve</Badge.Text>
+                  </Badge>
+                  <Type muted small>
+                    Allow matching access.
+                  </Type>
+                </span>
+              </label>
+              <label
+                className={cn(
+                  "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
+                  action === "deny" && "border-border bg-card shadow-xs",
+                )}
+              >
+                <RadioGroupItem value="deny" className="mt-1.5" />
+                <span>
+                  <Badge variant="destructive">
+                    <Badge.Text>Deny</Badge.Text>
+                  </Badge>
+                  <Type muted small>
+                    Reject the request.
+                  </Type>
+                </span>
+              </label>
+            </RadioGroup>
+          )}
+
+          {(isEditingAccess || action === "approve") && (
+            <section className="border-border space-y-3 rounded-md border p-3">
+              <Type variant="small" className="font-medium">
+                Applies to
+              </Type>
+              <RadioGroup
+                value={approvalAudience}
+                onValueChange={(value) =>
+                  selectApprovalAudience(value as ApprovalAudience)
+                }
+                className="space-y-2"
+              >
+                <label
+                  className={cn(
+                    "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
+                    approvalAudience === "everyone" &&
+                      "border-border bg-card shadow-xs",
+                  )}
+                >
+                  <RadioGroupItem value="everyone" className="mt-1" />
+                  <span>
+                    <Type variant="small" className="font-medium">
+                      Everyone
+                    </Type>
+                    <Type muted small>
+                      All users in this organization.
+                    </Type>
+                  </span>
+                </label>
+
+                <label
+                  className={cn(
+                    "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
+                    approvalAudience === "role" &&
+                      "border-border bg-card shadow-xs",
+                  )}
+                >
+                  <RadioGroupItem value="role" className="mt-1" />
+                  <span className="min-w-0 flex-1 space-y-2">
+                    <span>
+                      <Type variant="small" className="font-medium">
+                        Role
+                      </Type>
+                      <Type muted small>
+                        Users assigned to one role.
+                      </Type>
+                    </span>
+                    <Select
+                      value={selectedRoleId}
+                      onValueChange={(value) => {
+                        selectApprovalAudience("role");
+                        setSelectedRoleId(value);
+                      }}
+                      disabled={roles.length === 0}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select role" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {roles.map((role) => (
+                          <SelectItem key={role.id} value={role.id}>
+                            <span className="flex items-center gap-2">
+                              <span>{role.name}</span>
+                              {requesterRoleIdSet.has(role.id) && (
+                                <Badge variant="neutral">
+                                  <Badge.Text>Current</Badge.Text>
+                                </Badge>
+                              )}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </span>
+                </label>
+
+                <label
+                  className={cn(
+                    "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
+                    approvalAudience === "user" &&
+                      "border-border bg-card shadow-xs",
+                  )}
+                >
+                  <RadioGroupItem value="user" className="mt-1" />
+                  <span className="min-w-0 flex-1 space-y-2">
+                    <span>
+                      <Type variant="small" className="font-medium">
+                        User
+                      </Type>
+                      <Type muted small>
+                        One organization member.
+                      </Type>
+                    </span>
+                    <Select
+                      value={selectedUserId}
+                      onValueChange={(value) => {
+                        selectApprovalAudience("user");
+                        setSelectedUserId(value);
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select user" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {members.map((member) => (
+                          <SelectItem key={member.id} value={member.id}>
+                            {memberDisplayName(member)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </span>
+                </label>
+              </RadioGroup>
+            </section>
+          )}
 
           <Type muted small>
-            Approving grants bypass access for the requested policy target.
-            Denying leaves the policy block in place.
+            {sheetCopy.help}
           </Type>
         </div>
 
@@ -363,6 +700,8 @@ export function ApprovalRequestsContent({ projectId }: { projectId: string }) {
     undefined,
     { enabled: canAdmin && projectId.length > 0 },
   );
+  const rolesQuery = useRoles(undefined, undefined, { enabled: canAdmin });
+  const membersQuery = useMembers(undefined, undefined, { enabled: canAdmin });
 
   const requests = useMemo(
     () => requestsQuery.data?.requests ?? [],
@@ -371,6 +710,11 @@ export function ApprovalRequestsContent({ projectId }: { projectId: string }) {
   const rules = useMemo(
     () => rulesQuery.data?.requests ?? [],
     [rulesQuery.data?.requests],
+  );
+  const roles = useMemo(() => rolesQuery.data?.roles ?? [], [rolesQuery.data]);
+  const members = useMemo(
+    () => membersQuery.data?.members ?? [],
+    [membersQuery.data],
   );
   const requestsLoading = requestsQuery.isLoading;
   const requestsError = requestsQuery.error;
@@ -493,14 +837,13 @@ export function ApprovalRequestsContent({ projectId }: { projectId: string }) {
       ),
     },
     {
-      key: "requester",
-      header: "Requester",
-      width: "1.25fr",
+      key: "appliesTo",
+      header: "Applies to",
+      width: "1.5fr",
       render: (rule) => (
-        <ServerCell
-          name={getPolicyBypassRequesterLabel(rule)}
-          detail={getPolicyBypassRequesterDetail(rule)}
-        />
+        <Type variant="small" className="truncate">
+          {principalSummary(rule.grantedPrincipalUrns, roles, members)}
+        </Type>
       ),
     },
     {
@@ -508,16 +851,6 @@ export function ApprovalRequestsContent({ projectId }: { projectId: string }) {
       header: "Status",
       width: "0.5fr",
       render: (rule) => <RequestStatusBadge status={rule.status} />,
-    },
-    {
-      key: "principals",
-      header: "Principals",
-      width: "0.75fr",
-      render: (rule) => (
-        <Type variant="small">
-          {rule.grantedPrincipalUrns.length.toLocaleString()}
-        </Type>
-      ),
     },
     {
       key: "updated",
@@ -530,16 +863,25 @@ export function ApprovalRequestsContent({ projectId }: { projectId: string }) {
     {
       key: "actions",
       header: "",
-      width: "0.5fr",
+      width: "0.75fr",
       render: (rule) => (
         <RequireScope scope="org:admin" level="component">
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => setRulePendingDelete(rule)}
-          >
-            <Button.Text>Revoke</Button.Text>
-          </Button>
+          <div className="flex justify-end gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setReviewRequest(rule)}
+            >
+              <Button.Text>Edit</Button.Text>
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setRulePendingDelete(rule)}
+            >
+              <Button.Text>Revoke</Button.Text>
+            </Button>
+          </div>
         </RequireScope>
       ),
     },
@@ -550,21 +892,26 @@ export function ApprovalRequestsContent({ projectId }: { projectId: string }) {
       <ReviewRequestSheet
         request={reviewRequest}
         projectId={projectId}
+        roles={roles}
+        members={members}
         open={!!reviewRequest}
         isSubmitting={isReviewSubmitting}
         onOpenChange={(open) => {
           if (!open) setReviewRequest(null);
         }}
-        onApprove={async () => {
+        onApprove={async (principalUrns) => {
           if (!reviewRequest) return;
 
           await approveRequest.mutateAsync({
             request: {
-              riskIDRequestBody: { id: reviewRequest.id },
+              riskPolicyBypassApprovalRequestBody: {
+                id: reviewRequest.id,
+                grantedPrincipalUrns: principalUrns,
+              },
             },
           });
           await refreshApprovalRequestsData();
-          toast.success("Request approved");
+          toast.success(approvalSuccessMessage(reviewRequest.status));
           setReviewRequest(null);
         }}
         onDeny={async () => {
