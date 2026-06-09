@@ -5,6 +5,11 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
+import {
+  RiskPolicyModelConfig,
+  RiskPolicyModelConfig$Outbound,
+  RiskPolicyModelConfig$outboundSchema,
+} from "./riskpolicymodelconfig.js";
 
 /**
  * Policy action: flag or block.
@@ -49,6 +54,7 @@ export type UpdateRiskPolicyRequestBody = {
    * Message types this policy applies to. Omit to preserve the current selection; send an empty array to apply to all types.
    */
   messageTypes?: Array<string> | undefined;
+  modelConfig?: RiskPolicyModelConfig | undefined;
   /**
    * The policy name.
    */
@@ -57,6 +63,10 @@ export type UpdateRiskPolicyRequestBody = {
    * Presidio entity types to detect.
    */
   presidioEntities?: Array<string> | undefined;
+  /**
+   * For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Omit to preserve the current value.
+   */
+  prompt?: string | undefined;
   /**
    * Prompt-injection detection rule ids to enable in addition to the heuristic baseline (e.g. 'deberta-v3-classifier').
    */
@@ -85,8 +95,10 @@ export type UpdateRiskPolicyRequestBody$Outbound = {
   enabled?: boolean | undefined;
   id: string;
   message_types?: Array<string> | undefined;
+  model_config?: RiskPolicyModelConfig$Outbound | undefined;
   name: string;
   presidio_entities?: Array<string> | undefined;
+  prompt?: string | undefined;
   prompt_injection_rules?: Array<string> | undefined;
   sources?: Array<string> | undefined;
   user_message?: string | undefined;
@@ -105,8 +117,10 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     enabled: z.optional(z.boolean()),
     id: z.string(),
     messageTypes: z.optional(z.array(z.string())),
+    modelConfig: z.optional(RiskPolicyModelConfig$outboundSchema),
     name: z.string(),
     presidioEntities: z.optional(z.array(z.string())),
+    prompt: z.optional(z.string()),
     promptInjectionRules: z.optional(z.array(z.string())),
     sources: z.optional(z.array(z.string())),
     userMessage: z.optional(z.string()),
@@ -117,6 +131,7 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
       customRuleIds: "custom_rule_ids",
       disabledRules: "disabled_rules",
       messageTypes: "message_types",
+      modelConfig: "model_config",
       presidioEntities: "presidio_entities",
       promptInjectionRules: "prompt_injection_rules",
       userMessage: "user_message",

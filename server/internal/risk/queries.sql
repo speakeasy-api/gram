@@ -4,6 +4,7 @@ INSERT INTO risk_policies (
   , project_id
   , organization_id
   , name
+  , policy_type
   , sources
   , presidio_entities
   , prompt_injection_rules
@@ -14,6 +15,8 @@ INSERT INTO risk_policies (
   , action
   , auto_name
   , user_message
+  , prompt
+  , model_config
   , version
 )
 VALUES (
@@ -21,6 +24,7 @@ VALUES (
   , @project_id
   , @organization_id
   , @name
+  , COALESCE(NULLIF(@policy_type, ''), 'standard')
   , @sources
   , @presidio_entities
   , @prompt_injection_rules
@@ -31,6 +35,8 @@ VALUES (
   , @action
   , @auto_name
   , @user_message
+  , sqlc.narg(prompt)::text
+  , sqlc.narg(model_config)::jsonb
   , 1
 )
 RETURNING *;
@@ -75,6 +81,8 @@ SET name = @name
   , action = @action
   , auto_name = @auto_name
   , user_message = @user_message
+  , prompt = sqlc.narg(prompt)::text
+  , model_config = sqlc.narg(model_config)::jsonb
   , version = CASE
       WHEN sources IS DISTINCT FROM @sources
         OR presidio_entities IS DISTINCT FROM @presidio_entities
@@ -84,6 +92,8 @@ SET name = @name
         OR message_types IS DISTINCT FROM sqlc.arg(message_types)::text[]
         OR enabled IS DISTINCT FROM @enabled
         OR action IS DISTINCT FROM @action
+        OR prompt IS DISTINCT FROM sqlc.narg(prompt)::text
+        OR model_config IS DISTINCT FROM sqlc.narg(model_config)::jsonb
       THEN version + 1
       ELSE version
     END

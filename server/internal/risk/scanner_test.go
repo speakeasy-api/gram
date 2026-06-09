@@ -136,6 +136,8 @@ func TestScanner_FanOutAcrossPoliciesIsConcurrent(t *testing.T) {
 		ti.conn,
 		pii,
 		nil,
+		nil,
+		nil,
 		testenv.NewMeterProvider(t),
 	)
 	require.NoError(t, err)
@@ -179,6 +181,8 @@ func TestScanner_FirstMatchCancelsSiblings(t *testing.T) {
 		testenv.NewLogger(t),
 		ti.conn,
 		pii,
+		nil,
+		nil,
 		nil,
 		testenv.NewMeterProvider(t),
 	)
@@ -242,6 +246,8 @@ func TestScanner_CustomDetectionRuleEnforcement(t *testing.T) {
 		ti.conn,
 		nil,
 		nil,
+		nil,
+		nil,
 		testenv.NewMeterProvider(t),
 	)
 	require.NoError(t, err)
@@ -266,6 +272,8 @@ func TestScanner_RespectsMessageTypes(t *testing.T) {
 		testenv.NewLogger(t),
 		ti.conn,
 		pii,
+		nil,
+		nil,
 		nil,
 		testenv.NewMeterProvider(t),
 	)

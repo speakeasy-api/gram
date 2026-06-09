@@ -28,6 +28,25 @@ func RiskPolicyActionEnum() {
 	Enum("flag", "block")
 }
 
+// RiskPolicyTypeEnum applies the allowed-values constraint to a policy_type
+// attribute. "standard" is the regex/presidio/custom detection policy;
+// "prompt_based" is an LLM-judge policy that evaluates `prompt`
+// against in-scope messages. Use it inside an Attribute("policy_type", ...).
+func RiskPolicyTypeEnum() {
+	Enum("standard", "prompt_based")
+}
+
+// RiskPolicyModelConfig is the per-policy LLM-judge model configuration for
+// `prompt_based` policies. All fields are optional; unset fields fall back to
+// judge defaults (default model, low temperature, fail-open on judge error).
+var RiskPolicyModelConfig = Type("RiskPolicyModelConfig", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("model", String, "OpenRouter model id the judge should use. Empty selects the default judge model.")
+	Attribute("temperature", Float64, "Sampling temperature for the judge. Defaults to a low value for deterministic verdicts.")
+	Attribute("fail_open", Boolean, "When the judge errors or times out: true allows the message (fail-open), false blocks it (fail-closed). Defaults to fail-open.")
+})
+
 var RiskPolicy = Type("RiskPolicy", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -38,6 +57,10 @@ var RiskPolicy = Type("RiskPolicy", func() {
 		Format(FormatUUID)
 	})
 	Attribute("name", String, "The policy name.")
+	Attribute("policy_type", String, "Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge).", func() {
+		RiskPolicyTypeEnum()
+		Default("standard")
+	})
 	Attribute("sources", ArrayOf(String), "Detection sources enabled for this policy.")
 	Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to scan for. When empty, scans all entities.")
 	Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids enabled in addition to the heuristic baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.")
@@ -51,6 +74,8 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	})
 	Attribute("auto_name", Boolean, "Whether the policy name is auto-generated. When true, the name is regenerated on each update.")
 	Attribute("user_message", String, "Optional message shown to the end user when this policy blocks an action or surfaces a flagged finding. When unset, a default message is rendered.")
+	Attribute("prompt", String, "For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Null for standard policies.")
+	Attribute("model_config", RiskPolicyModelConfig, "For prompt_based policies: per-policy LLM-judge model configuration. Null for standard policies.")
 	Attribute("version", Int64, "Policy version, incremented on each update.")
 	Attribute("created_at", String, "When the policy was created.", func() {
 		Format(FormatDateTime)
@@ -61,7 +86,7 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("pending_messages", Int64, "Number of messages not yet analyzed at the current policy version.")
 	Attribute("total_messages", Int64, "Total number of messages in the project.")
 
-	Required("id", "project_id", "name", "sources", "enabled", "action", "auto_name", "version", "created_at", "updated_at", "pending_messages", "total_messages")
+	Required("id", "project_id", "name", "policy_type", "sources", "enabled", "action", "auto_name", "version", "created_at", "updated_at", "pending_messages", "total_messages")
 })
 
 var RiskCustomDetectionRule = Type("RiskCustomDetectionRule", func() {

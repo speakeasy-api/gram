@@ -72,11 +72,6 @@ import { cn } from "@/lib/utils";
 import { ruleIdToPresidioEntity } from "./rule-ids";
 import { useDetectionRulesStore } from "./detection-rules-data";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { useOrganization } from "@/contexts/Auth";
-import {
-  usePromptPoliciesStore,
-  type PromptPolicy,
-} from "./prompt-policies-store";
 import { PROMPT_POLICY_TEMPLATES } from "./prompt-policy-templates";
 
 /** Presidio-backed categories */
@@ -119,9 +114,7 @@ const FLAG_ONLY_CATEGORIES: Set<RuleCategory> = new Set([
 
 type PolicyKind = "risk" | "prompt";
 
-type PolicyRow =
-  | { kind: "risk"; policy: RiskPolicy }
-  | { kind: "prompt"; policy: PromptPolicy };
+type PolicyRow = { kind: PolicyKind; policy: RiskPolicy };
 
 const TOOL_CALL_MESSAGE_TYPES = new Set<PolicyMessageType>([
   "tool_request",
@@ -327,6 +320,14 @@ function promptTemplateNameForInstruction(prompt: string): string | undefined {
     ?.name;
 }
 
+function isPromptPolicy(policy: RiskPolicy): boolean {
+  return policy.policyType === "prompt_based";
+}
+
+function promptPolicyName(prompt: string): string {
+  return prompt.trim().replace(/\s+/g, " ").slice(0, 60) || "Prompt Policy";
+}
+
 export default function PolicyCenter(): JSX.Element {
   return (
     <RequireScope scope="org:admin" level="page">
@@ -340,39 +341,25 @@ function PolicyCenterContent() {
   const telemetry = useTelemetry();
   const { data, isLoading } = useRiskListPolicies();
   const nlEnabled = telemetry.isFeatureEnabled("gram-prompt-policies") ?? false;
-  const { id: orgId } = useOrganization();
-  const promptStore = usePromptPoliciesStore(orgId);
 
-  const serverRows = useMemo(
-    (): PolicyRow[] =>
-      (data?.policies ?? []).map((policy) => ({ kind: "risk", policy })),
-    [data?.policies],
-  );
-  const promptRows = useMemo(
-    (): PolicyRow[] =>
-      nlEnabled
-        ? promptStore.policies.map((policy) => ({ kind: "prompt", policy }))
-        : [],
-    [nlEnabled, promptStore.policies],
-  );
   const policyRows = useMemo(
-    () =>
-      [...serverRows, ...promptRows].sort((a, b) => {
-        const ta =
-          a.kind === "risk" ? a.policy.createdAt.getTime() : a.policy.createdAt;
-        const tb =
-          b.kind === "risk" ? b.policy.createdAt.getTime() : b.policy.createdAt;
-        return tb - ta;
-      }),
-    [serverRows, promptRows],
+    (): PolicyRow[] =>
+      (data?.policies ?? [])
+        .filter((policy) => nlEnabled || !isPromptPolicy(policy))
+        .map((policy) => {
+          const kind: PolicyKind = isPromptPolicy(policy) ? "prompt" : "risk";
+          return { kind, policy };
+        })
+        .sort(
+          (a, b) => b.policy.createdAt.getTime() - a.policy.createdAt.getTime(),
+        ),
+    [data?.policies, nlEnabled],
   );
 
   const { customRules } = useDetectionRulesStore();
 
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [editingPolicy, setEditingPolicy] = useState<
-    RiskPolicy | PromptPolicy | null
-  >(null);
+  const [editingPolicy, setEditingPolicy] = useState<RiskPolicy | null>(null);
   const [createStep, setCreateStep] = useState<"type" | "details">("details");
   const [formPolicyKind, setFormPolicyKind] = useState<PolicyKind>("risk");
   const [formName, setFormName] = useState("");
@@ -474,8 +461,8 @@ function PolicyCenterContent() {
   // Memoized so the deep-link effect below can depend on it without re-running
   // every render. Body references only module-level helpers + stable setters,
   // so the empty dependency array is correct.
-  const handleEdit = useCallback((policy: RiskPolicy | PromptPolicy) => {
-    const isPrompt = !("sources" in policy);
+  const handleEdit = useCallback((policy: RiskPolicy) => {
+    const isPrompt = isPromptPolicy(policy);
     const kind: PolicyKind = isPrompt ? "prompt" : "risk";
     setEditingPolicy(policy);
     setCreateStep("details");
@@ -483,10 +470,11 @@ function PolicyCenterContent() {
     setFormName(policy.name);
     setFormEnabled(policy.enabled);
     if (isPrompt) {
-      setFormPromptInstruction(policy.promptInstruction);
+      setFormPromptInstruction(policy.prompt ?? "");
       setSelectedMessageTypes(promptPolicyMessageTypes());
       setFormAction((policy.action as PolicyAction) ?? "flag");
-      setFormAutoName(policy.autoName ?? false);
+      setFormAutoName(policy.autoName ?? true);
+      setFormUserMessage(policy.userMessage ?? "");
       setSheetOpen(true);
       return;
     }
@@ -527,30 +515,43 @@ function PolicyCenterContent() {
 
   const handleSave = () => {
     if (formPolicyKind === "prompt") {
-      const name = formAutoName
-        ? formPromptInstruction.trim().replace(/\s+/g, " ").slice(0, 60) ||
-          "Prompt Policy"
-        : formName;
-      if (editingPolicy && !("sources" in editingPolicy)) {
-        promptStore.update(editingPolicy.id, {
-          name,
-          enabled: formEnabled,
-          promptInstruction: formPromptInstruction,
-          messageTypes: PROMPT_POLICY_MESSAGE_TYPES,
-          action: formAction,
-          autoName: formAutoName,
+      const prompt = formPromptInstruction.trim();
+      const name = formAutoName ? promptPolicyName(prompt) : formName;
+      if (editingPolicy) {
+        updateMutation.mutate({
+          request: {
+            updateRiskPolicyRequestBody: {
+              id: editingPolicy.id,
+              name,
+              enabled: formEnabled,
+              prompt,
+              messageTypes: PROMPT_POLICY_MESSAGE_TYPES,
+              action: formAction,
+              autoName: formAutoName,
+              ...(formUserMessage.trim()
+                ? { userMessage: formUserMessage }
+                : {}),
+            },
+          },
         });
       } else {
-        promptStore.create({
-          name,
-          enabled: formEnabled,
-          promptInstruction: formPromptInstruction,
-          messageTypes: PROMPT_POLICY_MESSAGE_TYPES,
-          action: formAction,
-          autoName: formAutoName,
+        createMutation.mutate({
+          request: {
+            createRiskPolicyRequestBody: {
+              name,
+              policyType: "prompt_based",
+              enabled: formEnabled,
+              prompt,
+              messageTypes: PROMPT_POLICY_MESSAGE_TYPES,
+              action: formAction,
+              autoName: formAutoName,
+              ...(formUserMessage.trim()
+                ? { userMessage: formUserMessage }
+                : {}),
+            },
+          },
         });
       }
-      setSheetOpen(false);
       return;
     }
 
@@ -564,9 +565,7 @@ function PolicyCenterContent() {
       selectedCategories,
       disabledRules,
       pinnedHiddenRuleIds(
-        editingPolicy && "sources" in editingPolicy
-          ? editingPolicy.presidioEntities
-          : undefined,
+        editingPolicy ? editingPolicy.presidioEntities : undefined,
       ),
     );
     const action =
@@ -614,22 +613,10 @@ function PolicyCenterContent() {
   };
 
   const handleDelete = (row: PolicyRow) => {
-    if (row.kind === "prompt") {
-      promptStore.remove(row.policy.id);
-      return;
-    }
     deleteMutation.mutate({ request: { id: row.policy.id } });
   };
 
-  const handleToggle = (
-    policy: RiskPolicy | PromptPolicy,
-    enabled: boolean,
-  ) => {
-    if (!("sources" in policy)) {
-      promptStore.update(policy.id, { enabled });
-      return;
-    }
-
+  const handleToggle = (policy: RiskPolicy, enabled: boolean) => {
     updateMutation.mutate({
       request: {
         updateRiskPolicyRequestBody: {
@@ -748,7 +735,7 @@ function PolicyCenterContent() {
       width: "2fr",
       render: (row) => {
         if (row.kind === "prompt") {
-          const prompt = row.policy.promptInstruction ?? "";
+          const prompt = row.policy.prompt ?? "";
           return (
             <SimpleTooltip tooltip={prompt}>
               <span
@@ -1577,6 +1564,40 @@ function PolicySheetBody({
                     findings. */}
                 {isAvailable && isExpanded && rules.length > 0 && (
                   <div className="bg-muted/30 border-border border-t px-4 py-2">
+                    <div className="flex items-center justify-between py-1">
+                      <span className="text-muted-foreground text-xs">
+                        {enabledRuleCount} of {rules.length} rules enabled
+                      </span>
+                      <div className="flex gap-3">
+                        <button
+                          type="button"
+                          className="text-primary text-xs underline-offset-2 hover:underline disabled:opacity-50"
+                          disabled={enabledRuleCount === rules.length}
+                          onClick={() => {
+                            const nextDisabled = new Set(disabledRules);
+                            for (const r of rules) nextDisabled.delete(r.id);
+                            setDisabledRules(nextDisabled);
+                            const nextCats = new Set(selectedCategories);
+                            nextCats.add(cat);
+                            setSelectedCategories(nextCats);
+                          }}
+                        >
+                          Enable all
+                        </button>
+                        <button
+                          type="button"
+                          className="text-primary text-xs underline-offset-2 hover:underline disabled:opacity-50"
+                          disabled={!categorySelected || enabledRuleCount === 0}
+                          onClick={() => {
+                            const nextDisabled = new Set(disabledRules);
+                            for (const r of rules) nextDisabled.add(r.id);
+                            setDisabledRules(nextDisabled);
+                          }}
+                        >
+                          Disable all
+                        </button>
+                      </div>
+                    </div>
                     <div className="space-y-2 py-1">
                       {rules.map((rule) => {
                         const ruleEnabled =
@@ -1584,25 +1605,18 @@ function PolicySheetBody({
                         return (
                           <div
                             key={rule.id}
-                            className="flex items-start gap-3 py-1"
+                            className="flex items-center gap-3 py-1 pl-8"
                           >
-                            <label
-                              htmlFor={rule.id}
-                              className="min-w-0 flex-1 cursor-pointer"
-                            >
-                              <div className="font-mono text-sm">{rule.id}</div>
-                              <div className="text-muted-foreground text-xs">
-                                {rule.title}
-                              </div>
-                            </label>
                             <Checkbox
                               id={rule.id}
                               checked={ruleEnabled}
                               onCheckedChange={(checked) =>
                                 toggleRule(rule.id, !!checked)
                               }
-                              className="mt-0.5"
                             />
+                            <label htmlFor={rule.id} className="text-xs">
+                              {rule.title}
+                            </label>
                           </div>
                         );
                       })}
@@ -2080,18 +2094,10 @@ function CustomRulesPicker({
               {customRules.map((rule) => {
                 const checked = selectedCustomRuleIds.has(rule.id);
                 return (
-                  <div key={rule.id} className="flex items-start gap-3 py-1">
-                    <label
-                      htmlFor={`custom-${rule.id}`}
-                      className="min-w-0 flex-1 cursor-pointer"
-                    >
-                      <div className="font-mono text-sm">{rule.id}</div>
-                      {rule.title && (
-                        <div className="text-muted-foreground text-xs">
-                          {rule.title}
-                        </div>
-                      )}
-                    </label>
+                  <div
+                    key={rule.id}
+                    className="flex items-center gap-3 py-1 pl-8"
+                  >
                     <Checkbox
                       id={`custom-${rule.id}`}
                       checked={checked}
@@ -2104,8 +2110,18 @@ function CustomRulesPicker({
                         }
                         setSelectedCustomRuleIds(set);
                       }}
-                      className="mt-0.5"
                     />
+                    <label
+                      htmlFor={`custom-${rule.id}`}
+                      className="cursor-pointer text-xs"
+                    >
+                      <span className="text-foreground">
+                        {rule.title || rule.id}
+                      </span>
+                      <span className="text-muted-foreground ml-2 font-mono text-[10px]">
+                        {rule.id}
+                      </span>
+                    </label>
                   </div>
                 );
               })}
