@@ -21,7 +21,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Type } from "@/components/ui/type";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useCustomDomains } from "@/hooks/useToolsetUrl";
@@ -54,7 +53,7 @@ import { Alert, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, SaveIcon, Trash2, XIcon } from "lucide-react";
 import { createContext, use, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useMcpEndpointSlugValidation } from "../useMcpEndpointSlugValidation";
 
@@ -65,6 +64,7 @@ const ADDRESS_INPUT_GROUP_CLASSNAME = "rounded-md";
 const ADDRESS_SLUG_INPUT_CLASSNAME = "font-mono pl-0! font-bold";
 const ADDRESS_RANDOM_SUFFIX_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 const ADDRESS_RANDOM_SUFFIX_LENGTH = 5;
+export const MCP_SERVER_URL_SECTION_ID = "server-url";
 
 function generateAddressSuffix() {
   let suffix = "";
@@ -77,6 +77,23 @@ function generateAddressSuffix() {
   return suffix;
 }
 
+function useScrollToSettingsHash() {
+  const location = useLocation();
+
+  useEffect(() => {
+    const targetId = location.hash.replace("#", "");
+    if (targetId !== MCP_SERVER_URL_SECTION_ID) return;
+
+    const animationFrame = window.requestAnimationFrame(() => {
+      document
+        .getElementById(targetId)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [location.hash]);
+}
+
 export function SettingsTab({
   mcpServer,
   endpoints,
@@ -86,6 +103,8 @@ export function SettingsTab({
   endpoints: McpEndpoint[];
   isLoadingEndpoints: boolean;
 }): JSX.Element {
+  useScrollToSettingsHash();
+
   return (
     <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
       <DisplayNameCard mcpServer={mcpServer} />
@@ -119,10 +138,18 @@ const DANGER_SETTINGS_SECTION_CONTEXT: SettingsSectionContextValue = {
 };
 const SettingsSectionContext = createContext(DEFAULT_SETTINGS_SECTION_CONTEXT);
 
-function SettingsSectionRoot({ children }: { children: React.ReactNode }) {
+function SettingsSectionRoot({
+  children,
+  id,
+}: {
+  children: React.ReactNode;
+  id?: string;
+}) {
   return (
     <SettingsSectionContext.Provider value={DEFAULT_SETTINGS_SECTION_CONTEXT}>
-      <section className="space-y-3">{children}</section>
+      <section id={id} className="space-y-3 scroll-mt-4">
+        {children}
+      </section>
     </SettingsSectionContext.Provider>
   );
 }
@@ -348,7 +375,7 @@ function DisplayNameCard({ mcpServer }: { mcpServer: McpServer }) {
       // invalidating queries so the refetch uses the new lookup args and the
       // page-level not-found guard doesn't bounce the user back to /mcp.
       const nextParam = mcpServerRouteParam(updated);
-      void navigate(routes.mcp.x.href(nextParam), { replace: true });
+      void navigate(routes.mcp.x.settings.href(nextParam), { replace: true });
       await Promise.all([
         invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
@@ -487,7 +514,7 @@ function ServerUrlCard({
   }
 
   return (
-    <SettingsSection>
+    <SettingsSection id={MCP_SERVER_URL_SECTION_ID}>
       <SettingsSection.Header>
         <SettingsSection.Title>Server URL</SettingsSection.Title>
         <SettingsSection.Description>
@@ -1112,10 +1139,10 @@ function mcpServerVisibilityToast(visibility: McpServerVisibility) {
   switch (visibility) {
     case "disabled":
       return "MCP server disabled";
+    case "private":
+      return "MCP server enabled";
     case "public":
       return "MCP server set to public";
-    case "private":
-      return "MCP server set to private";
     default:
       return "MCP server updated";
   }
@@ -1156,8 +1183,6 @@ function DangerZoneCard({
   const routes = useRoutes();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [pendingAvailability, setPendingAvailability] =
-    useState<McpServerVisibility | null>(null);
-  const [pendingVisibility, setPendingVisibility] =
     useState<McpServerVisibility | null>(null);
   const queryClient = useQueryClient();
   const client = useSdkClient();
@@ -1218,23 +1243,7 @@ function DangerZoneCard({
     setPendingAvailability(null);
   };
 
-  const requestVisibilityChange = (visibility: string) => {
-    if (visibility !== "public" && visibility !== "private") return;
-    if (visibility === mcpServer.visibility) return;
-    setPendingVisibility(visibility);
-  };
-
-  const confirmVisibilityChange = () => {
-    if (!pendingVisibility) return;
-    void applyVisibility(pendingVisibility);
-    setPendingVisibility(null);
-  };
-
   const enabled = mcpServer.visibility !== "disabled";
-  let accessMode = "";
-  if (enabled) {
-    accessMode = mcpServer.visibility === "public" ? "public" : "private";
-  }
 
   return (
     <>
@@ -1242,7 +1251,7 @@ function DangerZoneCard({
         <DangerSettingsSection.Header>
           <DangerSettingsSection.Title>Danger Zone</DangerSettingsSection.Title>
           <DangerSettingsSection.Description>
-            Manage server availability, access, and destructive actions.
+            Manage server availability and destructive actions.
           </DangerSettingsSection.Description>
         </DangerSettingsSection.Header>
         <DangerSettingsSection.Panel>
@@ -1266,41 +1275,6 @@ function DangerZoneCard({
                     aria-label="Enable MCP server"
                     onCheckedChange={requestAvailabilityChange}
                   />
-                </RequireScope>
-              </ServerControlRow>
-
-              <ServerControlRow
-                title="Visibility"
-                description={
-                  enabled
-                    ? "Choose whether clients can use this server publicly or only through authenticated project access."
-                    : "Choose an access mode to enable this server as public or private."
-                }
-              >
-                <RequireScope scope="mcp:write" level="component">
-                  <ToggleGroup
-                    type="single"
-                    value={accessMode}
-                    variant="outline"
-                    size="sm"
-                    disabled={isUpdatingVisibility}
-                    onValueChange={requestVisibilityChange}
-                  >
-                    <ToggleGroupItem
-                      value="private"
-                      aria-label="Set MCP server private"
-                      className="px-3"
-                    >
-                      Private
-                    </ToggleGroupItem>
-                    <ToggleGroupItem
-                      value="public"
-                      aria-label="Set MCP server public"
-                      className="px-3"
-                    >
-                      Public
-                    </ToggleGroupItem>
-                  </ToggleGroup>
                 </RequireScope>
               </ServerControlRow>
 
@@ -1349,12 +1323,6 @@ function DangerZoneCard({
         onClose={() => setPendingAvailability(null)}
         onConfirm={confirmAvailabilityChange}
       />
-      <ServerVisibilityDialog
-        targetVisibility={pendingVisibility}
-        isLoading={isUpdatingVisibility}
-        onClose={() => setPendingVisibility(null)}
-        onConfirm={confirmVisibilityChange}
-      />
     </>
   );
 }
@@ -1395,78 +1363,6 @@ function ServerAvailabilityDialog({
           </Button>
           <Button
             variant={enabling ? "primary" : "destructive-primary"}
-            disabled={isLoading}
-            onClick={onConfirm}
-          >
-            {isLoading ? (
-              <>
-                <Button.LeftIcon>
-                  <Loader2 className="size-4 animate-spin" />
-                </Button.LeftIcon>
-                <Button.Text>Saving</Button.Text>
-              </>
-            ) : (
-              <Button.Text>Continue</Button.Text>
-            )}
-          </Button>
-        </Dialog.Footer>
-      </Dialog.Content>
-    </Dialog>
-  );
-}
-
-function ServerVisibilityDialog({
-  targetVisibility,
-  isLoading,
-  onClose,
-  onConfirm,
-}: {
-  targetVisibility: McpServerVisibility | null;
-  isLoading: boolean;
-  onClose: () => void;
-  onConfirm: () => void;
-}) {
-  const isOpen = targetVisibility != null;
-  const makingPublic = targetVisibility === "public";
-  let title = "Make MCP server private?";
-  let confirmVariant: "primary" | "destructive-primary" = "primary";
-  let message = (
-    <>
-      You are about to make this MCP server private. Private MCP servers are
-      secured behind Speakeasy login and access controls, and thus not available
-      for use by the general public. Continue?
-    </>
-  );
-
-  if (makingPublic) {
-    title = "Make MCP server public?";
-    confirmVariant = "destructive-primary";
-    message = (
-      <>
-        You are about to make this MCP server public. This is only recommended
-        if you intend for it to be used by <em>anyone</em> who has its URL.{" "}
-        <span className="font-bold">
-          Public MCP servers are not secured behind Speakeasy&apos;s access
-          controls.
-        </span>
-        &nbsp;Continue?
-      </>
-    );
-  }
-
-  return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <Dialog.Content className="max-w-md">
-        <Dialog.Header>
-          <Dialog.Title>{title}</Dialog.Title>
-          <Dialog.Description>{message}</Dialog.Description>
-        </Dialog.Header>
-        <Dialog.Footer>
-          <Button variant="secondary" disabled={isLoading} onClick={onClose}>
-            <Button.Text>Cancel</Button.Text>
-          </Button>
-          <Button
-            variant={confirmVariant}
             disabled={isLoading}
             onClick={onConfirm}
           >

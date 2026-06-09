@@ -23,7 +23,7 @@ export function MCPServerTableRow({
   const routes = useRoutes();
 
   const handleClick = () => {
-    routes.mcp.x.goTo(mcpServerRouteParam(server));
+    routes.mcp.x.overview.goTo(mcpServerRouteParam(server));
   };
 
   const mcpEnabled = server.visibility !== "disabled";

@@ -83,7 +83,7 @@ function CreateRemoteMcpForm() {
         url: url.trim(),
       });
       toast.success("Remote MCP server added");
-      routes.mcp.x.goTo(mcpServerRouteParam(mcpServer));
+      routes.mcp.x.overview.goTo(mcpServerRouteParam(mcpServer));
     } catch (error) {
       const message =
         error instanceof Error
