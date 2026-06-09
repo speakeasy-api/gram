@@ -38,6 +38,7 @@ func TestResolveKnownUserPrincipals_resolvesUserAndRolesForOrgMember(t *testing.
 		principalURNs = append(principalURNs, principal.String())
 	}
 	require.Contains(t, principalURNs, urn.NewPrincipal(urn.PrincipalTypeUser, userID).String())
+	require.Contains(t, principalURNs, AllUsersPrincipal().String())
 	require.Contains(t, principalURNs, "role:member")
 	require.True(t, slices.ContainsFunc(principalURNs, func(principalURN string) bool {
 		return strings.HasPrefix(principalURN, "role:global:")
@@ -57,7 +58,13 @@ func TestResolveKnownUserPrincipals_unidentifiedWhenUserMissingOrNotInOrg(t *tes
 	seedOrganization(t, ctx, conn, otherOrganizationID)
 	seedActiveOrganizationUser(t, ctx, conn, otherOrganizationID, otherOrgUserID)
 
-	for _, userID := range []string{"", "user_missing", otherOrgUserID} {
+	for _, userID := range []string{"", urn.AllUsersPrincipalID} {
+		principals, err := ResolveUserPrincipals(ctx, conn, organizationID, userID)
+		require.ErrorIs(t, err, ErrPrincipalInvalid)
+		require.Empty(t, principals)
+	}
+
+	for _, userID := range []string{"user_missing", otherOrgUserID} {
 		principals, err := ResolveUserPrincipals(ctx, conn, organizationID, userID)
 		require.ErrorIs(t, err, ErrPrincipalNotFound)
 		require.Empty(t, principals)
