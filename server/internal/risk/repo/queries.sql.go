@@ -326,6 +326,25 @@ func (q *Queries) DeleteRiskPolicy(ctx context.Context, arg DeleteRiskPolicyPara
 	return err
 }
 
+const deleteRiskPolicyBypassRequestsByPolicy = `-- name: DeleteRiskPolicyBypassRequestsByPolicy :exec
+UPDATE risk_policy_bypass_requests
+SET deleted_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE risk_policy_id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+`
+
+type DeleteRiskPolicyBypassRequestsByPolicyParams struct {
+	RiskPolicyID uuid.UUID
+	ProjectID    uuid.UUID
+}
+
+func (q *Queries) DeleteRiskPolicyBypassRequestsByPolicy(ctx context.Context, arg DeleteRiskPolicyBypassRequestsByPolicyParams) error {
+	_, err := q.db.Exec(ctx, deleteRiskPolicyBypassRequestsByPolicy, arg.RiskPolicyID, arg.ProjectID)
+	return err
+}
+
 const deleteRiskResultsForMessages = `-- name: DeleteRiskResultsForMessages :exec
 DELETE FROM risk_results
 WHERE risk_policy_id = $1
@@ -553,11 +572,14 @@ func (q *Queries) GetRiskPolicy(ctx context.Context, arg GetRiskPolicyParams) (R
 }
 
 const getRiskPolicyBypassRequest = `-- name: GetRiskPolicyBypassRequest :one
-SELECT id, organization_id, project_id, risk_policy_id, target_kind, target_label, target_key, target_dimensions, requester_user_id, requester_email, note, status, decided_by, granted_principal_urns, decided_at, created_at, updated_at, deleted_at, deleted
-FROM risk_policy_bypass_requests
-WHERE id = $1
-  AND project_id = $2
-  AND deleted IS FALSE
+SELECT rpbr.id, rpbr.organization_id, rpbr.project_id, rpbr.risk_policy_id, rpbr.target_kind, rpbr.target_label, rpbr.target_key, rpbr.target_dimensions, rpbr.requester_user_id, rpbr.requester_email, rpbr.note, rpbr.status, rpbr.decided_by, rpbr.granted_principal_urns, rpbr.decided_at, rpbr.created_at, rpbr.updated_at, rpbr.deleted_at, rpbr.deleted
+FROM risk_policy_bypass_requests rpbr
+JOIN risk_policies rp ON rp.id = rpbr.risk_policy_id
+  AND rp.project_id = rpbr.project_id
+  AND rp.deleted IS FALSE
+WHERE rpbr.id = $1
+  AND rpbr.project_id = $2
+  AND rpbr.deleted IS FALSE
 `
 
 type GetRiskPolicyBypassRequestParams struct {
@@ -1151,19 +1173,22 @@ func (q *Queries) ListRiskPolicies(ctx context.Context, projectID uuid.UUID) ([]
 }
 
 const listRiskPolicyBypassRequests = `-- name: ListRiskPolicyBypassRequests :many
-SELECT id, organization_id, project_id, risk_policy_id, target_kind, target_label, target_key, target_dimensions, requester_user_id, requester_email, note, status, decided_by, granted_principal_urns, decided_at, created_at, updated_at, deleted_at, deleted
-FROM risk_policy_bypass_requests
-WHERE project_id = $1
-  AND deleted IS FALSE
+SELECT rpbr.id, rpbr.organization_id, rpbr.project_id, rpbr.risk_policy_id, rpbr.target_kind, rpbr.target_label, rpbr.target_key, rpbr.target_dimensions, rpbr.requester_user_id, rpbr.requester_email, rpbr.note, rpbr.status, rpbr.decided_by, rpbr.granted_principal_urns, rpbr.decided_at, rpbr.created_at, rpbr.updated_at, rpbr.deleted_at, rpbr.deleted
+FROM risk_policy_bypass_requests rpbr
+JOIN risk_policies rp ON rp.id = rpbr.risk_policy_id
+  AND rp.project_id = rpbr.project_id
+  AND rp.deleted IS FALSE
+WHERE rpbr.project_id = $1
+  AND rpbr.deleted IS FALSE
   AND (
     $2::uuid IS NULL
-    OR risk_policy_id = $2::uuid
+    OR rpbr.risk_policy_id = $2::uuid
   )
   AND (
     $3::text IS NULL
-    OR status = $3::text
+    OR rpbr.status = $3::text
   )
-ORDER BY updated_at DESC
+ORDER BY rpbr.updated_at DESC
 `
 
 type ListRiskPolicyBypassRequestsParams struct {

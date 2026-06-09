@@ -164,24 +164,38 @@ SET target_label = EXCLUDED.target_label
 RETURNING *;
 
 -- name: ListRiskPolicyBypassRequests :many
-SELECT *
-FROM risk_policy_bypass_requests
-WHERE project_id = @project_id
-  AND deleted IS FALSE
+SELECT rpbr.*
+FROM risk_policy_bypass_requests rpbr
+JOIN risk_policies rp ON rp.id = rpbr.risk_policy_id
+  AND rp.project_id = rpbr.project_id
+  AND rp.deleted IS FALSE
+WHERE rpbr.project_id = @project_id
+  AND rpbr.deleted IS FALSE
   AND (
     sqlc.narg(risk_policy_id)::uuid IS NULL
-    OR risk_policy_id = sqlc.narg(risk_policy_id)::uuid
+    OR rpbr.risk_policy_id = sqlc.narg(risk_policy_id)::uuid
   )
   AND (
     sqlc.narg(status)::text IS NULL
-    OR status = sqlc.narg(status)::text
+    OR rpbr.status = sqlc.narg(status)::text
   )
-ORDER BY updated_at DESC;
+ORDER BY rpbr.updated_at DESC;
 
 -- name: GetRiskPolicyBypassRequest :one
-SELECT *
-FROM risk_policy_bypass_requests
-WHERE id = @id
+SELECT rpbr.*
+FROM risk_policy_bypass_requests rpbr
+JOIN risk_policies rp ON rp.id = rpbr.risk_policy_id
+  AND rp.project_id = rpbr.project_id
+  AND rp.deleted IS FALSE
+WHERE rpbr.id = @id
+  AND rpbr.project_id = @project_id
+  AND rpbr.deleted IS FALSE;
+
+-- name: DeleteRiskPolicyBypassRequestsByPolicy :exec
+UPDATE risk_policy_bypass_requests
+SET deleted_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE risk_policy_id = @risk_policy_id
   AND project_id = @project_id
   AND deleted IS FALSE;
 

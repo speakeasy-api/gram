@@ -632,6 +632,17 @@ func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskP
 		return oops.E(oops.CodeUnexpected, err, "delete risk policy").Log(ctx, s.logger)
 	}
 
+	if err := repo.New(dbtx).DeleteRiskPolicyBypassRequestsByPolicy(ctx, repo.DeleteRiskPolicyBypassRequestsByPolicyParams{
+		RiskPolicyID: id,
+		ProjectID:    *authCtx.ProjectID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete risk policy bypass requests").Log(ctx, s.logger)
+	}
+
+	if err := syncRiskPolicyAudienceGrants(ctx, dbtx, authCtx.ActiveOrganizationID, id.String(), riskPolicyAudienceEveryone, nil); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "clear risk policy audience").Log(ctx, s.logger)
+	}
+
 	if err := s.audit.LogRiskPolicyDelete(ctx, dbtx, audit.LogRiskPolicyDeleteEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,
