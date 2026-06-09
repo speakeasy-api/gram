@@ -66,6 +66,23 @@ async function assertCleanWorktree(): Promise<void> {
       "working tree has uncommitted tracked changes; commit or stash before running",
     );
   }
+
+  // Untracked generated files would be swept into the chore(gen) commit by the
+  // staging step (which globs untracked paths), polluting history with artifacts
+  // that aren't part of the rewritten scope. Reject them up front so the rewrite
+  // stays deterministic. Unrelated untracked files (scratch notes, etc.) are fine.
+  const untracked = (await git("ls-files", "--others", "--exclude-standard"))
+    .split("\n")
+    .filter(Boolean);
+  const untrackedGenerated = await filterIgnored(
+    await filterLinguistGenerated(untracked),
+  );
+  if (untrackedGenerated.length > 0) {
+    fail(
+      "untracked generated files present; remove or commit them before running:\n" +
+        untrackedGenerated.map((p) => `  ${p}`).join("\n"),
+    );
+  }
 }
 
 async function subjectOf(commit: string): Promise<string> {
