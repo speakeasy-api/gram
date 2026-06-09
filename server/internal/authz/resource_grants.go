@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -40,12 +41,16 @@ func (r Resource) Kind() string {
 // one or more principals.
 type ResourceGrant struct {
 	Resource
+	Effect     PolicyEffect
 	Principals []urn.Principal
 	Selector   Selector
 }
 
 func (r ResourceGrant) Validate() error {
 	if err := r.Resource.Validate(); err != nil {
+		return err
+	}
+	if err := validatePolicyEffect(r.Effect); err != nil {
 		return err
 	}
 	for _, principal := range r.Principals {
@@ -74,6 +79,22 @@ func (r ResourceGrant) ValidatePrincipals() error {
 	return nil
 }
 
+// ValidateAudience checks invariants for full-audience replacement writes.
+// A grant target can apply to either user:all or a narrowed set of user/role
+// principals, but combining both would store a redundant and ambiguous audience.
+func (r ResourceGrant) ValidateAudience() error {
+	principals := r.uniquePrincipals()
+	hasAllUsers := false
+	for _, principal := range principals {
+		hasAllUsers = hasAllUsers || isAllUsersPrincipal(principal)
+	}
+	if hasAllUsers && len(principals) > 1 {
+		return fmt.Errorf("user:all cannot be combined with narrower principals")
+	}
+
+	return nil
+}
+
 func (r ResourceGrant) selector() Selector {
 	if r.Selector != nil {
 		return r.Selector
@@ -93,6 +114,51 @@ func (r ResourceGrant) uniquePrincipals() []urn.Principal {
 		principals = append(principals, principal)
 	}
 	return principals
+}
+
+// ReplaceGrantAudience replaces the full audience for one exact grant target.
+// This is intentionally distinct from PatchPrincipalGrants: callers use this
+// when they know the complete desired audience, such as switching from
+// user:all to a narrowed user/role set.
+func ReplaceGrantAudience(ctx context.Context, db repo.DBTX, resource ResourceGrant) error {
+	if err := resource.Validate(); err != nil {
+		return err
+	}
+
+	if err := resource.ValidateAudience(); err != nil {
+		return err
+	}
+
+	selector := resource.selector()
+	selectorBytes, err := selector.MarshalJSON()
+	if err != nil {
+		return fmt.Errorf("marshal grant selector: %w", err)
+	}
+
+	effect := conv.Default(resource.Effect, PolicyEffectAllow)
+	q := repo.New(db)
+	if _, err := q.DeletePrincipalGrantsByTarget(ctx, repo.DeletePrincipalGrantsByTargetParams{
+		OrganizationID: resource.OrganizationID,
+		Scope:          string(resource.Scope),
+		Effect:         string(effect),
+		Selectors:      selectorBytes,
+	}); err != nil {
+		return fmt.Errorf("delete grant audience: %w", err)
+	}
+
+	for _, principal := range resource.uniquePrincipals() {
+		if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
+			OrganizationID: resource.OrganizationID,
+			PrincipalUrn:   principal,
+			Scope:          string(resource.Scope),
+			Effect:         effect.pgText(),
+			Selectors:      selectorBytes,
+		}); err != nil {
+			return fmt.Errorf("upsert grant audience principal: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // Replace replaces allow grants for one resource-scoped permission.
@@ -144,7 +210,7 @@ func GrantResourceToPrincipals(ctx context.Context, db repo.DBTX, resource Resou
 	}
 	grant := &RoleGrant{
 		Scope:     string(resource.Scope),
-		Effect:    PolicyEffectAllow,
+		Effect:    conv.Default(resource.Effect, PolicyEffectAllow),
 		Selectors: []Selector{resource.selector()},
 	}
 
@@ -168,7 +234,7 @@ func RevokeResourceFromPrincipals(ctx context.Context, db repo.DBTX, resource Re
 	}
 	grant := &RoleGrant{
 		Scope:     string(resource.Scope),
-		Effect:    PolicyEffectAllow,
+		Effect:    conv.Default(resource.Effect, PolicyEffectAllow),
 		Selectors: []Selector{resource.selector()},
 	}
 
