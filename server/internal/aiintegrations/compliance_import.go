@@ -194,7 +194,7 @@ func (s *ComplianceImportService) importChatMessages(ctx context.Context, client
 		if err := s.upsertMessagePageChat(ctx, cfg, chatID, page, userIDsByEmail); err != nil {
 			return err
 		}
-		rows, err := s.buildExternalMessageRows(ctx, client, cfg, chatID, page, userIDsByEmail)
+		rows, err := s.buildExternalMessageRows(cfg, chatID, page, userIDsByEmail)
 		if err != nil {
 			return err
 		}
@@ -218,7 +218,7 @@ func (s *ComplianceImportService) importChatMessages(ctx context.Context, client
 }
 
 func (s *ComplianceImportService) upsertMessagePageChat(ctx context.Context, cfg Config, chatID uuid.UUID, page *anthropicapi.ChatMessagesPage, userIDsByEmail map[string]string) error {
-	createdAt := parseTimeOrNow(page.CreatedAt)
+	createdAt := parseTimeOrDefault(page.CreatedAt, time.Now().UTC())
 	updatedAt := parseTimeOrDefault(page.UpdatedAt, createdAt)
 	userID := userIDsByEmail[normalizeEmail(page.User.EmailAddress)]
 	resolvedChatID, err := s.chatRepo.UpsertExternalChat(ctx, chatrepo.UpsertExternalChatParams{
@@ -244,7 +244,7 @@ func (s *ComplianceImportService) upsertMessagePageChat(ctx context.Context, cfg
 	return nil
 }
 
-func (s *ComplianceImportService) buildExternalMessageRows(ctx context.Context, client *anthropicapi.Client, cfg Config, chatID uuid.UUID, page *anthropicapi.ChatMessagesPage, userIDsByEmail map[string]string) ([]chatrepo.CreateExternalChatMessageParams, error) {
+func (s *ComplianceImportService) buildExternalMessageRows(cfg Config, chatID uuid.UUID, page *anthropicapi.ChatMessagesPage, userIDsByEmail map[string]string) ([]chatrepo.CreateExternalChatMessageParams, error) {
 	rows := make([]chatrepo.CreateExternalChatMessageParams, 0, len(page.Messages))
 	userID := userIDsByEmail[normalizeEmail(page.User.EmailAddress)]
 	model := ""
@@ -382,10 +382,6 @@ func activityEmails(activities []anthropicapi.Activity) []string {
 
 func normalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
-}
-
-func parseTimeOrNow(value string) time.Time {
-	return parseTimeOrDefault(value, time.Now().UTC())
 }
 
 func parseTimeOrDefault(value string, fallback time.Time) time.Time {
