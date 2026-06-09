@@ -7505,8 +7505,8 @@ func collectionsUsage() {
 	fmt.Fprintln(os.Stderr, `    list: List MCP collections in the organization`)
 	fmt.Fprintln(os.Stderr, `    update: Update an MCP collection`)
 	fmt.Fprintln(os.Stderr, `    delete: Delete an MCP collection`)
-	fmt.Fprintln(os.Stderr, `    attach-server: Attach a server (toolset) to a collection`)
-	fmt.Fprintln(os.Stderr, `    detach-server: Detach a server (toolset) from a collection`)
+	fmt.Fprintln(os.Stderr, `    attach-server: Attach a server to a collection. Provide exactly one of toolset_id or mcp_server_id.`)
+	fmt.Fprintln(os.Stderr, `    detach-server: Detach a server from a collection. Provide exactly one of toolset_id or mcp_server_id.`)
 	fmt.Fprintln(os.Stderr, `    list-servers: List published MCP servers from a collection`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -7531,7 +7531,7 @@ func collectionsCreateUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections create --body '{\n      \"description\": \"aaa\",\n      \"mcp_registry_namespace\": \"aa\",\n      \"name\": \"aa\",\n      \"slug\": \"aa\",\n      \"toolset_ids\": [\n         \"abc123\"\n      ],\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections create --body '{\n      \"description\": \"aaa\",\n      \"mcp_registry_namespace\": \"aa\",\n      \"mcp_server_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"aa\",\n      \"slug\": \"aa\",\n      \"toolset_ids\": [\n         \"abc123\"\n      ],\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func collectionsListUsage() {
@@ -7608,7 +7608,7 @@ func collectionsAttachServerUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Attach a server (toolset) to a collection`)
+	fmt.Fprintln(os.Stderr, `Attach a server to a collection. Provide exactly one of toolset_id or mcp_server_id.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -7617,7 +7617,7 @@ func collectionsAttachServerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections attach-server --body '{\n      \"collection_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections attach-server --body '{\n      \"collection_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func collectionsDetachServerUsage() {
@@ -7630,7 +7630,7 @@ func collectionsDetachServerUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Detach a server (toolset) from a collection`)
+	fmt.Fprintln(os.Stderr, `Detach a server from a collection. Provide exactly one of toolset_id or mcp_server_id.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -7639,7 +7639,7 @@ func collectionsDetachServerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections detach-server --body '{\n      \"collection_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections detach-server --body '{\n      \"collection_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func collectionsListServersUsage() {

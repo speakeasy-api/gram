@@ -3,9 +3,11 @@ package collections_test
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/collections"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 )
 
 func TestCollectionsService_Create_Success(t *testing.T) {
@@ -62,6 +64,37 @@ func TestCollectionsService_Create_WithToolsetIds(t *testing.T) {
 	require.Len(t, servers.Servers, 1)
 	require.NotNil(t, servers.Servers[0].ToolsetID)
 	require.Equal(t, ts.ID, *servers.Servers[0].ToolsetID)
+}
+
+func TestCollectionsService_Create_WithMcpServerIds(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestCollectionsService(t)
+
+	server := createMCPServerWithEndpoint(t, ctx, ti, "Attach Me", "attach-me", mcpservers.VisibilityPrivate, uuid.NullUUID{})
+
+	result, err := ti.service.Create(ctx, &gen.CreatePayload{
+		Name:                 "Collection With Mcp Servers",
+		Slug:                 "collection-with-mcp-servers",
+		McpRegistryNamespace: "com.example.with-mcp-servers",
+		Visibility:           "private",
+		McpServerIds:         []string{server.idStr},
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	servers, err := ti.service.ListServers(ctx, &gen.ListServersPayload{
+		CollectionSlug: "collection-with-mcp-servers",
+		SessionToken:   nil,
+		ApikeyToken:    nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, servers.Servers, 1)
+	require.NotNil(t, servers.Servers[0].McpServerID)
+	require.Equal(t, server.idStr, *servers.Servers[0].McpServerID)
+	require.Nil(t, servers.Servers[0].ToolsetID)
 }
 
 func TestCollectionsService_Create_InvalidToolsetIdsRejected(t *testing.T) {

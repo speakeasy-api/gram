@@ -29,6 +29,10 @@ export type ExternalMCPServer = {
    */
   iconUrl?: string | undefined;
   /**
+   * ID of the attached MCP server when this server is listed from a Collection (mcp_server-backed attachment)
+   */
+  mcpServerId?: string | undefined;
+  /**
    * Opaque metadata from the registry
    */
   meta?: any | undefined;
@@ -57,7 +61,7 @@ export type ExternalMCPServer = {
    */
   tools?: Array<ExternalMCPTool> | undefined;
   /**
-   * ID of the attached toolset when this server is listed from a Collection
+   * ID of the attached toolset when this server is listed from a Collection (toolset-backed attachment)
    */
   toolsetId?: string | undefined;
   /**
@@ -74,6 +78,7 @@ export const ExternalMCPServer$inboundSchema: z.ZodMiniType<
   z.object({
     description: z.string(),
     icon_url: z.optional(z.string()),
+    mcp_server_id: z.optional(z.string()),
     meta: z.optional(z.any()),
     organization_mcp_collection_registry_id: z.optional(z.string()),
     registry_id: z.optional(z.string()),
@@ -87,6 +92,7 @@ export const ExternalMCPServer$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "icon_url": "iconUrl",
+      "mcp_server_id": "mcpServerId",
       "organization_mcp_collection_registry_id":
         "organizationMcpCollectionRegistryId",
       "registry_id": "registryId",

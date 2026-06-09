@@ -6621,7 +6621,7 @@ paths:
       x-speakeasy-name-override: revoke
   /rpc/collections.attachServer:
     post:
-      description: Attach a server (toolset) to a collection
+      description: Attach a server to a collection. Provide exactly one of toolset_id or mcp_server_id.
       operationId: attachServerToCollection
       parameters:
         - allowEmptyValue: true
@@ -6902,7 +6902,7 @@ paths:
       x-speakeasy-name-override: delete
   /rpc/collections.detachServer:
     post:
-      description: Detach a server (toolset) from a collection
+      description: Detach a server from a collection. Provide exactly one of toolset_id or mcp_server_id.
       operationId: detachServerFromCollection
       parameters:
         - allowEmptyValue: true
@@ -31858,13 +31858,16 @@ components:
           type: string
           description: ID of the collection
           format: uuid
+        mcp_server_id:
+          type: string
+          description: ID of the MCP server to attach (provide exactly one of toolset_id or mcp_server_id)
+          format: uuid
         toolset_id:
           type: string
-          description: ID of the toolset to attach
+          description: ID of the toolset to attach (provide exactly one of toolset_id or mcp_server_id)
           format: uuid
       required:
         - collection_id
-        - toolset_id
     AuditLog:
       type: object
       properties:
@@ -33383,6 +33386,11 @@ components:
           description: Registry namespace (e.g., 'com.speakeasy.acme.my-tools')
           minLength: 1
           maxLength: 200
+        mcp_server_ids:
+          type: array
+          items:
+            type: string
+          description: MCP server IDs to attach to the collection
         name:
           type: string
           description: Display name for the collection
@@ -34659,6 +34667,10 @@ components:
           type: string
           description: URL to the server's icon
           format: uri
+        mcp_server_id:
+          type: string
+          description: ID of the attached MCP server when this server is listed from a Collection (mcp_server-backed attachment)
+          format: uuid
         meta:
           description: Opaque metadata from the registry
         organization_mcp_collection_registry_id:
@@ -34688,7 +34700,7 @@ components:
           description: Tools available on the server
         toolset_id:
           type: string
-          description: ID of the attached toolset when this server is listed from a Collection
+          description: ID of the attached toolset when this server is listed from a Collection (toolset-backed attachment)
           format: uuid
         version:
           type: string

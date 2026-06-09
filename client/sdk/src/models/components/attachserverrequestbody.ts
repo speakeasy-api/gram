@@ -11,15 +11,20 @@ export type AttachServerRequestBody = {
    */
   collectionId: string;
   /**
-   * ID of the toolset to attach
+   * ID of the MCP server to attach (provide exactly one of toolset_id or mcp_server_id)
    */
-  toolsetId: string;
+  mcpServerId?: string | undefined;
+  /**
+   * ID of the toolset to attach (provide exactly one of toolset_id or mcp_server_id)
+   */
+  toolsetId?: string | undefined;
 };
 
 /** @internal */
 export type AttachServerRequestBody$Outbound = {
   collection_id: string;
-  toolset_id: string;
+  mcp_server_id?: string | undefined;
+  toolset_id?: string | undefined;
 };
 
 /** @internal */
@@ -29,11 +34,13 @@ export const AttachServerRequestBody$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     collectionId: z.string(),
-    toolsetId: z.string(),
+    mcpServerId: z.optional(z.string()),
+    toolsetId: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       collectionId: "collection_id",
+      mcpServerId: "mcp_server_id",
       toolsetId: "toolset_id",
     });
   }),
