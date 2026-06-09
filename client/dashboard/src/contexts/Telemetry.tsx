@@ -1,5 +1,5 @@
 import type { PostHog } from "posthog-js";
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useReducer } from "react";
 import type { User } from "./Auth";
 
 export type Telemetry = Pick<
@@ -60,36 +60,31 @@ export const TelemetryContext = createContext<Telemetry>(
   import.meta.env.DEV ? devTelemetry : nullTelemetry,
 );
 
-export const useTelemetry = (): Telemetry => useContext(TelemetryContext);
-
 /**
- * Reactively read a PostHog feature flag.
+ * Access telemetry, re-rendering the consumer when PostHog feature flags
+ * resolve or change.
  *
- * `telemetry.isFeatureEnabled` is a plain method call that reflects whatever
- * flags PostHog has loaded *so far*. PostHog fetches flags asynchronously after
- * init, so a component that reads the value during its first render gets
- * `undefined` and — because the call isn't reactive — never re-renders when the
- * flag later resolves. This hook subscribes to PostHog's `onFeatureFlags` event
- * and re-renders the consumer once flags arrive (or change), so opt-in gates
- * (`?? false`) reliably flip on instead of staying stuck hidden.
- *
- * Returns `undefined` until flags have resolved, then `true`/`false`.
+ * `telemetry.isFeatureEnabled(...)` reads whatever flags PostHog has loaded
+ * *so far*. PostHog fetches flags asynchronously after init (and reloads them
+ * on `group()`/`identify()`), so a component that reads a flag during render
+ * would otherwise be stuck on the pre-load value — most notably opt-in gates
+ * (`?? false`) staying hidden forever even once the flag turns on. Subscribing
+ * to `onFeatureFlags` here makes every `isFeatureEnabled` call site reactive,
+ * so there's a single way to read a flag and it just works.
  */
-export const useFeatureFlag = (flag: string): boolean | undefined => {
-  const telemetry = useTelemetry();
-  const [enabled, setEnabled] = useState<boolean | undefined>(() =>
-    telemetry.isFeatureEnabled(flag),
-  );
+export const useTelemetry = (): Telemetry => {
+  const telemetry = useContext(TelemetryContext);
+  const [, onFlagsChanged] = useReducer((version: number) => version + 1, 0);
 
   useEffect(() => {
-    // Re-read synchronously in case flags resolved between render and effect.
-    setEnabled(telemetry.isFeatureEnabled(flag));
-    return telemetry.onFeatureFlags(() => {
-      setEnabled(telemetry.isFeatureEnabled(flag));
-    });
-  }, [telemetry, flag]);
+    // onFeatureFlags fires once flags are loaded (immediately if already
+    // loaded when we subscribe) and again on any reload. Returns an
+    // unsubscribe fn. Bumping local state re-renders this consumer so its
+    // isFeatureEnabled reads re-evaluate against the latest flags.
+    return telemetry.onFeatureFlags(() => onFlagsChanged());
+  }, [telemetry]);
 
-  return enabled;
+  return telemetry;
 };
 
 export function useIdentifyUserForTelemetry(user: User | undefined): void {

@@ -6,7 +6,7 @@ import { Link as ExternalLink } from "@/components/ui/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
-import { useFeatureFlag } from "@/contexts/Telemetry";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { useAgentToken } from "@/hooks/useAgentToken";
 import { useOrgRoutes } from "@/routes";
 import { Button, Icon } from "@speakeasy-api/moonshine";
@@ -747,7 +747,8 @@ function FleetIdentity() {
 }
 
 export default function DeviceAgent(): React.JSX.Element | null {
-  const isDeviceAgentEnabled = useFeatureFlag("gram-device-agent");
+  const telemetry = useTelemetry();
+  const isDeviceAgentEnabled = telemetry.isFeatureEnabled("gram-device-agent");
 
   // Flags haven't resolved yet — render nothing rather than flashing a redirect.
   if (isDeviceAgentEnabled === undefined) {

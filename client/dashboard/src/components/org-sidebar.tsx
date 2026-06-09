@@ -14,7 +14,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useIsAdmin } from "@/contexts/Auth";
-import { useFeatureFlag } from "@/contexts/Telemetry";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { Scope, useRBAC } from "@/hooks/useRBAC";
 import { AppRoute, useOrgRoutes } from "@/routes";
 import { Icon } from "@speakeasy-api/moonshine";
@@ -66,7 +66,9 @@ export function OrgSidebar({
   const orgRoutes = useOrgRoutes();
   const isAdmin = useIsAdmin();
   const { isRbacEnabled, isLoading: rbacLoading } = useRBAC();
-  const isDeviceAgentEnabled = useFeatureFlag("gram-device-agent") ?? false;
+  const telemetry = useTelemetry();
+  const isDeviceAgentEnabled =
+    telemetry.isFeatureEnabled("gram-device-agent") ?? false;
 
   const settingsActive = [
     orgRoutes.billing,
