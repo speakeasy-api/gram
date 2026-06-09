@@ -215,9 +215,9 @@ type ListChatsPayload struct {
 	// Filter by whether chat has risk findings: 'true', 'false', or empty for no
 	// filter.
 	HasRisk *string
-	// Filter chats created after this timestamp (ISO 8601)
+	// Filter chats last active after this timestamp (ISO 8601)
 	From *string
-	// Filter chats created before this timestamp (ISO 8601)
+	// Filter chats last active before this timestamp (ISO 8601)
 	To *string
 	// Number of results per page
 	Limit int

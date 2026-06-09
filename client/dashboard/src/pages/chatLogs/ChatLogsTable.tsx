@@ -184,6 +184,8 @@ export function ChatLogsTable({
           const isSelected = selectedChatId === chat.id;
           const source = chat.source;
           const riskCount = chat.riskFindingsCount ?? 0;
+          const lastActivityTimestamp =
+            chat.lastMessageTimestamp ?? chat.createdAt;
 
           return (
             <button
@@ -212,7 +214,12 @@ export function ChatLogsTable({
                     <CopyButton value={chat.id} label="Chat ID" />
                     <span className="text-muted-foreground/40">·</span>
                     <span className="text-muted-foreground text-sm">
-                      {format(chat.createdAt, "MMM d, HH:mm")}
+                      Created {format(chat.createdAt, "MMM d, HH:mm")}
+                    </span>
+                    <span className="text-muted-foreground/40">·</span>
+                    <span className="text-muted-foreground text-sm">
+                      Last activity{" "}
+                      {format(lastActivityTimestamp, "MMM d, HH:mm")}
                     </span>
                   </div>
 

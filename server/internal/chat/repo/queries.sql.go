@@ -49,58 +49,70 @@ func (q *Queries) CountChatMessages(ctx context.Context, arg CountChatMessagesPa
 }
 
 const countChats = `-- name: CountChats :one
-SELECT COUNT(DISTINCT c.id) AS total
-FROM chats c
-WHERE c.project_id = $1
-  AND c.deleted IS FALSE
-  AND ($2 = '' OR c.external_user_id = $2)
-  AND ($3 = '' OR c.user_id = $3)
-  AND ($4::timestamptz IS NULL OR c.created_at >= $4)
-  AND ($5::timestamptz IS NULL OR c.created_at <= $5)
-  AND (
-    $6 = ''
-    OR c.id::text ILIKE '%' || $6 || '%'
-    OR c.external_user_id ILIKE '%' || $6 || '%'
-    OR c.title ILIKE '%' || $6 || '%'
-  )
-  AND (
-    $7 = ''
-    OR EXISTS (
-      SELECT 1 FROM assistant_threads at
-      WHERE at.chat_id = c.id
-        AND at.assistant_id = $7::uuid
-        AND at.deleted IS FALSE
+WITH candidate_chats AS (
+  SELECT c.id, c.created_at
+  FROM chats c
+  WHERE c.project_id = $3
+    AND c.deleted IS FALSE
+    AND ($4 = '' OR c.external_user_id = $4)
+    AND ($5 = '' OR c.user_id = $5)
+    AND (
+      $6 = ''
+      OR c.id::text ILIKE '%' || $6 || '%'
+      OR c.external_user_id ILIKE '%' || $6 || '%'
+      OR c.title ILIKE '%' || $6 || '%'
     )
-  )
-  AND (
-    $8::text = ''
-    OR (
-      $8::text = 'true' AND EXISTS (
-        SELECT 1 FROM risk_results rr
-        JOIN chat_messages cm ON cm.id = rr.chat_message_id
-        WHERE cm.chat_id = c.id
-          AND rr.project_id = $1
-          AND rr.found IS TRUE
+    AND (
+      $7 = ''
+      OR EXISTS (
+        SELECT 1 FROM assistant_threads at
+        WHERE at.chat_id = c.id
+          AND at.assistant_id = $7::uuid
+          AND at.deleted IS FALSE
       )
     )
-    OR (
-      $8::text = 'false' AND NOT EXISTS (
-        SELECT 1 FROM risk_results rr
-        JOIN chat_messages cm ON cm.id = rr.chat_message_id
-        WHERE cm.chat_id = c.id
-          AND rr.project_id = $1
-          AND rr.found IS TRUE
+    AND (
+      $8::text = ''
+      OR (
+        $8::text = 'true' AND EXISTS (
+          SELECT 1 FROM risk_results rr
+          JOIN chat_messages cm ON cm.id = rr.chat_message_id
+          WHERE cm.chat_id = c.id
+            AND rr.project_id = $3
+            AND rr.found IS TRUE
+        )
+      )
+      OR (
+        $8::text = 'false' AND NOT EXISTS (
+          SELECT 1 FROM risk_results rr
+          JOIN chat_messages cm ON cm.id = rr.chat_message_id
+          WHERE cm.chat_id = c.id
+            AND rr.project_id = $3
+            AND rr.found IS TRUE
+        )
       )
     )
-  )
+),
+chat_activity AS (
+  SELECT
+    cc.id,
+    COALESCE(MAX(cm.created_at), cc.created_at) AS last_message_timestamp
+  FROM candidate_chats cc
+  LEFT JOIN chat_messages cm ON cm.chat_id = cc.id
+  GROUP BY cc.id, cc.created_at
+)
+SELECT COUNT(*) AS total
+FROM chat_activity ca
+WHERE ($1::timestamptz IS NULL OR ca.last_message_timestamp >= $1)
+  AND ($2::timestamptz IS NULL OR ca.last_message_timestamp <= $2)
 `
 
 type CountChatsParams struct {
+	FromTime       pgtype.Timestamptz
+	ToTime         pgtype.Timestamptz
 	ProjectID      uuid.UUID
 	ExternalUserID interface{}
 	UserID         interface{}
-	FromTime       pgtype.Timestamptz
-	ToTime         pgtype.Timestamptz
 	Search         interface{}
 	AssistantID    interface{}
 	HasRiskFilter  string
@@ -108,11 +120,11 @@ type CountChatsParams struct {
 
 func (q *Queries) CountChats(ctx context.Context, arg CountChatsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countChats,
+		arg.FromTime,
+		arg.ToTime,
 		arg.ProjectID,
 		arg.ExternalUserID,
 		arg.UserID,
-		arg.FromTime,
-		arg.ToTime,
 		arg.Search,
 		arg.AssistantID,
 		arg.HasRiskFilter,
@@ -977,51 +989,38 @@ func (q *Queries) ListChatResolutions(ctx context.Context, chatID uuid.UUID) ([]
 }
 
 const listChats = `-- name: ListChats :many
-WITH limited_chats AS (
+WITH candidate_chats AS (
   SELECT
     c.id,
     c.title,
     c.user_id,
     c.external_user_id,
     c.created_at,
-    c.updated_at,
-    (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id)::integer AS num_messages,
-    (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) AS source,
-    (SELECT created_at FROM chat_messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) AS last_message_timestamp,
-    (
-      SELECT COUNT(*)::integer
-      FROM risk_results rr
-      JOIN chat_messages cm ON cm.id = rr.chat_message_id
-      WHERE cm.chat_id = c.id
-        AND rr.project_id = $1
-        AND rr.found IS TRUE
-    ) AS risk_findings_count
+    c.updated_at
   FROM chats c
   WHERE c.project_id = $1
     AND c.deleted IS FALSE
     AND ($2 = '' OR c.external_user_id = $2)
     AND ($3 = '' OR c.user_id = $3)
-    AND ($4::timestamptz IS NULL OR c.created_at >= $4)
-    AND ($5::timestamptz IS NULL OR c.created_at <= $5)
     AND (
-      $6 = ''
-      OR c.id::text ILIKE '%' || $6 || '%'
-      OR c.external_user_id ILIKE '%' || $6 || '%'
-      OR c.title ILIKE '%' || $6 || '%'
+      $4 = ''
+      OR c.id::text ILIKE '%' || $4 || '%'
+      OR c.external_user_id ILIKE '%' || $4 || '%'
+      OR c.title ILIKE '%' || $4 || '%'
     )
     AND (
-      $7 = ''
+      $5 = ''
       OR EXISTS (
         SELECT 1 FROM assistant_threads at
         WHERE at.chat_id = c.id
-          AND at.assistant_id = $7::uuid
+          AND at.assistant_id = $5::uuid
           AND at.deleted IS FALSE
       )
     )
     AND (
-      $8::text = ''
+      $6::text = ''
       OR (
-        $8::text = 'true' AND EXISTS (
+        $6::text = 'true' AND EXISTS (
           SELECT 1 FROM risk_results rr
           JOIN chat_messages cm ON cm.id = rr.chat_message_id
           WHERE cm.chat_id = c.id
@@ -1030,7 +1029,7 @@ WITH limited_chats AS (
         )
       )
       OR (
-        $8::text = 'false' AND NOT EXISTS (
+        $6::text = 'false' AND NOT EXISTS (
           SELECT 1 FROM risk_results rr
           JOIN chat_messages cm ON cm.id = rr.chat_message_id
           WHERE cm.chat_id = c.id
@@ -1039,12 +1038,59 @@ WITH limited_chats AS (
         )
       )
     )
+),
+chat_stats AS (
+  SELECT
+    cc.id,
+    COUNT(cm.id)::integer AS num_messages,
+    COALESCE(MAX(cm.created_at), cc.created_at) AS last_message_timestamp
+  FROM candidate_chats cc
+  LEFT JOIN chat_messages cm ON cm.chat_id = cc.id
+  GROUP BY cc.id, cc.created_at
+),
+filtered_chats AS (
+  SELECT
+    cc.id,
+    cc.title,
+    cc.user_id,
+    cc.external_user_id,
+    cc.created_at,
+    cc.updated_at,
+    cs.num_messages,
+    cs.last_message_timestamp,
+    (
+      SELECT COUNT(*)::integer
+      FROM risk_results rr
+      JOIN chat_messages cm ON cm.id = rr.chat_message_id
+      WHERE cm.chat_id = cc.id
+        AND rr.project_id = $1
+        AND rr.found IS TRUE
+    ) AS risk_findings_count
+  FROM candidate_chats cc
+  JOIN chat_stats cs ON cs.id = cc.id
+  WHERE ($7::timestamptz IS NULL OR cs.last_message_timestamp >= $7)
+    AND ($8::timestamptz IS NULL OR cs.last_message_timestamp <= $8)
+),
+limited_chats AS (
+  SELECT
+    fc.id,
+    fc.title,
+    fc.user_id,
+    fc.external_user_id,
+    fc.created_at,
+    fc.updated_at,
+    fc.num_messages,
+    (SELECT source FROM chat_messages WHERE chat_id = fc.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) AS source,
+    fc.last_message_timestamp,
+    fc.risk_findings_count
+  FROM filtered_chats fc
   ORDER BY
-    CASE WHEN $9 = 'created_at' AND $10 = 'desc' THEN c.created_at END DESC NULLS LAST,
-    CASE WHEN $9 = 'created_at' AND $10 = 'asc' THEN c.created_at END ASC NULLS LAST,
-    CASE WHEN $9 = 'num_messages' AND $10 = 'desc' THEN (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id) END DESC NULLS LAST,
-    CASE WHEN $9 = 'num_messages' AND $10 = 'asc' THEN (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id) END ASC NULLS LAST,
-    c.created_at DESC
+    CASE WHEN $9 = 'last_message_timestamp' AND $10 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
+    CASE WHEN $9 = 'last_message_timestamp' AND $10 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
+    CASE WHEN $9 = 'num_messages' AND $10 = 'desc' THEN fc.num_messages END DESC NULLS LAST,
+    CASE WHEN $9 = 'num_messages' AND $10 = 'asc' THEN fc.num_messages END ASC NULLS LAST,
+    fc.last_message_timestamp DESC,
+    fc.id DESC
   LIMIT $12
   OFFSET $11
 )
@@ -1066,11 +1112,11 @@ type ListChatsParams struct {
 	ProjectID      uuid.UUID
 	ExternalUserID interface{}
 	UserID         interface{}
-	FromTime       pgtype.Timestamptz
-	ToTime         pgtype.Timestamptz
 	Search         interface{}
 	AssistantID    interface{}
 	HasRiskFilter  string
+	FromTime       pgtype.Timestamptz
+	ToTime         pgtype.Timestamptz
 	SortBy         interface{}
 	SortOrder      interface{}
 	PageOffset     int32
@@ -1095,11 +1141,11 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 		arg.ProjectID,
 		arg.ExternalUserID,
 		arg.UserID,
-		arg.FromTime,
-		arg.ToTime,
 		arg.Search,
 		arg.AssistantID,
 		arg.HasRiskFilter,
+		arg.FromTime,
+		arg.ToTime,
 		arg.SortBy,
 		arg.SortOrder,
 		arg.PageOffset,

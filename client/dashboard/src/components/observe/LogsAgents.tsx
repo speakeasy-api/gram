@@ -42,7 +42,7 @@ type SortOrder = "asc" | "desc";
 function toApiSortBy(field: SortField): SortBy {
   switch (field) {
     case "chronological":
-      return SortBy.CreatedAt;
+      return SortBy.LastMessageTimestamp;
     case "messageCount":
       return SortBy.NumMessages;
   }
@@ -517,7 +517,7 @@ function AgentSessionsPageContent({
                   <SelectContent className="w-[280px]">
                     <SelectItem
                       value="chronological"
-                      description="Sort by when the chat was created"
+                      description="Sort by latest chat message activity"
                     >
                       Date
                     </SelectItem>

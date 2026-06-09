@@ -527,7 +527,7 @@ func ParseEndpoint(
 		chatListChatsToFlag                = chatListChatsFlags.String("to", "", "")
 		chatListChatsLimitFlag             = chatListChatsFlags.String("limit", "50", "")
 		chatListChatsOffsetFlag            = chatListChatsFlags.String("offset", "", "")
-		chatListChatsSortByFlag            = chatListChatsFlags.String("sort-by", "created_at", "")
+		chatListChatsSortByFlag            = chatListChatsFlags.String("sort-by", "last_message_timestamp", "")
 		chatListChatsSortOrderFlag         = chatListChatsFlags.String("sort-order", "desc", "")
 		chatListChatsSessionTokenFlag      = chatListChatsFlags.String("session-token", "", "")
 		chatListChatsProjectSlugInputFlag  = chatListChatsFlags.String("project-slug-input", "", "")
