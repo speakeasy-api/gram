@@ -68,7 +68,21 @@ func SetupOTelSDK(ctx context.Context, logger *slog.Logger, options SetupOTelSDK
 	if options.EnableMetrics {
 		logger.InfoContext(ctx, "otel metrics enabled")
 
-		exp, err := otlpmetricgrpc.New(ctx)
+		// Emit delta aggregation temporality for monotonic sums and histograms.
+		// We ship to a per-node Datadog Agent OTLP receiver; the default
+		// cumulative temporality forces the Agent to do a stateful
+		// cumulative-to-delta conversion that is fragile in our horizontally
+		// scaled, pod-churning topology and corrupts counter values. Emitting
+		// delta at the SDK makes each pod self-contained and the Agent a
+		// pass-through. See Datadog's "Producing Delta Temporality Metrics with
+		// OpenTelemetry" guide.
+		//
+		// NOTE: this overrides OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE.
+		// The exporter applies env config before explicit options, so this
+		// selector wins regardless of that env var.
+		exp, err := otlpmetricgrpc.New(ctx,
+			otlpmetricgrpc.WithTemporalitySelector(instrumentKindTemporalitySelector),
+		)
 		if err != nil {
 			handleErr(err)
 			return nil, err
