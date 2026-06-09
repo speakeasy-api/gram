@@ -55,7 +55,8 @@ import {
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { Ellipsis, Inbox, Loader2, Plus, ShieldCheck } from "lucide-react";
 import type React from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryState } from "nuqs";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import {
@@ -939,6 +940,21 @@ export function ApprovalRequestsContent({
   const rulesLoading = rulesQuery.isLoading;
   const rulesError = rulesQuery.error;
 
+  // Deep-link support: `?review=<id>` opens that request's review sheet. The
+  // command palette uses this since requests have no per-item route. Only
+  // pending ("requested") requests are listed, matching what the palette shows.
+  const [reviewParam, setReviewParam] = useQueryState("review");
+  const openedReviewRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!reviewParam || requestsLoading) return;
+    if (openedReviewRef.current === reviewParam) return;
+    const request = requests.find((r) => r.id === reviewParam);
+    if (request) {
+      openedReviewRef.current = reviewParam;
+      setReviewRequest(request);
+    }
+  }, [reviewParam, requestsLoading, requests]);
+
   const renderPaginationFooter = ({
     count,
     hasNextPage,
@@ -1191,7 +1207,11 @@ export function ApprovalRequestsContent({
         open={!!reviewRequest}
         isSubmitting={isReviewSubmitting}
         onOpenChange={(open) => {
-          if (!open) setReviewRequest(null);
+          if (!open) {
+            setReviewRequest(null);
+            openedReviewRef.current = null;
+            void setReviewParam(null);
+          }
         }}
         onApprove={async (input) => {
           if (!reviewRequest) return;

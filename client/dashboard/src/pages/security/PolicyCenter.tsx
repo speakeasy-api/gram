@@ -41,7 +41,8 @@ import {
   ChevronRight,
   RefreshCw,
 } from "lucide-react";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { useQueryState } from "nuqs";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   invalidateAllRiskListPolicies,
@@ -337,7 +338,7 @@ function PolicyCenterContent() {
     setSheetOpen(true);
   };
 
-  const handleEdit = (policy: RiskPolicy) => {
+  const handleEdit = useCallback((policy: RiskPolicy) => {
     const customRuleIds = policy.customRuleIds ?? [];
     setEditingPolicy(policy);
     setFormName(policy.name);
@@ -357,7 +358,24 @@ function PolicyCenterContent() {
     setFormAutoName(policy.autoName ?? true);
     setFormUserMessage(policy.userMessage ?? "");
     setSheetOpen(true);
-  };
+  }, []);
+
+  // Deep-link support: `?policy=<id>` opens that policy's edit sheet. The
+  // command palette uses this since policies have no per-item route. Guarded by
+  // a ref so it fires once per id (not on every policies re-fetch).
+  const [policyParam, setPolicyParam] = useQueryState("policy");
+  const openedPolicyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!policyParam || isLoading) return;
+    if (openedPolicyRef.current === policyParam) return;
+    // Read from the stable react-query `data` (not the per-render `policies`
+    // array) so the effect doesn't re-run every render.
+    const policy = data?.policies?.find((p) => p.id === policyParam);
+    if (policy) {
+      openedPolicyRef.current = policyParam;
+      handleEdit(policy);
+    }
+  }, [policyParam, isLoading, data, handleEdit]);
 
   const handleSave = () => {
     const {
@@ -691,7 +709,18 @@ function PolicyCenterContent() {
         />
 
         {/* Edit/Create Sheet */}
-        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <Sheet
+          open={sheetOpen}
+          onOpenChange={(open) => {
+            setSheetOpen(open);
+            if (!open) {
+              // Drop the deep-link param so the sheet doesn't reopen and the
+              // same id can be deep-linked again later.
+              openedPolicyRef.current = null;
+              void setPolicyParam(null);
+            }
+          }}
+        >
           <SheetContent className="flex flex-col overflow-y-auto sm:max-w-lg">
             <SheetHeader className="px-6 pt-6">
               <SheetTitle>

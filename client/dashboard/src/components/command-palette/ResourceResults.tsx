@@ -14,6 +14,7 @@ import { usePluginsSuspense } from "@gram/client/react-query/plugins";
 import { useShadowMCPApprovalRequestsSuspense } from "@gram/client/react-query/shadowMCPApprovalRequests.js";
 import { Icon, type IconName } from "@speakeasy-api/moonshine";
 import { Suspense, useMemo, type ReactNode } from "react";
+import { useNavigate } from "react-router";
 import { CommandErrorBoundary } from "./CommandErrorBoundary";
 
 /**
@@ -246,6 +247,7 @@ function PluginsGroup({ onNavigate }: GroupProps) {
 
 function RiskPoliciesGroup({ onNavigate }: GroupProps) {
   const routes = useRoutes();
+  const navigate = useNavigate();
   const { data } = useRiskListPolicies();
   const policies = data?.policies ?? [];
   if (!policies.length) return null;
@@ -258,8 +260,10 @@ function RiskPoliciesGroup({ onNavigate }: GroupProps) {
           label={policy.name}
           icon="shield-check"
           onSelect={() => {
-            // No per-policy detail route; land on the Risk Policies page.
-            routes.policyCenter.goTo();
+            // No per-policy route; deep-link opens the policy's sheet by id.
+            void navigate(
+              `${routes.policyCenter.href()}?policy=${encodeURIComponent(policy.id)}`,
+            );
             onNavigate();
           }}
         />
@@ -270,6 +274,7 @@ function RiskPoliciesGroup({ onNavigate }: GroupProps) {
 
 function DetectionRulesGroup({ onNavigate }: GroupProps) {
   const routes = useRoutes();
+  const navigate = useNavigate();
   const { data } = useRiskListCustomDetectionRules();
   const rules = data?.rules ?? [];
   if (!rules.length) return null;
@@ -283,8 +288,10 @@ function DetectionRulesGroup({ onNavigate }: GroupProps) {
           sublabel={rule.severity}
           icon="scan-search"
           onSelect={() => {
-            // No per-rule detail route; land on the Detection Rules page.
-            routes.detectionRules.goTo();
+            // No per-rule route; deep-link opens the rule's sheet by id.
+            void navigate(
+              `${routes.detectionRules.href()}?rule=${encodeURIComponent(rule.id)}`,
+            );
             onNavigate();
           }}
         />
@@ -295,6 +302,7 @@ function DetectionRulesGroup({ onNavigate }: GroupProps) {
 
 function ApprovalRequestsGroup({ onNavigate }: GroupProps) {
   const routes = useRoutes();
+  const navigate = useNavigate();
   const { data } = useShadowMCPApprovalRequestsSuspense({
     status: "requested",
   });
@@ -317,8 +325,10 @@ function ApprovalRequestsGroup({ onNavigate }: GroupProps) {
             sublabel={request.status}
             icon="inbox"
             onSelect={() => {
-              // No per-request detail route; land on the Approval Requests page.
-              routes.approvalRequests.goTo();
+              // No per-request route; deep-link opens the review sheet by id.
+              void navigate(
+                `${routes.approvalRequests.href()}?review=${encodeURIComponent(request.id)}`,
+              );
               onNavigate();
             }}
           />
