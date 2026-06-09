@@ -3,8 +3,7 @@ package testenv
 import (
 	"context"
 	"fmt"
-	"net"
-	"net/url"
+	"sync"
 	"testing"
 	"time"
 
@@ -33,54 +32,49 @@ func NewTestRedis(ctx context.Context) (*tcr.RedisContainer, RedisClientFunc, er
 }
 
 func newRedisClientFunc(container *tcr.RedisContainer) RedisClientFunc {
+	// Resolved once per container: probing candidate addresses on every
+	// client creation would cost seconds per test on hosts where the
+	// container IP is unroutable.
+	resolveAddr := sync.OnceValues(func() (string, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		candidates, err := candidateAddrs(ctx, container, "6379/tcp")
+		if err != nil {
+			return "", fmt.Errorf("resolve redis address: %w", err)
+		}
+
+		var lastErr error
+		for i, addr := range candidates {
+			attempts := 3
+			if i == len(candidates)-1 {
+				attempts = 10
+			}
+
+			client := newRedisTestClient(addr, 0)
+			lastErr = pingRedis(ctx, client, attempts)
+			_ = client.Close()
+			if lastErr == nil {
+				return addr, nil
+			}
+		}
+
+		return "", fmt.Errorf("redis not reachable on %v: %w", candidates, lastErr)
+	})
+
 	return func(t *testing.T, db int) (*redis.Client, error) {
 		t.Helper()
 
-		cstr, err := container.ConnectionString(t.Context())
+		addr, err := resolveAddr()
 		if err != nil {
-			return nil, fmt.Errorf("failed to get redis connection string: %w", err)
+			return nil, err
 		}
 
-		uri, err := url.Parse(cstr)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse redis connection string: %w", err)
-		}
+		client := newRedisTestClient(addr, db)
 
-		host, port, err := net.SplitHostPort(uri.Host)
-		if err != nil {
-			return nil, fmt.Errorf("split redis host/port: %w", err)
-		}
-
-		// Avoid a DNS lookup for localhost inside synctest bubbles without
-		// changing arbitrary Docker/Testcontainers endpoints. Re-resolving the
-		// host here can pick an address that is not the actual published Redis
-		// endpoint (for example ::1 instead of Docker's IPv4 localhost binding).
-		if host == "localhost" {
-			host = "127.0.0.1"
-		}
-
-		client := redis.NewClient(&redis.Options{
-			Addr:         net.JoinHostPort(host, port),
-			DB:           db,
-			DialTimeout:  1 * time.Second,
-			ReadTimeout:  300 * time.Millisecond,
-			WriteTimeout: 1 * time.Second,
-			Protocol:     2,
-		})
-
-		// Verify the connection is alive before returning. Without this,
-		// the container's mapped port may be open before the Docker
-		// port-forwarding is fully routing to Redis, causing transient
-		// connection errors under CI load.
-		ctx := t.Context()
-		for attempt := range 10 {
-			if err := client.Ping(ctx).Err(); err == nil {
-				break
-			} else if attempt == 9 {
-				_ = client.Close()
-				return nil, fmt.Errorf("redis not ready after retries: %w", err)
-			}
-			time.Sleep(100 * time.Millisecond)
+		if err := pingRedis(t.Context(), client, 10); err != nil {
+			_ = client.Close()
+			return nil, fmt.Errorf("redis not ready after retries: %w", err)
 		}
 
 		t.Cleanup(func() {
@@ -91,4 +85,28 @@ func newRedisClientFunc(container *tcr.RedisContainer) RedisClientFunc {
 
 		return client, nil
 	}
+}
+
+func newRedisTestClient(addr string, db int) *redis.Client {
+	return redis.NewClient(&redis.Options{
+		Addr:         addr,
+		DB:           db,
+		DialTimeout:  1 * time.Second,
+		ReadTimeout:  300 * time.Millisecond,
+		WriteTimeout: 1 * time.Second,
+		Protocol:     2,
+	})
+}
+
+func pingRedis(ctx context.Context, client *redis.Client, attempts int) error {
+	var err error
+	for attempt := range attempts {
+		if err = client.Ping(ctx).Err(); err == nil {
+			return nil
+		}
+		if attempt < attempts-1 {
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	return fmt.Errorf("ping redis: %w", err)
 }
