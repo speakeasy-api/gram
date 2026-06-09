@@ -3,7 +3,7 @@
 -- Modify "ai_integration_syncs" table
 ALTER TABLE "ai_integration_syncs" ADD COLUMN "last_cursor_id" text NULL;
 -- Modify "chat_messages" table
-ALTER TABLE "chat_messages" ADD COLUMN "external_message_id" text NULL, ADD COLUMN "external_chat_message_assets_url" text NULL;
+ALTER TABLE "chat_messages" ADD COLUMN "external_message_id" text NULL;
 -- Create index "chat_messages_chat_id_external_message_id_key" to table: "chat_messages"
 CREATE UNIQUE INDEX CONCURRENTLY "chat_messages_chat_id_external_message_id_key" ON "chat_messages" ("chat_id", "external_message_id") WHERE (external_message_id IS NOT NULL);
 -- Modify "chats" table

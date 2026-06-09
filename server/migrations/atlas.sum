@@ -1,4 +1,4 @@
-h1:rkFhIQ6bquSdnMwC9BRMtGKz+fr3Q5K2fH11/IY1lJc=
+h1:ONwE/YYwmRtr0pi42MPNTbIuwa3STas9Fzad0G/hNpY=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -211,4 +211,4 @@ h1:rkFhIQ6bquSdnMwC9BRMtGKz+fr3Q5K2fH11/IY1lJc=
 20260605174513_risk-results-drop-verbatim-match-index-column.sql h1:Ans/oK8EWrCsPWdbfL9v/66RrUgIMYdlwEDEx9hwscc=
 20260605200300_plugin_servers_mcp_server_id.sql h1:3NUyToGuksyCGuOgltiB60ob8++hRSAKYDdrUHesOzg=
 20260609101753_add_directory_attributes.sql h1:7AYW4VSIpTe3zZ5jUYEZil/TXBAU6gGT+P8VJB0bc8U=
-20260609184719_compliance-api-chat-messages.sql h1:+iRGteldO+rGhz1kCBNwBojlCY6J7eYv514D6hYBzyY=
+20260609184933_compliance-api-chat-messages.sql h1:Lmdvxf3k5Zoh8S/CBheqgC3DDuncZUNFuY0Ou6TBacE=

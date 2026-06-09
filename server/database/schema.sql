@@ -1371,7 +1371,6 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   user_id TEXT,
   external_user_id TEXT,
   external_message_id TEXT,
-  external_chat_message_assets_url TEXT,
   origin TEXT,
   user_agent TEXT,
   ip_address TEXT,
