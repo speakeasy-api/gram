@@ -10,11 +10,15 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AccessMember } from "@gram/client/models/components/accessmember.js";
+import type { Role } from "@gram/client/models/components/role.js";
 import type { RiskPolicyBypassRequest } from "@gram/client/models/components/riskpolicybypassrequest.js";
 
 const mocks = vi.hoisted(() => ({
   useRBAC: vi.fn(),
   usePolicyBypassRequests: vi.fn(),
+  useRoles: vi.fn(),
+  useMembers: vi.fn(),
   mutation: vi.fn(),
   invalidate: vi.fn(),
 }));
@@ -60,6 +64,14 @@ vi.mock("@gram/client/react-query/riskDenyPolicyBypassRequest.js", () => ({
 
 vi.mock("@gram/client/react-query/riskRevokePolicyBypassRequest.js", () => ({
   useRiskRevokePolicyBypassRequestMutation: mocks.mutation,
+}));
+
+vi.mock("@gram/client/react-query/roles.js", () => ({
+  useRoles: mocks.useRoles,
+}));
+
+vi.mock("@gram/client/react-query/members.js", () => ({
+  useMembers: mocks.useMembers,
 }));
 
 vi.mock("@speakeasy-api/moonshine", () => ({
@@ -177,6 +189,55 @@ vi.mock("@/components/ui/radio-group", async () => {
   };
 });
 
+vi.mock("@/components/ui/select", async () => {
+  const React = await vi.importActual<typeof import("react")>("react");
+  const SelectContext = React.createContext<
+    | {
+        onValueChange?: (value: string) => void;
+      }
+    | undefined
+  >(undefined);
+
+  return {
+    Select: ({
+      children,
+      onValueChange,
+    }: {
+      children: ReactNode;
+      value?: string;
+      onValueChange?: (value: string) => void;
+      disabled?: boolean;
+    }) => (
+      <SelectContext.Provider value={{ onValueChange }}>
+        <div>{children}</div>
+      </SelectContext.Provider>
+    ),
+    SelectContent: ({ children }: { children: ReactNode }) => (
+      <div>{children}</div>
+    ),
+    SelectItem: ({
+      children,
+      value,
+    }: {
+      children: ReactNode;
+      value: string;
+    }) => {
+      const context = React.useContext(SelectContext);
+      return (
+        <button type="button" onClick={() => context?.onValueChange?.(value)}>
+          {children}
+        </button>
+      );
+    },
+    SelectTrigger: ({ children }: { children: ReactNode }) => (
+      <div>{children}</div>
+    ),
+    SelectValue: ({ placeholder }: { placeholder?: string }) => (
+      <span>{placeholder}</span>
+    ),
+  };
+});
+
 vi.mock("@/components/ui/sheet", () => ({
   Sheet: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   SheetContent: ({ children }: { children: ReactNode }) => (
@@ -220,6 +281,48 @@ function policyBypassRequest({
     targetKey: serverURL,
     targetKind: "shadow_mcp_server",
     targetLabel: label,
+  };
+}
+
+function accessMember({
+  id,
+  email,
+  name = email,
+  roleIds = [],
+}: {
+  id: string;
+  email: string;
+  name?: string;
+  roleIds?: string[];
+}): AccessMember {
+  return {
+    email,
+    id,
+    joinedAt: new Date("2026-01-01"),
+    name,
+    roleIds,
+  };
+}
+
+function accessRole({
+  id,
+  name,
+  isSystem = false,
+}: {
+  id: string;
+  name: string;
+  isSystem?: boolean;
+}): Role {
+  return {
+    createdAt: new Date("2026-01-01"),
+    description: "",
+    grants: [],
+    id,
+    isSystem,
+    memberCount: 0,
+    name,
+    slug: name.toLowerCase(),
+    updatedAt: new Date("2026-01-01"),
   };
 }
 
@@ -280,6 +383,31 @@ beforeEach(() => {
   mocks.mutation.mockReturnValue({
     isPending: false,
     mutateAsync: vi.fn(),
+  });
+  mocks.useRoles.mockReturnValue({
+    data: {
+      roles: [
+        accessRole({ id: "role-admin", name: "Admin", isSystem: true }),
+        accessRole({ id: "role-reviewers", name: "Reviewers" }),
+      ],
+    },
+  });
+  mocks.useMembers.mockReturnValue({
+    data: {
+      members: [
+        accessMember({
+          id: "user-1",
+          email: "requester@example.com",
+          name: "Requester",
+          roleIds: ["role-reviewers"],
+        }),
+        accessMember({
+          id: "user-2",
+          email: "reviewer@example.com",
+          name: "Reviewer",
+        }),
+      ],
+    },
   });
 });
 
@@ -455,7 +583,90 @@ describe("ApprovalRequestsContent", () => {
     await waitFor(() => {
       expect(approveRequest).toHaveBeenCalledWith({
         request: {
-          riskIDRequestBody: { id: "request-approve" },
+          riskPolicyBypassApprovalRequestBody: {
+            id: "request-approve",
+            grantedPrincipalUrns: ["user:user-1"],
+          },
+        },
+      });
+    });
+  });
+
+  it("approves requests for every organization user", async () => {
+    const approveRequest = vi.fn().mockResolvedValue({});
+    mockPolicyBypassLists({
+      requested: [
+        policyBypassRequest({
+          id: "request-everyone",
+          label: "Everyone request",
+          serverURL: "https://everyone.example.com/mcp",
+        }),
+      ],
+    });
+    mockAdminRBAC();
+    mocks.mutation.mockReturnValue({
+      isPending: false,
+      mutateAsync: approveRequest,
+    });
+
+    renderContent();
+
+    await waitFor(() => {
+      expect(screen.getByText("Everyone request")).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    fireEvent.click(screen.getAllByRole("radio")[2]);
+    fireEvent.click(screen.getByRole("button", { name: "Approve request" }));
+
+    await waitFor(() => {
+      expect(approveRequest).toHaveBeenCalledWith({
+        request: {
+          riskPolicyBypassApprovalRequestBody: {
+            id: "request-everyone",
+            grantedPrincipalUrns: ["user:all"],
+          },
+        },
+      });
+    });
+  });
+
+  it("approves requests for a selected role", async () => {
+    const approveRequest = vi.fn().mockResolvedValue({});
+    mockPolicyBypassLists({
+      requested: [
+        policyBypassRequest({
+          id: "request-role",
+          label: "Role request",
+          serverURL: "https://role.example.com/mcp",
+        }),
+      ],
+    });
+    mockAdminRBAC();
+    mocks.mutation.mockReturnValue({
+      isPending: false,
+      mutateAsync: approveRequest,
+    });
+
+    renderContent();
+
+    await waitFor(() => {
+      expect(screen.getByText("Role request")).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    fireEvent.click(screen.getAllByRole("radio")[3]);
+    expect(screen.getByText("Current")).toBeTruthy();
+    const reviewersOption = screen.getByText("Reviewers").closest("button");
+    if (!reviewersOption) throw new Error("Reviewers option not found");
+    fireEvent.click(reviewersOption);
+    fireEvent.click(screen.getByRole("button", { name: "Approve request" }));
+
+    await waitFor(() => {
+      expect(approveRequest).toHaveBeenCalledWith({
+        request: {
+          riskPolicyBypassApprovalRequestBody: {
+            id: "request-role",
+            grantedPrincipalUrns: ["role:organization:role-reviewers"],
+          },
         },
       });
     });
@@ -470,8 +681,8 @@ describe("ApprovalRequestsContent", () => {
           serverURL: "https://datadog.example.com/mcp",
           status: "approved",
           grantedPrincipalUrns: [
-            "urn:gram:user:user-1",
-            "urn:gram:role:role-1",
+            "user:all",
+            "role:organization:role-reviewers",
           ],
         }),
       ],
@@ -489,8 +700,62 @@ describe("ApprovalRequestsContent", () => {
     if (!accessRulesSection) throw new Error("Access Rules section not found");
 
     expect(within(accessRulesSection).getByText("Approved")).toBeTruthy();
-    expect(within(accessRulesSection).getByText("2")).toBeTruthy();
+    expect(
+      within(accessRulesSection).getByRole("columnheader", {
+        name: "Applies to",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(accessRulesSection).getByText("Everyone, Reviewers"),
+    ).toBeTruthy();
     expect(within(accessRulesSection).getByText("Shadow MCP")).toBeTruthy();
+  });
+
+  it("edits the principals for approved policy bypass access", async () => {
+    const approveRequest = vi.fn().mockResolvedValue({});
+    mockPolicyBypassLists({
+      approved: [
+        policyBypassRequest({
+          id: "request-edit",
+          label: "Editable access",
+          serverURL: "https://edit.example.com/mcp",
+          status: "approved",
+          grantedPrincipalUrns: ["user:all"],
+        }),
+      ],
+    });
+    mockAdminRBAC();
+    mocks.mutation.mockReturnValue({
+      isPending: false,
+      mutateAsync: approveRequest,
+    });
+
+    renderContent();
+
+    await waitFor(() => {
+      expect(screen.getByText("Editable access")).toBeTruthy();
+    });
+    const row = screen.getByText("Editable access").closest("tr");
+    if (!row) throw new Error("Approved request row not found");
+    fireEvent.click(within(row).getByRole("button", { name: "Edit" }));
+
+    expect(screen.getByText("Edit access")).toBeTruthy();
+    fireEvent.click(screen.getAllByRole("radio")[1]);
+    const reviewersOption = screen.getByText("Reviewers").closest("button");
+    if (!reviewersOption) throw new Error("Reviewers option not found");
+    fireEvent.click(reviewersOption);
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => {
+      expect(approveRequest).toHaveBeenCalledWith({
+        request: {
+          riskPolicyBypassApprovalRequestBody: {
+            id: "request-edit",
+            grantedPrincipalUrns: ["role:organization:role-reviewers"],
+          },
+        },
+      });
+    });
   });
 
   it("revokes approved policy bypass access with a design system dialog", async () => {
