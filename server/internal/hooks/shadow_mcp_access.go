@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -42,6 +43,18 @@ func (s *Service) enforceShadowMCPToolAccess(
 				"target_kind": target.Kind,
 				"target_key":  target.Key,
 				"tool_name":   toolName,
+			}),
+		)
+		return "", false
+	}
+	if s.canBypassLegacyShadowMCPAccess(ctx, organizationID, projectID, policyID, evidence) {
+		s.logger.InfoContext(ctx, "shadow-mcp call allowed via legacy shadow mcp access rule",
+			attr.SlogEvent("shadow_mcp_legacy_access_allow"),
+			attr.SlogOrganizationID(organizationID),
+			attr.SlogProjectID(projectID),
+			attr.SlogRiskPolicyID(policyID),
+			attr.SlogValueAny(map[string]any{
+				"tool_name": toolName,
 			}),
 		)
 		return "", false
@@ -114,6 +127,72 @@ func (s *Service) canBypassRiskPolicy(ctx context.Context, organizationID string
 		ServerURL: serverURL,
 	}))
 	return err == nil
+}
+
+func (s *Service) canBypassLegacyShadowMCPAccess(ctx context.Context, organizationID string, projectID string, policyID string, evidence shadowmcp.AccessEvidence) bool {
+	if s.accessStore == nil || strings.TrimSpace(organizationID) == "" || strings.TrimSpace(projectID) == "" || strings.TrimSpace(policyID) == "" {
+		return false
+	}
+
+	normalized := shadowmcp.NormalizeAccessEvidence(evidence)
+	matchKinds, matchValues := legacyShadowMCPAccessRuleMatchCandidates(normalized)
+	if len(matchKinds) == 0 {
+		return false
+	}
+
+	rules, err := s.accessStore.ListMatchingRules(ctx, accesscontrol.MatchingRuleFilters{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+		ResourceType:   accesscontrol.ResourceTypeShadowMCP,
+		MatchKinds:     matchKinds,
+		MatchValues:    matchValues,
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to list legacy shadow mcp access rules for risk policy bypass",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(organizationID),
+			attr.SlogProjectID(projectID),
+			attr.SlogRiskPolicyID(policyID),
+		)
+		return false
+	}
+
+	for _, rule := range rules {
+		if rule.Disposition == accesscontrol.DispositionDenied && legacyShadowMCPAccessRuleAppliesToPolicy(rule, policyID) {
+			return false
+		}
+	}
+
+	for _, rule := range rules {
+		if rule.Disposition != accesscontrol.DispositionAllowed || !legacyShadowMCPAccessRuleAppliesToPolicy(rule, policyID) {
+			continue
+		}
+		return true
+	}
+
+	return false
+}
+
+func legacyShadowMCPAccessRuleMatchCandidates(evidence shadowmcp.AccessEvidence) ([]string, []string) {
+	kinds := make([]string, 0, 3)
+	values := make([]string, 0, 3)
+	if evidence.FullURL != "" {
+		kinds = append(kinds, accesscontrol.MatchKindFullURL)
+		values = append(values, evidence.FullURL)
+	}
+	if evidence.URLHost != "" {
+		kinds = append(kinds, accesscontrol.MatchKindURLHost)
+		values = append(values, evidence.URLHost)
+	}
+	if evidence.ServerIdentity != "" {
+		kinds = append(kinds, accesscontrol.MatchKindServerIdentity)
+		values = append(values, evidence.ServerIdentity)
+	}
+	return kinds, values
+}
+
+func legacyShadowMCPAccessRuleAppliesToPolicy(rule accesscontrol.AccessRule, policyID string) bool {
+	return rule.ObservedSummary.RiskPolicyID == nil || *rule.ObservedSummary.RiskPolicyID == policyID
 }
 
 func codexShadowMCPEvidence(payload *gen.CodexPayload) shadowmcp.AccessEvidence {

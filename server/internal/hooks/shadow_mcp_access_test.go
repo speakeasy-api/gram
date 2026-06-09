@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -109,4 +110,41 @@ func TestEnforceShadowMCPToolAccess_BypassGrantRequiresServerURLTarget(t *testin
 
 	require.True(t, denied)
 	require.Contains(t, detail, "missing required")
+}
+
+func TestEnforceShadowMCPToolAccess_LegacyAccessRuleAllowsBlockedCall(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	policyID := uuid.NewString()
+	serverURL := "https://legacy-blocked.example.com/mcp"
+	createHookAccessRule(
+		t,
+		ctx,
+		ti,
+		authCtx.ProjectID.String(),
+		accesscontrol.AccessScopeProject,
+		accesscontrol.DispositionAllowed,
+		accesscontrol.MatchKindFullURL,
+		serverURL,
+		"Legacy blocked server",
+	)
+
+	detail, denied := ti.service.enforceShadowMCPToolAccess(
+		ctx,
+		authCtx.ActiveOrganizationID,
+		authCtx.ProjectID.String(),
+		authCtx.UserID,
+		policyID,
+		map[string]any{},
+		"do_thing",
+		shadowmcp.AccessEvidence{FullURL: serverURL, URLHost: "", ServerIdentity: "legacy-blocked-server"},
+	)
+
+	require.False(t, denied)
+	require.Empty(t, detail)
 }

@@ -793,6 +793,9 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 	}
 	if matched != nil {
 		evidence.FullURL = matched.URL
+		if matched.Command != "" {
+			evidence.ServerIdentity = matched.Command
+		}
 	}
 	// A non-empty detail means this call is blocked. Return immediately for
 	// clean allows; otherwise give a URL-scoped bypass grant a chance to allow
@@ -813,6 +816,27 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		}
 		s.logger.InfoContext(ctx, "shadow-mcp call allowed via risk policy bypass grant",
 			attr.SlogEvent("claude_hook_policy_bypass_allow"),
+			attr.SlogToolName(rawToolName),
+			attr.SlogRiskPolicyID(policy.ID),
+			attr.SlogValueAny(map[string]any{
+				"serverPrefix":   serverPrefix,
+				"matchedURL":     matchedURL,
+				"matchedCommand": matchedCommand,
+			}),
+		)
+		if output != nil {
+			output.PermissionDecision = &allow
+		}
+		return result, nil
+	}
+	if s.canBypassLegacyShadowMCPAccess(ctx, metadata.GramOrgID, metadata.ProjectID, policy.ID, evidence) {
+		matchedURL, matchedCommand := "", ""
+		if matched != nil {
+			matchedURL = matched.URL
+			matchedCommand = matched.Command
+		}
+		s.logger.InfoContext(ctx, "shadow-mcp call allowed via legacy shadow mcp access rule",
+			attr.SlogEvent("claude_hook_legacy_access_allow"),
 			attr.SlogToolName(rawToolName),
 			attr.SlogRiskPolicyID(policy.ID),
 			attr.SlogValueAny(map[string]any{
