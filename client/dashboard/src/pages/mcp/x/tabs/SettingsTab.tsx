@@ -38,6 +38,7 @@ import type {
   McpServerVisibility,
 } from "@gram/client/models/components";
 import {
+  buildGetMcpServerQuery,
   invalidateAllGetMcpServer,
   invalidateAllMcpEndpoints,
   invalidateAllMcpServers,
@@ -1159,6 +1160,14 @@ function DangerZoneCard({
   const [pendingVisibility, setPendingVisibility] =
     useState<McpServerVisibility | null>(null);
   const queryClient = useQueryClient();
+  const client = useSdkClient();
+  const [isFetchingLatestMcpServer, setIsFetchingLatestMcpServer] =
+    useState(false);
+  const notifyVisibilityUpdateError = (error: unknown) => {
+    toast.error(
+      error instanceof Error ? error.message : "Failed to update MCP server",
+    );
+  };
   const updateVisibility = useUpdateMcpServerMutation({
     onSuccess: async (_data, variables) => {
       await Promise.all([
@@ -1168,23 +1177,35 @@ function DangerZoneCard({
       const next = variables.request.updateMcpServerForm.visibility;
       toast.success(mcpServerVisibilityToast(next));
     },
-    onError: (error) => {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to update MCP server",
-      );
-    },
+    onError: notifyVisibilityUpdateError,
   });
+  const isUpdatingVisibility =
+    isFetchingLatestMcpServer || updateVisibility.isPending;
 
-  const applyVisibility = (visibility: McpServerVisibility) => {
+  const applyVisibility = async (visibility: McpServerVisibility) => {
     if (visibility === mcpServer.visibility) return;
-    updateVisibility.mutate({
-      request: {
-        updateMcpServerForm: mcpServerVisibilityUpdateForm(
-          mcpServer,
-          visibility,
-        ),
-      },
-    });
+    setIsFetchingLatestMcpServer(true);
+    try {
+      const latestMcpServer = await queryClient.fetchQuery({
+        ...buildGetMcpServerQuery(client, { id: mcpServer.id }),
+        staleTime: 0,
+      });
+
+      if (visibility === latestMcpServer.visibility) return;
+
+      updateVisibility.mutate({
+        request: {
+          updateMcpServerForm: mcpServerVisibilityUpdateForm(
+            latestMcpServer,
+            visibility,
+          ),
+        },
+      });
+    } catch (error) {
+      notifyVisibilityUpdateError(error);
+    } finally {
+      setIsFetchingLatestMcpServer(false);
+    }
   };
 
   const requestAvailabilityChange = (checked: boolean) => {
@@ -1193,7 +1214,7 @@ function DangerZoneCard({
 
   const confirmAvailabilityChange = () => {
     if (!pendingAvailability) return;
-    applyVisibility(pendingAvailability);
+    void applyVisibility(pendingAvailability);
     setPendingAvailability(null);
   };
 
@@ -1205,7 +1226,7 @@ function DangerZoneCard({
 
   const confirmVisibilityChange = () => {
     if (!pendingVisibility) return;
-    applyVisibility(pendingVisibility);
+    void applyVisibility(pendingVisibility);
     setPendingVisibility(null);
   };
 
@@ -1241,7 +1262,7 @@ function DangerZoneCard({
                 <RequireScope scope="mcp:write" level="component">
                   <Switch
                     checked={enabled}
-                    disabled={updateVisibility.isPending}
+                    disabled={isUpdatingVisibility}
                     aria-label="Enable MCP server"
                     onCheckedChange={requestAvailabilityChange}
                   />
@@ -1262,7 +1283,7 @@ function DangerZoneCard({
                     value={accessMode}
                     variant="outline"
                     size="sm"
-                    disabled={updateVisibility.isPending}
+                    disabled={isUpdatingVisibility}
                     onValueChange={requestVisibilityChange}
                   >
                     <ToggleGroupItem
@@ -1324,13 +1345,13 @@ function DangerZoneCard({
       </Dialog>
       <ServerAvailabilityDialog
         targetVisibility={pendingAvailability}
-        isLoading={updateVisibility.isPending}
+        isLoading={isUpdatingVisibility}
         onClose={() => setPendingAvailability(null)}
         onConfirm={confirmAvailabilityChange}
       />
       <ServerVisibilityDialog
         targetVisibility={pendingVisibility}
-        isLoading={updateVisibility.isPending}
+        isLoading={isUpdatingVisibility}
         onClose={() => setPendingVisibility(null)}
         onConfirm={confirmVisibilityChange}
       />
