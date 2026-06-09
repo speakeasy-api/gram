@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/testsuite"
@@ -14,6 +15,10 @@ import (
 
 	servertemporal "github.com/speakeasy-api/gram/server/internal/temporal"
 )
+
+func nextRandom() string {
+	return fmt.Sprintf("%d", uuid.New().ID())
+}
 
 func NewTemporalDevServer(ctx context.Context) (*testsuite.DevServer, error) {
 	var stdout io.Writer

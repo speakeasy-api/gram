@@ -43,6 +43,7 @@ require (
 	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/microcosm-cc/bluemonday v1.0.27
+	github.com/moby/moby/client v0.4.0
 	github.com/modelcontextprotocol/go-sdk v1.4.1
 	github.com/oschwald/maxminddb-golang v1.13.1
 	github.com/pgvector/pgvector-go v0.3.0
@@ -234,7 +235,6 @@ require (
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/go-archive v0.2.0 // indirect
 	github.com/moby/moby/api v1.54.1 // indirect
-	github.com/moby/moby/client v0.4.0 // indirect
 	github.com/moby/patternmatcher v0.6.1 // indirect
 	github.com/moby/sys/sequential v0.6.0 // indirect
 	github.com/moby/sys/user v0.4.0 // indirect
