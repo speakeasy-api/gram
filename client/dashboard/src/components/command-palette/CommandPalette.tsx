@@ -13,7 +13,7 @@ import { Icon, IconName, Badge } from "@speakeasy-api/moonshine";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { requestAskAi } from "./askAiBridge";
-import { useRecentlyVisited } from "./recentlyVisited";
+import { useRecentlyVisited, useRecentsUserId } from "./recentlyVisited";
 import { ResourceResults } from "./ResourceResults";
 
 // Speakeasy brand spectrum — the same brand-language gradient the Project
@@ -36,7 +36,14 @@ export function CommandPalette(): JSX.Element {
   const inProject = Boolean(projectSlug);
 
   // Recently visited pages (client-side; read only while the palette is open).
-  const recents = useRecentlyVisited(orgSlug, projectSlug, isOpen);
+  // Scoped per user so a shared browser profile doesn't leak history.
+  const recentsUserId = useRecentsUserId();
+  const recents = useRecentlyVisited(
+    recentsUserId,
+    orgSlug,
+    projectSlug,
+    isOpen,
+  );
 
   const closeAndReset = () => {
     setQuery("");

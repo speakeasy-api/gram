@@ -20,7 +20,10 @@ import {
 } from "react-router";
 import { AppLayout, LoginCheck, OrgLayout } from "./components/app-layout.tsx";
 import { CommandPalette } from "./components/command-palette";
-import { recordVisit } from "./components/command-palette/recentlyVisited";
+import {
+  recordVisit,
+  useRecentsUserId,
+} from "./components/command-palette/recentlyVisited";
 import { useProjectNavRoutes } from "./hooks/useProjectNavRoutes";
 import { useRBAC } from "./hooks/useRBAC";
 import { AuthProvider, ProjectProvider } from "./contexts/AuthProvider.tsx";
@@ -158,6 +161,7 @@ const RouteProvider = () => {
   const location = useLocation();
   const projectNavRoutes = useProjectNavRoutes();
   const { hasAnyScope } = useRBAC();
+  const recentsUserId = useRecentsUserId();
 
   // Update document title based on active route
   usePageTitle(routes, orgRoutes);
@@ -174,7 +178,7 @@ const RouteProvider = () => {
       Object.values(orgRoutes).find((r) => r.active && !r.external);
     if (!active) return;
     const iconName = (active as unknown as { icon?: string }).icon;
-    recordVisit(orgSlug, projectSlug, {
+    recordVisit(recentsUserId, orgSlug, projectSlug, {
       label: pageLabel(active.title, active.href(), location.pathname),
       // Preserve the query string so deep-linked items (e.g. a policy opened via
       // ?policy=<id>) reopen correctly when picked from Recently Visited.
@@ -186,6 +190,7 @@ const RouteProvider = () => {
     location.search,
     routes,
     orgRoutes,
+    recentsUserId,
     orgSlug,
     projectSlug,
   ]);

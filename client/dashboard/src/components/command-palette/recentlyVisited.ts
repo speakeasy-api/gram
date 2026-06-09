@@ -1,3 +1,4 @@
+import { useSessionInfo } from "@gram/client/react-query";
 import { useEffect, useState } from "react";
 
 /**
@@ -5,11 +6,10 @@ import { useEffect, useState } from "react";
  *
  * Kept entirely in localStorage — recents are per-device, ephemeral state, so no
  * backend is involved. Entries store only page labels/paths (no sensitive data)
- * and are scoped by org/project so the list stays relevant when switching
- * workspaces. They are NOT scoped per authenticated user: anyone using the same
- * browser profile shares the list, which is acceptable for non-sensitive
- * navigation history. Cross-device (or per-user) sync would be the only reason
- * to move this server-side; that's intentionally out of scope.
+ * and are scoped by user + org/project so the list stays relevant when switching
+ * workspaces and is isolated between users who share a browser profile.
+ * Cross-device sync would be the only reason to move this server-side; that's
+ * intentionally out of scope.
  */
 export interface RecentEntry {
   label: string;
@@ -21,8 +21,28 @@ export interface RecentEntry {
 const MAX_RECENTS = 6;
 const UPDATED_EVENT = "gram:recents-updated";
 
-function storageKey(orgSlug?: string, projectSlug?: string): string {
-  return `gram:recents:${orgSlug ?? ""}:${projectSlug ?? ""}`;
+/**
+ * The current user's id, used to scope recents per authenticated user. Derived
+ * from the SDK session hook rather than `useUser()` so it works outside the
+ * `AuthProvider` (the command palette is mounted above it). Both the write
+ * (`recordVisit`) and read (`useRecentlyVisited`) paths resolve the id this way
+ * so their storage keys always match.
+ */
+export function useRecentsUserId(): string | undefined {
+  const { data } = useSessionInfo(undefined, undefined, {
+    refetchOnWindowFocus: false,
+    retry: false,
+    throwOnError: false,
+  });
+  return data?.result?.userId || undefined;
+}
+
+function storageKey(
+  userId?: string,
+  orgSlug?: string,
+  projectSlug?: string,
+): string {
+  return `gram:recents:${userId ?? ""}:${orgSlug ?? ""}:${projectSlug ?? ""}`;
 }
 
 function read(key: string): RecentEntry[] {
@@ -38,11 +58,12 @@ function read(key: string): RecentEntry[] {
 
 /** Record a page visit. Dedupes by href (most-recent wins) and caps the list. */
 export function recordVisit(
+  userId: string | undefined,
   orgSlug: string | undefined,
   projectSlug: string | undefined,
   entry: Omit<RecentEntry, "visitedAt">,
 ): void {
-  const key = storageKey(orgSlug, projectSlug);
+  const key = storageKey(userId, orgSlug, projectSlug);
   const next = [
     { ...entry, visitedAt: Date.now() },
     ...read(key).filter((e) => e.href !== entry.href),
@@ -61,11 +82,12 @@ export function recordVisit(
  * gates the read so we only touch localStorage when the palette is shown.
  */
 export function useRecentlyVisited(
+  userId: string | undefined,
   orgSlug: string | undefined,
   projectSlug: string | undefined,
   enabled: boolean,
 ): RecentEntry[] {
-  const key = storageKey(orgSlug, projectSlug);
+  const key = storageKey(userId, orgSlug, projectSlug);
   const [entries, setEntries] = useState<RecentEntry[]>([]);
 
   useEffect(() => {
