@@ -2,6 +2,7 @@ export const SLACK_TOOL_URN_PREFIX = "tools:platform:slack:";
 
 const SLACK_TOOL_SCOPES: Record<string, readonly string[]> = {
   send_message: ["chat:write", "chat:write.public", "im:write"],
+  set_thread_status: ["chat:write"],
   schedule_message: ["chat:write", "chat:write.public"],
   read_channel_messages: [
     "channels:history",
