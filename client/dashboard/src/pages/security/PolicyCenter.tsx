@@ -1162,16 +1162,18 @@ function PromptPolicySheetBody({
           placeholder="Describe the tool-call behavior this policy should match..."
           rows={5}
         />
-        <PromptExamplesRadioGroup
-          selectedExampleName={selectedExampleName}
-          onSelect={(template) => {
-            setSelectedExampleName(template.name);
-            setFormPromptInstruction(template.prompt);
-            if (!formName.trim()) {
-              setFormName(template.name);
-            }
-          }}
-        />
+        {!isEditing && (
+          <PromptExamplesRadioGroup
+            selectedExampleName={selectedExampleName}
+            onSelect={(template) => {
+              setSelectedExampleName(template.name);
+              setFormPromptInstruction(template.prompt);
+              if (!formName.trim()) {
+                setFormName(template.name);
+              }
+            }}
+          />
+        )}
       </div>
 
       <PromptPolicyMessageTypesPicker />
