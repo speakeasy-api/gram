@@ -46,9 +46,7 @@ export function useEnvironmentVariables(
     const getEnvironmentValues = (varName: string) =>
       environments.flatMap((env) => {
         const entry = env.entries.find((e) => e.name === varName);
-        return entry
-          ? [{ environmentSlug: env.slug, value: entry.value }]
-          : [];
+        return entry ? [{ environmentSlug: env.slug, value: entry.value }] : [];
       });
 
     // Get env vars from security variables (these are required auth credentials)
