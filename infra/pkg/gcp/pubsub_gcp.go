@@ -12,7 +12,6 @@ import (
 
 type PubSubBroker struct {
 	logger      *slog.Logger
-	projectID   string
 	client      *pubsub.Client
 	descriptors []byte
 }
@@ -20,10 +19,9 @@ type PubSubBroker struct {
 var _ SubscriberBroker = (*PubSubBroker)(nil)
 var _ PublisherBroker = (*PubSubBroker)(nil)
 
-func NewPubSubBroker(logger *slog.Logger, projectID string, client *pubsub.Client, descriptors []byte) *PubSubBroker {
+func NewPubSubBroker(logger *slog.Logger, client *pubsub.Client, descriptors []byte) *PubSubBroker {
 	return &PubSubBroker{
 		logger:      logger,
-		projectID:   projectID,
 		client:      client,
 		descriptors: descriptors,
 	}

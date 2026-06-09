@@ -6,6 +6,7 @@ import (
 
 	"github.com/urfave/cli/v2"
 
+	"github.com/speakeasy-api/gram/infra/gen"
 	"github.com/speakeasy-api/gram/infra/internal/gcp"
 )
 
@@ -27,14 +28,14 @@ func newGenCCCommand() *cli.Command {
 			if out == "" {
 				return fmt.Errorf("--out must not be empty")
 			}
-			if len(descriptors) == 0 {
+			if len(gen.Descriptors) == 0 {
 				return fmt.Errorf("embedded descriptor set is empty: cannot generate pubsub topology")
 			}
 
 			cc := gcp.NewCCPubSub(
 				logger,
 				out,
-				descriptors,
+				gen.Descriptors,
 			)
 			if err := cc.Generate(c.Context); err != nil {
 				return fmt.Errorf("generate helm values: %w", err)

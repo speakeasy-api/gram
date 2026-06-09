@@ -11,6 +11,7 @@ import (
 	"cloud.google.com/go/pubsub/v2"
 	"github.com/google/uuid"
 	"github.com/sourcegraph/conc/pool"
+	"github.com/speakeasy-api/gram/infra/gen"
 	pingv1 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v1"
 	"github.com/speakeasy-api/gram/infra/internal/attr"
 	gcppub "github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -82,7 +83,7 @@ func newDemoCommand() *cli.Command {
 
 			group := pool.New()
 
-			broker := gcppub.NewEmulatedPubSub(logger, projectID, client, descriptors)
+			broker := gcppub.NewEmulatedPubSub(logger, projectID, client, gen.Descriptors)
 
 			// Get a publisher handle so we can publish messages
 			pub, err := gcppub.PubSubPublisherForMessage(ctx, broker, &pingv1.Message{})
