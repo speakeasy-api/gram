@@ -487,6 +487,19 @@ export function ConfigurePoliciesStep({ onBack }: ConfigurePoliciesStepProps) {
               );
             })}
           </div>
+
+          <p className="text-muted-foreground/80 px-1 pt-1 text-xs">
+            More categories are available in the{" "}
+            <RouterLink
+              to={policyCenterHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+            >
+              Policy Center
+            </RouterLink>
+            .
+          </p>
         </div>
       </div>
 

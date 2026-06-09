@@ -33,13 +33,13 @@ export function StepContainer({
 }: StepContainerProps) {
   return (
     <div className="flex h-full flex-col">
-      {/* Icon */}
-      <div className="mb-6">{icon}</div>
-
       {/* Header */}
-      <h1 className="text-foreground text-2xl font-semibold tracking-tight">
-        {title}
-      </h1>
+      <div className="flex items-center gap-0">
+        <div className="flex-shrink-0">{icon}</div>
+        <h1 className="text-foreground text-2xl font-semibold tracking-tight">
+          {title}
+        </h1>
+      </div>
       <p className="text-muted-foreground mt-2 text-sm">{description}</p>
 
       {/* Content */}
