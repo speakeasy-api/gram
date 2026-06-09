@@ -10,7 +10,7 @@ const mkVar = (
   key: overrides.key,
   state: overrides.state,
   isRequired: overrides.isRequired ?? true,
-  valueGroups: overrides.valueGroups ?? [],
+  environmentValues: overrides.environmentValues ?? [],
   description: overrides.description,
 });
 
@@ -28,16 +28,12 @@ describe("getSystemProvidedVariables", () => {
       mkVar({
         key: "STRIPE_API_KEY",
         state: "system",
-        valueGroups: [
-          { valueHash: "h1", value: "***", environments: ["prod"] },
-        ],
+        environmentValues: [{ environmentSlug: "prod", value: "***" }],
       }),
       mkVar({
         key: "DATABASE_URL",
         state: "system",
-        valueGroups: [
-          { valueHash: "h2", value: "***", environments: ["prod"] },
-        ],
+        environmentValues: [{ environmentSlug: "prod", value: "***" }],
       }),
     ];
     expect(getSystemProvidedVariables(vars, "prod")).toEqual([
@@ -51,16 +47,12 @@ describe("getSystemProvidedVariables", () => {
       mkVar({
         key: "ONLY_IN_STAGING",
         state: "system",
-        valueGroups: [
-          { valueHash: "h1", value: "***", environments: ["staging"] },
-        ],
+        environmentValues: [{ environmentSlug: "staging", value: "***" }],
       }),
       mkVar({
         key: "IN_PROD",
         state: "system",
-        valueGroups: [
-          { valueHash: "h2", value: "***", environments: ["prod"] },
-        ],
+        environmentValues: [{ environmentSlug: "prod", value: "***" }],
       }),
     ];
     expect(getSystemProvidedVariables(vars, "prod")).toEqual(["IN_PROD"]);
@@ -72,9 +64,7 @@ describe("getSystemProvidedVariables", () => {
         key: "CUSTOM_SECRET",
         state: "system",
         isRequired: false,
-        valueGroups: [
-          { valueHash: "h1", value: "***", environments: ["prod"] },
-        ],
+        environmentValues: [{ environmentSlug: "prod", value: "***" }],
       }),
     ];
     expect(getSystemProvidedVariables(vars, "prod")).toEqual(["CUSTOM_SECRET"]);
