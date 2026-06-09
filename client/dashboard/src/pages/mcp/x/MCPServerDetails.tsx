@@ -45,50 +45,14 @@ import {
 } from "react-router";
 import { toast } from "sonner";
 import { MCPTeamAccessTab } from "../MCPTeamAccessTab";
+import {
+  activeTabFromPath,
+  initialTabFromHash,
+  type TabValue,
+} from "./MCPServerDetailsRouting";
 import { AuthenticationTab } from "./tabs/authentication/AuthenticationTab";
 import { OverviewTab } from "./tabs/OverviewTab";
 import { MCP_SERVER_URL_SECTION_ID, SettingsTab } from "./tabs/SettingsTab";
-
-const VALID_TABS = [
-  "overview",
-  "authentication",
-  "team-access",
-  "settings",
-] as const;
-type TabValue = (typeof VALID_TABS)[number];
-
-function isValidTab(value: string): value is TabValue {
-  return (VALID_TABS as readonly string[]).includes(value);
-}
-
-function decodePathSegment(segment: string): string {
-  try {
-    return decodeURIComponent(segment);
-  } catch {
-    return segment;
-  }
-}
-
-function activeTabFromPath(
-  pathname: string,
-  mcpServerSlug: string,
-): TabValue | undefined {
-  const segments = pathname.split("/").filter(Boolean);
-  const lastSegment = decodePathSegment(segments[segments.length - 1] ?? "");
-
-  if (!mcpServerSlug || lastSegment === mcpServerSlug) {
-    return undefined;
-  }
-
-  return isValidTab(lastSegment) ? lastSegment : undefined;
-}
-
-function initialTabFromHash(hash: string, isRbacEnabled: boolean): TabValue {
-  const hashValue = hash.replace("#", "");
-  if (!isValidTab(hashValue)) return "overview";
-  if (hashValue === "team-access" && !isRbacEnabled) return "overview";
-  return hashValue;
-}
 
 function mcpServerTabHref(
   routes: ReturnType<typeof useRoutes>,
