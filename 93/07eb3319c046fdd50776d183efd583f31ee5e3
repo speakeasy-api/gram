@@ -1,0 +1,1775 @@
+client/dashboard/src/components/ui/dot-row.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 17-22
+elements/docs/interfaces/ErrorTrackingConfigOption.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+elements/src/hooks/useMCPTools.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 45,48
+mise.toml
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 25,32,194-195
+client/dashboard/src/hooks/useToolUpdate.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 42-45,63
+client/dashboard/src/pages/mcp/oauth-wizard/PathSelection.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 15-17
+client/dashboard/src/pages/catalog/FilterSidebar.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 80
+client/dashboard/src/components/observe/useObserveFilters.test.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 156,207
+client/dashboard/src/lib/dates.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 40
+elements/src/components/ui/tooltip.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 12,24,34,46
+infra/internal/gcp/cc_pubsub_test.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-161
+client/dashboard/src/pages/org/OrgApiKeys.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 25,42,266,358-360
+client/dashboard/src/components/observe/useDateRangeFilter.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 14-23
+client/dashboard/src/pages/deployments/DeploymentsEmptyState.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 4
+client/dashboard/src/pages/mcp/oauth-wizard/AutoRegisterFailedStep.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 14
+elements/src/contexts/ToolExecutionContext.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 39
+elements/src/plugins/generative-ui/ui/textarea.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 5-8
+elements/docs/interfaces/ElementsConfig.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+go.mod
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 8-9,13,101,301,303,314,325,332
+client/dashboard/src/pages/playground/ChatContext.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 10-14
+client/dashboard/src/pages/mcp/oauth-wizard/machine-types.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 8,79-116
+elements/src/plugins/generative-ui/ui/button.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 50
+elements/docs/type-aliases/VARIANTS.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+elements/src/plugins/generative-ui/ui/radio-group.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 12,25
+client/dashboard/src/components/gram-logo/index.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 12
+client/dashboard/src/components/observe/InsightsAgents.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 42,53,154,672-680,729,732,817-826
+client/dashboard/src/pages/access/MembersTab.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 8
+elements/src/plugins/generative-ui/ui/table.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 7-10,25-28,38-41,51-54,67-70,83-86,99-102,118
+infra/pkg/gcp/pubsub_local.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-219
+client/dashboard/src/components/ui/dashboard-card.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 17
+server/internal/assistants/dashboard_ingress_test.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 5,33-71
+client/dashboard/src/pages/collections/hooks.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 20-21,81-83,97-99,113-115,129-131,145-147
+elements/src/plugins/generative-ui/ui/separator.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 13
+client/dashboard/src/pages/toolsets/resources/ResourcesTab.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1,12,35,143,154-181
+elements/docs/interfaces/ReplayOptions.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+infra/pkg/gcp/subscriber.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-184
+server/internal/assistants/provisioning_test.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 77,88-90,106,108,114
+client/dashboard/src/components/ui/heading.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 15
+server/internal/database/models.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 411-447,1062-1063,1264-1279,1330-1348
+server/internal/mcp/authnchallenge_test.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 21,407-463,528-593
+client/dashboard/src/pages/onboarding/FunctionsOnboarding.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 9
+client/dashboard/src/pages/deployments/RedeploySuccessToast.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-5
+client/dashboard/src/components/upload.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 18,47-49,118,197
+client/dashboard/src/lib/CustomChatTransport.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 6-9,13,17,23,30-34,44,46-47,58-64
+client/dashboard/src/hooks/use-mobile.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 5
+client/dashboard/src/pages/logs/use-attribute-logs-query.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 216,270-274
+client/dashboard/src/pages/playground/usePlaygroundEnvironment.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 27,112,124
+elements/src/hooks/useModel.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 8
+hooks/plugin-claude/hooks/send_hook.sh
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 17-26,33,36
+client/dashboard/src/components/ui/separator.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 11
+elements/src/components/assistant-ui/error-boundary.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 93
+client/dashboard/src/pages/plugins/PluginDetail.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 13,24,39,44,47-61,71-74,82-95,104,111,145-150,156-161,195-217,222-233,305-315,343-347,350-354,357-361,420,422,424,429-435,439,463-464,481-482,487-488,493-498,500-506,511-512,525-531,533,544-546,551
+elements/docs/type-aliases/ElementsTransportFactory.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+infra/cmd/infra/shutdown.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-51
+infra/proto/gram/ping/v1/processor.proto
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-21
+server/internal/background/activities/generate_chat_title_test.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-107
+elements/src/hooks/useFollowOnSuggestions.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 89,191,224
+server/internal/mcp/impl.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 297
+client/dashboard/src/components/billing/usage-controls.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 7,32,49
+client/dashboard/src/components/access/shadow-mcp-utils.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 18-19,25,34,38,42,55,66,77-79,89,98-100,109-111,123,132-134,159
+client/dashboard/src/contexts/SdkProvider.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 21-25,84-85,95
+client/dashboard/src/pages/assistants/onboarding/tools/components.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 98,236-239,256-258,283,314,476,596,905,1106,1109
+client/dashboard/src/pages/mcp/oauth-wizard/ResultStep.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 12
+client/dashboard/src/pages/sources/remote-mcp/CreateRemoteMcp.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 9,40,111-116,150-153,156-163
+infra/cmd/infra/demo.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-172
+client/dashboard/src/components/ui/sonner.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 4
+client/dashboard/src/components/webgl/ascii-video.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 25
+client/dashboard/src/components/page-layout.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1,19-22,117,121-126,213
+server/cmd/gram/root.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 45-46
+client/dashboard/src/components/diffs/provider.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 7-11
+client/dashboard/src/components/ui/popover.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 8,14,23,42
+server/internal/chat/impl.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 211-215,236,238-239,241,243,340-341,343-346
+server/internal/platformtools/risk/tool_list_risk_policies.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-58
+elements/src/plugins/generative-ui/ui/action-button.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 28,59-61
+client/dashboard/src/pages/prompts/PromptSelectPopover.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 27
+server/internal/authz/grants.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 217-219,254-260
+client/dashboard/src/pages/deployments/deployment/FailedSourcesSection.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 48,108,136-137,340-343
+elements/docs/type-aliases/DENSITIES.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+elements/docs/interfaces/Suggestion.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/pages/access/roundtrip.test.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-167
+elements/src/plugins/generative-ui/ui/metric.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 29,41
+client/dashboard/src/pages/logs/LogFilterBar.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 91,293
+client/dashboard/src/hooks/useRBAC.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 51,194-196
+client/dashboard/src/components/input-dialog.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 50,112,142-145
+client/dashboard/src/pages/assistants/onboarding/AssistantDraftContext.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 36,81-86
+client/dashboard/src/components/upload-asset/deploy-step.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 12,21,111,336-338
+server/internal/mcpmetadata/templatefuncs/funcs.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 16
+client/dashboard/src/pages/mcp/oauth-wizard/machine.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 6-7,67-79,91,359-368
+server/internal/platformtools/runtime/service_test.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 17,23-94
+elements/src/lib/utils.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 4,9
+client/dashboard/src/pages/sources/SourceDetails.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 54,60,191,354-356
+server/internal/authz/engine.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 132-134
+client/dashboard/src/pages/collections/Collections.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 13,17,73
+client/dashboard/src/pages/logs/Logs.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 9,26,34,42
+client/dashboard/src/pages/demo/components/DemoBookingFlow.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 32
+client/dashboard/src/pages/device-agent/DeviceAgent.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 9,15,749-761
+server/internal/testenv/testrepo/models.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 100-118
+client/dashboard/src/pages/login/components/platform-diagram.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 338-340
+server/internal/mcpmetadata/serve_install_page_scopes_test.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-354
+elements/src/components/Chat/stories/FrontendTools.stories.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 32
+server/internal/remotesessions/setup_test.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 32,264-299
+elements/docs/interfaces/ShareButtonProps.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1,66
+elements/docs/functions/Replay.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+elements/docs/type-aliases/DangerousApiKeyAuthConfig.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+hooks/plugin-claude/hooks/identity.sh
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-78
+server/internal/platformtools/impl_test.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 23-50
+server/internal/platformtools/runtime/service.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 21-22,25,27,129-131,135-178
+server/migrations/20260605143925_add_risk_exclusions.sql
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-35
+client/dashboard/src/hooks/useProjectFavorites.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 6-11
+client/dashboard/src/pages/security/ApprovalRequests.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 6
+client/dashboard/src/pages/security/risk-ui.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 26,47-52,61-65,83-87,112-116
+client/dashboard/src/pages/collections/CollectionInstallDialog.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 49
+elements/docs/interfaces/Plugin.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+elements/src/components/assistant-ui/markdown-text.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 69
+client/dashboard/src/pages/playground/Playground.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 71,208,309,315,350,356,381,396,398,458,498,509-511
+elements/src/components/ChatHistory.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 10-12
+client/dashboard/src/components/tool-list/AnnotationBadges.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 33
+elements/docs/interfaces/CalendarProps.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/components/asset-image.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 9
+client/dashboard/src/pages/assistants/Assistant.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 3
+client/dashboard/src/pages/mcp/wire-user-session-issuer/services.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 55,334-338
+client/dashboard/src/pages/access/GrantRuleDrawerContent.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 149,187,683,1088
+client/dashboard/src/pages/prompts/NewPrompt.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 10,22
+client/dashboard/src/pages/integrations/Integrations.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 27,39,83,219,276,310
+client/dashboard/src/components/observe/InsightsEmployees.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 246,345
+client/dashboard/src/pages/sdk/examples.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-3,5
+client/dashboard/src/components/updated-at.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 20
+elements/src/components/ShadowRoot.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 29,69
+elements/src/components/ui/time-range-picker.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 158,191-193,197-199,379,592-594
+server/internal/remotesessions/clienthandlers.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 229-234,238
+client/dashboard/src/components/mcp/MCPTableRow.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 20-24,34,160
+elements/src/plugins/generative-ui/ui/tooltip.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 11,23,29,38
+server/internal/platformtools/risk/tool_list_risk_results_for_agent.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-96
+client/dashboard/src/pages/playground/useMessageHistoryNavigation.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 4-10
+client/dashboard/src/components/chart/MetricCard.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 22,55
+client/dashboard/src/components/ui/copy-button.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 22,29
+client/dashboard/src/pages/environments/useEnvironment.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 4-10
+client/dashboard/src/components/diffs/worker.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+.agents/skills/gram-pubsub/SKILL.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-364
+client/dashboard/src/lib/chat-error.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 46
+client/dashboard/src/pages/access/roleGrantTransform.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-274
+client/dashboard/src/pages/assistants/Assistants.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 3,5-8,30,40,52,116,133-136,162,166,231-282,289,293-304,307-332,335-346
+client/dashboard/src/pages/logs/TriggerLogRow.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 23-26
+buf.yaml
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-10
+client/dashboard/package.json
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 4,9-11,13,18-19,40,108-109,111
+client/dashboard/src/pages/mcp/x/tabs/authentication/IssuerFormFields.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 28,81,187-191,216,285,346
+client/dashboard/src/pages/security/RiskEvents.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 44,214,231-233,311-313,600-602
+client/dashboard/src/pages/security/RiskOverviewCategoriesIndex.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 28
+.mise-tasks/gen/infra.sh
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-22
+client/dashboard/src/pages/toolBuilder/useToolifyContext.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 22-35,37,43-45
+client/dashboard/src/components/delete-button.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 15
+client/dashboard/src/lib/ServerAssistantTransport.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 16-29,69,187,237-238
+client/dashboard/src/pages/mcp/oauth-wizard/machine.test.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 14,16,791-900
+client/dashboard/src/pages/mcp/x/tabs/authentication/DeleteRemoteIdentityProviderDialog.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 29,157
+elements/docs/type-aliases/ColorScheme.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+elements/src/components/ui/tool-ui.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 162-166,180,192-194,235,250,379,443,464,507-509,727
+server/internal/hooks/claude_hooks.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 594-595,599-602,605-610,618-630,731,737-739,930-932
+elements/src/hooks/useDensity.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 105
+elements/src/plugins/chart/ui/area-chart.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 75
+server/cmd/gram/streams.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-333
+server/internal/mcp/metrics_test.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 75-135
+server/internal/platformtools/logs/tool_search_users.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-97
+server/internal/platformtools/users/tool_list_organization_users.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-56
+elements/docs/functions/GramElementsProvider.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+elements/docs/variables/PRESETS.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/components/webgl/canvas.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1,102,139
+server/internal/plugins/setup_test.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 25-26,197-255
+client/dashboard/src/components/ui/tabs.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 9,22,38,54,68
+client/dashboard/src/pages/deployments/deployment/Deployment.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 39,155-157
+client/dashboard/src/contexts/CommandPaletteProvider.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 11-15,35-37
+client/dashboard/src/components/tool-variation-tags-editor.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 26
+client/dashboard/src/pages/setup/types.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 18
+client/dashboard/src/components/ui/command.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 11,32,51,73,88,101,117,130
+client/dashboard/src/pages/catalog/CommandBar.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 74
+client/dashboard/src/pages/insights/Insights.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 14,49,57,65,69,77,85
+elements/src/plugins/generative-ui/ui/select.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 11,17,23,34,59,93,107,133,146-148,166-168
+client/dashboard/src/pages/prompts/Prompts.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 3,5,20,24,84,90,94-110,112-135
+client/dashboard/src/pages/playground/PlaygroundAuth.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 113,132,168,235,458
+server/internal/mcpmetadata/hosted_page.js
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-9,41-44,86-107,111,115,132-243,324-327,330
+elements/src/components/MessageContent.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 29
+infra/cmd/infra/gen_cc.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-46
+server/internal/remotesessions/clienthandlers_test.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 202-259,342-366,1014-1063
+client/dashboard/src/pages/catalog/hooks.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 41,76-81
+elements/src/components/ui/popover.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 9,15,27,47
+client/dashboard/src/components/ui/label.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 11
+server/internal/ping/handler.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-32
+client/dashboard/src/contexts/Telemetry.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 55,57,82,111,132,151,166,186
+client/dashboard/src/pages/environments/CloneEnvironmentDialog.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 16-20
+elements/src/plugins/generative-ui/ui/stack.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 39
+client/dashboard/src/pages/mcp/MCPEnvironmentSettings.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 54-58,181,192,214-215,767
+client/dashboard/src/components/app-layout.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 15,32,41-43,76-81,98,133,183-187,197,206-208,215
+client/dashboard/src/components/ui/context-menu.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-63
+client/dashboard/src/components/ui/tooltip.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 9,21,27,39,68
+client/dashboard/src/hooks/toolTypes.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 33,44,70-77,95-103,121-128,139
+client/dashboard/src/components/sources/Sources.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 70,238-240,259-260,418-420
+elements/docs/type-aliases/RADII.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/components/upload-asset/step/index.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 15
+client/dashboard/src/pages/playground/Openrouter.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 5,12
+client/dashboard/src/pages/demo/components/demo-booking.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 12
+client/dashboard/src/pages/org/OrgDomains.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 7-14,42,45,67,83-87,91,95,97-108,110-115,118-123,126-144,148-167,169,171,175-178,183,200,203,206,256,259,329,399,544,600,628,665,677,693-697,701-708,714-726,728-729,731,733-736
+docs/superpowers/specs/2026-06-07-right-click-card-menus-design.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-177
+client/dashboard/src/pages/sources/remote-mcp/useVerifyRemoteMcpUrl.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 4
+client/dashboard/src/pages/catalog/remotes.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-28
+elements/docs/type-aliases/Model.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+elements/docs/type-aliases/Radius.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/components/observe/InsightsMCP.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 125-130,235,417-422,430,438,784,996
+elements/docs/functions/useThreadId.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/pages/slackapp/SlackApp.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 22,30,47,203-205,283,295
+elements/src/hooks/useRadius.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 37
+client/dashboard/src/lib/constants.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1,4-5
+infra/gen/descriptors.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-6
+client/dashboard/src/components/tool-variation-badge.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1,7-11
+client/dashboard/src/components/tool-badge.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 16
+client/dashboard/src/pages/demo/BookDemo.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 9,33
+client/dashboard/src/components/ui/card.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1,133,153,174
+client/dashboard/src/pages/access/challengeHelpers.test.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 69,92
+client/dashboard/src/pages/settings/SettingsDangerZone.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 16,37
+elements/src/plugins/generative-ui/ui/badge.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 49
+client/dashboard/src/pages/playground/PlaygroundMcpApps.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 106,193-195,368-371,373
+client/dashboard/src/components/server-enable-dialog.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 25
+server/internal/attr/conventions.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 101-103,188-200,668-679,912-916
+hooks/plugin-claude/hooks/send_mcp_inventory.sh
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 28-35
+elements/docs/interfaces/ToolsConfig.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+server/internal/background/activities/risk_analysis/presidio_test.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 36,47,61,213
+client/dashboard/src/components/ui/button.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 65
+elements/src/lib/messageConverter.test.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 8,44,66,226-227,229-234
+server/internal/background/activities/risk_analysis/presidio_internal_test.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 75-104,121-122,125-234,410,414,425,429
+client/dashboard/src/pages/mcp/wire-user-session-issuer/machine-types.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 15
+client/dashboard/src/components/ui/skeleton.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 4-7,20,51-55,66
+.mise-tasks/lint/infra.sh
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-13
+client/dashboard/src/components/upload-asset/step/use-step.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 13
+client/dashboard/src/pages/access/ChallengesTab.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 26,33-43,80,147,253,343-352,446,449-452
+client/dashboard/src/pages/mcp/x/tabs/authentication/issuerFormUtils.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 45-48,51,57
+client/dashboard/src/pages/slackapp/SlackRegister.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 15,138
+server/internal/assistants/queries.sql
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 675
+client/dashboard/src/pages/assistants/onboarding/slackManifest.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 3,141,162,167
+server/internal/platformtools/logs/shared.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-64
+elements/src/server/hono.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 34
+server/package.json
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 3
+client/dashboard/src/pages/prompts/Prompt.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 11,17
+client/dashboard/src/components/sources/SourceTableRow.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 43
+client/dashboard/src/pages/deployments/deployment/ToolsTabContent.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 6-10
+elements/docs/functions/sleep.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/hooks/useExpandedChart.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1,3-6
+client/dashboard/src/components/expandable.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/components/page-header.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1,11,23-47,232-245,249
+client/dashboard/src/pages/login/components/journey-demo.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 28
+client/dashboard/src/pages/playground/PlaygroundLogsPanel.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 45,84,142-144
+client/dashboard/src/pages/settings/Settings.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 11
+client/dashboard/src/pages/mcp/EnvironmentVariableRow.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 78
+elements/docs/interfaces/GramChat.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/components/webgl/components/ascii-effect/font-texture.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 9
+elements/src/components/assistant-ui/thread.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 4,12,15,26,75-78,273,299-311,548-550,820-1031,1045-1046,1119-1120,1124-1125,1127-1128,1130-1132,1134
+elements/src/plugins/generative-ui/ui/accordion-wrapper.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 22,50
+infra/internal/gcp/cc.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-113
+server/internal/audit/plugins.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 164-177,194-197,203,208,305-308,314,316
+client/dashboard/src/lib/audit-log-format.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 130,133
+client/dashboard/src/components/sources/SourceActivityPanel.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 34
+client/dashboard/src/components/page-header.test.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-44
+elements/src/plugins/generative-ui/ui/alert-wrapper.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 19
+.agents/skills/feature-flag/SKILL.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-148
+client/dashboard/src/components/project-menu.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 20,32,108
+client/dashboard/src/pages/org/OtelForwardingSection.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 53
+elements/docs/interfaces/ThemeConfig.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1,28
+client/dashboard/src/pages/catalog/remotes.test.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-123
+server/internal/mcp/metrics.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 14-40,44-63,86-121,123-128,157-210
+server/internal/plugins/impl.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 41,532-536,546-548,551-589,601-603,610-615,620,634-635,647-703,810,813-817,821,832-833,1746-1760,1763,1768-1769,1773-1775,1780,1782-1786,1806,1829,1842-1854,1856-1870,1875-1888,1978,1980-1981,1987-1996
+client/dashboard/src/pages/sources/SourceToolsTab.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 268,310
+infra/internal/gcp/cc_pubsub.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-164
+.github/filters.yaml
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 63-71
+client/dashboard/src/components/gram-logo/variants/icon.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+elements/src/components/Replay.stories.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1,6
+server/internal/plugins/repo/models.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 49-50
+client/dashboard/src/components/ui/badge.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 50
+client/dashboard/src/pages/chatLogs/ChatLogsTable.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 82,125,299-301
+client/dashboard/src/pages/demo/SwitchOrg.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 20-22,58,114
+client/dashboard/src/pages/mcp/wire-user-session-issuer/WireUserSessionIssuerModal.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 78,129-140,231-232
+client/dashboard/src/pages/access/challengeHelpers.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 16-24,42
+infra/pkg/gcp/subscriber_test.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-170
+elements/src/components/ui/collapsible.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 5,11-13,24-26
+client/dashboard/src/components/app-sidebar.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 11,15-17,21-22,72-74,78-80,114-121,152-155,157-176,178-183,185,188-202,204-236,238,241-242,244-267,269-272,274-276,291,293
+client/dashboard/src/components/auditlogs/diff.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 42-45
+client/dashboard/src/pages/access/RolesTab.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 60-64,68-72,82,266-274
+client/dashboard/src/pages/catalog/hooks/useSelectionState.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 8-12
+client/dashboard/src/components/webgl/tunnel.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 6-10
+client/dashboard/src/pages/mcp/MCP.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 38,42,57,146,172
+elements/src/plugins/generative-ui/ui/checkbox-wrapper.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 21
+client/dashboard/src/components/ai-elements/prompt-input.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 9,12,35,75,335,412,425,527,540,558
+client/dashboard/src/pages/sources/external-mcp/ExternalMCPDetails.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 23,113
+client/dashboard/src/pages/prompts/usePrompts.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 4-9
+client/dashboard/src/pages/toolsets/ToolsetsEmptyState.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 5-6,8-9
+.oxfmtrc.json
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 16-17
+elements/src/plugins/generative-ui/ui/progress.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 24
+client/dashboard/src/components/access/ShadowMCPRequestAccessContent.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 21
+server/internal/assistants/managed_assistant_instructions.txt
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 8-9,12,16-18
+server/internal/assistants/provisioning.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 58-60,218-221
+elements/src/plugins/generative-ui/ui/button-wrapper.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 26
+elements/src/server/express.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 37
+client/dashboard/src/pages/logs/StatusBadge.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 11
+elements/docs/interfaces/ModelConfig.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/pages/toolsets/ToolsetDropown.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 22
+elements/src/lib/tools.byte-cap.test.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 117
+elements/docs/type-aliases/DateRangePreset.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/components/ui/xy-fade.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 18
+elements/docs/variables/ToolFallback.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/pages/org/OrgAuditLogs.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 264,280,585,611,666,695-696,980-982,993-995,1003-1005,1019,1209,1240-1242
+elements/src/plugins/generative-ui/ui/input-wrapper.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 23
+client/dashboard/src/components/ui/checkbox.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 10
+client/dashboard/src/pages/org/OrgLogs.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 15,30
+elements/docs/functions/convertGramMessagesToUIMessages.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+infra/pkg/gcp/publisher.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-101
+server/internal/authz/context_test.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 11,45-63
+client/dashboard/src/pages/access/useChallengeRowColumns.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 20-24,83,108,119
+server/internal/background/activities/generate_chat_title.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 8,110-134,142-143,146
+server/internal/platformtools/toolsets.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 27-29,42-43
+server/internal/platformtools/chats/tool_load_chat.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-69
+server/internal/platformtools/users/shared.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-15
+server/design/plugins/design.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 439-441,443,450-454,527,533-537,540
+client/dashboard/src/pages/toolsets/resources/ResourcesEmptyState.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 10
+client/dashboard/tsconfig.app.json
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 21-29
+server/internal/plugins/audit_test.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 11,114-115,148-149,192-193,268-269
+client/dashboard/src/contexts/Auth.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 62-64,68,73,83-85,107-111,158,165,179,216-219
+client/dashboard/src/components/ui/use-view-mode.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 25
+client/dashboard/src/pages/setup/components/onboarding-stepper.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 22
+elements/docs/functions/getPresetRange.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/pages/org/AIIntegrationsSection.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 31
+client/dashboard/src/lib.d.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-33
+elements/docs/interfaces/Cassette.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/pages/plugins/InstallInstructionsDialog.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 508,623,642-644,715
+client/dashboard/src/components/ui/dot-table.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 15
+client/dashboard/src/pages/setup/components/onboarding-footer.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 3
+client/dashboard/src/pages/deployments/useRedeployDeployment.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 22,36
+client/dashboard/src/pages/sources/SourceOverviewTab.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 56
+elements/docs/interfaces/ToolMentionsConfig.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/components/block.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 16,77
+elements/src/components/assistant-ui/attachment.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 143
+client/dashboard/src/components/EnableLoggingOverlay.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 15-17
+client/dashboard/src/components/ai-elements/conversation.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 12-15,32,41,45,48,50-62
+elements/docs/variables/CREDITS_EXHAUSTED_MESSAGE.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/assets/speakeasy-icon.svg
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-22
+client/dashboard/src/pages/deployments/useActiveDeployment.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 4-11
+elements/src/hooks/useToolApproval.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 3,9
+elements/src/storybook.d.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 18-22
+server/internal/platformtools/logs/tool_get_project_metrics_summary.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-72
+client/dashboard/src/lib/toolTypes.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 17-18,61,169,172-176,185,220-224,230
+server/internal/platformtools/logs/tool_search_chats.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-83
+client/dashboard/src/components/monaco-editor.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 8,62,88,94
+client/dashboard/src/components/ai-elements/code-block.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 39,47-54,105,130
+client/dashboard/src/pages/catalog/AddServerDialog.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 37,296,312,883,890,939-941
+elements/docs/interfaces/SidecarConfig.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/components/ui/input-group.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 10-13,66-67,111,126,139
+client/dashboard/src/pages/triggers/Triggers.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 44,115,513-514,750,781,798
+elements/src/components/assistant-ui/assistant-modal.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 39-41,280
+elements/src/lib/tools.test.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 255
+elements/src/plugins/generative-ui/ui/pagination.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 11-14,29,39-41,55,76,93,110
+client/dashboard/src/pages/org/OrgHome.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 76,94,205,691-693,699-701
+client/dashboard/src/components/ai-elements/highlight-code.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 29
+server/internal/platformtools/risk/tool_get_risk_policy_status.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-66
+server/internal/plugins/generate_test.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 17-23,668-794,817,847
+client/dashboard/src/pages/environments/Environments.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 4,6,9,21,25,171-185,188-210,212-219,222-224
+elements/src/plugins/generative-ui/ui/input.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 5-9
+client/dashboard/src/contexts/AuthProvider.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 62-66,147,212,269
+elements/src/plugins/chart/component.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 8,30-31,35-37,39
+client/dashboard/src/pages/deployments/deployment/use-deployment-search-params.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 21-28
+client/dashboard/src/components/project/ActivityTimelineCard.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 31-35
+client/dashboard/src/pages/mcp/MCPDetails.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 112,118,171,373,535-536,662,733-734,987-995,1029,1061,1135-1136,1201-1204,1326-1336,1338-1340,1342-1344,1363,1388,1505-1507,1526,1742,1812,1860,1867,1997-2001,2037,2070,2076,2344,2350
+client/dashboard/src/components/access/ShadowMCPRequestAccessContent.test.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 97
+client/dashboard/src/pages/logs/utils.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 54,64
+client/dashboard/src/pages/playground/ToolMentions.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 21,234
+elements/docs/type-aliases/ModalTriggerPosition.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/pages/org/OrgAdminSettings.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 132,139,275,470,498,561-568,570-573,587-592
+elements/src/components/ShareButton/index.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 83,121-123
+server/internal/o11y/slog.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 15,159-163
+elements/docs/type-aliases/FrontendTool.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1,9,13-16
+client/dashboard/src/components/ai-elements/tool.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 20,25,32,78,114-117,131-135,156
+client/dashboard/src/components/sources/SourceCard.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 6,77,162-171,173,175-176,178,180-199,202-208,210-212,216
+client/dashboard/src/components/FeatureRequestModal.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 28,73,80
+client/dashboard/src/lib/compute-changed-fields.test.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 64,71-72
+client/dashboard/.oxlintrc.json
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-70
+client/dashboard/src/pages/mcp/oauth-wizard/EditOAuthProxyModal.test.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 142,154,183,201
+client/dashboard/src/pages/mcp/x/tabs/SettingsTab.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 30,81,111,178
+elements/docs/functions/defineFrontendTool.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/pages/playground/useAgentify.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1,30
+elements/docs/functions/trackError.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+elements/src/hooks/useAuth.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 134-135
+elements/src/components/ui/skeleton.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 3-6
+elements/src/plugins/generative-ui/ui/data-table.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 28
+infra/internal/o11y/levels.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-19
+server/internal/chat/list_chats_test.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 136-154,252-282
+client/dashboard/src/components/sources/SourcesEmptyState.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 23
+server/internal/plugins/marketplace_settings_test.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 14,131-132
+client/dashboard/src/pages/hooks/HooksSetupDialog.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 432,458-460,511
+client/dashboard/src/components/editable-text.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 27,77
+client/dashboard/src/components/sources/ViewAssetDialogContent.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 96-98,136-138
+client/dashboard/src/pages/mcp/MCPToolFilterScopesPanel.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 37
+client/dashboard/src/pages/toolBuilder/CustomTools.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 3,6,24,32,88,94,98-110,112-138
+elements/src/plugins/generative-ui/ui/dialog.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 12,18,24,30,37,57,84-87,104,127,140-142
+elements/src/plugins/generative-ui/ui/alert.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 26-27,38-41,57
+client/dashboard/src/pages/deployments/deployment/LogsTabContent.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 85,162
+client/dashboard/src/contexts/Fetcher.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 5-7,15
+client/dashboard/src/pages/environments/useEnvironmentActions.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 16-19
+client/dashboard/src/components/project/ProjectOnboarding.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 4
+client/dashboard/src/components/ui/card-mini.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+elements/docs/type-aliases/ToolsFilter.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/pages/setup/components/step-container.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 33
+client/dashboard/src/pages/mcp/oauth-wizard/EditOAuthProxyModal.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 28,87
+elements/src/contexts/ReplayContext.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 5
+client/dashboard/src/pages/catalog/useExternalMcpReleaseWorkflow.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 28,35,43,353,365,367-370,448
+client/dashboard/src/pages/catalog/CatalogDetail.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 39,43,47-54,64,71,445-447,490-492
+client/dashboard/src/pages/chatLogs/ChatLogsTable.test.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 52-57
+elements/docs/functions/TimeRangePicker.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+infra/proto/gcp/pubsub/v1/options.proto
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-52
+client/dashboard/src/components/command-palette/CommandPalette.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 12
+server/internal/mcp/authnchallenge_authorize.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 99-106,128,145-149,153,163-165,174
+server/internal/mcpmetadata/hosted_page.html.tmpl
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 607-611,862-905,960,1033,1112,1176,1204-1207,1228,1230-1254,1257,1259-1285,1310,1388,1410,1436-1458,1471,1526,1759,1825,1857,1927-1929
+server/internal/platformtools/logs/tool_search_tool_calls.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-83
+client/dashboard/src/components/ui/view-toggle.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 11
+server/migrations/20260609101753_add_directory_attributes.sql
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-58
+elements/src/plugins/generative-ui/ui/grid.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 20
+client/dashboard/src/components/ui/alert.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 74
+client/dashboard/src/pages/mcp/x/tabs/authentication/AttachRemoteIdentityProviderSheet.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 81,362,500-502
+infra/cmd/infra/version.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-19
+elements/src/lib/tools.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 14-16,33-35,45-49,51-54
+.github/workflows/pr.yaml
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 48,126-132,684-733,1197-1200,1748
+client/dashboard/src/pages/collections/CollectionDetail.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 26,47,130,466-477,479,481-485,632-650,652-660,662-671,817-825
+client/dashboard/src/pages/sources/remote-mcp/RemoteMCPDetails.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 48-55,94,467,600,670,708-711,714-721,741,805
+client/dashboard/src/pages/sources/SourceMCPServersTab.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 69
+elements/docs/interfaces/GramChatOverview.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+elements/docs/interfaces/HistoryConfig.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1,62-94
+client/dashboard/src/lib/webgl/utils.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+server/internal/background/activities/risk_analysis/fp_split_test.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-96
+server/internal/background/activities/risk_analysis/testdata/fp-email.txt
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-346
+client/dashboard/src/pages/deployments/deployment/AssetsTabContent.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 28
+client/dashboard/src/pages/playground/playground-auth-utils.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 12,19,36
+client/dashboard/src/components/ui/dialog.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+server/internal/platformtools/core/io_test.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-19
+client/dashboard/src/components/DashboardTimeRangePicker.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 21
+client/dashboard/src/components/public-mcp-warning-dialog.test.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 53-58,65-70
+client/dashboard/src/components/observe/LogsAgents.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 68,104,368
+client/dashboard/src/components/moon/input-field.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 14
+server/internal/streams/handlers.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-17
+elements/docs/functions/useRecordCassette.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/pages/prompts/PromptsEmptyState.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 9
+client/dashboard/src/components/moon/input.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 5-9
+server/internal/mcp/consent_template.html
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 240-244,298-321,360,369-373,403
+server/internal/platformtools/logs/shared_test.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-36
+mprocs.yaml
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 39-41
+server/internal/access/queries.sql
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 63-71
+buf.gen.yaml
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-7
+server/internal/platformtools/logs/tool_get_user_metrics_summary.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-87
+elements/src/hooks/useThemeProps.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 7-9,11,23
+client/dashboard/src/components/observe/useObserveFilters.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 68,346-348
+client/dashboard/src/components/sources/UploadOpenApiDialogContent.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 19,59-61,78
+client/dashboard/src/components/webgl/utils/detect-webgl.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 5
+client/dashboard/src/components/mcp/MCPStatusIndicator.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 34
+client/dashboard/src/pages/assistants/onboarding/AssistantDraftPanel.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 15,32
+client/dashboard/src/pages/mcp/oauth-wizard/AutoConfigureLoader.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 4
+elements/docs/README.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+elements/docs/type-aliases/Density.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+elements/src/components/ui/dialog.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 10,16,23,36,43,63,90-93,103-106,122,135-137
+compose.yml
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 111-125
+elements/src/components/Chat/index.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 3,15,38-39
+client/dashboard/src/pages/security/RiskOverviewRulesIndex.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 28
+client/dashboard/src/components/enterprise-gate.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 18
+client/dashboard/src/components/sidebar-user-menu.test.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-84
+client/dashboard/src/pages/assistants/onboarding/systemPrompt.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 183-187
+elements/src/plugins/generative-ui/ui/text.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 23
+client/dashboard/src/pages/setup/components/steps/directory-sync-step.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 17
+elements/docs/type-aliases/COLOR_SCHEMES.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/components/insights-context.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 54
+elements/docs/interfaces/TimeRange.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+elements/tsconfig.json
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 11,13-14
+server/internal/platformtools/deployments/shared.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-15
+client/dashboard/src/components/require-scope.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 45-47,132
+client/dashboard/src/pages/playground/Agentify.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1,14,20,68
+client/dashboard/src/pages/security/RiskOverviewUserDetail.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 34
+hooks/plugin-cursor/hooks/identity.sh
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-78
+client/dashboard/src/pages/mcp/x/tabs/authentication/RemoteIdentityProvidersTable.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 30
+client/dashboard/knip.config.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-22
+.vscode/extensions.json
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 8-9
+client/dashboard/src/pages/shadow-mcp/RequestAccess.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 3
+client/dashboard/src/pages/playground/EditToolDialog.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 85,144,362-365
+elements/src/server/bun.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 36
+client/dashboard/src/components/product-tier-badge.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 8
+client/dashboard/src/components/observe/ObserveTabNav.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 18-22
+client/dashboard/src/pages/slackapp/SlackAppDetail.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 24,39,123,161-162,177-179,234,282-283,312-314,321-325,409
+elements/src/types/index.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1,4,666-674,853-858,1092-1111,1153-1154
+server/internal/assistants/resolve_mcp_servers_test.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 24,54,95,113-114
+server/internal/mcp/consent_script.js
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-64
+.changeset/smart-ends-bet.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-5
+client/dashboard/src/components/ui/sidebar-context.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 17
+client/dashboard/src/pages/playground/useChatContext.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 24-32,36
+client/dashboard/src/pages/chatLogs/TraceEntryIcon.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 15
+client/dashboard/src/components/full-page-error.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 8
+client/dashboard/src/components/observe/ObserveFilterBar.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 76,171
+client/dashboard/src/components/webgl/window-trail.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 120-123,126,210-211
+client/dashboard/src/lib/utils.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 4,31,41
+client/dashboard/src/pages/catalog/Catalog.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 32,36,141-142,343-345
+client/dashboard/src/pages/environments/EnvironmentDropdown.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 21
+client/dashboard/src/pages/access/DeleteRoleDialog.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 30
+client/dashboard/src/components/observe/InsightsEmployeeDetail.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 134,1200-1202
+client/dashboard/src/pages/mcp/x/tabs/authentication/AuthenticationTab.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 21-25
+client/dashboard/src/pages/onboarding/UploadOpenAPI.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 3,15-16,18,147
+client/dashboard/src/pages/slackapp/slackManifest.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 4,15,21
+elements/docs/interfaces/ComposerConfig.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+elements/src/components/Replay.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 66-75,79,114,155-157,247,252
+elements/src/lib/messageConverter.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 196-207,576
+elements/src/plugins/generative-ui/ui/tabs-wrapper.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 24,49-52
+infra/gen/kcc.yaml
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-37
+client/dashboard/src/pages/CLIs.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 7
+client/dashboard/src/components/sidebar-nav-skeleton.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-47
+client/dashboard/src/components/webgl/components/scroll-sync-plane.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 43
+elements/src/lib/token.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 12,32
+client/dashboard/src/pages/environments/Environment.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 163,205-206,215,721-725
+elements/src/plugins/generative-ui/ui/card-wrapper.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 18
+client/dashboard/src/components/ui/switch.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 21
+client/dashboard/src/pages/playground/PlaygroundConfigPanel.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 44,263
+client/dashboard/src/pages/setup/components/steps/confirm-traffic-step.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 75
+elements/src/plugins/generative-ui/ui/skeleton-wrapper.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 20
+client/dashboard/src/pages/mcp/oauth-wizard/FatalErrorStep.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 13
+client/dashboard/src/lib/errors.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 18,55
+elements/src/server/tanstack-start.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 50
+client/dashboard/src/components/mcp_install_page/config_form.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 26,76-78
+client/dashboard/index.html
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 8-34
+client/dashboard/src/pages/mcp/EnvironmentSwitcher.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 46
+elements/docs/interfaces/Dimensions.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/components/tool-list/ToolList.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 660,764,1041-1043,1046-1048,1057-1059,1062-1064
+elements/docs/functions/ShareButton.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+elements/docs/type-aliases/GetSessionFn.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+elements/src/hooks/useGramThreadListAdapter.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 13,64-71,90-96,112-115,121,126-146,167,201-203,258,408-410
+client/dashboard/src/contexts/Sdk.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 15-16,20,67-70
+client/dashboard/src/components/webgl/ascii-stars.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 21,234
+infra/cmd/infra/logger.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-21
+client/dashboard/src/lib/projectAssistantTranscript.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-76
+client/dashboard/src/components/ui/textarea.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 3,36
+elements/src/react-shim.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 13-21
+.mise-tasks/start/streams.sh
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-13
+server/internal/background/activities/risk_analysis/presidio.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 635-639,641-652,655-660,662-667
+server/internal/background/activities/risk_analysis/presidiotest/server_test.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 44,53,138,156
+client/dashboard/src/components/observe/LogsTools.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 65,163,176,423-425,431
+elements/src/components/ui/time-range-picker.stories.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 39-63,69,72-96,101-130,132-156,160,164,166,169,173-174,176-178,181-203,206-207,209-211,213-222,226,230,232,235-236,240-241,244-246,258
+elements/src/plugins/generative-ui/ui/tabs.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 13,48,62,81
+client/dashboard/src/components/log-workbench.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 36
+client/dashboard/src/hooks/useLocalStorageState.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 3-6
+elements/src/lib/cassette.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 13-18,103-108,149,159,161-162,201-204
+client/dashboard/src/pages/chatLogs/ChatLogs.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 4
+client/dashboard/src/lib/route-errors.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 3
+client/dashboard/src/components/ui/sidebar.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 8,38,107,134,229,256-259,273,276,287,290,292-295,301-304,318,321,332-335
+elements/docs/interfaces/WelcomeConfig.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1,11-18
+client/dashboard/src/components/gram-logo/variants/horizontal.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+docs/superpowers/specs/2026-06-06-sidebar-only-layout-design.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-215
+client/dashboard/src/components/create-thing-card.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 13
+server/internal/mcp/setup_test.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 204
+server/internal/platformtools/logs/tool_list_attribute_keys.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-72
+client/dashboard/src/pages/home/Home.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 8
+server/database/schema.sql
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 58,1648-1720,2436,2724-2725,2729-2730,2747-2753,2764-2767,2924-2964,2989-2994,3012-3024
+infra/pkg/gcp/pubsub_gcp.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-64
+client/dashboard/src/pages/hooks/HookSourceIcon.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 4-8,29,45,83-87,197,228,246-250,272-275
+elements/docs/interfaces/GramChatMessage.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1,39
+server/cmd/gram/deps.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 18,43-45,881-906
+elements/src/plugins/generative-ui/ui/avatar.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 14,31,44,57-60,76-79,95
+elements/src/plugins/generative-ui/ui/switch.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 14
+client/dashboard/src/contexts/CommandPalette.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 29
+client/dashboard/src/components/ui/link.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 12-16
+.agents/skills/golang/SKILL.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 221-328
+client/dashboard/src/pages/security/detection-rules-data.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 140,180,255-258
+elements/src/contexts/ConnectionStatusContext.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 39,141,156-159
+elements/docs/_media/ElementsConfig.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+server/internal/platformtools/logs/tool_get_observability_overview.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-101
+elements/src/server/nextjs.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 31
+client/dashboard/src/components/public-mcp-warning-dialog.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 21
+client/dashboard/src/components/ui/collapsible.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 5,11-13,24-26
+client/dashboard/src/components/project/ProjectDashboard.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 41
+client/dashboard/src/pages/access/CreateRoleDialog.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 57,66-71,74-76,101,121,286,295,362-364,366-367,369,921-925
+client/dashboard/src/pages/catalog/FilterChips.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 64
+client/dashboard/src/pages/playground/ShareChatButton.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 9
+client/dashboard/src/pages/plugins/PublishDialog.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 69-82
+client/dashboard/src/pages/setup/components/steps/create-marketplace-step.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 21,30
+elements/docs/interfaces/ErrorContext.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1,17
+elements/src/components/ui/calendar.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 133
+client/dashboard/src/pages/playground/ChatComposerWrapper.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 18,111
+client/dashboard/src/components/functions/GettingStartedInstructions.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 5
+elements/src/hooks/useElements.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 3,9
+elements/docs/variables/MODELS.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/components/upload-asset/name-deployment-step.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 9
+client/dashboard/src/pages/mcp/x/tabs/authentication/UserSessionsSection.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 61
+client/dashboard/src/components/ui/mcp-icon.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 27-31
+client/dashboard/src/components/ui/more-actions.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 27
+elements/src/compat-shims.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 42,50,66-77,79,85
+client/dashboard/src/components/upload-asset/upload-file-step.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 12,28-29,86-88
+elements/src/plugins/chart/chart.test.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 2,7,49
+elements/src/plugins/generative-ui/ui/card.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 5-8,21-24,37-40,50-53,63-66,79-82,92-95
+server/internal/mcp/authnchallenge_consent.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 13,39-58,78,126-143,171,214,252-260,277-281,290-292,303-305,321,327,333,344
+server/internal/assistants/service.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 143,2004-2011,2014,2355
+elements/src/plugins/generative-ui/ui/select-wrapper.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 26
+client/dashboard/src/lib/logout-storage.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 16
+server/internal/platformtools/deployments/tool_get_deployment_logs.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-68
+server/internal/risk/queries.sql
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 45-50
+elements/src/components/ui/generative-ui.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 7,45-46,48,102-106
+client/dashboard/src/components/upload-asset/stepper/use-stepper.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 41
+client/dashboard/src/pages/deployments/Deployments.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 23,40,125,266
+client/dashboard/src/pages/org/OrgWebhooks.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 26
+server/internal/plugins/generate.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 600,651,742,774-865,911-915,987,1004-1009,1016,1019,1047,1136-1139,1239
+client/dashboard/src/pages/access/types.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 8
+client/dashboard/src/pages/logs/log-filter-types.test.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 20-23,34,45,105-108,122-123,137-138
+server/internal/remotesessions/challenge_scope_e2e_test.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 131-186
+client/dashboard/src/pages/assistants/onboarding/tools/useOnboardingTools.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 56,1833,1836
+CLAUDE.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 125-126
+client/dashboard/src/pages/access/ChangeRoleDialog.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 39
+client/dashboard/src/pages/security/RiskOverviewCategoryDetail.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 50,173
+client/dashboard/src/pages/mcp/MCPEmptyState.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 5
+client/dashboard/src/pages/setup/components/onboarding-wizard.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 44,79,106,129,140
+client/dashboard/src/pages/security/SecurityOverview.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 105,120,508-510,801
+client/dashboard/src/pages/sources/remote-mcp/VerifyRemoteMcpUrlButton.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 13,48
+elements/src/plugins/generative-ui/ui/checkbox.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 12
+client/dashboard/src/pages/playground/MessageHistoryIndicator.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 14
+client/dashboard/vite.config.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 13-30
+client/dashboard/src/components/org-sidebar.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 11-12,17,22-26,63-65,68-71,115-118,120-137,140-142,145-148,151-189,191,194-209,211-213
+elements/docs/interfaces/CassetteMessage.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+server/internal/access/listusergrants_test.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 13,116-131
+elements/src/lib/tool-mentions.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 27-30,44
+client/dashboard/src/components/ui/multi-select.test.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 29
+client/dashboard/src/pages/access/Access.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 31,65,74,82
+client/dashboard/src/components/ui/type.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 28
+client/dashboard/src/components/ObservabilitySkeleton.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 7
+client/dashboard/src/pages/mcp/oauth-wizard/ProxyMetadataForm.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 10-12
+client/dashboard/src/pages/setup/components/steps/instrument-agents-step.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 105,283,359-367,536-537,540-541
+client/dashboard/src/components/sources/SourceCardIllustrations.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 55,63-66,97
+client/dashboard/src/components/workspace-switcher.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-134
+elements/src/components/FrontendTools/index.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 8
+client/dashboard/src/components/sources/sources-hooks.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 11,25
+client/dashboard/src/pages/toolBuilder/CustomToolsEmptyState.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 9
+client/dashboard/src/pages/toolsets/useToolsets.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 3-8
+elements/docs/functions/describeStreamError.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/pages/toolsets/ServerTab.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 11-13
+client/dashboard/src/pages/chatLogs/ChatDetailPanel.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 82,181,572-581,999
+client/dashboard/src/routes.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 665,716-718,933
+client/dashboard/src/hooks/useToolsetUrl.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 6-10
+elements/docs/interfaces/TimeRangePickerProps.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+elements/src/lib/errorTracking.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 78
+server/internal/mcpmetadata/impl.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 15,18,46,111-133,179-191,896-909,1136-1152,1213,1233,1239-1266,1281-1295,1351-1357,1375-1383,1401-1406,1408-1411,1413-1436,1439,1441,1444-1463,1468-1470,1479-1482
+client/dashboard/src/lib/projectAssistantTranscript.test.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-79
+client/dashboard/src/pages/settings/RegistryCacheSection.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 10
+client/dashboard/src/components/QuerySamplesPopover.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 10,34
+client/dashboard/src/components/observe/ObserveRedirects.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 9,14,19
+client/dashboard/src/pages/chatLogs/TraceEntryFilterBar.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 37
+client/dashboard/src/pages/mcp/BuiltInMCPDetailPage.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 65,98
+elements/docs/interfaces/MessageContentProps.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+elements/docs/interfaces/ModalConfig.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+elements/docs/type-aliases/CassettePart.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+infra/main.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-13
+client/dashboard/src/components/moon/any-field.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 25
+client/dashboard/src/pages/playground/ManageToolsDialog.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 36,245-247
+server/internal/platformtools/risk/shared.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-19
+client/dashboard/src/pages/catalog/SortDropdown.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 26-29
+elements/src/hooks/useSession.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 4-6
+client/dashboard/src/components/code.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 62,85,98,105,163
+client/dashboard/src/pages/sources/Sources.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 6,11,19
+hooks/plugin-cursor/hooks/send_hook.sh
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 14-23,30,35
+client/dashboard/src/components/product-tier-utils.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 3-5
+client/dashboard/src/components/ui/slider.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 4
+client/dashboard/src/App.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 38-49,82-84
+client/dashboard/src/pages/team/Team.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 89,104,247-255,272-277,294-299,322-326,354-358,360-366,528-530,538-544,555-557,1018-1020,1057-1059
+client/dashboard/src/components/observe/observeFilterUtils.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 9
+client/dashboard/src/components/webgl/hooks/use-scroll-update.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 8
+client/dashboard/src/pages/hooks/HooksEmptyState.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 61
+client/dashboard/src/pages/cli/CliCallback.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 15
+client/dashboard/src/pages/toolsets/ToolsetEmptyState.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 10
+client/dashboard/src/pages/login/Login.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 9,30
+elements/docs/functions/Chat.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+server/internal/mcp/authnchallenge.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 92-100,136-141
+server/internal/authz/resource_grants_test.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 22,306-432
+client/dashboard/src/components/ui/select.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 11,17,28,52,89,152
+client/dashboard/src/pages/plugins/Plugins.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 44,48,102,107-109,134,391-393,398-400,405-407
+elements/docs/type-aliases/Variant.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/components/workspace-switcher.test.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-39
+client/dashboard/src/components/tool-list/SubtoolsBadge.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 17,21,23,36-37
+elements/src/plugins/generative-ui/ui/accordion.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 11,18,32,54
+client/dashboard/src/pages/catalog/ServerTableRow.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 28,38
+client/dashboard/src/components/observe/LogsMCP.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 51,257-258,318,384,646-648
+elements/docs/functions/ChatHistory.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+server/cmd/gram/start.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 8,776-780,1018-1019,1044-1045,1082-1090
+client/dashboard/src/pages/logs/TraceLogsList.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1,74,94
+client/dashboard/src/pages/catalog/ServerCard.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 39,53
+client/dashboard/src/pages/access/GrantDrawer.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 22,43,112-115
+client/dashboard/src/components/nav-menu.test.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 116-118
+elements/src/contexts/ElementsProvider.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 51-52,71-72,76-83,86-89,94-99,102-103,108-111,162-169,227,237-241,249-253,541-542,545,583,585-586,588-589,605,607,681,730,738,810,859-861
+client/dashboard/src/components/moon/textarea.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 5-8
+client/dashboard/src/pages/mcp/x/tabs/authentication/EmptyAuthenticationState.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 23
+client/dashboard/src/pages/mcp/x/tabs/authentication/ModifyRemoteIdentityProviderSheet.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 46,342-344
+client/dashboard/src/pages/sources/SourceSettingsTab.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 31,79
+elements/src/lib.d.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-8
+client/dashboard/src/components/ui/search-bar.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 17
+infra/proto/gram/ping/v1/ping.proto
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-21
+server/.golangci.yaml
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 279,353-354
+client/dashboard/src/components/ui/avatar.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 11,27,40
+client/dashboard/src/pages/org/OrgIdentity.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 350
+server/internal/background/activities/risk_analysis/falsepositives_email.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-212
+server/migrations/20260605200300_plugin_servers_mcp_server_id.sql
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-6
+cubic.yaml
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 32-33
+client/dashboard/src/components/ui/accordion.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 9,16,30,52
+client/dashboard/src/components/mcp/BuiltInMCPCard.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 21
+client/dashboard/src/pages/prompts/PromptEditor.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 50
+client/dashboard/src/pages/security/DetectionRules.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 77,370-375,550,921
+server/internal/access/impl.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 317-318
+client/dashboard/src/lib/mcpOAuth.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 8
+elements/src/plugins/generative-ui/ui/list.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 10-14
+server/internal/ping/publisher.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-52
+infra/internal/o11y/slog.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-116
+client/dashboard/src/pages/collections/CreateCollection.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 30,100-101,170-175
+server/internal/authz/resource_grants.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 8,44,53-55,82-97,119-163,213,237
+client/dashboard/src/pages/mcp/oauth-wizard/ExternalOAuthForm.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 16-18
+client/dashboard/src/pages/setup/components/steps/connect-idp-step.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 44-47
+elements/src/plugins/generative-ui/ui/index.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 2-118,121-157
+client/dashboard/src/components/ui/sheet.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 9,11-12,46,78-81,91-94,107,120
+client/dashboard/src/components/auditlogs/structured-diff.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 50
+client/dashboard/src/pages/playground/ChatHistory.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 4-18,39,51-52,54-57,59-60,63,66-74
+client/dashboard/src/pages/security/PolicyCenter.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 25,35,268,304-305,435,533-535,541-545,552-554,571-578,590-599,605,637-639,656-682,695-703,969-970,974-977,1008,1010-1018,1025,1284-1286,1344,1346,1363-1367,1425-1427,1429-1431,1444-1455,1468
+elements/src/plugins/generative-ui/ui/label.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 11
+client/dashboard/CHANGELOG.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 3-24
+client/dashboard/src/pages/mcp/wire-user-session-issuer/defaults.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 13
+elements/docs/type-aliases/UnifiedSessionAuthConfig.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+infra/cmd/infra/root.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-73
+elements/docs/functions/convertGramMessagesToExported.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+infra/internal/attr/conventions.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-108
+elements/src/components/Chat/stories/ToolApproval.stories.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 96-97
+server/internal/mcp/authnchallenge_idp_callback.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 15,51-53,57-61,63,65-67,71-72,78-80,84-87,96-106,114-115,122,131,137-139,141,149-151,155,172
+server/internal/platformtools/risk/tool_list_risk_results_by_chat.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-65
+client/dashboard/src/pages/mcp/x/tabs/OverviewTab.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 2-3,6-7,12,20-21,23-50,58-60,64,67,69,71-72,74,79,82,84,88,90-94,98-99,101-124,129-144,146-148,150-170,172-180,184-199,203-252,260-305,307,309-312,317-333,335-389,393-399,402-435,437-439,441-442,444-468,470,472-482,485-510,513-520,524,526,532-539,542-586,589-645,647-684,686,690,692-696,699-703,705-724,726-728,730-732,734-742,745-746,748,752-757,759-762
+client/dashboard/src/components/ui/private-input.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 23
+client/dashboard/src/components/ai-elements/message.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 4,10-14,55
+client/dashboard/src/components/chart/ChartCard.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 19
+client/dashboard/src/pages/setup/components/onboarding-header.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 9-11
+client/dashboard/src/pages/access/useGrantFlow.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 16-21
+client/dashboard/src/pages/environments/useEnvironments.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 3-7
+client/dashboard/src/lib/toolVariationGroups.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 7-8
+client/dashboard/src/pages/playground/tool-mention-utils.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 17
+elements/.oxlintrc.json
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-75
+client/dashboard/src/components/ui/combobox.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 50
+client/dashboard/src/components/sources/SourceInfoTable.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 4-8,18
+client/dashboard/src/components/card-context-menu.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-58
+client/dashboard/src/pages/collections/CollectionCard.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 24-28,83-85
+elements/src/plugins/chart/ui/line-chart.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 77
+client/dashboard/src/pages/playground/ChatWindow.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 42-44,59-60,95,345,396-405,407,450,464-466,478-479,482,535,550,586,641,659-660
+server/internal/plugins/queries.sql
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 58-61,64-65,72-90,109-111,117-118,161-203
+client/dashboard/src/components/tool-collection-badge.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1,31,89
+client/dashboard/src/pages/assistants/NewAssistant.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 6
+client/dashboard/src/pages/playground/PlaygroundElements.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 57
+elements/docs/interfaces/ComponentOverrides.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+elements/src/plugins/generative-ui/ui/avatar-wrapper.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 15-19
+client/dashboard/src/components/sources/useFetchSourceContent.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 9
+client/dashboard/src/components/ui/code-block.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 2,34-36,72,126,137-141
+client/dashboard/src/components/upload-asset/step/frame.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 10
+elements/docs/_media/globals.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1,5
+client/dashboard/src/pages/login/components/login-section.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 94,164,183,191
+server/migrations/atlas.sum
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1,210-213
+client/dashboard/src/components/dev-toolbar.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1,204,392
+client/dashboard/src/pages/assistants/onboarding/docs/index.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 11
+client/dashboard/src/hooks/useProductTier.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 10
+infra/internal/gcp/pubsub_discover.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-475
+elements/src/components/assistant-ui/tool-mention-autocomplete.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 77
+client/dashboard/src/pages/collections/types.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/pages/mcp/oauth-wizard/services.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 14,52-57,177-200,203-206
+elements/src/contexts/portal-container.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 14
+infra/internal/gcp/values.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-37
+client/dashboard/src/components/ui/editable.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 16,24-26
+client/dashboard/src/components/useAssetImageUploadHandler.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 6
+elements/src/contexts/ChatIdContext.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 15
+client/dashboard/src/components/sources/useFailedDeploymentSources.test.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 193-195,238,278,318,421-422,452,513-515,570,592,614-615,637
+client/dashboard/src/contexts/TelemetryProvider.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 16-18
+elements/CHANGELOG.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 3-12
+client/dashboard/src/components/sources/RemoveSourceDialogContent.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 26,65
+docs/superpowers/plans/2026-06-06-sidebar-only-layout.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-1266
+client/dashboard/src/pages/mcp/MCPTeamAccessTab.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 19,245
+client/dashboard/src/pages/login/Register.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 7
+client/dashboard/src/pages/mcp/x/tabs/authentication/useIssuerDiscovery.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 27,203-207
+client/dashboard/src/components/mcp-tool-filtering-section.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 47
+client/dashboard/src/components/mcp/MCPServerTableRow.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 22
+client/dashboard/src/pages/hooks/EditServerNameDialog.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 56,131,192-194,246,267,291-293,310
+client/dashboard/src/components/add-button.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 4-8
+client/dashboard/src/components/ai-elements/prompt-input-utils.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 17,33-38,44-45,47,50
+client/dashboard/src/pages/logs/LogDetailSheet.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 30,96,101,494-497
+client/dashboard/src/lib/mcp-json.test.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 104,107,133
+client/dashboard/src/components/create-resource-card.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 20
+client/dashboard/src/pages/plugins/PluginCard.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1,4,19,25-33,35-69,73-75,77,79-101
+elements/docs/functions/Calendar.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/pages/mcp/oauth-wizard/OAuthWizard.test.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 227
+elements/src/components/Chat/stories/Tools.stories.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 142-144,247-250,267-272
+client/dashboard/src/components/moon/label.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 9
+client/dashboard/src/components/tool-list/MethodBadge.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 11
+client/dashboard/src/pages/sources/SourceDeploymentsPanel.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 200
+server/internal/platformtools/chats/shared.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-16
+client/dashboard/src/pages/onboarding/upload-openapi-utils.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 20,65,210-212,266-272
+client/dashboard/src/pages/mcp/x/tabs/EndpointsTab.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 42,429,539
+server/internal/platformtools/chats/tool_list_chats.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-107
+.claude/skills/feature-flag/SKILL.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-148
+client/dashboard/src/pages/mcp/x/MCPServerDetails.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 61,141-143,180
+client/dashboard/src/components/ui/radio-group.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 10,23
+client/dashboard/src/components/ui/spinner.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 4
+client/dashboard/src/components/detail-hero.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 16-20
+client/dashboard/src/components/sources/ViewSourceDialogContent.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 21,59-61
+client/dashboard/src/components/observe/InsightsTools.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 166,277,516-518,601,717,719,871,873,1011,1303,1305
+.github/dependabot.yml
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 46-84
+client/dashboard/src/pages/chatLogs/traceEntries.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 118,127,134,160,174
+elements/docs/functions/useChatId.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+elements/docs/interfaces/MCPServerEntry.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+elements/docs/interfaces/TimeRangePreset.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/components/upload-asset/stepper/frame.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 9
+client/dashboard/src/pages/elements/Elements.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 186,307
+client/dashboard/src/pages/assistants/onboarding/AssistantOnboarding.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 28,56
+client/dashboard/src/pages/mcp/oauth-wizard/ProxyCredentialsForm.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 8-10
+client/dashboard/src/pages/toolBuilder/Toolify.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 26,42,64,187-190
+elements/docs/variables/MessageContent.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+.changeset/catalog-detail-deep-specifier-lookup.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-5
+client/dashboard/src/components/ui/input.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 31
+client/dashboard/src/pages/toolBuilder/ToolBuilder.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 89,129,382-383,393-432,434-441,444,448,450-465,467-475,669,691,975-979,981-983,985-990,992-1006
+elements/src/contexts/ToolApprovalContext.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 29-33
+elements/docs/interfaces/ElementsTransportContext.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+elements/src/hooks/usePluginComponents.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 18-20
+elements/src/plugins/generative-ui/ui/popover.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 10,16,25,44,48-51,61-64,77
+client/dashboard/src/pages/sdk/SDK.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 19,43,142-144,178
+server/CHANGELOG.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 3-18
+.changeset/frank-maps-eat.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-5
+client/dashboard/src/pages/assistants/onboarding/sections.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+elements/src/plugins/generative-ui/ui/dropdown-menu.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 11,17-19,27-29,42-44,62-64,78,98-100,123-125,138-140,166,183-185,198,213,224,244-246
+client/dashboard/src/components/insights-sidebar.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 3-7,9-10,16-17,22,29-36,57,148-152,201-203,206,217,251-253,296,313,315,365,376,391,425-428,438,564,566-576,607-644
+client/dashboard/src/pages/catalog/useExternalMcpReleaseWorkflow.test.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 214-215,227,239,243,289,409,499,798-799,865,895-896,965,1010,1070,1198,1248,1253,1278,1326
+client/dashboard/src/pages/access/ResourceLink.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 16
+client/dashboard/src/pages/access/roleDialogState.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 81,138,146,183,191
+client/dashboard/src/pages/billing/Billing.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 27,42,209,259-275,277-280,284,341,361,382
+server/internal/authz/principal.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 271-274
+server/internal/contextvalues/context.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 65,158-170
+server/migrations/20260605174513_risk-results-drop-verbatim-match-index-column.sql
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-6
+server/design/hooks/design.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 26
+client/dashboard/src/pages/catalog/hooks/useFilterState.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 68-75
+client/dashboard/src/pages/mcp/AddVariableSheet.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 25,47
+.gitignore
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1,75
+client/dashboard/src/pages/chatLogs/ChatLogsFilters.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 43
+client/dashboard/src/components/mcp/MCPServerCard.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 26
+client/dashboard/src/pages/mcp/mcp-details-utils.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 7,28
+client/dashboard/src/pages/toolBuilder/useCustomTools.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 4-9
+server/internal/platformtools/core/io.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-47
+client/dashboard/src/components/card-context-menu.test.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-80
+server/internal/plugins/impl_test.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 17,20,251-252,259-492,506-507,539-540,728-729,753-800,813-814,842-843,895-896,946-947,1010-1011,1100-1101,1151-1152,1204-1205,1230-1231,1307-1308,1355-1356,1398-1399,1518-1519,1566-1567,1613-1614,1649-1650,1678-1679
+client/dashboard/src/pages/mcp/MCPPerformanceTab.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 85-89,97
+client/dashboard/src/components/ui/toggle-group.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 22,48
+client/dashboard/src/components/route-not-found-state.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 15,30-34
+client/dashboard/src/components/ui/dot-card.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 25
+infra/cmd/infra/vars.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-12
+server/internal/mcp/authnchallenge_token.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 144-151,156,167-172,176-179,182,187,192,196-212
+server/internal/platformtools/logs/tool_search_logs.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 48-52,70-71,99
+client/dashboard/src/components/content-error-boundary.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 70
+client/dashboard/src/components/mcp_install_page/useMcpMetadataForm.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 140
+client/dashboard/src/pages/mcp/oauth-wizard/OAuthWizard.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 102-104,106-108,110-111,114-117,120-121,247
+elements/src/plugins/generative-ui/ui/skeleton.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 3-6
+server/internal/assistants/source_adapter.go
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 7,338-343
+client/dashboard/src/components/OpenApiSourceInput.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 28
+client/dashboard/src/pages/toolsets/PromptsTab.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 23
+client/dashboard/src/components/release-stage-badge.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 38
+client/dashboard/src/pages/onboarding/Wizard.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 68-69,71,164,392,428,432,655,664,683,689,694,770-772,786-788,1061-1071
+client/dashboard/src/pages/sources/remote-mcp/RemoveRemoteMcpDialog.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 25,106
+elements/package.json
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 5,84-86,88,237-238
+client/dashboard/src/pages/security/RiskOverviewUsersIndex.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 27
+client/dashboard/src/components/nav-menu.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1,59,354,444,531
+client/dashboard/src/components/brand-gradient-line.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 12-14
+elements/docs/interfaces/AttachmentsConfig.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+elements/src/components/ui/avatar.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 9,25,38
+elements/src/server/fastify.ts
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 36
+client/dashboard/src/components/webgl/components/ascii-effect/index.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/components/chart/ChartCard.test.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 33,47
+client/dashboard/src/components/sidebar-user-menu.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1-228
+client/dashboard/src/pages/sources/SourceToolActions.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 47,303
+.gitattributes
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 8
+client/dashboard/src/pages/toolsets/AddToolsDialog.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 33
+client/dashboard/src/components/http-route.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 13
+client/dashboard/src/components/ui/multi-select.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 33,383
+elements/docs/globals.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1,5
+elements/docs/interfaces/Dimension.md
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 1
+client/dashboard/src/components/mcp/MCPCard.tsx
+  s_bfcdcec2fc12dd::t_81e6bf8df431c5 26,51,159
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "9307eb3319c046fdd50776d183efd583f31ee5e3",
+  "prompts": {},
+  "sessions": {
+    "s_bfcdcec2fc12dd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e978b-d153-7f13-a173-e4e397dcc332",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
