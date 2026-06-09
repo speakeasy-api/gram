@@ -1,0 +1,25 @@
+server/internal/outbox/events/audit_log.go
+  s_9ea3f125eaa40a::t_949650a314ea8f 45-46
+server/internal/outbox/events/catalog_gen.go
+  s_9ea3f125eaa40a::t_848428a3d88253 37-38
+server/internal/outbox/events/catalog_gen.yaml
+  s_9ea3f125eaa40a::t_848428a3d88253 1411-1468
+server/internal/outbox/events/catalog_test.go
+  s_9ea3f125eaa40a::t_953c6317aa7ea5 31,33,36-42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "3948e912fa5da574386c018a156b9c3575babe44",
+  "prompts": {},
+  "sessions": {
+    "s_9ea3f125eaa40a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea993-d952-7c03-8c1e-c43bcaab1de9",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Alex Martin <alex.martin@speakeasy.com>"
+    }
+  }
+}
