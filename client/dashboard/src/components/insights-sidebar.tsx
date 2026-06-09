@@ -484,7 +484,7 @@ export function InsightsProvider({
     if (hideTrigger) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!e.metaKey && !e.ctrlKey) return;
-      if (e.altKey || e.shiftKey) return;
+      if (e.altKey) return;
       // KeyboardEvent.code is layout-independent, unlike e.key which varies
       // with keyboard layout and held modifiers.
       if (e.code !== "Slash") return;
