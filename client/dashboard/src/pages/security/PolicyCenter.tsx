@@ -432,22 +432,7 @@ function PolicyCenterContent() {
     });
   };
 
-  if (isLoading) {
-    return (
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs />
-        </Page.Header>
-        <Page.Body>
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
-          </div>
-        </Page.Body>
-      </Page>
-    );
-  }
-
-  if (policies.length === 0) {
+  if (!isLoading && policies.length === 0) {
     return (
       <Page>
         <Page.Header>
@@ -668,6 +653,33 @@ function PolicyCenterContent() {
     },
   ];
 
+  let sectionBody = (
+    <Table
+      columns={policyColumns}
+      data={policies}
+      rowKey={(policy) => policy.id}
+      onRowClick={handleEdit}
+    />
+  );
+  if (isLoading) {
+    sectionBody = (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+      </div>
+    );
+  }
+
+  const cta = isLoading ? null : (
+    <Page.Section.CTA>
+      <Button onClick={handleCreate}>
+        <Button.LeftIcon>
+          <Plus className="mr-2 h-4 w-4" />
+        </Button.LeftIcon>
+        <Button.Text>New Policy</Button.Text>
+      </Button>
+    </Page.Section.CTA>
+  );
+
   return (
     <Page>
       <Page.Header>
@@ -680,28 +692,15 @@ function PolicyCenterContent() {
           title="Policy insights"
           subtitle="Ask about policy status, coverage, and detector capabilities. Match content is redacted before it reaches the assistant."
         />
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold">Risk Policies</h2>
-            <p className="text-muted-foreground text-sm">
-              Configure risk analysis rules to detect secrets and sensitive
-              information in agent session interactions.
-            </p>
-          </div>
-          <Button onClick={handleCreate}>
-            <Button.LeftIcon>
-              <Plus className="mr-2 h-4 w-4" />
-            </Button.LeftIcon>
-            <Button.Text>New Policy</Button.Text>
-          </Button>
-        </div>
-
-        <Table
-          columns={policyColumns}
-          data={policies}
-          rowKey={(policy) => policy.id}
-          onRowClick={handleEdit}
-        />
+        <Page.Section>
+          <Page.Section.Title stage="beta">Risk Policies</Page.Section.Title>
+          <Page.Section.Description>
+            Configure risk analysis rules to detect secrets and sensitive
+            information in agent session interactions.
+          </Page.Section.Description>
+          {cta}
+          <Page.Section.Body>{sectionBody}</Page.Section.Body>
+        </Page.Section>
 
         {/* Edit/Create Sheet */}
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
