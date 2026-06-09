@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -32,6 +33,6 @@ func NewRegistryClient(t *testing.T, logger *slog.Logger, tracerProvider trace.T
 		tracerProvider,
 		guardianPolicy,
 		externalmcp.NewPulseBackend(pulseURL, "test-tenant-id", conv.NewSecret([]byte("test-api-key"))),
-		nil,
+		cache.NoopCache,
 	)
 }
