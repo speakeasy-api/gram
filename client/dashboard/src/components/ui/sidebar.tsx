@@ -6,8 +6,13 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { cn } from "@/lib/utils";
+import { cn, isMacPlatform } from "@/lib/utils";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import * as React from "react";
 import {
@@ -228,28 +233,37 @@ function SidebarTrigger({
   ...props
 }: React.ComponentProps<typeof Button>): React.JSX.Element {
   const { toggleSidebar } = useSidebar();
+  const shortcutLabel = isMacPlatform() ? "⌘B" : "Ctrl+B";
 
   return (
-    <Button
-      data-sidebar="trigger"
-      data-slot="sidebar-trigger"
-      variant="tertiary"
-      size="sm"
-      className={cn(
-        "text-muted-foreground hover:text-foreground size-7 cursor-pointer transition",
-        className,
-      )}
-      onClick={(event) => {
-        onClick?.(event);
-        toggleSidebar();
-      }}
-      {...props}
-    >
-      <Button.LeftIcon>
-        <Icon name="panel-left" />
-      </Button.LeftIcon>
-      <Button.Text className="sr-only">Toggle Sidebar</Button.Text>
-    </Button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          data-sidebar="trigger"
+          data-slot="sidebar-trigger"
+          variant="tertiary"
+          size="sm"
+          aria-keyshortcuts={isMacPlatform() ? "Meta+B" : "Control+B"}
+          className={cn(
+            "text-muted-foreground hover:text-foreground size-7 cursor-pointer transition",
+            className,
+          )}
+          onClick={(event) => {
+            onClick?.(event);
+            toggleSidebar();
+          }}
+          {...props}
+        >
+          <Button.LeftIcon>
+            <Icon name="panel-left" />
+          </Button.LeftIcon>
+          <Button.Text className="sr-only">Toggle Sidebar</Button.Text>
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">
+        Toggle sidebar ({shortcutLabel})
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
