@@ -280,7 +280,6 @@ INSERT INTO chat_messages (
   , user_id
   , external_user_id
   , external_message_id
-  , external_chat_message_assets_url
   , finish_reason
   , tool_calls
   , prompt_tokens
@@ -320,39 +319,37 @@ VALUES (
   , $23
   , $24
   , $25
-  , $26
 )
 ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
 DO NOTHING
 `
 
 type CreateExternalChatMessageParams struct {
-	ChatID                       uuid.UUID
-	Role                         string
-	ProjectID                    uuid.UUID
-	Content                      string
-	ContentRaw                   []byte
-	ContentAssetUrl              pgtype.Text
-	StorageError                 pgtype.Text
-	Model                        pgtype.Text
-	MessageID                    pgtype.Text
-	ToolCallID                   pgtype.Text
-	UserID                       pgtype.Text
-	ExternalUserID               pgtype.Text
-	ExternalMessageID            pgtype.Text
-	ExternalChatMessageAssetsUrl pgtype.Text
-	FinishReason                 pgtype.Text
-	ToolCalls                    []byte
-	PromptTokens                 int64
-	CompletionTokens             int64
-	TotalTokens                  int64
-	Origin                       pgtype.Text
-	UserAgent                    pgtype.Text
-	IpAddress                    pgtype.Text
-	Source                       pgtype.Text
-	ContentHash                  []byte
-	Generation                   int32
-	CreatedAt                    pgtype.Timestamptz
+	ChatID            uuid.UUID
+	Role              string
+	ProjectID         uuid.UUID
+	Content           string
+	ContentRaw        []byte
+	ContentAssetUrl   pgtype.Text
+	StorageError      pgtype.Text
+	Model             pgtype.Text
+	MessageID         pgtype.Text
+	ToolCallID        pgtype.Text
+	UserID            pgtype.Text
+	ExternalUserID    pgtype.Text
+	ExternalMessageID pgtype.Text
+	FinishReason      pgtype.Text
+	ToolCalls         []byte
+	PromptTokens      int64
+	CompletionTokens  int64
+	TotalTokens       int64
+	Origin            pgtype.Text
+	UserAgent         pgtype.Text
+	IpAddress         pgtype.Text
+	Source            pgtype.Text
+	ContentHash       []byte
+	Generation        int32
+	CreatedAt         pgtype.Timestamptz
 }
 
 func (q *Queries) CreateExternalChatMessage(ctx context.Context, arg CreateExternalChatMessageParams) (int64, error) {
@@ -370,7 +367,6 @@ func (q *Queries) CreateExternalChatMessage(ctx context.Context, arg CreateExter
 		arg.UserID,
 		arg.ExternalUserID,
 		arg.ExternalMessageID,
-		arg.ExternalChatMessageAssetsUrl,
 		arg.FinishReason,
 		arg.ToolCalls,
 		arg.PromptTokens,
@@ -664,22 +660,6 @@ func (q *Queries) GetLLMClientBreakdownByMessages(ctx context.Context, arg GetLL
 	return items, nil
 }
 
-const getLastExternalMessageIDForChat = `-- name: GetLastExternalMessageIDForChat :one
-SELECT external_message_id
-FROM chat_messages
-WHERE chat_id = $1
-  AND external_message_id IS NOT NULL
-ORDER BY created_at DESC, seq DESC
-LIMIT 1
-`
-
-func (q *Queries) GetLastExternalMessageIDForChat(ctx context.Context, chatID uuid.UUID) (pgtype.Text, error) {
-	row := q.db.QueryRow(ctx, getLastExternalMessageIDForChat, chatID)
-	var external_message_id pgtype.Text
-	err := row.Scan(&external_message_id)
-	return external_message_id, err
-}
-
 const getMaxGenerationForChat = `-- name: GetMaxGenerationForChat :one
 SELECT COALESCE(MAX(generation), 0)::integer AS generation FROM chat_messages WHERE chat_id = $1
 `
@@ -908,7 +888,7 @@ func (q *Queries) InsertUserFeedback(ctx context.Context, arg InsertUserFeedback
 	return id, err
 }
 
-const linkAIIntegrationConfigChat = `-- name: LinkAIIntegrationConfigChat :exec
+const linkAIIntegrationConfigChat = `-- name: LinkAIIntegrationConfigChat :one
 INSERT INTO ai_integration_config_chats (
     ai_integration_config_id
   , chat_id
@@ -921,6 +901,7 @@ ON CONFLICT (chat_id)
 DO UPDATE SET
     ai_integration_config_id = EXCLUDED.ai_integration_config_id
   , updated_at = clock_timestamp()
+RETURNING last_cursor_id
 `
 
 type LinkAIIntegrationConfigChatParams struct {
@@ -928,9 +909,14 @@ type LinkAIIntegrationConfigChatParams struct {
 	ChatID                uuid.UUID
 }
 
-func (q *Queries) LinkAIIntegrationConfigChat(ctx context.Context, arg LinkAIIntegrationConfigChatParams) error {
-	_, err := q.db.Exec(ctx, linkAIIntegrationConfigChat, arg.AiIntegrationConfigID, arg.ChatID)
-	return err
+// Links a chat to the AI integration config that imported it and returns the
+// chat's persisted message pagination cursor so imports resume where the last
+// successful page ended.
+func (q *Queries) LinkAIIntegrationConfigChat(ctx context.Context, arg LinkAIIntegrationConfigChatParams) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, linkAIIntegrationConfigChat, arg.AiIntegrationConfigID, arg.ChatID)
+	var last_cursor_id pgtype.Text
+	err := row.Scan(&last_cursor_id)
+	return last_cursor_id, err
 }
 
 const listChatMessages = `-- name: ListChatMessages :many
@@ -1523,6 +1509,23 @@ type SoftDeleteChatParams struct {
 
 func (q *Queries) SoftDeleteChat(ctx context.Context, arg SoftDeleteChatParams) error {
 	_, err := q.db.Exec(ctx, softDeleteChat, arg.ID, arg.ProjectID)
+	return err
+}
+
+const updateAIIntegrationConfigChatCursor = `-- name: UpdateAIIntegrationConfigChatCursor :exec
+UPDATE ai_integration_config_chats
+SET last_cursor_id = $1
+  , updated_at = clock_timestamp()
+WHERE chat_id = $2
+`
+
+type UpdateAIIntegrationConfigChatCursorParams struct {
+	LastCursorID pgtype.Text
+	ChatID       uuid.UUID
+}
+
+func (q *Queries) UpdateAIIntegrationConfigChatCursor(ctx context.Context, arg UpdateAIIntegrationConfigChatCursorParams) error {
+	_, err := q.db.Exec(ctx, updateAIIntegrationConfigChatCursor, arg.LastCursorID, arg.ChatID)
 	return err
 }
 

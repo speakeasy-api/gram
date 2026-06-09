@@ -93,6 +93,7 @@ SELECT
   , s.last_poll_failed_at
   , s.last_poll_success_at
   , s.consecutive_failures
+  , s.last_cursor_id
   , s.created_at AS sync_created_at
   , s.updated_at AS sync_updated_at
 FROM ai_integration_configs c
@@ -126,6 +127,7 @@ type GetConfigByOrgAndProviderRow struct {
 	LastPollFailedAt       pgtype.Timestamptz
 	LastPollSuccessAt      pgtype.Timestamptz
 	ConsecutiveFailures    int32
+	LastCursorID           pgtype.Text
 	SyncCreatedAt          pgtype.Timestamptz
 	SyncUpdatedAt          pgtype.Timestamptz
 }
@@ -152,6 +154,7 @@ func (q *Queries) GetConfigByOrgAndProvider(ctx context.Context, arg GetConfigBy
 		&i.LastPollFailedAt,
 		&i.LastPollSuccessAt,
 		&i.ConsecutiveFailures,
+		&i.LastCursorID,
 		&i.SyncCreatedAt,
 		&i.SyncUpdatedAt,
 	)
@@ -184,6 +187,7 @@ SELECT
   , s.last_poll_failed_at
   , s.last_poll_success_at
   , s.consecutive_failures
+  , s.last_cursor_id
   , s.created_at AS sync_created_at
   , s.updated_at AS sync_updated_at
 FROM ai_integration_configs c
@@ -213,6 +217,7 @@ type GetUsagePollConfigByIDRow struct {
 	LastPollFailedAt       pgtype.Timestamptz
 	LastPollSuccessAt      pgtype.Timestamptz
 	ConsecutiveFailures    int32
+	LastCursorID           pgtype.Text
 	SyncCreatedAt          pgtype.Timestamptz
 	SyncUpdatedAt          pgtype.Timestamptz
 }
@@ -239,6 +244,7 @@ func (q *Queries) GetUsagePollConfigByID(ctx context.Context, aiIntegrationConfi
 		&i.LastPollFailedAt,
 		&i.LastPollSuccessAt,
 		&i.ConsecutiveFailures,
+		&i.LastCursorID,
 		&i.SyncCreatedAt,
 		&i.SyncUpdatedAt,
 	)
@@ -309,6 +315,7 @@ SELECT
   , s.last_poll_failed_at
   , s.last_poll_success_at
   , s.consecutive_failures
+  , s.last_cursor_id
   , s.created_at AS sync_created_at
   , s.updated_at AS sync_updated_at
 FROM ai_integration_configs c
@@ -339,6 +346,7 @@ type ListEnabledConfigsByProviderRow struct {
 	LastPollFailedAt       pgtype.Timestamptz
 	LastPollSuccessAt      pgtype.Timestamptz
 	ConsecutiveFailures    int32
+	LastCursorID           pgtype.Text
 	SyncCreatedAt          pgtype.Timestamptz
 	SyncUpdatedAt          pgtype.Timestamptz
 }
@@ -371,6 +379,7 @@ func (q *Queries) ListEnabledConfigsByProvider(ctx context.Context, provider str
 			&i.LastPollFailedAt,
 			&i.LastPollSuccessAt,
 			&i.ConsecutiveFailures,
+			&i.LastCursorID,
 			&i.SyncCreatedAt,
 			&i.SyncUpdatedAt,
 		); err != nil {
@@ -467,18 +476,25 @@ SET poll_watermark_at = $1,
     last_poll_failed_at = NULL,
     last_poll_success_at = clock_timestamp(),
     consecutive_failures = 0,
+    last_cursor_id = $3,
     updated_at = clock_timestamp()
-WHERE ai_integration_config_id = $3
+WHERE ai_integration_config_id = $4
 `
 
 type RecordUsagePollSuccessParams struct {
 	PollWatermarkAt       pgtype.Timestamptz
 	NextPollAfter         pgtype.Timestamptz
+	LastCursorID          pgtype.Text
 	AiIntegrationConfigID uuid.UUID
 }
 
 func (q *Queries) RecordUsagePollSuccess(ctx context.Context, arg RecordUsagePollSuccessParams) error {
-	_, err := q.db.Exec(ctx, recordUsagePollSuccess, arg.PollWatermarkAt, arg.NextPollAfter, arg.AiIntegrationConfigID)
+	_, err := q.db.Exec(ctx, recordUsagePollSuccess,
+		arg.PollWatermarkAt,
+		arg.NextPollAfter,
+		arg.LastCursorID,
+		arg.AiIntegrationConfigID,
+	)
 	return err
 }
 
@@ -490,6 +506,7 @@ SET poll_watermark_at = $1,
     last_poll_failed_at = NULL,
     last_poll_success_at = NULL,
     consecutive_failures = 0,
+    last_cursor_id = NULL,
     updated_at = clock_timestamp()
 WHERE ai_integration_config_id = $3
 `

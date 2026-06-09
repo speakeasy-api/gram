@@ -64,7 +64,10 @@ DO UPDATE SET
   , updated_at = GREATEST(chats.updated_at, EXCLUDED.updated_at)
 RETURNING id;
 
--- name: LinkAIIntegrationConfigChat :exec
+-- name: LinkAIIntegrationConfigChat :one
+-- Links a chat to the AI integration config that imported it and returns the
+-- chat's persisted message pagination cursor so imports resume where the last
+-- successful page ended.
 INSERT INTO ai_integration_config_chats (
     ai_integration_config_id
   , chat_id
@@ -76,15 +79,14 @@ VALUES (
 ON CONFLICT (chat_id)
 DO UPDATE SET
     ai_integration_config_id = EXCLUDED.ai_integration_config_id
-  , updated_at = clock_timestamp();
+  , updated_at = clock_timestamp()
+RETURNING last_cursor_id;
 
--- name: GetLastExternalMessageIDForChat :one
-SELECT external_message_id
-FROM chat_messages
-WHERE chat_id = @chat_id
-  AND external_message_id IS NOT NULL
-ORDER BY created_at DESC, seq DESC
-LIMIT 1;
+-- name: UpdateAIIntegrationConfigChatCursor :exec
+UPDATE ai_integration_config_chats
+SET last_cursor_id = @last_cursor_id
+  , updated_at = clock_timestamp()
+WHERE chat_id = @chat_id;
 
 -- name: CreateChatMessage :copyfrom
 INSERT INTO chat_messages (
@@ -153,7 +155,6 @@ INSERT INTO chat_messages (
   , user_id
   , external_user_id
   , external_message_id
-  , external_chat_message_assets_url
   , finish_reason
   , tool_calls
   , prompt_tokens
@@ -181,7 +182,6 @@ VALUES (
   , @user_id
   , @external_user_id
   , @external_message_id
-  , @external_chat_message_assets_url
   , @finish_reason
   , @tool_calls
   , @prompt_tokens

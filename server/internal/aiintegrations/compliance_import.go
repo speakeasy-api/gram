@@ -50,44 +50,60 @@ func NewComplianceImportService(logger *slog.Logger, db *pgxpool.Pool, guardianP
 	}
 }
 
-func (s *ComplianceImportService) SyncAnthropicCompliance(ctx context.Context, cfg Config, endTime time.Time) error {
+// SyncAnthropicCompliance imports new compliance activity and chat messages.
+// It returns the activities pagination cursor reached by this run; callers
+// must persist it on success so the next run resumes after the last imported
+// activity instead of re-discovering by time window.
+func (s *ComplianceImportService) SyncAnthropicCompliance(ctx context.Context, cfg Config) (string, error) {
 	if cfg.Provider != ProviderAnthropicCompliance {
-		return oops.E(oops.CodeInvalid, nil, "unsupported ai integration provider for compliance import: %s", cfg.Provider)
+		return "", oops.E(oops.CodeInvalid, nil, "unsupported ai integration provider for compliance import: %s", cfg.Provider)
 	}
 	if cfg.ExternalOrganizationID == "" {
-		return oops.E(oops.CodeInvalid, nil, "external_organization_id is required for anthropic_compliance")
+		return "", oops.E(oops.CodeInvalid, nil, "external_organization_id is required for anthropic_compliance")
 	}
 
 	client := anthropicapi.New(s.guardianPolicy, anthropicapi.WithAPIKey(cfg.APIKey))
-	activities, err := s.discoverChatActivities(ctx, client, cfg, endTime)
+	activities, nextCursor, err := s.discoverChatActivities(ctx, client, cfg)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if len(activities) == 0 {
-		return nil
+		return nextCursor, nil
 	}
 
 	userIDsByEmail, err := s.hydrateConnectedUsers(ctx, cfg.OrganizationID, activityEmails(activities))
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	for _, activity := range activities {
 		s.heartbeat(ctx, "chat_import", 0)
-		chatID, err := s.upsertActivityChat(ctx, cfg, activity, userIDsByEmail)
+		chatID, messagesCursor, err := s.upsertActivityChat(ctx, cfg, activity, userIDsByEmail)
 		if err != nil {
-			return err
+			return "", err
 		}
-		if err := s.importChatMessages(ctx, client, cfg, chatID, activity.ClaudeChatID, userIDsByEmail); err != nil {
-			return err
+		if err := s.importChatMessages(ctx, client, cfg, chatID, activity.ClaudeChatID, messagesCursor, userIDsByEmail); err != nil {
+			return "", err
 		}
 	}
-	return nil
+	return nextCursor, nil
 }
 
-func (s *ComplianceImportService) discoverChatActivities(ctx context.Context, client *anthropicapi.Client, cfg Config, endTime time.Time) ([]anthropicapi.Activity, error) {
+// discoverChatActivities pages through the activities feed starting after the
+// persisted cursor and returns the deduplicated chat activities plus the
+// cursor reached by this run. The cursor is the verbatim last_id pagination
+// token from the final page, not an id derived from imported rows.
+func (s *ComplianceImportService) discoverChatActivities(ctx context.Context, client *anthropicapi.Client, cfg Config) ([]anthropicapi.Activity, string, error) {
+	// First sync has no cursor yet; bound the initial backfill with a time
+	// window around the watermark. Every later sync resumes from the cursor.
+	createdAtGTE := time.Time{}
+	if cfg.LastCursor == "" {
+		createdAtGTE = cfg.PollWatermarkAt.Add(-time.Hour * 24)
+	}
+
 	seen := map[string]anthropicapi.Activity{}
-	var afterID string
+	afterID := cfg.LastCursor
+	nextCursor := cfg.LastCursor
 	for pageNum := 1; ; pageNum++ {
 		s.heartbeat(ctx, "activity_discovery", pageNum)
 		page, err := client.ListActivities(ctx, anthropicapi.ListActivitiesParams{
@@ -96,25 +112,21 @@ func (s *ComplianceImportService) discoverChatActivities(ctx context.Context, cl
 				anthropicComplianceActivityUpdated,
 			},
 			OrganizationIDs: []string{cfg.ExternalOrganizationID},
-			CreatedAtGTE:    cfg.PollWatermarkAt.Add(-time.Hour * 24),
+			CreatedAtGTE:    createdAtGTE,
 			AfterID:         afterID,
 			Limit:           5000,
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "list anthropic compliance activities")
+			return nil, "", oops.E(oops.CodeUnexpected, err, "list anthropic compliance activities")
 		}
 		for _, activity := range page.Data {
 			if activity.Actor.Type != "user_actor" || activity.ClaudeChatID == "" {
 				continue
 			}
-			createdAt, err := activity.CreatedAtTime()
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "parse anthropic compliance activity timestamp")
-			}
-			if !createdAt.IsZero() && createdAt.After(endTime) {
-				continue
-			}
 			seen[activity.ClaudeChatID] = activity
+		}
+		if page.LastID != "" {
+			nextCursor = page.LastID
 		}
 		if !page.HasMore || page.LastID == "" {
 			break
@@ -126,13 +138,15 @@ func (s *ComplianceImportService) discoverChatActivities(ctx context.Context, cl
 	for _, activity := range seen {
 		activities = append(activities, activity)
 	}
-	return activities, nil
+	return activities, nextCursor, nil
 }
 
-func (s *ComplianceImportService) upsertActivityChat(ctx context.Context, cfg Config, activity anthropicapi.Activity, userIDsByEmail map[string]string) (uuid.UUID, error) {
+// upsertActivityChat resolves the chat row for an activity and returns its
+// persisted message pagination cursor alongside the chat id.
+func (s *ComplianceImportService) upsertActivityChat(ctx context.Context, cfg Config, activity anthropicapi.Activity, userIDsByEmail map[string]string) (uuid.UUID, string, error) {
 	createdAt, err := activity.CreatedAtTime()
 	if err != nil {
-		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "parse anthropic compliance activity timestamp")
+		return uuid.Nil, "", oops.E(oops.CodeUnexpected, err, "parse anthropic compliance activity timestamp")
 	}
 	if createdAt.IsZero() {
 		createdAt = time.Now().UTC()
@@ -150,19 +164,23 @@ func (s *ComplianceImportService) upsertActivityChat(ctx context.Context, cfg Co
 		UpdatedAt:      timestamptz(createdAt),
 	})
 	if err != nil {
-		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "upsert anthropic compliance chat")
+		return uuid.Nil, "", oops.E(oops.CodeUnexpected, err, "upsert anthropic compliance chat")
 	}
-	if err := s.chatRepo.LinkAIIntegrationConfigChat(ctx, chatrepo.LinkAIIntegrationConfigChatParams{
+	messagesCursor, err := s.chatRepo.LinkAIIntegrationConfigChat(ctx, chatrepo.LinkAIIntegrationConfigChatParams{
 		AiIntegrationConfigID: cfg.ID,
 		ChatID:                chatID,
-	}); err != nil {
-		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "link anthropic compliance chat")
+	})
+	if err != nil {
+		return uuid.Nil, "", oops.E(oops.CodeUnexpected, err, "link anthropic compliance chat")
 	}
-	return chatID, nil
+	return chatID, messagesCursor.String, nil
 }
 
-func (s *ComplianceImportService) importChatMessages(ctx context.Context, client *anthropicapi.Client, cfg Config, chatID uuid.UUID, claudeChatID string, userIDsByEmail map[string]string) error {
-	var afterID string
+// importChatMessages pages through a chat's messages starting after the
+// chat's persisted cursor. The cursor is advanced after every successfully
+// written page so a failed run resumes at the last completed page instead of
+// re-importing the whole chat.
+func (s *ComplianceImportService) importChatMessages(ctx context.Context, client *anthropicapi.Client, cfg Config, chatID uuid.UUID, claudeChatID string, afterID string, userIDsByEmail map[string]string) error {
 	for pageNum := 1; ; pageNum++ {
 		s.heartbeat(ctx, "message_import", pageNum)
 		page, err := client.GetChatMessages(ctx, anthropicapi.GetChatMessagesParams{
@@ -182,6 +200,14 @@ func (s *ComplianceImportService) importChatMessages(ctx context.Context, client
 		}
 		if _, err := s.writer.WriteExternal(ctx, cfg.ProjectID, rows); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "write anthropic compliance chat messages")
+		}
+		if page.LastID != "" {
+			if err := s.chatRepo.UpdateAIIntegrationConfigChatCursor(ctx, chatrepo.UpdateAIIntegrationConfigChatCursorParams{
+				LastCursorID: conv.ToPGText(page.LastID),
+				ChatID:       chatID,
+			}); err != nil {
+				return oops.E(oops.CodeUnexpected, err, "record anthropic compliance chat cursor")
+			}
 		}
 		if !page.HasMore || page.LastID == "" {
 			break
@@ -243,32 +269,31 @@ func (s *ComplianceImportService) buildExternalMessageRows(ctx context.Context, 
 			contentRaw = msg.Content
 		}
 		rows = append(rows, chatrepo.CreateExternalChatMessageParams{
-			ChatID:                       chatID,
-			Role:                         msg.Role,
-			ProjectID:                    cfg.ProjectID,
-			Content:                      content,
-			ContentRaw:                   contentRaw,
-			ContentAssetUrl:              pgtype.Text{},
-			StorageError:                 pgtype.Text{},
-			Model:                        conv.ToPGText(model),
-			MessageID:                    pgtype.Text{},
-			ToolCallID:                   pgtype.Text{},
-			UserID:                       conv.ToPGText(userID),
-			ExternalUserID:               conv.ToPGText(page.User.ID),
-			ExternalMessageID:            conv.ToPGText(msg.ID),
-			ExternalChatMessageAssetsUrl: pgtype.Text{},
-			FinishReason:                 pgtype.Text{},
-			ToolCalls:                    nil,
-			PromptTokens:                 0,
-			CompletionTokens:             0,
-			TotalTokens:                  0,
-			Origin:                       conv.ToPGText(page.Href),
-			UserAgent:                    pgtype.Text{},
-			IpAddress:                    pgtype.Text{},
-			Source:                       conv.ToPGText(anthropicComplianceSource),
-			ContentHash:                  nil,
-			Generation:                   0,
-			CreatedAt:                    timestamptz(createdAt),
+			ChatID:            chatID,
+			Role:              msg.Role,
+			ProjectID:         cfg.ProjectID,
+			Content:           content,
+			ContentRaw:        contentRaw,
+			ContentAssetUrl:   pgtype.Text{},
+			StorageError:      pgtype.Text{},
+			Model:             conv.ToPGText(model),
+			MessageID:         pgtype.Text{},
+			ToolCallID:        pgtype.Text{},
+			UserID:            conv.ToPGText(userID),
+			ExternalUserID:    conv.ToPGText(page.User.ID),
+			ExternalMessageID: conv.ToPGText(msg.ID),
+			FinishReason:      pgtype.Text{},
+			ToolCalls:         nil,
+			PromptTokens:      0,
+			CompletionTokens:  0,
+			TotalTokens:       0,
+			Origin:            conv.ToPGText(page.Href),
+			UserAgent:         pgtype.Text{},
+			IpAddress:         pgtype.Text{},
+			Source:            conv.ToPGText(anthropicComplianceSource),
+			ContentHash:       nil,
+			Generation:        0,
+			CreatedAt:         timestamptz(createdAt),
 		})
 	}
 	return rows, nil

@@ -8,6 +8,7 @@ SELECT
   , s.last_poll_failed_at
   , s.last_poll_success_at
   , s.consecutive_failures
+  , s.last_cursor_id
   , s.created_at AS sync_created_at
   , s.updated_at AS sync_updated_at
 FROM ai_integration_configs c
@@ -94,6 +95,7 @@ SELECT
   , s.last_poll_failed_at
   , s.last_poll_success_at
   , s.consecutive_failures
+  , s.last_cursor_id
   , s.created_at AS sync_created_at
   , s.updated_at AS sync_updated_at
 FROM ai_integration_configs c
@@ -112,6 +114,7 @@ SET poll_watermark_at = @poll_watermark_at,
     last_poll_failed_at = NULL,
     last_poll_success_at = NULL,
     consecutive_failures = 0,
+    last_cursor_id = NULL,
     updated_at = clock_timestamp()
 WHERE ai_integration_config_id = @ai_integration_config_id;
 
@@ -141,6 +144,7 @@ SELECT
   , s.last_poll_failed_at
   , s.last_poll_success_at
   , s.consecutive_failures
+  , s.last_cursor_id
   , s.created_at AS sync_created_at
   , s.updated_at AS sync_updated_at
 FROM ai_integration_configs c
@@ -158,6 +162,7 @@ SET poll_watermark_at = @poll_watermark_at,
     last_poll_failed_at = NULL,
     last_poll_success_at = clock_timestamp(),
     consecutive_failures = 0,
+    last_cursor_id = @last_cursor_id,
     updated_at = clock_timestamp()
 WHERE ai_integration_config_id = @ai_integration_config_id;
 

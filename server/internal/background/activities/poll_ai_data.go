@@ -44,6 +44,7 @@ func NewPollAIData(
 				"page":     page,
 			})
 		}),
+		complianceImporter: nil,
 	}
 	if guardianPolicy != nil && chatWriter != nil && assetStorage != nil {
 		p.complianceImporter = aiintegrations.NewComplianceImportService(logger, db, guardianPolicy, chatWriter, func(ctx context.Context, scope string, page int) {
@@ -84,6 +85,9 @@ func (p *PollAIData) Do(ctx context.Context, configID string) (err error) {
 		return oops.E(oops.CodeUnexpected, err, "failed to load ai integration configuration")
 	}
 
+	// Providers with cursor-based pagination advance lastCursor; time-window
+	// providers leave the stored value untouched.
+	lastCursor := cfg.LastCursor
 	switch cfg.Provider {
 	case aiintegrations.ProviderCursor:
 		if err := p.cursorUsagePoller.SyncCursorUsage(ctx, cfg, endTime); err != nil {
@@ -94,17 +98,19 @@ func (p *PollAIData) Do(ctx context.Context, configID string) (err error) {
 			return oops.E(oops.CodeUnexpected, err, "fetch cursor usage window")
 		}
 	case aiintegrations.ProviderAnthropicCompliance:
-		if err := p.complianceImporter.SyncAnthropicCompliance(ctx, cfg, endTime); err != nil {
+		nextCursor, err := p.complianceImporter.SyncAnthropicCompliance(ctx, cfg)
+		if err != nil {
 			if aiintegrations.IsAnthropicComplianceUnauthorized(err) {
 				return oops.E(oops.CodeUnauthorized, err, "anthropic rejected the configured compliance api key")
 			}
 			return oops.E(oops.CodeUnexpected, err, "sync anthropic compliance data")
 		}
+		lastCursor = nextCursor
 	default:
 		return oops.E(oops.CodeInvalid, nil, "unsupported ai integration provider for usage polling: %s", cfg.Provider)
 	}
 
-	if err := p.integrations.RecordUsagePollSuccess(ctx, id, endTime); err != nil {
+	if err := p.integrations.RecordUsagePollSuccess(ctx, id, endTime, lastCursor); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "record usage poll success")
 	}
 	return nil
