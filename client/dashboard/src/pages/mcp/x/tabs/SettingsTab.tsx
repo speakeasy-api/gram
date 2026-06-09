@@ -54,7 +54,7 @@ import { Alert, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, SaveIcon, Trash2, XIcon } from "lucide-react";
 import { createContext, use, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useMcpEndpointSlugValidation } from "../useMcpEndpointSlugValidation";
 
@@ -65,6 +65,7 @@ const ADDRESS_INPUT_GROUP_CLASSNAME = "rounded-md";
 const ADDRESS_SLUG_INPUT_CLASSNAME = "font-mono pl-0! font-bold";
 const ADDRESS_RANDOM_SUFFIX_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 const ADDRESS_RANDOM_SUFFIX_LENGTH = 5;
+export const MCP_SERVER_URL_SECTION_ID = "server-url";
 
 function generateAddressSuffix() {
   let suffix = "";
@@ -77,6 +78,23 @@ function generateAddressSuffix() {
   return suffix;
 }
 
+function useScrollToSettingsHash() {
+  const location = useLocation();
+
+  useEffect(() => {
+    const targetId = location.hash.replace("#", "");
+    if (targetId !== MCP_SERVER_URL_SECTION_ID) return;
+
+    const animationFrame = window.requestAnimationFrame(() => {
+      document
+        .getElementById(targetId)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [location.hash]);
+}
+
 export function SettingsTab({
   mcpServer,
   endpoints,
@@ -86,6 +104,8 @@ export function SettingsTab({
   endpoints: McpEndpoint[];
   isLoadingEndpoints: boolean;
 }): JSX.Element {
+  useScrollToSettingsHash();
+
   return (
     <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
       <DisplayNameCard mcpServer={mcpServer} />
@@ -119,10 +139,18 @@ const DANGER_SETTINGS_SECTION_CONTEXT: SettingsSectionContextValue = {
 };
 const SettingsSectionContext = createContext(DEFAULT_SETTINGS_SECTION_CONTEXT);
 
-function SettingsSectionRoot({ children }: { children: React.ReactNode }) {
+function SettingsSectionRoot({
+  children,
+  id,
+}: {
+  children: React.ReactNode;
+  id?: string;
+}) {
   return (
     <SettingsSectionContext.Provider value={DEFAULT_SETTINGS_SECTION_CONTEXT}>
-      <section className="space-y-3">{children}</section>
+      <section id={id} className="space-y-3 scroll-mt-4">
+        {children}
+      </section>
     </SettingsSectionContext.Provider>
   );
 }
@@ -348,7 +376,7 @@ function DisplayNameCard({ mcpServer }: { mcpServer: McpServer }) {
       // invalidating queries so the refetch uses the new lookup args and the
       // page-level not-found guard doesn't bounce the user back to /mcp.
       const nextParam = mcpServerRouteParam(updated);
-      void navigate(routes.mcp.x.href(nextParam), { replace: true });
+      void navigate(routes.mcp.x.settings.href(nextParam), { replace: true });
       await Promise.all([
         invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
@@ -487,7 +515,7 @@ function ServerUrlCard({
   }
 
   return (
-    <SettingsSection>
+    <SettingsSection id={MCP_SERVER_URL_SECTION_ID}>
       <SettingsSection.Header>
         <SettingsSection.Title>Server URL</SettingsSection.Title>
         <SettingsSection.Description>
