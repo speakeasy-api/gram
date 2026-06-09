@@ -261,6 +261,23 @@ function RuleDispositionBadge({
   );
 }
 
+function AccessRuleTableCell({
+  inactive,
+  children,
+}: {
+  inactive: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      data-inactive-rule-cell={inactive ? "true" : undefined}
+      className={cn("min-w-0", inactive && "opacity-50")}
+    >
+      {children}
+    </div>
+  );
+}
+
 function Field({
   label,
   children,
@@ -915,16 +932,20 @@ export function ApprovalRequestsContent({
   );
   const canCreateAccessRules = useMemo(
     () =>
-      policiesQuery.error
+      // Policies are only fetched for admins; without policy data we can't
+      // know rules are inactive, so default to treating them as active.
+      !canAdmin || policiesQuery.error
         ? true
         : (policiesQuery.data?.policies.some(policyEnablesAccessRules) ??
           false),
-    [policiesQuery.data?.policies, policiesQuery.error],
+    [canAdmin, policiesQuery.data?.policies, policiesQuery.error],
   );
   const accessRuleCreateAvailability = getAccessRuleCreateAvailability({
     canCreateAccessRules,
     isLoadingPolicies: policiesQuery.isLoading,
   });
+  const inactiveAccessRules =
+    accessRuleCreateAvailability.status === "missing_blocking_policy";
   const addRuleDisabledReason =
     accessRuleCreateAvailability.status === "available"
       ? undefined
@@ -1102,10 +1123,12 @@ export function ApprovalRequestsContent({
       header: "Server",
       width: "1.5fr",
       render: (rule) => (
-        <ServerCell
-          name={getRuleDisplayName(rule)}
-          detail={getRuleServerDetail(rule)}
-        />
+        <AccessRuleTableCell inactive={inactiveAccessRules}>
+          <ServerCell
+            name={getRuleDisplayName(rule)}
+            detail={getRuleServerDetail(rule)}
+          />
+        </AccessRuleTableCell>
       ),
     },
     {
@@ -1113,9 +1136,11 @@ export function ApprovalRequestsContent({
       header: "Type",
       width: "0.75fr",
       render: (rule) => (
-        <Badge variant="neutral">
-          <Badge.Text>{getResourceTypeLabel(rule.resourceType)}</Badge.Text>
-        </Badge>
+        <AccessRuleTableCell inactive={inactiveAccessRules}>
+          <Badge variant="neutral">
+            <Badge.Text>{getResourceTypeLabel(rule.resourceType)}</Badge.Text>
+          </Badge>
+        </AccessRuleTableCell>
       ),
     },
     {
@@ -1123,35 +1148,43 @@ export function ApprovalRequestsContent({
       header: "Match",
       width: "1.25fr",
       render: (rule) => (
-        <div className="min-w-0 space-y-1">
-          <Type variant="small" className="font-medium">
-            {getMatchBreadthLabel(rule.matchBreadth)}
-          </Type>
-          <Type
-            variant="small"
-            className="text-muted-foreground truncate text-xs"
-          >
-            {rule.matchValue}
-          </Type>
-        </div>
+        <AccessRuleTableCell inactive={inactiveAccessRules}>
+          <div className="min-w-0 space-y-1">
+            <Type variant="small" className="font-medium">
+              {getMatchBreadthLabel(rule.matchBreadth)}
+            </Type>
+            <Type
+              variant="small"
+              className="text-muted-foreground truncate text-xs"
+            >
+              {rule.matchValue}
+            </Type>
+          </div>
+        </AccessRuleTableCell>
       ),
     },
     {
       key: "disposition",
       header: "Status",
       width: "0.5fr",
-      render: (rule) => <RuleDispositionBadge disposition={rule.disposition} />,
+      render: (rule) => (
+        <AccessRuleTableCell inactive={inactiveAccessRules}>
+          <RuleDispositionBadge disposition={rule.disposition} />
+        </AccessRuleTableCell>
+      ),
     },
     {
       key: "scope",
       header: "Scope",
       width: "0.5fr",
       render: (rule) => (
-        <Type variant="small">
-          {rule.accessScope === "project"
-            ? projectName(organization.projects, rule.projectId)
-            : getAccessScopeLabel(rule.accessScope)}
-        </Type>
+        <AccessRuleTableCell inactive={inactiveAccessRules}>
+          <Type variant="small">
+            {rule.accessScope === "project"
+              ? projectName(organization.projects, rule.projectId)
+              : getAccessScopeLabel(rule.accessScope)}
+          </Type>
+        </AccessRuleTableCell>
       ),
     },
     {
@@ -1159,7 +1192,9 @@ export function ApprovalRequestsContent({
       header: "Updated",
       width: "0.75fr",
       render: (rule) => (
-        <Type variant="small">{formatShortDate(rule.updatedAt)}</Type>
+        <AccessRuleTableCell inactive={inactiveAccessRules}>
+          <Type variant="small">{formatShortDate(rule.updatedAt)}</Type>
+        </AccessRuleTableCell>
       ),
     },
     {
