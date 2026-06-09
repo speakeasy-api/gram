@@ -29,13 +29,12 @@ CREATE TABLE "directory_users" (
   "deleted_at" timestamptz NULL,
   "deleted" boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
   PRIMARY KEY ("id"),
-  CONSTRAINT "directory_users_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
-  CONSTRAINT "directory_users_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users" ("id") ON UPDATE NO ACTION ON DELETE SET NULL
+  CONSTRAINT "directory_users_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
 -- Create index "directory_users_organization_id_idx" to table: "directory_users"
 CREATE INDEX "directory_users_organization_id_idx" ON "directory_users" ("organization_id");
 -- Create index "directory_users_user_id_idx" to table: "directory_users"
-CREATE INDEX "directory_users_user_id_idx" ON "directory_users" ("user_id") WHERE "user_id" IS NOT NULL;
+CREATE INDEX "directory_users_user_id_idx" ON "directory_users" ("user_id") WHERE (user_id IS NOT NULL);
 -- Create index "directory_users_workos_directory_user_id_key" to table: "directory_users"
 CREATE UNIQUE INDEX "directory_users_workos_directory_user_id_key" ON "directory_users" ("workos_directory_user_id");
 -- Create "directory_user_group_memberships" table
@@ -54,6 +53,6 @@ CREATE TABLE "directory_user_group_memberships" (
   CONSTRAINT "directory_user_group_memberships_directory_user_id_fkey" FOREIGN KEY ("directory_user_id") REFERENCES "directory_users" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
 -- Create index "directory_user_group_memberships_current_key" to table: "directory_user_group_memberships"
-CREATE UNIQUE INDEX "directory_user_group_memberships_current_key" ON "directory_user_group_memberships" ("directory_user_id", "directory_group_id") WHERE "deleted" IS FALSE;
+CREATE UNIQUE INDEX "directory_user_group_memberships_current_key" ON "directory_user_group_memberships" ("directory_user_id", "directory_group_id") WHERE (deleted IS FALSE);
 -- Create index "directory_user_group_memberships_directory_group_id_idx" to table: "directory_user_group_memberships"
 CREATE INDEX "directory_user_group_memberships_directory_group_id_idx" ON "directory_user_group_memberships" ("directory_group_id");

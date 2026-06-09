@@ -1681,8 +1681,7 @@ CREATE TABLE IF NOT EXISTS directory_users (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT directory_users_pkey PRIMARY KEY (id),
-  CONSTRAINT directory_users_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT directory_users_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
+  CONSTRAINT directory_users_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS directory_users_organization_id_idx
