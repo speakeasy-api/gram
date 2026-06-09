@@ -7,6 +7,11 @@ const config: KnipConfig = {
     // Invoked from the lint:format script; not on the dep tree.
     "oxfmt",
   ],
+  ignore: [
+    // Global ambient declarations (FIXME<M> escape-hatch + JSX namespace
+    // re-export). No import sites by design.
+    "src/lib.d.ts",
+  ],
   ignoreDependencies: [
     // Consumed via CSS @import inside @speakeasy-api/moonshine; knip's
     // CSS plugin only scans first-party files so it misses this.

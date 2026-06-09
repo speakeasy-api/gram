@@ -65,7 +65,7 @@ function isUuid(value: string | null): value is string {
   return !!value && UUID_RE.test(value);
 }
 
-export function LogsAgentsContent() {
+export function LogsAgentsContent(): JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [offset, setOffset] = useState(0);
@@ -101,7 +101,7 @@ export function LogsAgentsContent() {
             setCachedChat((current) =>
               current?.id === chatId ? null : current,
             );
-            invalidateAllListChats(queryClient);
+            void invalidateAllListChats(queryClient);
           },
         },
       );
@@ -365,7 +365,7 @@ export function LogsAgentsContent() {
         isLoading={isLoading}
         error={error}
         isLogsDisabled={isLogsDisabled}
-        onLogsEnabled={refetch}
+        onLogsEnabled={() => void refetch()}
         hasMore={hasMore}
         offset={offset}
         setOffset={setOffset}

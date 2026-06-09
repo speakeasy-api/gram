@@ -12,7 +12,9 @@ interface EnableLoggingOverlayProps {
  * Shared overlay component shown when logs are not enabled for the organization.
  * Displays a centered card with enable button and handles the mutation state.
  */
-export function EnableLoggingOverlay({ onEnabled }: EnableLoggingOverlayProps) {
+export function EnableLoggingOverlay({
+  onEnabled,
+}: EnableLoggingOverlayProps): JSX.Element {
   const [mutationError, setMutationError] = useState<string | null>(null);
   const { mutate: setLogsFeature, status: mutationStatus } =
     useFeaturesSetMutation({

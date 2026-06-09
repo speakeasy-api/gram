@@ -5,23 +5,28 @@ import process from "node:process";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-
-let key: Buffer | undefined;
-let cert: Buffer | undefined;
-
-if (process.env["GRAM_SSL_KEY_FILE"] && process.env["GRAM_SSL_CERT_FILE"]) {
-  const keyPath = process.env["GRAM_SSL_KEY_FILE"];
-  const certPath = process.env["GRAM_SSL_CERT_FILE"];
-
-  if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
-    key = fs.readFileSync(keyPath);
-    cert = fs.readFileSync(certPath);
-  }
-}
-
 // https://vite.dev/config/
 export default defineConfig(({ command }) => {
   const isDev = command === "serve";
+
+  // Dev HTTPS key/cert. Env vars are set repo-wide by mise.toml, but the
+  // referenced files only exist on dev laptops — CI runners (and tools
+  // like knip that load this config) get an ENOENT. Swallow the read
+  // error so non-dev consumers of the config still work.
+  let key: Buffer | undefined;
+  let cert: Buffer | undefined;
+  if (
+    isDev &&
+    process.env["GRAM_SSL_KEY_FILE"] &&
+    process.env["GRAM_SSL_CERT_FILE"]
+  ) {
+    try {
+      key = fs.readFileSync(process.env["GRAM_SSL_KEY_FILE"]);
+      cert = fs.readFileSync(process.env["GRAM_SSL_CERT_FILE"]);
+    } catch {
+      // SSL files missing — fall through without HTTPS.
+    }
+  }
 
   const siteUrl = process.env["GRAM_SITE_URL"];
   if (isDev && !siteUrl) {

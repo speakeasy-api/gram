@@ -14,7 +14,7 @@ interface DirectorySyncStepProps {
 export function DirectorySyncStep({
   onComplete,
   onBack,
-}: DirectorySyncStepProps) {
+}: DirectorySyncStepProps): JSX.Element {
   const [portalOpened, setPortalOpened] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const { refetch: refetchOnboardingStatus } = useOnboardingStatus();

@@ -14,7 +14,12 @@ interface DotRowProps {
  *
  * Must be used inside a table body.
  */
-export function DotRow({ children, icon, className, onClick }: DotRowProps) {
+export function DotRow({
+  children,
+  icon,
+  className,
+  onClick,
+}: DotRowProps): JSX.Element {
   return (
     <tr
       onClick={onClick}

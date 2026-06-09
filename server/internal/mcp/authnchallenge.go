@@ -89,7 +89,15 @@ type EndpointRef struct {
 // round-trip through the IDP and land on /connect, short enough that
 // abandoned flows don't pile up.
 type AuthnChallengeState struct {
-	ID                  string      `json:"id"`
+	ID string `json:"id"`
+	// FlowID is the stable correlation identifier for the whole OAuth flow,
+	// minted once at /authorize. Unlike ID — which idp_callback rotates to
+	// rotate the Redis cache key — FlowID is preserved across the rotation
+	// and copied into the UserSessionGrant so /token can log it too. Logged
+	// as attr.OAuthFlowID on every handler in the flow. Empty for in-flight
+	// states minted before this field landed (rolling deploy); callers treat
+	// empty as "unknown" and never depend on its presence.
+	FlowID              string      `json:"flow_id,omitempty"`
 	UserSessionIssuerID uuid.UUID   `json:"user_session_issuer_id"`
 	Endpoint            EndpointRef `json:"endpoint"`
 	ClientID            string      `json:"client_id"`
@@ -125,7 +133,12 @@ func (a AuthnChallengeState) TTL() time.Duration { return 10 * time.Minute }
 // grant. Stored in Redis under
 // `userSessionGrant:{user_session_issuer_id}:{code}` for ~10 minutes.
 type UserSessionGrant struct {
-	Code                string             `json:"code"`
+	Code string `json:"code"`
+	// FlowID carries the OAuth flow correlation identifier from the
+	// AuthnChallengeState into the grant so /token can stamp it on its logs,
+	// completing end-to-end correlation. Empty for grants minted before this
+	// field landed (rolling deploy).
+	FlowID              string             `json:"flow_id,omitempty"`
 	UserSessionIssuerID uuid.UUID          `json:"user_session_issuer_id"`
 	UserSessionClientID uuid.UUID          `json:"user_session_client_id"`
 	ClientID            string             `json:"client_id"`

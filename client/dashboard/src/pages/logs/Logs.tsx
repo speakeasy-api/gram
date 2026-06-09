@@ -6,7 +6,7 @@ import { LogsTools } from "@/components/observe/LogsTools";
 import { ObserveTabNav } from "@/components/observe/ObserveTabNav";
 import RiskEvents from "@/pages/security/RiskEvents";
 
-export function LogsRoot() {
+export function LogsRoot(): JSX.Element {
   return (
     <div className="flex h-full flex-col">
       {/* ^ Wrapper needed to fill page height, allow inner content scrolls. */}
@@ -23,7 +23,7 @@ export function LogsRoot() {
   );
 }
 
-export function LogsToolsPage() {
+export function LogsToolsPage(): JSX.Element {
   return (
     <RequireScope scope={["project:read", "project:write"]} level="page">
       <LogsTools />
@@ -31,7 +31,7 @@ export function LogsToolsPage() {
   );
 }
 
-export function LogsMCPPage() {
+export function LogsMCPPage(): JSX.Element {
   return (
     <RequireScope scope="project:read" level="page">
       <LogsMCPContent />
@@ -39,7 +39,7 @@ export function LogsMCPPage() {
   );
 }
 
-export function LogsRiskEventsPage() {
+export function LogsRiskEventsPage(): JSX.Element {
   return (
     <RequireScope scope="org:admin" level="page">
       <RiskEvents />

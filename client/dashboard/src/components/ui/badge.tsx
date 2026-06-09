@@ -47,7 +47,7 @@ export function Badge({
   tooltip,
   isLoading = false,
   ...props
-}: BadgeProps) {
+}: BadgeProps): React.JSX.Element {
   const Comp = asChild ? Slot : "span";
 
   const sizeClass = {

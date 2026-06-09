@@ -128,3 +128,59 @@ func TestBuildAuthorizationUrl_ScopeResolution(t *testing.T) {
 		})
 	}
 }
+
+// TestBuildAuthorizationUrl_OrgLevelIssuer drives the same ListClients →
+// BuildAuthorizationUrl path against a client bound to an organization-level
+// (cross-project, project_id IS NULL) issuer inherited from the project's org.
+// This is the consent + challenge data source (ListRemoteSessionClientsForUserSessionIssuer),
+// which joins to the issuer purely by id, so the org-level issuer's endpoints
+// flow through unchanged.
+func TestBuildAuthorizationUrl_OrgLevelIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	issuerID := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "org-listclients")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "org-listclients")
+	createRemoteClient(t, ctx, ti, issuerID.String(), userIssuerID.String(), "org-list-cid")
+
+	enc := testenv.NewEncryptionClient(t)
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+	mgr := remotesessions.NewChallengeManager(
+		logger,
+		ti.conn,
+		enc,
+		policy,
+		cache.NoopCache,
+		mustURL(t, "http://localhost"),
+	)
+
+	clients, err := mgr.ListClients(ctx, *authCtx.ProjectID, userIssuerID)
+	require.NoError(t, err)
+	require.Len(t, clients, 1)
+	require.Equal(t, "org-list-cid", clients[0].ExternalClientID)
+
+	subject := urn.NewUserSubject("org-list-subject")
+	authURL, err := mgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
+		ID:                  uuid.NewString(),
+		ProjectID:           *authCtx.ProjectID,
+		UserSessionIssuerID: userIssuerID,
+		Subject:             &subject,
+		McpSlug:             "",
+		FinalRedirectURI:    "",
+	}, clients[0])
+	require.NoError(t, err)
+
+	parsed, err := url.Parse(authURL)
+	require.NoError(t, err)
+	require.Equal(t, "https", parsed.Scheme)
+	require.Equal(t, "idp.example.com", parsed.Host)
+	require.Equal(t, "/authorize", parsed.Path)
+	require.Equal(t, "org-list-cid", parsed.Query().Get("client_id"))
+}

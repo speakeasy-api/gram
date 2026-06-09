@@ -137,7 +137,7 @@ export function useMcpMetadataMetadataForm(
 
   const mutation = useMcpMetadataSetMutation({
     onSettled: () => {
-      invalidateGetMcpMetadata(queryClient, [invalidationKey]);
+      void invalidateGetMcpMetadata(queryClient, [invalidationKey]);
     },
   });
 

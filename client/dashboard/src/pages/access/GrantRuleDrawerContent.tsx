@@ -146,7 +146,7 @@ export function GrantRuleDrawerContent({
   isDeny: isDenyProp,
   allowedPanels,
   allowSelectors,
-}: GrantRuleDrawerContentProps) {
+}: GrantRuleDrawerContentProps): JSX.Element {
   const organization = useOrganization();
   const mcpServers = useMCPServers(resourceType === "mcp");
   // Override for when user clicks a mode but selectors are still empty
@@ -184,7 +184,7 @@ export function GrantRuleDrawerContent({
   useEffect(() => {
     if (!allowedPanels || allowedPanels.length === 0) return;
     if (allowedPanels.includes(activePanel)) return;
-    switchPanel(allowedPanels[0]);
+    switchPanel(allowedPanels[0]!);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allowedPanels?.join(",")]);
 
@@ -680,7 +680,7 @@ function ToolSelectionPanel({
   const [search, setSearch] = useState("");
   // Auto-expand if only one server; otherwise all collapsed
   const [expandedServers, setExpandedServers] = useState<Set<string>>(
-    () => new Set(allServers.length === 1 ? [allServers[0].id] : []),
+    () => new Set(allServers.length === 1 ? [allServers[0]!.id!] : []),
   );
 
   const toggleExpanded = (serverId: string) => {
@@ -1085,7 +1085,7 @@ function useCollectionGroups(
         const matchedServers: Server[] = [];
         for (const es of externalServers) {
           const parts = es.registrySpecifier.split("/");
-          const mcpSlug = parts[parts.length - 1];
+          const mcpSlug = parts[parts.length - 1]!;
           const server = mcpSlugToServer.get(mcpSlug);
           if (server) matchedServers.push(server);
         }

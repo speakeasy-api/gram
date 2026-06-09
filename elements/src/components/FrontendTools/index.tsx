@@ -5,7 +5,7 @@ export function FrontendTools({
   tools: frontendTools,
 }: {
   tools: FrontendTools;
-}) {
+}): React.JSX.Element {
   return (
     <>
       {Object.entries(frontendTools).map(([, tool]) =>

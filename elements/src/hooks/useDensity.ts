@@ -102,7 +102,7 @@ type DensityToken = keyof (typeof densityClasses)["normal"];
  * Hook to get density classes based on theme config
  * Use: const d = useDensity(); then d('p-md') returns the appropriate padding class
  */
-export const useDensity = () => {
+export const useDensity = (): ((token: DensityToken) => string) => {
   const { config } = useElements();
   const density = config.theme?.density ?? "normal";
 

@@ -46,7 +46,7 @@ export function CollectionInstallDialog({
   collectionName: string;
   servers: CatalogServer[];
   projects: ProjectEntry[];
-}) {
+}): JSX.Element {
   const defaultProjectSlug = projects[0]?.slug;
   const [phase, setPhase] = useState<"select" | "installing" | "summary">(
     "select",

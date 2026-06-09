@@ -31,7 +31,7 @@ export function SourceActivityPanel({
   summary,
   isLoading,
   windowLabel,
-}: SourceActivityPanelProps) {
+}: SourceActivityPanelProps): JSX.Element {
   return (
     <div className="flex flex-col">
       <div className="mb-3 flex items-center justify-between">

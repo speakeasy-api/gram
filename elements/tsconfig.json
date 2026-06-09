@@ -8,7 +8,10 @@
     "declaration": true,
     "allowSyntheticDefaultImports": true,
     "outDir": "./dist",
+    "rootDir": "./src",
     "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "erasableSyntaxOnly": true,
     "jsx": "react-jsx",
     "forceConsistentCasingInFileNames": true,
     "incremental": true,
@@ -16,7 +19,6 @@
     "paths": {
       "@/*": ["./src/*"]
     },
-    "baseUrl": ".",
     "types": ["node", "vite/client"]
   },
   "include": ["src"],

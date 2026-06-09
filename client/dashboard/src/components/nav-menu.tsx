@@ -56,7 +56,7 @@ export function NavGroupProvider({
   defaultOpenGroups?: string[];
   activeItem?: string;
   children: React.ReactNode;
-}) {
+}): React.JSX.Element {
   const defaultsRef = React.useRef(new Set(defaultOpenGroups ?? []));
   const [openGroups, _setOpenGroups] = React.useState<Set<string>>(() => {
     const initial = new Set(defaultOpenGroups ?? []);
@@ -351,7 +351,7 @@ export function NavButton({
   active?: boolean;
   Icon?: React.ComponentType<{ className?: string }>;
   stage?: ReleaseStage;
-}) {
+}): React.JSX.Element {
   const itemId = id ?? title;
   const navItem = useNavItem(itemId);
   const [isLoading, setIsLoading] = React.useState(false);
@@ -441,7 +441,7 @@ export function CollapsibleNavGroup({
   defaultHref?: string;
   stage?: ReleaseStage;
   children: React.ReactNode;
-}) {
+}): React.JSX.Element {
   const { openGroups, toggleGroup, openGroup } =
     React.useContext(NavGroupContext);
   const navItem = useNavItem(label);
@@ -528,7 +528,7 @@ export function CollapsibleNavItem({
 }: {
   item: AppRoute;
   stage?: ReleaseStage;
-}) {
+}): React.JSX.Element {
   const navItem = useNavItem(item.title);
   const [isLoading, setIsLoading] = React.useState(false);
   const timeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);

@@ -19,7 +19,7 @@ export function OnboardingStepper({
   currentStep,
   onStepClick,
   maxAllowedStep = steps.length - 1,
-}: OnboardingStepperProps) {
+}: OnboardingStepperProps): JSX.Element {
   return (
     <nav className="flex flex-col" aria-label="Progress">
       {steps.map((step, index) => {

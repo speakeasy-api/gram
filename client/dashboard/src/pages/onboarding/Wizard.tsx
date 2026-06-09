@@ -68,7 +68,7 @@ type OnboardingStep =
 const START_PATH_PARAM = "start-path";
 const START_STEP_PARAM = "start-step";
 
-export function OnboardingWizard() {
+export function OnboardingWizard(): JSX.Element {
   const { orgSlug } = useParams();
   const telemetry = useTelemetry();
   const routes = useRoutes();
@@ -389,7 +389,7 @@ export const InitialChoiceStep = ({
   setSelectedPath?: (path: OnboardingPath) => void;
   routes: RoutesWithGoTo;
   isFunctionsEnabled: boolean;
-}) => {
+}): JSX.Element => {
   const navigate = useNavigate();
   const telemetry = useTelemetry();
 
@@ -425,11 +425,11 @@ export const InitialChoiceStep = ({
     } else {
       // Navigate to onboarding with appropriate start params
       if (isFunctionsEnabled) {
-        navigate(
+        void navigate(
           routes.onboarding.href() + `?${START_STEP_PARAM}=first-party-choice`,
         );
       } else {
-        navigate(
+        void navigate(
           routes.onboarding.href() +
             `?${START_STEP_PARAM}=upload&${START_PATH_PARAM}=openapi`,
         );
@@ -652,7 +652,7 @@ const CliSetupStep = ({
                 </Stack>
               )}
             </Stack>
-            <CodeBlock children={item.command} language="bash" />
+            <CodeBlock language="bash">{item.command}</CodeBlock>
           </Stack>
         ))}
       </Stack>
@@ -661,7 +661,7 @@ const CliSetupStep = ({
         The build command should open a new window with the next step. If it
         doesn't, click{" "}
         <span
-          onClick={handleContinue}
+          onClick={() => void handleContinue()}
           className="text-primary cursor-pointer underline"
         >
           here
@@ -680,18 +680,18 @@ export const UploadedDocument = ({
   file: File;
   onReset: () => void;
   defaultExpanded?: boolean;
-}) => {
+}): JSX.Element => {
   const [fileText, setFileText] = useState<string>();
 
   useEffect(() => {
     if (!file) return;
     if (file.size > 10_000) {
-      file
+      void file
         .slice(0, 10_000)
         .text()
         .then((text) => setFileText(text + "\n..."));
     } else {
-      file.text().then(setFileText);
+      void file.text().then(setFileText);
     }
   }, [file]);
 
@@ -767,7 +767,9 @@ const UploadStep = ({
         <InputField
           placeholder="Petstore"
           value={apiName}
-          onChange={(e) => setApiName(e.target.value)}
+          onChange={(e) => {
+            setApiName(e.target.value);
+          }}
           maxLength={30}
           label="API Name"
           error={apiNameError}
@@ -781,7 +783,9 @@ const UploadStep = ({
     </Stack>
   ) : (
     <OpenApiSourceInput
-      onUpload={handleSpecUpload}
+      onUpload={(file) => {
+        void handleSpecUpload(file);
+      }}
       onUrlUpload={handleUrlUpload}
       className="max-w-full"
     />
@@ -1054,15 +1058,17 @@ const ContinueButton = ({
     <Button
       variant="brand"
       disabled={disabled || isLoading}
-      onClick={async () => {
-        setIsLoading(true);
-        try {
-          await onClick();
-        } catch (_error) {
-          // Error is already handled by the individual step components
-        } finally {
-          setIsLoading(false);
-        }
+      onClick={() => {
+        void (async () => {
+          setIsLoading(true);
+          try {
+            await onClick();
+          } catch (_error) {
+            // Error is already handled by the individual step components
+          } finally {
+            setIsLoading(false);
+          }
+        })();
       }}
       className="w-full"
     >

@@ -25,7 +25,7 @@ export function IssuerUrlField({
 }: {
   issuerUrl: string;
   onIssuerUrlChange: (value: string) => void;
-}) {
+}): JSX.Element {
   return (
     <Stack gap={2}>
       <Label className="text-muted-foreground text-xs">Issuer URL</Label>
@@ -78,7 +78,7 @@ export function EndpointsFields({
   onJwksUriChange: (value: string) => void;
   onDiscover: () => void;
   onResetEndpoints: () => void;
-}) {
+}): JSX.Element {
   return (
     <Stack gap={3} className="border-t pt-6">
       <Stack gap={1}>
@@ -184,7 +184,11 @@ export function EndpointsFields({
 // obtain credentials; in Modify the existing client_id is kept and only
 // scope/audience can drift. The token_endpoint_auth_method field stays
 // editable in both DCR and manual modes — see TokenEndpointAuthMethodField.
-export function DcrNotice({ description }: { description?: string }) {
+export function DcrNotice({
+  description,
+}: {
+  description?: string;
+}): JSX.Element {
   return (
     <Stack gap={2} className="border-t pt-6">
       <Label className="text-sm font-medium">OAuth Client Credentials</Label>
@@ -209,7 +213,7 @@ export function TokenEndpointAuthMethodField({
   onChange: (
     value: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "",
   ) => void;
-}) {
+}): JSX.Element {
   return (
     <Stack gap={2}>
       <Label className="text-muted-foreground text-xs">
@@ -278,7 +282,7 @@ export function ClientCredentialsFields({
   onTokenEndpointAuthMethodChange: (
     value: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "",
   ) => void;
-}) {
+}): JSX.Element {
   return (
     <Stack gap={4} className="border-t pt-6">
       <Stack gap={1}>
@@ -339,7 +343,7 @@ export function OverridesFields({
   audienceOverride: string;
   onScopeOverrideChange: (value: string) => void;
   onAudienceOverrideChange: (value: string) => void;
-}) {
+}): JSX.Element {
   return (
     <Stack gap={4} className="border-t pt-6">
       <Stack gap={2}>

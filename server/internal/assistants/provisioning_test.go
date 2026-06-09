@@ -74,7 +74,7 @@ func TestEnableManagedAssistantIsIdempotent(t *testing.T) {
 	require.Len(t, triggers, 1, "re-enable must not duplicate the dashboard trigger")
 }
 
-func TestEnableManagedAssistantAttachesMCPReachableToolsets(t *testing.T) {
+func TestEnableManagedAssistantAttachesNoToolsets(t *testing.T) {
 	t.Parallel()
 
 	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_managed_toolsets")
@@ -85,7 +85,9 @@ func TestEnableManagedAssistantAttachesMCPReachableToolsets(t *testing.T) {
 	projectID := newProvisioningProject(t, conn, "managed-toolsets")
 
 	toolsetsQ := toolsetsrepo.New(conn)
-	// MCP-reachable toolset — should be attached.
+	// An MCP-reachable toolset already exists in the project. The managed
+	// assistant must still start empty — admins add project MCP servers
+	// deliberately, not by default.
 	reachable, err := toolsetsQ.CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID:         "org-test",
 		ProjectID:              projectID,
@@ -97,32 +99,19 @@ func TestEnableManagedAssistantAttachesMCPReachableToolsets(t *testing.T) {
 		McpEnabled:             false,
 	})
 	require.NoError(t, err)
-	// Toolset without an mcp_slug — the runtime can't address it, so it must
-	// be excluded from the managed assistant.
-	_, err = toolsetsQ.CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
-		OrganizationID:         "org-test",
-		ProjectID:              projectID,
-		Name:                   "Internal",
-		Slug:                   "internal",
-		Description:            pgtype.Text{},
-		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                pgtype.Text{Valid: false},
-		McpEnabled:             false,
-	})
-	require.NoError(t, err)
 
 	record, err := core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1")
 	require.NoError(t, err)
 
-	require.Len(t, record.Toolsets, 1, "only the MCP-reachable toolset attaches")
-	require.Equal(t, reachable.Slug, record.Toolsets[0].ToolsetSlug)
+	require.Empty(t, record.Toolsets, "managed assistant must not attach project toolsets by default")
 
+	// Provisioning must not touch the project's toolsets — MCP stays as it was.
 	reloaded, err := toolsetsQ.GetToolset(ctx, toolsetsrepo.GetToolsetParams{
 		Slug:      reachable.Slug,
 		ProjectID: projectID,
 	})
 	require.NoError(t, err)
-	require.True(t, reloaded.McpEnabled, "attaching toolset to assistant must enable MCP")
+	require.False(t, reloaded.McpEnabled, "provisioning must not auto-enable MCP on project toolsets")
 }
 
 func TestDisableManagedAssistantTearsDown(t *testing.T) {

@@ -53,7 +53,7 @@ export function EditServerNameDialog({
   remove,
   isUpserting,
   isDeleting,
-}: EditServerNameDialogProps) {
+}: EditServerNameDialogProps): JSX.Element {
   // For single server, use one display name state
   // For grouped servers, use a map of raw name -> display name
   const [displayName, setDisplayName] = useState(
@@ -128,7 +128,7 @@ export function EditServerNameDialog({
         await Promise.all(promises);
       } else if (groupedOverrides.length === 1) {
         // Single server - update its display name
-        await onUpsert(groupedOverrides[0].rawServerName, displayName);
+        await onUpsert(groupedOverrides[0]!.rawServerName!, displayName);
       } else {
         // No existing override - create new one
         await onUpsert(serverName, displayName);
@@ -189,7 +189,9 @@ export function EditServerNameDialog({
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleDelete(server.id)}
+                        onClick={() => {
+                          void handleDelete(server.id);
+                        }}
                         disabled={deletingIds.has(server.id) || isProcessing}
                         className="h-7 shrink-0 px-2"
                       >
@@ -241,7 +243,7 @@ export function EditServerNameDialog({
                   </Label>
                   <Input
                     id="raw-name"
-                    value={groupedOverrides[0].rawServerName}
+                    value={groupedOverrides[0]!.rawServerName!}
                     readOnly
                     className="bg-muted font-mono text-sm"
                   />
@@ -262,7 +264,7 @@ export function EditServerNameDialog({
                   autoFocus
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !isProcessing) {
-                      handleSave();
+                      void handleSave();
                     }
                   }}
                 />
@@ -286,7 +288,9 @@ export function EditServerNameDialog({
           {groupedOverrides.length > 0 && !isGrouped && (
             <Button
               variant="destructive"
-              onClick={() => handleDelete(groupedOverrides[0].id)}
+              onClick={() => {
+                void handleDelete(groupedOverrides[0]!.id!);
+              }}
               disabled={isProcessing}
             >
               {isDeleting ? (
@@ -303,7 +307,7 @@ export function EditServerNameDialog({
             </Button>
           )}
           <Button
-            onClick={handleSave}
+            onClick={() => void handleSave()}
             disabled={
               isProcessing ||
               (isGrouped

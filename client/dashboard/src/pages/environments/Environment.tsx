@@ -160,7 +160,7 @@ function ToolsetDialog({ open, onOpenChange, onSubmit }: ToolsetDialogProps) {
   );
 }
 
-export default function EnvironmentPage() {
+export default function EnvironmentPage(): JSX.Element {
   return (
     <RequireScope scope="project:read" level="page">
       <EnvironmentPageInner />
@@ -202,8 +202,8 @@ function EnvironmentPageInner() {
       telemetry.capture("environment_event", {
         action: "environment_deleted",
       });
-      environment!.refetch();
-      navigate("/environments");
+      void environment!.refetch();
+      void navigate("/environments");
     },
   });
 
@@ -212,7 +212,7 @@ function EnvironmentPageInner() {
       telemetry.capture("environment_event", {
         action: "environment_updated",
       });
-      environment!.refetch();
+      void environment!.refetch();
       setHasChanges(false);
       setSaveError(null);
       setEnvValues({});
@@ -718,9 +718,11 @@ function EnvironmentPageInner() {
 
             <Dialog
               open={deleteConfirmDialog.open}
-              onOpenChange={(open) =>
-                !open && setDeleteConfirmDialog({ open: false, varName: "" })
-              }
+              onOpenChange={(open) => {
+                void (
+                  !open && setDeleteConfirmDialog({ open: false, varName: "" })
+                );
+              }}
             >
               <Dialog.Content>
                 <Dialog.Header>

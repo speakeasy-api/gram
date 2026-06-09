@@ -122,7 +122,12 @@ function SetupRequiredModal({
   onNavigateToElements,
 }: SetupRequiredModalProps) {
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+    <Dialog
+      open={open}
+      onOpenChange={(isOpen) => {
+        void (!isOpen && onClose());
+      }}
+    >
       <Dialog.Content className="sm:max-w-md">
         <Dialog.Header className="text-center">
           <div className="bg-muted mx-auto mb-2 flex size-14 items-center justify-center rounded-full">
@@ -409,12 +414,12 @@ function parseLocalDate(dateStr: string): Date {
     if (match) {
       const [, year, month, day, hours, minutes, seconds] = match;
       return new Date(
-        parseInt(year),
-        parseInt(month) - 1,
-        parseInt(day),
-        parseInt(hours),
-        parseInt(minutes),
-        parseInt(seconds),
+        parseInt(year!),
+        parseInt(month!) - 1,
+        parseInt(day!),
+        parseInt(hours!),
+        parseInt(minutes!),
+        parseInt(seconds!),
       );
     }
     return utcDate;
@@ -422,7 +427,7 @@ function parseLocalDate(dateStr: string): Date {
   return new Date(dateStr);
 }
 
-export function InsightsMCPContent() {
+export function InsightsMCPContent(): React.JSX.Element {
   return (
     <InsightsOverviewShell noDataKind="tools" showMcpFilter>
       {(props) => <ToolsInsightsContent {...props} />}
@@ -776,7 +781,7 @@ function InsightsOverviewShell({
           onTimeRangeSelect={(from, to) => {
             setCustomRangeParam(from, to);
           }}
-          refetch={refetch}
+          refetch={() => void refetch()}
           hasSeenSetupModal={hasSeenSetupModal}
           onSetupModalSeen={markSetupModalSeen}
           showSetupRequiredModal={showSetupRequiredModal}
@@ -988,7 +993,7 @@ function InsightsOverviewContent({
       }
 
       const queryString = params.toString();
-      navigate(queryString ? `${logsUrl}?${queryString}` : logsUrl);
+      void navigate(queryString ? `${logsUrl}?${queryString}` : logsUrl);
     },
     [routes.logs, navigate, customRange, dateRange],
   );

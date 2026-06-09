@@ -57,11 +57,19 @@ function RoleActionsMenu({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => setTimeout(onEdit, 0)}>
+          <DropdownMenuItem
+            onSelect={() => {
+              void setTimeout(onEdit, 0);
+            }}
+          >
             Edit
           </DropdownMenuItem>
           {!role.isSystem && (
-            <DropdownMenuItem onSelect={() => setTimeout(onDelete, 0)}>
+            <DropdownMenuItem
+              onSelect={() => {
+                void setTimeout(onDelete, 0);
+              }}
+            >
               Delete
             </DropdownMenuItem>
           )}
@@ -71,7 +79,7 @@ function RoleActionsMenu({
   );
 }
 
-export function RolesTab() {
+export function RolesTab(): JSX.Element {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [deletingRole, setDeletingRole] = useState<Role | null>(null);
@@ -255,11 +263,15 @@ export function RolesTab() {
         onOpenChange={(open) => {
           if (!open) setDeletingRole(null);
         }}
-        handleDeleteRole={async () => {
-          if (deletingRole) {
-            await deleteRole.mutateAsync({ request: { id: deletingRole.id } });
-            setDeletingRole(null);
-          }
+        handleDeleteRole={() => {
+          void (async () => {
+            if (deletingRole) {
+              await deleteRole.mutateAsync({
+                request: { id: deletingRole.id },
+              });
+              setDeletingRole(null);
+            }
+          })();
         }}
         handleCancel={() => setDeletingRole(null)}
         role={deletingRole}

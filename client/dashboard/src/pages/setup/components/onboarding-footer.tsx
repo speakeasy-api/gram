@@ -1,6 +1,6 @@
 import { ThemeSwitcher } from "@speakeasy-api/moonshine";
 
-export function OnboardingFooter() {
+export function OnboardingFooter(): JSX.Element {
   return (
     <footer className="border-border bg-background w-full border-t">
       <div className="mx-auto flex w-full max-w-5xl items-center justify-between py-4">

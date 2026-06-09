@@ -39,7 +39,7 @@ export function EndpointsTab({
   mcpServer: McpServer;
   endpoints: McpEndpoint[];
   isLoadingEndpoints: boolean;
-}) {
+}): JSX.Element {
   const { domains } = useCustomDomains();
 
   const platformEndpoint = useMemo(
@@ -426,7 +426,7 @@ function NewEndpointRow({
           size="md"
           variant="primary"
           disabled={!slug.trim() || !!slugError || submitting}
-          onClick={handleCreate}
+          onClick={() => void handleCreate()}
         >
           <Button.Text>Add</Button.Text>
         </Button>
@@ -536,7 +536,7 @@ function NewCustomDomainEndpointRow({
           size="md"
           variant="primary"
           disabled={!slug.trim() || !domainId || !!slugError || submitting}
-          onClick={handleCreate}
+          onClick={() => void handleCreate()}
         >
           <Button.Text>Add</Button.Text>
         </Button>

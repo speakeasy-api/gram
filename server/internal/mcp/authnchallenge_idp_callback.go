@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -47,23 +48,43 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	// substitute their own Subject on the victim's in-flight challenge.
 	challengeState, err := s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID)
 	if err != nil {
+		// No challenge in hand (expired / replayed / never existed): nothing to
+		// attribute to an issuer, and an expired state is closer to abandonment
+		// than a flow failure, so it is left to the started-without-terminal gap.
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").Log(ctx, logger)
 	}
 
+	// Challenge in hand: correlate every subsequent log line by flow_id, and
+	// use the cached ref's issuer/slug for flow metrics until the endpoint is
+	// re-resolved below.
+	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
+	issuerID := challengeState.UserSessionIssuerID.String()
 	mcpSlug := challengeState.Endpoint.McpSlug
+
 	if mcpSlug == "" {
+		// Corrupted in-flight state (a code/data integrity failure), terminal
+		// for the flow.
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageIDPCallback)
 		return oops.E(oops.CodeBadRequest, nil, "mcp slug is missing from authn challenge state").Log(ctx, logger)
 	}
 	if routeMcpSlug != "" && routeMcpSlug != mcpSlug {
+		// State-confusion guard (state minted for a different route). Attacker-
+		// controllable, so deliberately NOT counted as a flow failure.
 		return oops.E(oops.CodeUnauthorized, nil, "authn challenge state does not match this MCP server").Log(ctx, logger)
 	}
 
 	endpoint, err := s.loadResolvedMcpEndpointByRef(ctx, challengeState.Endpoint)
 	if err != nil {
+		// The endpoint backing an in-flight challenge could not be re-resolved
+		// (e.g. toolset removed mid-flow) — a config-class terminal failure.
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageIDPCallback)
 		return err
 	}
 
-	logger = endpoint.LogWith(s.logger)
+	logger = endpoint.LogWith(logger)
+	// issuerID is unchanged (same issuer the ref resolved to); re-point mcpSlug
+	// at the resolved endpoint's canonical slug for the flow-metric dimension.
+	mcpSlug = endpoint.Slug
 
 	// If the IDP returned an error (user cancelled at the IDP, IDP refused
 	// to authenticate, etc.) per OAuth 2.0, forward it back to the MCP
@@ -72,6 +93,17 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	// required" 400.
 	if idpErr := q.Get("error"); idpErr != "" {
 		errDescription := q.Get("error_description")
+		// access_denied is the user opting out at the IDP — a decline, not an
+		// errant config. Any other IDP error code (server_error, invalid_scope,
+		// ...) points at IDP/config trouble. Both are terminal; bucket them
+		// accordingly before bouncing the error back to the client.
+		if idpErr == "access_denied" {
+			s.metrics.RecordOAuthFlowDeclined(ctx, issuerID, mcpSlug, oauthFlowStageIDPCallback)
+			logger.InfoContext(ctx, "oauth flow declined at idp", attr.SlogOAuthError(idpErr), attr.SlogOAuthErrorDescription(errDescription))
+		} else {
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageIDPCallback)
+			logger.InfoContext(ctx, "oauth flow failed at idp callback", attr.SlogOAuthError(idpErr), attr.SlogOAuthErrorDescription(errDescription))
+		}
 		clientRedirect := buildClientRedirect(challengeState.RedirectURI, "", challengeState.State, idpErr, errDescription)
 		http.Redirect(w, r, clientRedirect, http.StatusFound)
 		return nil
@@ -79,12 +111,15 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 
 	code := q.Get("code")
 	if code == "" {
+		// IDP returned neither code nor error — a broken IDP redirect.
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageIDPCallback)
 		return oops.E(oops.CodeBadRequest, nil, "code is required").Log(ctx, logger)
 	}
 
 	// Exchange the authorization code for user identity via WorkOS.
 	idpUser, err := s.identityResolver.ExchangeCodeForTokens(ctx, code)
 	if err != nil {
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageIDPCallback)
 		return oops.E(oops.CodeUnauthorized, err, "failed to exchange IDP code").Log(ctx, logger)
 	}
 
@@ -93,13 +128,17 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	// session manager runs on dashboard logins.
 	gramUserID, err := s.identityResolver.UpsertUserFromIDP(ctx, idpUser)
 	if err != nil {
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageIDPCallback)
 		return oops.E(oops.CodeUnexpected, err, "failed to bootstrap user").Log(ctx, logger)
 	}
 
 	// Validate the user belongs to the endpoint's organization before
 	// issuing a token. The mcp:connect RBAC policy operates at org level;
-	// this is the first gate.
+	// this is the first gate. The user wanted in but policy refused — a
+	// config-relevant failure (e.g. the toolset is exposed to the wrong
+	// audience), not a user decline.
 	if _, _, ok := s.identityResolver.HasAccessToOrganization(ctx, endpoint.OrganizationID, gramUserID); !ok {
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageIDPCallback)
 		return oops.E(oops.CodeForbidden, nil, "user is not a member of this MCP server's organization").Log(ctx, logger)
 	}
 
@@ -107,9 +146,13 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	// same value that just bounced through the IDP. The IDP-returned state
 	// is consumed; the new ID is what /connect's GetAndDelete will burn.
 	subject := urn.NewUserSubject(gramUserID)
+	// Rotate only the cache-key ID (replay protection). challengeState.FlowID
+	// is deliberately left untouched so the flow stays correlatable across the
+	// rotation — do not regenerate it here.
 	challengeState.ID = uuid.NewString()
 	challengeState.Subject = &subject
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageIDPCallback)
 		return oops.E(oops.CodeUnexpected, err, "failed to update authn challenge state").Log(ctx, logger)
 	}
 
@@ -126,6 +169,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	}
 	consentURL, err := endpoint.ConsentURL(baseURL, challengeState.ID)
 	if err != nil {
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageIDPCallback)
 		return oops.E(oops.CodeUnexpected, err, "build consent URL").Log(ctx, logger)
 	}
 	http.Redirect(w, r, consentURL, http.StatusFound)

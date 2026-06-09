@@ -11,6 +11,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
@@ -127,8 +128,8 @@ func TestPluginsService_UpdateMarketplaceSettings_AutoRepublishesWhenConnected(t
 	toolset := createTestToolset(t, ctx, ti.conn, "mkt-toolset")
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
-		ToolsetID:   toolset.ID.String(),
-		DisplayName: "Server",
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Server"),
 		Policy:      "required",
 		SortOrder:   0,
 	})

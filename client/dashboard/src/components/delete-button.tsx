@@ -12,7 +12,7 @@ export function DeleteButton({
   size?: "default" | "sm";
   onClick: () => void;
   className?: string;
-}) {
+}): JSX.Element {
   return (
     <Button
       variant="ghost"

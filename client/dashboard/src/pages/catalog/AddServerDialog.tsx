@@ -34,6 +34,7 @@ import {
   type ServerToolsetStatus,
   useExternalMcpReleaseWorkflow,
 } from "./useExternalMcpReleaseWorkflow";
+import { filterToHttpRemotes } from "./remotes";
 
 /** Friendly display names and descriptions for known remote endpoints */
 const REMOTE_DISPLAY_INFO: Record<
@@ -208,15 +209,6 @@ export interface AddServerDialogProps {
   headless?: boolean;
 }
 
-function filterToHttpRemotes(server: PulseMCPServer): PulseMCPServer {
-  return {
-    ...server,
-    remotes: server.remotes?.filter(
-      (r) => r.transportType === "streamable-http",
-    ),
-  };
-}
-
 /**
  * Hook to fetch server details (including remotes) for all servers.
  * This enriches the server objects with remote endpoint data from the registry.
@@ -301,7 +293,7 @@ function useEnrichedServers(servers: PulseMCPServer[], open: boolean) {
       setIsLoading(false);
     };
 
-    fetchServerDetails();
+    void fetchServerDetails();
   }, [open, serversKey, servers, client]);
 
   return { enrichedServers, isLoading, error };
@@ -317,7 +309,7 @@ export function AddServerDialog({
   bulk,
   autoStartDeployment,
   headless,
-}: AddServerDialogProps) {
+}: AddServerDialogProps): JSX.Element | null {
   const telemetry = useTelemetry();
   // Fetch server details (including remotes) when dialog opens
   const {
@@ -888,14 +880,14 @@ function ConfigurePhaseContent({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && releaseState.canDeploy) {
       e.preventDefault();
-      releaseState.startDeployment();
+      void releaseState.startDeployment();
     }
   };
 
   // Auto-deploy when all servers were multi-remote (already configured in selectRemotes)
   useEffect(() => {
     if (!hasOnlySingleRemote && releaseState.canDeploy && needsDeployment) {
-      releaseState.startDeployment();
+      void releaseState.startDeployment();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only trigger on deploy readiness changes, not on every releaseState update
   }, [hasOnlySingleRemote, needsDeployment, releaseState.canDeploy]);
@@ -944,7 +936,9 @@ function ConfigurePhaseContent({
         </div>
         <Button
           disabled={!releaseState.canDeploy}
-          onClick={() => releaseState.startDeployment()}
+          onClick={() => {
+            void releaseState.startDeployment();
+          }}
         >
           <Button.Text>
             {needsDeployment

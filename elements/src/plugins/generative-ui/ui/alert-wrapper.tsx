@@ -16,7 +16,7 @@ export function AlertWrapper({
   title,
   description,
   variant = "default",
-}: AlertWrapperProps) {
+}: AlertWrapperProps): React.JSX.Element {
   return (
     <Alert variant={variant}>
       <AlertTitle>{title}</AlertTitle>

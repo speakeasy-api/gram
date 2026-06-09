@@ -51,6 +51,6 @@ export const InsightsContext = createContext<InsightsContextValue>({
  * Hook to access the insights sidebar state. `available` is false when no
  * InsightsProvider ancestor exists.
  */
-export function useInsightsState() {
+export function useInsightsState(): InsightsContextValue {
   return useContext(InsightsContext);
 }

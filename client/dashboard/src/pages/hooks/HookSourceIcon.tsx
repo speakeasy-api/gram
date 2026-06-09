@@ -1,7 +1,11 @@
 import { GlobeIcon } from "lucide-react";
 
 // Claude Code logo - official Anthropic Claude icon
-export function ClaudeCodeIcon({ className }: { className?: string }) {
+export function ClaudeCodeIcon({
+  className,
+}: {
+  className?: string;
+}): JSX.Element {
   return (
     <svg
       className={className}
@@ -22,7 +26,7 @@ export function ClaudeCodeIcon({ className }: { className?: string }) {
 }
 
 // Cursor logo - official cursor cube icon
-export function CursorIcon({ className }: { className?: string }) {
+export function CursorIcon({ className }: { className?: string }): JSX.Element {
   return (
     <svg
       className={className}
@@ -38,7 +42,7 @@ export function CursorIcon({ className }: { className?: string }) {
 }
 
 // Codex logo - official OpenAI monoblossom icon
-export function CodexIcon({ className }: { className?: string }) {
+export function CodexIcon({ className }: { className?: string }): JSX.Element {
   return (
     <svg
       className={className}
@@ -76,7 +80,11 @@ export function CodexIcon({ className }: { className?: string }) {
 }
 
 // Microsoft Copilot logo
-export function CopilotIcon({ className }: { className?: string }) {
+export function CopilotIcon({
+  className,
+}: {
+  className?: string;
+}): JSX.Element {
   return (
     <svg
       className={className}
@@ -186,7 +194,7 @@ export function CopilotIcon({ className }: { className?: string }) {
 }
 
 // Google Gemini logo
-export function GeminiIcon({ className }: { className?: string }) {
+export function GeminiIcon({ className }: { className?: string }): JSX.Element {
   return (
     <svg
       className={className}
@@ -217,7 +225,7 @@ export function GeminiIcon({ className }: { className?: string }) {
 }
 
 // Glean logo
-export function GleanIcon({ className }: { className?: string }) {
+export function GleanIcon({ className }: { className?: string }): JSX.Element {
   return (
     <svg
       className={className}
@@ -235,7 +243,11 @@ export function GleanIcon({ className }: { className?: string }) {
 }
 
 // AWS Bedrock logo
-export function BedrockIcon({ className }: { className?: string }) {
+export function BedrockIcon({
+  className,
+}: {
+  className?: string;
+}): JSX.Element {
   return (
     <svg
       className={className}
@@ -257,7 +269,10 @@ interface HookSourceIconProps {
   className?: string;
 }
 
-export function HookSourceIcon({ source, className }: HookSourceIconProps) {
+export function HookSourceIcon({
+  source,
+  className,
+}: HookSourceIconProps): JSX.Element {
   const normalizedSource = source?.toLowerCase();
 
   if (

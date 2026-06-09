@@ -159,7 +159,11 @@ function isStructuredContent(
  * Helper Components
  * -------------------------------------------------------------------------- */
 
-function StatusIndicator({ status }: { status: ToolStatus }) {
+function StatusIndicator({
+  status,
+}: {
+  status: ToolStatus;
+}): React.JSX.Element {
   return (
     <div className={cn(statusVariants({ status }))}>
       {status === "pending" && null}
@@ -173,7 +177,7 @@ function StatusIndicator({ status }: { status: ToolStatus }) {
   );
 }
 
-function CopyButton({ content }: { content: string }) {
+function CopyButton({ content }: { content: string }): React.JSX.Element {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async (e: React.MouseEvent) => {
@@ -185,7 +189,9 @@ function CopyButton({ content }: { content: string }) {
 
   return (
     <button
-      onClick={handleCopy}
+      onClick={(e) => {
+        void handleCopy(e);
+      }}
       className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       aria-label="Copy to clipboard"
     >
@@ -226,7 +232,7 @@ function SyntaxHighlightedCode({
   text: string;
   language?: BundledLanguage;
   className?: string;
-}) {
+}): React.JSX.Element {
   const [highlightedCode, setHighlightedCode] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
 
@@ -241,7 +247,7 @@ function SyntaxHighlightedCode({
     setHighlightedCode(null);
     if (!language || !canHighlight) return;
     let cancelled = false;
-    codeToHtml(displayText, {
+    void codeToHtml(displayText, {
       lang: language,
       theme: "github-dark-default",
       rootStyle: "background-color: transparent;",
@@ -370,7 +376,7 @@ function ToolUISection({
   defaultExpanded = false,
   highlightSyntax = true,
   language = "json",
-}: ToolUISectionProps) {
+}: ToolUISectionProps): React.JSX.Element {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
   // For structured content, we don't stringify it
@@ -434,7 +440,7 @@ function ToolUI({
   onApproveOnce,
   onApproveForSession,
   onDeny,
-}: ToolUIProps) {
+}: ToolUIProps): React.JSX.Element {
   // Use annotation title if available, otherwise fall back to name
   const displayName = annotations?.title || name;
   const isApprovalPending =
@@ -455,6 +461,7 @@ function ToolUI({
     if (!isApprovalPending && isExpanded && !defaultExpanded) {
       setIsExpanded(false);
     }
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- only react to approval transition; defaultExpanded/isExpanded are intentionally not deps
   }, [isApprovalPending]);
 
   // Handle approve based on selected mode
@@ -497,7 +504,9 @@ function ToolUI({
 
       {/* Tool row */}
       <button
-        onClick={() => hasContent && setIsExpanded(!isExpanded)}
+        onClick={() => {
+          if (hasContent) setIsExpanded(!isExpanded);
+        }}
         disabled={!hasContent}
         className={cn(
           "flex w-full items-center gap-2 px-4 py-3 text-left",
@@ -715,7 +724,7 @@ function ToolUIGroup({
   defaultExpanded = false,
   children,
   className,
-}: ToolUIGroupProps) {
+}: ToolUIGroupProps): React.JSX.Element {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
   return (

@@ -240,18 +240,6 @@ VALUES (@project_id, @assistant_id);
 DELETE FROM project_managed_assistants
 WHERE project_id = @project_id;
 
--- name: ListProjectMCPToolsetSlugs :many
--- Slugs of every MCP-reachable toolset in a project, used to attach all of a
--- project's toolsets to its managed assistant at provisioning time. Toolsets
--- without an mcp_slug can't be addressed by the runtime, so they're excluded
--- (mirrors the guard in EnableMCPForToolsets).
-SELECT slug
-FROM toolsets
-WHERE project_id = @project_id
-  AND mcp_slug IS NOT NULL
-  AND deleted IS FALSE
-ORDER BY created_at;
-
 -- name: UpdateAssistant :one
 UPDATE assistants
 SET

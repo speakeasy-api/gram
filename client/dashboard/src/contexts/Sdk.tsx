@@ -12,11 +12,12 @@ import { useLocation, useParams } from "react-router";
 export const IsAdminContext = createContext<React.MutableRefObject<boolean>>({
   current: false,
 });
-export const useIsAdminRef = () => useContext(IsAdminContext);
+export const useIsAdminRef = (): React.MutableRefObject<boolean> =>
+  useContext(IsAdminContext);
 
 export const SdkContext = createContext<Gram>({} as Gram);
 
-export const useSdkClient = () => {
+export const useSdkClient = (): Gram => {
   const client = useContext(SdkContext);
   return client;
 };
@@ -63,7 +64,10 @@ if (import.meta.hot) {
   import.meta.hot.data.queryClient = queryClient;
 }
 
-export const useSlugs = () => {
+export const useSlugs = (): {
+  orgSlug: string | undefined;
+  projectSlug: string | undefined;
+} => {
   let { orgSlug, projectSlug } = useParams();
   const location = useLocation();
 

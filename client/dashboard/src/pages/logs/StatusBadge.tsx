@@ -8,7 +8,7 @@ export function StatusBadge({
   isSuccess,
   httpStatusCode,
   severity,
-}: StatusBadgeProps) {
+}: StatusBadgeProps): JSX.Element {
   // For log entries with severity
   if (severity) {
     return <SeverityBadge severity={severity} />;

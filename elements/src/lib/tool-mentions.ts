@@ -24,7 +24,10 @@ export function toolSetToMentionableTools(
     name,
     description:
       typeof tool === "object" && tool !== null && "description" in tool
-        ? String((tool as { description?: unknown }).description ?? "")
+        ? (() => {
+            const desc = (tool as { description?: unknown }).description;
+            return typeof desc === "string" ? desc : "";
+          })()
         : undefined,
   }));
 }
@@ -38,7 +41,7 @@ export function parseMentionedTools(text: string, tools: ToolRecord): string[] {
 
   MENTION_PATTERN.lastIndex = 0;
   while ((match = MENTION_PATTERN.exec(text)) !== null) {
-    mentions.push(match[1].toLowerCase());
+    mentions.push(match[1]!.toLowerCase());
   }
 
   const matchedToolIds = toolNames.filter((name) =>

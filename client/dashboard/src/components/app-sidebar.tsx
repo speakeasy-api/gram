@@ -69,7 +69,9 @@ function ScopeGatedTopLevelItem({
   );
 }
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+export function AppSidebar({
+  ...props
+}: React.ComponentProps<typeof Sidebar>): React.JSX.Element {
   const routes = useRoutes();
   const { orgSlug } = useSlugs();
   const { state } = useSidebar();
@@ -109,19 +111,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   ].some((r) => r.active);
 
   let activeGroup: string | undefined;
-  switch (true) {
-    case connectActive:
-      activeGroup = "Connect";
-      break;
-    case buildActive:
-      activeGroup = "Build";
-      break;
-    case observeActive:
-      activeGroup = "Observe";
-      break;
-    case securityActive:
-      activeGroup = "Secure";
-      break;
+  if (connectActive) {
+    activeGroup = "Connect";
+  } else if (buildActive) {
+    activeGroup = "Build";
+  } else if (observeActive) {
+    activeGroup = "Observe";
+  } else if (securityActive) {
+    activeGroup = "Secure";
   }
 
   // Find the specific active route title for the sliding highlight

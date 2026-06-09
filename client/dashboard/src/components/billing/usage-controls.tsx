@@ -4,7 +4,7 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { Button, cn } from "@speakeasy-api/moonshine";
 import { useCallback, useState } from "react";
 
-export const TopUpCTA = () => {
+export const TopUpCTA = (): JSX.Element => {
   const client = useSdkClient();
   const telemetry = useTelemetry();
   const [busy, setBusy] = useState(false);
@@ -29,7 +29,7 @@ export const TopUpCTA = () => {
 
   return (
     <Page.Section.CTA>
-      <Button onClick={handleClick} disabled={busy}>
+      <Button onClick={() => void handleClick()} disabled={busy}>
         TOP UP CREDITS
       </Button>
     </Page.Section.CTA>
@@ -46,7 +46,7 @@ export const UsageProgress = ({
   included: number;
   overageIncrement: number;
   noMax?: boolean;
-}) => {
+}): JSX.Element => {
   if (noMax) {
     included = Math.max(1, value * 1.5);
   }

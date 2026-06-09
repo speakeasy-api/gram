@@ -4,7 +4,7 @@ import { JourneyDemo } from "./components/journey-demo";
 import { RegisterSection } from "./components/login-section";
 import { Navigate, useSearchParams } from "react-router";
 
-export default function Register() {
+export default function Register(): JSX.Element {
   const routes = useRoutes();
   const session = useSession();
   const [searchParams] = useSearchParams();

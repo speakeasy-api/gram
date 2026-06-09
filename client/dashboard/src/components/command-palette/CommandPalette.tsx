@@ -9,7 +9,7 @@ import {
 import { useCommandPalette } from "@/contexts/CommandPalette";
 import { Icon, IconName, Badge } from "@speakeasy-api/moonshine";
 
-export function CommandPalette() {
+export function CommandPalette(): JSX.Element {
   const { isOpen, close, actions, contextBadge } = useCommandPalette();
 
   // Group actions by their group property

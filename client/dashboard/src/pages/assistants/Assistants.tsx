@@ -2,9 +2,10 @@ import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
 import { Page } from "@/components/page-layout";
 import { getProjectColors } from "@/components/project-colors";
 import { RequireScope } from "@/components/require-scope";
+import { CardContextMenu } from "@/components/card-context-menu";
 import { Badge } from "@/components/ui/badge";
 import { DotCard } from "@/components/ui/dot-card";
-import { MoreActions } from "@/components/ui/more-actions";
+import { Action, MoreActions } from "@/components/ui/more-actions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { SimpleTooltip } from "@/components/ui/tooltip";
@@ -36,7 +37,7 @@ function stopLinkNavigation(e: MouseEvent<HTMLDivElement>) {
   e.stopPropagation();
 }
 
-export function AssistantsRoot() {
+export function AssistantsRoot(): JSX.Element {
   return <Outlet />;
 }
 
@@ -48,7 +49,7 @@ function StatusToggle({ assistant }: { assistant: Assistant }) {
 
   const updateAssistant = useAssistantsUpdateMutation({
     onSuccess: () => {
-      invalidateAllAssistantsList(queryClient);
+      void invalidateAllAssistantsList(queryClient);
     },
     onError: () => {
       toast.error("Failed to update assistant status");
@@ -112,7 +113,7 @@ function AssistantsEmptyState({ onCreate }: { onCreate: () => void }) {
   );
 }
 
-export default function AssistantsIndex() {
+export default function AssistantsIndex(): JSX.Element {
   const routes = useRoutes();
   const { data, isLoading } = useAssistantsList(undefined, undefined, {
     retry: false,
@@ -285,61 +286,63 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
 
   const deleteAssistant = useAssistantsDeleteMutation({
     onSuccess: () => {
-      invalidateAllAssistantsList(queryClient);
+      void invalidateAllAssistantsList(queryClient);
     },
   });
 
+  const actions: Action[] = [
+    {
+      label: "Delete",
+      destructive: true,
+      icon: "trash",
+      onClick: () => {
+        if (confirm(`Delete assistant "${assistant.name}"?`)) {
+          deleteAssistant.mutate({ request: { id: assistant.id } });
+        }
+      },
+    },
+  ];
+
   return (
-    <routes.assistants.detail.Link
-      params={[assistant.id]}
-      className="focus-visible:ring-ring block rounded-xl no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-    >
-      <DotCard icon={<AssistantIcon assistant={assistant} />}>
-        {/* Header row: name + actions */}
-        <div className="mb-3 flex items-start justify-between gap-2">
-          <Type
-            variant="subheading"
-            as="div"
-            className="text-md group-hover:text-primary flex-1 truncate normal-case transition-colors"
-            title={assistant.name}
-          >
-            {assistant.name}
-          </Type>
-          <div onClick={stopLinkNavigation}>
-            <MoreActions
-              actions={[
-                {
-                  label: "Delete",
-                  destructive: true,
-                  icon: "trash",
-                  onClick: () => {
-                    if (confirm(`Delete assistant "${assistant.name}"?`)) {
-                      deleteAssistant.mutate({ request: { id: assistant.id } });
-                    }
-                  },
-                },
-              ]}
-            />
-          </div>
-        </div>
-
-        {/* Metadata: model + MCP servers */}
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-1.5">
-            <Cpu className="text-muted-foreground/70 size-3.5 shrink-0" />
-            <Type muted small className="truncate" title={assistant.model}>
-              {assistant.model}
+    <CardContextMenu actions={actions}>
+      <routes.assistants.detail.Link
+        params={[assistant.id]}
+        className="focus-visible:ring-ring block h-full rounded-xl no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+      >
+        <DotCard icon={<AssistantIcon assistant={assistant} />}>
+          {/* Header row: name + actions */}
+          <div className="mb-3 flex items-start justify-between gap-2">
+            <Type
+              variant="subheading"
+              as="div"
+              className="text-md group-hover:text-primary flex-1 truncate normal-case transition-colors"
+              title={assistant.name}
+            >
+              {assistant.name}
             </Type>
+            <div onClick={stopLinkNavigation}>
+              <MoreActions actions={actions} />
+            </div>
           </div>
-          <AssistantToolsets assistant={assistant} />
-        </div>
 
-        {/* Footer row: status toggle + last updated */}
-        <div className="border-border/60 mt-auto flex items-center justify-between gap-2 border-t pt-3">
-          <StatusToggle assistant={assistant} />
-          <UpdatedAt date={new Date(assistant.updatedAt)} />
-        </div>
-      </DotCard>
-    </routes.assistants.detail.Link>
+          {/* Metadata: model + MCP servers */}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-1.5">
+              <Cpu className="text-muted-foreground/70 size-3.5 shrink-0" />
+              <Type muted small className="truncate" title={assistant.model}>
+                {assistant.model}
+              </Type>
+            </div>
+            <AssistantToolsets assistant={assistant} />
+          </div>
+
+          {/* Footer row: status toggle + last updated */}
+          <div className="border-border/60 mt-auto flex items-center justify-between gap-2 border-t pt-3">
+            <StatusToggle assistant={assistant} />
+            <UpdatedAt date={new Date(assistant.updatedAt)} />
+          </div>
+        </DotCard>
+      </routes.assistants.detail.Link>
+    </CardContextMenu>
   );
 }
