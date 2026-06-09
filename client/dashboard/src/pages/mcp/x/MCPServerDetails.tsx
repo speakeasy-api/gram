@@ -263,9 +263,10 @@ function MCPServerStatusDropdown({ server }: { server: McpServer }) {
           toolsetId: server.toolsetId ?? undefined,
           environmentId: server.environmentId ?? undefined,
           // updateMcpServer is a full-record replace for the optional UUID
-          // references. Forwarding userSessionIssuerId keeps the stored
-          // value intact across a visibility-only update.
+          // references. Forwarding them keeps stored values intact across a
+          // visibility-only update.
           userSessionIssuerId: server.userSessionIssuerId ?? undefined,
+          toolVariationsGroupId: server.toolVariationsGroupId ?? undefined,
           visibility: next,
         },
       },
