@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -110,6 +111,24 @@ func TestService_ListGrants_NotConnected(t *testing.T) {
 	_, err = ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "current user has not joined this organization")
+}
+
+func TestService_ListGrants_InvalidUserPrincipal(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+	authCtx.AccountType = "enterprise"
+	authCtx.UserID = urn.AllUsersPrincipalID
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	_, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
+	require.ErrorIs(t, err, authz.ErrPrincipalInvalid)
 }
 
 func TestService_ListGrants_AdminImpersonatingReturnsFullAccess(t *testing.T) {
