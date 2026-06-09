@@ -1401,7 +1401,9 @@ const listRemoteSessionStatusesForSubject = `-- name: ListRemoteSessionStatusesF
 SELECT
   remote_session_client_id,
   (CASE
-    WHEN access_expires_at > now() OR refresh_token_encrypted IS NOT NULL THEN 'active'
+    WHEN access_expires_at > now()
+      OR (refresh_token_encrypted IS NOT NULL
+          AND (refresh_expires_at IS NULL OR refresh_expires_at > now())) THEN 'active'
     ELSE 'expired'
   END)::text AS status
 FROM remote_sessions
@@ -1429,11 +1431,14 @@ type ListRemoteSessionStatusesForSubjectRow struct {
 // DISTINCT. A soft-deleted row is absent here entirely (truly disconnected).
 //
 // The 'active' predicate mirrors validateAndRefresh in tokenservice.go: a
-// session is usable only when its access token is unexpired, or it has a
-// refresh token to renew with. A present-but-unusable row is 'expired' rather
-// than dropped, so the consent UI can distinguish "reconnect this expired
-// link" from "never connected" — and so the runtime gate (which rejects the
-// same row as ErrNoValidToken) stops disagreeing with a green "Connected" badge.
+// session is usable only when its access token is unexpired, or it carries a
+// refresh token that is not itself known-expired to renew with. A
+// refresh_expires_at of NULL means no known expiry (non-expiring refresh
+// token), so it still counts as usable. A present-but-unusable row is
+// 'expired' rather than dropped, so the consent UI can distinguish "reconnect
+// this expired link" from "never connected" — and so the runtime gate (which
+// rejects the same row as ErrNoValidToken) stops disagreeing with a green
+// "Connected" badge.
 func (q *Queries) ListRemoteSessionStatusesForSubject(ctx context.Context, arg ListRemoteSessionStatusesForSubjectParams) ([]ListRemoteSessionStatusesForSubjectRow, error) {
 	rows, err := q.db.Query(ctx, listRemoteSessionStatusesForSubject, arg.SubjectUrn, arg.UserSessionIssuerID)
 	if err != nil {
