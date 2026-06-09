@@ -12,6 +12,7 @@ export type RuleCategory =
   | "pii"
   | "government_ids"
   | "healthcare"
+  | "prompt_policy"
   | "prompt_injection"
   | "off_policy"
   | "shadow_mcp"
@@ -22,7 +23,7 @@ export type RuleCategory =
 export type DetectionRule = {
   id: string;
   title: string;
-  source: "gitleaks" | "presidio" | "prompt_injection";
+  source: "gitleaks" | "presidio" | "prompt_injection" | "llm_judge";
   // When true the rule is kept in the catalog so legacy risk_results still
   // resolve their human-readable title via risk-utils.ts, but it is hidden
   // from the policy create/edit form so users cannot select it on new
@@ -59,6 +60,11 @@ export const RULE_CATEGORY_META: Record<
     label: "Healthcare Information",
     description: "Medical record numbers, patient data, Medicare IDs",
     icon: "heart-pulse",
+  },
+  prompt_policy: {
+    label: "Prompt Policies",
+    description: "Natural-language guardrails evaluated by the policy judge",
+    icon: "message-square-warning",
   },
   prompt_injection: {
     label: "Prompt Injection",
@@ -1365,6 +1371,14 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
       id: "pii.medical_family_history",
       title: "Family medical history reference",
       source: "presidio",
+    },
+  ],
+  prompt_policy: [
+    {
+      id: "llm_judge",
+      title: "Prompt Policy Judge",
+      source: "llm_judge",
+      hidden: true,
     },
   ],
   // prompt_injection is enabled at the category level; the detection

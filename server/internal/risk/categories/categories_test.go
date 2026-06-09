@@ -20,6 +20,7 @@ func TestClassify_PinsPriorCASEBehavior(t *testing.T) {
 		{name: "destructive_tool source", source: "destructive_tool", ruleID: "", want: CategoryDestructiveTool},
 		{name: "cli_destructive source", source: "cli_destructive", ruleID: "secret.foo", want: CategoryCLIDestructive},
 		{name: "prompt_injection source", source: "prompt_injection", ruleID: "", want: CategoryPromptInjection},
+		{name: "llm_judge source", source: "llm_judge", ruleID: "llm_judge", want: CategoryPromptPolicy},
 
 		// Secrets prefix.
 		{name: "secret aws", source: "gitleaks", ruleID: "secret.aws_access_key", want: CategorySecrets},
