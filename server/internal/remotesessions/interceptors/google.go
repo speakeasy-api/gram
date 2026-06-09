@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"net/url"
+	"slices"
+	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
@@ -26,7 +28,9 @@ func (g *google) Match(issuerURL string) bool {
 	if err != nil {
 		return false
 	}
-	return u.Hostname() == "accounts.google.com"
+	// Hostnames are case-insensitive (url.Parse does not normalise case), so
+	// fold the comparison to catch mixed-case issuer URLs.
+	return strings.EqualFold(u.Hostname(), "accounts.google.com")
 }
 
 // ModifyAuthorize requests offline access. Google issues a refresh token only
@@ -35,7 +39,18 @@ func (g *google) Match(issuerURL string) bool {
 // offline_access.
 func (g *google) ModifyAuthorize(ctx context.Context, q url.Values) {
 	q.Set("access_type", "offline")
-	q.Set("prompt", "consent")
+
+	// prompt is a space-delimited list. Merge consent in rather than
+	// overwriting any value already carried on the authorization endpoint
+	// (e.g. select_account) so we don't silently drop other prompt behaviour.
+	// consent must always be present — Google omits the refresh token on a
+	// silent re-consent.
+	prompts := strings.Fields(q.Get("prompt"))
+	if !slices.Contains(prompts, "consent") {
+		prompts = append(prompts, "consent")
+	}
+	q.Set("prompt", strings.Join(prompts, " "))
+
 	g.logger.InfoContext(ctx,
 		"applied authorize interceptor: requesting offline access (access_type=offline, prompt=consent)")
 }

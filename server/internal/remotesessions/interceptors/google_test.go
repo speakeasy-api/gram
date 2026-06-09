@@ -18,6 +18,14 @@ func TestGoogleMatchesGoogleIssuer(t *testing.T) {
 	require.True(t, ic.Match("https://accounts.google.com/o/oauth2/v2/auth"))
 }
 
+func TestGoogleMatchesGoogleIssuerCaseInsensitively(t *testing.T) {
+	t.Parallel()
+
+	ic := interceptors.NewGoogle(testenv.NewLogger(t))
+	require.True(t, ic.Match("https://Accounts.Google.com"))
+	require.True(t, ic.Match("https://ACCOUNTS.GOOGLE.COM/o/oauth2/v2/auth"))
+}
+
 func TestGoogleDoesNotMatchOtherIssuers(t *testing.T) {
 	t.Parallel()
 
@@ -42,6 +50,29 @@ func TestGoogleModifyAuthorizeRequestsOfflineAccess(t *testing.T) {
 
 	require.Equal(t, "offline", q.Get("access_type"))
 	require.Equal(t, "consent", q.Get("prompt"))
+}
+
+func TestGoogleModifyAuthorizePreservesExistingPrompt(t *testing.T) {
+	t.Parallel()
+
+	ic := interceptors.NewGoogle(testenv.NewLogger(t))
+	q := url.Values{}
+	q.Set("prompt", "select_account")
+	ic.ModifyAuthorize(t.Context(), q)
+
+	require.Equal(t, "offline", q.Get("access_type"))
+	require.Equal(t, "select_account consent", q.Get("prompt"))
+}
+
+func TestGoogleModifyAuthorizeDoesNotDuplicateConsent(t *testing.T) {
+	t.Parallel()
+
+	ic := interceptors.NewGoogle(testenv.NewLogger(t))
+	q := url.Values{}
+	q.Set("prompt", "consent select_account")
+	ic.ModifyAuthorize(t.Context(), q)
+
+	require.Equal(t, "consent select_account", q.Get("prompt"))
 }
 
 func TestGoogleName(t *testing.T) {
