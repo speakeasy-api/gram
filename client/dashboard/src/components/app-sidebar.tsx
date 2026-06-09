@@ -28,7 +28,7 @@ import { useGetPeriodUsage } from "@gram/client/react-query";
 import { cn, Icon, Stack } from "@speakeasy-api/moonshine";
 import { MinusIcon, TestTube2Icon, Undo2 } from "lucide-react";
 import * as React from "react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { RequireScope } from "./require-scope";
 import { FeatureRequestModal } from "./FeatureRequestModal";
@@ -127,6 +127,15 @@ export function AppSidebar({
   // the command palette via useProjectNavRoutes so the two stay in sync.
   const allNavRoutes = useProjectNavRoutes();
   const activeRoute = allNavRoutes.find((entry) => entry.route.active)?.route;
+  // Single source of truth for per-page scopes, shared with the command palette
+  // via useProjectNavRoutes so nav visibility and palette visibility can't drift.
+  const navScopes = useMemo(() => {
+    const map = new Map<string, Scope[]>();
+    for (const { route, scope } of allNavRoutes) map.set(route.url, scope);
+    return map;
+  }, [allNavRoutes]);
+  const scopeFor = (route: AppRoute): Scope | Scope[] =>
+    navScopes.get(route.url) ?? "project:read";
   // In collapsed mode, sub-items are hidden — fall back to group highlight.
   // Top-level items (Home, Settings) have no activeGroup, so keep activeItem for those.
   const activeItem =
@@ -161,7 +170,10 @@ export function AppSidebar({
           >
             <SidebarMenu className="gap-1 px-2 group-data-[collapsible=icon]:px-0">
               {/* Home — top-level, no group */}
-              <ScopeGatedTopLevelItem item={routes.home} scope="project:read" />
+              <ScopeGatedTopLevelItem
+                item={routes.home}
+                scope={scopeFor(routes.home)}
+              />
 
               {/* Connect group */}
               <CollapsibleNavGroup
@@ -171,20 +183,20 @@ export function AppSidebar({
               >
                 <ScopeGatedNavItem
                   item={routes.sources}
-                  scope={["project:read", "project:write"]}
+                  scope={scopeFor(routes.sources)}
                 />
                 <ScopeGatedNavItem
                   item={routes.catalog}
-                  scope={["project:read", "mcp:write"]}
+                  scope={scopeFor(routes.catalog)}
                 />
                 <ScopeGatedNavItem
                   item={routes.playground}
-                  scope={["mcp:read", "mcp:write", "mcp:connect"]}
+                  scope={scopeFor(routes.playground)}
                 />
                 {isDeploymentsPageEnabled && (
                   <ScopeGatedNavItem
                     item={routes.deployments}
-                    scope={["project:read", "project:write"]}
+                    scope={scopeFor(routes.deployments)}
                   />
                 )}
               </CollapsibleNavGroup>
@@ -197,22 +209,25 @@ export function AppSidebar({
               >
                 <ScopeGatedNavItem
                   item={routes.mcp}
-                  scope={["mcp:read", "mcp:write"]}
+                  scope={scopeFor(routes.mcp)}
                 />
                 {isAssistantsEnabled && (
                   <ScopeGatedNavItem
                     item={routes.assistants}
-                    scope="project:read"
+                    scope={scopeFor(routes.assistants)}
                   />
                 )}
-                <ScopeGatedNavItem item={routes.clis} scope="project:read" />
+                <ScopeGatedNavItem
+                  item={routes.clis}
+                  scope={scopeFor(routes.clis)}
+                />
                 <ScopeGatedNavItem
                   item={routes.plugins}
-                  scope={["project:read", "project:write"]}
+                  scope={scopeFor(routes.plugins)}
                 />
                 <ScopeGatedNavItem
                   item={routes.environments}
-                  scope={["project:read", "project:write"]}
+                  scope={scopeFor(routes.environments)}
                 />
               </CollapsibleNavGroup>
 
@@ -224,9 +239,12 @@ export function AppSidebar({
               >
                 <ScopeGatedNavItem
                   item={routes.insights}
-                  scope="project:read"
+                  scope={scopeFor(routes.insights)}
                 />
-                <ScopeGatedNavItem item={routes.logs} scope="project:read" />
+                <ScopeGatedNavItem
+                  item={routes.logs}
+                  scope={scopeFor(routes.logs)}
+                />
               </CollapsibleNavGroup>
 
               {/* Security group */}
@@ -238,26 +256,26 @@ export function AppSidebar({
               >
                 <ScopeGatedNavItem
                   item={routes.riskOverview}
-                  scope="project:read"
+                  scope={scopeFor(routes.riskOverview)}
                 />
                 <ScopeGatedNavItem
                   item={routes.policyCenter}
-                  scope={["project:read", "project:write"]}
+                  scope={scopeFor(routes.policyCenter)}
                 />
                 <ScopeGatedNavItem
                   item={routes.approvalRequests}
-                  scope={["project:read", "project:write"]}
+                  scope={scopeFor(routes.approvalRequests)}
                 />
                 <ScopeGatedNavItem
                   item={routes.detectionRules}
-                  scope={["project:read", "project:write"]}
+                  scope={scopeFor(routes.detectionRules)}
                 />
               </CollapsibleNavGroup>
 
               {/* Settings — top-level, no group */}
               <ScopeGatedTopLevelItem
                 item={routes.settings}
-                scope="project:write"
+                scope={scopeFor(routes.settings)}
               />
             </SidebarMenu>
           </NavGroupProvider>
