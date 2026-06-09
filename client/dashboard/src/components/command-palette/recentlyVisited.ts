@@ -1,3 +1,4 @@
+import { RECENTS_STORAGE_PREFIX } from "@/lib/local-storage-keys";
 import { useSessionInfo } from "@gram/client/react-query";
 import { useEffect, useState } from "react";
 
@@ -47,7 +48,7 @@ function storageKey(
   orgSlug?: string,
   projectSlug?: string,
 ): string {
-  return `gram:recents:${STORAGE_VERSION}:${userId ?? ""}:${orgSlug ?? ""}:${projectSlug ?? ""}`;
+  return `${RECENTS_STORAGE_PREFIX}${STORAGE_VERSION}:${userId ?? ""}:${orgSlug ?? ""}:${projectSlug ?? ""}`;
 }
 
 function read(key: string): RecentEntry[] {
