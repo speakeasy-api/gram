@@ -31,7 +31,7 @@ import { Result } from "../types/fp.js";
  * attachServer collections
  *
  * @remarks
- * Attach a server (toolset) to a collection
+ * Attach a server to a collection. Provide exactly one of toolset_id or mcp_server_id.
  */
 export function collectionsAttachServer(
   client: GramCore,

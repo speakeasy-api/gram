@@ -19,7 +19,7 @@ export class Collections extends ClientSDK {
    * attachServer collections
    *
    * @remarks
-   * Attach a server (toolset) to a collection
+   * Attach a server to a collection. Provide exactly one of toolset_id or mcp_server_id.
    */
   async attachServer(
     request: operations.AttachServerToCollectionRequest,
@@ -76,7 +76,7 @@ export class Collections extends ClientSDK {
    * detachServer collections
    *
    * @remarks
-   * Detach a server (toolset) from a collection
+   * Detach a server from a collection. Provide exactly one of toolset_id or mcp_server_id.
    */
   async detachServer(
     request: operations.DetachServerFromCollectionRequest,

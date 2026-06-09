@@ -244,7 +244,7 @@ func TestCollections_RBAC_AttachServer_DeniedWithNoGrants(t *testing.T) {
 
 	_, err := ti.service.AttachServer(ctx, &gen.AttachServerPayload{
 		CollectionID: collection.ID,
-		ToolsetID:    toolset.ID,
+		ToolsetID:    &toolset.ID,
 	})
 
 	var oopsErr *oops.ShareableError
@@ -270,7 +270,7 @@ func TestCollections_RBAC_AttachServer_AllowedWithOrgAdminGrant(t *testing.T) {
 
 	result, err := ti.service.AttachServer(ctx, &gen.AttachServerPayload{
 		CollectionID: collection.ID,
-		ToolsetID:    toolset.ID,
+		ToolsetID:    &toolset.ID,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -286,7 +286,7 @@ func TestCollections_RBAC_DetachServer_DeniedWithNoGrants(t *testing.T) {
 
 	_, err := ti.service.AttachServer(ctx, &gen.AttachServerPayload{
 		CollectionID: collection.ID,
-		ToolsetID:    toolset.ID,
+		ToolsetID:    &toolset.ID,
 	})
 	require.NoError(t, err)
 
@@ -294,7 +294,7 @@ func TestCollections_RBAC_DetachServer_DeniedWithNoGrants(t *testing.T) {
 
 	err = ti.service.DetachServer(ctx, &gen.DetachServerPayload{
 		CollectionID: collection.ID,
-		ToolsetID:    toolset.ID,
+		ToolsetID:    &toolset.ID,
 	})
 
 	var oopsErr *oops.ShareableError
@@ -312,7 +312,7 @@ func TestCollections_RBAC_DetachServer_AllowedWithOrgAdminGrant(t *testing.T) {
 
 	_, err := ti.service.AttachServer(ctx, &gen.AttachServerPayload{
 		CollectionID: collection.ID,
-		ToolsetID:    toolset.ID,
+		ToolsetID:    &toolset.ID,
 	})
 	require.NoError(t, err)
 
@@ -326,7 +326,7 @@ func TestCollections_RBAC_DetachServer_AllowedWithOrgAdminGrant(t *testing.T) {
 
 	err = ti.service.DetachServer(ctx, &gen.DetachServerPayload{
 		CollectionID: collection.ID,
-		ToolsetID:    toolset.ID,
+		ToolsetID:    &toolset.ID,
 	})
 	require.NoError(t, err)
 }

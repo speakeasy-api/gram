@@ -177,7 +177,7 @@ func TestCollectionsService_Audit_AttachAndDetachServer(t *testing.T) {
 
 	_, err = ti.service.AttachServer(ctx, &gen.AttachServerPayload{
 		CollectionID: collection.ID,
-		ToolsetID:    toolset.ID,
+		ToolsetID:    &toolset.ID,
 		SessionToken: nil,
 		ApikeyToken:  nil,
 	})
@@ -201,7 +201,7 @@ func TestCollectionsService_Audit_AttachAndDetachServer(t *testing.T) {
 
 	err = ti.service.DetachServer(ctx, &gen.DetachServerPayload{
 		CollectionID: collection.ID,
-		ToolsetID:    toolset.ID,
+		ToolsetID:    &toolset.ID,
 		SessionToken: nil,
 		ApikeyToken:  nil,
 	})

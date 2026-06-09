@@ -30,6 +30,10 @@ export type CreateRequestBody2 = {
    */
   mcpRegistryNamespace: string;
   /**
+   * MCP server IDs to attach to the collection
+   */
+  mcpServerIds?: Array<string> | undefined;
+  /**
    * Display name for the collection
    */
   name: string;
@@ -56,6 +60,7 @@ export const CreateRequestBody2Visibility$outboundSchema: z.ZodMiniEnum<
 export type CreateRequestBody2$Outbound = {
   description?: string | undefined;
   mcp_registry_namespace: string;
+  mcp_server_ids?: Array<string> | undefined;
   name: string;
   slug: string;
   toolset_ids?: Array<string> | undefined;
@@ -70,6 +75,7 @@ export const CreateRequestBody2$outboundSchema: z.ZodMiniType<
   z.object({
     description: z.optional(z.string()),
     mcpRegistryNamespace: z.string(),
+    mcpServerIds: z.optional(z.array(z.string())),
     name: z.string(),
     slug: z.string(),
     toolsetIds: z.optional(z.array(z.string())),
@@ -81,6 +87,7 @@ export const CreateRequestBody2$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       mcpRegistryNamespace: "mcp_registry_namespace",
+      mcpServerIds: "mcp_server_ids",
       toolsetIds: "toolset_ids",
     });
   }),

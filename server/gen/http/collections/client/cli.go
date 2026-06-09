@@ -24,7 +24,7 @@ func BuildCreatePayload(collectionsCreateBody string, collectionsCreateSessionTo
 	{
 		err = json.Unmarshal([]byte(collectionsCreateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"aaa\",\n      \"mcp_registry_namespace\": \"aa\",\n      \"name\": \"aa\",\n      \"slug\": \"aa\",\n      \"toolset_ids\": [\n         \"abc123\"\n      ],\n      \"visibility\": \"private\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"aaa\",\n      \"mcp_registry_namespace\": \"aa\",\n      \"mcp_server_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"aa\",\n      \"slug\": \"aa\",\n      \"toolset_ids\": [\n         \"abc123\"\n      ],\n      \"visibility\": \"private\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.Name) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
@@ -85,6 +85,12 @@ func BuildCreatePayload(collectionsCreateBody string, collectionsCreateSessionTo
 		v.ToolsetIds = make([]string, len(body.ToolsetIds))
 		for i, val := range body.ToolsetIds {
 			v.ToolsetIds[i] = val
+		}
+	}
+	if body.McpServerIds != nil {
+		v.McpServerIds = make([]string, len(body.McpServerIds))
+		for i, val := range body.McpServerIds {
+			v.McpServerIds[i] = val
 		}
 	}
 	v.SessionToken = sessionToken
@@ -214,10 +220,15 @@ func BuildAttachServerPayload(collectionsAttachServerBody string, collectionsAtt
 	{
 		err = json.Unmarshal([]byte(collectionsAttachServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"collection_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"collection_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.collection_id", body.CollectionID, goa.FormatUUID))
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", body.ToolsetID, goa.FormatUUID))
+		if body.ToolsetID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+		}
+		if body.McpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -237,6 +248,7 @@ func BuildAttachServerPayload(collectionsAttachServerBody string, collectionsAtt
 	v := &collections.AttachServerPayload{
 		CollectionID: body.CollectionID,
 		ToolsetID:    body.ToolsetID,
+		McpServerID:  body.McpServerID,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -252,10 +264,15 @@ func BuildDetachServerPayload(collectionsDetachServerBody string, collectionsDet
 	{
 		err = json.Unmarshal([]byte(collectionsDetachServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"collection_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"collection_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.collection_id", body.CollectionID, goa.FormatUUID))
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", body.ToolsetID, goa.FormatUUID))
+		if body.ToolsetID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+		}
+		if body.McpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -275,6 +292,7 @@ func BuildDetachServerPayload(collectionsDetachServerBody string, collectionsDet
 	v := &collections.DetachServerPayload{
 		CollectionID: body.CollectionID,
 		ToolsetID:    body.ToolsetID,
+		McpServerID:  body.McpServerID,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
