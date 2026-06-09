@@ -180,9 +180,9 @@ func TestClaude_PreToolUse_DeniesLocalStdioServer(t *testing.T) {
 	assert.Equal(t, "deny", *output.PermissionDecision)
 }
 
-// Server identity rules are ignored for Shadow MCP access enforcement; local
-// stdio servers without URL evidence should still be governed by policy.
-func TestClaude_PreToolUse_DoesNotAllowLocalStdioServerByIdentityRule(t *testing.T) {
+// Legacy server identity rules are double-read during migration so local stdio
+// servers approved through the old Redis-backed workflow continue to work.
+func TestClaude_PreToolUse_AllowsLocalStdioServerByLegacyIdentityRule(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
@@ -215,7 +215,7 @@ func TestClaude_PreToolUse_DoesNotAllowLocalStdioServerByIdentityRule(t *testing
 	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
 	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
 	require.NotNil(t, output.PermissionDecision)
-	assert.Equal(t, "deny", *output.PermissionDecision)
+	assert.Equal(t, "allow", *output.PermissionDecision)
 }
 
 func TestClaude_PreToolUse_DoesNotAllowUnconfiguredServerByIdentityRule(t *testing.T) {
