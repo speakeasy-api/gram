@@ -16,7 +16,9 @@ CREATE TABLE "ai_integration_config_chats" (
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY ("id"),
-  CONSTRAINT "ai_integration_config_chats_config_chat_key" UNIQUE ("ai_integration_config_id", "chat_id")
+  CONSTRAINT "ai_integration_config_chats_config_chat_key" UNIQUE ("ai_integration_config_id", "chat_id"),
+  CONSTRAINT "ai_integration_config_chats_chat_id_fkey" FOREIGN KEY ("chat_id") REFERENCES "chats" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "ai_integration_config_chats_config_id_fkey" FOREIGN KEY ("ai_integration_config_id") REFERENCES "ai_integration_configs" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
 -- Create index "ai_integration_config_chats_chat_id_key" to table: "ai_integration_config_chats"
 CREATE UNIQUE INDEX "ai_integration_config_chats_chat_id_key" ON "ai_integration_config_chats" ("chat_id");
