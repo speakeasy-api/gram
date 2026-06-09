@@ -7303,6 +7303,7 @@ func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody)
 		Name:            *v.Name,
 		Enabled:         *v.Enabled,
 		Action:          *v.Action,
+		AudienceType:    *v.AudienceType,
 		AutoName:        *v.AutoName,
 		UserMessage:     v.UserMessage,
 		Version:         *v.Version,
@@ -7344,6 +7345,10 @@ func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody)
 		for i, val := range v.MessageTypes {
 			res.MessageTypes[i] = val
 		}
+	}
+	res.AudiencePrincipalUrns = make([]string, len(v.AudiencePrincipalUrns))
+	for i, val := range v.AudiencePrincipalUrns {
+		res.AudiencePrincipalUrns[i] = val
 	}
 
 	return res

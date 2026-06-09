@@ -200,6 +200,7 @@ INSERT INTO risk_policies (
   , message_types
   , enabled
   , action
+  , audience_type
   , auto_name
   , user_message
   , version
@@ -219,6 +220,7 @@ VALUES (
   , $12
   , $13
   , $14
+  , $15
   , 1
 )
 RETURNING id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, action, audience_type, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
@@ -237,6 +239,7 @@ type CreateRiskPolicyParams struct {
 	MessageTypes         []string
 	Enabled              bool
 	Action               string
+	AudienceType         string
 	AutoName             bool
 	UserMessage          pgtype.Text
 }
@@ -255,6 +258,7 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 		arg.MessageTypes,
 		arg.Enabled,
 		arg.Action,
+		arg.AudienceType,
 		arg.AutoName,
 		arg.UserMessage,
 	)
@@ -1991,8 +1995,9 @@ SET name = $1
   , message_types = $7::text[]
   , enabled = $8
   , action = $9
-  , auto_name = $10
-  , user_message = $11
+  , audience_type = $10
+  , auto_name = $11
+  , user_message = $12
   , version = CASE
       WHEN sources IS DISTINCT FROM $2
         OR presidio_entities IS DISTINCT FROM $3
@@ -2002,12 +2007,13 @@ SET name = $1
         OR message_types IS DISTINCT FROM $7::text[]
         OR enabled IS DISTINCT FROM $8
         OR action IS DISTINCT FROM $9
+        OR audience_type IS DISTINCT FROM $10
       THEN version + 1
       ELSE version
     END
   , updated_at = clock_timestamp()
-WHERE id = $12
-  AND project_id = $13
+WHERE id = $13
+  AND project_id = $14
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, action, audience_type, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
 `
@@ -2022,6 +2028,7 @@ type UpdateRiskPolicyParams struct {
 	MessageTypes         []string
 	Enabled              bool
 	Action               string
+	AudienceType         string
 	AutoName             bool
 	UserMessage          pgtype.Text
 	ID                   uuid.UUID
@@ -2039,6 +2046,7 @@ func (q *Queries) UpdateRiskPolicy(ctx context.Context, arg UpdateRiskPolicyPara
 		arg.MessageTypes,
 		arg.Enabled,
 		arg.Action,
+		arg.AudienceType,
 		arg.AutoName,
 		arg.UserMessage,
 		arg.ID,

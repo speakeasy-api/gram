@@ -9,6 +9,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 )
@@ -40,7 +41,7 @@ func (s *Service) scanClaudeForEnforcement(ctx context.Context, payload *gen.Cla
 		return nil
 	}
 
-	projectID, ok := s.resolveClaudeScanProjectID(ctx, *payload.SessionID)
+	orgID, projectID, userID, ok := s.resolveClaudeScanContext(ctx, *payload.SessionID)
 	if !ok {
 		return nil
 	}
@@ -50,7 +51,7 @@ func (s *Service) scanClaudeForEnforcement(ctx context.Context, payload *gen.Cla
 		return nil
 	}
 
-	result, err := s.riskScanner.ScanForEnforcement(ctx, projectID, text, messageType)
+	result, err := s.riskScanner.ScanForUserEnforcement(ctx, orgID, projectID, userID, text, messageType)
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for Claude hook",
 			attr.SlogError(err),
@@ -62,24 +63,28 @@ func (s *Service) scanClaudeForEnforcement(ctx context.Context, payload *gen.Cla
 	return result
 }
 
-// resolveClaudeScanProjectID resolves the project_id used to scope a Claude
-// hook risk scan. Session metadata cached by the OTEL Logs endpoint wins;
-// the plugin-auth context populated by Gram-Key + Gram-Project headers is
-// the fallback. Returns ok=false when neither source yields a project_id.
-func (s *Service) resolveClaudeScanProjectID(ctx context.Context, sessionID string) (uuid.UUID, bool) {
+// resolveClaudeScanContext resolves the org/project/user used to scope a Claude
+// hook risk scan. Session metadata cached by the OTEL Logs endpoint wins; the
+// plugin-auth context populated by Gram-Key + Gram-Project headers is the
+// fallback. Returns ok=false when neither source yields a project_id.
+func (s *Service) resolveClaudeScanContext(ctx context.Context, sessionID string) (string, uuid.UUID, string, bool) {
 	metadata, err := s.getSessionMetadata(ctx, sessionID)
 	if err == nil {
 		pid, perr := uuid.Parse(metadata.ProjectID)
 		if perr == nil {
-			return pid, true
+			userID := metadata.UserID
+			if userID == "" {
+				userID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
+			}
+			return metadata.GramOrgID, pid, userID, true
 		}
-		return uuid.Nil, false
+		return "", uuid.Nil, "", false
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return uuid.Nil, false
+		return "", uuid.Nil, "", false
 	}
-	return *authCtx.ProjectID, true
+	return authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, true
 }
 
 // scanCursorForEnforcement runs the risk scanner for a Cursor hook payload.
@@ -109,7 +114,7 @@ func (s *Service) scanCursorForEnforcement(ctx context.Context, payload *gen.Cur
 		return nil
 	}
 
-	result, err := s.riskScanner.ScanForEnforcement(ctx, pid, text, messageType)
+	result, err := s.riskScanner.ScanForUserEnforcement(ctx, orgID, pid, s.resolveCursorUserID(ctx, payload, orgID), text, messageType)
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for Cursor hook",
 			attr.SlogError(err),
@@ -119,6 +124,10 @@ func (s *Service) scanCursorForEnforcement(ctx context.Context, payload *gen.Cur
 	}
 
 	return result
+}
+
+func (s *Service) resolveCursorUserID(ctx context.Context, payload *gen.CursorPayload, orgID string) string {
+	return s.resolveUserByEmail(ctx, conv.PtrValOr(payload.UserEmail, ""), orgID)
 }
 
 // scanCodexForEnforcement runs the risk scanner for a Codex hook payload.
@@ -148,7 +157,7 @@ func (s *Service) scanCodexForEnforcement(ctx context.Context, payload *gen.Code
 		return nil
 	}
 
-	result, err := s.riskScanner.ScanForEnforcement(ctx, pid, text, messageType)
+	result, err := s.riskScanner.ScanForUserEnforcement(ctx, orgID, pid, s.resolveCodexUserID(ctx, payload, orgID, projectID), text, messageType)
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for Codex hook",
 			attr.SlogError(err),
@@ -158,6 +167,10 @@ func (s *Service) scanCodexForEnforcement(ctx context.Context, payload *gen.Code
 	}
 
 	return result
+}
+
+func (s *Service) resolveCodexUserID(ctx context.Context, payload *gen.CodexPayload, orgID, projectID string) string {
+	return s.codexSessionMetadata(ctx, payload, orgID, projectID).UserID
 }
 
 func hookEventToMessageType(hookEvent HookEvent) (message.Type, bool) {

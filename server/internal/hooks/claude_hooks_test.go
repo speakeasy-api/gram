@@ -23,7 +23,15 @@ func (stubBlockingShadowMCPScanner) ScanForEnforcement(_ context.Context, _ uuid
 	return nil, nil
 }
 
+func (stubBlockingShadowMCPScanner) ScanForUserEnforcement(_ context.Context, _ string, _ uuid.UUID, _ string, _ string, _ string) (*risk.ScanResult, error) {
+	return nil, nil
+}
+
 func (stubBlockingShadowMCPScanner) LookupShadowMCPBlockingPolicy(_ context.Context, _ uuid.UUID) (*risk.ShadowMCPPolicy, error) {
+	return &risk.ShadowMCPPolicy{ID: "00000000-0000-0000-0000-000000000001", Name: "shadow-mcp-block"}, nil
+}
+
+func (stubBlockingShadowMCPScanner) LookupShadowMCPBlockingPolicyForUser(_ context.Context, _ string, _ uuid.UUID, _ string) (*risk.ShadowMCPPolicy, error) {
 	return &risk.ShadowMCPPolicy{ID: "00000000-0000-0000-0000-000000000001", Name: "shadow-mcp-block"}, nil
 }
 

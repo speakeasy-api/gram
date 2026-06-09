@@ -25,7 +25,7 @@ func BuildCreateRiskPolicyPayload(riskCreateRiskPolicyBody string, riskCreateRis
 	{
 		err = json.Unmarshal([]byte(riskCreateRiskPolicyBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -47,11 +47,12 @@ func BuildCreateRiskPolicyPayload(riskCreateRiskPolicyBody string, riskCreateRis
 		}
 	}
 	v := &risk.CreateRiskPolicyPayload{
-		Name:        body.Name,
-		Enabled:     body.Enabled,
-		Action:      body.Action,
-		AutoName:    body.AutoName,
-		UserMessage: body.UserMessage,
+		Name:         body.Name,
+		Enabled:      body.Enabled,
+		Action:       body.Action,
+		AudienceType: body.AudienceType,
+		AutoName:     body.AutoName,
+		UserMessage:  body.UserMessage,
 	}
 	if body.Sources != nil {
 		v.Sources = make([]string, len(body.Sources))
@@ -93,6 +94,18 @@ func BuildCreateRiskPolicyPayload(riskCreateRiskPolicyBody string, riskCreateRis
 		var zero string
 		if v.Action == zero {
 			v.Action = "flag"
+		}
+	}
+	{
+		var zero string
+		if v.AudienceType == zero {
+			v.AudienceType = "everyone"
+		}
+	}
+	if body.AudiencePrincipalUrns != nil {
+		v.AudiencePrincipalUrns = make([]string, len(body.AudiencePrincipalUrns))
+		for i, val := range body.AudiencePrincipalUrns {
+			v.AudiencePrincipalUrns[i] = val
 		}
 	}
 	v.ApikeyToken = apikeyToken
@@ -207,12 +220,17 @@ func BuildUpdateRiskPolicyPayload(riskUpdateRiskPolicyBody string, riskUpdateRis
 	{
 		err = json.Unmarshal([]byte(riskUpdateRiskPolicyBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.Action != nil {
 			if !(*body.Action == "flag" || *body.Action == "block") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block"}))
+			}
+		}
+		if body.AudienceType != nil {
+			if !(*body.AudienceType == "everyone" || *body.AudienceType == "targeted") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.audience_type", *body.AudienceType, []any{"everyone", "targeted"}))
 			}
 		}
 		if err != nil {
@@ -238,12 +256,13 @@ func BuildUpdateRiskPolicyPayload(riskUpdateRiskPolicyBody string, riskUpdateRis
 		}
 	}
 	v := &risk.UpdateRiskPolicyPayload{
-		ID:          body.ID,
-		Name:        body.Name,
-		Enabled:     body.Enabled,
-		Action:      body.Action,
-		AutoName:    body.AutoName,
-		UserMessage: body.UserMessage,
+		ID:           body.ID,
+		Name:         body.Name,
+		Enabled:      body.Enabled,
+		Action:       body.Action,
+		AudienceType: body.AudienceType,
+		AutoName:     body.AutoName,
+		UserMessage:  body.UserMessage,
 	}
 	if body.Sources != nil {
 		v.Sources = make([]string, len(body.Sources))
@@ -279,6 +298,12 @@ func BuildUpdateRiskPolicyPayload(riskUpdateRiskPolicyBody string, riskUpdateRis
 		v.MessageTypes = make([]string, len(body.MessageTypes))
 		for i, val := range body.MessageTypes {
 			v.MessageTypes[i] = val
+		}
+	}
+	if body.AudiencePrincipalUrns != nil {
+		v.AudiencePrincipalUrns = make([]string, len(body.AudiencePrincipalUrns))
+		for i, val := range body.AudiencePrincipalUrns {
+			v.AudiencePrincipalUrns[i] = val
 		}
 	}
 	v.ApikeyToken = apikeyToken
@@ -1107,7 +1132,7 @@ func BuildApproveRiskPolicyBypassRequestPayload(riskApproveRiskPolicyBypassReque
 	{
 		err = json.Unmarshal([]byte(riskApproveRiskPolicyBypassRequestBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"granted_principal_urns\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if err != nil {

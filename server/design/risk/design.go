@@ -33,6 +33,11 @@ var _ = Service("risk", func() {
 				shared.RiskPolicyActionEnum()
 				Default("flag")
 			})
+			Attribute("audience_type", String, "Policy audience type: everyone or targeted.", func() {
+				shared.RiskPolicyAudienceTypeEnum()
+				Default("everyone")
+			})
+			Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs this policy applies to when audience_type is targeted.")
 			Attribute("auto_name", Boolean, "Whether the policy name should be auto-generated.")
 			Attribute("user_message", String, "Optional message shown to end users when this policy blocks an action or surfaces a flagged finding.")
 		})
@@ -153,6 +158,10 @@ var _ = Service("risk", func() {
 			Attribute("action", String, "Policy action: flag or block.", func() {
 				shared.RiskPolicyActionEnum()
 			})
+			Attribute("audience_type", String, "Policy audience type: everyone or targeted. Omit to preserve the current audience type.", func() {
+				shared.RiskPolicyAudienceTypeEnum()
+			})
+			Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs this policy applies to when audience_type is targeted. Omit to preserve the current target principals.")
 			Attribute("auto_name", Boolean, "Whether the policy name should be auto-generated.")
 			Attribute("user_message", String, "Optional message shown to end users when this policy blocks an action or surfaces a flagged finding. Send an empty string to clear.")
 			Required("id", "name")

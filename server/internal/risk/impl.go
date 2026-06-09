@@ -242,6 +242,16 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		return nil, err
 	}
 
+	audienceType := payload.AudienceType
+	if audienceType == "" {
+		audienceType = riskPolicyAudienceEveryone
+	}
+	audiencePrincipals, err := riskPolicyAudiencePrincipals(audienceType, payload.AudiencePrincipalUrns)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid policy audience")
+	}
+	audiencePrincipalURNs := principalStrings(audiencePrincipals)
+
 	enabled := true
 	if payload.Enabled != nil {
 		enabled = *payload.Enabled
@@ -288,11 +298,16 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		MessageTypes:         payload.MessageTypes,
 		Enabled:              enabled,
 		Action:               action,
+		AudienceType:         audienceType,
 		AutoName:             autoName,
 		UserMessage:          conv.PtrToPGTextEmpty(payload.UserMessage),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create risk policy").Log(ctx, s.logger)
+	}
+
+	if err := syncRiskPolicyAudienceGrants(ctx, dbtx, authCtx.ActiveOrganizationID, row.ID.String(), audienceType, audiencePrincipalURNs); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "sync risk policy audience").Log(ctx, s.logger)
 	}
 
 	if err := s.audit.LogRiskPolicyCreate(ctx, dbtx, audit.LogRiskPolicyCreateEvent{
@@ -463,6 +478,32 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		autoName = *payload.AutoName
 	}
 
+	audienceType := current.AudienceType
+	if payload.AudienceType != nil {
+		audienceType = *payload.AudienceType
+	}
+	if err := validateRiskPolicyAudienceType(audienceType); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid policy audience")
+	}
+
+	var audiencePrincipalURNs []string
+	if audienceType == riskPolicyAudienceTargeted {
+		if payload.AudiencePrincipalUrns != nil {
+			audiencePrincipalURNs = payload.AudiencePrincipalUrns
+		} else {
+			var err error
+			audiencePrincipalURNs, err = riskPolicyAudiencePrincipalURNs(ctx, s.db, authCtx.ActiveOrganizationID, current.ID.String())
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "load risk policy audience").Log(ctx, s.logger)
+			}
+		}
+	}
+	audiencePrincipals, err := riskPolicyAudiencePrincipals(audienceType, audiencePrincipalURNs)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid policy audience")
+	}
+	audiencePrincipalURNs = principalStrings(audiencePrincipals)
+
 	// user_message is preserved when not in the payload; an explicit empty
 	// string clears it (rendered as NULL).
 	userMessage := current.UserMessage
@@ -489,7 +530,11 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		return nil, err
 	}
 
-	snapshotBefore := policyRowSnapshot(current)
+	currentAudiencePrincipalURNs, err := riskPolicyAudiencePrincipalURNs(ctx, s.db, authCtx.ActiveOrganizationID, current.ID.String())
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load risk policy audience snapshot").Log(ctx, s.logger)
+	}
+	snapshotBefore := policyRowSnapshotWithAudience(current, currentAudiencePrincipalURNs)
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -509,11 +554,16 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		MessageTypes:         messageTypes,
 		Enabled:              enabled,
 		Action:               action,
+		AudienceType:         audienceType,
 		AutoName:             autoName,
 		UserMessage:          userMessage,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update risk policy").Log(ctx, s.logger)
+	}
+
+	if err := syncRiskPolicyAudienceGrants(ctx, dbtx, authCtx.ActiveOrganizationID, row.ID.String(), audienceType, audiencePrincipalURNs); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "sync risk policy audience").Log(ctx, s.logger)
 	}
 
 	if err := s.audit.LogRiskPolicyUpdate(ctx, dbtx, audit.LogRiskPolicyUpdateEvent{
@@ -525,7 +575,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		RiskPolicyID:     row.ID,
 		RiskPolicyName:   row.Name,
 		SnapshotBefore:   snapshotBefore,
-		SnapshotAfter:    policyRowSnapshot(row),
+		SnapshotAfter:    policyRowSnapshotWithAudience(row, audiencePrincipalURNs),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy update").Log(ctx, s.logger)
 	}
@@ -2001,25 +2051,32 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 	}
 	pendingMessages := max(totalMessages-analyzedMessages, 0)
 
+	audiencePrincipalURNs, err := riskPolicyAudiencePrincipalURNs(ctx, s.db, row.OrganizationID, row.ID.String())
+	if err != nil {
+		audiencePrincipalURNs = []string{}
+	}
+
 	return &types.RiskPolicy{
-		ID:                   row.ID.String(),
-		ProjectID:            row.ProjectID.String(),
-		Name:                 row.Name,
-		Sources:              row.Sources,
-		PresidioEntities:     row.PresidioEntities,
-		PromptInjectionRules: row.PromptInjectionRules,
-		DisabledRules:        row.DisabledRules,
-		CustomRuleIds:        row.CustomRuleIds,
-		MessageTypes:         row.MessageTypes,
-		Enabled:              row.Enabled,
-		Action:               row.Action,
-		AutoName:             row.AutoName,
-		UserMessage:          conv.FromPGText[string](row.UserMessage),
-		Version:              row.Version,
-		CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
-		PendingMessages:      pendingMessages,
-		TotalMessages:        totalMessages,
+		ID:                    row.ID.String(),
+		ProjectID:             row.ProjectID.String(),
+		Name:                  row.Name,
+		Sources:               row.Sources,
+		PresidioEntities:      row.PresidioEntities,
+		PromptInjectionRules:  row.PromptInjectionRules,
+		DisabledRules:         row.DisabledRules,
+		CustomRuleIds:         row.CustomRuleIds,
+		MessageTypes:          row.MessageTypes,
+		Enabled:               row.Enabled,
+		Action:                row.Action,
+		AudienceType:          row.AudienceType,
+		AudiencePrincipalUrns: audiencePrincipalURNs,
+		AutoName:              row.AutoName,
+		UserMessage:           conv.FromPGText[string](row.UserMessage),
+		Version:               row.Version,
+		CreatedAt:             row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:             row.UpdatedAt.Time.Format(time.RFC3339),
+		PendingMessages:       pendingMessages,
+		TotalMessages:         totalMessages,
 	}, nil
 }
 
@@ -2028,25 +2085,34 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 // counts, keeping transactions short. Count fields are set to -1 to indicate
 // they were not computed.
 func policyRowSnapshot(row repo.RiskPolicy) *types.RiskPolicy {
+	return policyRowSnapshotWithAudience(row, nil)
+}
+
+func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []string) *types.RiskPolicy {
+	if audiencePrincipalURNs == nil {
+		audiencePrincipalURNs = []string{}
+	}
 	return &types.RiskPolicy{
-		ID:                   row.ID.String(),
-		ProjectID:            row.ProjectID.String(),
-		Name:                 row.Name,
-		Sources:              row.Sources,
-		PresidioEntities:     row.PresidioEntities,
-		PromptInjectionRules: row.PromptInjectionRules,
-		DisabledRules:        row.DisabledRules,
-		CustomRuleIds:        row.CustomRuleIds,
-		MessageTypes:         row.MessageTypes,
-		Enabled:              row.Enabled,
-		Action:               row.Action,
-		AutoName:             row.AutoName,
-		UserMessage:          conv.FromPGText[string](row.UserMessage),
-		Version:              row.Version,
-		CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
-		PendingMessages:      -1,
-		TotalMessages:        -1,
+		ID:                    row.ID.String(),
+		ProjectID:             row.ProjectID.String(),
+		Name:                  row.Name,
+		Sources:               row.Sources,
+		PresidioEntities:      row.PresidioEntities,
+		PromptInjectionRules:  row.PromptInjectionRules,
+		DisabledRules:         row.DisabledRules,
+		CustomRuleIds:         row.CustomRuleIds,
+		MessageTypes:          row.MessageTypes,
+		Enabled:               row.Enabled,
+		Action:                row.Action,
+		AudienceType:          row.AudienceType,
+		AudiencePrincipalUrns: audiencePrincipalURNs,
+		AutoName:              row.AutoName,
+		UserMessage:           conv.FromPGText[string](row.UserMessage),
+		Version:               row.Version,
+		CreatedAt:             row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:             row.UpdatedAt.Time.Format(time.RFC3339),
+		PendingMessages:       -1,
+		TotalMessages:         -1,
 	}
 }
 

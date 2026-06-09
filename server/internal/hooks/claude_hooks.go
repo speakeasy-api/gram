@@ -735,7 +735,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		}
 	}
 
-	policy := s.lookupShadowMCPBlockingPolicy(ctx, metadata.ProjectID)
+	policy := s.lookupShadowMCPBlockingPolicy(ctx, metadata.GramOrgID, metadata.ProjectID, metadata.UserID)
 	if policy == nil {
 		if output != nil {
 			output.PermissionDecision = &allow

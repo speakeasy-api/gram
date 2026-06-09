@@ -57,7 +57,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 			userReason = renderUserBlockReason(scanResult.UserMessage, blockReason)
 			break
 		}
-		policy := s.lookupShadowMCPBlockingPolicy(ctx, projectID)
+		policy := s.lookupShadowMCPBlockingPolicy(ctx, orgID, projectID, s.resolveCodexUserID(ctx, payload, orgID, projectID))
 		if policy != nil {
 			toolName := conv.PtrValOr(payload.ToolName, "")
 			evidence := codexShadowMCPEvidence(payload)

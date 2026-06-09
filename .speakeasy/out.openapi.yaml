@@ -20900,7 +20900,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RiskIDRequestBody'
+              $ref: '#/components/schemas/RiskPolicyBypassApprovalRequestBody'
         required: true
       responses:
         "200":
@@ -34031,6 +34031,18 @@ components:
           enum:
             - flag
             - block
+        audience_principal_urns:
+          type: array
+          items:
+            type: string
+          description: Principal URNs this policy applies to when audience_type is targeted.
+        audience_type:
+          type: string
+          description: 'Policy audience type: everyone or targeted.'
+          default: everyone
+          enum:
+            - everyone
+            - targeted
         auto_name:
           type: boolean
           description: Whether the policy name should be auto-generated.
@@ -40526,6 +40538,18 @@ components:
           enum:
             - flag
             - block
+        audience_principal_urns:
+          type: array
+          items:
+            type: string
+          description: Principal URNs the policy applies to when audience_type is targeted. Empty when the policy applies to everyone.
+        audience_type:
+          type: string
+          description: 'Policy audience type: everyone or targeted.'
+          default: everyone
+          enum:
+            - everyone
+            - targeted
         auto_name:
           type: boolean
           description: Whether the policy name is auto-generated. When true, the name is regenerated on each update.
@@ -40603,12 +40627,28 @@ components:
         - sources
         - enabled
         - action
+        - audience_type
+        - audience_principal_urns
         - auto_name
         - version
         - created_at
         - updated_at
         - pending_messages
         - total_messages
+    RiskPolicyBypassApprovalRequestBody:
+      type: object
+      properties:
+        granted_principal_urns:
+          type: array
+          items:
+            type: string
+          description: Principal URNs to grant bypass access to. Use user:all for every user in the organization.
+        id:
+          type: string
+          description: The bypass request ID.
+          format: uuid
+      required:
+        - id
     RiskPolicyBypassRequest:
       type: object
       properties:
@@ -43982,6 +44022,17 @@ components:
           enum:
             - flag
             - block
+        audience_principal_urns:
+          type: array
+          items:
+            type: string
+          description: Principal URNs this policy applies to when audience_type is targeted. Omit to preserve the current target principals.
+        audience_type:
+          type: string
+          description: 'Policy audience type: everyone or targeted. Omit to preserve the current audience type.'
+          enum:
+            - everyone
+            - targeted
         auto_name:
           type: boolean
           description: Whether the policy name should be auto-generated.

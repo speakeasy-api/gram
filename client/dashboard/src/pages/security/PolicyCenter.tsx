@@ -11,6 +11,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { TextArea } from "@/components/ui/textarea";
 import {
@@ -50,10 +57,14 @@ import {
   useRiskPoliciesDeleteMutation,
   useRiskPoliciesUpdateMutation,
 } from "@gram/client/react-query/index.js";
+import { useMembers } from "@gram/client/react-query/members.js";
+import { useRoles } from "@gram/client/react-query/roles.js";
 import {
   useRiskPoliciesStatus,
   invalidateAllRiskPoliciesStatus,
 } from "@gram/client/react-query/riskPoliciesStatus.js";
+import type { AccessMember } from "@gram/client/models/components/accessmember.js";
+import type { Role } from "@gram/client/models/components/role.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import {
   RULE_CATEGORY_META,
@@ -108,6 +119,124 @@ const FLAG_ONLY_CATEGORIES: Set<RuleCategory> = new Set([
 const ALL_POLICY_MESSAGE_TYPES = Object.keys(
   POLICY_MESSAGE_TYPE_META,
 ) as Array<PolicyMessageType>;
+
+type PolicyAudience = "everyone" | "role" | "user";
+
+function userPrincipalUrn(userId: string) {
+  return `user:${userId}`;
+}
+
+function rolePrincipalUrn(role: Role) {
+  const roleKind = role.isSystem ? "global" : "organization";
+  return `role:${roleKind}:${role.id}`;
+}
+
+function roleIdFromPrincipalUrn(principalUrn: string) {
+  const globalPrefix = "role:global:";
+  const organizationPrefix = "role:organization:";
+  if (principalUrn.startsWith(globalPrefix)) {
+    return principalUrn.slice(globalPrefix.length);
+  }
+  if (principalUrn.startsWith(organizationPrefix)) {
+    return principalUrn.slice(organizationPrefix.length);
+  }
+  return "";
+}
+
+function memberDisplayName(member: AccessMember) {
+  if (member.name && member.name !== member.email) {
+    return `${member.name} (${member.email})`;
+  }
+  return member.email;
+}
+
+function policyAudiencePrincipalUrns({
+  audience,
+  selectedRoleId,
+  selectedUserId,
+  roles,
+}: {
+  audience: PolicyAudience;
+  selectedRoleId: string;
+  selectedUserId: string;
+  roles: Role[];
+}) {
+  switch (audience) {
+    case "everyone":
+      return [];
+    case "role": {
+      const role = roles.find((item) => item.id === selectedRoleId);
+      return role ? [rolePrincipalUrn(role)] : [];
+    }
+    case "user":
+      return selectedUserId ? [userPrincipalUrn(selectedUserId)] : [];
+  }
+}
+
+function policyAudienceFromPolicy(policy: RiskPolicy, roles: Role[]) {
+  const principalUrn = policy.audiencePrincipalUrns?.[0];
+  if (policy.audienceType !== "targeted" || !principalUrn) {
+    return {
+      audience: "everyone" as const,
+      selectedRoleId: "",
+      selectedUserId: "",
+    };
+  }
+
+  const role = roles.find((item) => rolePrincipalUrn(item) === principalUrn);
+  const roleId = role?.id ?? roleIdFromPrincipalUrn(principalUrn);
+  if (roleId) {
+    return {
+      audience: "role" as const,
+      selectedRoleId: roleId,
+      selectedUserId: "",
+    };
+  }
+
+  const userPrefix = "user:";
+  if (principalUrn.startsWith(userPrefix)) {
+    return {
+      audience: "user" as const,
+      selectedRoleId: "",
+      selectedUserId: principalUrn.slice(userPrefix.length),
+    };
+  }
+
+  return {
+    audience: "everyone" as const,
+    selectedRoleId: "",
+    selectedUserId: "",
+  };
+}
+
+function policyAudienceSummary(
+  policy: RiskPolicy,
+  roles: Role[],
+  members: AccessMember[],
+) {
+  if (policy.audienceType !== "targeted") {
+    return "Everyone";
+  }
+
+  const principalUrn = policy.audiencePrincipalUrns?.[0];
+  if (!principalUrn) {
+    return "Targeted";
+  }
+
+  const role = roles.find((item) => rolePrincipalUrn(item) === principalUrn);
+  if (role) {
+    return role.name;
+  }
+
+  const userPrefix = "user:";
+  if (principalUrn.startsWith(userPrefix)) {
+    const userId = principalUrn.slice(userPrefix.length);
+    const member = members.find((item) => item.id === userId);
+    return member ? memberDisplayName(member) : principalUrn;
+  }
+
+  return principalUrn;
+}
 
 /** Derive selected categories from a policy's sources + presidioEntities.
  *
@@ -277,6 +406,10 @@ function PolicyCenterContent() {
   const queryClient = useQueryClient();
   const { data, isLoading } = useRiskListPolicies();
   const policies = data?.policies ?? [];
+  const { data: rolesData } = useRoles();
+  const { data: membersData } = useMembers();
+  const roles = rolesData?.roles ?? [];
+  const members = membersData?.members ?? [];
 
   const { customRules } = useDetectionRulesStore();
 
@@ -295,6 +428,9 @@ function PolicyCenterContent() {
     Set<PolicyMessageType>
   >(new Set(ALL_POLICY_MESSAGE_TYPES));
   const [formAction, setFormAction] = useState<PolicyAction>("flag");
+  const [formAudience, setFormAudience] = useState<PolicyAudience>("everyone");
+  const [selectedAudienceRoleId, setSelectedAudienceRoleId] = useState("");
+  const [selectedAudienceUserId, setSelectedAudienceUserId] = useState("");
   const [formAutoName, setFormAutoName] = useState(true);
   const [formUserMessage, setFormUserMessage] = useState("");
 
@@ -332,6 +468,9 @@ function PolicyCenterContent() {
     setSelectedCustomRuleIds(new Set<string>());
     setSelectedMessageTypes(new Set(ALL_POLICY_MESSAGE_TYPES));
     setFormAction("flag");
+    setFormAudience("everyone");
+    setSelectedAudienceRoleId("");
+    setSelectedAudienceUserId("");
     setFormAutoName(true);
     setFormUserMessage("");
     setSheetOpen(true);
@@ -354,6 +493,10 @@ function PolicyCenterContent() {
     setSelectedCustomRuleIds(new Set<string>(customRuleIds));
     setSelectedMessageTypes(policyMessageTypesForForm(policy.messageTypes));
     setFormAction((policy.action as PolicyAction) ?? "flag");
+    const audience = policyAudienceFromPolicy(policy, roles);
+    setFormAudience(audience.audience);
+    setSelectedAudienceRoleId(audience.selectedRoleId);
+    setSelectedAudienceUserId(audience.selectedUserId);
     setFormAutoName(policy.autoName ?? true);
     setFormUserMessage(policy.userMessage ?? "");
     setSheetOpen(true);
@@ -375,6 +518,13 @@ function PolicyCenterContent() {
       sources.includes("destructive_tool") && formAction === "block"
         ? "flag"
         : formAction;
+    const audiencePrincipalUrns = policyAudiencePrincipalUrns({
+      audience: formAudience,
+      selectedRoleId: selectedAudienceRoleId,
+      selectedUserId: selectedAudienceUserId,
+      roles,
+    });
+    const audienceType = formAudience === "everyone" ? "everyone" : "targeted";
     if (editingPolicy) {
       updateMutation.mutate({
         request: {
@@ -389,6 +539,8 @@ function PolicyCenterContent() {
             customRuleIds: [...selectedCustomRuleIds],
             messageTypes,
             action,
+            audienceType,
+            audiencePrincipalUrns,
             autoName: formAutoName,
             userMessage: formUserMessage,
           },
@@ -407,6 +559,8 @@ function PolicyCenterContent() {
             customRuleIds: [...selectedCustomRuleIds],
             messageTypes,
             action,
+            audienceType,
+            audiencePrincipalUrns,
             autoName: formAutoName,
             ...(formUserMessage.trim() ? { userMessage: formUserMessage } : {}),
           },
@@ -427,6 +581,8 @@ function PolicyCenterContent() {
           name: policy.name,
           enabled,
           messageTypes: policy.messageTypes ?? [],
+          audienceType: policy.audienceType,
+          audiencePrincipalUrns: policy.audiencePrincipalUrns ?? [],
         },
       },
     });
@@ -510,6 +666,10 @@ function PolicyCenterContent() {
   }
 
   const enabledPolicies = policies.filter((p) => p.enabled);
+  const audienceReady =
+    formAudience === "everyone" ||
+    (formAudience === "role" && selectedAudienceRoleId !== "") ||
+    (formAudience === "user" && selectedAudienceUserId !== "");
   const insightsContext = [
     "Page: Policy Center.",
     `Total policies: ${policies.length}, enabled: ${enabledPolicies.length}.`,
@@ -601,6 +761,12 @@ function PolicyCenterContent() {
           </div>
         );
       },
+    },
+    {
+      key: "audience",
+      header: "Audience",
+      width: "1fr",
+      render: (policy) => policyAudienceSummary(policy, roles, members),
     },
     {
       key: "enabled",
@@ -718,6 +884,14 @@ function PolicyCenterContent() {
                 setSelectedMessageTypes={setSelectedMessageTypes}
                 formAction={formAction}
                 setFormAction={setFormAction}
+                formAudience={formAudience}
+                setFormAudience={setFormAudience}
+                selectedAudienceRoleId={selectedAudienceRoleId}
+                setSelectedAudienceRoleId={setSelectedAudienceRoleId}
+                selectedAudienceUserId={selectedAudienceUserId}
+                setSelectedAudienceUserId={setSelectedAudienceUserId}
+                roles={roles}
+                members={members}
                 formAutoName={formAutoName}
                 setFormAutoName={setFormAutoName}
                 formUserMessage={formUserMessage}
@@ -730,6 +904,7 @@ function PolicyCenterContent() {
                 disabled={
                   (!formAutoName && !formName.trim()) ||
                   selectedMessageTypes.size === 0 ||
+                  !audienceReady ||
                   createMutation.isPending ||
                   updateMutation.isPending
                 }
@@ -787,6 +962,14 @@ function PolicySheetBody({
   setSelectedMessageTypes,
   formAction,
   setFormAction,
+  formAudience,
+  setFormAudience,
+  selectedAudienceRoleId,
+  setSelectedAudienceRoleId,
+  selectedAudienceUserId,
+  setSelectedAudienceUserId,
+  roles,
+  members,
   formAutoName,
   setFormAutoName,
   formUserMessage,
@@ -807,6 +990,14 @@ function PolicySheetBody({
   setSelectedMessageTypes: (v: Set<PolicyMessageType>) => void;
   formAction: PolicyAction;
   setFormAction: (v: PolicyAction) => void;
+  formAudience: PolicyAudience;
+  setFormAudience: (v: PolicyAudience) => void;
+  selectedAudienceRoleId: string;
+  setSelectedAudienceRoleId: (v: string) => void;
+  selectedAudienceUserId: string;
+  setSelectedAudienceUserId: (v: string) => void;
+  roles: Role[];
+  members: AccessMember[];
   formAutoName: boolean;
   setFormAutoName: (v: boolean) => void;
   formUserMessage: string;
@@ -823,6 +1014,15 @@ function PolicySheetBody({
   );
   const actionValue =
     flagOnlySelected && formAction === "block" ? "flag" : formAction;
+  const selectPolicyAudience = (audience: PolicyAudience) => {
+    setFormAudience(audience);
+    if (audience === "role" && !selectedAudienceRoleId && roles[0]) {
+      setSelectedAudienceRoleId(roles[0].id);
+    }
+    if (audience === "user" && !selectedAudienceUserId && members[0]) {
+      setSelectedAudienceUserId(members[0].id);
+    }
+  };
 
   return (
     <div className="space-y-6 py-4">
@@ -1130,6 +1330,109 @@ function PolicySheetBody({
           </p>
         )}
       </Collapsible>
+
+      {/* Audience */}
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Audience</Label>
+        <p className="text-muted-foreground text-xs">
+          Choose who this policy applies to.
+        </p>
+        <RadioGroup
+          value={formAudience}
+          onValueChange={(value) =>
+            selectPolicyAudience(value as PolicyAudience)
+          }
+        >
+          <div className="border-border divide-border divide-y rounded-lg border">
+            <label
+              className={cn(
+                "hover:bg-muted/50 flex cursor-pointer items-start gap-3 p-3",
+                formAudience === "everyone" && "bg-muted/30",
+              )}
+            >
+              <RadioGroupItem value="everyone" className="mt-0.5" />
+              <div>
+                <div className="text-sm font-medium">Everyone</div>
+                <div className="text-muted-foreground mt-1 text-xs">
+                  All users in this organization.
+                </div>
+              </div>
+            </label>
+
+            <label
+              className={cn(
+                "hover:bg-muted/50 flex cursor-pointer items-start gap-3 p-3",
+                formAudience === "role" && "bg-muted/30",
+              )}
+            >
+              <RadioGroupItem value="role" className="mt-0.5" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <div>
+                  <div className="text-sm font-medium">Role</div>
+                  <div className="text-muted-foreground mt-1 text-xs">
+                    Users assigned to one role.
+                  </div>
+                </div>
+                <Select
+                  value={selectedAudienceRoleId}
+                  onValueChange={(value) => {
+                    setFormAudience("role");
+                    setSelectedAudienceRoleId(value);
+                  }}
+                  disabled={roles.length === 0}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {roles.map((role) => (
+                      <SelectItem key={role.id} value={role.id}>
+                        {role.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </label>
+
+            <label
+              className={cn(
+                "hover:bg-muted/50 flex cursor-pointer items-start gap-3 p-3",
+                formAudience === "user" && "bg-muted/30",
+              )}
+            >
+              <RadioGroupItem value="user" className="mt-0.5" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <div>
+                  <div className="text-sm font-medium">User</div>
+                  <div className="text-muted-foreground mt-1 text-xs">
+                    One organization member.
+                  </div>
+                </div>
+                <Select
+                  value={selectedAudienceUserId}
+                  onValueChange={(value) => {
+                    setFormAudience("user");
+                    setSelectedAudienceUserId(value);
+                  }}
+                  disabled={members.length === 0}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select user" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {members.map((member) => (
+                      <SelectItem key={member.id} value={member.id}>
+                        {memberDisplayName(member)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </label>
+          </div>
+        </RadioGroup>
+      </div>
 
       {/* Action */}
       <div className="space-y-2">

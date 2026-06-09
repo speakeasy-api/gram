@@ -28,6 +28,14 @@ func RiskPolicyActionEnum() {
 	Enum("flag", "block")
 }
 
+// RiskPolicyAudienceTypeEnum applies the allowed-values constraint to a policy
+// audience type. `everyone` means the policy applies to every user in the org;
+// `targeted` means the policy applies only to the principals granted
+// risk_policy:evaluate for the policy resource.
+func RiskPolicyAudienceTypeEnum() {
+	Enum("everyone", "targeted")
+}
+
 var RiskPolicy = Type("RiskPolicy", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -49,6 +57,11 @@ var RiskPolicy = Type("RiskPolicy", func() {
 		RiskPolicyActionEnum()
 		Default("flag")
 	})
+	Attribute("audience_type", String, "Policy audience type: everyone or targeted.", func() {
+		RiskPolicyAudienceTypeEnum()
+		Default("everyone")
+	})
+	Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs the policy applies to when audience_type is targeted. Empty when the policy applies to everyone.")
 	Attribute("auto_name", Boolean, "Whether the policy name is auto-generated. When true, the name is regenerated on each update.")
 	Attribute("user_message", String, "Optional message shown to the end user when this policy blocks an action or surfaces a flagged finding. When unset, a default message is rendered.")
 	Attribute("version", Int64, "Policy version, incremented on each update.")
@@ -61,7 +74,7 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("pending_messages", Int64, "Number of messages not yet analyzed at the current policy version.")
 	Attribute("total_messages", Int64, "Total number of messages in the project.")
 
-	Required("id", "project_id", "name", "sources", "enabled", "action", "auto_name", "version", "created_at", "updated_at", "pending_messages", "total_messages")
+	Required("id", "project_id", "name", "sources", "enabled", "action", "audience_type", "audience_principal_urns", "auto_name", "version", "created_at", "updated_at", "pending_messages", "total_messages")
 })
 
 var RiskCustomDetectionRule = Type("RiskCustomDetectionRule", func() {

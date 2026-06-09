@@ -12,6 +12,7 @@ INSERT INTO risk_policies (
   , message_types
   , enabled
   , action
+  , audience_type
   , auto_name
   , user_message
   , version
@@ -29,6 +30,7 @@ VALUES (
   , sqlc.arg(message_types)::text[]
   , @enabled
   , @action
+  , @audience_type
   , @auto_name
   , @user_message
   , 1
@@ -67,6 +69,7 @@ SET name = @name
   , message_types = sqlc.arg(message_types)::text[]
   , enabled = @enabled
   , action = @action
+  , audience_type = @audience_type
   , auto_name = @auto_name
   , user_message = @user_message
   , version = CASE
@@ -78,6 +81,7 @@ SET name = @name
         OR message_types IS DISTINCT FROM sqlc.arg(message_types)::text[]
         OR enabled IS DISTINCT FROM @enabled
         OR action IS DISTINCT FROM @action
+        OR audience_type IS DISTINCT FROM @audience_type
       THEN version + 1
       ELSE version
     END
