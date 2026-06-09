@@ -24,7 +24,7 @@ import {
 import { Button, Input } from "@speakeasy-api/moonshine";
 import { Textarea } from "@/components/moon/textarea";
 import { useMemo, useState } from "react";
-import { Outlet, useParams } from "react-router";
+import { useParams } from "react-router";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useQueries } from "@tanstack/react-query";
 import { Search } from "lucide-react";
@@ -79,10 +79,6 @@ function attachBodyForKey(collectionId: string, key: string) {
   return kind === "mcpServer"
     ? { collectionId, mcpServerId: id }
     : { collectionId, toolsetId: id };
-}
-
-export function CollectionDetailRoot(): JSX.Element {
-  return <Outlet />;
 }
 
 export default function CollectionDetail(): JSX.Element {
