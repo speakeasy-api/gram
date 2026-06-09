@@ -408,6 +408,43 @@ type DeploymentsPackage struct {
 	VersionID    uuid.UUID
 }
 
+type DirectoryGroup struct {
+	ID                     uuid.UUID
+	OrganizationID         string
+	WorkosDirectoryGroupID string
+	Name                   string
+	Attributes             []byte
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
+}
+
+type DirectoryUser struct {
+	ID                    uuid.UUID
+	OrganizationID        string
+	UserID                pgtype.Text
+	WorkosDirectoryUserID string
+	Email                 pgtype.Text
+	Attributes            []byte
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
+}
+
+type DirectoryUserGroupMembership struct {
+	ID                     uuid.UUID
+	DirectoryUserID        uuid.UUID
+	DirectoryGroupID       uuid.UUID
+	WorkosDirectoryUserID  string
+	WorkosDirectoryGroupID string
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
+}
+
 type Environment struct {
 	ID             uuid.UUID
 	OrganizationID string
