@@ -64,6 +64,8 @@ else
     export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT="${GRAM_SERVER_URL}/rpc/hooks.otel/v1/logs"
     export OTEL_EXPORTER_OTLP_METRICS_ENDPOINT="${GRAM_SERVER_URL}/rpc/hooks.otel/v1/metrics"
     export OTEL_EXPORTER_OTLP_HEADERS="Gram-Key=${api_key},Gram-Project=${project_slug}"
+    export GRAM_HOOKS_API_KEY="${api_key}"
+    export GRAM_HOOKS_PROJECT_SLUG="${project_slug}"
     echo "OTEL configured (key: ${api_key:0:20}...)"
   fi
 fi
