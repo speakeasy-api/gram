@@ -60,7 +60,7 @@ func callDeleteMessage(ctx context.Context, client *apiClient, env toolconfig.To
 		"ts":      ts,
 	}
 
-	body, err := client.call(ctx, "chat.delete", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "chat.delete", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

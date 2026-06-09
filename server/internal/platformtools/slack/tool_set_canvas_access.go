@@ -77,7 +77,7 @@ func callSetCanvasAccess(ctx context.Context, client *apiClient, env toolconfig.
 		request["user_ids"] = input.UserIDs
 	}
 
-	body, err := client.call(ctx, "canvases.access.set", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "canvases.access.set", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

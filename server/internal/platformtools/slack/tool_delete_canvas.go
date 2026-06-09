@@ -54,7 +54,7 @@ func callDeleteCanvas(ctx context.Context, client *apiClient, env toolconfig.Too
 		"canvas_id": canvasID,
 	}
 
-	body, err := client.call(ctx, "canvases.delete", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "canvases.delete", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

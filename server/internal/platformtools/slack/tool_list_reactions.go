@@ -54,7 +54,7 @@ func callListReactions(ctx context.Context, client *apiClient, env toolconfig.To
 	setOptionalInt(request, "limit", input.Limit)
 	setOptionalString(request, "cursor", input.Cursor)
 
-	body, err := client.call(ctx, "reactions.list", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "reactions.list", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

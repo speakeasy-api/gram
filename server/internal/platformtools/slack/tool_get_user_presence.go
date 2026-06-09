@@ -48,7 +48,7 @@ func callGetUserPresence(ctx context.Context, client *apiClient, env toolconfig.
 	request := map[string]any{}
 	setOptionalString(request, "user", input.UserID)
 
-	body, err := client.call(ctx, "users.getPresence", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "users.getPresence", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

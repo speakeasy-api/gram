@@ -50,7 +50,7 @@ func callDeleteFile(ctx context.Context, client *apiClient, env toolconfig.ToolC
 		return err
 	}
 
-	body, err := client.call(ctx, "files.delete", map[string]any{"file": file}, tokenPreferBot, env)
+	body, err := client.Call(ctx, "files.delete", map[string]any{"file": file}, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

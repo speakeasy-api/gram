@@ -60,7 +60,7 @@ func callMarkConversation(ctx context.Context, client *apiClient, env toolconfig
 		"ts":      timestamp,
 	}
 
-	body, err := client.call(ctx, "conversations.mark", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "conversations.mark", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}
