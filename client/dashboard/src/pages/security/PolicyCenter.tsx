@@ -1120,12 +1120,12 @@ function PromptPolicySheetBody({
   formEnabled: boolean;
   setFormEnabled: (v: boolean) => void;
 }) {
-  const [selectedExampleName, setSelectedExampleName] = useState<
-    string | undefined
-  >(() => promptTemplateNameForInstruction(formPromptInstruction));
+  const [selectedExampleName, setSelectedExampleName] = useState(
+    () => promptTemplateNameForInstruction(formPromptInstruction) ?? "",
+  );
 
   const handlePromptChange = (value: string) => {
-    setSelectedExampleName(undefined);
+    setSelectedExampleName("");
     setFormPromptInstruction(value);
   };
 
@@ -1195,7 +1195,7 @@ function PromptExamplesRadioGroup({
   selectedExampleName,
   onSelect,
 }: {
-  selectedExampleName: string | undefined;
+  selectedExampleName: string;
   onSelect: (template: (typeof PROMPT_POLICY_TEMPLATES)[number]) => void;
 }) {
   return (
