@@ -74,9 +74,9 @@ echo ""
 if [ "${usage_local:-}" = "true" ] || ! git diff --quiet main -- hooks/; then
   echo "Using local plugin directory: ./hooks/plugin-claude-test"
   echo ""
-  exec claude --plugin-dir ./hooks/plugin-claude-test --debug
+  exec claude --setting-sources project,local --plugin-dir ./hooks/plugin-claude-test --debug
 else
   echo "No branch changes in hooks/ vs main — using published plugin"
   echo ""
-  exec claude --debug
+  exec claude --setting-sources project,local --debug
 fi

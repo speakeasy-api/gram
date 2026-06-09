@@ -3,6 +3,7 @@ package hooks
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -10,6 +11,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
+	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 )
@@ -339,6 +341,53 @@ func TestMergeClaudeAuthContextMetadata_PreservesAuthUserIDWhenCacheIsEmpty(t *t
 	assert.Equal(t, "claude-code", metadata.ServiceName)
 	assert.Equal(t, "local-hook-testing@example.com", metadata.UserEmail)
 	assert.Equal(t, "claude_org", metadata.ClaudeOrgID)
+}
+
+func TestClaude_RecordHook_PersistsPluginAuthProjectOverCachedMetadata(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+	prompt := "hello from plugin-auth project"
+	cachedProjectID := uuid.NewString()
+
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "claude-code",
+		UserEmail:   localFallbackEmail,
+		UserID:      "",
+		ClaudeOrgID: authCtx.ActiveOrganizationID,
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   cachedProjectID,
+	}, time.Hour))
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "UserPromptSubmit",
+		SessionID:     &sessionID,
+		Prompt:        &prompt,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	var msgs []chatRepo.ChatMessage
+	require.Eventually(t, func() bool {
+		var err error
+		msgs, err = chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+			ChatID:    chatID,
+			ProjectID: *authCtx.ProjectID,
+		})
+		return err == nil && len(msgs) == 1
+	}, 2*time.Second, 25*time.Millisecond)
+
+	require.True(t, msgs[0].ProjectID.Valid)
+	assert.Equal(t, *authCtx.ProjectID, msgs[0].ProjectID.UUID)
+	assert.Equal(t, prompt, msgs[0].Content)
 }
 
 // When plugin auth headers are present but the API key is invalid/expired,
