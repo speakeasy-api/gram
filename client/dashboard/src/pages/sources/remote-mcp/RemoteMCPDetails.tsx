@@ -45,7 +45,14 @@ import { unwrapAsync } from "@gram/client/types/fp";
 import { Alert, Badge, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { Loader2, Network, Plus, Server, Trash2 } from "lucide-react";
+import {
+  AlertCircle,
+  Loader2,
+  Network,
+  Plus,
+  Server,
+  Trash2,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
@@ -698,11 +705,20 @@ function UrlSection({
           }}
           onBlur={() => setTouched(true)}
           placeholder="https://example.com/mcp"
+          aria-invalid={validationError ? true : undefined}
+          aria-describedby={
+            validationError ? "remote-mcp-url-settings-error" : undefined
+          }
         />
         {validationError && (
-          <Alert variant="error" dismissible={false}>
-            {validationError}
-          </Alert>
+          <div
+            id="remote-mcp-url-settings-error"
+            role="alert"
+            className="text-destructive mt-2 flex items-center gap-1.5 text-xs"
+          >
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+            <span>{validationError}</span>
+          </div>
         )}
         {update.isError && (
           <Alert variant="error" dismissible={false}>

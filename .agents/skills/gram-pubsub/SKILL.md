@@ -1,13 +1,16 @@
 ---
 name: gram-pubsub
 description: |
-  A walkthrough of Gram's declarative GCP Pub/Sub system — topics and subscriptions are declared as options on protobuf messages, projected into Config Connector Helm values (`infra/gen/kcc.yaml`), and consumed at runtime through a type-safe publisher/subscriber library. Activate this skill whenever the task involves Pub/Sub in Gram: adding or changing a topic or subscription, declaring a `(gcp.pubsub.v1.topic)` or `(gcp.pubsub.v1.subscription)` message option, regenerating `infra/gen/kcc.yaml`, publishing or receiving messages with the `infra/pkg/gcp` brokers, dead-letter queues, the local Pub/Sub emulator, or understanding why a declared topic has not yet appeared in a real GCP environment. It also applies to adjacent phrasing like "add an outbox topic", "create a subscription", "wire up a message consumer", or "why isn't my topic being created in GCP" even when Pub/Sub is not named explicitly.
+  Gram's declarative GCP Pub/Sub system — topics and subscriptions are declared as protobuf message options, generated into `infra/gen/kcc.yaml`, and used at runtime via a type-safe publisher/subscriber library and the `gram streams` process. Activate for any Pub/Sub work in Gram: adding or changing a topic/subscription, declaring `(gcp.pubsub.v1.topic)`/`(gcp.pubsub.v1.subscription)` options, publishing or consuming messages, implementing a stream handler, dead-letter queues, or the local emulator — including phrasings like "add an outbox topic", "wire up a consumer", or "why isn't my topic created in GCP" even when Pub/Sub isn't named.
 metadata:
   relevant_files:
     - "infra/proto/**/*.proto"
     - "infra/internal/gcp/*.go"
     - "infra/pkg/gcp/*.go"
     - "infra/cmd/infra/*.go"
+    - "server/cmd/gram/streams.go"
+    - "server/internal/streams/*.go"
+    - "server/internal/ping/*.go"
     - "buf.yaml"
     - "buf.gen.yaml"
     - ".mise-tasks/gen/infra.sh"
@@ -200,6 +203,114 @@ a fresh `M` and hands it to your callback along with a `MessageMetadata`. The
 callback's return value drives ack/nack — nil acks, non-nil nacks — so you no
 longer call `Ack`/`Nack` yourself. Tune behavior with
 `WithPubSubPublishSettings` / `WithPubSubReceiveSettings`.
+
+This is the low-level library. **Inside the Gram server you almost never call
+`sub.Receive` directly** — you write a `streams.Handler` and register it in the
+`gram streams` process, which wraps the receive loop with tracing, panic
+recovery, and ack/nack plumbing for you. See the next section.
+
+## Implementing a subscriber in the server
+
+Subscribers run in a dedicated long-running process, **`gram streams`**
+(`server/cmd/gram/streams.go`). It is its own service — separate from the API
+server and the Temporal worker — so message consumers scale and fail
+independently. Locally it runs as the `streams` process under mprocs; start it
+with `mise run start:streams`. Adding a consumer is two steps: write a handler,
+then register it.
+
+### Step 1 — write a handler
+
+A consumer is a `streams.Handler[M]` (`server/internal/streams/handlers.go`),
+where `M` is the proto message the topic carries:
+
+```go
+type Handler[M any] interface {
+    Handle(context.Context, M, gcp.MessageMetadata) error
+}
+```
+
+Implement it in the domain package that owns the behavior (not in `streams/` and
+not in `cmd/gram/`). `server/internal/ping/handler.go` is the canonical
+reference — a struct holding its dependencies, a `NewHandler` constructor, and a
+`Handle` method:
+
+```go
+type Handler struct {
+    logger *slog.Logger
+}
+
+func NewHandler(logger *slog.Logger) *Handler {
+    return &Handler{logger: logger}
+}
+
+func (h *Handler) Handle(ctx context.Context, m *pingv1.Message, _ gcp.MessageMetadata) error {
+    // ... do the work ...
+    return nil
+}
+```
+
+The handler's job is narrow: process one message and return. **The return value
+is the ack/nack signal** — `nil` acks the message; a non-nil error nacks it,
+triggering redelivery and eventual dead-lettering if the subscription declares a
+`dead_letter` policy (see "Authoring a subscription"). So return an error only
+when you genuinely want the message retried; for a poison message you can never
+process, log it and return `nil` to drop it. Do not call `Ack`/`Nack`, start
+your own receive goroutine, or open a span for the receive loop — the runner
+does all of that (next step).
+
+`HandlerFunc[M]` adapts a bare function to the interface when a struct is
+overkill.
+
+### Step 2 — register it in the streams runner
+
+In `streams.go`, the `Action` builds the shared dependencies (db, redis, the
+`gcp.NewPubSubBroker`) and a `receiverGroup`. Register each handler inside the
+marked block with `mustReceive`:
+
+```go
+// Start subscription receivers in this block
+{
+    mustReceive(rg, &pingv1.Message{}, &pingv1.Processor{}, ping.NewHandler(logger))
+}
+```
+
+The three positional arguments mirror the proto declarations:
+
+- `&pingv1.Message{}` — the **topic** message; its type fixes `M`, the payload
+  your handler receives.
+- `&pingv1.Processor{}` — the **subscription** marker message (the one carrying
+  `(gcp.pubsub.v1.subscription)`).
+- `ping.NewHandler(...)` — your handler, with its dependencies injected from the
+  ones the `Action` already constructed. If a handler needs the db or redis,
+  pass them here; add new shared dependencies to the `Action` body.
+
+Trailing `gcp.SubscriberOption`s (e.g. `WithPubSubReceiveSettings`) can follow.
+Use `mustReceive` (it panics on a misconfigured subscription, which is a
+programmer error caught at startup); `receive` returns the error if you need to
+handle it.
+
+### What the runner does for you
+
+`receive`/`mustReceive` exist so handlers stay tiny. For each registration the
+runner: resolves the subscription via `gcp.PubSubSubscriberForMessage`, launches
+the receive loop in the shared `errgroup` (so any subscriber's fatal error tears
+the whole process down for a clean restart), starts a `stream.handleMessage`
+span per message, stamps pub/sub subscriber context values for telemetry,
+**recovers panics** in your handler (converting them to a nacking error instead
+of crashing the goroutine), and treats `context.Canceled` as a clean shutdown
+rather than a failure. Because all of this is centralized, you get consistent
+observability and failure semantics across every consumer without writing any of
+it.
+
+### Driving the flow end to end (optional publisher)
+
+`ping` also ships a `StartPublisher` (`server/internal/ping/publisher.go`)
+launched with `group.Go` alongside the receivers — a heartbeat that publishes a
+message every few seconds so you can confirm the publish→subscribe loop is alive
+in logs. It is a sanity-check harness, not a pattern to copy for real
+publishers: production code publishes from wherever the event originates (an API
+handler, a workflow activity) using `gcp.PubSubPublisherForMessage`, not from a
+loop in the streams process.
 
 ## Local development
 

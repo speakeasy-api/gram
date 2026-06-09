@@ -3,6 +3,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
+import { CardContextMenu } from "@/components/card-context-menu";
 import { DotCard } from "@/components/ui/dot-card";
 import { MoreActions } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
@@ -158,55 +159,57 @@ export function SourceCard({
   })();
 
   return (
-    <routes.sources.source.Link
-      key={asset.id}
-      params={[sourceKind, asset.slug]}
-      className="hover:no-underline"
-    >
-      <DotCard icon={iconContent}>
-        {/* Header row with name and actions */}
-        <div className="mb-2 flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <Type
-              variant="subheading"
-              as="div"
-              className="text-md group-hover:text-primary truncate transition-colors"
-              title={displayName}
-            >
-              {displayName}
-            </Type>
-            {displaySubtitle && (
+    <CardContextMenu actions={actions}>
+      <routes.sources.source.Link
+        key={asset.id}
+        params={[sourceKind, asset.slug]}
+        className="block h-full hover:no-underline"
+      >
+        <DotCard icon={iconContent}>
+          {/* Header row with name and actions */}
+          <div className="mb-2 flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
               <Type
+                variant="subheading"
                 as="div"
-                muted
-                small
-                className="truncate"
-                title={displaySubtitle}
+                className="text-md group-hover:text-primary truncate transition-colors"
+                title={displayName}
               >
-                {displaySubtitle}
+                {displayName}
               </Type>
-            )}
+              {displaySubtitle && (
+                <Type
+                  as="div"
+                  muted
+                  small
+                  className="truncate"
+                  title={displaySubtitle}
+                >
+                  {displaySubtitle}
+                </Type>
+              )}
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              {causingFailure && <AssetIsCausingFailureNotice />}
+              {actions.length > 0 && (
+                <div onClick={(e) => e.stopPropagation()}>
+                  <MoreActions actions={actions} />
+                </div>
+              )}
+            </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1">
-            {causingFailure && <AssetIsCausingFailureNotice />}
-            {actions.length > 0 && (
-              <div onClick={(e) => e.stopPropagation()}>
-                <MoreActions actions={actions} />
-              </div>
-            )}
-          </div>
-        </div>
 
-        {/* Footer row with type badge and open link */}
-        <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-          <Badge variant="neutral">{sourceTypeLabel}</Badge>
-          <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
-            <span>Open</span>
-            <ArrowRight className="h-3.5 w-3.5" />
+          {/* Footer row with type badge and open link */}
+          <div className="mt-auto flex items-center justify-between gap-2 pt-2">
+            <Badge variant="neutral">{sourceTypeLabel}</Badge>
+            <div className="text-muted-foreground group-hover:text-primary flex items-center gap-1 text-sm transition-colors">
+              <span>Open</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </div>
           </div>
-        </div>
-      </DotCard>
-    </routes.sources.source.Link>
+        </DotCard>
+      </routes.sources.source.Link>
+    </CardContextMenu>
   );
 }
 

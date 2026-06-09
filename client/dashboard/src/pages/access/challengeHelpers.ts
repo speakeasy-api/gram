@@ -13,6 +13,15 @@ export function getInitials(identifier: string): string {
   return name.slice(0, 2).toUpperCase();
 }
 
+export function principalDisplayName(
+  userEmail: string | undefined,
+  principalUrn: string,
+): string {
+  if (userEmail) return userEmail;
+  if (principalUrn === "user:all") return "All users";
+  return principalUrn;
+}
+
 export function reasonLabel(reason: Reason): string {
   switch (reason) {
     case "grant_matched":
@@ -30,6 +39,7 @@ export function reasonLabel(reason: Reason): string {
     case "dev_override":
       return "Access allowed via a development override.";
   }
+  return "Authorization status unavailable.";
 }
 
 /**

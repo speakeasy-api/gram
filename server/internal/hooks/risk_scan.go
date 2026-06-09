@@ -14,10 +14,10 @@ import (
 )
 
 // scanClaudeForEnforcement extracts the scannable text from a Claude hook
-// payload, resolves the project (session metadata wins; falls back to the
-// plugin-auth context populated by Gram-Key + Gram-Project headers), and
-// runs the risk scanner. Returns nil when the scanner is unavailable, the
-// project cannot be resolved, or no enforcing policy matches.
+// payload, resolves the project (plugin-auth context populated by Gram-Key +
+// Gram-Project wins; session metadata is the legacy fallback), and runs the
+// risk scanner. Returns nil when the scanner is unavailable, the project cannot
+// be resolved, or no enforcing policy matches.
 //
 // The authCtx fallback is critical for UserPromptSubmit on the very first
 // hook of a session: Claude Code's OTEL Logs exporter is async, so the
@@ -63,10 +63,16 @@ func (s *Service) scanClaudeForEnforcement(ctx context.Context, payload *gen.Cla
 }
 
 // resolveClaudeScanProjectID resolves the project_id used to scope a Claude
-// hook risk scan. Session metadata cached by the OTEL Logs endpoint wins;
-// the plugin-auth context populated by Gram-Key + Gram-Project headers is
-// the fallback. Returns ok=false when neither source yields a project_id.
+// hook risk scan. The plugin-auth context populated by Gram-Key + Gram-Project
+// wins when present. Session metadata cached by the OTEL Logs endpoint remains
+// the fallback for legacy hooks without plugin auth. Returns ok=false when
+// neither source yields a project_id.
 func (s *Service) resolveClaudeScanProjectID(ctx context.Context, sessionID string) (uuid.UUID, bool) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if ok && authCtx != nil && authCtx.ProjectID != nil {
+		return *authCtx.ProjectID, true
+	}
+
 	metadata, err := s.getSessionMetadata(ctx, sessionID)
 	if err == nil {
 		pid, perr := uuid.Parse(metadata.ProjectID)
@@ -75,11 +81,7 @@ func (s *Service) resolveClaudeScanProjectID(ctx context.Context, sessionID stri
 		}
 		return uuid.Nil, false
 	}
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return uuid.Nil, false
-	}
-	return *authCtx.ProjectID, true
+	return uuid.Nil, false
 }
 
 // scanCursorForEnforcement runs the risk scanner for a Cursor hook payload.

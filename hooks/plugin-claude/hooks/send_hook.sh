@@ -14,16 +14,46 @@ set -u
 
 server_url="${GRAM_HOOKS_SERVER_URL:-https://app.getgram.ai}"
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$script_dir/identity.sh" ]; then
+  . "$script_dir/identity.sh"
+fi
+
+payload=$(cat)
+if type gram_enrich_identity_payload >/dev/null 2>&1; then
+  payload=$(gram_enrich_identity_payload "$payload")
+fi
+
 hook_hostname=$(hostname 2>/dev/null || true)
 hook_hostname_header=()
 if [ -n "$hook_hostname" ]; then
   hook_hostname_header=(-H "X-Gram-Hook-Hostname: ${hook_hostname}")
 fi
+auth_config=""
+auth_config_arg=()
+cleanup_auth_config() {
+  if [ -n "$auth_config" ]; then
+    rm -f "$auth_config"
+  fi
+}
+trap cleanup_auth_config EXIT
+if [ -n "${GRAM_HOOKS_API_KEY:-}" ] || [ -n "${GRAM_HOOKS_PROJECT_SLUG:-}" ]; then
+  auth_config=$(mktemp "${TMPDIR:-/tmp}/gram-hooks-curl.XXXXXX") || exit 2
+  chmod 600 "$auth_config" || true
+  if [ -n "${GRAM_HOOKS_API_KEY:-}" ]; then
+    printf 'header = "Gram-Key: %s"\n' "$GRAM_HOOKS_API_KEY" >>"$auth_config"
+  fi
+  if [ -n "${GRAM_HOOKS_PROJECT_SLUG:-}" ]; then
+    printf 'header = "Gram-Project: %s"\n' "$GRAM_HOOKS_PROJECT_SLUG" >>"$auth_config"
+  fi
+  auth_config_arg=(--config "$auth_config")
+fi
 
-response=$(curl -s -w "\n%{http_code}" -X POST \
+response=$(printf '%s' "$payload" | curl -s -w "\n%{http_code}" -X POST \
   -H "Content-Type: application/json" \
   ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
-  -d @- \
+  ${auth_config_arg[@]+"${auth_config_arg[@]}"} \
+  --data-binary @- \
   --max-time 10 \
   "${server_url}/rpc/hooks.claude")
 

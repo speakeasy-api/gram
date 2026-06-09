@@ -100,6 +100,8 @@ type ClaudePayload struct {
 	IsInterrupt *bool
 	// The Claude Code session ID
 	SessionID *string
+	// Email of the authenticated user from the Speakeasy device agent, if available
+	UserEmail *string
 	// The working directory when the event fired
 	Cwd *string
 	// Path to the conversation transcript file

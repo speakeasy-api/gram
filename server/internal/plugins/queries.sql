@@ -55,15 +55,38 @@ WHERE id = @id
   AND deleted IS FALSE;
 
 -- name: AddPluginServer :one
-INSERT INTO plugin_servers (plugin_id, toolset_id, display_name, policy, sort_order)
+-- Inserts a plugin server backed by exactly one of a toolset or an mcp_server.
+-- The plugin_servers backend-exclusivity CHECK enforces the XOR; callers must
+-- supply exactly one of toolset_id / mcp_server_id.
+INSERT INTO plugin_servers (plugin_id, toolset_id, mcp_server_id, display_name, policy, sort_order)
 VALUES (
   @plugin_id,
-  @toolset_id,
+  sqlc.narg('toolset_id'),
+  sqlc.narg('mcp_server_id'),
   @display_name,
   @policy,
   @sort_order
 )
 RETURNING *;
+
+-- name: GetMcpServerForPluginServer :one
+-- Resolve an mcp_server for plugin-server validation, scoped to the project so
+-- IDs alone are never trusted. has_endpoint reports whether the server has at
+-- least one usable endpoint so the caller can reject unpublishable servers.
+SELECT
+  s.id,
+  s.name,
+  s.slug,
+  s.visibility,
+  EXISTS (
+    SELECT 1 FROM mcp_endpoints e
+    WHERE e.mcp_server_id = s.id AND e.deleted IS FALSE
+  ) AS has_endpoint
+FROM mcp_servers s
+WHERE
+  s.id = @mcp_server_id
+  AND s.project_id = @project_id
+  AND s.deleted IS FALSE;
 
 -- name: ListPluginServers :many
 SELECT *
@@ -83,13 +106,16 @@ WHERE id = @id
   AND deleted IS FALSE
 RETURNING *;
 
--- name: RemovePluginServer :exec
+-- name: RemovePluginServer :one
+-- Soft-deletes a plugin server and returns the removed row so the caller can
+-- record the correct backend (toolset vs mcp_server) in the audit log.
 UPDATE plugin_servers
 SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE id = @id
   AND plugin_id = @plugin_id
-  AND deleted IS FALSE;
+  AND deleted IS FALSE
+RETURNING *;
 
 -- name: AddPluginAssignment :one
 INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
@@ -130,6 +156,51 @@ JOIN toolsets t ON t.id = ps.toolset_id AND t.deleted IS FALSE AND t.mcp_enabled
 LEFT JOIN custom_domains cd ON cd.id = t.custom_domain_id AND cd.activated IS TRUE AND cd.verified IS TRUE AND cd.deleted IS FALSE
 WHERE p.project_id = @project_id
   AND p.deleted IS FALSE
+ORDER BY p.slug, ps.sort_order ASC;
+
+-- name: ListPluginsWithMcpServersForProject :many
+-- Plugin-generation companion to ListPluginsWithServersForProject covering
+-- mcp_server-backed (Remote MCP) plugin servers. Each server resolves to a
+-- single usable endpoint via a lateral pick: custom-domain endpoints win over
+-- platform endpoints, then oldest created_at, limit 1 (mirrors the collections
+-- rule; per-plugin endpoint preference is a follow-up). Resolving the host
+-- inside the selection keeps endpoint choice and URL-host construction in
+-- lockstep, so a dangling custom-domain endpoint is never picked and emitted as
+-- a (wrong) platform URL. Servers without a usable endpoint are dropped.
+-- Scoped to project_id; the mcp_server must live in the same project as the
+-- plugin, and disabled servers are excluded.
+SELECT
+  p.id AS plugin_id,
+  p.name AS plugin_name,
+  p.slug AS plugin_slug,
+  p.description AS plugin_description,
+  ps.id AS server_id,
+  ps.display_name AS server_display_name,
+  ps.policy AS server_policy,
+  ps.sort_order AS server_sort_order,
+  ps.mcp_server_id,
+  ep.slug AS endpoint_slug,
+  ep.custom_domain AS endpoint_custom_domain
+FROM plugins p
+JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
+JOIN mcp_servers s ON s.id = ps.mcp_server_id AND s.deleted IS FALSE AND s.project_id = p.project_id AND s.visibility <> 'disabled'
+LEFT JOIN LATERAL (
+  SELECT e.slug, cd.domain AS custom_domain, e.created_at
+  FROM mcp_endpoints e
+  LEFT JOIN custom_domains cd
+    ON cd.id = e.custom_domain_id
+    AND cd.activated IS TRUE
+    AND cd.verified IS TRUE
+    AND cd.deleted IS FALSE
+  WHERE e.mcp_server_id = s.id
+    AND e.deleted IS FALSE
+    AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
+  ORDER BY (e.custom_domain_id IS NULL) ASC, e.created_at ASC
+  LIMIT 1
+) ep ON TRUE
+WHERE p.project_id = @project_id
+  AND p.deleted IS FALSE
+  AND ep.slug IS NOT NULL
 ORDER BY p.slug, ps.sort_order ASC;
 
 -- name: GetOrganizationName :one

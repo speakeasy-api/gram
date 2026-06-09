@@ -199,6 +199,64 @@ func TestCreateRemoteSessionClient_RejectsCrossProjectRemoteIssuer(t *testing.T)
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
+// TestCreateRemoteSessionClient_OrgLevelIssuer binds a project-scoped client to
+// an organization-level (cross-project, project_id IS NULL) issuer inherited
+// from the project's org. AGE-2485 added inheritance for these issuers but
+// deferred runtime consumption; the client stays project-owned while the issuer
+// it references is shared across the org.
+func TestCreateRemoteSessionClient_OrgLevelIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	issuerID := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "org-create-client")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "org-create-client")
+
+	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID: issuerID.String(),
+		UserSessionIssuerID:   userIssuerID.String(),
+		ClientID:              "org-create-cid",
+		ClientSecret:          nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, issuerID.String(), created.RemoteSessionIssuerID)
+
+	clientUUID, err := uuid.Parse(created.ID)
+	require.NoError(t, err)
+	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, userIssuerID))
+}
+
+// TestCreateRemoteSessionClient_CrossOrgIssuerRejected confirms a caller cannot
+// bind a client to an org-level issuer owned by a different organization: the
+// reachability gate matches inherited issuers only when organization_id equals
+// the caller's active org.
+func TestCreateRemoteSessionClient_CrossOrgIssuerRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	otherOrg := createOrganization(t, ctx, ti.conn, "other-org-create")
+	issuerID := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, otherOrg, "create-cross-org")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "create-cross-org").String()
+
+	_, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID: issuerID.String(),
+		UserSessionIssuerID:   userIssuerID,
+		ClientID:              "cross-org-cid",
+		ClientSecret:          nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
 func TestUpdateRemoteSessionClient_RejectsCrossProjectUserIssuer(t *testing.T) {
 	t.Parallel()
 
@@ -279,6 +337,31 @@ func TestGetRemoteSessionClient(t *testing.T) {
 	})
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+// TestGetRemoteSessionClientWithIssuerByID_OrgLevelIssuer guards the runtime
+// token resolver (used by the refresh path): the joined client+issuer view must
+// resolve an org-level issuer's token endpoint even though the issuer carries no
+// project_id. The join keys purely on remote_session_issuer_id, so no project
+// predicate filters the issuer side.
+func TestGetRemoteSessionClientWithIssuerByID_OrgLevelIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	issuerID := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "org-tokenresolve")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "org-tokenresolve")
+	clientID := createRemoteClient(t, ctx, ti, issuerID.String(), userIssuerID.String(), "org-resolve-cid")
+
+	clientUUID, err := uuid.Parse(clientID)
+	require.NoError(t, err)
+
+	row, err := repo.New(ti.conn).GetRemoteSessionClientWithIssuerByID(ctx, clientUUID)
+	require.NoError(t, err)
+	require.Equal(t, issuerID, row.RemoteSessionIssuerID)
+	require.Equal(t, "https://idp.example.com/token", row.TokenEndpoint.String, "token resolver joins to the org-level issuer's token endpoint")
 }
 
 func TestListRemoteSessionClients(t *testing.T) {
@@ -919,6 +1002,65 @@ func TestCloneClientFromOAuthProxyProvider_ProviderNotFound(t *testing.T) {
 	_, err := ti.service.CloneClientFromOAuthProxyProvider(ctx, &clientsgen.CloneClientFromOAuthProxyProviderPayload{
 		OauthProxyProviderID:  uuid.NewString(),
 		RemoteSessionIssuerID: issuerID,
+		UserSessionIssuerID:   userIssuerID,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+// TestCloneClientFromOAuthProxyProvider_OrgLevelIssuer is the regression test
+// for AGE-2593: the clone path used to force a project-only issuer lookup, so
+// cloning onto an inherited org-level issuer returned a spurious 404. The
+// dashboard "clone" wizard lets operators pick inherited issuers, so this is a
+// reachable path.
+func TestCloneClientFromOAuthProxyProvider_OrgLevelIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	ctx = withAdmin(t, ctx)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	secrets := []byte(`{"client_id":"upstream-cid","client_secret":"upstream-shhh"}`)
+	proxyProviderID := insertProxyProvider(t, ctx, ti.conn, "clone-org", "custom", secrets)
+	issuerID := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "clone-org")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "clone-org").String()
+
+	result, err := ti.service.CloneClientFromOAuthProxyProvider(ctx, &clientsgen.CloneClientFromOAuthProxyProviderPayload{
+		OauthProxyProviderID:  proxyProviderID.String(),
+		RemoteSessionIssuerID: issuerID.String(),
+		UserSessionIssuerID:   userIssuerID,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "upstream-cid", result.ClientID)
+	require.Equal(t, issuerID.String(), result.RemoteSessionIssuerID)
+}
+
+// TestCloneClientFromOAuthProxyProvider_CrossOrgIssuerRejected confirms the
+// widened clone lookup still refuses an org-level issuer owned by a different
+// organization.
+func TestCloneClientFromOAuthProxyProvider_CrossOrgIssuerRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	ctx = withAdmin(t, ctx)
+
+	otherOrg := createOrganization(t, ctx, ti.conn, "other-org-clone")
+	issuerID := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, otherOrg, "clone-cross-org")
+
+	secrets := []byte(`{"client_id":"upstream-cid","client_secret":"upstream-shhh"}`)
+	proxyProviderID := insertProxyProvider(t, ctx, ti.conn, "clone-cross-org", "custom", secrets)
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "clone-cross-org").String()
+
+	_, err := ti.service.CloneClientFromOAuthProxyProvider(ctx, &clientsgen.CloneClientFromOAuthProxyProviderPayload{
+		OauthProxyProviderID:  proxyProviderID.String(),
+		RemoteSessionIssuerID: issuerID.String(),
 		UserSessionIssuerID:   userIssuerID,
 		SessionToken:          nil,
 		ApikeyToken:           nil,
