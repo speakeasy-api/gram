@@ -173,6 +173,11 @@ const RouteProvider = () => {
   // detail page like /sources/externalmcp/notion is its own entry — labelled by
   // the item slug ("notion") rather than the section ("Sources").
   useEffect(() => {
+    // Wait until the user id resolves before recording — otherwise the early
+    // write lands on the shared anonymous key instead of the per-user one.
+    // recentsUserId is a dependency, so the effect re-runs (and records the
+    // current page) as soon as the session loads.
+    if (!recentsUserId) return;
     const active =
       Object.values(routes).find((r) => r.active && !r.external) ??
       Object.values(orgRoutes).find((r) => r.active && !r.external);

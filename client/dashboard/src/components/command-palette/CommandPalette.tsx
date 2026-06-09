@@ -36,13 +36,15 @@ export function CommandPalette(): JSX.Element {
   const inProject = Boolean(projectSlug);
 
   // Recently visited pages (client-side; read only while the palette is open).
-  // Scoped per user so a shared browser profile doesn't leak history.
+  // Scoped per user so a shared browser profile doesn't leak history. Gate the
+  // read on the user id resolving so we never read the shared anonymous key
+  // before the session loads.
   const recentsUserId = useRecentsUserId();
   const recents = useRecentlyVisited(
     recentsUserId,
     orgSlug,
     projectSlug,
-    isOpen,
+    isOpen && Boolean(recentsUserId),
   );
 
   const closeAndReset = () => {
