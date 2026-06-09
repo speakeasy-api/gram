@@ -37,12 +37,17 @@ export function useRecentsUserId(): string | undefined {
   return data?.result?.userId || undefined;
 }
 
+// Bump when the entry shape or href scheme changes so stale entries (e.g. older
+// deep-link-param hrefs that now collapse to page-level) are dropped instead of
+// lingering as duplicates.
+const STORAGE_VERSION = "v2";
+
 function storageKey(
   userId?: string,
   orgSlug?: string,
   projectSlug?: string,
 ): string {
-  return `gram:recents:${userId ?? ""}:${orgSlug ?? ""}:${projectSlug ?? ""}`;
+  return `gram:recents:${STORAGE_VERSION}:${userId ?? ""}:${orgSlug ?? ""}:${projectSlug ?? ""}`;
 }
 
 function read(key: string): RecentEntry[] {

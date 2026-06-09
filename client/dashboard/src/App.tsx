@@ -185,14 +185,14 @@ const RouteProvider = () => {
     const iconName = (active as unknown as { icon?: string }).icon;
     recordVisit(recentsUserId, orgSlug, projectSlug, {
       label: pageLabel(active.title, active.href(), location.pathname),
-      // Keep only deep-link params (e.g. ?policy=<id>) so the item reopens
-      // correctly, without capturing transient filter/tab params.
-      href: recentsHref(location.pathname, location.search),
+      // Recents are page-level: record the pathname without query params so a
+      // page and its deep-linked item state (e.g. ?policy=<id>) collapse into a
+      // single entry instead of appearing as duplicates with the same label.
+      href: location.pathname,
       icon: typeof iconName === "string" ? iconName : undefined,
     });
   }, [
     location.pathname,
-    location.search,
     routes,
     orgRoutes,
     recentsUserId,
@@ -326,22 +326,6 @@ const pageLabel = (
     return `${title} · ${segment.slice(0, 8)}`;
   }
   return segment;
-};
-
-// Only deep-link params identify a specific item worth re-opening from Recently
-// Visited. Other query params (tabs, filters, pagination) are transient and
-// would pollute the list with near-duplicate entries, so we strip them and keep
-// only the deep-link keys the security pages hydrate from.
-const RECENTS_QUERY_KEYS = ["policy", "rule", "review"];
-const recentsHref = (pathname: string, search: string): string => {
-  const params = new URLSearchParams(search);
-  const keep = new URLSearchParams();
-  for (const key of RECENTS_QUERY_KEYS) {
-    const value = params.get(key);
-    if (value) keep.set(key, value);
-  }
-  const query = keep.toString();
-  return query ? `${pathname}?${query}` : pathname;
 };
 
 // Convert a single route into a command-palette navigation action.
