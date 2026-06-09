@@ -20,8 +20,15 @@ import {
 } from "react-router";
 import { AppLayout, LoginCheck, OrgLayout } from "./components/app-layout.tsx";
 import { CommandPalette } from "./components/command-palette";
+import {
+  recordVisit,
+  useRecentsUserId,
+} from "./components/command-palette/recentlyVisited";
+import { useProjectNavRoutes } from "./hooks/useProjectNavRoutes";
+import { useRBAC } from "./hooks/useRBAC";
 import { AuthProvider, ProjectProvider } from "./contexts/AuthProvider.tsx";
 import { useCommandPalette } from "./contexts/CommandPalette";
+import type { CommandAction } from "./contexts/CommandPalette";
 import { CommandPaletteProvider } from "./contexts/CommandPaletteProvider";
 import { useSlugs } from "./contexts/Sdk.tsx";
 import { SdkProvider } from "./contexts/SdkProvider.tsx";
@@ -149,79 +156,86 @@ const RouteProvider = () => {
   const routes = useRoutes();
   const orgRoutes = useOrgRoutes();
   const { addActions, removeActions } = useCommandPalette();
-  const { projectSlug } = useSlugs();
+  const { orgSlug, projectSlug } = useSlugs();
+  const location = useLocation();
+  const projectNavRoutes = useProjectNavRoutes();
+  const { hasAnyScope } = useRBAC();
+  const recentsUserId = useRecentsUserId();
 
   // Update document title based on active route
   usePageTitle(routes, orgRoutes);
 
-  // Register global command palette actions
+  // Record the visited page for the command palette's "Recently Visited"
+  // section. Stored client-side (localStorage), scoped per workspace.
+  // matchesCurrent uses exact segment counts, so the active top-level route is
+  // the real current page. We record the EXACT path (not the section base) so a
+  // detail page like /sources/externalmcp/notion is its own entry — labelled by
+  // the item slug ("notion") rather than the section ("Sources").
   useEffect(() => {
-    // Only register project-scoped navigation actions when a project is selected
-    const globalActions = projectSlug
-      ? [
-          {
-            id: "go-home",
-            label: "Go to Home",
-            icon: "home",
-            onSelect: () => routes.home.goTo(),
-            group: "Navigation",
-          },
-          {
-            id: "go-sources",
-            label: "Go to Sources",
-            icon: "file-code",
-            onSelect: () => routes.sources.goTo(),
-            group: "Navigation",
-          },
-          {
-            id: "go-mcp-servers",
-            label: "Go to MCP Servers",
-            icon: "network",
-            onSelect: () => routes.mcp.goTo(),
-            group: "Navigation",
-          },
-          {
-            id: "go-playground",
-            label: "Go to Playground",
-            icon: "message-square",
-            onSelect: () => routes.playground.goTo(),
-            group: "Navigation",
-          },
-          {
-            id: "go-insights",
-            label: "Go to Insights",
-            icon: "layout-dashboard",
-            onSelect: () => routes.insights.goTo(),
-            group: "Navigation",
-          },
-        ]
+    // Wait until the user id resolves before recording — otherwise the early
+    // write lands on the shared anonymous key instead of the per-user one.
+    // recentsUserId is a dependency, so the effect re-runs (and records the
+    // current page) as soon as the session loads.
+    if (!recentsUserId) return;
+    const active =
+      Object.values(routes).find((r) => r.active && !r.external) ??
+      Object.values(orgRoutes).find((r) => r.active && !r.external);
+    if (!active) return;
+    const iconName = (active as unknown as { icon?: string }).icon;
+    recordVisit(recentsUserId, orgSlug, projectSlug, {
+      label: pageLabel(active.title, active.href(), location.pathname),
+      // Recents are page-level: record the pathname without query params so a
+      // page and its deep-linked item state (e.g. ?policy=<id>) collapse into a
+      // single entry instead of appearing as duplicates with the same label.
+      href: location.pathname,
+      icon: typeof iconName === "string" ? iconName : undefined,
+    });
+  }, [
+    location.pathname,
+    routes,
+    orgRoutes,
+    recentsUserId,
+    orgSlug,
+    projectSlug,
+  ]);
+
+  // Register command palette navigation actions. Project "Pages" mirror the
+  // left sidebar exactly (same source, same order) so the palette only offers
+  // pages a user can actually reach from the nav. Project pages register only
+  // once a project is selected (their goTo() needs the :projectSlug); org pages
+  // are always available.
+  useEffect(() => {
+    const projectActions = projectSlug
+      ? projectNavRoutes
+          .filter(
+            ({ route, scope }) =>
+              !route.external &&
+              route.component &&
+              route.title &&
+              // Mirror the sidebar's per-page scope gating so the palette never
+              // offers (nor navigates to) pages the user can't access.
+              hasAnyScope(scope),
+          )
+          .map(({ route }) =>
+            routeToNavAction(route, "Pages", `nav-page-${route.url || "home"}`),
+          )
       : [];
+    const orgActions = routesToNavActions(orgRoutes, "Organization", "nav-org");
 
-    // Always register org-level navigation actions
-    const orgActions = [
-      {
-        id: "go-billing",
-        label: "Go to Billing",
-        icon: "credit-card",
-        onSelect: () => orgRoutes.billing.goTo(),
-        group: "Navigation",
-      },
-      {
-        id: "go-api-keys",
-        label: "Go to API Keys",
-        icon: "key-round",
-        onSelect: () => orgRoutes.apiKeys.goTo(),
-        group: "Navigation",
-      },
-    ];
-
-    const allActions = [...globalActions, ...orgActions];
+    const allActions = [...projectActions, ...orgActions];
     addActions(allActions);
 
     return () => {
       removeActions(allActions.map((a) => a.id));
     };
-  }, [routes, orgRoutes, projectSlug, addActions, removeActions]);
+  }, [
+    projectNavRoutes,
+    orgRoutes,
+    projectSlug,
+    hasAnyScope,
+    addActions,
+    removeActions,
+  ]);
 
   const routeElements = useMemo(() => {
     const allRoutes = Object.values(routes);
@@ -285,6 +299,71 @@ const RouteProvider = () => {
 
   return routeElements;
 };
+
+// Opaque ids make poor Recents labels; detect UUIDs so detail pages keyed by id
+// fall back to "<Section> <short id>" instead of a raw UUID.
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Label a visited page for the Recents list. Section/list pages keep the route
+// title; detail pages prefer the human-readable last path segment (a slug like
+// "notion"), falling back to "<Title> <short id>" when that segment is opaque.
+const pageLabel = (
+  title: string,
+  baseHref: string,
+  pathname: string,
+): string => {
+  if (pathname === baseHref || !pathname.startsWith(baseHref)) return title;
+  const segment = decodeURIComponent(
+    pathname.split("/").filter(Boolean).pop() ?? "",
+  );
+  if (!segment) return title;
+  if (UUID_RE.test(segment) || segment.length > 24) {
+    return `${title} · ${segment.slice(0, 8)}`;
+  }
+  return segment;
+};
+
+// Convert a single route into a command-palette navigation action.
+const routeToNavAction = (
+  route: AppRoute,
+  group: string,
+  id: string,
+): CommandAction => {
+  // AppRoute type-omits the raw `icon` string (exposing only the <Icon>
+  // component), but the builder spreads it through, so it's present at runtime.
+  // CommandAction renders the string name, so read it back here.
+  const iconName = (route as unknown as { icon?: string }).icon;
+  return {
+    id,
+    label: route.title,
+    icon: typeof iconName === "string" ? iconName : undefined,
+    onSelect: () => route.goTo(),
+    group,
+    stage: route.stage,
+  };
+};
+
+// Flatten a route map into command-palette navigation actions. Only top-level
+// pages a user can actually land on: external links, unauthenticated pages, and
+// full-screen pages outside the main layout are excluded.
+const routesToNavActions = (
+  routeMap: Record<string, AppRoute>,
+  group: string,
+  idPrefix: string,
+): CommandAction[] =>
+  Object.entries(routeMap)
+    .filter(
+      ([, route]) =>
+        !route.external &&
+        !route.unauthenticated &&
+        !route.outsideMainLayout &&
+        Boolean(route.component) &&
+        Boolean(route.title),
+    )
+    .map(([key, route]) =>
+      routeToNavAction(route, group, `${idPrefix}-${key}`),
+    );
 
 const routesWithSubroutes = (routes: AppRoute[]) => {
   return routes

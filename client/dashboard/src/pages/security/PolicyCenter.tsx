@@ -45,7 +45,8 @@ import {
   RefreshCw,
   Sparkles,
 } from "lucide-react";
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { useQueryState } from "nuqs";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   invalidateAllRiskListPolicies,
@@ -393,6 +394,17 @@ function PolicyCenterContent() {
 
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
 
+  // Deep-link support: `?policy=<id>` opens that policy's edit sheet. The
+  // command palette uses this since policies have no per-item route. Declared
+  // here (above the mutations) so save handlers can clear it on programmatic
+  // close — Radix's onOpenChange only fires for user-initiated closes.
+  const [policyParam, setPolicyParam] = useQueryState("policy");
+  const openedPolicyRef = useRef<string | null>(null);
+  const clearPolicyDeepLink = useCallback(() => {
+    openedPolicyRef.current = null;
+    void setPolicyParam(null);
+  }, [setPolicyParam]);
+
   const invalidate = useCallback(() => {
     void invalidateAllRiskListPolicies(queryClient);
     void invalidateAllRiskPoliciesStatus(queryClient);
@@ -402,6 +414,7 @@ function PolicyCenterContent() {
     onSuccess: () => {
       invalidate();
       setSheetOpen(false);
+      clearPolicyDeepLink();
     },
   });
 
@@ -409,6 +422,7 @@ function PolicyCenterContent() {
     onSuccess: () => {
       invalidate();
       setSheetOpen(false);
+      clearPolicyDeepLink();
     },
   });
 
@@ -457,7 +471,10 @@ function PolicyCenterContent() {
     setCreateStep("details");
   };
 
-  const handleEdit = (policy: RiskPolicy | PromptPolicy) => {
+  // Memoized so the deep-link effect below can depend on it without re-running
+  // every render. Body references only module-level helpers + stable setters,
+  // so the empty dependency array is correct.
+  const handleEdit = useCallback((policy: RiskPolicy | PromptPolicy) => {
     const isPrompt = !("sources" in policy);
     const kind: PolicyKind = isPrompt ? "prompt" : "risk";
     setEditingPolicy(policy);
@@ -490,7 +507,23 @@ function PolicyCenterContent() {
     setFormAutoName(policy.autoName ?? true);
     setFormUserMessage(policy.userMessage ?? "");
     setSheetOpen(true);
-  };
+  }, []);
+
+  // Open the deep-linked policy once its data has loaded. Guarded by a ref so it
+  // fires once per id (not on every policies re-fetch). The ref is marked as
+  // handled even when the id doesn't resolve, so a stale/invalid id doesn't
+  // re-trigger the lookup on every subsequent `data` change.
+  useEffect(() => {
+    if (!policyParam || isLoading) return;
+    if (openedPolicyRef.current === policyParam) return;
+    // Read from the stable react-query `data` (not the per-render `policies`
+    // array) so the effect doesn't re-run every render.
+    const policy = data?.policies?.find((p) => p.id === policyParam);
+    openedPolicyRef.current = policyParam;
+    if (policy) {
+      handleEdit(policy);
+    }
+  }, [policyParam, isLoading, data, handleEdit]);
 
   const handleSave = () => {
     if (formPolicyKind === "prompt") {
@@ -929,7 +962,15 @@ function PolicyCenterContent() {
         </Page.Section>
 
         {/* Edit/Create Sheet */}
-        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <Sheet
+          open={sheetOpen}
+          onOpenChange={(open) => {
+            setSheetOpen(open);
+            // Drop the deep-link param so the sheet doesn't reopen and the same
+            // id can be deep-linked again later.
+            if (!open) clearPolicyDeepLink();
+          }}
+        >
           <SheetContent className="flex flex-col overflow-y-auto sm:max-w-lg">
             <SheetHeader className="px-6 pt-6">
               <SheetTitle>{sheetTitle}</SheetTitle>

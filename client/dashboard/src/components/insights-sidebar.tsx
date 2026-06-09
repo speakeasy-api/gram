@@ -36,6 +36,7 @@ import {
 } from "react";
 import type { InsightsConfigOptions } from "./insights-context";
 import { InsightsContext, useInsightsState } from "./insights-context";
+import { useAskAiListener } from "./command-palette/askAiBridge";
 
 // Types-only re-export (erased at compile time, won't break Fast Refresh)
 export type { InsightsConfigOptions } from "./insights-context";
@@ -466,6 +467,20 @@ export function InsightsProvider({
   }, []);
 
   const consumePendingPrompt = useCallback(() => setPendingPrompt(null), []);
+
+  // Bridge: the command palette's "Ask AI" row dispatches a window event from
+  // outside this provider. Open the sidebar and, when a prompt was typed, drop
+  // the user straight into a running conversation.
+  useAskAiListener(
+    useCallback(
+      (prompt: string) => {
+        setIsExpanded(true);
+        setTriggerSpinKey((k) => k + 1);
+        if (prompt.trim()) handleSendPrompt(prompt);
+      },
+      [handleSendPrompt],
+    ),
+  );
 
   // Start a brand-new Project Assistant conversation: remount the chat provider
   // (bumping sessionKey) so a fresh thread opens. With server-side id minting,

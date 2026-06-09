@@ -26,6 +26,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryState } from "nuqs";
 import { toast } from "sonner";
 import {
   useListChats,
@@ -105,6 +106,41 @@ function DetectionRulesContent() {
     null,
   );
 
+  // Deep-link support: `?rule=<id>` opens that rule's detail sheet (and expands
+  // its category). The command palette uses this since rules have no per-item
+  // route. The `custom.` prefix distinguishes custom rules from built-ins, so
+  // no separate kind param is needed.
+  const [ruleParam, setRuleParam] = useQueryState("rule");
+  const openedRuleRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!ruleParam || openedRuleRef.current === ruleParam) return;
+    if (ruleParam.startsWith(CUSTOM_RULE_ID_PREFIX)) {
+      if (customRulesLoading) return;
+      const rule = customRules.find((r) => r.id === ruleParam);
+      // Mark handled regardless of match so a stale/invalid id doesn't re-run
+      // the lookup on every `customRules` re-render (it's a fresh array ref).
+      openedRuleRef.current = ruleParam;
+      if (rule) {
+        setSelected({ kind: "custom", rule });
+        setExpanded("custom");
+      }
+    } else {
+      const rule = Object.values(BUILTIN_RULES_BY_CATEGORY)
+        .flat()
+        .find((r) => r.id === ruleParam);
+      openedRuleRef.current = ruleParam;
+      if (rule) {
+        setSelected({ kind: "builtin", rule });
+        setExpanded(rule.category);
+      }
+    }
+  }, [ruleParam, customRules, customRulesLoading]);
+
+  const clearRuleDeepLink = () => {
+    openedRuleRef.current = null;
+    void setRuleParam(null);
+  };
+
   return (
     <>
       <Page.Section>
@@ -154,11 +190,15 @@ function DetectionRulesContent() {
 
       <RuleDetailSheet
         selection={selected}
-        onClose={() => setSelected(null)}
+        onClose={() => {
+          setSelected(null);
+          clearRuleDeepLink();
+        }}
         onUpdateCustomRule={updateCustomRule}
         onDeleteCustomRule={(id) => {
           removeCustomRule(id);
           setSelected(null);
+          clearRuleDeepLink();
           toast.success("Custom detection rule deleted");
         }}
       />

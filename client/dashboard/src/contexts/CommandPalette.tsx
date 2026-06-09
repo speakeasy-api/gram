@@ -1,4 +1,5 @@
 import { createContext, useContext } from "react";
+import type { ReleaseStage } from "@/components/release-stage-badge";
 
 export interface CommandAction {
   id: string;
@@ -7,6 +8,8 @@ export interface CommandAction {
   shortcut?: string;
   onSelect: () => void;
   group?: string;
+  /** Release stage of the target (e.g. a pre-GA page); renders a badge. */
+  stage?: ReleaseStage;
 }
 
 interface CommandPaletteContextType {
