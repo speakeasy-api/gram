@@ -1,5 +1,4 @@
 import { RequireScope } from "@/components/require-scope";
-import { Badge } from "@/components/ui/badge";
 import {
   Field,
   FieldDescription,
@@ -21,6 +20,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Type } from "@/components/ui/type";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useCustomDomains } from "@/hooks/useToolsetUrl";
@@ -34,6 +35,7 @@ import type {
   CustomDomain,
   McpEndpoint,
   McpServer,
+  McpServerVisibility,
 } from "@gram/client/models/components";
 import {
   invalidateAllGetMcpServer,
@@ -60,8 +62,6 @@ import { useMcpEndpointSlugValidation } from "../useMcpEndpointSlugValidation";
 const NAME_MAX_LENGTH = 40;
 const ADDRESS_INPUT_GROUP_CLASSNAME = "rounded-md";
 const ADDRESS_SLUG_INPUT_CLASSNAME = "font-mono pl-0! font-bold";
-const ADDRESS_DOMAIN_SELECT_TRIGGER_CLASSNAME =
-  "!h-auto gap-1 rounded-none border-0 bg-transparent px-0 py-0 text-sm font-medium text-muted-foreground shadow-none hover:bg-transparent focus-visible:ring-0 dark:bg-transparent dark:hover:bg-transparent";
 const ADDRESS_RANDOM_SUFFIX_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 const ADDRESS_RANDOM_SUFFIX_LENGTH = 5;
 
@@ -86,7 +86,7 @@ export function SettingsTab({
   isLoadingEndpoints: boolean;
 }): JSX.Element {
   return (
-    <div className="mx-auto w-full max-w-[1270px] space-y-6 px-8 py-8">
+    <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
       <DisplayNameCard mcpServer={mcpServer} />
       <ServerUrlCard
         mcpServer={mcpServer}
@@ -101,9 +101,8 @@ export function SettingsTab({
 
 // --- Card shell -----------------------------------------------------------
 
-// Settings cards share a header (title + description), a body, and an optional
-// footer bar (subtle tinted strip with a hint on the left and actions on the
-// right). The danger variant recolors the border, title, and footer red.
+// Settings sections share an external header and an inner configuration panel.
+// The danger variant recolors the border, title, and footer red.
 function SettingsCard({
   title,
   description,
@@ -120,49 +119,51 @@ function SettingsCard({
   children?: React.ReactNode;
 }) {
   const danger = variant === "danger";
+  const hasBody = children != null;
   const hasFooter = footerHint != null || footerActions != null;
 
   return (
-    <div
-      className={cn(
-        "overflow-hidden rounded-xl border",
-        danger && "border-destructive/30",
-      )}
-    >
-      <div className="space-y-4 p-6">
-        <div className="space-y-1">
-          <Heading
-            variant="h4"
-            className={cn("normal-case", danger && "text-destructive")}
-          >
-            {title}
-          </Heading>
-          {description && (
-            <Type muted small className="max-w-3xl">
-              {description}
-            </Type>
-          )}
-        </div>
-        {children}
-      </div>
-      {hasFooter && (
-        <div
-          className={cn(
-            "flex min-h-[56px] items-center justify-between gap-4 border-t px-6 py-3",
-            danger ? "bg-destructive/5" : "bg-muted/30",
-          )}
+    <section className="space-y-3">
+      <div className="space-y-1">
+        <Heading
+          variant="h4"
+          className={cn("normal-case", danger && "text-destructive")}
         >
-          <Type muted small>
-            {footerHint}
+          {title}
+        </Heading>
+        {description && (
+          <Type muted small className="max-w-3xl">
+            {description}
           </Type>
-          {footerActions && (
-            <div className="flex shrink-0 items-center gap-2">
-              {footerActions}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+      <div
+        className={cn(
+          "overflow-hidden rounded-xl border bg-card",
+          danger && "border-destructive/30",
+        )}
+      >
+        {hasBody && <div className="space-y-4 p-6">{children}</div>}
+        {hasFooter && (
+          <div
+            className={cn(
+              "flex min-h-[56px] items-center justify-between gap-4 px-6 py-3",
+              hasBody && "border-t",
+              danger ? "bg-destructive/5" : "bg-muted/30",
+            )}
+          >
+            <Type muted small>
+              {footerHint}
+            </Type>
+            {footerActions && (
+              <div className="flex shrink-0 items-center gap-2">
+                {footerActions}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -265,7 +266,7 @@ function DisplayNameCard({ mcpServer }: { mcpServer: McpServer }) {
 
   return (
     <SettingsCard
-      title="Display Name"
+      title="Branding"
       description="Used to identify your MCP server within the dashboard and on its installation page."
       footerHint={`Please use no more than ${NAME_MAX_LENGTH} characters.`}
       footerActions={
@@ -285,9 +286,7 @@ function DisplayNameCard({ mcpServer }: { mcpServer: McpServer }) {
         data-invalid={update.isError ? true : undefined}
         className="max-w-md"
       >
-        <FieldLabel htmlFor="mcp-server-display-name" className="sr-only">
-          Display name
-        </FieldLabel>
+        <FieldLabel htmlFor="mcp-server-display-name">Display Name</FieldLabel>
         <Input
           id="mcp-server-display-name"
           value={nameDraft}
@@ -367,7 +366,7 @@ function ServerUrlCard({
         <RequireScope scope="mcp:write" level="component">
           <AddressEmptyState
             title="No custom address"
-            description="Create an MCP URL on one of your verified custom domains."
+            description="Create an MCP URL on your verified custom domain."
             actionLabel="Add"
             onAction={() => setAddingCustom(true)}
           />
@@ -418,9 +417,6 @@ function ServerUrlCard({
           <Field>
             <div className="flex items-center gap-2">
               <FieldLabel>Custom Address</FieldLabel>
-              {customDomainEndpoints.length === 0 && (
-                <Badge variant="outline">Not configured</Badge>
-              )}
             </div>
             {customDomainEndpoints.map((endpoint) => (
               <AddressRow
@@ -722,7 +718,8 @@ function NewCustomAddressRow({
   domains: CustomDomain[];
   onClose: () => void;
 }) {
-  const [domainId, setDomainId] = useState<string>(domains[0]?.id ?? "");
+  const customDomain = domains[0];
+  const domainId = customDomain?.id ?? "";
   const [slug, setSlug] = useState("");
   const queryClient = useQueryClient();
   const client = useSdkClient();
@@ -765,27 +762,7 @@ function NewCustomAddressRow({
     >
       <Stack direction="horizontal" gap={2} align="center">
         <InputGroup className={ADDRESS_INPUT_GROUP_CLASSNAME}>
-          <InputGroupAddon className="ml-0! gap-0">
-            <span>https://</span>
-            <Select
-              value={domainId}
-              onValueChange={(value) => setDomainId(value)}
-            >
-              <SelectTrigger
-                className={ADDRESS_DOMAIN_SELECT_TRIGGER_CLASSNAME}
-              >
-                <SelectValue placeholder="domain" />
-              </SelectTrigger>
-              <SelectContent>
-                {domains.map((domain) => (
-                  <SelectItem key={domain.id} value={domain.id}>
-                    {domain.domain}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <span>/mcp/</span>
-          </InputGroupAddon>
+          <InputGroupAddon>{`https://${customDomain?.domain ?? "custom-domain"}/mcp/`}</InputGroupAddon>
           <InputGroupInput
             value={slug}
             onChange={(e) => setSlug(e.target.value)}
@@ -973,6 +950,59 @@ function ToolFilteringCard({ mcpServer }: { mcpServer: McpServer }) {
 
 // --- Danger zone ----------------------------------------------------------
 
+function mcpServerVisibilityUpdateForm(
+  mcpServer: McpServer,
+  visibility: McpServerVisibility,
+) {
+  return {
+    id: mcpServer.id,
+    name: mcpServer.name ?? undefined,
+    remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
+    toolsetId: mcpServer.toolsetId ?? undefined,
+    environmentId: mcpServer.environmentId ?? undefined,
+    userSessionIssuerId: mcpServer.userSessionIssuerId ?? undefined,
+    toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
+    visibility,
+  };
+}
+
+function mcpServerVisibilityToast(visibility: McpServerVisibility) {
+  switch (visibility) {
+    case "disabled":
+      return "MCP server disabled";
+    case "public":
+      return "MCP server set to public";
+    case "private":
+      return "MCP server set to private";
+    default:
+      return "MCP server updated";
+  }
+}
+
+function ServerControlRow({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0 space-y-1">
+        <Type small className="font-medium">
+          {title}
+        </Type>
+        <Type muted small className="max-w-2xl">
+          {description}
+        </Type>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">{children}</div>
+    </div>
+  );
+}
+
 function DangerZoneCard({
   mcpServer,
   endpoints,
@@ -983,28 +1013,155 @@ function DangerZoneCard({
   const navigate = useNavigate();
   const routes = useRoutes();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [pendingAvailability, setPendingAvailability] =
+    useState<McpServerVisibility | null>(null);
+  const [pendingVisibility, setPendingVisibility] =
+    useState<McpServerVisibility | null>(null);
+  const queryClient = useQueryClient();
+  const updateVisibility = useUpdateMcpServerMutation({
+    onSuccess: async (_data, variables) => {
+      await Promise.all([
+        invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
+        invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+      ]);
+      const next = variables.request.updateMcpServerForm.visibility;
+      toast.success(mcpServerVisibilityToast(next));
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update MCP server",
+      );
+    },
+  });
+
+  const applyVisibility = (visibility: McpServerVisibility) => {
+    if (visibility === mcpServer.visibility) return;
+    updateVisibility.mutate({
+      request: {
+        updateMcpServerForm: mcpServerVisibilityUpdateForm(
+          mcpServer,
+          visibility,
+        ),
+      },
+    });
+  };
+
+  const requestAvailabilityChange = (checked: boolean) => {
+    setPendingAvailability(checked ? "private" : "disabled");
+  };
+
+  const confirmAvailabilityChange = () => {
+    if (!pendingAvailability) return;
+    applyVisibility(pendingAvailability);
+    setPendingAvailability(null);
+  };
+
+  const requestVisibilityChange = (visibility: string) => {
+    if (visibility !== "public" && visibility !== "private") return;
+    if (visibility === mcpServer.visibility) return;
+    setPendingVisibility(visibility);
+  };
+
+  const confirmVisibilityChange = () => {
+    if (!pendingVisibility) return;
+    applyVisibility(pendingVisibility);
+    setPendingVisibility(null);
+  };
+
+  const enabled = mcpServer.visibility !== "disabled";
+  let accessMode = "";
+  if (enabled) {
+    accessMode = mcpServer.visibility === "public" ? "public" : "private";
+  }
 
   return (
-    <SettingsCard
-      title="Delete MCP Server"
-      description="Permanently remove this server and all of its endpoints. This action cannot be undone."
-      variant="danger"
-      footerHint="This action is not reversible."
-      footerActions={
-        <RequireScope scope="mcp:write" level="component">
-          <Button
-            variant="destructive-primary"
-            size="md"
-            onClick={() => setDeleteDialogOpen(true)}
+    <>
+      <SettingsCard
+        title="Danger Zone"
+        description="Manage server availability, access, and destructive actions."
+        variant="danger"
+      >
+        <div className="divide-y">
+          <ServerControlRow
+            title="Server Availability"
+            description={
+              enabled
+                ? "This MCP server is currently serving traffic on configured URLs."
+                : "This MCP server is offline and will not serve client traffic."
+            }
           >
-            <Button.LeftIcon>
-              <Trash2 className="h-4 w-4" />
-            </Button.LeftIcon>
-            <Button.Text>Delete MCP server</Button.Text>
-          </Button>
-        </RequireScope>
-      }
-    >
+            <Type muted small>
+              {enabled ? "Enabled" : "Disabled"}
+            </Type>
+            <RequireScope scope="mcp:write" level="component">
+              <Switch
+                checked={enabled}
+                disabled={updateVisibility.isPending}
+                aria-label="Enable MCP server"
+                onCheckedChange={requestAvailabilityChange}
+              />
+            </RequireScope>
+          </ServerControlRow>
+
+          <ServerControlRow
+            title="Visibility"
+            description={
+              enabled
+                ? "Choose whether clients can use this server publicly or only through authenticated project access."
+                : "Choose an access mode to enable this server as public or private."
+            }
+          >
+            <RequireScope scope="mcp:write" level="component">
+              <ToggleGroup
+                type="single"
+                value={accessMode}
+                variant="outline"
+                size="sm"
+                disabled={updateVisibility.isPending}
+                onValueChange={requestVisibilityChange}
+              >
+                <ToggleGroupItem
+                  value="private"
+                  aria-label="Set MCP server private"
+                  className="px-3"
+                >
+                  Private
+                </ToggleGroupItem>
+                <ToggleGroupItem
+                  value="public"
+                  aria-label="Set MCP server public"
+                  className="px-3"
+                >
+                  Public
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </RequireScope>
+          </ServerControlRow>
+
+          <ServerControlRow
+            title="Delete MCP Server"
+            description="Permanently remove this server and all of its endpoints. This action cannot be undone."
+          >
+            <RequireScope scope="mcp:write" level="component">
+              <Button
+                variant="destructive-primary"
+                size="md"
+                onClick={() => setDeleteDialogOpen(true)}
+              >
+                <Button.LeftIcon>
+                  <Trash2 className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>Delete MCP server</Button.Text>
+              </Button>
+            </RequireScope>
+          </ServerControlRow>
+        </div>
+        {updateVisibility.isError && (
+          <Alert variant="error" dismissible={false}>
+            {updateVisibility.error.message}
+          </Alert>
+        )}
+      </SettingsCard>
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <Dialog.Content className="max-w-2xl!">
           <DeleteMcpServerDialogContent
@@ -1018,7 +1175,147 @@ function DangerZoneCard({
           />
         </Dialog.Content>
       </Dialog>
-    </SettingsCard>
+      <ServerAvailabilityDialog
+        targetVisibility={pendingAvailability}
+        isLoading={updateVisibility.isPending}
+        onClose={() => setPendingAvailability(null)}
+        onConfirm={confirmAvailabilityChange}
+      />
+      <ServerVisibilityDialog
+        targetVisibility={pendingVisibility}
+        isLoading={updateVisibility.isPending}
+        onClose={() => setPendingVisibility(null)}
+        onConfirm={confirmVisibilityChange}
+      />
+    </>
+  );
+}
+
+function ServerAvailabilityDialog({
+  targetVisibility,
+  isLoading,
+  onClose,
+  onConfirm,
+}: {
+  targetVisibility: McpServerVisibility | null;
+  isLoading: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const isOpen = targetVisibility != null;
+  const enabling = targetVisibility !== "disabled";
+  let title = "Disable MCP server?";
+  let message =
+    "You are about to disable this MCP server. Users will no longer be able to connect to it. Continue?";
+
+  if (enabling) {
+    title = "Enable MCP server?";
+    message =
+      "You are about to enable this MCP server. Users will be able to connect to it and perform tool calls. Continue?";
+  }
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <Dialog.Content className="max-w-md">
+        <Dialog.Header>
+          <Dialog.Title>{title}</Dialog.Title>
+          <Dialog.Description>{message}</Dialog.Description>
+        </Dialog.Header>
+        <Dialog.Footer>
+          <Button variant="secondary" disabled={isLoading} onClick={onClose}>
+            <Button.Text>Cancel</Button.Text>
+          </Button>
+          <Button
+            variant={enabling ? "primary" : "destructive-primary"}
+            disabled={isLoading}
+            onClick={onConfirm}
+          >
+            {isLoading ? (
+              <>
+                <Button.LeftIcon>
+                  <Loader2 className="size-4 animate-spin" />
+                </Button.LeftIcon>
+                <Button.Text>Saving</Button.Text>
+              </>
+            ) : (
+              <Button.Text>Continue</Button.Text>
+            )}
+          </Button>
+        </Dialog.Footer>
+      </Dialog.Content>
+    </Dialog>
+  );
+}
+
+function ServerVisibilityDialog({
+  targetVisibility,
+  isLoading,
+  onClose,
+  onConfirm,
+}: {
+  targetVisibility: McpServerVisibility | null;
+  isLoading: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const isOpen = targetVisibility != null;
+  const makingPublic = targetVisibility === "public";
+  let title = "Make MCP server private?";
+  let confirmVariant: "primary" | "destructive-primary" = "primary";
+  let message = (
+    <>
+      You are about to make this MCP server private. Private MCP servers are
+      secured behind Speakeasy login and access controls, and thus not available
+      for use by the general public. Continue?
+    </>
+  );
+
+  if (makingPublic) {
+    title = "Make MCP server public?";
+    confirmVariant = "destructive-primary";
+    message = (
+      <>
+        You are about to make this MCP server public. This is only recommended
+        if you intend for it to be used by <em>anyone</em> who has its URL.{" "}
+        <span className="font-bold">
+          Public MCP servers are not secured behind Speakeasy&apos;s access
+          controls.
+        </span>
+        &nbsp;Continue?
+      </>
+    );
+  }
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <Dialog.Content className="max-w-md">
+        <Dialog.Header>
+          <Dialog.Title>{title}</Dialog.Title>
+          <Dialog.Description>{message}</Dialog.Description>
+        </Dialog.Header>
+        <Dialog.Footer>
+          <Button variant="secondary" disabled={isLoading} onClick={onClose}>
+            <Button.Text>Cancel</Button.Text>
+          </Button>
+          <Button
+            variant={confirmVariant}
+            disabled={isLoading}
+            onClick={onConfirm}
+          >
+            {isLoading ? (
+              <>
+                <Button.LeftIcon>
+                  <Loader2 className="size-4 animate-spin" />
+                </Button.LeftIcon>
+                <Button.Text>Saving</Button.Text>
+              </>
+            ) : (
+              <Button.Text>Continue</Button.Text>
+            )}
+          </Button>
+        </Dialog.Footer>
+      </Dialog.Content>
+    </Dialog>
   );
 }
 
