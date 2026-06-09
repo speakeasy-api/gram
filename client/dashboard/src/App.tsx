@@ -21,6 +21,7 @@ import {
 import { AppLayout, LoginCheck, OrgLayout } from "./components/app-layout.tsx";
 import { CommandPalette } from "./components/command-palette";
 import { recordVisit } from "./components/command-palette/recentlyVisited";
+import { useProjectNavRoutes } from "./hooks/useProjectNavRoutes";
 import { AuthProvider, ProjectProvider } from "./contexts/AuthProvider.tsx";
 import { useCommandPalette } from "./contexts/CommandPalette";
 import type { CommandAction } from "./contexts/CommandPalette";
@@ -154,15 +155,17 @@ const RouteProvider = () => {
   const { addActions, removeActions } = useCommandPalette();
   const { orgSlug, projectSlug } = useSlugs();
   const location = useLocation();
+  const projectNavRoutes = useProjectNavRoutes();
 
   // Update document title based on active route
   usePageTitle(routes, orgRoutes);
 
-  // Record the active top-level page for the command palette's "Recently
-  // Visited" section. Stored client-side (localStorage), scoped per workspace.
+  // Record the visited page for the command palette's "Recently Visited"
+  // section. Stored client-side (localStorage), scoped per workspace.
   // matchesCurrent uses exact segment counts, so the active top-level route is
-  // the real current page (home never false-matches a subpage); we record its
-  // base href so detail-page visits collapse onto their parent page.
+  // the real current page. We record the EXACT path (not the section base) so a
+  // detail page like /sources/externalmcp/notion is its own entry — labelled by
+  // the item slug ("notion") rather than the section ("Sources").
   useEffect(() => {
     const active =
       Object.values(routes).find((r) => r.active && !r.external) ??
@@ -170,19 +173,24 @@ const RouteProvider = () => {
     if (!active) return;
     const iconName = (active as unknown as { icon?: string }).icon;
     recordVisit(orgSlug, projectSlug, {
-      label: active.title,
-      href: active.href(),
+      label: pageLabel(active.title, active.href(), location.pathname),
+      href: location.pathname,
       icon: typeof iconName === "string" ? iconName : undefined,
     });
   }, [location.pathname, routes, orgRoutes, orgSlug, projectSlug]);
 
-  // Register global command palette navigation actions, enumerated from the
-  // route definitions so every navigable page is searchable — no hand-kept
-  // list to drift. Project pages only register once a project is selected
-  // (their goTo() needs the :projectSlug); org pages are always available.
+  // Register command palette navigation actions. Project "Pages" mirror the
+  // left sidebar exactly (same source, same order) so the palette only offers
+  // pages a user can actually reach from the nav. Project pages register only
+  // once a project is selected (their goTo() needs the :projectSlug); org pages
+  // are always available.
   useEffect(() => {
     const projectActions = projectSlug
-      ? routesToNavActions(routes, "Pages", "nav-page")
+      ? projectNavRoutes
+          .filter((route) => !route.external && route.component && route.title)
+          .map((route) =>
+            routeToNavAction(route, "Pages", `nav-page-${route.url || "home"}`),
+          )
       : [];
     const orgActions = routesToNavActions(orgRoutes, "Organization", "nav-org");
 
@@ -192,7 +200,7 @@ const RouteProvider = () => {
     return () => {
       removeActions(allActions.map((a) => a.id));
     };
-  }, [routes, orgRoutes, projectSlug, addActions, removeActions]);
+  }, [projectNavRoutes, orgRoutes, projectSlug, addActions, removeActions]);
 
   const routeElements = useMemo(() => {
     const allRoutes = Object.values(routes);
@@ -260,6 +268,50 @@ const RouteProvider = () => {
   return routeElements;
 };
 
+// Opaque ids make poor Recents labels; detect UUIDs so detail pages keyed by id
+// fall back to "<Section> <short id>" instead of a raw UUID.
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Label a visited page for the Recents list. Section/list pages keep the route
+// title; detail pages prefer the human-readable last path segment (a slug like
+// "notion"), falling back to "<Title> <short id>" when that segment is opaque.
+const pageLabel = (
+  title: string,
+  baseHref: string,
+  pathname: string,
+): string => {
+  if (pathname === baseHref || !pathname.startsWith(baseHref)) return title;
+  const segment = decodeURIComponent(
+    pathname.split("/").filter(Boolean).pop() ?? "",
+  );
+  if (!segment) return title;
+  if (UUID_RE.test(segment) || segment.length > 24) {
+    return `${title} · ${segment.slice(0, 8)}`;
+  }
+  return segment;
+};
+
+// Convert a single route into a command-palette navigation action.
+const routeToNavAction = (
+  route: AppRoute,
+  group: string,
+  id: string,
+): CommandAction => {
+  // AppRoute type-omits the raw `icon` string (exposing only the <Icon>
+  // component), but the builder spreads it through, so it's present at runtime.
+  // CommandAction renders the string name, so read it back here.
+  const iconName = (route as unknown as { icon?: string }).icon;
+  return {
+    id,
+    label: route.title,
+    icon: typeof iconName === "string" ? iconName : undefined,
+    onSelect: () => route.goTo(),
+    group,
+    stage: route.stage,
+  };
+};
+
 // Flatten a route map into command-palette navigation actions. Only top-level
 // pages a user can actually land on: external links, unauthenticated pages, and
 // full-screen pages outside the main layout are excluded.
@@ -277,20 +329,9 @@ const routesToNavActions = (
         Boolean(route.component) &&
         Boolean(route.title),
     )
-    .map(([key, route]) => {
-      // AppRoute type-omits the raw `icon` string (exposing only the <Icon>
-      // component), but the builder spreads it through, so it's present at
-      // runtime. CommandAction renders the string name, so read it back here.
-      const iconName = (route as unknown as { icon?: string }).icon;
-      return {
-        id: `${idPrefix}-${key}`,
-        label: route.title,
-        icon: typeof iconName === "string" ? iconName : undefined,
-        onSelect: () => route.goTo(),
-        group,
-        stage: route.stage,
-      };
-    });
+    .map(([key, route]) =>
+      routeToNavAction(route, group, `${idPrefix}-${key}`),
+    );
 
 const routesWithSubroutes = (routes: AppRoute[]) => {
   return routes

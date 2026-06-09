@@ -61,11 +61,23 @@ export function CommandPalette(): JSX.Element {
     {} as Record<string, typeof actions>,
   );
 
-  // Sort groups: Tool Actions first (when present), then others alphabetically
+  // Sort groups by an explicit priority: contextual Tool Actions first, then
+  // project Pages before Organization pages, then anything else alphabetically.
+  const groupPriority = (name: string): number => {
+    switch (name) {
+      case "Tool Actions":
+        return 0;
+      case "Pages":
+        return 1;
+      case "Organization":
+        return 2;
+      default:
+        return 3;
+    }
+  };
   const sortedGroups = Object.entries(groupedActions).sort(([a], [b]) => {
-    if (a === "Tool Actions") return -1;
-    if (b === "Tool Actions") return 1;
-    return a.localeCompare(b);
+    const byPriority = groupPriority(a) - groupPriority(b);
+    return byPriority !== 0 ? byPriority : a.localeCompare(b);
   });
 
   const handleSelect = (action: (typeof actions)[0]) => {

@@ -22,6 +22,7 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { Scope, useRBAC } from "@/hooks/useRBAC";
 import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
 import { useProductTier } from "@/hooks/useProductTier";
+import { useProjectNavRoutes } from "@/hooks/useProjectNavRoutes";
 import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
 import { cn, Icon, Stack } from "@speakeasy-api/moonshine";
@@ -122,26 +123,9 @@ export function AppSidebar({
     activeGroup = "Secure";
   }
 
-  // Find the specific active route title for the sliding highlight
-  const allNavRoutes = [
-    routes.home,
-    routes.sources,
-    routes.catalog,
-    routes.playground,
-    ...(isDeploymentsPageEnabled ? [routes.deployments] : []),
-    routes.mcp,
-    ...(isAssistantsEnabled ? [routes.assistants] : []),
-    routes.clis,
-    routes.plugins,
-    routes.environments,
-    routes.insights,
-    routes.logs,
-    routes.riskOverview,
-    routes.policyCenter,
-    routes.approvalRequests,
-    routes.detectionRules,
-    routes.settings,
-  ];
+  // Find the specific active route title for the sliding highlight. Shared with
+  // the command palette via useProjectNavRoutes so the two stay in sync.
+  const allNavRoutes = useProjectNavRoutes();
   const activeRoute = allNavRoutes.find((r) => r.active);
   // In collapsed mode, sub-items are hidden — fall back to group highlight.
   // Top-level items (Home, Settings) have no activeGroup, so keep activeItem for those.
