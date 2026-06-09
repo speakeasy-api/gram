@@ -21,7 +21,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Type } from "@/components/ui/type";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useCustomDomains } from "@/hooks/useToolsetUrl";
@@ -1140,10 +1139,10 @@ function mcpServerVisibilityToast(visibility: McpServerVisibility) {
   switch (visibility) {
     case "disabled":
       return "MCP server disabled";
+    case "private":
+      return "MCP server enabled";
     case "public":
       return "MCP server set to public";
-    case "private":
-      return "MCP server set to private";
     default:
       return "MCP server updated";
   }
@@ -1184,8 +1183,6 @@ function DangerZoneCard({
   const routes = useRoutes();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [pendingAvailability, setPendingAvailability] =
-    useState<McpServerVisibility | null>(null);
-  const [pendingVisibility, setPendingVisibility] =
     useState<McpServerVisibility | null>(null);
   const queryClient = useQueryClient();
   const client = useSdkClient();
@@ -1246,23 +1243,7 @@ function DangerZoneCard({
     setPendingAvailability(null);
   };
 
-  const requestVisibilityChange = (visibility: string) => {
-    if (visibility !== "public" && visibility !== "private") return;
-    if (visibility === mcpServer.visibility) return;
-    setPendingVisibility(visibility);
-  };
-
-  const confirmVisibilityChange = () => {
-    if (!pendingVisibility) return;
-    void applyVisibility(pendingVisibility);
-    setPendingVisibility(null);
-  };
-
   const enabled = mcpServer.visibility !== "disabled";
-  let accessMode = "";
-  if (enabled) {
-    accessMode = mcpServer.visibility === "public" ? "public" : "private";
-  }
 
   return (
     <>
@@ -1270,7 +1251,7 @@ function DangerZoneCard({
         <DangerSettingsSection.Header>
           <DangerSettingsSection.Title>Danger Zone</DangerSettingsSection.Title>
           <DangerSettingsSection.Description>
-            Manage server availability, access, and destructive actions.
+            Manage server availability and destructive actions.
           </DangerSettingsSection.Description>
         </DangerSettingsSection.Header>
         <DangerSettingsSection.Panel>
@@ -1294,41 +1275,6 @@ function DangerZoneCard({
                     aria-label="Enable MCP server"
                     onCheckedChange={requestAvailabilityChange}
                   />
-                </RequireScope>
-              </ServerControlRow>
-
-              <ServerControlRow
-                title="Visibility"
-                description={
-                  enabled
-                    ? "Choose whether clients can use this server publicly or only through authenticated project access."
-                    : "Choose an access mode to enable this server as public or private."
-                }
-              >
-                <RequireScope scope="mcp:write" level="component">
-                  <ToggleGroup
-                    type="single"
-                    value={accessMode}
-                    variant="outline"
-                    size="sm"
-                    disabled={isUpdatingVisibility}
-                    onValueChange={requestVisibilityChange}
-                  >
-                    <ToggleGroupItem
-                      value="private"
-                      aria-label="Set MCP server private"
-                      className="px-3"
-                    >
-                      Private
-                    </ToggleGroupItem>
-                    <ToggleGroupItem
-                      value="public"
-                      aria-label="Set MCP server public"
-                      className="px-3"
-                    >
-                      Public
-                    </ToggleGroupItem>
-                  </ToggleGroup>
                 </RequireScope>
               </ServerControlRow>
 
@@ -1377,12 +1323,6 @@ function DangerZoneCard({
         onClose={() => setPendingAvailability(null)}
         onConfirm={confirmAvailabilityChange}
       />
-      <ServerVisibilityDialog
-        targetVisibility={pendingVisibility}
-        isLoading={isUpdatingVisibility}
-        onClose={() => setPendingVisibility(null)}
-        onConfirm={confirmVisibilityChange}
-      />
     </>
   );
 }
@@ -1423,78 +1363,6 @@ function ServerAvailabilityDialog({
           </Button>
           <Button
             variant={enabling ? "primary" : "destructive-primary"}
-            disabled={isLoading}
-            onClick={onConfirm}
-          >
-            {isLoading ? (
-              <>
-                <Button.LeftIcon>
-                  <Loader2 className="size-4 animate-spin" />
-                </Button.LeftIcon>
-                <Button.Text>Saving</Button.Text>
-              </>
-            ) : (
-              <Button.Text>Continue</Button.Text>
-            )}
-          </Button>
-        </Dialog.Footer>
-      </Dialog.Content>
-    </Dialog>
-  );
-}
-
-function ServerVisibilityDialog({
-  targetVisibility,
-  isLoading,
-  onClose,
-  onConfirm,
-}: {
-  targetVisibility: McpServerVisibility | null;
-  isLoading: boolean;
-  onClose: () => void;
-  onConfirm: () => void;
-}) {
-  const isOpen = targetVisibility != null;
-  const makingPublic = targetVisibility === "public";
-  let title = "Make MCP server private?";
-  let confirmVariant: "primary" | "destructive-primary" = "primary";
-  let message = (
-    <>
-      You are about to make this MCP server private. Private MCP servers are
-      secured behind Speakeasy login and access controls, and thus not available
-      for use by the general public. Continue?
-    </>
-  );
-
-  if (makingPublic) {
-    title = "Make MCP server public?";
-    confirmVariant = "destructive-primary";
-    message = (
-      <>
-        You are about to make this MCP server public. This is only recommended
-        if you intend for it to be used by <em>anyone</em> who has its URL.{" "}
-        <span className="font-bold">
-          Public MCP servers are not secured behind Speakeasy&apos;s access
-          controls.
-        </span>
-        &nbsp;Continue?
-      </>
-    );
-  }
-
-  return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <Dialog.Content className="max-w-md">
-        <Dialog.Header>
-          <Dialog.Title>{title}</Dialog.Title>
-          <Dialog.Description>{message}</Dialog.Description>
-        </Dialog.Header>
-        <Dialog.Footer>
-          <Button variant="secondary" disabled={isLoading} onClick={onClose}>
-            <Button.Text>Cancel</Button.Text>
-          </Button>
-          <Button
-            variant={confirmVariant}
             disabled={isLoading}
             onClick={onConfirm}
           >
