@@ -10,6 +10,7 @@ import (
 	"crypto/subtle"
 	_ "embed"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"html/template"
@@ -35,6 +36,26 @@ var consentTemplateHTML string
 
 var consentTemplate = template.Must(template.New("consent").Parse(consentTemplateHTML))
 
+// consentScriptData is the consent page's client-side script. It is served
+// as an external file (not inlined into the template) because the ingress
+// CSP forbids inline scripts.
+//
+//go:embed consent_script.js
+var consentScriptData []byte
+
+// consentScriptHash is the first 8 hex chars of the SHA-256 of
+// consentScriptData, used to cache-bust the immutable script URL. Matches
+// the install-page script convention in the mcpmetadata package.
+var consentScriptHash = func() string {
+	sum := sha256.Sum256(consentScriptData)
+	return hex.EncodeToString(sum[:])[:8]
+}()
+
+// consentScriptURL is the path the consent template loads the script from.
+// Hardcoded to the /mcp surface (like the install-page script) so the
+// /x/mcp surface reuses the same route rather than registering its own.
+var consentScriptURL = "/mcp/consent-page-" + consentScriptHash + ".js"
+
 // remoteSetHashEmpty is the SHA-256 of an empty remote-set, used by the
 // consent record's remote_set_hash column when the issuer has no remote
 // session clients (the only case today). The empty case is NOT skipped —
@@ -54,6 +75,7 @@ type consentTemplateData struct {
 	CSRFToken          string
 	SubjectDisplay     string
 	RedirectURI        string
+	ScriptURL          string
 	RemoteSessionCards []remoteSessionCard
 	// ConsentEnabled gates the "Give Access" button. True when there are no
 	// remote-session challenges, or when at least one challenge has been
@@ -99,6 +121,24 @@ func (s *Service) HandleConsent(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	return s.ServeConsent(w, r, endpoint)
+}
+
+// ServeConsentScript serves the consent page's client-side script with
+// immutable cache headers. Mounted at `GET /mcp/consent-page-{hash}.js`.
+// The hash in the path is content-derived, so a mismatch is a stale URL.
+func (s *Service) ServeConsentScript(w http.ResponseWriter, r *http.Request) error {
+	if chi.URLParam(r, "hash") != consentScriptHash {
+		w.WriteHeader(http.StatusNotFound)
+		return nil
+	}
+
+	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(consentScriptData); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "write consent script response").Log(r.Context(), s.logger)
+	}
+	return nil
 }
 
 // ServeConsent is the post-resolution entry point for the consent UI
@@ -171,6 +211,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		CSRFToken:          challengeState.CSRFToken,
 		SubjectDisplay:     subjectDisplay,
 		RedirectURI:        challengeState.RedirectURI,
+		ScriptURL:          consentScriptURL,
 		RemoteSessionCards: cards,
 		ConsentEnabled:     consentEnabled,
 	}
