@@ -28,13 +28,16 @@ func TestCatalogIsUpToDate(t *testing.T) {
 func TestAccessEventsUseGenericNames(t *testing.T) {
 	t.Parallel()
 
-	eventTypes := make([]outbox.EventType, 0, len(events.All))
+	eventDescriptions := make(map[outbox.EventType]string, len(events.All))
 	for _, event := range events.All {
-		eventTypes = append(eventTypes, event.EventType())
+		eventDescriptions[event.EventType()] = event.Description()
 	}
 
-	require.Contains(t, eventTypes, outbox.EventType("audit_log.access_rule_event_v1"))
-	require.Contains(t, eventTypes, outbox.EventType("audit_log.access_request_event_v1"))
-	require.NotContains(t, eventTypes, outbox.EventType("audit_log.shadow_mcp_access_rule_event_v1"))
-	require.NotContains(t, eventTypes, outbox.EventType("audit_log.shadow_mcp_approval_event_v1"))
+	require.Contains(t, eventDescriptions, outbox.EventType("audit_log.access_rule_event_v1"))
+	require.Contains(t, eventDescriptions, outbox.EventType("audit_log.access_request_event_v1"))
+
+	require.Contains(t, eventDescriptions, outbox.EventType("audit_log.shadow_mcp_access_rule_event_v1"))
+	require.Contains(t, eventDescriptions, outbox.EventType("audit_log.shadow_mcp_approval_event_v1"))
+	require.Contains(t, eventDescriptions[outbox.EventType("audit_log.shadow_mcp_access_rule_event_v1")], "Deprecated: use audit_log.access_rule_event_v1.")
+	require.Contains(t, eventDescriptions[outbox.EventType("audit_log.shadow_mcp_approval_event_v1")], "Deprecated: use audit_log.access_request_event_v1.")
 }
