@@ -9,15 +9,12 @@ import { useViewMode } from "@/components/ui/use-view-mode";
 import { useProject } from "@/contexts/Auth";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import { CommandBar } from "@/pages/catalog/CommandBar";
-import {
-  type PulseMCPServer,
-  useInfiniteListMCPCatalog,
-} from "@/pages/catalog/hooks";
+import { type PulseMCPServer, useListMCPCatalog } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query";
 import { Button, Input, Stack } from "@speakeasy-api/moonshine";
-import { Loader2, Search, SearchXIcon, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Search, SearchXIcon, X } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Outlet } from "react-router";
 import { FilterChips } from "./FilterChips";
 import { defaultFilterValues } from "./filter-defaults";
@@ -57,58 +54,26 @@ function CatalogInner() {
   const [addingServers, setAddingServers] = useState<PulseMCPServer[]>([]);
   const [gridElement, setGridElement] = useState<HTMLDivElement | null>(null);
 
-  // Track if we've loaded all data (for client-side search)
-  const [allDataLoaded, setAllDataLoaded] = useState(false);
-
-  // Only use server-side search if we haven't loaded all data yet
-  // Normalize empty string to undefined for consistent query keys
-  const serverSideSearch = allDataLoaded ? undefined : searchQuery || undefined;
-
-  const {
-    data,
-    isLoading,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-    debouncedSearch,
-  } = useInfiniteListMCPCatalog(serverSideSearch);
+  const { data, isLoading } = useListMCPCatalog();
   const { data: deploymentResult, refetch: refetchDeployment } =
     useLatestDeployment();
   const deployment = deploymentResult?.deployment;
   const externalMcps = deployment?.externalMcps ?? [];
-  const loadMoreRef = useRef<HTMLDivElement>(null);
 
-  // Track when all data has been loaded (for the unfiltered query only)
-  // Once we've loaded all data without a search, we can switch to client-side filtering
-  useEffect(() => {
-    // Only set allDataLoaded based on the unfiltered (no search) query state
-    // Use debouncedSearch (not searchQuery) to ensure we're checking against the actual
-    // query state, avoiding timing mismatches during debounce transitions
-    if (
-      !debouncedSearch &&
-      !hasNextPage &&
-      !isLoading &&
-      data?.pages &&
-      data.pages.length > 0
-    ) {
-      setAllDataLoaded(true);
-    }
-    // Never reset allDataLoaded to false - once we have all data, we keep it
-  }, [hasNextPage, isLoading, data?.pages, debouncedSearch]);
+  // The backend returns the full catalog in one response.
+  const allServers = useMemo(
+    () => (data?.servers as PulseMCPServer[]) ?? [],
+    [data],
+  );
 
-  // Flatten all pages into a single list
-  const allServers = useMemo(() => {
-    return (
-      data?.pages.flatMap((page) => page.servers as PulseMCPServer[]) ?? []
-    );
-  }, [data]);
-
-  // Apply client-side filtering based on filter state
-  // Use client-side search when all data is loaded
-  const clientSideSearch = allDataLoaded ? searchQuery : undefined;
+  // Search, sort, and filter the full catalog client-side.
   const filteredServers = useMemo(() => {
-    return filterAndSortServers(allServers, filterState, clientSideSearch);
-  }, [allServers, filterState, clientSideSearch]);
+    return filterAndSortServers(
+      allServers,
+      filterState,
+      searchQuery || undefined,
+    );
+  }, [allServers, filterState, searchQuery]);
 
   // Check if any granular filters are active
   const hasActiveFilters = useMemo(() => {
@@ -130,24 +95,6 @@ function CatalogInner() {
   const handleAdd = () => {
     setAddingServers(getSelectedServerObjects());
   };
-
-  // Infinite scroll with IntersectionObserver
-  useEffect(() => {
-    const element = loadMoreRef.current;
-    if (!element) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]!.isIntersecting! && hasNextPage && !isFetchingNextPage) {
-          void fetchNextPage();
-        }
-      },
-      { threshold: 0.1 },
-    );
-
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   return (
     <Page>
@@ -291,23 +238,6 @@ function CatalogInner() {
                       );
                     })}
                   </DotTable>
-                </div>
-              )}
-
-              {/* Load more trigger */}
-              {!isLoading && hasNextPage && !searchQuery && (
-                <div
-                  ref={loadMoreRef}
-                  className="flex items-center justify-center py-8"
-                >
-                  {isFetchingNextPage && (
-                    <Stack direction="horizontal" gap={2} align="center">
-                      <Loader2 className="text-muted-foreground h-4 w-4 animate-spin" />
-                      <Type small muted>
-                        Loading more...
-                      </Type>
-                    </Stack>
-                  )}
                 </div>
               )}
 
