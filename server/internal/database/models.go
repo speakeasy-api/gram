@@ -26,22 +26,24 @@ type AgentExecution struct {
 }
 
 type AiIntegrationConfig struct {
-	CreatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	OrganizationID  string
-	Provider        string
-	ProjectID       uuid.UUID
-	ApiKeyEncrypted string
-	Enabled         bool
-	ID              uuid.UUID
-	Deleted         bool
+	CreatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	OrganizationID         string
+	Provider               string
+	ProjectID              uuid.UUID
+	ExternalOrganizationID pgtype.Text
+	ApiKeyEncrypted        string
+	Enabled                bool
+	ID                     uuid.UUID
+	Deleted                bool
 }
 
 type AiIntegrationConfigChat struct {
 	ID                    uuid.UUID
 	AiIntegrationConfigID uuid.UUID
 	ChatID                uuid.UUID
+	LastCursorID          pgtype.Text
 	CreatedAt             pgtype.Timestamptz
 	UpdatedAt             pgtype.Timestamptz
 }
@@ -51,6 +53,7 @@ type AiIntegrationSync struct {
 	UpdatedAt             pgtype.Timestamptz
 	AiIntegrationConfigID uuid.UUID
 	PollWatermarkAt       pgtype.Timestamptz
+	LastCursorID          pgtype.Text
 	NextPollAfter         pgtype.Timestamptz
 	LastPollError         pgtype.Text
 	LastPollFailedAt      pgtype.Timestamptz

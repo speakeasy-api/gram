@@ -2376,6 +2376,7 @@ CREATE TABLE IF NOT EXISTS ai_integration_config_chats (
   id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
   ai_integration_config_id uuid NOT NULL,
   chat_id uuid NOT NULL,
+  last_cursor_id TEXT,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
@@ -2394,6 +2395,7 @@ CREATE TABLE IF NOT EXISTS ai_integration_syncs (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   ai_integration_config_id uuid NOT NULL,
   poll_watermark_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_cursor_id TEXT,
   next_poll_after timestamptz NOT NULL DEFAULT clock_timestamp(),
   last_poll_error TEXT,
   last_poll_failed_at timestamptz,
