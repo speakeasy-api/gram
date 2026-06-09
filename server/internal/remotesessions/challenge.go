@@ -206,31 +206,48 @@ func (m *ChallengeManager) ListClients(
 	return out, nil
 }
 
-// ConnectedClientIDs returns the set of remote_session_client_ids that
-// have an active remote_sessions row for `subject` under the given
-// `userSessionIssuerID`. Single round-trip; the caller (consent
-// renderer) then does O(1) membership checks per card. Returns an empty
-// set for zero subjects so anonymous-pre-stamp renders are no-ops.
-func (m *ChallengeManager) ConnectedClientIDs(
+// RemoteSessionStatus is the usability of a subject's stored remote_session
+// for a single client, as surfaced to the consent renderer. A client with no
+// non-deleted remote_session is absent from the map entirely (disconnected);
+// only present rows carry a status.
+type RemoteSessionStatus string
+
+const (
+	// RemoteSessionActive: the access token is unexpired, or a refresh token
+	// exists to renew it — the runtime gate will accept it.
+	RemoteSessionActive RemoteSessionStatus = "active"
+	// RemoteSessionExpired: the row exists but the access token has expired
+	// with no refresh token, so the runtime gate rejects it
+	// (ErrNoValidToken). The user must re-link to recover.
+	RemoteSessionExpired RemoteSessionStatus = "expired"
+)
+
+// RemoteSessionStatuses returns, per remote_session_client_id, the usability
+// status of `subject`'s remote_session under the given `userSessionIssuerID`.
+// Clients with no non-deleted session are omitted (disconnected). Single
+// round-trip; the caller (consent renderer) then does O(1) lookups per card.
+// Returns an empty map for zero subjects so anonymous-pre-stamp renders are
+// no-ops.
+func (m *ChallengeManager) RemoteSessionStatuses(
 	ctx context.Context,
 	subject urn.SessionSubject,
 	userSessionIssuerID uuid.UUID,
-) (map[uuid.UUID]struct{}, error) {
+) (map[uuid.UUID]RemoteSessionStatus, error) {
 	if subject.IsZero() {
-		return map[uuid.UUID]struct{}{}, nil
+		return map[uuid.UUID]RemoteSessionStatus{}, nil
 	}
-	ids, err := remotesessions_repo.New(m.db).ListConnectedClientIDsForSubject(ctx, remotesessions_repo.ListConnectedClientIDsForSubjectParams{
+	rows, err := remotesessions_repo.New(m.db).ListRemoteSessionStatusesForSubject(ctx, remotesessions_repo.ListRemoteSessionStatusesForSubjectParams{
 		SubjectUrn:          subject,
 		UserSessionIssuerID: userSessionIssuerID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("list connected client ids: %w", err)
+		return nil, fmt.Errorf("list remote session statuses: %w", err)
 	}
-	set := make(map[uuid.UUID]struct{}, len(ids))
-	for _, id := range ids {
-		set[id] = struct{}{}
+	statuses := make(map[uuid.UUID]RemoteSessionStatus, len(rows))
+	for _, row := range rows {
+		statuses[row.RemoteSessionClientID] = RemoteSessionStatus(row.Status)
 	}
-	return set, nil
+	return statuses, nil
 }
 
 // BuildAuthorizationUrl mints a RemoteLoginState (with PKCE S256) for the

@@ -456,15 +456,27 @@ WHERE subject_urn = @subject_urn
   AND remote_session_client_id = @remote_session_client_id
   AND deleted IS FALSE;
 
--- name: ListConnectedClientIDsForSubject :many
--- Bulk lookup for the consent renderer: returns the set of
--- remote_session_client_ids that have an active remote_sessions row for
--- the given subject under a single user_session_issuer. Folds the N
--- per-card IsConnected lookups into one round-trip. The partial unique
--- index on (subject_urn, remote_session_client_id) WHERE deleted IS
--- FALSE means at most one row per (subject, client), so the result set
--- doubles as a membership set without DISTINCT.
-SELECT remote_session_client_id
+-- name: ListRemoteSessionStatusesForSubject :many
+-- Bulk lookup for the consent renderer: returns each non-deleted
+-- remote_session for the given subject under a single user_session_issuer,
+-- tagged with whether it is still usable. Folds the N per-card lookups into
+-- one round-trip. The partial unique index on (subject_urn,
+-- remote_session_client_id) WHERE deleted IS FALSE means at most one row per
+-- (subject, client), so the result doubles as a per-client map without
+-- DISTINCT. A soft-deleted row is absent here entirely (truly disconnected).
+--
+-- The 'active' predicate mirrors validateAndRefresh in tokenservice.go: a
+-- session is usable only when its access token is unexpired, or it has a
+-- refresh token to renew with. A present-but-unusable row is 'expired' rather
+-- than dropped, so the consent UI can distinguish "reconnect this expired
+-- link" from "never connected" — and so the runtime gate (which rejects the
+-- same row as ErrNoValidToken) stops disagreeing with a green "Connected" badge.
+SELECT
+  remote_session_client_id,
+  (CASE
+    WHEN access_expires_at > now() OR refresh_token_encrypted IS NOT NULL THEN 'active'
+    ELSE 'expired'
+  END)::text AS status
 FROM remote_sessions
 WHERE subject_urn = @subject_urn
   AND user_session_issuer_id = @user_session_issuer_id
