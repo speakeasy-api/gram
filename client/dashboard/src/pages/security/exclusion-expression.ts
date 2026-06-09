@@ -19,6 +19,9 @@ type ExclusionMatchType =
   | "source"
   | "entity_type";
 
+type ExclusionClauseLHS = "match" | "rule_id" | "source" | "entity_type";
+type ExclusionClauseOperator = "==" | "~=";
+
 export interface ExclusionFields {
   matchType: ExclusionMatchType;
   matchValue: string;
@@ -83,7 +86,9 @@ export function parseExclusionExpression(input: string): ParseResult {
         error: `Could not parse \`${clause}\`. Use e.g. match == "value".`,
       };
     }
-    const [, lhs, op, rawValue] = m;
+    const lhs = m[1] as ExclusionClauseLHS;
+    const op = m[2] as ExclusionClauseOperator;
+    const rawValue = m[3];
     const value = unescape(rawValue);
 
     if (op === "~=" && lhs !== "match") {

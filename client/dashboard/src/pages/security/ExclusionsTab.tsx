@@ -20,7 +20,7 @@ import type { RiskExclusion } from "@gram/client/models/components/riskexclusion
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import type { ReactNode } from "react";
+import type { JSX, ReactNode } from "react";
 import { Ellipsis, Plus } from "lucide-react";
 import { serializeExclusionExpression } from "./exclusion-expression";
 import { ExclusionSheet, type ExclusionSheetState } from "./exclusion-sheet";
@@ -37,7 +37,7 @@ export function ExclusionsTab({
   policies,
   sheet,
   onSheetChange,
-}: ExclusionsTabProps) {
+}: ExclusionsTabProps): JSX.Element {
   const queryClient = useQueryClient();
   const { data, isLoading } = useRiskListExclusions();
   const exclusions = data?.exclusions ?? [];
@@ -132,9 +132,9 @@ export function ExclusionsTab({
         <div onClick={(e) => e.stopPropagation()}>
           <ExclusionActionsMenu
             onEdit={() => onSheetChange({ mode: "edit", exclusion })}
-            onDelete={() =>
-              deleteMutation.mutate({ request: { id: exclusion.id } })
-            }
+            onDelete={() => {
+              deleteMutation.mutate({ request: { id: exclusion.id } });
+            }}
           />
         </div>
       ),
@@ -180,7 +180,7 @@ function ExclusionActionsMenu({
 }: {
   onEdit: () => void;
   onDelete: () => void;
-}) {
+}): JSX.Element {
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
@@ -193,13 +193,17 @@ function ExclusionActionsMenu({
       <DropdownMenuContent align="end">
         <DropdownMenuItem
           className="cursor-pointer"
-          onSelect={() => setTimeout(onEdit, 0)}
+          onSelect={() => {
+            setTimeout(onEdit, 0);
+          }}
         >
           Edit
         </DropdownMenuItem>
         <DropdownMenuItem
           className="text-destructive focus:text-destructive cursor-pointer"
-          onSelect={() => setTimeout(onDelete, 0)}
+          onSelect={() => {
+            setTimeout(onDelete, 0);
+          }}
         >
           Delete
         </DropdownMenuItem>

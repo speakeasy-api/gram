@@ -27,6 +27,7 @@ import {
 import type { RiskExclusion } from "@gram/client/models/components/riskexclusion.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
+import type { JSX } from "react";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
@@ -53,7 +54,7 @@ export function ExclusionSheet({
 }: {
   state: ExclusionSheetState | null;
   onOpenChange: (open: boolean) => void;
-}) {
+}): JSX.Element {
   const queryClient = useQueryClient();
   const { data: policyData } = useRiskListPolicies();
   const policies = policyData?.policies ?? [];
@@ -62,7 +63,7 @@ export function ExclusionSheet({
 
   const createMutation = useRiskCreateExclusionMutation({
     onSuccess: () => {
-      invalidate();
+      void invalidate();
       onOpenChange(false);
       toast.success(
         "Exclusion created. Matching findings will update shortly.",
@@ -72,7 +73,7 @@ export function ExclusionSheet({
   });
   const updateMutation = useRiskUpdateExclusionMutation({
     onSuccess: () => {
-      invalidate();
+      void invalidate();
       onOpenChange(false);
       toast.success("Exclusion updated. Findings will update shortly.");
     },
