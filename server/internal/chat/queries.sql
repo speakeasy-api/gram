@@ -117,6 +117,7 @@ WHERE c.project_id = @project_id
         WHERE cm.chat_id = c.id
           AND rr.project_id = @project_id
           AND rr.found IS TRUE
+          AND rr.excluded_at IS NULL
       )
     )
     OR (
@@ -126,6 +127,7 @@ WHERE c.project_id = @project_id
         WHERE cm.chat_id = c.id
           AND rr.project_id = @project_id
           AND rr.found IS TRUE
+          AND rr.excluded_at IS NULL
       )
     )
   );
@@ -149,6 +151,7 @@ WITH limited_chats AS (
       WHERE cm.chat_id = c.id
         AND rr.project_id = @project_id
         AND rr.found IS TRUE
+        AND rr.excluded_at IS NULL
     ) AS risk_findings_count
   FROM chats c
   WHERE c.project_id = @project_id
@@ -181,6 +184,7 @@ WITH limited_chats AS (
           WHERE cm.chat_id = c.id
             AND rr.project_id = @project_id
             AND rr.found IS TRUE
+            AND rr.excluded_at IS NULL
         )
       )
       OR (
@@ -190,6 +194,7 @@ WITH limited_chats AS (
           WHERE cm.chat_id = c.id
             AND rr.project_id = @project_id
             AND rr.found IS TRUE
+            AND rr.excluded_at IS NULL
         )
       )
     )
@@ -372,6 +377,7 @@ WHERE c.project_id = @project_id
         WHERE cm.chat_id = c.id
           AND rr.project_id = @project_id
           AND rr.found IS TRUE
+          AND rr.excluded_at IS NULL
       )
     )
     OR (
@@ -381,6 +387,7 @@ WHERE c.project_id = @project_id
         WHERE cm.chat_id = c.id
           AND rr.project_id = @project_id
           AND rr.found IS TRUE
+          AND rr.excluded_at IS NULL
       )
     )
   );

@@ -38,7 +38,10 @@ const REGEX_MAX_LENGTH = 512;
 const CLAUSE_RE =
   /^(match|rule_id|source|entity_type)\s*(==|~=)\s*"((?:[^"\\]|\\.)*)"$/;
 
-function unescape(value: string): string {
+function unescape(value: string | undefined): string {
+  if (value === undefined) {
+    return "";
+  }
   return value.replace(/\\(["\\])/g, "$1");
 }
 
@@ -88,7 +91,7 @@ export function parseExclusionExpression(input: string): ParseResult {
     }
     const lhs = m[1] as ExclusionClauseLHS;
     const op = m[2] as ExclusionClauseOperator;
-    const rawValue = m[3];
+    const rawValue = m[3] ?? "";
     const value = unescape(rawValue);
 
     if (op === "~=" && lhs !== "match") {
