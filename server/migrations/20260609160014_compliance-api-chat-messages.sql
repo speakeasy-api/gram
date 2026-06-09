@@ -8,6 +8,8 @@ CREATE UNIQUE INDEX CONCURRENTLY "chat_messages_chat_id_external_message_id_key"
 ALTER TABLE "chats" ADD COLUMN "external_chat_id" text NULL;
 -- Create index "chats_org_external_chat_id_key" to table: "chats"
 CREATE UNIQUE INDEX CONCURRENTLY "chats_org_external_chat_id_key" ON "chats" ("organization_id", "external_chat_id") WHERE (external_chat_id IS NOT NULL);
+-- Modify "ai_integration_configs" table
+ALTER TABLE "ai_integration_configs" ADD COLUMN "external_organization_id" text NULL;
 -- Create "ai_integration_config_chats" table
 CREATE TABLE "ai_integration_config_chats" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),

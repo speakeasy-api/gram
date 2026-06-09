@@ -2359,6 +2359,7 @@ CREATE TABLE IF NOT EXISTS ai_integration_configs (
   organization_id TEXT NOT NULL,
   provider TEXT NOT NULL,
   project_id uuid NOT NULL,
+  external_organization_id TEXT,
   api_key_encrypted TEXT NOT NULL,
   enabled boolean NOT NULL DEFAULT true,
   id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
