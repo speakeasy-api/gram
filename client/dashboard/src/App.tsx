@@ -20,6 +20,7 @@ import {
 } from "react-router";
 import { AppLayout, LoginCheck, OrgLayout } from "./components/app-layout.tsx";
 import { CommandPalette } from "./components/command-palette";
+import { recordVisit } from "./components/command-palette/recentlyVisited";
 import { AuthProvider, ProjectProvider } from "./contexts/AuthProvider.tsx";
 import { useCommandPalette } from "./contexts/CommandPalette";
 import type { CommandAction } from "./contexts/CommandPalette";
@@ -151,10 +152,29 @@ const RouteProvider = () => {
   const routes = useRoutes();
   const orgRoutes = useOrgRoutes();
   const { addActions, removeActions } = useCommandPalette();
-  const { projectSlug } = useSlugs();
+  const { orgSlug, projectSlug } = useSlugs();
+  const location = useLocation();
 
   // Update document title based on active route
   usePageTitle(routes, orgRoutes);
+
+  // Record the active top-level page for the command palette's "Recently
+  // Visited" section. Stored client-side (localStorage), scoped per workspace.
+  // matchesCurrent uses exact segment counts, so the active top-level route is
+  // the real current page (home never false-matches a subpage); we record its
+  // base href so detail-page visits collapse onto their parent page.
+  useEffect(() => {
+    const active =
+      Object.values(routes).find((r) => r.active && !r.external) ??
+      Object.values(orgRoutes).find((r) => r.active && !r.external);
+    if (!active) return;
+    const iconName = (active as unknown as { icon?: string }).icon;
+    recordVisit(orgSlug, projectSlug, {
+      label: active.title,
+      href: active.href(),
+      icon: typeof iconName === "string" ? iconName : undefined,
+    });
+  }, [location.pathname, routes, orgRoutes, orgSlug, projectSlug]);
 
   // Register global command palette navigation actions, enumerated from the
   // route definitions so every navigable page is searchable — no hand-kept

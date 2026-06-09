@@ -11,7 +11,9 @@ import { useCommandPalette } from "@/contexts/CommandPalette";
 import { useSlugs } from "@/contexts/Sdk";
 import { Icon, IconName, Badge } from "@speakeasy-api/moonshine";
 import { useState } from "react";
+import { useNavigate } from "react-router";
 import { requestAskAi } from "./askAiBridge";
+import { useRecentlyVisited } from "./recentlyVisited";
 import { ResourceResults } from "./ResourceResults";
 
 // Speakeasy brand spectrum — the same brand-language gradient the Project
@@ -25,16 +27,25 @@ const KBD_CLASS =
 
 export function CommandPalette(): JSX.Element {
   const { isOpen, close, actions, contextBadge } = useCommandPalette();
-  const { projectSlug } = useSlugs();
+  const { orgSlug, projectSlug } = useSlugs();
+  const navigate = useNavigate();
   const [query, setQuery] = useState("");
 
   // Project Assistant and resource search are project-scoped. At the org level
   // (no project in the URL) the palette still works for navigating org pages.
   const inProject = Boolean(projectSlug);
 
+  // Recently visited pages (client-side; read only while the palette is open).
+  const recents = useRecentlyVisited(orgSlug, projectSlug, isOpen);
+
   const closeAndReset = () => {
     setQuery("");
     close();
+  };
+
+  const handleRecentSelect = (href: string) => {
+    void navigate(href);
+    closeAndReset();
   };
 
   // Group actions by their group property
@@ -101,6 +112,25 @@ export function CommandPalette(): JSX.Element {
       />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
+
+        {/* Recently visited pages (most-recent first), client-side localStorage. */}
+        {recents.length > 0 && (
+          <CommandGroup heading="Recently Visited">
+            {recents.map((recent) => (
+              <CommandItem
+                key={recent.href}
+                value={`recent ${recent.label} ${recent.href}`}
+                onSelect={() => handleRecentSelect(recent.href)}
+                className="flex items-center gap-2"
+              >
+                {recent.icon && (
+                  <Icon name={recent.icon as IconName} className="size-4" />
+                )}
+                <span className="truncate">{recent.label}</span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
 
         {/* Free-form AI escape hatch — always offered regardless of the filter
             (forceMount) so the typed query can always be sent to the assistant.
