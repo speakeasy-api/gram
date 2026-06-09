@@ -208,7 +208,9 @@ export function CommandPalette(): JSX.Element {
 
         {/* Resource search results — only mounted while open, so the list
             fetches lazily on first open (React Query caches thereafter). */}
-        {isOpen && inProject && <ResourceResults onNavigate={closeAndReset} />}
+        {isOpen && inProject && (
+          <ResourceResults onNavigate={closeAndReset} query={trimmedQuery} />
+        )}
       </CommandList>
 
       {/* Keyboard navigation hints */}
