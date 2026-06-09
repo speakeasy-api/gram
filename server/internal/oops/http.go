@@ -37,8 +37,8 @@ func ErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Requ
 		var se *ShareableError
 		switch {
 		case errors.As(err, &se):
-			code = se.HTTPStatus()
-			payload = se.AsGoa()
+			code = se.HTTPStatus(r.Context())
+			payload = se.AsGoa(r.Context())
 		default:
 			stack := string(debug.Stack())
 			logger.ErrorContext(r.Context(), "unexpected error", attr.SlogErrorID(payload.ID), attr.SlogError(err), attr.SlogErrorStack(stack))

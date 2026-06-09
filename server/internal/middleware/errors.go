@@ -15,7 +15,7 @@ func MapErrors() func(goa.Endpoint) goa.Endpoint {
 
 			var se *oops.ShareableError
 			if err != nil && errors.As(err, &se) {
-				return nil, se.AsGoa()
+				return nil, se.AsGoa(ctx)
 			}
 
 			return val, err
