@@ -207,9 +207,12 @@ export function ConfigurePoliciesStep({ onBack }: ConfigurePoliciesStepProps) {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const projectSlug = useMemo(
+    () => new URLSearchParams(location.search).get("projectSlug") || "default",
+    [location.search],
+  );
+
   const handleComplete = () => {
-    const search = new URLSearchParams(location.search);
-    const projectSlug = search.get("projectSlug") || "default";
     navigate(`/${orgSlug}/projects/${projectSlug}`);
   };
   const [configs, setConfigs] = useState<Record<RuleCategory, CategoryConfig>>(
@@ -354,8 +357,11 @@ export function ConfigurePoliciesStep({ onBack }: ConfigurePoliciesStepProps) {
     handleCategoryToggle("shadow_mcp", checked);
 
   const policyCenterHref = useMemo(
-    () => (orgSlug ? `/${orgSlug}/risk-policies` : "/risk-policies"),
-    [orgSlug],
+    () =>
+      orgSlug
+        ? `/${orgSlug}/projects/${projectSlug}/risk-policies`
+        : "/risk-policies",
+    [orgSlug, projectSlug],
   );
 
   const updateConfig = (cat: RuleCategory, patch: Partial<CategoryConfig>) => {
