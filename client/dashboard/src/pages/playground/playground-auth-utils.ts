@@ -9,14 +9,14 @@ const ExternalMcpOAuthStatusResponseSchema = z.object({
   expires_at: z.string().optional(),
 });
 
-export type ExternalOAuthStatusResponse = z.infer<
+type ExternalOAuthStatusResponse = z.infer<
   typeof ExternalMcpOAuthStatusResponseSchema
 >;
 
 export const getExternalMcpOAuthStatusQueryKey = (
   toolsetId: string | undefined,
   slug?: string,
-) => {
+): string[] => {
   const result = ["oauthExternalStatus"];
   if (toolsetId) result.push(toolsetId);
   if (slug) result.push(slug);
@@ -33,7 +33,7 @@ export function useExternalMcpOAuthStatus(
     slug?: string; // For query key uniqueness
     enabled?: boolean;
   },
-) {
+): ReturnType<typeof useQuery<ExternalOAuthStatusResponse>> {
   const { enabled = true } = options || {};
 
   const project = useProject();

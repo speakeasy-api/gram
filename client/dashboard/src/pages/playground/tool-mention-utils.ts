@@ -14,7 +14,7 @@ export function parseMentionedTools(text: string, tools: Tool[]): string[] {
   let match;
 
   while ((match = mentionPattern.exec(text)) !== null) {
-    mentions.push(match[1].toLowerCase());
+    mentions.push(match[1]!.toLowerCase()!);
   }
 
   // Find tools that match the mentions

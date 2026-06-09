@@ -42,7 +42,9 @@ type RequireScopeProps = {
     }
 );
 
-export function RequireScope(props: RequireScopeProps) {
+export function RequireScope(
+  props: RequireScopeProps,
+): React.JSX.Element | null {
   const { scope, all = false, resourceId, children, level } = props;
   const { hasAllScopes, hasAnyScope, isLoading } = useRBAC();
 

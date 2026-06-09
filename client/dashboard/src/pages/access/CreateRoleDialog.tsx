@@ -98,6 +98,7 @@ function getDenyPanels(allowLevel: string | null): ActivePanel[] {
       return ["servers", "tools"];
     case "server":
       return ["tools"];
+    case null:
     default:
       return []; // tool/annotation — already most specific, no deny possible
   }
@@ -117,7 +118,7 @@ export function CreateRoleDialog({
   onOpenChange,
   editingRole,
   onRoleCreated,
-}: CreateRoleDialogProps) {
+}: CreateRoleDialogProps): JSX.Element {
   const isEditing = !!editingRole;
   const isSystemRole = !!editingRole?.isSystem;
 
@@ -282,7 +283,7 @@ export function CreateRoleDialog({
     const grant = grants[scopeSlug];
     if (ruleIndex >= 0 && grant?.rules[ruleIndex]) {
       // Edit existing rule — clone it as draft
-      setDraftRule({ ...grant.rules[ruleIndex] });
+      setDraftRule({ ...grant.rules[ruleIndex]! });
     } else {
       // New deny rule — or edit existing deny if one already exists
       const existingDenyIdx = grant?.rules.findIndex(
@@ -291,7 +292,7 @@ export function CreateRoleDialog({
       if (existingDenyIdx !== undefined && existingDenyIdx >= 0) {
         // Edit the existing deny rule instead of creating a new one
         setEditingRuleIndex(existingDenyIdx);
-        setDraftRule({ ...grant!.rules[existingDenyIdx] });
+        setDraftRule({ ...grant!.rules[existingDenyIdx]! });
       } else {
         setDraftRule({
           id: crypto.randomUUID(),
@@ -917,9 +918,11 @@ export function CreateRoleDialog({
                                 alreadyHasRole || selectedMembers.has(member.id)
                               }
                               disabled={alreadyHasRole}
-                              onCheckedChange={() =>
-                                !alreadyHasRole && toggleMember(member.id)
-                              }
+                              onCheckedChange={() => {
+                                void (
+                                  !alreadyHasRole && toggleMember(member.id)
+                                );
+                              }}
                             />
                             <Avatar className="h-7 w-7">
                               {member.photoUrl && (

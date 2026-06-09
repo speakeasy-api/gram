@@ -36,9 +36,9 @@ const LAYOUT_TRANSITION = {
 } as const;
 
 type Dimensions = {
-  width?: string | number | `${number}%`;
-  height?: string | number | `${number}%`;
-  maxHeight?: string | number | `${number}%`;
+  width?: string | number;
+  height?: string | number;
+  maxHeight?: string | number;
 };
 
 interface AssistantModalProps {
@@ -276,6 +276,8 @@ function positionClassname(
     case "top-left":
       return "left-4 top-4";
     case "bottom-right":
+      return "right-4 bottom-4";
+    case undefined:
       return "right-4 bottom-4";
     default:
       assertNever(position);

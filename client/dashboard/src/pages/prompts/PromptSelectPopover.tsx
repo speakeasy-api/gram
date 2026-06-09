@@ -24,7 +24,7 @@ export function PromptSelectPopover({
   setOpen: (open: boolean) => void;
   onSelect: (prompt: PromptTemplate) => void;
   children: React.ReactNode;
-}) {
+}): JSX.Element {
   const { prompts } = usePrompts();
 
   return (

@@ -23,7 +23,7 @@ export function MCPServerCard({
 }: {
   server: McpServer;
   endpointCount: number;
-}) {
+}): JSX.Element {
   const routes = useRoutes();
 
   const mcpEnabled = server.visibility !== "disabled";

@@ -8,7 +8,7 @@ const methodVariants = {
   DELETE: "destructive",
 } as const;
 
-export function MethodBadge({ method }: { method: string }) {
+export function MethodBadge({ method }: { method: string }): JSX.Element {
   const upperMethod = method.toUpperCase();
   const variant =
     methodVariants[upperMethod as keyof typeof methodVariants] || "information";

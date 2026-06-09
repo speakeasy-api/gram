@@ -18,7 +18,14 @@ export type DeploymentPageSearchParams =
     };
 
 /** A hook to manage and consume the search params for the deployment page. */
-export function useDeploymentSearchParams() {
+export function useDeploymentSearchParams(): {
+  searchParams: DeploymentPageSearchParams;
+  setSearchParams: (
+    updater:
+      | DeploymentPageSearchParams
+      | ((prev: DeploymentPageSearchParams) => DeploymentPageSearchParams),
+  ) => void;
+} {
   const [_searchParams, _setSearchParams] = useSearchParams(defaultValue);
 
   const setSearchParams = (

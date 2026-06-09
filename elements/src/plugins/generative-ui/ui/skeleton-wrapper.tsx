@@ -17,7 +17,7 @@ export function SkeletonWrapper({
   width,
   height,
   className,
-}: SkeletonWrapperProps) {
+}: SkeletonWrapperProps): React.JSX.Element {
   return (
     <Skeleton
       className={cn(className)}

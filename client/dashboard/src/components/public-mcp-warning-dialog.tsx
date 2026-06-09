@@ -18,7 +18,7 @@ export function PublicMcpWarningDialog({
   isLoading = false,
   environmentSlug,
   variableNames,
-}: PublicMcpWarningDialogProps) {
+}: PublicMcpWarningDialogProps): JSX.Element {
   const handleConfirm = () => {
     onConfirm();
     onClose();

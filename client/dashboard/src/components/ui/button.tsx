@@ -62,7 +62,7 @@ export function Button({
     iconAfter?: boolean;
     caps?: boolean;
     href?: string;
-  }) {
+  }): React.JSX.Element {
   const Comp: React.ElementType = asChild ? Slot : props.href ? "a" : "button";
 
   const iconColors = {

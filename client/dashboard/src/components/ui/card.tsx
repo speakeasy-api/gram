@@ -1,3 +1,4 @@
+// oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
@@ -129,7 +130,7 @@ export function Cards({
   isLoading?: boolean;
   noGrid?: boolean;
   cardSize?: number;
-}) {
+}): React.JSX.Element {
   let children = React.Children.map(props.children, (child) => (
     <Grid.Item colSpan={cardSize}>{child}</Grid.Item>
   ));
@@ -149,7 +150,7 @@ export function Cards({
   }
 
   if (!children) {
-    return "Nothing found";
+    return <>Nothing found</>;
   }
 
   return (
@@ -170,7 +171,7 @@ export function Cards({
   );
 }
 
-export function CardSkeleton() {
+export function CardSkeleton(): React.JSX.Element {
   return (
     <Card>
       <Card.Header>

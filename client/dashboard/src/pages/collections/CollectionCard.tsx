@@ -21,7 +21,11 @@ import { useCollectionServers } from "./hooks";
 import type { Collection } from "./types";
 import { CollectionInstallDialog } from "./CollectionInstallDialog";
 
-export function CollectionCard({ collection }: { collection: Collection }) {
+export function CollectionCard({
+  collection,
+}: {
+  collection: Collection;
+}): JSX.Element {
   const orgRoutes = useOrgRoutes();
   const navigate = useNavigate();
   const organization = useOrganization();
@@ -76,7 +80,9 @@ export function CollectionCard({ collection }: { collection: Collection }) {
   return (
     <DotCard
       className="cursor-pointer"
-      onClick={() => navigate(detailHref)}
+      onClick={() => {
+        void navigate(detailHref);
+      }}
       icon={
         <LayoutGrid className="text-muted-foreground h-10 w-10 opacity-60" />
       }

@@ -25,6 +25,14 @@ fi
 
 payload=$(cat)
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$script_dir/identity.sh" ]; then
+  . "$script_dir/identity.sh"
+fi
+if type gram_enrich_identity_payload >/dev/null 2>&1; then
+  payload=$(gram_enrich_identity_payload "$payload")
+fi
+
 mcp_inventory_claude_code=""
 mcp_inventory_cowork="null"
 

@@ -18,7 +18,11 @@ import {
   useSlugs,
 } from "./Sdk";
 
-export const SdkProvider = ({ children }: { children: React.ReactNode }) => {
+export const SdkProvider = ({
+  children,
+}: {
+  children: React.ReactNode;
+}): JSX.Element => {
   const projectSlug = useProjectSlugForRequests();
   const { projectSlug: pathProjectSlug } = useSlugs();
   const telemetry = useTelemetry();
@@ -77,8 +81,8 @@ export const SdkProvider = ({ children }: { children: React.ReactNode }) => {
     // "default" fallback used for org-scoped pages shouldn't trigger work the
     // user will never see.
     if (pathProjectSlug) {
-      queryClient.prefetchQuery(buildLatestDeploymentQuery(gram));
-      queryClient.prefetchQuery(buildListToolsetsQuery(gram));
+      void queryClient.prefetchQuery(buildLatestDeploymentQuery(gram));
+      void queryClient.prefetchQuery(buildListToolsetsQuery(gram));
     }
 
     return gram;
@@ -88,7 +92,7 @@ export const SdkProvider = ({ children }: { children: React.ReactNode }) => {
   // Invalidate all queries when projectSlug changes
   useEffect(() => {
     if (previousProjectSlug.current !== projectSlug) {
-      queryClient.invalidateQueries();
+      void queryClient.invalidateQueries();
       previousProjectSlug.current = projectSlug;
     }
   }, [projectSlug]);

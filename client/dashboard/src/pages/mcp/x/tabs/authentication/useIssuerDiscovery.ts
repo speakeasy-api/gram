@@ -24,7 +24,7 @@ export type UseIssuerDiscoveryInitial = {
 // endpoint-validation warnings. Used by both AttachRemoteIdentityProviderSheet
 // and ModifyRemoteIdentityProviderSheet — those sheets compose their own
 // slug / credentials / override state on top.
-export function useIssuerDiscovery(initial: UseIssuerDiscoveryInitial) {
+function useIssuerDiscoveryImpl(initial: UseIssuerDiscoveryInitial) {
   const client = useSdkClient();
 
   const [issuerUrl, setIssuerUrl] = useState(initial?.issuerUrl ?? "");
@@ -199,4 +199,10 @@ export function useIssuerDiscovery(initial: UseIssuerDiscoveryInitial) {
     showResetControls,
     endpointWarnings,
   };
+}
+
+export function useIssuerDiscovery(
+  initial: UseIssuerDiscoveryInitial,
+): ReturnType<typeof useIssuerDiscoveryImpl> {
+  return useIssuerDiscoveryImpl(initial);
 }

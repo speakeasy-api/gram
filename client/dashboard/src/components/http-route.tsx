@@ -10,7 +10,7 @@ export const HttpRoute = ({
   method: string;
   path: string;
   className?: string;
-}) => {
+}): JSX.Element => {
   return (
     <div className={cn("flex items-start gap-2 font-mono", className)}>
       <HttpMethod method={method} />

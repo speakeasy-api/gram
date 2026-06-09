@@ -82,7 +82,7 @@ function formatLogTimestamp(createdAt: string): string {
 }
 
 function parseLogMessage(message: string, event: string): ParsedLogEntry {
-  let source: string | undefined;
+  const source: string | undefined = undefined;
   let cleanMessage = message;
 
   const lowerMsg = message.toLowerCase();
@@ -159,7 +159,7 @@ export const LogsTabContent = ({
   deploymentId?: string;
   embeddedMode?: boolean;
   attachmentType?: string;
-} = {}) => {
+} = {}): React.JSX.Element | null => {
   const { deploymentId: paramDeploymentId } = useParams();
   const deploymentId = propDeploymentId ?? paramDeploymentId!;
   const { data: deploymentLogs } = useDeploymentLogsSuspense(

@@ -414,7 +414,6 @@ type DirectoryGroup struct {
 	WorkosDirectoryGroupID string
 	Name                   string
 	Attributes             []byte
-	AttributesContentHash  pgtype.Text
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
@@ -428,7 +427,6 @@ type DirectoryUser struct {
 	WorkosDirectoryUserID string
 	Email                 pgtype.Text
 	Attributes            []byte
-	AttributesContentHash pgtype.Text
 	CreatedAt             pgtype.Timestamptz
 	UpdatedAt             pgtype.Timestamptz
 	DeletedAt             pgtype.Timestamptz

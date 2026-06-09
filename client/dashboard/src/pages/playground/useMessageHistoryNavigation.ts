@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { UIMessage } from "ai";
 
-export function useMessageHistoryNavigation(messages: UIMessage[]) {
+export function useMessageHistoryNavigation(messages: UIMessage[]): {
+  historyIndex: number;
+  userMessages: string[];
+  isNavigating: boolean;
+  currentMessage: string | null | undefined;
+  totalMessages: number;
+} {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [originalInputValue, setOriginalInputValue] = useState("");
   const inputRef = useRef<HTMLTextAreaElement | null>(null);

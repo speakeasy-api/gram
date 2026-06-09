@@ -22,7 +22,7 @@ export function DotCard({
   className,
   overlay,
   onClick,
-}: DotCardProps) {
+}: DotCardProps): JSX.Element {
   return (
     <div
       onClick={onClick}

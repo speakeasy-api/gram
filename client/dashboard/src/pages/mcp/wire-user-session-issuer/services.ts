@@ -52,7 +52,7 @@ function narrowTokenEndpointAuthMethod(
 
 export type GramClient = Gram;
 
-export function createMigrationServices(
+function createMigrationServicesImpl(
   client: GramClient,
   authedFetch: AuthedFetch,
 ) {
@@ -329,6 +329,13 @@ export function createMigrationServices(
     createRemoteSessionClient,
     linkToolsetUserSessionIssuer,
   };
+}
+
+export function createMigrationServices(
+  client: GramClient,
+  authedFetch: AuthedFetch,
+): ReturnType<typeof createMigrationServicesImpl> {
+  return createMigrationServicesImpl(client, authedFetch);
 }
 
 function isNotFound(error: unknown): boolean {

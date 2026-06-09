@@ -33,7 +33,7 @@ export function ManageToolsDialog({
   onAddTools,
   onRemoveTools,
   initialGroup,
-}: ManageToolsDialogProps) {
+}: ManageToolsDialogProps): JSX.Element {
   const [search, setSearch] = useState("");
   const [mode, setMode] = useState<"add" | "manage">(
     initialGroup ? "manage" : "add",
@@ -242,7 +242,9 @@ export function ManageToolsDialog({
       {/* Edit Tool Dialog */}
       <EditToolDialog
         open={!!editingTool}
-        onOpenChange={(open) => !open && setEditingTool(null)}
+        onOpenChange={(open) => {
+          void (!open && setEditingTool(null));
+        }}
         tool={editingTool}
         documentIdToName={documentIdToName}
         functionIdToName={functionIdToName}

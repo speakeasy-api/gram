@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 function Command({
   className,
   ...props
-}: React.ComponentProps<typeof CommandPrimitive>) {
+}: React.ComponentProps<typeof CommandPrimitive>): React.JSX.Element {
   return (
     <CommandPrimitive
       data-slot="command"
@@ -29,7 +29,7 @@ function CommandDialog({
 }: React.ComponentProps<typeof Dialog> & {
   title?: string;
   description?: string;
-}) {
+}): React.JSX.Element {
   return (
     <Dialog {...props}>
       <Dialog.Content className="max-w-2xl overflow-hidden p-0">
@@ -48,7 +48,7 @@ function CommandDialog({
 function CommandInput({
   className,
   ...props
-}: React.ComponentProps<typeof CommandPrimitive.Input>) {
+}: React.ComponentProps<typeof CommandPrimitive.Input>): React.JSX.Element {
   return (
     <div
       data-slot="command-input-wrapper"
@@ -70,7 +70,7 @@ function CommandInput({
 function CommandList({
   className,
   ...props
-}: React.ComponentProps<typeof CommandPrimitive.List>) {
+}: React.ComponentProps<typeof CommandPrimitive.List>): React.JSX.Element {
   return (
     <CommandPrimitive.List
       data-slot="command-list"
@@ -85,7 +85,7 @@ function CommandList({
 
 function CommandEmpty({
   ...props
-}: React.ComponentProps<typeof CommandPrimitive.Empty>) {
+}: React.ComponentProps<typeof CommandPrimitive.Empty>): React.JSX.Element {
   return (
     <CommandPrimitive.Empty
       data-slot="command-empty"
@@ -98,7 +98,7 @@ function CommandEmpty({
 function CommandGroup({
   className,
   ...props
-}: React.ComponentProps<typeof CommandPrimitive.Group>) {
+}: React.ComponentProps<typeof CommandPrimitive.Group>): React.JSX.Element {
   return (
     <CommandPrimitive.Group
       data-slot="command-group"
@@ -114,7 +114,7 @@ function CommandGroup({
 function CommandSeparator({
   className,
   ...props
-}: React.ComponentProps<typeof CommandPrimitive.Separator>) {
+}: React.ComponentProps<typeof CommandPrimitive.Separator>): React.JSX.Element {
   return (
     <CommandPrimitive.Separator
       data-slot="command-separator"
@@ -127,7 +127,7 @@ function CommandSeparator({
 function CommandItem({
   className,
   ...props
-}: React.ComponentProps<typeof CommandPrimitive.Item>) {
+}: React.ComponentProps<typeof CommandPrimitive.Item>): React.JSX.Element {
   return (
     <CommandPrimitive.Item
       data-slot="command-item"

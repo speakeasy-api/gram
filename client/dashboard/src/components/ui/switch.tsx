@@ -18,7 +18,7 @@ export function Switch({
   "aria-label": ariaLabel,
   "aria-labelledby": ariaLabelledBy,
   className,
-}: SwitchProps) {
+}: SwitchProps): JSX.Element {
   return (
     <button
       onClick={() => onCheckedChange(!checked)}

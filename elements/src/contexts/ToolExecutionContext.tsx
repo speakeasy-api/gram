@@ -36,7 +36,7 @@ interface ToolExecutionProviderProps {
 export function ToolExecutionProvider({
   children,
   tools,
-}: ToolExecutionProviderProps) {
+}: ToolExecutionProviderProps): React.JSX.Element {
   const executeTool = useCallback(
     async (
       toolName: string,

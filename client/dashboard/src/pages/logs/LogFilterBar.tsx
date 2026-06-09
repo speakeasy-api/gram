@@ -88,7 +88,7 @@ export function LogFilterBar({
   searchInput,
   onSearchInputChange,
   onSearchSubmit,
-}: LogFilterBarProps) {
+}: LogFilterBarProps): JSX.Element {
   const [step, setStep] = useState<Step>("key");
   const [selectedKey, setSelectedKey] = useState("");
   const [selectedOp, setSelectedOp] = useState<Op | null>(null);
@@ -290,7 +290,7 @@ export function LogFilterBar({
         break;
       case "Backspace":
         if (searchInput === "" && step === "key" && filters.length > 0) {
-          removeFilter(filters[filters.length - 1].id);
+          removeFilter(filters[filters.length - 1]!.id!);
         }
         if (searchInput === "" && step === "operator") {
           resetFlow();

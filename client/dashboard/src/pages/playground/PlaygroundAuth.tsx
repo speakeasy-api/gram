@@ -110,7 +110,7 @@ function ExternalMcpOAuthConnection({
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({
         queryKey: getExternalMcpOAuthStatusQueryKey(toolset?.id),
       });
       toast.success(`Disconnected from ${providerName}`);
@@ -129,7 +129,7 @@ function ExternalMcpOAuthConnection({
 
     const params = new URLSearchParams({
       toolset_id: toolset?.id ?? "",
-      redirect_uri: window.location.href.split("?")[0],
+      redirect_uri: window.location.href.split("?")[0] ?? "",
       project: project.slug,
     });
 
@@ -165,7 +165,7 @@ function ExternalMcpOAuthConnection({
         }
         // Small delay to ensure server has processed the callback
         setTimeout(() => {
-          refetchStatus();
+          void refetchStatus();
         }, 300);
       }
     }, 500);
@@ -232,7 +232,7 @@ function ExternalMcpOAuthConnection({
 export function PlaygroundAuth({
   toolset,
   onPlaygroundEnvironmentSlug,
-}: PlaygroundAuthProps) {
+}: PlaygroundAuthProps): JSX.Element {
   const routes = useRoutes();
 
   // Standard OAuth discovery against the MCP URL — no toolset-field sniffing.
@@ -455,7 +455,7 @@ export function PlaygroundAuth({
           size="sm"
           variant="default"
           className="w-full"
-          onClick={handleSave}
+          onClick={() => void handleSave()}
           disabled={editedKeys.size === 0 || playgroundEnv.isSaving}
         >
           {playgroundEnv.isSaving ? (

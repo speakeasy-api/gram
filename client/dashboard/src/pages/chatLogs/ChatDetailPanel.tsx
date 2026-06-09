@@ -79,7 +79,7 @@ export function ChatDetailSheet({
   onDelete,
   collapseNonRisk,
   initialRiskOnly,
-}: ChatDetailSheetProps) {
+}: ChatDetailSheetProps): JSX.Element {
   return (
     <Sheet
       open={Boolean(chatId)}
@@ -178,6 +178,7 @@ function getSeverityBadgeVariant(
       return "destructive";
     case "WARN":
       return "warning";
+    case undefined:
     default:
       return "neutral";
   }
@@ -568,7 +569,16 @@ function ToolResultEntry({
             )}
           </div>
         </div>
-        <CodeBlock content={String(content ?? "")} maxHeight={300} />
+        <CodeBlock
+          content={
+            typeof content === "string"
+              ? content
+              : content == null
+                ? ""
+                : JSON.stringify(content)
+          }
+          maxHeight={300}
+        />
       </SensitiveContentGate>
     </EntryContentFrame>
   );

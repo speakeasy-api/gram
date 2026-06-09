@@ -98,6 +98,9 @@ const (
 	AuthUserIDKey           = attribute.Key("gram.auth.user_id")
 	AuthUserExternalIDKey   = attribute.Key("gram.auth.external_user_id")
 
+	TopicProtoNameKey        = attribute.Key("gram.topic.proto_name")
+	SubscriptionProtoNameKey = attribute.Key("gram.subscription.proto_name")
+
 	AssetIDKey                     = attribute.Key("gram.asset.id")
 	AssetURLKey                    = attribute.Key("gram.asset.url")
 	ChatIDKey                      = attribute.Key("gram.chat.id")
@@ -182,9 +185,19 @@ const (
 	// OAuthErrorKey / OAuthErrorDescriptionKey carry the `error` /
 	// `error_description` parameters from RFC 6749 / RFC 7591 error responses
 	// — used across DCR registration, /authorize, /token, and /revoke.
-	OAuthErrorKey                          = attribute.Key("gram.oauth.error")
-	OAuthErrorDescriptionKey               = attribute.Key("gram.oauth.error_description")
-	OAuthFailureReasonKey                  = attribute.Key("gram.oauth.failure_reason")
+	OAuthErrorKey            = attribute.Key("gram.oauth.error")
+	OAuthErrorDescriptionKey = attribute.Key("gram.oauth.error_description")
+	OAuthFailureReasonKey    = attribute.Key("gram.oauth.failure_reason")
+	// OAuthFlowIDKey is the stable correlation identifier for a single
+	// user-facing OAuth flow. Minted once at /authorize and threaded through
+	// every handler in the flow (idp_callback, consent, token) so the whole
+	// chain can be reconstructed from one log filter. Distinct from the
+	// AuthnChallengeState cache-key ID, which idp_callback rotates.
+	OAuthFlowIDKey = attribute.Key("gram.oauth.flow_id")
+	// OAuthFlowStageKey is the coarse, low-cardinality stage at which an OAuth
+	// flow terminated (see the oauthFlowStage enum in the mcp package). Used
+	// as a metric dimension on oauth.flow.failed and in failure logs.
+	OAuthFlowStageKey                      = attribute.Key("gram.oauth.flow_stage")
 	OAuthGrantKey                          = attribute.Key("gram.oauth.grant")
 	OAuthIssuerKey                         = attribute.Key("gram.oauth.issuer")
 	OAuthPresentedAuthMethodKey            = attribute.Key("gram.oauth.presented_auth_method")
@@ -228,10 +241,10 @@ const (
 	OrganizationIDKey                      = attribute.Key("gram.org.id")
 	OrganizationSlugKey                    = attribute.Key("gram.org.slug")
 	WorkOSOrganizationIDKey                = attribute.Key("gram.workos.organization_id")
-	WorkOSLinkedUserIDKey                  = attribute.Key("gram.workos.linked_user_id")
-	WorkOSUserIDKey                        = attribute.Key("gram.workos.user_id")
 	WorkOSDirectoryAttributesEntityTypeKey = attribute.Key("gram.workos.directory_attributes.entity_type")
 	WorkOSDirectoryAttributesEntityIDKey   = attribute.Key("gram.workos.directory_attributes.entity_id")
+	WorkOSLinkedUserIDKey                  = attribute.Key("gram.workos.linked_user_id")
+	WorkOSUserIDKey                        = attribute.Key("gram.workos.user_id")
 	WorkOSSSOEnabledKey                    = attribute.Key("gram.workos.sso_enabled")
 	WorkOSSCIMEnabledKey                   = attribute.Key("gram.workos.scim_enabled")
 	OutcomeKey                             = attribute.Key("gram.outcome")
@@ -654,6 +667,18 @@ func SlogAuthUserID(v string) slog.Attr      { return slog.String(string(AuthUse
 func AuthUserExternalID(v string) attribute.KeyValue { return AuthUserExternalIDKey.String(v) }
 func SlogAuthUserExternalID(v string) slog.Attr      { return slog.String(string(AuthUserExternalIDKey), v) }
 
+func TopicProtoName[S ~string](v S) attribute.KeyValue { return TopicProtoNameKey.String(string(v)) }
+func SlogTopicProtoName[S ~string](v S) slog.Attr {
+	return slog.String(string(TopicProtoNameKey), string(v))
+}
+
+func SubscriptionProtoName[S ~string](v S) attribute.KeyValue {
+	return SubscriptionProtoNameKey.String(string(v))
+}
+func SlogSubscriptionProtoName[S ~string](v S) slog.Attr {
+	return slog.String(string(SubscriptionProtoNameKey), string(v))
+}
+
 func AssetID(v string) attribute.KeyValue { return AssetIDKey.String(v) }
 func SlogAssetID(v string) slog.Attr      { return slog.String(string(AssetIDKey), v) }
 
@@ -885,6 +910,12 @@ func SlogOAuthClientSecretGenerated(v bool) slog.Attr {
 
 func OAuthError(v string) attribute.KeyValue { return OAuthErrorKey.String(v) }
 func SlogOAuthError(v string) slog.Attr      { return slog.String(string(OAuthErrorKey), v) }
+
+func OAuthFlowID(v string) attribute.KeyValue { return OAuthFlowIDKey.String(v) }
+func SlogOAuthFlowID(v string) slog.Attr      { return slog.String(string(OAuthFlowIDKey), v) }
+
+func OAuthFlowStage(v string) attribute.KeyValue { return OAuthFlowStageKey.String(v) }
+func SlogOAuthFlowStage(v string) slog.Attr      { return slog.String(string(OAuthFlowStageKey), v) }
 
 func OAuthErrorDescription(v string) attribute.KeyValue {
 	return OAuthErrorDescriptionKey.String(v)

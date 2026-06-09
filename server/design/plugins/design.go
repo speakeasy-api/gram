@@ -436,16 +436,22 @@ var _ = Service("plugins", func() {
 
 // --- Models ---
 
-// PluginServerModel represents a toolset-backed MCP server included in a plugin.
+// PluginServerModel represents an MCP server included in a plugin. The server
+// is backed by exactly one of a Gram toolset (toolset_id) or a Remote
+// MCP-backed mcp_server (mcp_server_id).
 var PluginServerModel = Type("PluginServer", func() {
-	Required("id", "toolset_id", "display_name", "policy", "sort_order", "created_at")
+	Required("id", "display_name", "policy", "sort_order", "created_at")
 
 	Attribute("id", String, func() {
 		Description("Unique plugin server identifier.")
 		Format(FormatUUID)
 	})
 	Attribute("toolset_id", String, func() {
-		Description("Gram toolset ID.")
+		Description("Gram toolset ID. Set when this server is toolset-backed (exactly one of toolset_id / mcp_server_id is set).")
+		Format(FormatUUID)
+	})
+	Attribute("mcp_server_id", String, func() {
+		Description("Gram MCP server ID. Set when this server is Remote MCP-backed (exactly one of toolset_id / mcp_server_id is set).")
 		Format(FormatUUID)
 	})
 	Attribute("display_name", String, "Display name shown in generated plugin config.")
@@ -518,16 +524,20 @@ var UpdatePluginForm = Type("UpdatePluginForm", func() {
 })
 
 var AddPluginServerForm = Type("AddPluginServerForm", func() {
-	Required("plugin_id", "toolset_id", "display_name")
+	Required("plugin_id")
 
 	Attribute("plugin_id", String, func() {
 		Format(FormatUUID)
 	})
 	Attribute("toolset_id", String, func() {
-		Description("Gram toolset ID for the MCP server.")
+		Description("Gram toolset ID for a toolset-backed MCP server. Provide exactly one of toolset_id or mcp_server_id.")
 		Format(FormatUUID)
 	})
-	Attribute("display_name", String, "Display name for the server.")
+	Attribute("mcp_server_id", String, func() {
+		Description("Gram MCP server ID for a Remote MCP-backed server. Provide exactly one of toolset_id or mcp_server_id.")
+		Format(FormatUUID)
+	})
+	Attribute("display_name", String, "Display name for the server. Defaults to the backing toolset or mcp_server name when omitted.")
 	Attribute("policy", String, func() {
 		Enum("required", "optional")
 		Default("required")

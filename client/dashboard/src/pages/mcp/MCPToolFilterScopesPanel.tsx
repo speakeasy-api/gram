@@ -34,7 +34,7 @@ export function MCPToolFilterScopesPanel({
   filters: ListToolFiltersResult;
   activeTag: string | null;
   onSelectTag: (tag: string | null) => void;
-}) {
+}): JSX.Element {
   const hasExcluded = filters.excluded.length > 0;
 
   return (

@@ -24,7 +24,7 @@ export function MoreActions({
 }: {
   actions: Action[];
   triggerLabel?: string;
-}) {
+}): JSX.Element {
   const [isOpen, setIsOpen] = useState(false);
 
   const wrapOnClick =

@@ -1,4 +1,4 @@
-import { createContext, useContext } from "react";
+import { ContextType, createContext, useContext } from "react";
 import { SdkFramework, SdkLanguage, OPENAI_AGENTS_SDK } from "../sdk/examples";
 
 export const AgentifyContext = createContext<{
@@ -27,6 +27,6 @@ export const AgentifyContext = createContext<{
   agentify: () => Promise.resolve(""),
 });
 
-export const useAgentify = () => {
+export const useAgentify = (): ContextType<typeof AgentifyContext> => {
   return useContext(AgentifyContext);
 };

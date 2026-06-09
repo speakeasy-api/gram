@@ -34,7 +34,7 @@ export function EntryTypeFilterBar({
   riskCount?: number;
   onRiskOnlyChange?: (value: boolean) => void;
   title?: string;
-}) {
+}): JSX.Element {
   const riskOnlyDisabled = !riskOnly && riskCount === 0;
 
   return (

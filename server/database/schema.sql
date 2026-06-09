@@ -1666,7 +1666,6 @@ CREATE TABLE IF NOT EXISTS directory_groups (
   workos_directory_group_id TEXT NOT NULL,
   name TEXT NOT NULL,
   attributes JSONB NOT NULL DEFAULT '{}'::jsonb,
-  attributes_content_hash TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1690,7 +1689,6 @@ CREATE TABLE IF NOT EXISTS directory_users (
   workos_directory_user_id TEXT NOT NULL,
   email TEXT,
   attributes JSONB NOT NULL DEFAULT '{}'::jsonb,
-  attributes_content_hash TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1698,8 +1696,7 @@ CREATE TABLE IF NOT EXISTS directory_users (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT directory_users_pkey PRIMARY KEY (id),
-  CONSTRAINT directory_users_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT directory_users_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
+  CONSTRAINT directory_users_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS directory_users_organization_id_idx

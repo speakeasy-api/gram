@@ -8,7 +8,7 @@ import {
 import { useLatestDeployment } from "@gram/client/react-query/index.js";
 import { useMemo } from "react";
 
-export const useCatalogIconMap = () => {
+export const useCatalogIconMap = (): Map<string, string> => {
   const { data: catalogData } = useInfiniteListMCPCatalog();
   return useMemo(() => {
     if (!catalogData?.pages) {

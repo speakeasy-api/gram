@@ -72,7 +72,7 @@ export const AreaChart: FC<AreaChartProps> = ({
   const seriesKeys = useMemo(() => {
     if (series && series.length > 0) return series;
     if (data.length === 0) return [];
-    const keys = Object.keys(data[0]).filter((k) => k !== "label");
+    const keys = Object.keys(data[0]!).filter((k) => k !== "label");
     return keys;
   }, [data, series]);
 

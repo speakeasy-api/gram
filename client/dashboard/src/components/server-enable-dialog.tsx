@@ -22,7 +22,7 @@ export function ServerEnableDialog({
   isLoading = false,
   currentlyEnabled = false,
   targetIsPublic = false,
-}: ServerEnableDialogProps) {
+}: ServerEnableDialogProps): JSX.Element {
   const productTier = useProductTier();
   const orgRoutes = useOrgRoutes();
   const { data: periodUsage } = useGetPeriodUsage();

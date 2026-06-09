@@ -27,7 +27,7 @@ function slugify(name: string): string {
     .replace(/^-|-$/g, "");
 }
 
-export default function CreateCollection() {
+export default function CreateCollection(): JSX.Element {
   return (
     <Page>
       <Page.Header>
@@ -97,8 +97,8 @@ function CreateCollectionForm() {
           id: t.id,
           name: t.name,
           description: t.description ?? undefined,
-          projectName: project.name,
-          projectSlug: project.slug,
+          projectName: project!.name!,
+          projectSlug: project!.slug!,
         });
       }
     }
@@ -167,7 +167,12 @@ function CreateCollectionForm() {
         together
       </Page.Section.Description>
       <Page.Section.Body>
-        <form onSubmit={handleSubmit} className="max-w-lg">
+        <form
+          onSubmit={(e) => {
+            void handleSubmit(e);
+          }}
+          className="max-w-lg"
+        >
           <Stack direction="vertical" gap={4}>
             <div>
               <label htmlFor="name" className="mb-1 block text-sm font-medium">

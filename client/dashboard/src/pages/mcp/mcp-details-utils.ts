@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 export function useMcpSlugValidation(
   mcpSlug: string | undefined,
   currentSlug?: string,
-) {
+): string | null {
   const [slugError, setSlugError] = useState<string | null>(null);
   const client = useSdkClient();
 
@@ -25,7 +25,7 @@ export function useMcpSlugValidation(
         setSlugError(validationError);
         return;
       }
-      client.toolsets
+      void client.toolsets
         .checkMCPSlugAvailability({ slug: mcpSlug })
         .then((res) => {
           if (res) {

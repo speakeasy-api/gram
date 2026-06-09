@@ -1,10 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { parse, View, Warn } from "vega";
+import { parse, View, Warn, type Spec } from "vega";
 import { expressionInterpreter } from "vega-interpreter";
 
 describe("ChartRenderer CSP compliance", () => {
   it("renders a chart using vega-interpreter without eval", async () => {
-    const spec = {
+    const spec: Spec = {
       $schema: "https://vega.github.io/schema/vega/v5.json",
       width: 400,
       height: 200,
@@ -46,8 +46,7 @@ describe("ChartRenderer CSP compliance", () => {
       ],
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const runtime = parse(spec as any, undefined, { ast: true });
+    const runtime = parse(spec, undefined, { ast: true });
 
     // This is the key - using expr: vegaInterpreter means no eval() is called
     const view = new View(runtime, {

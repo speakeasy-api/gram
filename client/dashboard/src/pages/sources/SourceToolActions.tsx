@@ -44,7 +44,7 @@ export function SourceToolActions({
   tool: SourceTool;
   onUpdate: (updates: ToolUpdateFields) => void | Promise<void>;
   isUpdating?: boolean;
-}) {
+}): JSX.Element {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editMode, setEditMode] = useState<EditMode>("name");
   const [editValue, setEditValue] = useState("");
@@ -300,7 +300,7 @@ export function SourceToolActions({
             >
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={isUpdating}>
+            <Button onClick={() => void handleSave()} disabled={isUpdating}>
               Save
             </Button>
           </Dialog.Footer>
