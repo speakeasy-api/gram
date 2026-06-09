@@ -9,7 +9,6 @@ interface Environment {
   entries: Array<{
     name: string;
     value: string;
-    valueHash: string;
     createdAt: Date;
   }>;
 }
@@ -43,42 +42,21 @@ export function useEnvironmentVariables(
       return envEntries.find((e) => e.variableName === varName);
     };
 
-    // Helper to build value groups for a variable across all environments
-    const getValueGroups = (varName: string) => {
-      const valueHashMap = new Map<
-        string,
-        { value: string; environments: string[] }
-      >();
-
-      environments.forEach((env) => {
+    // Helper to collect a variable's (redacted) value in each environment that defines it
+    const getEnvironmentValues = (varName: string) =>
+      environments.flatMap((env) => {
         const entry = env.entries.find((e) => e.name === varName);
-        if (entry) {
-          if (!valueHashMap.has(entry.valueHash)) {
-            valueHashMap.set(entry.valueHash, {
-              value: entry.value,
-              environments: [env.slug],
-            });
-          } else {
-            valueHashMap.get(entry.valueHash)!.environments.push(env.slug);
-          }
-        }
+        return entry
+          ? [{ environmentSlug: env.slug, value: entry.value }]
+          : [];
       });
-
-      return Array.from(valueHashMap.entries()).map(
-        ([valueHash, { value, environments }]) => ({
-          valueHash,
-          value,
-          environments,
-        }),
-      );
-    };
 
     // Get env vars from security variables (these are required auth credentials)
     toolset.securityVariables?.forEach((secVar) => {
       secVar.envVariables.forEach((envVar) => {
         if (!envVar.toLowerCase().includes("token_url")) {
           requiredVarNames.add(envVar);
-          const valueGroups = getValueGroups(envVar);
+          const environmentValues = getEnvironmentValues(envVar);
           const id = `sec-${secVar.id}-${envVar}`;
           // Check if this variable has an environment entry
           const entry = findEnvEntry(envVar);
@@ -91,7 +69,7 @@ export function useEnvironmentVariables(
           existingVars.push({
             id,
             key: envVar,
-            valueGroups,
+            environmentValues,
             state,
             isRequired: true,
             description: `Authentication credential for ${secVar.name || "API access"}`,
@@ -105,7 +83,7 @@ export function useEnvironmentVariables(
     toolset.serverVariables?.forEach((serverVar) => {
       serverVar.envVariables.forEach((envVar) => {
         requiredVarNames.add(envVar);
-        const valueGroups = getValueGroups(envVar);
+        const environmentValues = getEnvironmentValues(envVar);
         const id = `srv-${envVar}`;
         // Check if this variable has an environment entry
         const entry = findEnvEntry(envVar);
@@ -118,7 +96,7 @@ export function useEnvironmentVariables(
         existingVars.push({
           id,
           key: envVar,
-          valueGroups,
+          environmentValues,
           state,
           isRequired: true,
           description: "Server configuration variable",
@@ -130,7 +108,7 @@ export function useEnvironmentVariables(
     // Get env vars from function environment variables (these are required for functions)
     toolset.functionEnvironmentVariables?.forEach((funcVar) => {
       requiredVarNames.add(funcVar.name);
-      const valueGroups = getValueGroups(funcVar.name);
+      const environmentValues = getEnvironmentValues(funcVar.name);
       const id = `func-${funcVar.name}`;
       // Check if this variable has an environment entry
       const entry = findEnvEntry(funcVar.name);
@@ -143,7 +121,7 @@ export function useEnvironmentVariables(
       existingVars.push({
         id,
         key: funcVar.name,
-        valueGroups,
+        environmentValues,
         state,
         isRequired: true,
         description: funcVar.description || "Function environment variable",
@@ -154,7 +132,7 @@ export function useEnvironmentVariables(
     // Get env   vars from external MCP header definitions (these are required for external MCP servers)
     toolset.externalMcpHeaderDefinitions?.forEach((headerDef) => {
       requiredVarNames.add(headerDef.name);
-      const valueGroups = getValueGroups(headerDef.name);
+      const environmentValues = getEnvironmentValues(headerDef.name);
       const id = `ext-${headerDef.name}`;
       // Check if this variable has an environment entry
       const entry = findEnvEntry(headerDef.name);
@@ -167,7 +145,7 @@ export function useEnvironmentVariables(
       existingVars.push({
         id,
         key: headerDef.name,
-        valueGroups,
+        environmentValues,
         state,
         isRequired: true,
         description: headerDef.description || "External MCP header",
@@ -179,7 +157,7 @@ export function useEnvironmentVariables(
     const customVarMap = new Map<
       string,
       {
-        valueGroups: Map<string, { value: string; environments: Set<string> }>;
+        environmentValues: Array<{ environmentSlug: string; value: string }>;
         createdAt: Date;
       }
     >();
@@ -191,28 +169,15 @@ export function useEnvironmentVariables(
           !requiredVarNames.has(entry.name) &&
           !entry.name.toLowerCase().includes("token_url")
         ) {
-          if (!customVarMap.has(entry.name)) {
+          const value = { environmentSlug: env.slug, value: entry.value };
+          const varData = customVarMap.get(entry.name);
+          if (varData) {
+            varData.environmentValues.push(value);
+          } else {
             customVarMap.set(entry.name, {
-              valueGroups: new Map([
-                [
-                  entry.valueHash,
-                  { value: entry.value, environments: new Set([env.slug]) },
-                ],
-              ]),
+              environmentValues: [value],
               createdAt: entry.createdAt,
             });
-          } else {
-            const varData = customVarMap.get(entry.name)!;
-            if (!varData.valueGroups.has(entry.valueHash)) {
-              varData.valueGroups.set(entry.valueHash, {
-                value: entry.value,
-                environments: new Set([env.slug]),
-              });
-            } else {
-              varData.valueGroups
-                .get(entry.valueHash)!
-                .environments.add(env.slug);
-            }
           }
         }
       });
@@ -227,13 +192,7 @@ export function useEnvironmentVariables(
       }
 
       const id = `custom-${varName}`;
-      const valueGroups = Array.from(info.valueGroups.entries()).map(
-        ([valueHash, { value, environments }]) => ({
-          valueHash,
-          value,
-          environments: Array.from(environments),
-        }),
-      );
+      const environmentValues = info.environmentValues;
       const state: EnvVarState =
         entry.providedBy === "user"
           ? "user-provided"
@@ -243,7 +202,7 @@ export function useEnvironmentVariables(
       existingVars.push({
         id,
         key: varName,
-        valueGroups,
+        environmentValues,
         state,
         isRequired: false,
         description: "Custom environment variable",

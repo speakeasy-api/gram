@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: dc8b8ec43c710d2cffe1aeb17e845000
+  docChecksum: 5d0703bce67665ea7d756e3ce21426e9
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -295,7 +295,7 @@ trackedFiles:
   docs/models/components/environment.md:
     last_write_checksum: sha1:b3d3b1370b81801891ca3a68daa696310013e49d
   docs/models/components/environmententry.md:
-    last_write_checksum: sha1:6b156efd88e4630d89983598ce1bab1f8c6a686d
+    last_write_checksum: sha1:dc976668fcb703eb3c6fd2053ff7b22d39a6c026
   docs/models/components/environmententryinput.md:
     last_write_checksum: sha1:82e419b9a54dbf5869c1c3e7d15f57ef12673593
   docs/models/components/evolveform.md:
@@ -463,7 +463,7 @@ trackedFiles:
   docs/models/components/listdeploymentresult.md:
     last_write_checksum: sha1:e81f46e1358dfcee125fcfb93dfb636b707be998
   docs/models/components/listenvironmentsresult.md:
-    last_write_checksum: sha1:407469156fe816e6d51ea58346d03afc56129391
+    last_write_checksum: sha1:fe802f082c11ca85860a63497dad434d82cb687d
   docs/models/components/listfilteroptionspayload.md:
     last_write_checksum: sha1:37bedf6b5340d625c49f10f62175ef018c836f3c
   docs/models/components/listfilteroptionsresult.md:
@@ -4102,7 +4102,7 @@ trackedFiles:
   src/models/components/environment.ts:
     last_write_checksum: sha1:c5af3e46aabad6dbcba00fbfec14734c2f5b7e3d
   src/models/components/environmententry.ts:
-    last_write_checksum: sha1:00cee6b46cbb43ddd86de6414ea21b8375e59907
+    last_write_checksum: sha1:bd335b6e02bd1c19f8802681a2bbafd5e7b41fcd
   src/models/components/environmententryinput.ts:
     last_write_checksum: sha1:985038104847661630b502cc87fb18f40e196ea9
   src/models/components/evolveform.ts:
@@ -7280,7 +7280,7 @@ examples:
         application/json: {"new_name": "<value>"}
       responses:
         "200":
-          application/json: {"created_at": "2025-10-20T20:04:05.659Z", "entries": [{"created_at": "2025-01-06T15:50:05.639Z", "name": "<value>", "updated_at": "2026-06-15T19:26:29.483Z", "value": "<value>", "value_hash": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2026-12-23T01:37:04.789Z"}
+          application/json: {"created_at": "2025-10-20T20:04:05.659Z", "entries": [{"created_at": "2025-01-06T15:50:05.639Z", "name": "<value>", "updated_at": "2026-06-15T19:26:29.483Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2026-12-23T01:37:04.789Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -7347,7 +7347,7 @@ examples:
           toolset_id: "7003cb87-ab79-4484-b08e-a7afac2dc2b5"
       responses:
         "200":
-          application/json: {"created_at": "2024-10-11T00:52:32.537Z", "entries": [{"created_at": "2025-10-05T02:06:46.478Z", "name": "<value>", "updated_at": "2026-02-11T02:25:29.751Z", "value": "<value>", "value_hash": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-03-14T08:23:10.020Z"}
+          application/json: {"created_at": "2024-10-11T00:52:32.537Z", "entries": [{"created_at": "2025-10-05T02:06:46.478Z", "name": "<value>", "updated_at": "2026-02-11T02:25:29.751Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-03-14T08:23:10.020Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
