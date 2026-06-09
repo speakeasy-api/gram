@@ -47,6 +47,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/interceptors"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -117,6 +118,10 @@ type ChallengeManager struct {
 	policy    *guardian.Policy
 	cache     cache.TypedCacheObject[RemoteLoginState]
 	serverURL *url.URL
+	// authorizeInterceptors adapt the outgoing upstream authorize request to
+	// per-provider, non-standard requirements (e.g. Google's offline access).
+	// Injected here rather than via a package-global registry.
+	authorizeInterceptors []interceptors.AuthorizeInterceptor
 }
 
 func NewChallengeManager(
@@ -139,6 +144,9 @@ func NewChallengeManager(
 			cache.SuffixNone,
 		),
 		serverURL: serverURL,
+		authorizeInterceptors: []interceptors.AuthorizeInterceptor{
+			interceptors.NewGoogle(logger),
+		},
 	}
 }
 
@@ -318,6 +326,11 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 	}
 	if client.Audience != "" {
 		q.Set("audience", client.Audience)
+	}
+	for _, ic := range m.authorizeInterceptors {
+		if ic.Match(client.IssuerURL) {
+			ic.ModifyAuthorize(ctx, q)
+		}
 	}
 	u.RawQuery = q.Encode()
 	return u.String(), nil
