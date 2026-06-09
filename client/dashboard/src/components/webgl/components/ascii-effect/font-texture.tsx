@@ -6,7 +6,7 @@ const TEXTURE_SIZE = 1024;
 const TEXTURE_STEPS = 256;
 const FONT_SIZE = 64;
 
-export function FontTexture() {
+export function FontTexture(): JSX.Element | null {
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
   const canvasDebug = useRef<HTMLCanvasElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);

@@ -11,7 +11,7 @@ import { ObserveTabNav } from "@/components/observe/ObserveTabNav";
 import { useMembers } from "@gram/client/react-query";
 import { slugify } from "@/lib/constants";
 
-export function InsightsRoot() {
+export function InsightsRoot(): JSX.Element {
   const { userSlug } = useParams<{ userSlug: string }>();
   const { data: membersData } = useMembers();
   const substitutions = useMemo(() => {
@@ -46,7 +46,7 @@ export function InsightsRoot() {
   );
 }
 
-export function InsightsHooksPage() {
+export function InsightsHooksPage(): JSX.Element {
   return (
     <RequireScope scope={["project:read", "project:write"]} level="page">
       <InsightsToolsContent />
@@ -54,7 +54,7 @@ export function InsightsHooksPage() {
   );
 }
 
-export function InsightsMCPPage() {
+export function InsightsMCPPage(): JSX.Element {
   return (
     <RequireScope scope="project:read" level="page">
       <InsightsMCPContent />
@@ -62,11 +62,11 @@ export function InsightsMCPPage() {
   );
 }
 
-export function InsightsEmployeesLayout() {
+export function InsightsEmployeesLayout(): JSX.Element {
   return <Outlet />;
 }
 
-export function InsightsEmployeesPage() {
+export function InsightsEmployeesPage(): JSX.Element {
   return (
     <RequireScope scope="project:read" level="page">
       <InsightsEmployeesContent />
@@ -74,7 +74,7 @@ export function InsightsEmployeesPage() {
   );
 }
 
-export function InsightsEmployeeDetailPage() {
+export function InsightsEmployeeDetailPage(): JSX.Element {
   return (
     <RequireScope scope="project:read" level="page">
       <InsightsEmployeeDetailContent />
@@ -82,7 +82,7 @@ export function InsightsEmployeeDetailPage() {
   );
 }
 
-export function InsightsAgentsPage() {
+export function InsightsAgentsPage(): JSX.Element {
   return (
     <RequireScope scope="project:read" level="page">
       <InsightsAgentsContent />

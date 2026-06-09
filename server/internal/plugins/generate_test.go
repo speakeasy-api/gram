@@ -14,6 +14,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func requireFileBytes(t *testing.T, path string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	return data
+}
+
 func TestGeneratePluginWithCustomDomainURL(t *testing.T) {
 	t.Parallel()
 	plugins := []PluginInfo{
@@ -621,6 +628,8 @@ func TestRenderHookScriptClaudeUsesGramKeyAndProjectHeaders(t *testing.T) {
 	require.NotContains(t, script, "/hooks/claude", "must not use the legacy /hooks/<platform> path")
 	require.Contains(t, script, "Gram-Key: gram_local_secret_xyz")
 	require.Contains(t, script, "Gram-Project: acme-prod")
+	require.Contains(t, script, `--config "$auth_config"`)
+	require.NotContains(t, script, `-H "Gram-Key:`, "secret headers should not be passed in curl argv")
 	require.NotContains(t, script, "Authorization", "endpoint reads Gram-Key, not Authorization")
 }
 
@@ -639,6 +648,8 @@ func TestRenderHookScriptCursorUsesGramKeyAndProjectHeaders(t *testing.T) {
 	require.Contains(t, script, "https://app.getgram.ai", "server URL must appear as the env var default")
 	require.NotContains(t, script, "/hooks/cursor", "must not use the legacy /hooks/<platform> path")
 	require.Contains(t, script, `Gram-Key: gram_local_secret_xyz`, "cursor reads Gram-Key, not Authorization")
+	require.Contains(t, script, `--config "$auth_config"`)
+	require.NotContains(t, script, `-H "Gram-Key:`, "secret headers should not be passed in curl argv")
 	require.NotContains(t, script, "Authorization", "cursor endpoint does not read Authorization")
 	require.Contains(t, script, `Gram-Project: acme-prod`, "cursor requires the project header per design")
 }
@@ -656,6 +667,134 @@ func TestRenderHookScriptCursorOmitsProjectHeaderWhenSlugMissing(t *testing.T) {
 
 	require.Contains(t, script, "Gram-Key: gram_local_secret_xyz", "key still emitted without a slug")
 	require.NotContains(t, script, "Gram-Project")
+	require.NotContains(t, script, `-H "Gram-Key:`, "secret headers should not be passed in curl argv")
+}
+
+func TestRenderHookScriptUsesDeviceAgentIdentityWhenAvailable(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	script := string(renderHookScript(cfg, "cursor"))
+
+	dir := t.TempDir()
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "payload.json")
+	require.NoError(t, os.WriteFile(hookPath, []byte(script), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "identity.sh"), renderDeviceAgentIdentityScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "fake-agent"), []byte(`#!/usr/bin/env bash
+if [ "$1" = "identity" ]; then
+  printf '{"identity":{"email":"agent@example.com"}}'
+  exit 0
+fi
+exit 1
+`), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "curl"), []byte(`#!/usr/bin/env bash
+cat > "$GRAM_CAPTURE_PAYLOAD"
+printf '{}\n200'
+`), 0o755))
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"beforeSubmitPrompt","user_email":"cursor@example.com"}`)
+	cmd.Env = append(os.Environ(),
+		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"GRAM_CAPTURE_PAYLOAD="+capturePath,
+		"GRAM_DEVICE_AGENT_COMMANDS=fake-agent",
+	)
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	var posted map[string]any
+	postedPayload := string(requireFileBytes(t, capturePath))
+	require.NoError(t, json.Unmarshal([]byte(postedPayload), &posted))
+	require.Equal(t, "agent@example.com", posted["user_email"])
+	require.NotContains(t, postedPayload, `cursor@example.com`)
+	require.Equal(t, 1, strings.Count(postedPayload, `"user_email"`), "identity enrichment must replace user_email, not append a duplicate key")
+}
+
+func TestRenderHookScriptFallsBackWhenDeviceAgentMissing(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	script := string(renderHookScript(cfg, "cursor"))
+
+	dir := t.TempDir()
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "payload.json")
+	require.NoError(t, os.WriteFile(hookPath, []byte(script), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "identity.sh"), renderDeviceAgentIdentityScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "curl"), []byte(`#!/usr/bin/env bash
+cat > "$GRAM_CAPTURE_PAYLOAD"
+printf '{}\n200'
+`), 0o755))
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"beforeSubmitPrompt","user_email":"cursor@example.com"}`)
+	cmd.Env = append(os.Environ(),
+		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"GRAM_CAPTURE_PAYLOAD="+capturePath,
+		"GRAM_DEVICE_AGENT_COMMANDS=missing-agent",
+	)
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	var posted map[string]any
+	require.NoError(t, json.Unmarshal(requireFileBytes(t, capturePath), &posted))
+	require.Equal(t, "cursor@example.com", posted["user_email"])
+}
+
+func TestDeviceAgentIdentityScriptHandlesWhitespaceEmptyObject(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "fake-agent"), []byte(`#!/usr/bin/env bash
+if [ "$1" = "identity" ]; then
+  printf '{"email":"agent@example.com"}'
+  exit 0
+fi
+exit 1
+`), 0o755))
+
+	cmd := exec.Command("bash", "-c", `. ./identity.sh; gram_enrich_identity_payload '{
+  }'`)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"GRAM_DEVICE_AGENT_COMMANDS=fake-agent",
+	)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "identity.sh"), renderDeviceAgentIdentityScript(), 0o755))
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	var posted map[string]any
+	require.NoError(t, json.Unmarshal(output, &posted))
+	require.Equal(t, "agent@example.com", posted["user_email"])
+}
+
+func TestGenerateObservabilityPluginsIncludeIdentityHelper(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := GeneratePluginPackages(nil, cfg)
+	require.NoError(t, err)
+
+	for _, path := range []string{
+		ClaudeObservabilitySlug(cfg) + "/hooks/identity.sh",
+		CursorObservabilitySlug(cfg) + "/hooks/identity.sh",
+		CodexObservabilitySlug(cfg) + "/hooks/identity.sh",
+	} {
+		require.NotNil(t, files[path], "observability identity helper missing: %s", path)
+	}
 }
 
 // Claude only invokes hook.sh for events listed in hooks.json. The Claude()
@@ -680,6 +819,7 @@ func TestGenerateClaudeObservabilityPluginHooksJSONIncludesAllRegisteredEvents(t
 
 	hooksJSON := files[ClaudeObservabilitySlug(cfg)+"/hooks/hooks.json"]
 	require.NotNil(t, hooksJSON, "claude observability hooks/hooks.json missing")
+	require.NotNil(t, files[ClaudeObservabilitySlug(cfg)+"/hooks/identity.sh"], "claude observability hooks/identity.sh missing")
 
 	var parsed claudeHooksConfig
 	require.NoError(t, json.Unmarshal(hooksJSON, &parsed))
@@ -709,6 +849,7 @@ func TestGenerateClaudeObservabilityRoutesInventoryEventsToOwnScript(t *testing.
 
 	inventoryScript := files[slug+"/hooks/mcp_inventory.sh"]
 	require.NotNil(t, inventoryScript, "claude observability hooks/mcp_inventory.sh missing")
+	require.NotNil(t, files[slug+"/hooks/identity.sh"], "claude observability hooks/identity.sh missing")
 
 	var parsed claudeHooksConfig
 	require.NoError(t, json.Unmarshal(files[slug+"/hooks/hooks.json"], &parsed))
@@ -751,6 +892,8 @@ func TestRenderClaudeMCPInventoryScriptCarriesAuthAndEnrichesPayload(t *testing.
 
 	require.Contains(t, script, "Gram-Key: gram_local_secret_xyz")
 	require.Contains(t, script, "Gram-Project: acme-prod")
+	require.Contains(t, script, `--config "$auth_config"`)
+	require.NotContains(t, script, `-H "Gram-Key:`, "secret headers should not be passed in curl argv")
 	require.Contains(t, script, "${server_url}/rpc/hooks.claude")
 	require.Contains(t, script, "https://app.getgram.ai", "server URL must appear as the env var default")
 	// Server-side parsers key off these field names — see

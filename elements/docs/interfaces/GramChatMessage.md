@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.34.0**](../README.md)
+[**@gram-ai/elements v1.35.0**](../README.md)
 
 ***
 
@@ -36,7 +36,7 @@ carries when `role === "tool"`.
 
 ### role
 
-> **role**: `"tool"` \| `"system"` \| `"developer"` \| `"user"` \| `"assistant"`
+> **role**: `"system"` \| `"developer"` \| `"user"` \| `"assistant"` \| `"tool"`
 
 ***
 

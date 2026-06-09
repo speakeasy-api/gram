@@ -166,10 +166,12 @@ export const useGroupedTools = (tools: Tool[]): ToolGroup[] => {
   return toolGroups;
 };
 
-export const isPrompt = (template: PromptTemplateEntry) =>
+export const isPrompt = (template: PromptTemplateEntry): boolean =>
   template.kind === PromptTemplateKind.Prompt;
 
-export const isHttpTool = (tool: Tool) => tool.type === "http";
+export const isHttpTool = (
+  tool: Tool,
+): tool is Extract<Tool, { type: "http" }> => tool.type === "http";
 const isPromptTool = (tool: Tool) => tool.type === "prompt";
 const isFunctionTool = (tool: Tool) => tool.type === "function";
 export const toolSupportsAnnotations = (
@@ -180,7 +182,7 @@ export const toolSupportsAnnotations = (
 export const getToolSourceLabel = (
   tool: Tool,
   context: ToolDisplayContext = {},
-) => {
+): string => {
   const { documentIdToName, functionIdToName } = context;
 
   switch (tool.type) {
@@ -215,12 +217,17 @@ const getToolSourcePrefix = (tool: Tool, context: ToolDisplayContext = {}) => {
         return documentIdToSlug[tool.openapiv3DocumentId];
       }
       return null;
+    case "external-mcp":
+    case "function":
+    case "platform":
+    case "prompt":
+      return null;
     default:
       return null;
   }
 };
 
-export const getToolTypeLabel = (tool: Tool) => {
+export const getToolTypeLabel = (tool: Tool): string => {
   switch (tool.type) {
     case "http":
       return "HTTP";

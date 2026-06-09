@@ -15,7 +15,7 @@ import { Heading } from "@/components/ui/heading";
 import { Button, CodeSnippet, Stack } from "@speakeasy-api/moonshine";
 import { ArrowRightIcon, FileTextIcon, RefreshCcwIcon } from "lucide-react";
 
-export default function UploadOpenAPI() {
+export default function UploadOpenAPI(): JSX.Element {
   return (
     <Page>
       <Page.Header>
@@ -144,7 +144,7 @@ function FooterActions() {
 export function DeploymentLogs(props: {
   deploymentId: string;
   onlyErrors?: boolean;
-}) {
+}): JSX.Element | null {
   const { data, status, error } = useDeploymentLogs({
     deploymentId: props.deploymentId,
   });

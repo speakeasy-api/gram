@@ -67,7 +67,7 @@ interface ContentErrorBoundaryProps {
 export function ContentErrorBoundary({
   children,
   fallback,
-}: ContentErrorBoundaryProps) {
+}: ContentErrorBoundaryProps): JSX.Element {
   const defaultFallback = (
     <div className="flex items-center justify-center p-8">
       <Spinner />

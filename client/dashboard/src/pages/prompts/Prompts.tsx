@@ -1,7 +1,8 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { CardContextMenu } from "@/components/card-context-menu";
 import { Card, Cards } from "@/components/ui/card";
-import { MoreActions } from "@/components/ui/more-actions";
+import { Action, MoreActions } from "@/components/ui/more-actions";
 import { UpdatedAt } from "@/components/updated-at";
 import { useRoutes } from "@/routes";
 import { PromptTemplate } from "@gram/client/models/components";
@@ -16,11 +17,11 @@ import { Plus } from "lucide-react";
 import { Outlet } from "react-router";
 import { PromptsEmptyState } from "./PromptsEmptyState";
 
-export function PromptsRoot() {
+export function PromptsRoot(): JSX.Element {
   return <Outlet />;
 }
 
-export default function Prompts() {
+export default function Prompts(): JSX.Element {
   return (
     <Page>
       <Page.Header>
@@ -80,55 +81,57 @@ export function PromptTemplateCard({
   template: PromptTemplate;
   onDelete?: () => void;
   deleteLabel?: string;
-}) {
+}): JSX.Element {
   const routes = useRoutes();
   const queryClient = useQueryClient();
 
   const deleteTemplate = useDeleteTemplateMutation({
     onSuccess: () => {
-      invalidateAllTemplates(queryClient);
+      void invalidateAllTemplates(queryClient);
     },
   });
 
+  const actions: Action[] = [
+    {
+      label: deleteLabel ?? "Delete",
+      destructive: true,
+      icon: "trash",
+      onClick: () => {
+        if (onDelete) {
+          onDelete();
+        } else if (
+          confirm("Are you sure you want to delete this prompt template?")
+        ) {
+          deleteTemplate.mutate({ request: { name: template.name } });
+        }
+      },
+    },
+  ];
+
   return (
-    <routes.prompts.prompt.Link
-      params={[template.name]}
-      className="hover:no-underline"
-    >
-      <Card>
-        <Card.Header>
-          <Card.Title className="normal-case">{template.name}</Card.Title>
-          <MoreActions
-            actions={[
-              {
-                label: deleteLabel ?? "Delete",
-                destructive: true,
-                icon: "trash",
-                onClick: () => {
-                  if (onDelete) {
-                    onDelete();
-                  } else if (
-                    confirm(
-                      "Are you sure you want to delete this prompt template?",
-                    )
-                  ) {
-                    deleteTemplate.mutate({ request: { name: template.name } });
-                  }
-                },
-              },
-            ]}
-          />
-        </Card.Header>
-        <Card.Content>
-          <Card.Description>
-            {template.description || "No description"}
-          </Card.Description>
-        </Card.Content>
-        <Card.Footer>
-          <div />
-          <UpdatedAt date={new Date(template.updatedAt)} />
-        </Card.Footer>
-      </Card>
-    </routes.prompts.prompt.Link>
+    <CardContextMenu actions={actions}>
+      <routes.prompts.prompt.Link
+        params={[template.name]}
+        className="block h-full hover:no-underline"
+      >
+        <Card>
+          <Card.Header>
+            <Card.Title className="normal-case">{template.name}</Card.Title>
+            <div onClick={(e) => e.stopPropagation()}>
+              <MoreActions actions={actions} />
+            </div>
+          </Card.Header>
+          <Card.Content>
+            <Card.Description>
+              {template.description || "No description"}
+            </Card.Description>
+          </Card.Content>
+          <Card.Footer>
+            <div />
+            <UpdatedAt date={new Date(template.updatedAt)} />
+          </Card.Footer>
+        </Card>
+      </routes.prompts.prompt.Link>
+    </CardContextMenu>
   );
 }

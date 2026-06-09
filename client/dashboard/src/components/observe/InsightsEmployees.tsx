@@ -243,7 +243,7 @@ const statusMeta: Record<
   },
 };
 
-export function InsightsEmployeesContent() {
+export function InsightsEmployeesContent(): JSX.Element {
   const client = useGramContext();
   const { orgSlug, projectSlug } = useSlugs();
   const navigate = useNavigate();
@@ -342,7 +342,7 @@ export function InsightsEmployeesContent() {
   );
   const employeesBase = `/${orgSlug}/projects/${projectSlug}/insights/employees`;
   const openUser = (employee: Employee) => {
-    navigate(`${employeesBase}/${routeSegmentForEmployee(employee)}`);
+    void navigate(`${employeesBase}/${routeSegmentForEmployee(employee)}`);
   };
   const enrollmentRate =
     totalEmployees > 0 ? (enrolledEmployees / totalEmployees) * 100 : 0;

@@ -127,10 +127,10 @@ function describeToolsetUpdate(log: AuditLog): string {
     return `${enabled ? "enabled" : "disabled"} MCP for server`;
   }
   if (changed.has("Name") && changed.size <= 2) {
-    return `renamed MCP server to ${after["Name"]}`;
+    return `renamed MCP server to ${String(after["Name"])}`;
   }
   if (changed.has("ToolSelectionMode") && changed.size <= 2) {
-    return `changed tool selection mode to ${after["ToolSelectionMode"]}`;
+    return `changed tool selection mode to ${String(after["ToolSelectionMode"])}`;
   }
   if (changed.has("Description") && changed.size <= 2) {
     return "updated MCP server description";

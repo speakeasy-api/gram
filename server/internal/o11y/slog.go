@@ -12,6 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/plog"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
 func getTemporalKeyRemaps(withDataDogAttr bool) map[string]attr.Key {
@@ -153,6 +154,13 @@ func (h *ContextHandler) Handle(ctx context.Context, record slog.Record) error {
 	}
 	if method, ok := ctx.Value(goa.MethodKey).(string); ok {
 		record.Add(attr.SlogGoaMethod(method))
+	}
+
+	if sub, ok := contextvalues.GetPubSubSubscriberContext(ctx); ok && sub != nil {
+		record.Add(
+			attr.SlogTopicProtoName(sub.TopicProtoName),
+			attr.SlogSubscriptionProtoName(sub.SubscriptionProtoName),
+		)
 	}
 
 	err := h.Handler.Handle(ctx, record)

@@ -33,7 +33,7 @@ export function TextArea({
   onCompositionStart?: React.CompositionEventHandler<HTMLTextAreaElement>;
   onCompositionEnd?: React.CompositionEventHandler<HTMLTextAreaElement>;
   onPaste?: React.ClipboardEventHandler<HTMLTextAreaElement>;
-}) {
+}): JSX.Element {
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     onChange?.(e.target.value);
   };

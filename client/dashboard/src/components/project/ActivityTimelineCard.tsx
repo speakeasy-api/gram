@@ -28,7 +28,11 @@ type Props = {
   viewAllHref: string;
 };
 
-export function ActivityTimelineCard({ logs, isPending, viewAllHref }: Props) {
+export function ActivityTimelineCard({
+  logs,
+  isPending,
+  viewAllHref,
+}: Props): JSX.Element {
   const logGroups = groupLogsByDate(logs);
 
   return (

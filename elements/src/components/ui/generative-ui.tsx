@@ -4,7 +4,7 @@ import { useDensity } from "@/hooks/useDensity";
 import { cn } from "@/lib/utils";
 import { isJsonRenderTree, type JsonRenderNode } from "@/lib/generative-ui";
 import { AlertCircleIcon } from "lucide-react";
-import { FC, useMemo } from "react";
+import { ElementType, FC, useMemo } from "react";
 
 // Import all components from the generative-ui plugin ui directory
 import {
@@ -42,9 +42,10 @@ interface GenerativeUIProps {
 /**
  * Built-in components for rendering json-render trees.
  * These provide a default set of UI primitives for tool results.
+ * Each entry has its own prop shape; the registry erases those generics via
+ * `ElementType` so heterogeneous components can coexist under one map.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const components: Record<string, FC<any>> = {
+const components: Record<string, ElementType> = {
   // Layout
   Card: CardWrapper,
   Grid,
@@ -98,7 +99,11 @@ function renderNode(node: JsonRenderNode, key?: number): React.ReactNode {
     ? node.children.map((child, i) => renderNode(child, i))
     : undefined;
 
-  return <Component key={key} {...(node.props ?? {})} children={children} />;
+  return (
+    <Component key={key} {...(node.props ?? {})}>
+      {children}
+    </Component>
+  );
 }
 
 /**

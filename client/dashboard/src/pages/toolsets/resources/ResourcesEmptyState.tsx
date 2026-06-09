@@ -7,7 +7,7 @@ export function ResourcesEmptyState({
   onAddResources,
 }: {
   onAddResources: () => void;
-}) {
+}): JSX.Element {
   const cta = (
     <RequireScope scope="mcp:write" level="component">
       <Button size="sm" onClick={onAddResources}>

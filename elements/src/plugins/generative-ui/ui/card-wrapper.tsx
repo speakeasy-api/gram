@@ -15,7 +15,7 @@ export function CardWrapper({
   className,
   children,
   ...props
-}: CardWrapperProps) {
+}: CardWrapperProps): React.JSX.Element {
   return (
     <div
       data-slot="card-wrapper"

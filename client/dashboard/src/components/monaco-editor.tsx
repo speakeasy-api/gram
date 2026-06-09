@@ -5,6 +5,7 @@ import type * as Monaco from "monaco-editor";
 import * as monaco from "monaco-editor";
 import { useEffect, useRef } from "react";
 
+// oxlint-disable import/default -- Vite ?worker URL imports lack named defaults
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
 import cssWorker from "monaco-editor/esm/vs/language/css/css.worker?worker";
@@ -58,7 +59,7 @@ export function MonacoEditor({
   readOnly = true,
   height = "100%",
   wordWrap = "off",
-}: MonacoEditorProps) {
+}: MonacoEditorProps): JSX.Element {
   const { theme } = useMoonshineConfig();
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
 
@@ -84,21 +85,13 @@ export function MonacoEditor({
   // Update editor theme when Moonshine theme changes
   useEffect(() => {
     if (editorRef.current) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const monaco = (window as any).monaco;
-      if (monaco) {
-        monaco.editor.setTheme(theme === "dark" ? "vs-dark" : "vs");
-      }
+      monaco.editor.setTheme(theme === "dark" ? "vs-dark" : "vs");
     }
   }, [theme]);
 
-  // Type cast needed for React 19 compatibility with @monaco-editor/react
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const EditorComponent = Editor as any;
-
   return (
     <div className={cn("overflow-hidden", className)}>
-      <EditorComponent
+      <Editor
         height={height}
         language={language}
         value={value}

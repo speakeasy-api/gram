@@ -6,7 +6,7 @@ import { Type } from "../ui/type";
 import { useStep } from "./step/use-step";
 import { useStepper } from "./stepper/use-stepper";
 
-export default function NameDeploymentStep() {
+export default function NameDeploymentStep(): React.JSX.Element | null {
   const stepper = useStepper();
   const step = useStep();
 

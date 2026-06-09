@@ -2,7 +2,9 @@ import { getServerURL } from "@/lib/utils";
 import { useSession } from "./Auth";
 import { useProject } from "./Auth";
 
-export const useFetcher = () => {
+export const useFetcher = (): {
+  fetch: (endpoint: string, opts: RequestInit) => Promise<Response>;
+} => {
   const project = useProject();
   const { session } = useSession();
 
@@ -10,7 +12,7 @@ export const useFetcher = () => {
     fetch(`${getServerURL()}${endpoint}`, {
       ...opts,
       headers: {
-        ...opts.headers,
+        ...(opts.headers as Record<string, string> | undefined),
         "gram-project": project.slug,
         "gram-session": session,
       },

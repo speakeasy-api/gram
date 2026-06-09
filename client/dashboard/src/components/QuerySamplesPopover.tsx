@@ -31,7 +31,7 @@ export function QuerySamplesPopover({
   ariaLabel = "Show sample queries",
   align = "end",
   className,
-}: QuerySamplesPopoverProps) {
+}: QuerySamplesPopoverProps): JSX.Element {
   const [open, setOpen] = useState(false);
 
   return (

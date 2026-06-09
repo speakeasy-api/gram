@@ -14,6 +14,7 @@ import type {
   ElementsTransportFactory,
 } from "@gram-ai/elements";
 import { Chat, ChatHistory, GramElementsProvider } from "@gram-ai/elements";
+import { stripMessageContextFraming } from "@/lib/projectAssistantTranscript";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import type { UIMessage } from "ai";
 import {
@@ -25,7 +26,14 @@ import {
   Terminal,
   Wand2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  ReactElement,
+} from "react";
 import type { InsightsConfigOptions } from "./insights-context";
 import { InsightsContext, useInsightsState } from "./insights-context";
 
@@ -137,7 +145,11 @@ function isMacPlatform(): boolean {
  * single 600ms rotation. Implemented by mounting/unmounting the spin class
  * with a setTimeout rather than `animate-spin` (which is infinite).
  */
-export function InsightsTrigger({ className }: { className?: string }) {
+export function InsightsTrigger({
+  className,
+}: {
+  className?: string;
+}): ReactElement | null {
   const { available, isExpanded, setIsExpanded, triggerSpinKey } =
     useInsightsState();
   const [spinning, setSpinning] = useState(false);
@@ -186,10 +198,12 @@ export function InsightsTrigger({ className }: { className?: string }) {
         startSpin();
         setIsExpanded(!isExpanded);
       }}
-      aria-label={isExpanded ? "Close AI Insights" : "Open AI Insights"}
+      aria-label={
+        isExpanded ? "Close Project Assistant" : "Open Project Assistant"
+      }
       aria-keyshortcuts={shortcutAria}
       aria-pressed={isExpanded}
-      title={`AI Insights (${shortcutKeys.join("+")})`}
+      title={`Project Assistant (${shortcutKeys.join("+")})`}
       className={cn(
         "group border-border hover:bg-accent hover:text-accent-foreground inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm transition-colors",
         isExpanded && "bg-accent text-accent-foreground",
@@ -200,7 +214,7 @@ export function InsightsTrigger({ className }: { className?: string }) {
       <Wand2
         className={cn("size-3.5", spinning && "insights-trigger-spinning")}
       />
-      <span className="font-medium">AI Insights</span>
+      <span className="font-medium">Project Assistant</span>
       {/* Hover-revealed shortcut hint. The outer wrapper animates between
           0fr and 1fr grid columns so the contents transition cleanly from
           width 0 to their natural width without us hardcoding a pixel value.
@@ -234,7 +248,9 @@ export function InsightsTrigger({ className }: { className?: string }) {
  * to swap in a custom prompt/suggestions/MCP filter. Cleans up on unmount,
  * restoring the provider's defaults.
  */
-export function InsightsConfig(options: InsightsConfigOptions) {
+export function InsightsConfig(
+  options: InsightsConfigOptions,
+): ReactElement | null {
   const { setOverride } = useInsightsState();
   // JSON.stringify is the stable content key; optionsRef is read inside the
   // effect to avoid a stale closure on re-renders that don't change content.
@@ -277,7 +293,7 @@ export function InsightsProvider({
   suggestions: defaultSuggestions = [],
   defaultExpanded = false,
   children,
-}: InsightsProviderProps) {
+}: InsightsProviderProps): ReactElement {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [override, setOverride] = useState<InsightsConfigOptions | null>(null);
   // Bumped whenever the keyboard shortcut fires so the trigger plays its
@@ -346,7 +362,7 @@ export function InsightsProvider({
           const messages = args.messages;
           let lastUserIdx = -1;
           for (let i = messages.length - 1; i >= 0; i--) {
-            if (messages[i].role === "user") {
+            if (messages[i]!.role === "user") {
               lastUserIdx = i;
               break;
             }
@@ -357,7 +373,7 @@ export function InsightsProvider({
           const original = messages[lastUserIdx];
           const prefix = `<dashboard_context>\n${ctxText}\n</dashboard_context>\n\n`;
           let prefixed = false;
-          const newParts = original.parts.map((p) => {
+          const newParts = original!.parts.map((p) => {
             if (!prefixed && p.type === "text") {
               prefixed = true;
               return { ...p, text: `${prefix}${p.text}` };
@@ -372,7 +388,7 @@ export function InsightsProvider({
           }
           const wrappedMessages: UIMessage[] = [
             ...messages.slice(0, lastUserIdx),
-            { ...original, parts: newParts },
+            { ...original, parts: newParts } as UIMessage,
             ...messages.slice(lastUserIdx + 1),
           ];
           return inner.sendMessages({ ...args, messages: wrappedMessages });
@@ -406,6 +422,10 @@ export function InsightsProvider({
         enabled: true,
         threadListFilters: { assistant_id: managedAssistantId },
         deferThreadIdMinting: true,
+        // The runtime persists each turn with a backend `<message-context>`
+        // framing block (needed for replay, noise for display). Strip it — and
+        // drop framing-only turns — before Elements renders the transcript.
+        transformChatMessage: stripMessageContextFraming,
       },
       api: {
         ...mcpConfig.api,

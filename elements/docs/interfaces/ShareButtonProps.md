@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.34.0**](../README.md)
+[**@gram-ai/elements v1.35.0**](../README.md)
 
 ***
 
@@ -63,7 +63,7 @@ Button variant
 
 ### size?
 
-> `optional` **size**: `"default"` \| `"icon"` \| `"sm"` \| `"lg"`
+> `optional` **size**: `"icon"` \| `"default"` \| `"sm"` \| `"lg"`
 
 Button size
 

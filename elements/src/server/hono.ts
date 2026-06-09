@@ -31,7 +31,7 @@ export function createHonoHandler(
   options:
     | SessionHandlerOptions
     | ((c: Context) => SessionHandlerOptions | Promise<SessionHandlerOptions>),
-) {
+): (c: Context) => Promise<Response> {
   return async (c: Context) => {
     const projectSlug = c.req.header("gram-project");
 

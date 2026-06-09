@@ -6,7 +6,7 @@ import { Type } from "@/components/ui/type";
 import { Stack } from "@speakeasy-api/moonshine";
 import { CodeIcon } from "lucide-react";
 
-export default function FunctionsOnboarding() {
+export default function FunctionsOnboarding(): JSX.Element {
   return (
     <Page>
       <Page.Header>

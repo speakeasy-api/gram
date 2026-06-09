@@ -11,7 +11,7 @@ function Switch({
   ...props
 }: React.ComponentProps<typeof SwitchPrimitive.Root> & {
   size?: "sm" | "default";
-}) {
+}): React.JSX.Element {
   return (
     <SwitchPrimitive.Root
       data-slot="switch"

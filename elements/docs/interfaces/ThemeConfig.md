@@ -1,4 +1,4 @@
-[**@gram-ai/elements v1.34.0**](../README.md)
+[**@gram-ai/elements v1.35.0**](../README.md)
 
 ***
 
@@ -25,7 +25,7 @@ const config: ElementsConfig = {
 
 ### colorScheme?
 
-> `optional` **colorScheme**: `"light"` \| `"dark"` \| `"system"`
+> `optional` **colorScheme**: `"system"` \| `"light"` \| `"dark"`
 
 The color scheme to use for the UI.
 

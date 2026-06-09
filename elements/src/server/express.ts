@@ -34,7 +34,7 @@ export function createExpressHandler(
     | ((
         req: Request,
       ) => SessionHandlerOptions | Promise<SessionHandlerOptions>),
-) {
+): (req: Request, res: Response) => Promise<void> {
   return async (req: Request, res: Response) => {
     const projectSlug = Array.isArray(req.headers["gram-project"])
       ? req.headers["gram-project"][0]

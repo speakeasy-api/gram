@@ -19,7 +19,7 @@ export function MCPServerTableRow({
 }: {
   server: McpServer;
   endpointCount: number;
-}) {
+}): JSX.Element {
   const routes = useRoutes();
 
   const handleClick = () => {

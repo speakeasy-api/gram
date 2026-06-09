@@ -47,7 +47,7 @@ const STEPS: Step[] = [
   },
 ];
 
-export function SetupWizard() {
+export function SetupWizard(): JSX.Element | null {
   const navigate = useNavigate();
   const { orgSlug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -82,7 +82,7 @@ export function SetupWizard() {
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
-        next.set("step", STEPS[resumeStep].id);
+        next.set("step", STEPS[resumeStep]!.id!);
         return next;
       },
       { replace: true },
@@ -109,7 +109,7 @@ export function SetupWizard() {
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
-          next.set("step", STEPS[index].id);
+          next.set("step", STEPS[index]!.id!);
           return next;
         },
         { replace: true },
@@ -132,7 +132,7 @@ export function SetupWizard() {
     if (nextIndex < STEPS.length) {
       setCurrentStep(nextIndex);
     } else {
-      navigate(`/${orgSlug}`);
+      void navigate(`/${orgSlug}`);
     }
   }, [currentStep, navigate, orgSlug, setCurrentStep]);
 
@@ -143,7 +143,7 @@ export function SetupWizard() {
   }, [currentStep, setCurrentStep]);
 
   const handleLeave = () => {
-    navigate(`/${orgSlug}`);
+    void navigate(`/${orgSlug}`);
   };
 
   // While we're still figuring out where to resume (no slug + queries in

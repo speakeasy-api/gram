@@ -26,6 +26,7 @@ function formatValue(
         maximumFractionDigits: 1,
       }).format(value);
     case "number":
+    case undefined:
     default:
       return new Intl.NumberFormat("en-US").format(value);
   }
@@ -37,7 +38,7 @@ export function Metric({
   format,
   className,
   ...props
-}: MetricProps) {
+}: MetricProps): React.JSX.Element {
   return (
     <div
       data-slot="metric"

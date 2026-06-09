@@ -12,7 +12,7 @@ export function DotTable({
   headers: { label: string; className?: string }[];
   children: React.ReactNode;
   className?: string;
-}) {
+}): JSX.Element {
   return (
     <div
       className={cn(

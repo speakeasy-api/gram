@@ -14,8 +14,10 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	mcpmetarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -246,15 +248,248 @@ func TestPluginsService_AddPluginServer(t *testing.T) {
 	toolset := createTestToolset(t, ctx, ti.conn, "test-toolset")
 	server, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
-		ToolsetID:   toolset.ID.String(),
-		DisplayName: "My Toolset Server",
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("My Toolset Server"),
 		Policy:      "required",
 		SortOrder:   0,
 	})
 	require.NoError(t, err)
 	require.Equal(t, "My Toolset Server", server.DisplayName)
 	require.Equal(t, "required", server.Policy)
-	require.Equal(t, toolset.ID.String(), server.ToolsetID)
+	require.NotNil(t, server.ToolsetID)
+	require.Equal(t, toolset.ID.String(), *server.ToolsetID)
+	require.Nil(t, server.McpServerID)
+}
+
+func TestPluginsService_AddPluginServer_McpServerBacked(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Remote Server Test"})
+	require.NoError(t, err)
+
+	mcpServer := createTestMcpServer(t, ctx, ti.conn, "Remote Widget", mcpservers.VisibilityPublic)
+
+	// Omit display_name: it should default to the mcp_server's name.
+	server, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		McpServerID: conv.PtrEmpty(mcpServer.idStr),
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "Remote Widget", server.DisplayName)
+	require.NotNil(t, server.McpServerID)
+	require.Equal(t, mcpServer.idStr, *server.McpServerID)
+	require.Nil(t, server.ToolsetID)
+}
+
+func TestPluginsService_AddPluginServer_DuplicateToolsetReturnsConflict(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Dup Toolset"})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "dup-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("First"),
+		Policy:      "required",
+	})
+	require.NoError(t, err)
+
+	// Adding the same toolset again (different display name) hits the
+	// plugin_id+toolset_id unique index, not the display-name one.
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Second"),
+		Policy:      "required",
+	})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeConflict, oopsErr.Code)
+	require.Contains(t, oopsErr.Error(), "already been added")
+}
+
+func TestPluginsService_AddPluginServer_DuplicateMcpServerReturnsConflict(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Dup Remote"})
+	require.NoError(t, err)
+
+	mcpServer := createTestMcpServer(t, ctx, ti.conn, "Dup Remote Server", mcpservers.VisibilityPublic)
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		McpServerID: conv.PtrEmpty(mcpServer.idStr),
+		DisplayName: conv.PtrEmpty("First"),
+		Policy:      "required",
+	})
+	require.NoError(t, err)
+
+	// Adding the same mcp_server again (different display name) hits the
+	// plugin_id+mcp_server_id unique index, not the display-name one.
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		McpServerID: conv.PtrEmpty(mcpServer.idStr),
+		DisplayName: conv.PtrEmpty("Second"),
+		Policy:      "required",
+	})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeConflict, oopsErr.Code)
+	require.Contains(t, oopsErr.Error(), "already been added")
+}
+
+func TestPluginsService_AddPluginServer_DuplicateDisplayNameReturnsConflict(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Dup Name"})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "dup-name-toolset")
+	mcpServer := createTestMcpServer(t, ctx, ti.conn, "Dup Name Remote", mcpservers.VisibilityPublic)
+
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Shared Name"),
+		Policy:      "required",
+	})
+	require.NoError(t, err)
+
+	// A different backend reusing the same display name hits the
+	// plugin_id+display_name unique index (the default conflict branch).
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		McpServerID: conv.PtrEmpty(mcpServer.idStr),
+		DisplayName: conv.PtrEmpty("Shared Name"),
+		Policy:      "required",
+	})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeConflict, oopsErr.Code)
+	require.Contains(t, oopsErr.Error(), "display name already exists")
+}
+
+func TestPluginsService_AddPluginServer_RequiresExactlyOneBackend(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "XOR Test"})
+	require.NoError(t, err)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "xor-toolset")
+	mcpServer := createTestMcpServer(t, ctx, ti.conn, "XOR Remote", mcpservers.VisibilityPublic)
+
+	// Neither backend provided.
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		DisplayName: conv.PtrEmpty("No Backend"),
+		Policy:      "required",
+	})
+	require.Error(t, err)
+	var noBackendErr *oops.ShareableError
+	require.ErrorAs(t, err, &noBackendErr)
+	require.Equal(t, oops.CodeBadRequest, noBackendErr.Code)
+
+	// Both backends provided.
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		McpServerID: conv.PtrEmpty(mcpServer.idStr),
+		DisplayName: conv.PtrEmpty("Both Backends"),
+		Policy:      "required",
+	})
+	require.Error(t, err)
+	var bothErr *oops.ShareableError
+	require.ErrorAs(t, err, &bothErr)
+	require.Equal(t, oops.CodeBadRequest, bothErr.Code)
+}
+
+func TestPluginsService_AddPluginServer_RejectsDisabledMcpServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Disabled Remote Test"})
+	require.NoError(t, err)
+
+	mcpServer := createTestMcpServer(t, ctx, ti.conn, "Disabled Remote", mcpservers.VisibilityDisabled)
+
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		McpServerID: conv.PtrEmpty(mcpServer.idStr),
+		DisplayName: conv.PtrEmpty("Disabled Server"),
+		Policy:      "required",
+	})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
+func TestPluginsService_AddPluginServer_RejectsMcpServerWithoutEndpoint(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "No Endpoint Test"})
+	require.NoError(t, err)
+
+	mcpServer := createTestMcpServerWithEndpoint(t, ctx, ti.conn, "No Endpoint Remote", mcpservers.VisibilityPublic, false)
+
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		McpServerID: conv.PtrEmpty(mcpServer.idStr),
+		DisplayName: conv.PtrEmpty("No Endpoint Server"),
+		Policy:      "required",
+	})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
+func TestPluginsService_RemovePluginServer_McpServerBacked(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Remove Remote Test"})
+	require.NoError(t, err)
+
+	mcpServer := createTestMcpServer(t, ctx, ti.conn, "Removable Remote", mcpservers.VisibilityPublic)
+	server, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		McpServerID: conv.PtrEmpty(mcpServer.idStr),
+		DisplayName: conv.PtrEmpty("Removable Server"),
+		Policy:      "required",
+	})
+	require.NoError(t, err)
+
+	err = ti.service.RemovePluginServer(ctx, &gen.RemovePluginServerPayload{
+		ID:       server.ID,
+		PluginID: plugin.ID,
+	})
+	require.NoError(t, err)
+
+	// The server is gone from the plugin.
+	fetched, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
+	require.NoError(t, err)
+	require.Empty(t, fetched.Servers)
 }
 
 func TestPluginsService_UpdatePluginServer_VerifiesOwnership(t *testing.T) {
@@ -268,8 +503,8 @@ func TestPluginsService_UpdatePluginServer_VerifiesOwnership(t *testing.T) {
 	toolset := createTestToolset(t, ctx, ti.conn, "ownership-toolset")
 	server, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
-		ToolsetID:   toolset.ID.String(),
-		DisplayName: "My Server",
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("My Server"),
 		Policy:      "required",
 		SortOrder:   0,
 	})
@@ -301,8 +536,8 @@ func TestPluginsService_RemovePluginServer_VerifiesOwnership(t *testing.T) {
 	toolset := createTestToolset(t, ctx, ti.conn, "remove-toolset")
 	server, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
-		ToolsetID:   toolset.ID.String(),
-		DisplayName: "My Server",
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("My Server"),
 		Policy:      "required",
 		SortOrder:   0,
 	})
@@ -490,8 +725,8 @@ func TestPluginsService_PublishPlugins_HappyPath(t *testing.T) {
 	toolset := createTestToolset(t, ctx, ti.conn, "publish-toolset")
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
-		ToolsetID:   toolset.ID.String(),
-		DisplayName: "Test Server",
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Test Server"),
 		Policy:      "required",
 		SortOrder:   0,
 	})
@@ -515,6 +750,54 @@ func TestPluginsService_PublishPlugins_HappyPath(t *testing.T) {
 	require.Contains(t, *status.MarketplaceURL, ".git")
 }
 
+// A Remote MCP-backed (mcp_server) plugin server is emitted into the generated
+// bundle as an HTTP server pointing at its resolved endpoint URL, with no
+// static Authorization header — auth is handled at the HTTP layer via the
+// mcp_server's user session issuer (OAuth).
+func TestPluginsService_PublishPlugins_McpServerBacked(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Remote Publish"})
+	require.NoError(t, err)
+
+	mcpServer := createTestMcpServer(t, ctx, ti.conn, "Remote API", mcpservers.VisibilityPublic)
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		McpServerID: conv.PtrEmpty(mcpServer.idStr),
+		DisplayName: conv.PtrEmpty("Remote API"),
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+
+	claudeMCP := mock.lastPushedFiles["remote-publish/.mcp.json"]
+	require.NotNil(t, claudeMCP)
+
+	var claudeConfig struct {
+		MCPServers map[string]struct {
+			Type    string            `json:"type"`
+			URL     string            `json:"url"`
+			Headers map[string]string `json:"headers"`
+		} `json:"mcpServers"`
+	}
+	require.NoError(t, json.Unmarshal(claudeMCP, &claudeConfig))
+
+	server, ok := claudeConfig.MCPServers["Remote API"]
+	require.True(t, ok)
+	require.Equal(t, "http", server.Type)
+	require.Equal(t, "https://app.getgram.ai/mcp/"+mcpServer.endpointSlug, server.URL)
+	// No static auth header for OAuth (mcp_server-backed) remotes.
+	require.Empty(t, server.Headers["Authorization"])
+	// And no Gram API key is baked in for a Remote MCP-backed server.
+	require.NotContains(t, string(claudeMCP), "gram_local_")
+}
+
 func TestPluginsService_PublishPlugins_WithCollaborators(t *testing.T) {
 	t.Parallel()
 
@@ -527,8 +810,8 @@ func TestPluginsService_PublishPlugins_WithCollaborators(t *testing.T) {
 	toolset := createTestToolset(t, ctx, ti.conn, "collab-toolset")
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
-		ToolsetID:   toolset.ID.String(),
-		DisplayName: "Collab Server",
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Collab Server"),
 		Policy:      "required",
 		SortOrder:   0,
 	})
@@ -556,8 +839,8 @@ func TestPluginsService_PublishPlugins_CreatesAPIKeyWithCorrectScope(t *testing.
 	toolset := createTestToolset(t, ctx, ti.conn, "key-toolset")
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
-		ToolsetID:   toolset.ID.String(),
-		DisplayName: "Key Server",
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Key Server"),
 		Policy:      "required",
 		SortOrder:   0,
 	})
@@ -609,8 +892,8 @@ func TestPluginsService_PublishPlugins_RePublishCreatesAdditionalKey(t *testing.
 	toolset := createTestToolset(t, ctx, ti.conn, "republish-toolset")
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
-		ToolsetID:   toolset.ID.String(),
-		DisplayName: "Republish Server",
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Republish Server"),
 		Policy:      "required",
 		SortOrder:   0,
 	})
@@ -660,8 +943,8 @@ func TestPluginsService_PublishPlugins_NoOrphanedKeyOnGitHubFailure(t *testing.T
 	toolset := createTestToolset(t, ctx, ti.conn, "fail-toolset")
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
-		ToolsetID:   toolset.ID.String(),
-		DisplayName: "Server",
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Server"),
 		Policy:      "required",
 		SortOrder:   0,
 	})
@@ -724,8 +1007,8 @@ func TestPluginsService_PublishPlugins_PublicToolsetEnvConfigs(t *testing.T) {
 
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
-		ToolsetID:   toolset.ID.String(),
-		DisplayName: "Public Server",
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Public Server"),
 		Policy:      "required",
 		SortOrder:   0,
 	})
@@ -814,8 +1097,8 @@ func TestPluginsService_PublishPlugins_SkipsUserEnvConfigsWithoutHeaderName(t *t
 
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
-		ToolsetID:   toolset.ID.String(),
-		DisplayName: "Headerless Server",
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Headerless Server"),
 		Policy:      "required",
 		SortOrder:   0,
 	})
@@ -865,8 +1148,8 @@ func TestPluginsService_PublishPlugins_SkipsDisabledMCPToolsets(t *testing.T) {
 	for _, ts := range []toolsetsrepo.Toolset{enabled, disabled} {
 		_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 			PluginID:    plugin.ID,
-			ToolsetID:   ts.ID.String(),
-			DisplayName: "Server " + ts.Name,
+			ToolsetID:   conv.PtrEmpty(ts.ID.String()),
+			DisplayName: conv.PtrEmpty("Server " + ts.Name),
 			Policy:      "required",
 			SortOrder:   0,
 		})
@@ -918,8 +1201,8 @@ func TestPluginsService_PublishPlugins_PublicToolsetWithoutMetadata(t *testing.T
 
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
-		ToolsetID:   toolset.ID.String(),
-		DisplayName: "No Meta Server",
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("No Meta Server"),
 		Policy:      "required",
 		SortOrder:   0,
 	})
@@ -944,8 +1227,8 @@ func TestPluginsService_PublishPlugins_EmitsObservabilityPlugin(t *testing.T) {
 	toolset := createTestToolset(t, ctx, ti.conn, "observability-toolset")
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
-		ToolsetID:   toolset.ID.String(),
-		DisplayName: "Server",
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Server"),
 		Policy:      "required",
 		SortOrder:   0,
 	})
@@ -1021,8 +1304,8 @@ func TestPluginsService_PublishPlugins_ObservabilityHookScriptContainsAPIKey(t *
 	toolset := createTestToolset(t, ctx, ti.conn, "hookkey-toolset")
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
-		ToolsetID:   toolset.ID.String(),
-		DisplayName: "S",
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("S"),
 		Policy:      "required",
 		SortOrder:   0,
 	})
@@ -1069,8 +1352,8 @@ func TestPluginsService_PublishPlugins_ObservabilityListedFirstInMarketplace(t *
 		ts := createTestToolset(t, ctx, ti.conn, "ts-"+name)
 		_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 			PluginID:    p.ID,
-			ToolsetID:   ts.ID.String(),
-			DisplayName: "Server " + name,
+			ToolsetID:   conv.PtrEmpty(ts.ID.String()),
+			DisplayName: conv.PtrEmpty("Server " + name),
 			Policy:      "required",
 			SortOrder:   0,
 		})
@@ -1112,8 +1395,8 @@ func TestPluginsService_PublishPlugins_CodexPackageHappyPath(t *testing.T) {
 	toolset := createTestToolset(t, ctx, ti.conn, "codex-toolset")
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
-		ToolsetID:   toolset.ID.String(),
-		DisplayName: "Codex Server",
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Codex Server"),
 		Policy:      "required",
 		SortOrder:   0,
 	})
@@ -1232,8 +1515,8 @@ func TestPluginsService_PublishPlugins_CodexPublicToolsetEnvHeaders(t *testing.T
 
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
-		ToolsetID:   toolset.ID.String(),
-		DisplayName: "Public Codex Server",
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Public Codex Server"),
 		Policy:      "required",
 		SortOrder:   0,
 	})
@@ -1280,8 +1563,8 @@ func TestPluginsService_PublishPlugins_CodexSkipsDisabledMCPToolsets(t *testing.
 	for _, ts := range []toolsetsrepo.Toolset{enabled, disabled} {
 		_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 			PluginID:    plugin.ID,
-			ToolsetID:   ts.ID.String(),
-			DisplayName: "Server " + ts.Name,
+			ToolsetID:   conv.PtrEmpty(ts.ID.String()),
+			DisplayName: conv.PtrEmpty("Server " + ts.Name),
 			Policy:      "required",
 			SortOrder:   0,
 		})
@@ -1327,8 +1610,8 @@ func TestPluginsService_PublishProject_SkipsWhenUnchanged(t *testing.T) {
 	toolset := createTestToolset(t, ctx, ti.conn, "skip-toolset")
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
-		ToolsetID:   toolset.ID.String(),
-		DisplayName: "Skip Server",
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Skip Server"),
 		Policy:      "required",
 		SortOrder:   0,
 	})
@@ -1363,8 +1646,8 @@ func TestPluginsService_PublishProject_SkipsWhenUnchanged(t *testing.T) {
 	toolset2 := createTestToolset(t, ctx, ti.conn, "skip-toolset-2")
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
-		ToolsetID:   toolset2.ID.String(),
-		DisplayName: "Skip Server 2",
+		ToolsetID:   conv.PtrEmpty(toolset2.ID.String()),
+		DisplayName: conv.PtrEmpty("Skip Server 2"),
 		Policy:      "optional",
 		SortOrder:   1,
 	})
@@ -1392,8 +1675,8 @@ func TestPluginsService_PublishProject_SkipsAfterDashboardPublish(t *testing.T) 
 	toolset := createTestToolset(t, ctx, ti.conn, "dashboard-toolset")
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
 		PluginID:    plugin.ID,
-		ToolsetID:   toolset.ID.String(),
-		DisplayName: "Dashboard Server",
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Dashboard Server"),
 		Policy:      "required",
 		SortOrder:   0,
 	})

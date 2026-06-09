@@ -15,7 +15,7 @@ export function XYFade({
   fadeHeight = 20,
   fadeColor = "var(--background)",
   direction = "vertical",
-}: XYFadeProps) {
+}: XYFadeProps): JSX.Element {
   const fadeStyle = {
     height: fadeHeight,
     background: `linear-gradient(to bottom, ${fadeColor}, transparent)`,

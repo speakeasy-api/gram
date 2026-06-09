@@ -161,6 +161,20 @@ func (l *Logger) LogPluginDelete(ctx context.Context, dbtx repo.DBTX, event LogP
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.PluginV1})
 }
 
+// pluginServerBackendMetadata augments base audit metadata with the URN of
+// whichever backend a plugin server targets. Exactly one of toolsetURN /
+// mcpServerURN is non-nil, mirroring the toolset_id XOR mcp_server_id
+// plugin_servers row.
+func pluginServerBackendMetadata(base map[string]any, toolsetURN *urn.Toolset, mcpServerURN *urn.McpServer) map[string]any {
+	if toolsetURN != nil {
+		base["toolset_urn"] = toolsetURN.String()
+	}
+	if mcpServerURN != nil {
+		base["mcp_server_urn"] = mcpServerURN.String()
+	}
+	return base
+}
+
 type LogPluginServerAddEvent struct {
 	OrganizationID string
 	ProjectID      uuid.UUID
@@ -177,19 +191,21 @@ type LogPluginServerAddEvent struct {
 	ServerDisplayName string
 	ServerPolicy      string
 	ServerSortOrder   int32
-	ToolsetURN        urn.Toolset
+	// Exactly one of ToolsetURN / McpServerURN identifies the added server's
+	// backend, mirroring the toolset_id XOR mcp_server_id plugin_servers row.
+	ToolsetURN   *urn.Toolset
+	McpServerURN *urn.McpServer
 }
 
 func (l *Logger) LogPluginServerAdd(ctx context.Context, dbtx repo.DBTX, event LogPluginServerAddEvent) error {
 	action := ActionPluginServerAdd
 
-	metadata, err := marshalAuditPayload(map[string]any{
+	metadata, err := marshalAuditPayload(pluginServerBackendMetadata(map[string]any{
 		"server_id":           event.ServerID.String(),
 		"server_display_name": event.ServerDisplayName,
 		"server_policy":       event.ServerPolicy,
 		"server_sort_order":   event.ServerSortOrder,
-		"toolset_urn":         event.ToolsetURN.String(),
-	})
+	}, event.ToolsetURN, event.McpServerURN))
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}
@@ -286,14 +302,18 @@ type LogPluginServerRemoveEvent struct {
 	PluginSlug string
 
 	ServerID uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.PluginServer and migrate to ServerURN; pending team discussion
+	// Exactly one of ToolsetURN / McpServerURN identifies the removed server's
+	// backend, mirroring the toolset_id XOR mcp_server_id plugin_servers row.
+	ToolsetURN   *urn.Toolset
+	McpServerURN *urn.McpServer
 }
 
 func (l *Logger) LogPluginServerRemove(ctx context.Context, dbtx repo.DBTX, event LogPluginServerRemoveEvent) error {
 	action := ActionPluginServerRemove
 
-	metadata, err := marshalAuditPayload(map[string]any{
+	metadata, err := marshalAuditPayload(pluginServerBackendMetadata(map[string]any{
 		"server_id": event.ServerID.String(),
-	})
+	}, event.ToolsetURN, event.McpServerURN))
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}

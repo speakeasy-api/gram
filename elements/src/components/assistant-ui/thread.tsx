@@ -545,7 +545,9 @@ const ComposerFeedback: FC = () => {
               <MessageFeedback
                 className="mx-auto"
                 onResolved={setResolved}
-                onFeedback={handleFeedback}
+                onFeedback={(type) => {
+                  void handleFeedback(type);
+                }}
               />
             </m.div>
           )}
@@ -1114,21 +1116,22 @@ const ToolCallStreamingIndicator: FC = () => {
 const AssistantMessage: FC = () => {
   const { config } = useElements();
   const toolsConfig = config.tools ?? {};
-  const components = config.components ?? {};
+  const components = config.components;
+  const toolsComponents = toolsConfig.components;
 
   const partsComponents = useMemo(
     () => ({
-      Text: components.Text ?? MarkdownText,
-      Image: components.Image ?? Image,
+      Text: components?.Text ?? MarkdownText,
+      Image: components?.Image ?? Image,
       tools: {
-        by_name: toolsConfig.components,
-        Fallback: components.ToolFallback ?? ToolFallback,
+        by_name: toolsComponents,
+        Fallback: components?.ToolFallback ?? ToolFallback,
       },
-      Reasoning: components.Reasoning ?? Reasoning,
-      ReasoningGroup: components.ReasoningGroup ?? ReasoningGroup,
-      ToolGroup: components.ToolGroup ?? ToolGroup,
+      Reasoning: components?.Reasoning ?? Reasoning,
+      ReasoningGroup: components?.ReasoningGroup ?? ReasoningGroup,
+      ToolGroup: components?.ToolGroup ?? ToolGroup,
     }),
-    [components, toolsConfig.components],
+    [components, toolsComponents],
   );
 
   return (

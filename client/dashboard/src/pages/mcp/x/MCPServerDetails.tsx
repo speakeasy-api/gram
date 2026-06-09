@@ -41,13 +41,11 @@ import { Navigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { MCPTeamAccessTab } from "../MCPTeamAccessTab";
 import { AuthenticationTab } from "./tabs/authentication/AuthenticationTab";
-import { EndpointsTab } from "./tabs/EndpointsTab";
 import { OverviewTab } from "./tabs/OverviewTab";
 import { SettingsTab } from "./tabs/SettingsTab";
 
 const VALID_TABS = [
   "overview",
-  "endpoints",
   "authentication",
   "team-access",
   "settings",
@@ -58,7 +56,7 @@ function isValidTab(value: string): value is TabValue {
   return (VALID_TABS as readonly string[]).includes(value);
 }
 
-export default function MCPServerDetails() {
+export default function MCPServerDetails(): JSX.Element {
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
   const routes = useRoutes();
   const telemetry = useTelemetry();
@@ -116,28 +114,18 @@ export default function MCPServerDetails() {
         />
       </Page.Header>
 
-      <Page.Body
-        fullWidth
-        noPadding
-        fullHeight
-        overflowHidden
-        className="gap-0"
-      >
+      <Page.Body fullWidth noPadding className="gap-0">
         <MCPServerHero server={mcpServer} />
 
         <Tabs
           value={activeTab}
           onValueChange={handleTabChange}
-          className="flex min-h-0 w-full flex-1 flex-col"
+          className="flex w-full flex-1 flex-col"
         >
           <div className="shrink-0 border-b">
             <div className="mx-auto max-w-[1270px] px-8">
               <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
                 <PageTabsTrigger value="overview">Overview</PageTabsTrigger>
-                <PageTabsTrigger value="endpoints">
-                  Endpoints
-                  {endpoints.length > 0 && ` (${endpoints.length})`}
-                </PageTabsTrigger>
                 <PageTabsTrigger value="authentication">
                   Authentication
                 </PageTabsTrigger>
@@ -153,34 +141,21 @@ export default function MCPServerDetails() {
 
           <TabsContent
             value="overview"
-            className="mt-0 min-h-0 flex-1 overflow-y-auto"
+            className="mt-0 w-full data-[state=inactive]:hidden"
           >
             <OverviewTab
               mcpServer={mcpServer}
               endpoints={endpoints}
               isLoadingEndpoints={isLoadingEndpoints}
-              onShowEndpoints={() => handleTabChange("endpoints")}
+              onShowEndpoints={() => handleTabChange("settings")}
               onShowAuthentication={() => handleTabChange("authentication")}
             />
-          </TabsContent>
-
-          <TabsContent
-            value="endpoints"
-            className="mt-0 min-h-0 flex-1 overflow-y-auto"
-          >
-            {mcpServer && (
-              <EndpointsTab
-                mcpServer={mcpServer}
-                endpoints={endpoints}
-                isLoadingEndpoints={isLoadingEndpoints}
-              />
-            )}
           </TabsContent>
 
           {mcpServer && (
             <TabsContent
               value="authentication"
-              className="mt-0 min-h-0 flex-1 overflow-y-auto"
+              className="mt-0 w-full data-[state=inactive]:hidden"
             >
               <AuthenticationTab mcpServer={mcpServer} />
             </TabsContent>
@@ -189,16 +164,16 @@ export default function MCPServerDetails() {
           {isRbacEnabled && mcpServer && (
             <TabsContent
               value="team-access"
-              className="mt-0 min-h-0 flex-1 overflow-y-auto"
+              className="mt-0 w-full data-[state=inactive]:hidden"
             >
               <RequireScope scope="mcp:read" level="page">
                 <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
                   {/* mcp_servers-backed servers grant under the same `mcp:*`
-                      scope kind as toolset-backed ones (see selector.go), so
-                      MCPTeamAccessTab is reused as-is with the mcp_server's
-                      id as the resource id. No `tools` prop because the
-                      Remote MCP backend doesn't expose a Gram-side tool
-                      catalog. */}
+                    scope kind as toolset-backed ones (see selector.go), so
+                    MCPTeamAccessTab is reused as-is with the mcp_server's
+                    id as the resource id. No `tools` prop because the
+                    Remote MCP backend doesn't expose a Gram-side tool
+                    catalog. */}
                   <MCPTeamAccessTab resourceId={mcpServer.id} />
                 </div>
               </RequireScope>
@@ -207,10 +182,14 @@ export default function MCPServerDetails() {
 
           <TabsContent
             value="settings"
-            className="mt-0 min-h-0 flex-1 overflow-y-auto"
+            className="mt-0 w-full data-[state=inactive]:hidden"
           >
             {mcpServer && (
-              <SettingsTab mcpServer={mcpServer} endpoints={endpoints} />
+              <SettingsTab
+                mcpServer={mcpServer}
+                endpoints={endpoints}
+                isLoadingEndpoints={isLoadingEndpoints}
+              />
             )}
           </TabsContent>
         </Tabs>
@@ -284,9 +263,10 @@ function MCPServerStatusDropdown({ server }: { server: McpServer }) {
           toolsetId: server.toolsetId ?? undefined,
           environmentId: server.environmentId ?? undefined,
           // updateMcpServer is a full-record replace for the optional UUID
-          // references. Forwarding userSessionIssuerId keeps the stored
-          // value intact across a visibility-only update.
+          // references. Forwarding them keeps stored values intact across a
+          // visibility-only update.
           userSessionIssuerId: server.userSessionIssuerId ?? undefined,
+          toolVariationsGroupId: server.toolVariationsGroupId ?? undefined,
           visibility: next,
         },
       },

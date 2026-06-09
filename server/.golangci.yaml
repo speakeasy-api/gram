@@ -73,6 +73,11 @@ linters:
         linters:
           - gosec
         text: G101
+      # False positives that audit action constants containing "bypass" are somehow hardcoded credentials.
+      - path: internal/audit/risk\.go
+        linters:
+          - gosec
+        text: G101
       # The guardian package is the only package that is allowed to access
       # http.Client directly since it constructs the safe HTTP clients
       # that are used throughout the codebase. This is tracked by GG002.
@@ -271,6 +276,7 @@ linters:
         # pattern.
         - '^github\.com/speakeasy-api/gram/server/internal/risk/categories\.Definition$'
         - '^github\.com/speakeasy-api/gram/server/internal/risk/categories\.Filter$'
+        - '^github\.com/speakeasy-api/gram/infra/gen/gram/.+'
     exhaustive:
       check:
         - switch

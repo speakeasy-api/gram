@@ -9,7 +9,11 @@ export function Link({
   noIcon,
   className,
   ...props
-}: LinkProps & { external?: boolean; className?: string; noIcon?: boolean }) {
+}: LinkProps & {
+  external?: boolean;
+  className?: string;
+  noIcon?: boolean;
+}): JSX.Element {
   let content = children || (typeof to === "string" ? to : undefined);
 
   if (external && !noIcon) {

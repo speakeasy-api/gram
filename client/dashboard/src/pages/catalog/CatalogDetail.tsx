@@ -36,15 +36,22 @@ const SERVER_WEBSITE_MAP: Record<string, string> = {
   "com.notion/mcp": "notion.so",
 };
 
-export function CatalogDetailRoot() {
+export function CatalogDetailRoot(): JSX.Element {
   return <Outlet />;
 }
 
-export default function CatalogDetail() {
+export default function CatalogDetail(): JSX.Element {
   const { serverSpecifier } = useParams<{ serverSpecifier: string }>();
   const routes = useRoutes();
   const client = useSdkClient();
-  const { data, isLoading } = useInfiniteListMCPCatalog();
+  const decodedSpecifier = serverSpecifier
+    ? decodeURIComponent(serverSpecifier)
+    : "";
+  // Scope the catalog list to a search hint derived from the specifier's last
+  // segment so the target server is in the first page (backend caps results
+  // at 100 across all registries and only paginates single-registry queries).
+  const searchHint = decodedSpecifier.split("/").pop() ?? "";
+  const { data, isLoading } = useInfiniteListMCPCatalog(searchHint);
   const [showAddDialog, setShowAddDialog] = useState(false);
 
   const { data: deploymentResult, refetch: refetchDeployment } =
@@ -54,16 +61,14 @@ export default function CatalogDetail() {
   const { data: toolsetsResult } = useListToolsets();
 
   const server = useMemo(() => {
-    if (!data?.pages || !serverSpecifier) return null;
+    if (!data?.pages || !decodedSpecifier) return null;
     const allServers = data.pages.flatMap(
       (page) => page.servers as PulseMCPServer[],
     );
-    // The specifier is URL encoded, so we need to decode it
-    const decodedSpecifier = decodeURIComponent(serverSpecifier);
     return (
       allServers.find((s) => s.registrySpecifier === decodedSpecifier) ?? null
     );
-  }, [data, serverSpecifier]);
+  }, [data, decodedSpecifier]);
 
   const removeServerMutation = useMutation({
     mutationFn: async (slug: string) => {
@@ -99,9 +104,6 @@ export default function CatalogDetail() {
   const versionMeta = server?.meta?.["com.pulsemcp/server-version"];
   const isOfficial = meta?.isOfficial;
   const visitorsTotal = meta?.visitorsEstimateLastFourWeeks;
-  const decodedSpecifier = serverSpecifier
-    ? decodeURIComponent(serverSpecifier)
-    : "";
   const displayName =
     server?.title ??
     server?.registrySpecifier?.split("/").pop() ??
@@ -440,7 +442,9 @@ export default function CatalogDetail() {
           servers={[server]}
           open={showAddDialog}
           onOpenChange={setShowAddDialog}
-          onServersAdded={() => refetchDeployment()}
+          onServersAdded={() => {
+            void refetchDeployment();
+          }}
         />
       </Page.Body>
     </Page>
@@ -483,7 +487,9 @@ function ToolCard({ tool }: { tool: Tool }) {
   return (
     <div className="bg-muted/50 flex flex-col gap-1 overflow-hidden rounded-lg p-3">
       <button
-        onClick={() => hasMoreContent && setIsExpanded(!isExpanded)}
+        onClick={() => {
+          void (hasMoreContent && setIsExpanded(!isExpanded));
+        }}
         className={`flex w-full flex-col gap-1 text-left ${hasMoreContent ? "cursor-pointer" : "cursor-default"}`}
       >
         <Stack

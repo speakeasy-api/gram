@@ -408,6 +408,43 @@ type DeploymentsPackage struct {
 	VersionID    uuid.UUID
 }
 
+type DirectoryGroup struct {
+	ID                     uuid.UUID
+	OrganizationID         string
+	WorkosDirectoryGroupID string
+	Name                   string
+	Attributes             []byte
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
+}
+
+type DirectoryUser struct {
+	ID                    uuid.UUID
+	OrganizationID        string
+	UserID                pgtype.Text
+	WorkosDirectoryUserID string
+	Email                 pgtype.Text
+	Attributes            []byte
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
+}
+
+type DirectoryUserGroupMembership struct {
+	ID                     uuid.UUID
+	DirectoryUserID        uuid.UUID
+	DirectoryGroupID       uuid.UUID
+	WorkosDirectoryUserID  string
+	WorkosDirectoryGroupID string
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
+}
+
 type Environment struct {
 	ID             uuid.UUID
 	OrganizationID string
@@ -1022,7 +1059,8 @@ type PluginGithubConnection struct {
 type PluginServer struct {
 	ID          uuid.UUID
 	PluginID    uuid.UUID
-	ToolsetID   uuid.UUID
+	ToolsetID   uuid.NullUUID
+	McpServerID uuid.NullUUID
 	DisplayName string
 	Policy      string
 	SortOrder   int32
@@ -1223,6 +1261,22 @@ type RiskCustomDetectionRule struct {
 	Deleted        bool
 }
 
+type RiskExclusion struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	RiskPolicyID   uuid.NullUUID
+	MatchType      string
+	MatchValue     string
+	RuleIDFilter   pgtype.Text
+	SourceFilter   pgtype.Text
+	Enabled        bool
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type RiskPolicy struct {
 	ID                   uuid.UUID
 	ProjectID            uuid.UUID
@@ -1273,23 +1327,25 @@ type RiskPolicyBypassRequest struct {
 }
 
 type RiskResult struct {
-	ID                uuid.UUID
-	ProjectID         uuid.UUID
-	OrganizationID    string
-	RiskPolicyID      uuid.UUID
-	RiskPolicyVersion int64
-	ChatMessageID     uuid.UUID
-	Source            string
-	Found             bool
-	RuleID            pgtype.Text
-	Description       pgtype.Text
-	Match             pgtype.Text
-	StartPos          pgtype.Int4
-	EndPos            pgtype.Int4
-	Confidence        pgtype.Float8
-	Tags              []string
-	DeadLetterReason  pgtype.Text
-	CreatedAt         pgtype.Timestamptz
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	OrganizationID      string
+	RiskPolicyID        uuid.UUID
+	RiskPolicyVersion   int64
+	ChatMessageID       uuid.UUID
+	Source              string
+	Found               bool
+	RuleID              pgtype.Text
+	Description         pgtype.Text
+	Match               pgtype.Text
+	StartPos            pgtype.Int4
+	EndPos              pgtype.Int4
+	Confidence          pgtype.Float8
+	Tags                []string
+	DeadLetterReason    pgtype.Text
+	ExcludedAt          pgtype.Timestamptz
+	ExcludedExclusionID uuid.NullUUID
+	CreatedAt           pgtype.Timestamptz
 }
 
 type SlackApp struct {

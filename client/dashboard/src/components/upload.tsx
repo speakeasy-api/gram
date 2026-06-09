@@ -15,7 +15,7 @@ export function ImageUpload({
   onUpload: (asset: Asset) => void;
   existingAssetId?: string;
   className?: string;
-}) {
+}): JSX.Element {
   const [assetId, setAssetId] = useState<string | null>(
     existingAssetId ?? null,
   );
@@ -44,7 +44,9 @@ export function ImageUpload({
 
   return (
     <FullWidthUpload
-      onUpload={handler}
+      onUpload={(file) => {
+        void handler(file);
+      }}
       className={className}
       allowedExtensions={["png", "jpg", "jpeg"]}
     />
@@ -113,7 +115,7 @@ export function FullWidthUpload({
   label?: React.ReactNode;
   className?: string;
   isLoading?: boolean;
-}) {
+}): JSX.Element {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -192,7 +194,7 @@ export function CompactUpload({
   label?: React.ReactNode;
   className?: string;
   renderFilePreview?: () => React.ReactNode;
-}) {
+}): JSX.Element {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {

@@ -74,7 +74,7 @@ export const ToolMentionAutocomplete: FC<ToolMentionAutocompleteProps> = ({
       onValueChange(result.text, result.cursorPosition);
       setIsVisible(false);
     },
-    [mentionContext, value, cursorPosition, onValueChange, textareaRef],
+    [mentionContext, value, cursorPosition, onValueChange],
   );
 
   useEffect(() => {

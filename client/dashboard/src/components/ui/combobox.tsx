@@ -47,7 +47,7 @@ export function Combobox<T extends DropdownItem>({
   label?: string;
   disabledMessage?: string;
   tooltip?: string;
-}) {
+}): JSX.Element {
   const [open, setOpen] = useState(false);
 
   const handleOpenChange = (open: boolean) => {

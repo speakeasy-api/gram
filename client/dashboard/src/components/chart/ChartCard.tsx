@@ -16,7 +16,7 @@ export function ChartCard({
   onExpand: (id: string | null) => void;
   hasData?: boolean;
   children: ReactNode;
-}) {
+}): JSX.Element {
   const isExpanded = expandedChart === chartId;
   const showExpandButton = hasData || isExpanded;
   return (

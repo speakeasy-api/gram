@@ -13,7 +13,12 @@ import { toRoleSlug } from "./types";
 const RESOLVE_LINGER_MS = 3_000;
 const FADE_OUT_MS = 1_000;
 
-export function useGrantFlow() {
+export function useGrantFlow(): {
+  actionsColumn: Column<ChallengeBucket>;
+  grantFlowPortals: JSX.Element;
+  recentlyResolvedIds: Set<string>;
+  animatingOutIds: Set<string>;
+} {
   const [grantChallenge, setGrantChallenge] = useState<ChallengeBucket | null>(
     null,
   );

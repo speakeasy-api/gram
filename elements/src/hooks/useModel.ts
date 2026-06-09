@@ -5,9 +5,7 @@ import { useAuth } from "./useAuth";
 import { useElements } from "./useElements";
 
 // Creates an OpenRouter client to be used for "internal Gram" usage, such as follow-on suggestions
-export const useModel = (
-  model: string = "openai/gpt-5.4-mini",
-): LanguageModel => {
+export const useModel = (model = "openai/gpt-5.4-mini"): LanguageModel => {
   const { config } = useElements();
 
   const auth = useAuth({

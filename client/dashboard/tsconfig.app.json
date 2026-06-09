@@ -16,14 +16,17 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
     },
 
     /* Dead-code guards */
     "noUnusedLocals": true,
-    "noUnusedParameters": true
+    "noUnusedParameters": true,
+
+    /* Strict additions */
+    "noUncheckedIndexedAccess": true,
+    "erasableSyntaxOnly": true
   },
   "include": ["src"]
 }

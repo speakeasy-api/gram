@@ -12,7 +12,7 @@ interface CliCallbackProps {
  * transmits it to the client by appending it to the callback URL as a query
  * parameter.
  */
-export default function CliCallback(props: CliCallbackProps) {
+export default function CliCallback(props: CliCallbackProps): JSX.Element {
   const { localCallbackUrl } = props;
   const { session, status } = useSessionData();
   const [error, setError] = useState<string | null>(null);

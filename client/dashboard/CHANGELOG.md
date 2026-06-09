@@ -1,5 +1,27 @@
 # dashboard
 
+## 0.69.0
+
+### Minor Changes
+
+- 5d59ae9: Support adding Remote MCP-backed `mcp_servers` to plugins alongside toolset-backed servers. `plugins.addPluginServer` accepts either `toolset_id` or `mcp_server_id` (exactly one), `PluginServer` exposes `mcp_server_id`, and `display_name` is now optional (defaulting to the backing toolset or mcp_server name). Plugin bundle generation resolves the preferred endpoint for mcp_server-backed servers (custom-domain over platform, then oldest) and emits them as OAuth HTTP servers with no static auth header. In the dashboard, the plugin add-server picker and server cards offer and render Remote MCP-backed servers (gated on the `gram-remote-mcp` feature flag).
+
+### Patch Changes
+
+- fb3f0ca: Two Project Assistant sidebar fixes:
+
+  - Make the server-assistant transport poll adaptively for replies: poll quickly for the first few iterations (so short turns surface within a few hundred milliseconds instead of waiting a full fixed interval), then back off geometrically to the steady-state interval for long, tool-heavy turns. Reduces the perceived latency of the project assistant relative to the old streaming AI assistant.
+  - Strip the backend's `<message-context>` framing (and drop framing-only turns) from the rendered transcript via Elements' new `history.transformChatMessage` hook, so reopening a historical thread no longer shows a raw block exposing internal event/MCP-auth metadata.
+
+- fbd0398: Add right-click (context-menu) support to dashboard cards. Right-clicking a card opens a menu of the same actions shown by the card's visible `⋯` button, driven by one shared `Action[]` so the two never drift. Applied to every card that already exposes an action menu — Plugin, Source, Environment, Assistant, Custom Tool, Prompt, and Resource cards — via a reusable `CardContextMenu` primitive. The right-click menu honors the same RBAC gating as the `⋯` menu (e.g. the Environment "Clone" action stays hidden without `environment:write`).
+- b23c7f3: Fix the catalog Add Server dialog rendering duplicate-looking endpoint checkboxes when a registry entry exposes the same streamable-http URL twice (e.g. Datadog publishes an OAuth variant and an API-key variant under one URL). Same-URL remotes are now collapsed in the UI, matching the backend's deploy-time behavior of picking the first URL match.
+- 3fd496d: Redesign the app shell as a sidebar-only vertical split. The full-width top nav bar is removed and all of its functionality moves into the sidebar: a combined org/project workspace switcher and the logo in the header, and the account menu in the footer (inline theme toggle, Docs/Changelog/Get Support, and a new **Roadmap** link replacing the old bug/feature link). Light mode is now the default, the brand gradient line sits beneath the main-panel header, and pages gain a `Page.Header.Actions` toolbar slot. Switching projects now shows a nav skeleton instead of flashing empty while permissions reload.
+- c6517cb: Redesign the Overview tab of the experimental MCP server details page (`/x/mcp` route) into status-driven cards. Server Address, Authentication, and Source/Tools each render as a consistent card with a Ready / Needs Setup signal: the Server Address card shows the connect URL plus the shareable `/install` page URL, and the Authentication card derives an explicit posture (Gram-only, Gram + remote, remote-only, or open to anyone) so a public server with no remote identity is correctly flagged as unsecured. Adds an early-access banner and an "Enhance your server" section, and wires the install-page Customize action to the Settings tab.
+- 989d905: Gate the Device Agent pages and sidebar nav item behind the `gram-device-agent` feature flag (defaults off). The nav link is hidden entirely when the flag is off, and the page redirects away so it can't be reached by direct URL.
+- Updated dependencies [fb3f0ca]
+- Updated dependencies [7acfbee]
+  - @gram-ai/elements@1.35.0
+
 ## 0.68.0
 
 ### Minor Changes

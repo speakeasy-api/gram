@@ -11,7 +11,9 @@ import z from "zod";
 /**
  * Converts from assistant-ui tool format to the AI SDK tool shape
  */
-export const toAISDKTools = (tools: Record<string, Tool>) => {
+export const toAISDKTools = (
+  tools: Record<string, Tool>,
+): Record<string, { description?: string; parameters: JSONSchema7 }> => {
   return Object.fromEntries(
     Object.entries(tools).map(([name, tool]) => [
       name,
@@ -28,7 +30,9 @@ export const toAISDKTools = (tools: Record<string, Tool>) => {
 /**
  * Returns only frontend tools that are enabled
  */
-export const getEnabledTools = (tools: Record<string, Tool>) => {
+export const getEnabledTools = (
+  tools: Record<string, Tool>,
+): Record<string, Tool> => {
   return Object.fromEntries(
     Object.entries(tools).filter(
       ([, tool]) => !tool.disabled && tool.type !== "backend",
@@ -38,10 +42,16 @@ export const getEnabledTools = (tools: Record<string, Tool>) => {
 
 /**
  * A frontend tool is a tool that is defined by the user and can be used in the chat.
+ *
+ * Shape mirrors assistant-ui's `AssistantTool`: an `FC` (rendered with no props
+ * at runtime to register the tool) plus an `unstable_tool` describing the tool
+ * itself. Keeping the FC unparameterised here matches the SDK and allows tools
+ * with different `TArgs`/`TResult` to coexist in a `Record<string, FrontendTool<...>>`.
  */
-export type FrontendTool<TArgs extends Record<string, unknown>, TResult> = FC<
-  AssistantToolProps<TArgs, TResult>
-> & {
+export type FrontendTool<
+  TArgs extends Record<string, unknown>,
+  TResult,
+> = FC & {
   unstable_tool: AssistantToolProps<TArgs, TResult>;
 };
 
