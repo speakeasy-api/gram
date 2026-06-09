@@ -123,7 +123,7 @@ function InputGroupButton({
 function InputGroupInput({
   className,
   ...props
-}: React.ComponentProps<"input">) {
+}: React.ComponentProps<"input">): React.JSX.Element {
   return (
     <input
       data-slot="input-group-control"

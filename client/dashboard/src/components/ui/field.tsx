@@ -3,7 +3,10 @@ import * as React from "react";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
-function FieldSet({ className, ...props }: React.ComponentProps<"fieldset">) {
+function FieldSet({
+  className,
+  ...props
+}: React.ComponentProps<"fieldset">): React.JSX.Element {
   return (
     <fieldset
       data-slot="field-set"
@@ -19,7 +22,7 @@ function FieldLegend({
   ...props
 }: React.ComponentProps<"legend"> & {
   variant?: "legend" | "label";
-}) {
+}): React.JSX.Element {
   return (
     <legend
       data-slot="field-legend"
@@ -34,7 +37,10 @@ function FieldLegend({
   );
 }
 
-function FieldGroup({ className, ...props }: React.ComponentProps<"div">) {
+function FieldGroup({
+  className,
+  ...props
+}: React.ComponentProps<"div">): React.JSX.Element {
   return (
     <div
       data-slot="field-group"
@@ -50,7 +56,7 @@ function Field({
   ...props
 }: React.ComponentProps<"div"> & {
   orientation?: "vertical" | "horizontal" | "responsive";
-}) {
+}): React.JSX.Element {
   return (
     <div
       role="group"
@@ -68,7 +74,10 @@ function Field({
   );
 }
 
-function FieldContent({ className, ...props }: React.ComponentProps<"div">) {
+function FieldContent({
+  className,
+  ...props
+}: React.ComponentProps<"div">): React.JSX.Element {
   return (
     <div
       data-slot="field-content"
@@ -81,7 +90,7 @@ function FieldContent({ className, ...props }: React.ComponentProps<"div">) {
 function FieldLabel({
   className,
   ...props
-}: React.ComponentProps<typeof Label>) {
+}: React.ComponentProps<typeof Label>): React.JSX.Element {
   return (
     <Label
       data-slot="field-label"
@@ -94,7 +103,10 @@ function FieldLabel({
   );
 }
 
-function FieldTitle({ className, ...props }: React.ComponentProps<"div">) {
+function FieldTitle({
+  className,
+  ...props
+}: React.ComponentProps<"div">): React.JSX.Element {
   return (
     <div
       data-slot="field-title"
@@ -104,7 +116,10 @@ function FieldTitle({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
-function FieldDescription({ className, ...props }: React.ComponentProps<"p">) {
+function FieldDescription({
+  className,
+  ...props
+}: React.ComponentProps<"p">): React.JSX.Element {
   return (
     <p
       data-slot="field-description"
@@ -121,7 +136,7 @@ function FieldError({
   ...props
 }: React.ComponentProps<"div"> & {
   errors?: Array<{ message?: string } | undefined>;
-}) {
+}): React.JSX.Element | null {
   const messages = errors?.flatMap((error) => {
     if (!error?.message) return [];
     return [error.message];
@@ -150,7 +165,10 @@ function FieldError({
   );
 }
 
-function FieldSeparator({ className, ...props }: React.ComponentProps<"div">) {
+function FieldSeparator({
+  className,
+  ...props
+}: React.ComponentProps<"div">): React.JSX.Element {
   return (
     <div
       data-slot="field-separator"

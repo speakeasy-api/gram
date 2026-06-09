@@ -52,7 +52,7 @@ import {
 import { Alert, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, SaveIcon, Trash2, XIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { createContext, use, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useMcpEndpointSlugValidation } from "../useMcpEndpointSlugValidation";
@@ -99,73 +99,169 @@ export function SettingsTab({
   );
 }
 
-// --- Card shell -----------------------------------------------------------
+// --- Section shell --------------------------------------------------------
 
-// Settings sections share an external header and an inner configuration panel.
-// The danger variant recolors the border, title, and footer red.
-function SettingsCard({
-  title,
-  description,
-  variant = "default",
-  footerHint,
-  footerActions,
-  children,
-}: {
-  title: string;
-  description?: string;
-  variant?: "default" | "danger";
-  footerHint?: React.ReactNode;
-  footerActions?: React.ReactNode;
+type SettingsSectionTone = "default" | "danger";
+type SettingsSectionContextValue = {
+  tone: SettingsSectionTone;
+};
+type SettingsSectionSlotProps = {
   children?: React.ReactNode;
-}) {
-  const danger = variant === "danger";
-  const hasBody = children != null;
-  const hasFooter = footerHint != null || footerActions != null;
+  className?: string;
+};
 
+const DEFAULT_SETTINGS_SECTION_CONTEXT: SettingsSectionContextValue = {
+  tone: "default",
+};
+const DANGER_SETTINGS_SECTION_CONTEXT: SettingsSectionContextValue = {
+  tone: "danger",
+};
+const SettingsSectionContext = createContext(DEFAULT_SETTINGS_SECTION_CONTEXT);
+
+function SettingsSectionRoot({ children }: { children: React.ReactNode }) {
   return (
-    <section className="space-y-3">
-      <div className="space-y-1">
-        <Heading
-          variant="h4"
-          className={cn("normal-case", danger && "text-destructive")}
-        >
-          {title}
-        </Heading>
-        {description && (
-          <Type muted small className="max-w-3xl">
-            {description}
-          </Type>
-        )}
-      </div>
-      <div
-        className={cn(
-          "overflow-hidden rounded-xl border bg-card",
-          danger && "border-destructive/30",
-        )}
-      >
-        {hasBody && <div className="space-y-4 p-6">{children}</div>}
-        {hasFooter && (
-          <div
-            className={cn(
-              "flex min-h-[56px] items-center justify-between gap-4 px-6 py-3",
-              hasBody && "border-t",
-              danger ? "bg-destructive/5" : "bg-muted/30",
-            )}
-          >
-            <Type muted small>
-              {footerHint}
-            </Type>
-            {footerActions && (
-              <div className="flex shrink-0 items-center gap-2">
-                {footerActions}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </section>
+    <SettingsSectionContext.Provider value={DEFAULT_SETTINGS_SECTION_CONTEXT}>
+      <section className="space-y-3">{children}</section>
+    </SettingsSectionContext.Provider>
   );
 }
+
+function DangerSettingsSectionRoot({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <SettingsSectionContext.Provider value={DANGER_SETTINGS_SECTION_CONTEXT}>
+      <section className="space-y-3">{children}</section>
+    </SettingsSectionContext.Provider>
+  );
+}
+
+function SettingsSectionHeader({
+  children,
+  className,
+}: SettingsSectionSlotProps) {
+  return <div className={cn("space-y-1", className)}>{children}</div>;
+}
+
+function SettingsSectionTitle({
+  children,
+  className,
+}: SettingsSectionSlotProps) {
+  const { tone } = use(SettingsSectionContext);
+
+  return (
+    <Heading
+      variant="h4"
+      className={cn(
+        "normal-case",
+        tone === "danger" && "text-destructive",
+        className,
+      )}
+    >
+      {children}
+    </Heading>
+  );
+}
+
+function SettingsSectionDescription({
+  children,
+  className,
+}: SettingsSectionSlotProps) {
+  return (
+    <Type muted small className={cn("max-w-3xl", className)}>
+      {children}
+    </Type>
+  );
+}
+
+function SettingsSectionPanel({
+  children,
+  className,
+}: SettingsSectionSlotProps) {
+  const { tone } = use(SettingsSectionContext);
+
+  return (
+    <div
+      className={cn(
+        "overflow-hidden rounded-xl border bg-card",
+        tone === "danger" && "border-destructive/30",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+function SettingsSectionBody({
+  children,
+  className,
+}: SettingsSectionSlotProps) {
+  return <div className={cn("space-y-4 p-6", className)}>{children}</div>;
+}
+
+function SettingsSectionFooter({
+  children,
+  className,
+}: SettingsSectionSlotProps) {
+  const { tone } = use(SettingsSectionContext);
+
+  return (
+    <div
+      className={cn(
+        "flex min-h-[56px] items-center justify-between gap-4 border-t px-6 py-3",
+        tone === "danger" ? "bg-destructive/5" : "bg-muted/30",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+function SettingsSectionFooterHint({
+  children,
+  className,
+}: SettingsSectionSlotProps) {
+  return (
+    <Type muted small className={className}>
+      {children}
+    </Type>
+  );
+}
+
+function SettingsSectionFooterActions({
+  children,
+  className,
+}: SettingsSectionSlotProps) {
+  return (
+    <div className={cn("flex shrink-0 items-center gap-2", className)}>
+      {children}
+    </div>
+  );
+}
+
+const settingsSectionSlots = {
+  Header: SettingsSectionHeader,
+  Title: SettingsSectionTitle,
+  Description: SettingsSectionDescription,
+  Panel: SettingsSectionPanel,
+  Body: SettingsSectionBody,
+  Footer: SettingsSectionFooter,
+  FooterHint: SettingsSectionFooterHint,
+  FooterActions: SettingsSectionFooterActions,
+};
+
+const SettingsSection = Object.assign(
+  SettingsSectionRoot,
+  settingsSectionSlots,
+);
+const DangerSettingsSection = Object.assign(
+  DangerSettingsSectionRoot,
+  settingsSectionSlots,
+);
 
 function FooterSaveButtonContent({ pending }: { pending: boolean }) {
   if (pending) {
@@ -265,44 +361,58 @@ function DisplayNameCard({ mcpServer }: { mcpServer: McpServer }) {
   };
 
   return (
-    <SettingsCard
-      title="Branding"
-      description="Used to identify your MCP server within the dashboard and on its installation page."
-      footerHint={`Please use no more than ${NAME_MAX_LENGTH} characters.`}
-      footerActions={
-        <RequireScope scope="mcp:write" level="component">
-          <Button
-            variant="primary"
-            size="md"
-            disabled={saveDisabled}
-            onClick={() => void handleSave()}
+    <SettingsSection>
+      <SettingsSection.Header>
+        <SettingsSection.Title>Branding</SettingsSection.Title>
+        <SettingsSection.Description>
+          Used to identify your MCP server within the dashboard and on its
+          installation page.
+        </SettingsSection.Description>
+      </SettingsSection.Header>
+      <SettingsSection.Panel>
+        <SettingsSection.Body>
+          <Field
+            data-invalid={update.isError ? true : undefined}
+            className="max-w-md"
           >
-            <FooterSaveButtonContent pending={update.isPending} />
-          </Button>
-        </RequireScope>
-      }
-    >
-      <Field
-        data-invalid={update.isError ? true : undefined}
-        className="max-w-md"
-      >
-        <FieldLabel htmlFor="mcp-server-display-name">Display Name</FieldLabel>
-        <Input
-          id="mcp-server-display-name"
-          value={nameDraft}
-          onChange={(value) => setNameDraft(value)}
-          placeholder="My MCP server"
-          maxLength={NAME_MAX_LENGTH}
-          aria-invalid={update.isError}
-        />
-        {dirty && (
-          <FieldDescription className="pl-1 text-xs">
-            {characterCount}
-          </FieldDescription>
-        )}
-        {update.isError && <FieldError>{update.error.message}</FieldError>}
-      </Field>
-    </SettingsCard>
+            <FieldLabel htmlFor="mcp-server-display-name">
+              Display Name
+            </FieldLabel>
+            <Input
+              id="mcp-server-display-name"
+              value={nameDraft}
+              onChange={(value) => setNameDraft(value)}
+              placeholder="My MCP server"
+              maxLength={NAME_MAX_LENGTH}
+              aria-invalid={update.isError}
+            />
+            {dirty && (
+              <FieldDescription className="pl-1 text-xs">
+                {characterCount}
+              </FieldDescription>
+            )}
+            {update.isError && <FieldError>{update.error.message}</FieldError>}
+          </Field>
+        </SettingsSection.Body>
+        <SettingsSection.Footer>
+          <SettingsSection.FooterHint>
+            {`Please use no more than ${NAME_MAX_LENGTH} characters.`}
+          </SettingsSection.FooterHint>
+          <SettingsSection.FooterActions>
+            <RequireScope scope="mcp:write" level="component">
+              <Button
+                variant="primary"
+                size="md"
+                disabled={saveDisabled}
+                onClick={() => void handleSave()}
+              >
+                <FooterSaveButtonContent pending={update.isPending} />
+              </Button>
+            </RequireScope>
+          </SettingsSection.FooterActions>
+        </SettingsSection.Footer>
+      </SettingsSection.Panel>
+    </SettingsSection>
   );
 }
 
@@ -376,88 +486,101 @@ function ServerUrlCard({
   }
 
   return (
-    <SettingsCard
-      title="Server URL"
-      description="The web address MCP clients use to connect to this server."
-      footerHint="Changes apply to new client connections."
-    >
-      {isLoadingEndpoints ? (
-        <Type muted small>
-          Loading…
-        </Type>
-      ) : (
-        <FieldGroup className="gap-6">
-          {/* Hosted (platform) address: at most one. */}
-          <Field>
-            <FieldLabel>Hosted Address</FieldLabel>
-            {platformEndpoint ? (
-              <AddressRow mcpServer={mcpServer} endpoint={platformEndpoint} />
-            ) : addingPlatform ? (
-              <NewPlatformAddressRow
-                mcpServer={mcpServer}
-                onClose={() => setAddingPlatform(false)}
-              />
-            ) : (
-              <RequireScope scope="mcp:write" level="component">
-                <AddressEmptyState
-                  title="No hosted address"
-                  description="Create the default Speakeasy-hosted URL for this server."
-                  actionLabel="Add"
-                  onAction={() => setAddingPlatform(true)}
-                />
-              </RequireScope>
-            )}
-            <FieldDescription>
-              Hosted under a Speakeasy domain. Always available unless you
-              remove it.
-            </FieldDescription>
-          </Field>
+    <SettingsSection>
+      <SettingsSection.Header>
+        <SettingsSection.Title>Server URL</SettingsSection.Title>
+        <SettingsSection.Description>
+          The web address MCP clients use to connect to this server.
+        </SettingsSection.Description>
+      </SettingsSection.Header>
+      <SettingsSection.Panel>
+        <SettingsSection.Body>
+          {isLoadingEndpoints ? (
+            <Type muted small>
+              Loading…
+            </Type>
+          ) : (
+            <FieldGroup className="gap-6">
+              {/* Hosted (platform) address: at most one. */}
+              <Field>
+                <FieldLabel>Hosted Address</FieldLabel>
+                {platformEndpoint ? (
+                  <AddressRow
+                    mcpServer={mcpServer}
+                    endpoint={platformEndpoint}
+                  />
+                ) : addingPlatform ? (
+                  <NewPlatformAddressRow
+                    mcpServer={mcpServer}
+                    onClose={() => setAddingPlatform(false)}
+                  />
+                ) : (
+                  <RequireScope scope="mcp:write" level="component">
+                    <AddressEmptyState
+                      title="No hosted address"
+                      description="Create the default Speakeasy-hosted URL for this server."
+                      actionLabel="Add"
+                      onAction={() => setAddingPlatform(true)}
+                    />
+                  </RequireScope>
+                )}
+                <FieldDescription>
+                  Hosted under a Speakeasy domain. Always available unless you
+                  remove it.
+                </FieldDescription>
+              </Field>
 
-          {/* Custom-domain addresses: zero or more. */}
-          <Field>
-            <div className="flex items-center gap-2">
-              <FieldLabel>Custom Address</FieldLabel>
-            </div>
-            {customDomainEndpoints.map((endpoint) => (
-              <AddressRow
-                key={endpoint.id}
-                mcpServer={mcpServer}
-                endpoint={endpoint}
-                domains={availableDomains}
-              />
-            ))}
-            {addingCustom && (
-              <NewCustomAddressRow
-                mcpServer={mcpServer}
-                domains={availableDomains}
-                onClose={() => setAddingCustom(false)}
-              />
-            )}
-            {customAddressEmptyState}
-            {!addingCustom &&
-              customDomainEndpoints.length > 0 &&
-              availableDomains.length > 0 && (
-                <RequireScope scope="mcp:write" level="component">
-                  <div>
-                    <Button
-                      variant="secondary"
-                      onClick={() => setAddingCustom(true)}
-                    >
-                      <Button.LeftIcon>
-                        <Plus className="size-4" />
-                      </Button.LeftIcon>
-                      <Button.Text>Add</Button.Text>
-                    </Button>
-                  </div>
-                </RequireScope>
-              )}
-          </Field>
-        </FieldGroup>
-      )}
-    </SettingsCard>
+              {/* Custom-domain addresses: zero or more. */}
+              <Field>
+                <div className="flex items-center gap-2">
+                  <FieldLabel>Custom Address</FieldLabel>
+                </div>
+                {customDomainEndpoints.map((endpoint) => (
+                  <AddressRow
+                    key={endpoint.id}
+                    mcpServer={mcpServer}
+                    endpoint={endpoint}
+                    domains={availableDomains}
+                  />
+                ))}
+                {addingCustom && (
+                  <NewCustomAddressRow
+                    mcpServer={mcpServer}
+                    domains={availableDomains}
+                    onClose={() => setAddingCustom(false)}
+                  />
+                )}
+                {customAddressEmptyState}
+                {!addingCustom &&
+                  customDomainEndpoints.length > 0 &&
+                  availableDomains.length > 0 && (
+                    <RequireScope scope="mcp:write" level="component">
+                      <div>
+                        <Button
+                          variant="secondary"
+                          onClick={() => setAddingCustom(true)}
+                        >
+                          <Button.LeftIcon>
+                            <Plus className="size-4" />
+                          </Button.LeftIcon>
+                          <Button.Text>Add</Button.Text>
+                        </Button>
+                      </div>
+                    </RequireScope>
+                  )}
+              </Field>
+            </FieldGroup>
+          )}
+        </SettingsSection.Body>
+        <SettingsSection.Footer>
+          <SettingsSection.FooterHint>
+            Changes apply to new client connections.
+          </SettingsSection.FooterHint>
+        </SettingsSection.Footer>
+      </SettingsSection.Panel>
+    </SettingsSection>
   );
 }
-
 function AddressEmptyState({
   title,
   description,
@@ -886,65 +1009,83 @@ function ToolFilteringCard({ mcpServer }: { mcpServer: McpServer }) {
   }
 
   return (
-    <SettingsCard
-      title="Tool Filtering"
-      description="Filter the tools exposed by this server based on their tags. All tools are returned by default unless filtering is enabled and a `tags` query parameter is provided."
-      footerHint="Filtering applies to every endpoint on this server."
-      footerActions={
-        hasGroups ? (
-          <RequireScope scope="mcp:write" level="component">
-            <Button
-              variant="primary"
-              size="md"
-              disabled={!dirty || isSaving}
-              onClick={() =>
-                applyGroup(draft === DISABLED_VALUE ? null : draft)
-              }
-            >
-              <FooterSaveButtonContent pending={updateMcpServer.isPending} />
-            </Button>
-          </RequireScope>
-        ) : undefined
-      }
-    >
-      <Field>
-        <FieldLabel htmlFor="mcp-server-tool-filtering" className="sr-only">
-          Tool filtering
-        </FieldLabel>
-        {hasGroups ? (
-          <RequireScope scope="mcp:write" level="component">
-            <Select
-              value={draft}
-              disabled={isSaving}
-              onValueChange={(value) => setDraft(value)}
-            >
-              <SelectTrigger id="mcp-server-tool-filtering" className="w-72">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={DISABLED_VALUE}>Disabled</SelectItem>
-                {groups.map((group) => (
-                  <SelectItem key={group.id} value={group.id}>
-                    {toolVariationsGroupDisplayName(group.name)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </RequireScope>
-        ) : (
-          <RequireScope scope="mcp:write" level="component">
-            <Button
-              variant="secondary"
-              size="md"
-              disabled={isSaving || groupsQuery.isLoading}
-              onClick={() => createGroup.mutate({})}
-            >
-              {enableButtonContent}
-            </Button>
-          </RequireScope>
-        )}
-      </Field>
-    </SettingsCard>
+    <SettingsSection>
+      <SettingsSection.Header>
+        <SettingsSection.Title>Tool Filtering</SettingsSection.Title>
+        <SettingsSection.Description>
+          Filter the tools exposed by this server based on their tags. All tools
+          are returned by default unless filtering is enabled and a `tags` query
+          parameter is provided.
+        </SettingsSection.Description>
+      </SettingsSection.Header>
+      <SettingsSection.Panel>
+        <SettingsSection.Body>
+          <Field>
+            <FieldLabel htmlFor="mcp-server-tool-filtering" className="sr-only">
+              Tool filtering
+            </FieldLabel>
+            {hasGroups ? (
+              <RequireScope scope="mcp:write" level="component">
+                <Select
+                  value={draft}
+                  disabled={isSaving}
+                  onValueChange={(value) => setDraft(value)}
+                >
+                  <SelectTrigger
+                    id="mcp-server-tool-filtering"
+                    className="w-72"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={DISABLED_VALUE}>Disabled</SelectItem>
+                    {groups.map((group) => (
+                      <SelectItem key={group.id} value={group.id}>
+                        {toolVariationsGroupDisplayName(group.name)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </RequireScope>
+            ) : (
+              <RequireScope scope="mcp:write" level="component">
+                <Button
+                  variant="secondary"
+                  size="md"
+                  disabled={isSaving || groupsQuery.isLoading}
+                  onClick={() => createGroup.mutate({})}
+                >
+                  {enableButtonContent}
+                </Button>
+              </RequireScope>
+            )}
+          </Field>
+        </SettingsSection.Body>
+        <SettingsSection.Footer>
+          <SettingsSection.FooterHint>
+            Filtering applies to every endpoint on this server.
+          </SettingsSection.FooterHint>
+          {hasGroups && (
+            <SettingsSection.FooterActions>
+              <RequireScope scope="mcp:write" level="component">
+                <Button
+                  variant="primary"
+                  size="md"
+                  disabled={!dirty || isSaving}
+                  onClick={() =>
+                    applyGroup(draft === DISABLED_VALUE ? null : draft)
+                  }
+                >
+                  <FooterSaveButtonContent
+                    pending={updateMcpServer.isPending}
+                  />
+                </Button>
+              </RequireScope>
+            </SettingsSection.FooterActions>
+          )}
+        </SettingsSection.Footer>
+      </SettingsSection.Panel>
+    </SettingsSection>
   );
 }
 
@@ -1076,92 +1217,98 @@ function DangerZoneCard({
 
   return (
     <>
-      <SettingsCard
-        title="Danger Zone"
-        description="Manage server availability, access, and destructive actions."
-        variant="danger"
-      >
-        <div className="divide-y">
-          <ServerControlRow
-            title="Server Availability"
-            description={
-              enabled
-                ? "This MCP server is currently serving traffic on configured URLs."
-                : "This MCP server is offline and will not serve client traffic."
-            }
-          >
-            <Type muted small>
-              {enabled ? "Enabled" : "Disabled"}
-            </Type>
-            <RequireScope scope="mcp:write" level="component">
-              <Switch
-                checked={enabled}
-                disabled={updateVisibility.isPending}
-                aria-label="Enable MCP server"
-                onCheckedChange={requestAvailabilityChange}
-              />
-            </RequireScope>
-          </ServerControlRow>
-
-          <ServerControlRow
-            title="Visibility"
-            description={
-              enabled
-                ? "Choose whether clients can use this server publicly or only through authenticated project access."
-                : "Choose an access mode to enable this server as public or private."
-            }
-          >
-            <RequireScope scope="mcp:write" level="component">
-              <ToggleGroup
-                type="single"
-                value={accessMode}
-                variant="outline"
-                size="sm"
-                disabled={updateVisibility.isPending}
-                onValueChange={requestVisibilityChange}
+      <DangerSettingsSection>
+        <DangerSettingsSection.Header>
+          <DangerSettingsSection.Title>Danger Zone</DangerSettingsSection.Title>
+          <DangerSettingsSection.Description>
+            Manage server availability, access, and destructive actions.
+          </DangerSettingsSection.Description>
+        </DangerSettingsSection.Header>
+        <DangerSettingsSection.Panel>
+          <DangerSettingsSection.Body>
+            <div className="divide-y">
+              <ServerControlRow
+                title="Server Availability"
+                description={
+                  enabled
+                    ? "This MCP server is currently serving traffic on configured URLs."
+                    : "This MCP server is offline and will not serve client traffic."
+                }
               >
-                <ToggleGroupItem
-                  value="private"
-                  aria-label="Set MCP server private"
-                  className="px-3"
-                >
-                  Private
-                </ToggleGroupItem>
-                <ToggleGroupItem
-                  value="public"
-                  aria-label="Set MCP server public"
-                  className="px-3"
-                >
-                  Public
-                </ToggleGroupItem>
-              </ToggleGroup>
-            </RequireScope>
-          </ServerControlRow>
+                <Type muted small>
+                  {enabled ? "Enabled" : "Disabled"}
+                </Type>
+                <RequireScope scope="mcp:write" level="component">
+                  <Switch
+                    checked={enabled}
+                    disabled={updateVisibility.isPending}
+                    aria-label="Enable MCP server"
+                    onCheckedChange={requestAvailabilityChange}
+                  />
+                </RequireScope>
+              </ServerControlRow>
 
-          <ServerControlRow
-            title="Delete MCP Server"
-            description="Permanently remove this server and all of its endpoints. This action cannot be undone."
-          >
-            <RequireScope scope="mcp:write" level="component">
-              <Button
-                variant="destructive-primary"
-                size="md"
-                onClick={() => setDeleteDialogOpen(true)}
+              <ServerControlRow
+                title="Visibility"
+                description={
+                  enabled
+                    ? "Choose whether clients can use this server publicly or only through authenticated project access."
+                    : "Choose an access mode to enable this server as public or private."
+                }
               >
-                <Button.LeftIcon>
-                  <Trash2 className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Delete MCP server</Button.Text>
-              </Button>
-            </RequireScope>
-          </ServerControlRow>
-        </div>
-        {updateVisibility.isError && (
-          <Alert variant="error" dismissible={false}>
-            {updateVisibility.error.message}
-          </Alert>
-        )}
-      </SettingsCard>
+                <RequireScope scope="mcp:write" level="component">
+                  <ToggleGroup
+                    type="single"
+                    value={accessMode}
+                    variant="outline"
+                    size="sm"
+                    disabled={updateVisibility.isPending}
+                    onValueChange={requestVisibilityChange}
+                  >
+                    <ToggleGroupItem
+                      value="private"
+                      aria-label="Set MCP server private"
+                      className="px-3"
+                    >
+                      Private
+                    </ToggleGroupItem>
+                    <ToggleGroupItem
+                      value="public"
+                      aria-label="Set MCP server public"
+                      className="px-3"
+                    >
+                      Public
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+                </RequireScope>
+              </ServerControlRow>
+
+              <ServerControlRow
+                title="Delete MCP Server"
+                description="Permanently remove this server and all of its endpoints. This action cannot be undone."
+              >
+                <RequireScope scope="mcp:write" level="component">
+                  <Button
+                    variant="destructive-primary"
+                    size="md"
+                    onClick={() => setDeleteDialogOpen(true)}
+                  >
+                    <Button.LeftIcon>
+                      <Trash2 className="h-4 w-4" />
+                    </Button.LeftIcon>
+                    <Button.Text>Delete MCP server</Button.Text>
+                  </Button>
+                </RequireScope>
+              </ServerControlRow>
+            </div>
+            {updateVisibility.isError && (
+              <Alert variant="error" dismissible={false}>
+                {updateVisibility.error.message}
+              </Alert>
+            )}
+          </DangerSettingsSection.Body>
+        </DangerSettingsSection.Panel>
+      </DangerSettingsSection>
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <Dialog.Content className="max-w-2xl!">
           <DeleteMcpServerDialogContent
