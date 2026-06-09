@@ -932,11 +932,13 @@ export function ApprovalRequestsContent({
   );
   const canCreateAccessRules = useMemo(
     () =>
-      policiesQuery.error
+      // Policies are only fetched for admins; without policy data we can't
+      // know rules are inactive, so default to treating them as active.
+      !canAdmin || policiesQuery.error
         ? true
         : (policiesQuery.data?.policies.some(policyEnablesAccessRules) ??
           false),
-    [policiesQuery.data?.policies, policiesQuery.error],
+    [canAdmin, policiesQuery.data?.policies, policiesQuery.error],
   );
   const accessRuleCreateAvailability = getAccessRuleCreateAvailability({
     canCreateAccessRules,
