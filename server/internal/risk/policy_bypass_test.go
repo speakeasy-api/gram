@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -169,7 +170,7 @@ func TestApprovePolicyBypassRequest_CanGrantRole(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	rolePrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "organization:test-risk-policy-bypass")
+	rolePrincipal := seedRiskPolicyBypassOrganizationRole(t, ti, authCtx.ActiveOrganizationID, "risk-policy-bypass")
 	approved, err := ti.service.ApproveRiskPolicyBypassRequest(ctx, &gen.ApproveRiskPolicyBypassRequestPayload{
 		ID:                   request.ID,
 		GrantedPrincipalUrns: []string{rolePrincipal.String()},
@@ -215,7 +216,7 @@ func TestApprovePolicyBypassRequest_ApprovedRequestReplacesGrantedPrincipals(t *
 	assert.Equal(t, "approved", approved.Status)
 	assert.True(t, userHasRiskPolicyBypassGrant(t, ti, authCtx.ActiveOrganizationID, authCtx.UserID, policy.ID, fullURL))
 
-	rolePrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "organization:test-risk-policy-bypass-edit")
+	rolePrincipal := seedRiskPolicyBypassOrganizationRole(t, ti, authCtx.ActiveOrganizationID, "risk-policy-bypass-edit")
 	updated, err := ti.service.ApproveRiskPolicyBypassRequest(ctx, &gen.ApproveRiskPolicyBypassRequestPayload{
 		ID:                   request.ID,
 		GrantedPrincipalUrns: []string{rolePrincipal.String()},
@@ -225,6 +226,70 @@ func TestApprovePolicyBypassRequest_ApprovedRequestReplacesGrantedPrincipals(t *
 	assert.Equal(t, []string{rolePrincipal.String()}, updated.GrantedPrincipalUrns)
 	assert.False(t, userHasRiskPolicyBypassGrant(t, ti, authCtx.ActiveOrganizationID, authCtx.UserID, policy.ID, fullURL))
 	assert.True(t, principalHasRiskPolicyBypassGrant(t, ti, authCtx.ActiveOrganizationID, rolePrincipal, policy.ID, fullURL))
+}
+
+func TestApprovePolicyBypassRequest_RejectsUnknownRolePrincipal(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name: new("Policy Bypass Unknown Role"),
+	})
+	require.NoError(t, err)
+
+	request, err := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
+		RequestToken: riskPolicyBypassRequestToken(t, authCtx, policy.ID, "https://mcp.example.com/unknown-role"),
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.ApproveRiskPolicyBypassRequest(ctx, &gen.ApproveRiskPolicyBypassRequestPayload{
+		ID:                   request.ID,
+		GrantedPrincipalUrns: []string{"role:organization:not-a-real-role"},
+	})
+	require.Error(t, err)
+}
+
+func TestDenyPolicyBypassRequest_ApprovedRequestRevokesGrant(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name: new("Policy Bypass Deny Approved"),
+	})
+	require.NoError(t, err)
+
+	fullURL := "https://mcp.example.com/deny-approved"
+	request, err := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
+		RequestToken: riskPolicyBypassRequestToken(t, authCtx, policy.ID, fullURL),
+	})
+	require.NoError(t, err)
+
+	approved, err := ti.service.ApproveRiskPolicyBypassRequest(ctx, &gen.ApproveRiskPolicyBypassRequestPayload{
+		ID: request.ID,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "approved", approved.Status)
+	assert.True(t, userHasRiskPolicyBypassGrant(t, ti, authCtx.ActiveOrganizationID, authCtx.UserID, policy.ID, fullURL))
+
+	denied, err := ti.service.DenyRiskPolicyBypassRequest(ctx, &gen.DenyRiskPolicyBypassRequestPayload{
+		ID: request.ID,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "denied", denied.Status)
+	assert.Empty(t, denied.GrantedPrincipalUrns)
+	assert.False(t, userHasRiskPolicyBypassGrant(t, ti, authCtx.ActiveOrganizationID, authCtx.UserID, policy.ID, fullURL))
 }
 
 func TestCreatePolicyBypassRequest_AfterDeny_ResetsExistingRequestToRequested(t *testing.T) {
@@ -423,6 +488,26 @@ func seedRiskPolicyBypassOrganizationUser(t *testing.T, organizationID string, u
 		UserID:         conv.ToPGText(userID),
 	})
 	require.NoError(t, err)
+}
+
+func seedRiskPolicyBypassOrganizationRole(t *testing.T, ti *testInstance, organizationID string, slug string) urn.Principal {
+	t.Helper()
+
+	now := time.Now().UTC()
+	row, err := accessrepo.New(ti.conn).UpsertOrganizationRole(t.Context(), accessrepo.UpsertOrganizationRoleParams{
+		OrganizationID:    organizationID,
+		WorkosSlug:        slug,
+		WorkosName:        slug,
+		WorkosDescription: conv.ToPGTextEmpty(""),
+		WorkosCreatedAt:   conv.ToPGTimestamptz(now),
+		WorkosUpdatedAt:   conv.ToPGTimestamptz(now),
+		WorkosLastEventID: conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+
+	principal, err := urn.ParsePrincipal(row.RoleUrn)
+	require.NoError(t, err)
+	return principal
 }
 
 func userHasRiskPolicyBypassGrant(t *testing.T, ti *testInstance, organizationID, userID, policyID, serverURL string) bool {

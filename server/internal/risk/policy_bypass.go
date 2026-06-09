@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -227,6 +228,9 @@ func (s *Service) ApproveRiskPolicyBypassRequest(ctx context.Context, payload *g
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid risk policy bypass grant principals")
 	}
+	if err := validateRiskPolicyBypassGrantPrincipals(ctx, dbtx, authCtx.ActiveOrganizationID, principals); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid risk policy bypass grant principals")
+	}
 	selector, err := riskPolicyBypassGrantSelector(current)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build risk policy bypass selector").Log(ctx, s.logger)
@@ -244,6 +248,7 @@ func (s *Service) ApproveRiskPolicyBypassRequest(ctx context.Context, payload *g
 					Scope:          authz.ScopeRiskPolicyBypass,
 					ResourceID:     current.RiskPolicyID.String(),
 				},
+				Effect:     authz.PolicyEffectAllow,
 				Principals: principalsToRevoke,
 				Selector:   selector,
 			}); err != nil {
@@ -257,6 +262,7 @@ func (s *Service) ApproveRiskPolicyBypassRequest(ctx context.Context, payload *g
 			Scope:          authz.ScopeRiskPolicyBypass,
 			ResourceID:     current.RiskPolicyID.String(),
 		},
+		Effect:     authz.PolicyEffectAllow,
 		Principals: principals,
 		Selector:   selector,
 	}); err != nil {
@@ -319,6 +325,28 @@ func (s *Service) DenyRiskPolicyBypassRequest(ctx context.Context, payload *gen.
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").Log(ctx, s.logger)
+	}
+	if current.Status == riskPolicyBypassRequestStatusApproved {
+		principals, _, err := riskPolicyBypassGrantPrincipals(current.RequesterUserID, current.GrantedPrincipalUrns)
+		if err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid granted risk policy bypass principals")
+		}
+		selector, err := riskPolicyBypassGrantSelector(current)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "build risk policy bypass selector").Log(ctx, s.logger)
+		}
+		if err := authz.RevokeResourceFromPrincipals(ctx, dbtx, authz.ResourceGrant{
+			Resource: authz.Resource{
+				OrganizationID: authCtx.ActiveOrganizationID,
+				Scope:          authz.ScopeRiskPolicyBypass,
+				ResourceID:     current.RiskPolicyID.String(),
+			},
+			Effect:     authz.PolicyEffectAllow,
+			Principals: principals,
+			Selector:   selector,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "revoke denied risk policy bypass grants").Log(ctx, s.logger)
+		}
 	}
 	row, err := q.UpdateRiskPolicyBypassRequestStatus(ctx, repo.UpdateRiskPolicyBypassRequestStatusParams{
 		Status:               riskPolicyBypassRequestStatusDenied,
@@ -391,6 +419,7 @@ func (s *Service) RevokeRiskPolicyBypassRequest(ctx context.Context, payload *ge
 			Scope:          authz.ScopeRiskPolicyBypass,
 			ResourceID:     current.RiskPolicyID.String(),
 		},
+		Effect:     authz.PolicyEffectAllow,
 		Principals: principals,
 		Selector:   selector,
 	}); err != nil {
@@ -653,6 +682,55 @@ func riskPolicyBypassGrantPrincipals(requesterUserID string, principalURNs []str
 	}
 
 	return principals, grantedPrincipalURNs, nil
+}
+
+func validateRiskPolicyBypassGrantPrincipals(ctx context.Context, db accessrepo.DBTX, organizationID string, principals []urn.Principal) error {
+	for _, principal := range principals {
+		switch principal.Type {
+		case urn.PrincipalTypeUser:
+			if principal.String() == authz.AllUsersPrincipal().String() {
+				continue
+			}
+			if _, err := authz.ResolveUserPrincipals(ctx, db, organizationID, principal.ID); err != nil {
+				return fmt.Errorf("validate user principal %q: %w", principal.String(), err)
+			}
+		case urn.PrincipalTypeRole:
+			if err := validateRiskPolicyBypassRolePrincipal(ctx, db, organizationID, principal); err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("unsupported principal type %q", principal.Type)
+		}
+	}
+
+	return nil
+}
+
+func validateRiskPolicyBypassRolePrincipal(ctx context.Context, db accessrepo.DBTX, organizationID string, principal urn.Principal) error {
+	roleKind, rawRoleID, ok := strings.Cut(principal.ID, ":")
+	if !ok {
+		return fmt.Errorf("invalid role principal %q", principal.String())
+	}
+	if roleKind != "organization" && roleKind != "global" {
+		return fmt.Errorf("invalid role principal %q", principal.String())
+	}
+	roleID, err := uuid.Parse(rawRoleID)
+	if err != nil {
+		return fmt.Errorf("invalid role principal %q: %w", principal.String(), err)
+	}
+
+	row, err := accessrepo.New(db).GetOrganizationRoleByID(ctx, accessrepo.GetOrganizationRoleByIDParams{
+		OrganizationID: organizationID,
+		ID:             roleID,
+	})
+	if err != nil {
+		return fmt.Errorf("validate role principal %q: %w", principal.String(), err)
+	}
+	if row.RoleUrn != principal.String() {
+		return fmt.Errorf("role principal %q does not match active role %q", principal.String(), row.RoleUrn)
+	}
+
+	return nil
 }
 
 func riskPolicyBypassGrantPrincipalDifference(currentPrincipals []urn.Principal, nextPrincipals []urn.Principal) []urn.Principal {

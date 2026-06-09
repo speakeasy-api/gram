@@ -853,7 +853,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		}
 		return result, nil
 	}
-	if s.canBypassLegacyShadowMCPAccess(ctx, metadata.GramOrgID, metadata.ProjectID, policy.ID, evidence) {
+	if s.canBypassLegacyShadowMCPAccess(ctx, metadata.GramOrgID, metadata.ProjectID, metadata.UserID, policy.ID, evidence) {
 		matchedURL, matchedCommand := "", ""
 		if matched != nil {
 			matchedURL = matched.URL

@@ -47,7 +47,7 @@ func (s *Service) enforceShadowMCPToolAccess(
 		)
 		return "", false
 	}
-	if s.canBypassLegacyShadowMCPAccess(ctx, organizationID, projectID, policyID, evidence) {
+	if s.canBypassLegacyShadowMCPAccess(ctx, organizationID, projectID, userID, policyID, evidence) {
 		s.logger.InfoContext(ctx, "shadow-mcp call allowed via legacy shadow mcp access rule",
 			attr.SlogEvent("shadow_mcp_legacy_access_allow"),
 			attr.SlogOrganizationID(organizationID),
@@ -129,7 +129,7 @@ func (s *Service) canBypassRiskPolicy(ctx context.Context, organizationID string
 	return err == nil
 }
 
-func (s *Service) canBypassLegacyShadowMCPAccess(ctx context.Context, organizationID string, projectID string, policyID string, evidence shadowmcp.AccessEvidence) bool {
+func (s *Service) canBypassLegacyShadowMCPAccess(ctx context.Context, organizationID string, projectID string, userID string, policyID string, evidence shadowmcp.AccessEvidence) bool {
 	if s.accessStore == nil || strings.TrimSpace(organizationID) == "" || strings.TrimSpace(projectID) == "" || strings.TrimSpace(policyID) == "" {
 		return false
 	}
@@ -167,10 +167,38 @@ func (s *Service) canBypassLegacyShadowMCPAccess(ctx context.Context, organizati
 		if rule.Disposition != accesscontrol.DispositionAllowed || !legacyShadowMCPAccessRuleAppliesToPolicy(rule, policyID) {
 			continue
 		}
-		return true
+		if s.legacyShadowMCPAccessRuleAllowsUser(ctx, organizationID, userID, rule) {
+			return true
+		}
 	}
 
 	return false
+}
+
+func (s *Service) legacyShadowMCPAccessRuleAllowsUser(ctx context.Context, organizationID string, userID string, rule accesscontrol.AccessRule) bool {
+	if strings.TrimSpace(rule.SourceRequestID) == "" {
+		return true
+	}
+	if strings.TrimSpace(userID) == "" {
+		return false
+	}
+
+	request, err := s.accessStore.GetRequest(ctx, organizationID, accesscontrol.ResourceTypeShadowMCP, rule.SourceRequestID)
+	if err != nil {
+		if !errors.Is(err, accesscontrol.ErrNotFound) {
+			s.logger.WarnContext(ctx, "failed to load legacy shadow mcp source request for risk policy bypass",
+				attr.SlogError(err),
+				attr.SlogOrganizationID(organizationID),
+				attr.SlogValueAny(map[string]any{
+					"source_request_id": rule.SourceRequestID,
+					"rule_id":           rule.ID,
+				}),
+			)
+		}
+		return false
+	}
+
+	return request.RequesterUserID == userID
 }
 
 func legacyShadowMCPAccessRuleMatchCandidates(evidence shadowmcp.AccessEvidence) ([]string, []string) {

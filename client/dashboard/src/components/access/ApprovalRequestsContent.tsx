@@ -379,6 +379,7 @@ function ReviewRequestSheet({
   const [action, setAction] = useState<ReviewAction>("approve");
   const [approvalAudience, setApprovalAudience] =
     useState<ApprovalAudience>("user");
+  const [approvalAudienceDirty, setApprovalAudienceDirty] = useState(false);
   const [selectedRoleId, setSelectedRoleId] = useState("");
   const [selectedUserId, setSelectedUserId] = useState("");
   const requesterRoleIds = useMemo(() => {
@@ -403,6 +404,7 @@ function ReviewRequestSheet({
       roles,
     );
     setAction("approve");
+    setApprovalAudienceDirty(false);
     setApprovalAudience(initial.audience);
     setSelectedRoleId(initial.selectedRoleId || defaultRequesterRoleId);
     setSelectedUserId(initial.selectedUserId);
@@ -411,17 +413,21 @@ function ReviewRequestSheet({
   if (!request) return null;
 
   const isEditingAccess = request.status === "approved";
-  const principalUrns = approvalPrincipalUrns({
-    audience: approvalAudience,
-    selectedRoleId,
-    selectedUserId,
-    roles,
-  });
+  const principalUrns =
+    isEditingAccess && !approvalAudienceDirty
+      ? request.grantedPrincipalUrns
+      : approvalPrincipalUrns({
+          audience: approvalAudience,
+          selectedRoleId,
+          selectedUserId,
+          roles,
+        });
   const approveReady = action !== "approve" || principalUrns.length > 0;
   const canSubmit = projectId.length > 0 && approveReady;
   const submitLabel = reviewRequestSubmitLabel(isEditingAccess, action);
   const sheetCopy = reviewRequestSheetCopy(isEditingAccess);
   const selectApprovalAudience = (audience: ApprovalAudience) => {
+    setApprovalAudienceDirty(true);
     setApprovalAudience(audience);
     if (
       audience === "role" &&
@@ -435,7 +441,7 @@ function ReviewRequestSheet({
     }
   };
 
-  const submit = async () => {
+  const submit = async (): Promise<void> => {
     try {
       if (isEditingAccess || action === "approve") {
         await onApprove(principalUrns);
@@ -665,7 +671,9 @@ function ReviewRequestSheet({
 
         <SheetFooter>
           <Button
-            onClick={submit}
+            onClick={() => {
+              void submit();
+            }}
             disabled={!canSubmit || isSubmitting}
             className="w-full"
           >
@@ -677,7 +685,11 @@ function ReviewRequestSheet({
   );
 }
 
-export function ApprovalRequestsContent({ projectId }: { projectId: string }) {
+export function ApprovalRequestsContent({
+  projectId,
+}: {
+  projectId: string;
+}): JSX.Element {
   const queryClient = useQueryClient();
   const { hasScope } = useRBAC();
   const canAdmin = hasScope("org:admin");
@@ -691,12 +703,12 @@ export function ApprovalRequestsContent({ projectId }: { projectId: string }) {
   }, [projectId]);
 
   const requestsQuery = useRiskListPolicyBypassRequests(
-    { status: "requested" },
+    { status: "requested", gramProject: projectId },
     undefined,
     { enabled: canAdmin && projectId.length > 0 },
   );
   const rulesQuery = useRiskListPolicyBypassRequests(
-    { status: "approved" },
+    { status: "approved", gramProject: projectId },
     undefined,
     { enabled: canAdmin && projectId.length > 0 },
   );
@@ -1029,7 +1041,9 @@ export function ApprovalRequestsContent({ projectId }: { projectId: string }) {
             </Button>
             <Button
               variant="destructive-primary"
-              onClick={confirmDeleteRule}
+              onClick={() => {
+                void confirmDeleteRule();
+              }}
               disabled={revokeRequest.isPending}
             >
               {revokeRequest.isPending ? (
