@@ -75,9 +75,7 @@ import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
 import SDK from "./pages/sdk/SDK";
 import Access from "./pages/access/Access";
 import Settings from "./pages/settings/Settings";
-import SlackAppsIndex, { SlackAppsRoot } from "./pages/slackapp/SlackApp";
 import TriggersIndex, { TriggersRoot } from "./pages/triggers/Triggers";
-import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
 import SecurityOverview, {
   RiskOverviewRoot,
 } from "./pages/security/SecurityOverview";
@@ -314,20 +312,6 @@ const ROUTE_STRUCTURE = {
         title: "Assistant",
         url: ":assistantId",
         component: AssistantPage,
-      },
-    },
-  },
-  slackApps: {
-    title: "Slack Apps",
-    url: "slack",
-    icon: "bot",
-    component: SlackAppsRoot,
-    indexComponent: SlackAppsIndex,
-    subPages: {
-      detail: {
-        title: "Slack App",
-        url: ":slackAppId",
-        component: SlackAppDetailPage,
       },
     },
   },

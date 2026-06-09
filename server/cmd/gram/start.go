@@ -99,7 +99,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/triggers"
@@ -275,18 +274,6 @@ func newStartCommand() *cli.Command {
 			Usage:   "Run the server and worker in a single process for local development",
 			EnvVars: []string{"GRAM_SINGLE_PROCESS"},
 			Value:   false,
-		},
-		&cli.StringFlag{
-			Name:     "slack-client-secret",
-			Usage:    "The slack client secret",
-			EnvVars:  []string{"SLACK_CLIENT_SECRET"},
-			Required: false,
-		},
-		&cli.StringFlag{
-			Name:     "slack-signing-secret",
-			Usage:    "The slack signing secret",
-			EnvVars:  []string{"SLACK_SIGNING_SECRET"},
-			Required: false,
 		},
 		&cli.StringFlag{
 			Name:     "pylon-verification-secret",
@@ -692,7 +679,7 @@ func newStartCommand() *cli.Command {
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 			runnerVersion := functions.RunnerVersion(conv.Default(strings.TrimPrefix(c.String("functions-runner-version"), "sha-"), GitSHA))
 
-			slackClient := slack_client.NewSlackClient(guardianPolicy, "", "", db, encryptionClient)
+			slackClient := slack_client.NewSlackClient(guardianPolicy)
 
 			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
 			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
@@ -1088,12 +1075,6 @@ func newStartCommand() *cli.Command {
 				AssistantTriggerTools:         triggerTools,
 				ManagedAssistantInsightsTools: managedInsightsTools,
 			}))
-
-			slack.Attach(mux, slack.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, redisClient, slackClient, temporalEnv, slack.Configurations{
-				GramServerURL:     c.String("server-url"),
-				GramSiteURL:       c.String("site-url"),
-				SignInRedirectURL: auth.FormSignInRedirectURL(c.String("site-url")),
-			}, authzEngine))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),
