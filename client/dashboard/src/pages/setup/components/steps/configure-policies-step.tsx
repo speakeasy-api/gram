@@ -291,9 +291,35 @@ export function ConfigurePoliciesStep({ onBack }: ConfigurePoliciesStepProps) {
       let changed = false;
       const next = { ...prev };
       for (const cat of ["shadow_mcp" as RuleCategory, ...WIZARD_CATEGORIES]) {
-        const desired = policyForCategory.has(cat);
-        if (next[cat].enabled !== desired) {
-          next[cat] = { ...next[cat], enabled: desired };
+        const existing = policyForCategory.get(cat);
+        if (!existing) {
+          if (next[cat].enabled) {
+            next[cat] = { ...next[cat], enabled: false };
+            changed = true;
+          }
+          continue;
+        }
+        const serverAction =
+          (existing.action as PolicyAction) ?? next[cat].action;
+        const serverMessageTypes = new Set(
+          (existing.messageTypes as PolicyMessageType[] | undefined) ?? [
+            ...next[cat].messageTypes,
+          ],
+        );
+        const messageTypesEqual =
+          formatMessageTypes(serverMessageTypes) ===
+          formatMessageTypes(next[cat].messageTypes);
+        if (
+          !next[cat].enabled ||
+          next[cat].action !== serverAction ||
+          !messageTypesEqual
+        ) {
+          next[cat] = {
+            ...next[cat],
+            enabled: true,
+            action: serverAction,
+            messageTypes: serverMessageTypes,
+          };
           changed = true;
         }
       }
@@ -365,22 +391,18 @@ export function ConfigurePoliciesStep({ onBack }: ConfigurePoliciesStepProps) {
   );
 
   const updateConfig = (cat: RuleCategory, patch: Partial<CategoryConfig>) => {
-    setConfigs((prev) => {
-      const next = { ...prev[cat], ...patch };
-      persistConfigChange(cat, next);
-      return { ...prev, [cat]: next };
-    });
+    const next = { ...configs[cat], ...patch };
+    setConfigs((prev) => ({ ...prev, [cat]: next }));
+    persistConfigChange(cat, next);
   };
 
   const toggleMessageType = (cat: RuleCategory, t: PolicyMessageType) => {
-    setConfigs((prev) => {
-      const types = new Set(prev[cat].messageTypes);
-      if (types.has(t)) types.delete(t);
-      else types.add(t);
-      const next = { ...prev[cat], messageTypes: types };
-      persistConfigChange(cat, next);
-      return { ...prev, [cat]: next };
-    });
+    const types = new Set(configs[cat].messageTypes);
+    if (types.has(t)) types.delete(t);
+    else types.add(t);
+    const next = { ...configs[cat], messageTypes: types };
+    setConfigs((prev) => ({ ...prev, [cat]: next }));
+    persistConfigChange(cat, next);
   };
 
   const shadow = configs.shadow_mcp;
