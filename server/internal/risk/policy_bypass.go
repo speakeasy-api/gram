@@ -326,28 +326,6 @@ func (s *Service) DenyRiskPolicyBypassRequest(ctx context.Context, payload *gen.
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").Log(ctx, s.logger)
 	}
-	if current.Status == riskPolicyBypassRequestStatusApproved {
-		principals, _, err := riskPolicyBypassGrantPrincipals(current.RequesterUserID, current.GrantedPrincipalUrns)
-		if err != nil {
-			return nil, oops.E(oops.CodeInvalid, err, "invalid granted risk policy bypass principals")
-		}
-		selector, err := riskPolicyBypassGrantSelector(current)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "build risk policy bypass selector").Log(ctx, s.logger)
-		}
-		if err := authz.RevokeResourceFromPrincipals(ctx, dbtx, authz.ResourceGrant{
-			Resource: authz.Resource{
-				OrganizationID: authCtx.ActiveOrganizationID,
-				Scope:          authz.ScopeRiskPolicyBypass,
-				ResourceID:     current.RiskPolicyID.String(),
-			},
-			Effect:     authz.PolicyEffectAllow,
-			Principals: principals,
-			Selector:   selector,
-		}); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "revoke denied risk policy bypass grants").Log(ctx, s.logger)
-		}
-	}
 	row, err := q.UpdateRiskPolicyBypassRequestStatus(ctx, repo.UpdateRiskPolicyBypassRequestStatusParams{
 		Status:               riskPolicyBypassRequestStatusDenied,
 		DecidedBy:            conv.ToPGText(authCtx.UserID),

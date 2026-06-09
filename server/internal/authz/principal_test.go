@@ -71,6 +71,29 @@ func TestResolveKnownUserPrincipals_unidentifiedWhenUserMissingOrNotInOrg(t *tes
 	}
 }
 
+func TestResolveKnownUserPrincipals_allUsersGrantAuthorizesOrgMember(t *testing.T) {
+	t.Parallel()
+
+	ctx := enterpriseTestCtx(t.Context())
+	conn := newTestDB(t)
+	organizationID := "org_resolve_all_users"
+	userID := "user_all_users"
+	policyID := "policy_123"
+
+	seedOrganization(t, ctx, conn, organizationID)
+	seedActiveOrganizationUser(t, ctx, conn, organizationID, userID)
+	seedGrant(t, ctx, conn, organizationID, AllUsersPrincipal(), ScopeRiskPolicyEvaluate, policyID)
+
+	principals, err := ResolveUserPrincipals(ctx, conn, organizationID, userID)
+	require.NoError(t, err)
+	grants, err := LoadGrants(ctx, conn, organizationID, principals)
+	require.NoError(t, err)
+
+	allowGrant, _, denied := evaluateGrants(grants, Check{Scope: ScopeRiskPolicyEvaluate, ResourceKind: "", ResourceID: policyID, Dimensions: nil}.expand())
+	require.NotNil(t, allowGrant)
+	require.False(t, denied)
+}
+
 func seedActiveOrganizationUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, userID string) {
 	t.Helper()
 
