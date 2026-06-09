@@ -1,15 +1,3 @@
--- Create "workos_directory_attributes_syncs" table
-CREATE TABLE "workos_directory_attributes_syncs" (
-  "id" uuid NOT NULL DEFAULT generate_uuidv7(),
-  "entity_id" text NOT NULL,
-  "entity_type" text NOT NULL,
-  "last_event_id" text NOT NULL,
-  "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
-  "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
-  PRIMARY KEY ("id")
-);
--- Create index "workos_directory_attributes_syncs_entity_key" to table: "workos_directory_attributes_syncs"
-CREATE UNIQUE INDEX "workos_directory_attributes_syncs_entity_key" ON "workos_directory_attributes_syncs" ("entity_type", "entity_id");
 -- Create "directory_groups" table
 CREATE TABLE "directory_groups" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -17,7 +5,6 @@ CREATE TABLE "directory_groups" (
   "workos_directory_group_id" text NOT NULL,
   "name" text NOT NULL,
   "attributes" jsonb NOT NULL DEFAULT '{}',
-  "attributes_content_hash" text NULL,
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "deleted_at" timestamptz NULL,
@@ -37,7 +24,6 @@ CREATE TABLE "directory_users" (
   "workos_directory_user_id" text NOT NULL,
   "email" text NULL,
   "attributes" jsonb NOT NULL DEFAULT '{}',
-  "attributes_content_hash" text NULL,
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "deleted_at" timestamptz NULL,
