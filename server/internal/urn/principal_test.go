@@ -25,6 +25,12 @@ func TestNewPrincipal(t *testing.T) {
 			wantErr: nil,
 		},
 		{
+			name:    "valid all users subject-set principal",
+			typ:     urn.PrincipalTypeUser,
+			id:      urn.AllUsersPrincipalID,
+			wantErr: nil,
+		},
+		{
 			name:    "valid role principal",
 			typ:     urn.PrincipalTypeRole,
 			id:      "admin",
@@ -97,6 +103,11 @@ func TestPrincipal_String(t *testing.T) {
 			name:      "user principal",
 			principal: urn.NewPrincipal(urn.PrincipalTypeUser, "user_01abc"),
 			want:      "user:user_01abc",
+		},
+		{
+			name:      "all users subject-set principal",
+			principal: urn.NewPrincipal(urn.PrincipalTypeUser, urn.AllUsersPrincipalID),
+			want:      "user:all",
 		},
 		{
 			name:      "role principal",
