@@ -23,7 +23,7 @@ func TestUpsertWithTxCreatesConfigGeneration(t *testing.T) {
 	require.True(t, result.CreatedNewGeneration)
 	require.NotNil(t, result.Row)
 	require.Equal(t, result.Row.ID, result.Config.ID)
-	require.Equal(t, watermark.UTC().Add(usagePollInterval), result.Config.NextPollAfter)
+	require.Equal(t, watermark.UTC().Add(usagePollIntervalFor(ProviderCursor)), result.Config.NextPollAfter)
 	require.Equal(t, watermark, result.Config.PollWatermarkAt)
 
 	require.Equal(t, int64(1), countAIIntegrationConfigs(t, ctx, conn, orgID, false))
@@ -71,7 +71,7 @@ func TestRecordUsagePollFailureStoresErrorAsData(t *testing.T) {
 	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "cursor-key", true, true, nil, &watermark)
 
 	message := `cursor rejected the configured api key'; DROP TABLE ai_integration_syncs; -- <script>alert(1)</script>`
-	require.NoError(t, store.RecordUsagePollFailure(ctx, created.Config.ID, time.Now(), errors.New(message)))
+	require.NoError(t, store.RecordUsagePollFailure(ctx, created.Config.ID, ProviderCursor, time.Now(), errors.New(message)))
 
 	cfg, _, err := store.loadForOrgAndProviderRow(ctx, orgID, ProviderCursor)
 	require.NoError(t, err)

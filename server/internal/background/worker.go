@@ -149,6 +149,7 @@ func NewTemporalWorker(
 		FeatureProvider:                nil,
 		AssetStorage:                   nil,
 		SlackClient:                    nil,
+		ChatMessageWriter:              nil,
 		ChatClient:                     nil,
 		OpenRouter:                     nil,
 		K8sClient:                      nil,

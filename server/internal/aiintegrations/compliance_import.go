@@ -3,7 +3,6 @@ package aiintegrations
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"log/slog"
 	"maps"
 	"slices"
@@ -394,9 +393,4 @@ func parseTimeOrDefault(value string, fallback time.Time) time.Time {
 		return fallback.UTC()
 	}
 	return t.UTC()
-}
-
-func IsAnthropicComplianceUnauthorized(err error) bool {
-	var httpErr *anthropicapi.HTTPError
-	return errors.As(err, &httpErr) && (httpErr.StatusCode == 401 || httpErr.StatusCode == 403)
 }

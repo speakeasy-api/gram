@@ -277,19 +277,20 @@ func (s *Service) startUsagePoll(ctx context.Context, organizationSlug string, c
 
 func emptyView(orgID, provider string) *gen.AIIntegrationConfig {
 	return &gen.AIIntegrationConfig{
-		ID:               nil,
-		OrganizationID:   orgID,
-		Provider:         provider,
-		ProjectID:        nil,
-		Enabled:          false,
-		HasAPIKey:        false,
-		LastPolledAt:     nil,
-		LastPollStatus:   nil,
-		LastPollError:    nil,
-		LastPollFailedAt: nil,
-		NextPollAfter:    nil,
-		CreatedAt:        nil,
-		UpdatedAt:        nil,
+		ID:                     nil,
+		OrganizationID:         orgID,
+		Provider:               provider,
+		ProjectID:              nil,
+		ExternalOrganizationID: nil,
+		Enabled:                false,
+		HasAPIKey:              false,
+		LastPolledAt:           nil,
+		LastPollStatus:         nil,
+		LastPollError:          nil,
+		LastPollFailedAt:       nil,
+		NextPollAfter:          nil,
+		CreatedAt:              nil,
+		UpdatedAt:              nil,
 	}
 }
 

@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	anthropicapi "github.com/speakeasy-api/gram/server/internal/thirdparty/anthropic"
 	cursorapi "github.com/speakeasy-api/gram/server/internal/thirdparty/cursor"
 )
 
@@ -61,6 +62,10 @@ func (p *PollAIData) Do(ctx context.Context, configID string) (err error) {
 	}
 
 	endTime := time.Now().UTC()
+	// cfg is declared before the defer so the failure path can resolve the
+	// provider-specific poll interval; if loading failed the provider is empty
+	// and the default interval applies.
+	var cfg aiintegrations.Config
 	defer func() {
 		if err == nil || activity.GetInfo(ctx).Attempt < PollUsageMaxAttempts {
 			return
@@ -69,12 +74,12 @@ func (p *PollAIData) Do(ctx context.Context, configID string) (err error) {
 		recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 		defer cancel()
 
-		if recordErr := p.integrations.RecordUsagePollFailure(recordCtx, id, endTime, err); recordErr != nil {
+		if recordErr := p.integrations.RecordUsagePollFailure(recordCtx, id, cfg.Provider, endTime, err); recordErr != nil {
 			err = errors.Join(err, fmt.Errorf("record usage poll failure: %w", recordErr))
 		}
 	}()
 
-	cfg, err := p.integrations.GetUsagePollConfig(ctx, id)
+	cfg, err = p.integrations.GetUsagePollConfig(ctx, id)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to load ai integration configuration")
 	}
@@ -94,8 +99,9 @@ func (p *PollAIData) Do(ctx context.Context, configID string) (err error) {
 	case aiintegrations.ProviderAnthropicCompliance:
 		nextCursor, err := p.complianceImporter.SyncAnthropicCompliance(ctx, cfg)
 		if err != nil {
-			if aiintegrations.IsAnthropicComplianceUnauthorized(err) {
-				return oops.E(oops.CodeUnauthorized, err, "anthropic rejected the configured compliance api key")
+			var httpErr *anthropicapi.HTTPError
+			if errors.As(err, &httpErr) && (httpErr.StatusCode == 401 || httpErr.StatusCode == 403) {
+				return oops.E(oops.CodeUnauthorized, err, "anthropic compliance rejected the configured api key")
 			}
 			return oops.E(oops.CodeUnexpected, err, "sync anthropic compliance data")
 		}
@@ -104,7 +110,7 @@ func (p *PollAIData) Do(ctx context.Context, configID string) (err error) {
 		return oops.E(oops.CodeInvalid, nil, "unsupported ai integration provider for usage polling: %s", cfg.Provider)
 	}
 
-	if err := p.integrations.RecordUsagePollSuccess(ctx, id, endTime, lastCursor); err != nil {
+	if err := p.integrations.RecordUsagePollSuccess(ctx, id, cfg.Provider, endTime, lastCursor); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "record usage poll success")
 	}
 	return nil

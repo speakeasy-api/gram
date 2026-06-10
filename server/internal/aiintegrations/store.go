@@ -25,10 +25,20 @@ const (
 )
 
 const (
-	initialUsagePollLookback = time.Hour
-	usagePollInterval        = time.Hour
-	maxUsagePollErrorMessage = 4000
+	initialUsagePollLookback             = time.Hour
+	cursorUsagePollInterval              = time.Hour
+	anthropicComplianceUsagePollInterval = 5 * time.Minute
+	maxUsagePollErrorMessage             = 4000
 )
+
+// usagePollIntervalFor returns the delay between polls for a provider.
+// Unknown providers fall back to the cursor interval.
+func usagePollIntervalFor(provider string) time.Duration {
+	if provider == ProviderAnthropicCompliance {
+		return anthropicComplianceUsagePollInterval
+	}
+	return cursorUsagePollInterval
+}
 
 type Store struct {
 	logger *slog.Logger
@@ -177,7 +187,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 	}
 	if resetPollWatermarkAt != nil {
 		syncRow.PollWatermarkAt = conv.ToPGTimestamptz(*resetPollWatermarkAt)
-		syncRow.NextPollAfter = conv.ToPGTimestamptz(resetPollWatermarkAt.UTC().Add(usagePollInterval))
+		syncRow.NextPollAfter = conv.ToPGTimestamptz(resetPollWatermarkAt.UTC().Add(usagePollIntervalFor(provider)))
 		syncRow.LastPollError = pgtype.Text{String: "", Valid: false}
 		syncRow.LastPollFailedAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
 		syncRow.LastPollSuccessAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
@@ -286,11 +296,11 @@ func (s *Store) GetUsagePollConfig(ctx context.Context, configID uuid.UUID) (Con
 	return cfg, nil
 }
 
-func (s *Store) RecordUsagePollSuccess(ctx context.Context, configID uuid.UUID, t time.Time, lastCursor string) error {
+func (s *Store) RecordUsagePollSuccess(ctx context.Context, configID uuid.UUID, provider string, t time.Time, lastCursor string) error {
 	if err := s.repo.RecordUsagePollSuccess(ctx, repo.RecordUsagePollSuccessParams{
 		AiIntegrationConfigID: configID,
 		PollWatermarkAt:       conv.ToPGTimestamptz(t),
-		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(usagePollInterval)),
+		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(usagePollIntervalFor(provider))),
 		LastCursorID:          conv.ToPGTextEmpty(lastCursor),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to record ai integration usage poll success")
@@ -298,7 +308,7 @@ func (s *Store) RecordUsagePollSuccess(ctx context.Context, configID uuid.UUID, 
 	return nil
 }
 
-func (s *Store) RecordUsagePollFailure(ctx context.Context, configID uuid.UUID, t time.Time, cause error) error {
+func (s *Store) RecordUsagePollFailure(ctx context.Context, configID uuid.UUID, provider string, t time.Time, cause error) error {
 	var errStr string
 	if cause != nil {
 		errStr = cause.Error()
@@ -306,7 +316,7 @@ func (s *Store) RecordUsagePollFailure(ctx context.Context, configID uuid.UUID, 
 
 	if err := s.repo.RecordUsagePollFailure(ctx, repo.RecordUsagePollFailureParams{
 		AiIntegrationConfigID: configID,
-		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(usagePollInterval)),
+		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(usagePollIntervalFor(provider))),
 		LastPollError:         conv.ToPGTextEmpty(conv.TruncateString(errStr, maxUsagePollErrorMessage)),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to record ai integration usage poll failure")
