@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 51892c0c37207701647959778a2abe2b
+  docChecksum: 7e1e4ee385ae9ed1c38bec27b63037ba
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -75,7 +75,7 @@ trackedFiles:
   docs/models/components/agentplugin.md:
     last_write_checksum: sha1:47a23e63a23265078a632129a0fec6982cfa3aec
   docs/models/components/aiintegrationconfig.md:
-    last_write_checksum: sha1:6fd07c709c59d79aacdf82600a23adf69dbb6158
+    last_write_checksum: sha1:7ea9ad8d1fd9e1273b997053e9b1132ad040d134
   docs/models/components/allowedorigin.md:
     last_write_checksum: sha1:962b6ed2e5fe2e57c01511a764dbef975efd6289
   docs/models/components/allowedoriginstatus.md:
@@ -247,7 +247,7 @@ trackedFiles:
   docs/models/components/customdomainmcpendpoint.md:
     last_write_checksum: sha1:617d60e0c7ecb67914f505e0ac62966aab59cfb9
   docs/models/components/deleteaiintegrationconfigrequest.md:
-    last_write_checksum: sha1:c880791036abdb30f71e62015017e036e52a4d86
+    last_write_checksum: sha1:fa326220dcc1d183e08a1dc1ec3a3e9b9618c952
   docs/models/components/deleteglobaltoolvariationresult.md:
     last_write_checksum: sha1:04dce9a78844146d01af0010e5af8cd64c155a00
   docs/models/components/deleterequestbody.md:
@@ -1119,7 +1119,7 @@ trackedFiles:
   docs/models/components/uploadopenapiv3result.md:
     last_write_checksum: sha1:dd29e65d31268f978e3b3b95948e137dfb8a4972
   docs/models/components/upsertaiintegrationconfigrequest.md:
-    last_write_checksum: sha1:932368d9613a0f5d0a88492331f9c8e31fdd6258
+    last_write_checksum: sha1:937b82215fa61494639abb4f685eb62c989eb54f
   docs/models/components/upsertallowedoriginform.md:
     last_write_checksum: sha1:e933fec03eea3c4ac5795a5868233adb2dbf7993
   docs/models/components/upsertallowedoriginformstatus.md:
@@ -1743,7 +1743,7 @@ trackedFiles:
   docs/models/operations/getagentpluginssecurity.md:
     last_write_checksum: sha1:019094a5f8866a3c1a7bc6b7584ba31e40913cf0
   docs/models/operations/getaiintegrationconfigrequest.md:
-    last_write_checksum: sha1:00ad81e47fbcfa1d92adcc7cc0007eaacef17a26
+    last_write_checksum: sha1:4f4f38b86e5e2e577e4282b50920b5d76bafec2d
   docs/models/operations/getaiintegrationconfigsecurity.md:
     last_write_checksum: sha1:c1bbc8cb3561261c8b17890598cea4549365feee
   docs/models/operations/getassistantmemoryrequest.md:
@@ -3847,7 +3847,7 @@ trackedFiles:
   src/models/components/agentplugin.ts:
     last_write_checksum: sha1:15434de35272d44a41b4379c86047304528a27c0
   src/models/components/aiintegrationconfig.ts:
-    last_write_checksum: sha1:cfbccc1b3a3aa4738c2f052324df032d1b1882f6
+    last_write_checksum: sha1:d4969b5c4807110e308838b1e68805ca37ac8069
   src/models/components/allowedorigin.ts:
     last_write_checksum: sha1:09b19b8524236e2c90452d0539edff8f12f26872
   src/models/components/approveshadowmcpapprovalrequestform.ts:
@@ -3975,7 +3975,7 @@ trackedFiles:
   src/models/components/customdomainmcpendpoint.ts:
     last_write_checksum: sha1:f8efac77a26df7a14f5cdbbbd8c81f9ef7b13ab2
   src/models/components/deleteaiintegrationconfigrequest.ts:
-    last_write_checksum: sha1:46c26beb62b12aecc1ca69e68f8095e329a195c7
+    last_write_checksum: sha1:3b56bd65cf0fb7c522f5ef08402bd5b4100698be
   src/models/components/deleteglobaltoolvariationresult.ts:
     last_write_checksum: sha1:b1b651c14d4f90bf88183b9936c52d9e01bf42c8
   src/models/components/deleterequestbody.ts:
@@ -4681,7 +4681,7 @@ trackedFiles:
   src/models/components/uploadopenapiv3result.ts:
     last_write_checksum: sha1:e717201487406c35eacecd7c62cefa01e52b0c0a
   src/models/components/upsertaiintegrationconfigrequest.ts:
-    last_write_checksum: sha1:ba2e4f6045d273610668dee94b89f496c8c52975
+    last_write_checksum: sha1:728e93c2587602f058d821929ed41718d835d2f4
   src/models/components/upsertallowedoriginform.ts:
     last_write_checksum: sha1:1c41d4411e26e8a04d7c0a425c274c5565fc068c
   src/models/components/upsertallowedoriginresult.ts:
@@ -4929,7 +4929,7 @@ trackedFiles:
   src/models/operations/getagentplugins.ts:
     last_write_checksum: sha1:ec3c7404106d4a19e577b3b3270f8ac658480479
   src/models/operations/getaiintegrationconfig.ts:
-    last_write_checksum: sha1:4bd7cc4f21d4bcc4c5f95dec28626092e5210b32
+    last_write_checksum: sha1:c5e790c4dd9133c11babab9a0e1e273dc55d06aa
   src/models/operations/getassistant.ts:
     last_write_checksum: sha1:71ff220b50fdf314f7e422b5593f46f5ed8c96bb
   src/models/operations/getassistantmemory.ts:
