@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -91,9 +92,28 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	t.Cleanup(func() { _ = chatWriterShutdown(t.Context()) })
 	accessStore := accesscontrol.NewRedisStore(cacheAdapter, accesscontrol.AlphaTTL)
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore)
+	policyBypass := risk.NewPolicyBypassEvaluator(logger, conn, authzEngine)
 	siteURL, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
-	svc := NewService(logger, conn, tracerProvider, nil, sessionManager, cacheAdapter, nil, nil, authzEngine, nil, nil, nil, shadowMCPClient, chatWriter, siteURL, "test-jwt-secret")
+	svc := NewService(
+		logger,
+		conn,
+		tracerProvider,
+		nil,
+		sessionManager,
+		cacheAdapter,
+		nil,
+		nil,
+		authzEngine,
+		nil,
+		nil,
+		nil,
+		policyBypass,
+		shadowMCPClient,
+		chatWriter,
+		siteURL,
+		"test-jwt-secret",
+	)
 
 	return ctx, &testInstance{
 		service:        svc,

@@ -42,6 +42,7 @@ Required keys (listed in the order the user encounters them in Slack's UI — Si
    - **b.** DM the user a greeting in the assistant's voice (the persona picked via \`propose_personality\`). Do not template.
    - **c.** Search your own messages for the greeting; read \`bot_id\` off the bot-authored message. Do not substitute a user id.
    - **d.** \`update_trigger(id, config)\` adding \`event.bot_id != "<bot_id>"\` to \`config.filter\` (AND with any existing filter). Required to break reply loops.
+   - **e.** **Record the owner.** You resolved the user's Slack user ID to DM them — persist it: re-call \`set_tasks\` with the current \`# Tasks\` body plus an \`## Owner\` subsection recording the owner's Slack handle and user ID (\`U…\`), and stating that MCP/OAuth authentication can only be completed by the owner — auth prompts go to them (ephemeral or DM), and anyone else who trips an auth flow is simply told the owner has to complete it. Without this, the assistant can't tell the owner apart from whoever happens to message it and may prompt the wrong person to authenticate.
 7. **Offer to narrow the filter** (only when a slack trigger was created). After the self-handshake, prompt the user in plain English to scope the trigger further — see "Filter narrowing" below. Skip only if the user has already given a tight filter or has explicitly said the firehose is fine.
 
 ## Filter narrowing — plain English to CEL
@@ -66,7 +67,7 @@ Same as the recommended flow with these differences:
 - In step 2, do NOT add \`SLACK_SIGNING_SECRET\` — there is no inbound webhook to verify. Still declare \`SLACK_BOT_TOKEN\` and \`SLACK_USER_TOKEN\`.
 - In step 3, call \`show_slack_app_guide\` without \`webhook_url\`. The manifest is scope-only (no \`event_subscriptions\`); both xoxb- and xoxp- are still issued.
 - In step 5, omit \`SLACK_SIGNING_SECRET\` from the secrets request.
-- Skip steps 6 and 7 — without a trigger, the bot will never see the reply anyway.
+- Skip steps 6a–d and 7 — without a trigger, the bot will never see the reply anyway. Still record the owner (step 6e): ask for the user's Slack handle, resolve it to their user ID with the Slack user-lookup/search tools, and write the \`## Owner\` subsection.
 
 ## Webhook URL not yet available
 

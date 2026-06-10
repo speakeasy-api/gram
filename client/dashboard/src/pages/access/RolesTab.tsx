@@ -30,6 +30,7 @@ import { DeleteRoleDialog } from "./DeleteRoleDialog";
 import { Ellipsis } from "lucide-react";
 import { RequireScope } from "@/components/require-scope";
 import { cn } from "@/lib/utils";
+import { visiblePermissionCount } from "./roleDialogState";
 
 function RoleActionsMenu({
   role,
@@ -157,7 +158,9 @@ export function RolesTab(): JSX.Element {
       key: "permissions",
       header: "Permissions",
       width: "120px",
-      render: (role) => <Type variant="body">{role.grants.length}</Type>,
+      render: (role) => (
+        <Type variant="body">{visiblePermissionCount(role.grants)}</Type>
+      ),
     },
     {
       key: "members",

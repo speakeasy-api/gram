@@ -1,5 +1,4 @@
 import { RequireScope } from "@/components/require-scope";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Heading } from "@/components/ui/heading";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
@@ -19,128 +18,191 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Type } from "@/components/ui/type";
-import { Input } from "@/components/moon/input";
-import { Textarea } from "@/components/moon/textarea";
-import { useOrganization } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
-import { useSdkClient } from "@/contexts/Sdk";
-import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
-import type { ShadowMCPAccessRule } from "@gram/client/models/components/shadowmcpaccessrule.js";
-import type { ShadowMCPApprovalRequest } from "@gram/client/models/components/shadowmcpapprovalrequest.js";
-import { useApproveShadowMCPApprovalRequestMutation } from "@gram/client/react-query/approveShadowMCPApprovalRequest.js";
-import { useCreateShadowMCPAccessRuleMutation } from "@gram/client/react-query/createShadowMCPAccessRule.js";
-import { useDeleteShadowMCPAccessRuleMutation } from "@gram/client/react-query/deleteShadowMCPAccessRule.js";
-import { useDenyShadowMCPApprovalRequestMutation } from "@gram/client/react-query/denyShadowMCPApprovalRequest.js";
-import { invalidateAllShadowMCPAccessRules } from "@gram/client/react-query/shadowMCPAccessRules.js";
-import { invalidateAllShadowMCPApprovalRequests } from "@gram/client/react-query/shadowMCPApprovalRequests.js";
-import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
-import { useUpdateShadowMCPAccessRuleMutation } from "@gram/client/react-query/updateShadowMCPAccessRule.js";
+import type { AccessMember } from "@gram/client/models/components/accessmember.js";
+import type { Role } from "@gram/client/models/components/role.js";
+import type { RiskPolicyBypassRequest } from "@gram/client/models/components/riskpolicybypassrequest.js";
+import { useMembers } from "@gram/client/react-query/members.js";
 import {
-  Badge,
-  Button,
-  Column,
-  Dialog,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  Icon,
-  Table,
-  Tooltip,
-  TooltipContent,
-  TooltipPortal,
-  TooltipTrigger,
-} from "@speakeasy-api/moonshine";
-import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
-import { Ellipsis, Inbox, Loader2, Plus, ShieldCheck } from "lucide-react";
+  invalidateAllRiskListPolicyBypassRequests,
+  useRiskListPolicyBypassRequests,
+} from "@gram/client/react-query/riskListPolicyBypassRequests.js";
+import { useRiskApprovePolicyBypassRequestMutation } from "@gram/client/react-query/riskApprovePolicyBypassRequest.js";
+import { useRiskDenyPolicyBypassRequestMutation } from "@gram/client/react-query/riskDenyPolicyBypassRequest.js";
+import { useRiskRevokePolicyBypassRequestMutation } from "@gram/client/react-query/riskRevokePolicyBypassRequest.js";
+import { useRoles } from "@gram/client/react-query/roles.js";
+import { Badge, Button, Column, Dialog, Table } from "@speakeasy-api/moonshine";
+import { useQueryClient } from "@tanstack/react-query";
+import { Inbox, Loader2, ShieldCheck } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryState } from "nuqs";
-import { Link } from "react-router";
 import { toast } from "sonner";
-import {
-  formatShortDate,
-  getAccessScopeLabel,
-  getDefaultMatchBreadth,
-  getDispositionLabel,
-  getMatchBreadthLabel,
-  getMatchValue,
-  normalizeRuleMatchBreadth,
-  getRequesterDetail,
-  getRequesterLabel,
-  getRequestDisplayName,
-  getRequestServerDetail,
-  getRequestStatusLabel,
-  getResourceTypeLabel,
-  getRuleDisplayName,
-  getRuleServerDetail,
-  type ShadowMCPDisposition,
-  type ShadowMCPMatchBreadth,
-} from "./shadow-mcp-utils";
+import { formatShortDate } from "./shadow-mcp-utils";
 
-type RuleDispositionFilter = "allowed" | "denied" | "all";
 type ReviewAction = "approve" | "deny";
+type ApprovalAudience = "everyone" | "role" | "user";
 
-const APPROVAL_REQUESTS_PAGE_SIZE = 100;
-const APPROVAL_REQUESTS_QUERY_KEY = ["approval-requests", "requests"];
-const APPROVAL_REQUEST_RULES_QUERY_KEY = ["approval-requests", "access-rules"];
-const ACCESS_RULE_BLOCKING_POLICY_REQUIREMENTS = [
-  {
-    source: "shadow_mcp",
-    label: "Shadow MCP",
-  },
-] as const;
-const CREATE_BLOCKING_POLICY_MESSAGE =
-  "Create a blocking Shadow MCP policy before adding access rules.";
-const DEFAULT_ACCESS_RULES_EMPTY_STATE_DESCRIPTION =
-  "Create a rule manually or approve a request to allow or deny matching resources.";
+const SERVER_URL_TARGET_DIMENSION = "server_url";
+const ALL_USERS_PRINCIPAL_URN = "user:all";
 
-type AccessRuleCreateAvailability =
-  | { status: "available" }
-  | { status: "checking"; reason: string }
-  | { status: "missing_blocking_policy"; reason: string };
-
-const MATCH_BREADTH_OPTIONS: {
-  value: ShadowMCPMatchBreadth;
-  label: string;
-}[] = [
-  { value: "full_url", label: "Full URL" },
-  { value: "url_host", label: "URL host" },
-];
-
-function getAccessRuleCreateAvailability({
-  canCreateAccessRules,
-  isLoadingPolicies,
-}: {
-  canCreateAccessRules: boolean;
-  isLoadingPolicies: boolean;
-}): AccessRuleCreateAvailability {
-  if (isLoadingPolicies) {
-    return {
-      status: "checking",
-      reason: "Checking Shadow MCP policies...",
-    };
-  }
-
-  if (!canCreateAccessRules) {
-    return {
-      status: "missing_blocking_policy",
-      reason: CREATE_BLOCKING_POLICY_MESSAGE,
-    };
-  }
-
-  return { status: "available" };
+function userPrincipalUrn(userId: string) {
+  return `user:${userId}`;
 }
 
-function policyEnablesAccessRules(policy: RiskPolicy) {
-  return (
-    policy.enabled &&
-    policy.action === "block" &&
-    ACCESS_RULE_BLOCKING_POLICY_REQUIREMENTS.some((requirement) =>
-      policy.sources.includes(requirement.source),
-    )
+function rolePrincipalUrn(role: Role) {
+  const roleKind = role.isSystem ? "global" : "organization";
+  return `role:${roleKind}:${role.id}`;
+}
+
+function approvalPrincipalUrns({
+  audience,
+  selectedRoleId,
+  selectedUserId,
+  roles,
+}: {
+  audience: ApprovalAudience;
+  selectedRoleId: string;
+  selectedUserId: string;
+  roles: Role[];
+}) {
+  switch (audience) {
+    case "everyone":
+      return [ALL_USERS_PRINCIPAL_URN];
+    case "role": {
+      const role = roles.find((item) => item.id === selectedRoleId);
+      return role ? [rolePrincipalUrn(role)] : [];
+    }
+    case "user":
+      return selectedUserId ? [userPrincipalUrn(selectedUserId)] : [];
+  }
+}
+
+function memberDisplayName(member: AccessMember) {
+  if (member.name && member.name !== member.email) {
+    return `${member.name} (${member.email})`;
+  }
+  return member.email;
+}
+
+function principalDisplayName(
+  principalUrn: string,
+  roles: Role[],
+  members: AccessMember[],
+) {
+  if (principalUrn === ALL_USERS_PRINCIPAL_URN) {
+    return "Everyone";
+  }
+
+  const userPrefix = "user:";
+  if (principalUrn.startsWith(userPrefix)) {
+    const userId = principalUrn.slice(userPrefix.length);
+    const member = members.find((item) => item.id === userId);
+    return member ? memberDisplayName(member) : principalUrn;
+  }
+
+  const role = roles.find((item) => rolePrincipalUrn(item) === principalUrn);
+  return role?.name ?? principalUrn;
+}
+
+function principalSummary(
+  principalUrns: string[],
+  roles: Role[],
+  members: AccessMember[],
+) {
+  if (principalUrns.length === 0) {
+    return "None";
+  }
+
+  const names = principalUrns.map((principalUrn) =>
+    principalDisplayName(principalUrn, roles, members),
   );
+  if (names.length <= 2) {
+    return names.join(", ");
+  }
+
+  return `${names.slice(0, 2).join(", ")} +${names.length - 2}`;
+}
+
+function approvalAudienceFromPrincipalUrns(
+  principalUrns: string[],
+  request: RiskPolicyBypassRequest,
+  roles: Role[],
+) {
+  const principalUrn =
+    principalUrns[0] ?? userPrincipalUrn(request.requesterUserId);
+  if (principalUrn === ALL_USERS_PRINCIPAL_URN) {
+    return {
+      audience: "everyone" as const,
+      selectedRoleId: "",
+      selectedUserId: request.requesterUserId,
+    };
+  }
+
+  const role = roles.find((item) => rolePrincipalUrn(item) === principalUrn);
+  if (role) {
+    return {
+      audience: "role" as const,
+      selectedRoleId: role.id,
+      selectedUserId: request.requesterUserId,
+    };
+  }
+
+  const userPrefix = "user:";
+  if (principalUrn.startsWith(userPrefix)) {
+    return {
+      audience: "user" as const,
+      selectedRoleId: "",
+      selectedUserId: principalUrn.slice(userPrefix.length),
+    };
+  }
+
+  return {
+    audience: "user" as const,
+    selectedRoleId: "",
+    selectedUserId: request.requesterUserId,
+  };
+}
+
+function firstRequesterRoleId(requesterRoleIds: string[], roles: Role[]) {
+  return roles.find((role) => requesterRoleIds.includes(role.id))?.id ?? "";
+}
+
+function reviewRequestSubmitLabel(
+  isEditingAccess: boolean,
+  action: ReviewAction,
+) {
+  if (isEditingAccess) {
+    return "Save changes";
+  }
+  if (action === "approve") {
+    return "Approve request";
+  }
+  return "Deny request";
+}
+
+function approvalSuccessMessage(status: RiskPolicyBypassRequest["status"]) {
+  if (status === "approved") {
+    return "Access updated";
+  }
+  return "Request approved";
+}
+
+function reviewRequestSheetCopy(isEditingAccess: boolean) {
+  if (isEditingAccess) {
+    return {
+      title: "Edit access",
+      description: "Change who this bypass applies to.",
+      help: "Saving changes updates the principals that receive bypass access for this policy target.",
+    };
+  }
+
+  return {
+    title: "Review request",
+    description: "Decide how this access request should be handled.",
+    help: "Approving grants bypass access for the requested policy target. Denying leaves the policy block in place.",
+  };
 }
 
 function TableEmptyState({
@@ -189,24 +251,6 @@ function ApprovalSectionEmptyState({
   );
 }
 
-function getAccessRulesEmptyDescription(
-  availability: AccessRuleCreateAvailability,
-) {
-  if (availability.status === "missing_blocking_policy") {
-    const policyLabel = ACCESS_RULE_BLOCKING_POLICY_REQUIREMENTS.map(
-      (requirement) => requirement.label,
-    ).join(", ");
-
-    return `Create a blocking risk policy for ${policyLabel} servers before adding access rules.`;
-  }
-
-  if (availability.status === "checking") {
-    return availability.reason;
-  }
-
-  return DEFAULT_ACCESS_RULES_EMPTY_STATE_DESCRIPTION;
-}
-
 function ServerCell({
   name,
   detail,
@@ -231,167 +275,179 @@ function ServerCell({
   );
 }
 
+function getPolicyBypassRequestStatusLabel(
+  status: RiskPolicyBypassRequest["status"],
+) {
+  switch (status) {
+    case "requested":
+      return "Requested";
+    case "approved":
+      return "Approved";
+    case "denied":
+      return "Denied";
+    case "revoked":
+      return "Revoked";
+  }
+}
+
 function RequestStatusBadge({
   status,
 }: {
-  status: ShadowMCPApprovalRequest["status"];
+  status: RiskPolicyBypassRequest["status"];
 }) {
   const variant =
     status === "approved"
       ? "success"
-      : status === "denied"
+      : status === "denied" || status === "revoked"
         ? "destructive"
         : "neutral";
 
   return (
     <Badge variant={variant}>
-      <Badge.Text>{getRequestStatusLabel(status)}</Badge.Text>
+      <Badge.Text>{getPolicyBypassRequestStatusLabel(status)}</Badge.Text>
     </Badge>
   );
 }
 
-function RuleDispositionBadge({
-  disposition,
-}: {
-  disposition: ShadowMCPAccessRule["disposition"];
-}) {
+function getPolicyBypassTargetURL(request: RiskPolicyBypassRequest) {
+  return request.targetDimensions[SERVER_URL_TARGET_DIMENSION];
+}
+
+function getPolicyBypassRequestDisplayName(request: RiskPolicyBypassRequest) {
   return (
-    <Badge variant={disposition === "allowed" ? "success" : "destructive"}>
-      <Badge.Text>{getDispositionLabel(disposition)}</Badge.Text>
-    </Badge>
+    request.targetLabel ??
+    getPolicyBypassTargetURL(request) ??
+    request.targetKey ??
+    "Policy target"
   );
 }
 
-function AccessRuleTableCell({
-  inactive,
-  children,
-}: {
-  inactive: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      data-inactive-rule-cell={inactive ? "true" : undefined}
-      className={cn("min-w-0", inactive && "opacity-50")}
-    >
-      {children}
-    </div>
-  );
+function getPolicyBypassRequestTargetDetail(request: RiskPolicyBypassRequest) {
+  const targetURL = getPolicyBypassTargetURL(request);
+  if (targetURL && targetURL !== request.targetLabel) {
+    return targetURL;
+  }
+  if (request.targetKind) {
+    return request.targetKind;
+  }
+  return request.policyId;
 }
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="block space-y-2">
-      <Type variant="body" className="text-sm font-medium">
-        {label}
-      </Type>
-      {children}
-    </label>
-  );
+function getPolicyBypassRequestTargetType(request: RiskPolicyBypassRequest) {
+  switch (request.targetKind) {
+    case "shadow_mcp_server":
+      return "Shadow MCP";
+    case "":
+    case undefined:
+      return "Policy";
+    default:
+      return request.targetKind;
+  }
 }
 
-function projectName(
-  projects: { id: string; name: string }[] | undefined,
-  projectId?: string | null,
-) {
-  if (!projectId) return "Project";
-  return (
-    projects?.find((project) => project.id === projectId)?.name ?? "Project"
-  );
+function getPolicyBypassRequesterLabel(request: RiskPolicyBypassRequest) {
+  return request.requesterEmail ?? request.requesterUserId ?? "Unknown user";
+}
+
+function getPolicyBypassRequesterDetail(request: RiskPolicyBypassRequest) {
+  if (request.requesterEmail) {
+    return request.requesterUserId;
+  }
+  return undefined;
 }
 
 function ReviewRequestSheet({
   request,
-  projectId,
+  projectSlug,
+  roles,
+  members,
   open,
   isSubmitting,
   onOpenChange,
   onApprove,
   onDeny,
 }: {
-  request: ShadowMCPApprovalRequest | null;
-  projectId: string;
+  request: RiskPolicyBypassRequest | null;
+  projectSlug: string;
+  roles: Role[];
+  members: AccessMember[];
   open: boolean;
   isSubmitting: boolean;
   onOpenChange: (open: boolean) => void;
-  onApprove: (input: {
-    displayName: string;
-    projectIds: string[];
-    matchBreadth: ShadowMCPMatchBreadth;
-    matchValue: string;
-    reason?: string;
-  }) => Promise<void>;
-  onDeny: (input: {
-    createDenyRule: boolean;
-    projectIds: string[];
-    displayName?: string;
-    matchBreadth?: ShadowMCPMatchBreadth;
-    matchValue?: string;
-    reason?: string;
-  }) => Promise<void>;
+  onApprove: (principalUrns: string[]) => Promise<void>;
+  onDeny: () => Promise<void>;
 }) {
   const [action, setAction] = useState<ReviewAction>("approve");
-  const [displayName, setDisplayName] = useState("");
-  const [matchBreadth, setMatchBreadth] =
-    useState<ShadowMCPMatchBreadth>("full_url");
-  const [matchValue, setMatchValue] = useState("");
-  const [reason, setReason] = useState("");
-  const [createDenyRule, setCreateDenyRule] = useState(false);
+  const [approvalAudience, setApprovalAudience] =
+    useState<ApprovalAudience>("user");
+  const [approvalAudienceDirty, setApprovalAudienceDirty] = useState(false);
+  const [selectedRoleId, setSelectedRoleId] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const requesterRoleIds = useMemo(() => {
+    if (!request) return [];
+    return (
+      members.find((member) => member.id === request.requesterUserId)
+        ?.roleIds ?? []
+    );
+  }, [members, request]);
+  const requesterRoleIdSet = useMemo(
+    () => new Set(requesterRoleIds),
+    [requesterRoleIds],
+  );
+  const defaultRequesterRoleId = firstRequesterRoleId(requesterRoleIds, roles);
 
   useEffect(() => {
     if (!request || !open) return;
 
-    const nextMatchBreadth = getDefaultMatchBreadth(request);
+    const initial = approvalAudienceFromPrincipalUrns(
+      request.grantedPrincipalUrns,
+      request,
+      roles,
+    );
     setAction("approve");
-    setDisplayName(getRequestDisplayName(request));
-    setMatchBreadth(nextMatchBreadth);
-    setMatchValue(getMatchValue(request, nextMatchBreadth));
-    setReason("");
-    setCreateDenyRule(false);
-  }, [request, open]);
+    setApprovalAudienceDirty(false);
+    setApprovalAudience(initial.audience);
+    setSelectedRoleId(initial.selectedRoleId || defaultRequesterRoleId);
+    setSelectedUserId(initial.selectedUserId);
+  }, [defaultRequesterRoleId, request, roles, open]);
 
   if (!request) return null;
 
-  const projectIds = [projectId];
-  const requiresRuleFields = action === "approve" || createDenyRule;
-  const canSubmit =
-    projectId.length > 0 &&
-    (!requiresRuleFields ||
-      (displayName.trim().length > 0 && matchValue.trim().length > 0));
-  const submitLabel =
-    action === "approve"
-      ? "Approve and create rule"
-      : createDenyRule
-        ? "Deny and create rule"
-        : "Deny request";
+  const isEditingAccess = request.status === "approved";
+  const principalUrns =
+    isEditingAccess && !approvalAudienceDirty
+      ? request.grantedPrincipalUrns
+      : approvalPrincipalUrns({
+          audience: approvalAudience,
+          selectedRoleId,
+          selectedUserId,
+          roles,
+        });
+  const approveReady = action !== "approve" || principalUrns.length > 0;
+  const canSubmit = projectSlug.length > 0 && approveReady;
+  const submitLabel = reviewRequestSubmitLabel(isEditingAccess, action);
+  const sheetCopy = reviewRequestSheetCopy(isEditingAccess);
+  const selectApprovalAudience = (audience: ApprovalAudience) => {
+    setApprovalAudienceDirty(true);
+    setApprovalAudience(audience);
+    if (
+      audience === "role" &&
+      selectedRoleId === "" &&
+      defaultRequesterRoleId
+    ) {
+      setSelectedRoleId(defaultRequesterRoleId);
+    }
+    if (audience === "user" && selectedUserId === "") {
+      setSelectedUserId(request.requesterUserId);
+    }
+  };
 
-  const submit = async () => {
-    const trimmedReason = reason.trim() || undefined;
-
+  const submit = async (): Promise<void> => {
     try {
-      if (action === "approve") {
-        await onApprove({
-          displayName: displayName.trim(),
-          projectIds,
-          matchBreadth,
-          matchValue: matchValue.trim(),
-          reason: trimmedReason,
-        });
+      if (isEditingAccess || action === "approve") {
+        await onApprove(principalUrns);
       } else {
-        await onDeny({
-          createDenyRule,
-          projectIds,
-          displayName: displayName.trim(),
-          matchBreadth,
-          matchValue: matchValue.trim(),
-          reason: trimmedReason,
-        });
+        await onDeny();
       }
     } catch {
       toast.error("Request review failed");
@@ -402,18 +458,16 @@ function ReviewRequestSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="sm:max-w-xl">
         <SheetHeader>
-          <SheetTitle>Review request</SheetTitle>
-          <SheetDescription>
-            Decide how this access request should be handled.
-          </SheetDescription>
+          <SheetTitle>{sheetCopy.title}</SheetTitle>
+          <SheetDescription>{sheetCopy.description}</SheetDescription>
         </SheetHeader>
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4">
           <section className="border-border rounded-md border px-4 py-3">
             <div className="flex items-start justify-between gap-3">
               <ServerCell
-                name={getRequestDisplayName(request)}
-                detail={getRequestServerDetail(request)}
+                name={getPolicyBypassRequestDisplayName(request)}
+                detail={getPolicyBypassRequestTargetDetail(request)}
               />
               <RequestStatusBadge status={request.status} />
             </div>
@@ -423,148 +477,204 @@ function ReviewRequestSheet({
                   Requester
                 </Type>
                 <Type variant="body" className="mt-1 truncate text-sm">
-                  {getRequesterLabel(request)}
+                  {getPolicyBypassRequesterLabel(request)}
                 </Type>
-                {getRequesterDetail(request) && (
+                {getPolicyBypassRequesterDetail(request) && (
                   <Type
                     variant="body"
                     className="text-muted-foreground truncate text-xs"
                   >
-                    {getRequesterDetail(request)}
+                    {getPolicyBypassRequesterDetail(request)}
                   </Type>
                 )}
               </div>
               <div className="col-span-2">
                 <Type muted small>
-                  Last blocked
+                  Updated
                 </Type>
                 <Type variant="body" className="mt-1 text-sm">
-                  {formatShortDate(request.lastBlockedAt)}
+                  {formatShortDate(request.updatedAt)}
                 </Type>
               </div>
               <div className="col-span-1">
                 <Type muted small>
-                  Blocked
+                  Created
                 </Type>
                 <Type variant="body" className="mt-1 text-sm">
-                  {request.blockedCount.toLocaleString()}{" "}
-                  {request.blockedCount === 1 ? "time" : "times"}
+                  {formatShortDate(request.createdAt)}
                 </Type>
               </div>
             </div>
           </section>
 
-          <RadioGroup
-            value={action}
-            onValueChange={(value) => setAction(value as ReviewAction)}
-            className="border-border grid grid-cols-2 gap-4 rounded-md border p-3"
-          >
-            <label
-              className={cn(
-                "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
-                action === "approve" && "border-border bg-card shadow-xs",
-              )}
+          {!isEditingAccess && (
+            <RadioGroup
+              value={action}
+              onValueChange={(value) => setAction(value as ReviewAction)}
+              className="border-border grid grid-cols-2 gap-4 rounded-md border p-3"
             >
-              <RadioGroupItem value="approve" className="mt-1.5" />
-              <span>
-                <Badge variant="success">
-                  <Badge.Text>Approve</Badge.Text>
-                </Badge>
-                <Type muted small>
-                  Allow matching access.
-                </Type>
-              </span>
-            </label>
-            <label
-              className={cn(
-                "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
-                action === "deny" && "border-border bg-card shadow-xs",
-              )}
-            >
-              <RadioGroupItem value="deny" className="mt-1.5" />
-              <span>
-                <Badge variant="destructive">
-                  <Badge.Text>Deny</Badge.Text>
-                </Badge>
-                <Type muted small>
-                  Reject the request.
-                </Type>
-              </span>
-            </label>
-          </RadioGroup>
-
-          <section className="border-border space-y-4 rounded-md border px-4 py-4">
-            <div>
-              <Type variant="body" className="text-sm font-medium">
-                Rule
-              </Type>
-              <Type muted small>
-                {action === "approve"
-                  ? "Allow rule details"
-                  : "Deny rule details"}
-              </Type>
-            </div>
-
-            <Field label="Rule name">
-              <Input
-                value={displayName}
-                onChange={(event) => setDisplayName(event.target.value)}
-              />
-            </Field>
-
-            <Field label="Match">
-              <Select
-                value={matchBreadth}
-                onValueChange={(value) => {
-                  const nextBreadth = value as ShadowMCPMatchBreadth;
-                  setMatchBreadth(nextBreadth);
-                  setMatchValue(getMatchValue(request, nextBreadth));
-                }}
+              <label
+                className={cn(
+                  "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
+                  action === "approve" && "border-border bg-card shadow-xs",
+                )}
               >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {MATCH_BREADTH_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="Match value">
-              <Input
-                value={matchValue}
-                onChange={(event) => setMatchValue(event.target.value)}
-              />
-            </Field>
-
-            <Field label="Reason">
-              <Textarea
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
-                placeholder="Optional"
-              />
-            </Field>
-
-            {action === "deny" && (
-              <label className="flex items-center gap-2 text-sm">
-                <Checkbox
-                  checked={createDenyRule}
-                  onCheckedChange={(checked) =>
-                    setCreateDenyRule(checked === true)
-                  }
-                />
-                <span>Create deny rule</span>
+                <RadioGroupItem value="approve" className="mt-1.5" />
+                <span>
+                  <Badge variant="success">
+                    <Badge.Text>Approve</Badge.Text>
+                  </Badge>
+                  <Type muted small>
+                    Allow matching access.
+                  </Type>
+                </span>
               </label>
-            )}
-          </section>
+              <label
+                className={cn(
+                  "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
+                  action === "deny" && "border-border bg-card shadow-xs",
+                )}
+              >
+                <RadioGroupItem value="deny" className="mt-1.5" />
+                <span>
+                  <Badge variant="destructive">
+                    <Badge.Text>Deny</Badge.Text>
+                  </Badge>
+                  <Type muted small>
+                    Reject the request.
+                  </Type>
+                </span>
+              </label>
+            </RadioGroup>
+          )}
+
+          {(isEditingAccess || action === "approve") && (
+            <section className="border-border space-y-3 rounded-md border p-3">
+              <Type variant="small" className="font-medium">
+                Applies to
+              </Type>
+              <RadioGroup
+                value={approvalAudience}
+                onValueChange={(value) =>
+                  selectApprovalAudience(value as ApprovalAudience)
+                }
+                className="space-y-2"
+              >
+                <label
+                  className={cn(
+                    "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
+                    approvalAudience === "everyone" &&
+                      "border-border bg-card shadow-xs",
+                  )}
+                >
+                  <RadioGroupItem value="everyone" className="mt-1" />
+                  <span>
+                    <Type variant="small" className="font-medium">
+                      Everyone
+                    </Type>
+                    <Type muted small>
+                      All users in this organization.
+                    </Type>
+                  </span>
+                </label>
+
+                <label
+                  className={cn(
+                    "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
+                    approvalAudience === "role" &&
+                      "border-border bg-card shadow-xs",
+                  )}
+                >
+                  <RadioGroupItem value="role" className="mt-1" />
+                  <span className="min-w-0 flex-1 space-y-2">
+                    <span>
+                      <Type variant="small" className="font-medium">
+                        Role
+                      </Type>
+                      <Type muted small>
+                        Users assigned to one role.
+                      </Type>
+                    </span>
+                    <Select
+                      value={selectedRoleId}
+                      onValueChange={(value) => {
+                        selectApprovalAudience("role");
+                        setSelectedRoleId(value);
+                      }}
+                      disabled={roles.length === 0}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select role" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {roles.map((role) => (
+                          <SelectItem key={role.id} value={role.id}>
+                            <span className="flex items-center gap-2">
+                              <span>{role.name}</span>
+                              {requesterRoleIdSet.has(role.id) && (
+                                <Badge variant="neutral">
+                                  <Badge.Text>Current</Badge.Text>
+                                </Badge>
+                              )}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </span>
+                </label>
+
+                <label
+                  className={cn(
+                    "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
+                    approvalAudience === "user" &&
+                      "border-border bg-card shadow-xs",
+                  )}
+                >
+                  <RadioGroupItem value="user" className="mt-1" />
+                  <span className="min-w-0 flex-1 space-y-2">
+                    <span>
+                      <Type variant="small" className="font-medium">
+                        User
+                      </Type>
+                      <Type muted small>
+                        One organization member.
+                      </Type>
+                    </span>
+                    <Select
+                      value={selectedUserId}
+                      onValueChange={(value) => {
+                        selectApprovalAudience("user");
+                        setSelectedUserId(value);
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select user" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {members.map((member) => (
+                          <SelectItem key={member.id} value={member.id}>
+                            {memberDisplayName(member)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </span>
+                </label>
+              </RadioGroup>
+            </section>
+          )}
+
+          <Type muted small>
+            {sheetCopy.help}
+          </Type>
         </div>
 
         <SheetFooter>
           <Button
-            onClick={() => void submit()}
+            onClick={() => {
+              void submit();
+            }}
             disabled={!canSubmit || isSubmitting}
             className="w-full"
           >
@@ -576,506 +686,116 @@ function ReviewRequestSheet({
   );
 }
 
-function AccessRuleSheet({
-  rule,
-  projectId,
-  open,
-  isSubmitting,
-  onOpenChange,
-  onSubmit,
-}: {
-  rule: ShadowMCPAccessRule | null;
-  projectId: string;
-  open: boolean;
-  isSubmitting: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSubmit: (input: {
-    displayName: string;
-    disposition: ShadowMCPDisposition;
-    projectId?: string;
-    projectIds: string[];
-    matchBreadth: ShadowMCPMatchBreadth;
-    matchValue: string;
-    reason?: string;
-  }) => Promise<void>;
-}) {
-  const [disposition, setDisposition] =
-    useState<ShadowMCPDisposition>("allowed");
-  const [displayName, setDisplayName] = useState("");
-  const [matchBreadth, setMatchBreadth] =
-    useState<ShadowMCPMatchBreadth>("full_url");
-  const [matchValue, setMatchValue] = useState("");
-  const [reason, setReason] = useState("");
-
-  useEffect(() => {
-    if (!open) return;
-
-    if (rule) {
-      setDisposition(rule.disposition);
-      setDisplayName(rule.displayName);
-      setMatchBreadth(normalizeRuleMatchBreadth(rule.matchBreadth));
-      setMatchValue(rule.matchValue);
-      setReason(rule.reason ?? "");
-      return;
-    }
-
-    setDisposition("allowed");
-    setDisplayName("");
-    setMatchBreadth("full_url");
-    setMatchValue("");
-    setReason("");
-  }, [rule, open]);
-
-  const projectIds = [projectId];
-  const canSubmit =
-    displayName.trim().length > 0 &&
-    matchValue.trim().length > 0 &&
-    projectId.length > 0;
-
-  const submit = async () => {
-    try {
-      await onSubmit({
-        displayName: displayName.trim(),
-        disposition,
-        projectId,
-        projectIds,
-        matchBreadth,
-        matchValue: matchValue.trim(),
-        reason: reason.trim() || undefined,
-      });
-    } catch {
-      toast.error(
-        rule ? "Access Rule update failed" : "Access Rule creation failed",
-      );
-    }
-  };
-
-  return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-xl">
-        <SheetHeader>
-          <SheetTitle>
-            {rule ? "Edit Access Rule" : "Add Access Rule"}
-          </SheetTitle>
-          <SheetDescription>
-            Configure an allow or deny decision for matching requests.
-          </SheetDescription>
-        </SheetHeader>
-
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4">
-          <RadioGroup
-            value={disposition}
-            onValueChange={(value) =>
-              setDisposition(value as ShadowMCPDisposition)
-            }
-            className="border-border bg-muted/20 grid grid-cols-2 gap-1 rounded-md border p-1"
-          >
-            <label
-              className={cn(
-                "flex cursor-pointer items-start gap-3 rounded-sm px-3 py-2.5 transition-colors",
-                disposition === "allowed" && "bg-background shadow-xs",
-              )}
-            >
-              <RadioGroupItem value="allowed" className="mt-0.5" />
-              <span>
-                <Badge variant="success">
-                  <Badge.Text>Allow</Badge.Text>
-                </Badge>
-                <Type muted small>
-                  Allow matching calls.
-                </Type>
-              </span>
-            </label>
-            <label
-              className={cn(
-                "flex cursor-pointer items-start gap-3 rounded-sm px-3 py-2.5 transition-colors",
-                disposition === "denied" && "bg-background shadow-xs",
-              )}
-            >
-              <RadioGroupItem value="denied" className="mt-0.5" />
-              <span>
-                <Badge variant="destructive">
-                  <Badge.Text>Deny</Badge.Text>
-                </Badge>
-                <Type muted small>
-                  Block matching calls.
-                </Type>
-              </span>
-            </label>
-          </RadioGroup>
-
-          <section className="border-border space-y-4 rounded-md border px-4 py-4">
-            <div>
-              <Type variant="body" className="text-sm font-medium">
-                Rule
-              </Type>
-              <Type muted small>
-                {disposition === "allowed"
-                  ? "Allow rule details"
-                  : "Deny rule details"}
-              </Type>
-            </div>
-
-            <Field label="Rule name">
-              <Input
-                value={displayName}
-                onChange={(event) => setDisplayName(event.target.value)}
-                placeholder="Datadog"
-              />
-            </Field>
-
-            <Field label="Match">
-              <Select
-                value={matchBreadth}
-                onValueChange={(value) =>
-                  setMatchBreadth(value as ShadowMCPMatchBreadth)
-                }
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {MATCH_BREADTH_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="Match value">
-              <Input
-                value={matchValue}
-                onChange={(event) => setMatchValue(event.target.value)}
-                placeholder="https://example.com/mcp"
-              />
-            </Field>
-
-            <Field label="Reason">
-              <Textarea
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
-                placeholder="Optional"
-              />
-            </Field>
-          </section>
-        </div>
-
-        <SheetFooter>
-          <Button
-            onClick={() => void submit()}
-            disabled={!canSubmit || isSubmitting}
-            className="w-full"
-          >
-            <Button.Text>{rule ? "Save rule" : "Add rule"}</Button.Text>
-          </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
-  );
-}
-
-function RuleActionsMenu({
-  onEdit,
-  onDelete,
-}: {
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
-  return (
-    <RequireScope scope="org:admin" level="component">
-      <DropdownMenu modal={false}>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            className={cn(
-              "text-muted-foreground hover:bg-accent hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-colors",
-            )}
-          >
-            <Ellipsis className="h-4 w-4" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem
-            onSelect={() => {
-              void setTimeout(onEdit, 0);
-            }}
-          >
-            Edit
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onSelect={() => {
-              void setTimeout(onDelete, 0);
-            }}
-          >
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </RequireScope>
-  );
-}
-
-function AddRuleButton({
-  disabled,
-  disabledReason,
-  onClick,
-}: {
-  disabled?: boolean;
-  disabledReason?: string;
-  onClick: () => void;
-}) {
-  const button = (
-    <Button disabled={disabled} onClick={disabled ? undefined : onClick}>
-      <Button.LeftIcon>
-        <Plus className="h-4 w-4" />
-      </Button.LeftIcon>
-      <Button.Text>Add Rule</Button.Text>
-    </Button>
-  );
-
-  if (!disabled) {
-    return button;
-  }
-
-  return (
-    <Tooltip delayDuration={0}>
-      <TooltipTrigger asChild>
-        <div className="inline-flex cursor-not-allowed">{button}</div>
-      </TooltipTrigger>
-      <TooltipPortal>
-        <TooltipContent>{disabledReason}</TooltipContent>
-      </TooltipPortal>
-    </Tooltip>
-  );
-}
-
-function ManagePoliciesButton() {
-  return (
-    <Button variant="primary" asChild>
-      <Link to="../risk-policies" relative="path">
-        <Button.Text>Manage Policies</Button.Text>
-        <Button.RightIcon>
-          <Icon name="arrow-right" />
-        </Button.RightIcon>
-      </Link>
-    </Button>
-  );
-}
-
 export function ApprovalRequestsContent({
-  projectId,
+  projectSlug,
 }: {
-  projectId: string;
+  projectSlug: string;
 }): JSX.Element {
   const queryClient = useQueryClient();
-  const client = useSdkClient();
-  const organization = useOrganization();
   const { hasScope } = useRBAC();
   const canAdmin = hasScope("org:admin");
-  const [ruleDispositionFilter, setRuleDispositionFilter] =
-    useState<RuleDispositionFilter>("all");
   const [reviewRequest, setReviewRequest] =
-    useState<ShadowMCPApprovalRequest | null>(null);
-  const [isRuleSheetOpen, setIsRuleSheetOpen] = useState(false);
-  const [editingRule, setEditingRule] = useState<ShadowMCPAccessRule | null>(
-    null,
-  );
+    useState<RiskPolicyBypassRequest | null>(null);
   const [rulePendingDelete, setRulePendingDelete] =
-    useState<ShadowMCPAccessRule | null>(null);
+    useState<RiskPolicyBypassRequest | null>(null);
 
   useEffect(() => {
     setRulePendingDelete(null);
-  }, [projectId]);
+  }, [projectSlug]);
 
-  const ruleDisposition =
-    ruleDispositionFilter === "all" ? undefined : ruleDispositionFilter;
-  const hasActiveRuleFilter = ruleDispositionFilter !== "all";
-
-  const requestsQuery = useInfiniteQuery({
-    queryKey: [...APPROVAL_REQUESTS_QUERY_KEY, projectId, "requested"],
-    queryFn: ({ pageParam }) =>
-      client.access.listShadowMCPApprovalRequests({
-        limit: APPROVAL_REQUESTS_PAGE_SIZE,
-        projectId,
-        status: "requested",
-        cursor: pageParam,
-      }),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    enabled: canAdmin && projectId.length > 0,
-  });
-  const rulesQuery = useInfiniteQuery({
-    queryKey: [...APPROVAL_REQUEST_RULES_QUERY_KEY, projectId, ruleDisposition],
-    queryFn: ({ pageParam }) =>
-      client.access.listShadowMCPAccessRules({
-        limit: APPROVAL_REQUESTS_PAGE_SIZE,
-        accessScope: "project",
-        projectId,
-        disposition: ruleDisposition,
-        cursor: pageParam,
-      }),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    enabled: projectId.length > 0,
-  });
-  const policiesQuery = useRiskListPolicies(undefined, undefined, {
-    enabled: canAdmin && projectId.length > 0,
-  });
+  const requestsQuery = useRiskListPolicyBypassRequests(
+    { status: "requested", gramProject: projectSlug },
+    undefined,
+    { enabled: canAdmin && projectSlug.length > 0 },
+  );
+  const rulesQuery = useRiskListPolicyBypassRequests(
+    { status: "approved", gramProject: projectSlug },
+    undefined,
+    { enabled: canAdmin && projectSlug.length > 0 },
+  );
+  const rolesQuery = useRoles(undefined, undefined, { enabled: canAdmin });
+  const membersQuery = useMembers(undefined, undefined, { enabled: canAdmin });
 
   const requests = useMemo(
-    () => requestsQuery.data?.pages.flatMap((page) => page.requests) ?? [],
-    [requestsQuery.data?.pages],
+    () => requestsQuery.data?.requests ?? [],
+    [requestsQuery.data?.requests],
   );
   const rules = useMemo(
-    () => rulesQuery.data?.pages.flatMap((page) => page.rules) ?? [],
-    [rulesQuery.data?.pages],
+    () => rulesQuery.data?.requests ?? [],
+    [rulesQuery.data?.requests],
   );
-  const canCreateAccessRules = useMemo(
-    () =>
-      // Policies are only fetched for admins; without policy data we can't
-      // know rules are inactive, so default to treating them as active.
-      !canAdmin || policiesQuery.error
-        ? true
-        : (policiesQuery.data?.policies.some(policyEnablesAccessRules) ??
-          false),
-    [canAdmin, policiesQuery.data?.policies, policiesQuery.error],
+  const roles = useMemo(() => rolesQuery.data?.roles ?? [], [rolesQuery.data]);
+  const members = useMemo(
+    () => membersQuery.data?.members ?? [],
+    [membersQuery.data],
   );
-  const accessRuleCreateAvailability = getAccessRuleCreateAvailability({
-    canCreateAccessRules,
-    isLoadingPolicies: policiesQuery.isLoading,
-  });
-  const inactiveAccessRules =
-    accessRuleCreateAvailability.status === "missing_blocking_policy";
-  const addRuleDisabledReason =
-    accessRuleCreateAvailability.status === "available"
-      ? undefined
-      : accessRuleCreateAvailability.reason;
-  const accessRulesEmptyDescription = getAccessRulesEmptyDescription(
-    accessRuleCreateAvailability,
-  );
-  const showManagePoliciesEmptyAction =
-    accessRuleCreateAvailability.status === "missing_blocking_policy";
   const requestsLoading = requestsQuery.isLoading;
   const requestsError = requestsQuery.error;
   const rulesLoading = rulesQuery.isLoading;
   const rulesError = rulesQuery.error;
 
-  // Deep-link support: `?review=<id>` opens that request's review sheet. The
-  // command palette uses this since requests have no per-item route. Only
-  // pending ("requested") requests are listed, matching what the palette shows.
+  const approveRequest = useRiskApprovePolicyBypassRequestMutation();
+  const denyRequest = useRiskDenyPolicyBypassRequestMutation();
+  const revokeRequest = useRiskRevokePolicyBypassRequestMutation();
+  const isReviewSubmitting = approveRequest.isPending || denyRequest.isPending;
+
+  // The command palette deep-links to pending requests because they do not have
+  // per-request routes.
   const [reviewParam, setReviewParam] = useQueryState("review");
   const openedReviewRef = useRef<string | null>(null);
   useEffect(() => {
     if (!reviewParam || requestsLoading) return;
     if (openedReviewRef.current === reviewParam) return;
-    const request = requests.find((r) => r.id === reviewParam);
+
+    const request = requests.find((item) => item.id === reviewParam);
     if (request) {
       openedReviewRef.current = reviewParam;
       setReviewRequest(request);
     }
   }, [reviewParam, requestsLoading, requests]);
 
-  // Close the review sheet and drop its deep-link param. Called from both the
-  // user-initiated close (onOpenChange) and the programmatic approve/deny close,
-  // since Radix's onOpenChange does not fire when the sheet closes via state.
   const closeReviewSheet = useCallback(() => {
     setReviewRequest(null);
     openedReviewRef.current = null;
     void setReviewParam(null);
   }, [setReviewParam]);
 
-  const renderPaginationFooter = ({
-    count,
-    hasNextPage,
-    isFetching,
-    isFetchingNextPage,
-    noun,
-    onLoadMore,
-    showEndMessage,
-  }: {
-    count: number;
-    hasNextPage: boolean;
-    isFetching: boolean;
-    isFetchingNextPage: boolean;
-    noun: string;
-    onLoadMore: () => void;
-    showEndMessage: boolean;
-  }) => (
-    <div className="bg-muted/20 flex items-center justify-between border-t px-4 py-3">
-      <Type muted small>
-        {count.toLocaleString()} {noun}
-        {count === 1 ? "" : "s"}
-      </Type>
-
-      {hasNextPage ? (
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={onLoadMore}
-          disabled={isFetchingNextPage}
-        >
-          <Button.Text>
-            {isFetchingNextPage ? "Loading..." : "Load more"}
-          </Button.Text>
-        </Button>
-      ) : isFetching || showEndMessage ? (
-        <Type muted small>
-          {isFetching ? "Refreshing..." : `End of ${noun} list`}
-        </Type>
-      ) : null}
-    </div>
-  );
-
-  const approveRequest = useApproveShadowMCPApprovalRequestMutation();
-  const denyRequest = useDenyShadowMCPApprovalRequestMutation();
-  const createRule = useCreateShadowMCPAccessRuleMutation();
-  const updateRule = useUpdateShadowMCPAccessRuleMutation();
-  const deleteRule = useDeleteShadowMCPAccessRuleMutation();
-  const isReviewSubmitting = approveRequest.isPending || denyRequest.isPending;
-  const isRuleSubmitting =
-    createRule.isPending || updateRule.isPending || deleteRule.isPending;
-
   const refreshApprovalRequestsData = async () => {
-    await Promise.all([
-      invalidateAllShadowMCPApprovalRequests(queryClient),
-      invalidateAllShadowMCPAccessRules(queryClient),
-      queryClient.invalidateQueries({
-        queryKey: APPROVAL_REQUESTS_QUERY_KEY,
-      }),
-      queryClient.invalidateQueries({
-        queryKey: APPROVAL_REQUEST_RULES_QUERY_KEY,
-      }),
-    ]);
+    await invalidateAllRiskListPolicyBypassRequests(queryClient);
   };
 
   const closeDeleteRuleDialog = () => {
-    if (deleteRule.isPending) return;
+    if (revokeRequest.isPending) return;
     setRulePendingDelete(null);
   };
 
   const confirmDeleteRule = async () => {
-    if (!rulePendingDelete || deleteRule.isPending) return;
+    if (!rulePendingDelete || revokeRequest.isPending) return;
 
     try {
-      await deleteRule.mutateAsync({ request: { id: rulePendingDelete.id } });
+      await revokeRequest.mutateAsync({
+        request: {
+          gramProject: projectSlug,
+          riskIDRequestBody: { id: rulePendingDelete.id },
+        },
+      });
       await refreshApprovalRequestsData();
-      toast.success("Access Rule deleted");
+      toast.success("Access revoked");
       setRulePendingDelete(null);
     } catch {
-      toast.error("Access Rule delete failed");
+      toast.error("Access revoke failed");
     }
   };
 
-  const requestColumns: Column<ShadowMCPApprovalRequest>[] = [
+  const requestColumns: Column<RiskPolicyBypassRequest>[] = [
     {
       key: "server",
       header: "Server",
       width: "1.5fr",
       render: (request) => (
         <ServerCell
-          name={getRequestDisplayName(request)}
-          detail={getRequestServerDetail(request)}
+          name={getPolicyBypassRequestDisplayName(request)}
+          detail={getPolicyBypassRequestTargetDetail(request)}
         />
       ),
     },
@@ -1085,7 +805,7 @@ export function ApprovalRequestsContent({
       width: "0.75fr",
       render: (request) => (
         <Badge variant="neutral">
-          <Badge.Text>{getResourceTypeLabel(request.resourceType)}</Badge.Text>
+          <Badge.Text>{getPolicyBypassRequestTargetType(request)}</Badge.Text>
         </Badge>
       ),
     },
@@ -1095,8 +815,8 @@ export function ApprovalRequestsContent({
       width: "1.25fr",
       render: (request) => (
         <ServerCell
-          name={getRequesterLabel(request)}
-          detail={getRequesterDetail(request)}
+          name={getPolicyBypassRequesterLabel(request)}
+          detail={getPolicyBypassRequesterDetail(request)}
         />
       ),
     },
@@ -1107,26 +827,15 @@ export function ApprovalRequestsContent({
       render: (request) => <RequestStatusBadge status={request.status} />,
     },
     {
-      key: "blocked",
-      header: "Blocked",
-      width: "0.5fr",
-      render: (request) => (
-        <Type variant="small">
-          {request.blockedCount}{" "}
-          <span className="text-muted-foreground">times</span>
-        </Type>
-      ),
-    },
-    {
-      key: "lastBlocked",
-      header: "Last blocked",
+      key: "updated",
+      header: "Updated",
       width: "0.75fr",
       render: (request) => (
-        <Type variant="small">{formatShortDate(request.lastBlockedAt)}</Type>
+        <Type variant="small">{formatShortDate(request.updatedAt)}</Type>
       ),
     },
   ];
-  const pendingRequestColumns: Column<ShadowMCPApprovalRequest>[] = [
+  const pendingRequestColumns: Column<RiskPolicyBypassRequest>[] = [
     ...requestColumns,
     {
       key: "actions",
@@ -1142,18 +851,16 @@ export function ApprovalRequestsContent({
     },
   ];
 
-  const ruleColumns: Column<ShadowMCPAccessRule>[] = [
+  const ruleColumns: Column<RiskPolicyBypassRequest>[] = [
     {
       key: "server",
       header: "Server",
       width: "1.5fr",
       render: (rule) => (
-        <AccessRuleTableCell inactive={inactiveAccessRules}>
-          <ServerCell
-            name={getRuleDisplayName(rule)}
-            detail={getRuleServerDetail(rule)}
-          />
-        </AccessRuleTableCell>
+        <ServerCell
+          name={getPolicyBypassRequestDisplayName(rule)}
+          detail={getPolicyBypassRequestTargetDetail(rule)}
+        />
       ),
     },
     {
@@ -1161,208 +868,102 @@ export function ApprovalRequestsContent({
       header: "Type",
       width: "0.75fr",
       render: (rule) => (
-        <AccessRuleTableCell inactive={inactiveAccessRules}>
-          <Badge variant="neutral">
-            <Badge.Text>{getResourceTypeLabel(rule.resourceType)}</Badge.Text>
-          </Badge>
-        </AccessRuleTableCell>
+        <Badge variant="neutral">
+          <Badge.Text>{getPolicyBypassRequestTargetType(rule)}</Badge.Text>
+        </Badge>
       ),
     },
     {
-      key: "match",
-      header: "Match",
-      width: "1.25fr",
+      key: "appliesTo",
+      header: "Applies to",
+      width: "1.5fr",
       render: (rule) => (
-        <AccessRuleTableCell inactive={inactiveAccessRules}>
-          <div className="min-w-0 space-y-1">
-            <Type variant="small" className="font-medium">
-              {getMatchBreadthLabel(rule.matchBreadth)}
-            </Type>
-            <Type
-              variant="small"
-              className="text-muted-foreground truncate text-xs"
-            >
-              {rule.matchValue}
-            </Type>
-          </div>
-        </AccessRuleTableCell>
+        <Type variant="small" className="truncate">
+          {principalSummary(rule.grantedPrincipalUrns, roles, members)}
+        </Type>
       ),
     },
     {
-      key: "disposition",
+      key: "status",
       header: "Status",
       width: "0.5fr",
-      render: (rule) => (
-        <AccessRuleTableCell inactive={inactiveAccessRules}>
-          <RuleDispositionBadge disposition={rule.disposition} />
-        </AccessRuleTableCell>
-      ),
-    },
-    {
-      key: "scope",
-      header: "Scope",
-      width: "0.5fr",
-      render: (rule) => (
-        <AccessRuleTableCell inactive={inactiveAccessRules}>
-          <Type variant="small">
-            {rule.accessScope === "project"
-              ? projectName(organization.projects, rule.projectId)
-              : getAccessScopeLabel(rule.accessScope)}
-          </Type>
-        </AccessRuleTableCell>
-      ),
+      render: (rule) => <RequestStatusBadge status={rule.status} />,
     },
     {
       key: "updated",
       header: "Updated",
       width: "0.75fr",
       render: (rule) => (
-        <AccessRuleTableCell inactive={inactiveAccessRules}>
-          <Type variant="small">{formatShortDate(rule.updatedAt)}</Type>
-        </AccessRuleTableCell>
+        <Type variant="small">{formatShortDate(rule.updatedAt)}</Type>
       ),
     },
     {
       key: "actions",
       header: "",
-      width: "0.5fr",
+      width: "0.75fr",
       render: (rule) => (
-        <RuleActionsMenu
-          onEdit={() => {
-            setEditingRule(rule);
-            setIsRuleSheetOpen(true);
-          }}
-          onDelete={() => setRulePendingDelete(rule)}
-        />
+        <RequireScope scope="org:admin" level="component">
+          <div className="flex justify-end gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setReviewRequest(rule)}
+            >
+              <Button.Text>Edit</Button.Text>
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setRulePendingDelete(rule)}
+            >
+              <Button.Text>Revoke</Button.Text>
+            </Button>
+          </div>
+        </RequireScope>
       ),
     },
   ];
-
-  const openCreateRuleSheet = () => {
-    setEditingRule(null);
-    setIsRuleSheetOpen(true);
-  };
 
   return (
     <div className="space-y-8">
       <ReviewRequestSheet
         request={reviewRequest}
-        projectId={projectId}
+        projectSlug={projectSlug}
+        roles={roles}
+        members={members}
         open={!!reviewRequest}
         isSubmitting={isReviewSubmitting}
         onOpenChange={(open) => {
           if (!open) closeReviewSheet();
         }}
-        onApprove={async (input) => {
+        onApprove={async (principalUrns) => {
           if (!reviewRequest) return;
 
           await approveRequest.mutateAsync({
             request: {
-              approveShadowMCPApprovalRequestForm: {
+              gramProject: projectSlug,
+              riskPolicyBypassApprovalRequestBody: {
                 id: reviewRequest.id,
-                displayName: input.displayName,
-                accessScope: "project",
-                projectIds: input.projectIds,
-                matchBreadth: input.matchBreadth,
-                matchValue: input.matchValue,
-                observedFullUrl: reviewRequest.observedFullUrl,
-                observedServerIdentity: reviewRequest.observedServerIdentity,
-                observedUrlHost: reviewRequest.observedUrlHost,
-                reason: input.reason,
+                grantedPrincipalUrns: principalUrns,
               },
             },
           });
           await refreshApprovalRequestsData();
-          toast.success("Request approved");
+          toast.success(approvalSuccessMessage(reviewRequest.status));
           closeReviewSheet();
         }}
-        onDeny={async (input) => {
+        onDeny={async () => {
           if (!reviewRequest) return;
 
           await denyRequest.mutateAsync({
             request: {
-              denyShadowMCPApprovalRequestForm: {
-                id: reviewRequest.id,
-                createDenyRule: input.createDenyRule,
-                projectIds: input.projectIds,
-                displayName: input.displayName,
-                matchBreadth: input.matchBreadth,
-                matchValue: input.matchValue,
-                observedFullUrl: reviewRequest.observedFullUrl,
-                observedServerIdentity: reviewRequest.observedServerIdentity,
-                observedUrlHost: reviewRequest.observedUrlHost,
-                reason: input.reason,
-              },
+              gramProject: projectSlug,
+              riskIDRequestBody: { id: reviewRequest.id },
             },
           });
           await refreshApprovalRequestsData();
           toast.success("Request denied");
           closeReviewSheet();
-        }}
-      />
-
-      <AccessRuleSheet
-        rule={editingRule}
-        projectId={projectId}
-        open={isRuleSheetOpen}
-        isSubmitting={isRuleSubmitting}
-        onOpenChange={(open) => {
-          setIsRuleSheetOpen(open);
-          if (!open) setEditingRule(null);
-        }}
-        onSubmit={async (input) => {
-          if (editingRule) {
-            await updateRule.mutateAsync({
-              request: {
-                updateShadowMCPAccessRuleForm: {
-                  id: editingRule.id,
-                  displayName: input.displayName,
-                  disposition: input.disposition,
-                  accessScope: "project",
-                  projectId: input.projectId,
-                  matchBreadth: input.matchBreadth,
-                  matchValue: input.matchValue,
-                  observedFullUrl:
-                    input.matchBreadth === "full_url"
-                      ? input.matchValue
-                      : undefined,
-                  observedUrlHost:
-                    input.matchBreadth === "url_host"
-                      ? input.matchValue
-                      : undefined,
-                  reason: input.reason,
-                },
-              },
-            });
-            toast.success("Access Rule updated");
-          } else {
-            await createRule.mutateAsync({
-              request: {
-                createShadowMCPAccessRuleForm: {
-                  displayName: input.displayName,
-                  disposition: input.disposition,
-                  accessScope: "project",
-                  projectIds: input.projectIds,
-                  matchBreadth: input.matchBreadth,
-                  matchValue: input.matchValue,
-                  observedFullUrl:
-                    input.matchBreadth === "full_url"
-                      ? input.matchValue
-                      : undefined,
-                  observedUrlHost:
-                    input.matchBreadth === "url_host"
-                      ? input.matchValue
-                      : undefined,
-                  reason: input.reason,
-                },
-              },
-            });
-            toast.success("Access Rule created");
-          }
-
-          await refreshApprovalRequestsData();
-          setIsRuleSheetOpen(false);
-          setEditingRule(null);
         }}
       />
 
@@ -1398,17 +999,6 @@ export function ApprovalRequestsContent({
                 rowKey={(row) => row.id}
                 className="[&_thead]:bg-background max-h-128 overflow-y-auto rounded-none border-0 [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
               />
-              {renderPaginationFooter({
-                count: requests.length,
-                hasNextPage: requestsQuery.hasNextPage,
-                isFetching: requestsQuery.isFetching,
-                isFetchingNextPage: requestsQuery.isFetchingNextPage,
-                noun: "request",
-                onLoadMore: () => {
-                  void requestsQuery.fetchNextPage();
-                },
-                showEndMessage: (requestsQuery.data?.pages.length ?? 0) > 1,
-              })}
             </div>
           )}
         </section>
@@ -1419,36 +1009,9 @@ export function ApprovalRequestsContent({
           <div>
             <Heading variant="h5">Access Rules</Heading>
             <Type muted small className="mt-1">
-              Manage resources that are explicitly allowed or denied.
+              Manage approved policy bypass access.
             </Type>
           </div>
-
-          {(rules.length > 0 || hasActiveRuleFilter) && (
-            <div className="flex shrink-0 flex-wrap justify-end gap-2">
-              <Select
-                value={ruleDispositionFilter}
-                onValueChange={(value) =>
-                  setRuleDispositionFilter(value as RuleDispositionFilter)
-                }
-              >
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All rules</SelectItem>
-                  <SelectItem value="allowed">Allowed</SelectItem>
-                  <SelectItem value="denied">Denied</SelectItem>
-                </SelectContent>
-              </Select>
-              <RequireScope scope="org:admin" level="component">
-                <AddRuleButton
-                  disabled={!!addRuleDisabledReason}
-                  disabledReason={addRuleDisabledReason}
-                  onClick={openCreateRuleSheet}
-                />
-              </RequireScope>
-            </div>
-          )}
         </div>
 
         {rulesLoading ? (
@@ -1458,24 +1021,11 @@ export function ApprovalRequestsContent({
             title="Access Rules could not be loaded"
             description="Refresh the page or try again later."
           />
-        ) : rules.length === 0 && !hasActiveRuleFilter ? (
+        ) : rules.length === 0 ? (
           <ApprovalSectionEmptyState
             icon={ShieldCheck}
             title="No access rules"
-            description={accessRulesEmptyDescription}
-            action={
-              showManagePoliciesEmptyAction ? (
-                <ManagePoliciesButton />
-              ) : (
-                <RequireScope scope="org:admin" level="component">
-                  <AddRuleButton
-                    disabled={!!addRuleDisabledReason}
-                    disabledReason={addRuleDisabledReason}
-                    onClick={openCreateRuleSheet}
-                  />
-                </RequireScope>
-              )
-            }
+            description="Approved policy bypass requests will appear here."
           />
         ) : (
           <div className="overflow-hidden rounded-lg border">
@@ -1484,23 +1034,7 @@ export function ApprovalRequestsContent({
               data={rules}
               rowKey={(row) => row.id}
               className="[&_thead]:bg-background max-h-128 overflow-y-auto rounded-none border-0 [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
-              noResultsMessage={
-                <div className="bg-muted/20 flex justify-center p-6 text-center">
-                  <Type variant="subheading">No matching rules</Type>
-                </div>
-              }
             />
-            {renderPaginationFooter({
-              count: rules.length,
-              hasNextPage: rulesQuery.hasNextPage,
-              isFetching: rulesQuery.isFetching,
-              isFetchingNextPage: rulesQuery.isFetchingNextPage,
-              noun: "rule",
-              onLoadMore: () => {
-                void rulesQuery.fetchNextPage();
-              },
-              showEndMessage: (rulesQuery.data?.pages.length ?? 0) > 1,
-            })}
           </div>
         )}
       </section>
@@ -1513,12 +1047,14 @@ export function ApprovalRequestsContent({
       >
         <Dialog.Content>
           <Dialog.Header>
-            <Dialog.Title>Delete access rule</Dialog.Title>
+            <Dialog.Title>Revoke access</Dialog.Title>
           </Dialog.Header>
           <Type variant="small">
-            This action cannot be undone. Are you sure you want to delete{" "}
+            This removes the bypass grant for{" "}
             <code className="bg-muted rounded px-1 py-0.5 font-mono font-bold">
-              {rulePendingDelete?.displayName ?? "this access rule"}
+              {rulePendingDelete
+                ? getPolicyBypassRequestDisplayName(rulePendingDelete)
+                : "this access rule"}
             </code>
             ?
           </Type>
@@ -1526,24 +1062,26 @@ export function ApprovalRequestsContent({
             <Button
               variant="secondary"
               onClick={closeDeleteRuleDialog}
-              disabled={deleteRule.isPending}
+              disabled={revokeRequest.isPending}
             >
               <Button.Text>Cancel</Button.Text>
             </Button>
             <Button
               variant="destructive-primary"
-              onClick={() => void confirmDeleteRule()}
-              disabled={deleteRule.isPending}
+              onClick={() => {
+                void confirmDeleteRule();
+              }}
+              disabled={revokeRequest.isPending}
             >
-              {deleteRule.isPending ? (
+              {revokeRequest.isPending ? (
                 <>
                   <Button.LeftIcon>
                     <Loader2 className="size-4 animate-spin" />
                   </Button.LeftIcon>
-                  <Button.Text>Deleting</Button.Text>
+                  <Button.Text>Revoking</Button.Text>
                 </>
               ) : (
-                <Button.Text>Delete</Button.Text>
+                <Button.Text>Revoke</Button.Text>
               )}
             </Button>
           </Dialog.Footer>

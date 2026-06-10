@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"unicode"
 
 	"github.com/speakeasy-api/gram/server/internal/matchvalue"
 )
@@ -17,6 +18,41 @@ type AccessEvidence struct {
 	FullURL        string
 	URLHost        string
 	ServerIdentity string
+}
+
+func ObservedName(evidence AccessEvidence, toolName string) *string {
+	switch {
+	case evidence.URLHost != "":
+		return &evidence.URLHost
+	case evidence.ServerIdentity != "":
+		name := HumanizeServerIdentity(evidence.ServerIdentity)
+		return &name
+	case toolName != "":
+		return &toolName
+	default:
+		return nil
+	}
+}
+
+func HumanizeServerIdentity(value string) string {
+	parts := strings.FieldsFunc(value, func(r rune) bool {
+		return r == '_' || r == '-' || r == '.' || r == ':' || r == ' '
+	})
+	if len(parts) == 0 {
+		return value
+	}
+
+	words := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part == "" {
+			continue
+		}
+		words = append(words, humanizeServerIdentityWord(part))
+	}
+	if len(words) == 0 {
+		return value
+	}
+	return strings.Join(words, " ")
 }
 
 func NormalizeMatchValue(matchBreadth string, matchValue string) (string, error) {
@@ -62,4 +98,21 @@ func NormalizeHost(host string) string {
 
 func NormalizeURLHost(scheme string, host string) string {
 	return matchvalue.NormalizeURLHost(scheme, host)
+}
+
+func humanizeServerIdentityWord(value string) string {
+	lower := strings.ToLower(value)
+	switch lower {
+	case "ai", "api", "http", "https", "mcp", "oauth", "url":
+		return strings.ToUpper(lower)
+	case "github":
+		return "GitHub"
+	default:
+		runes := []rune(lower)
+		if len(runes) == 0 {
+			return ""
+		}
+		runes[0] = unicode.ToUpper(runes[0])
+		return string(runes)
+	}
 }
