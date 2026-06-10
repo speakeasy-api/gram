@@ -127,10 +127,10 @@ func DecodeListChatsRequest(mux goahttp.Muxer, decoder func(*http.Request) goaht
 		if sortByRaw != "" {
 			sortBy = sortByRaw
 		} else {
-			sortBy = "created_at"
+			sortBy = "last_message_timestamp"
 		}
-		if !(sortBy == "created_at" || sortBy == "num_messages") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort_by", sortBy, []any{"created_at", "num_messages"}))
+		if !(sortBy == "last_message_timestamp" || sortBy == "num_messages") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort_by", sortBy, []any{"last_message_timestamp", "num_messages"}))
 		}
 		sortOrderRaw := qp.Get("sort_order")
 		if sortOrderRaw != "" {

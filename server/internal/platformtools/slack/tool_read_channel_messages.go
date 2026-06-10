@@ -68,7 +68,7 @@ func callReadChannelMessages(ctx context.Context, client *apiClient, env toolcon
 	setOptionalInt(request, "limit", input.Limit)
 	setOptionalBool(request, "include_all_metadata", input.IncludeAllMetadata)
 
-	body, err := client.call(ctx, "conversations.history", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "conversations.history", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

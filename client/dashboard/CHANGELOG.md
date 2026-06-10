@@ -1,5 +1,27 @@
 # dashboard
 
+## 0.70.0
+
+### Minor Changes
+
+- 84240ec: `Cmd+K` — and a new magnifying-glass trigger beside the logo — now searches
+  across resources (MCP servers, sources, deployments, environments, assistants,
+  plugins, and admin-only risk policies, detection rules and approval requests),
+  all app pages (auto-enumerated from the route map), and offers a free-form
+  "Ask AI" hand-off to the Project Assistant.
+- 489f7fe: Support publishing Remote MCP-backed `mcp_servers` to collections alongside toolset-backed servers. `collections.attachServer` / `collections.detachServer` accept either `toolset_id` or `mcp_server_id` (exactly one), `collections.create` accepts `mcp_server_ids` in addition to `toolset_ids`, `collections.listServers` returns both backends merged by publish time, and `ExternalMCPServer` exposes `mcp_server_id`. In the dashboard, the Publishing section, the create-collection form, and the collection detail edit-servers picker all offer Remote MCP-backed servers, and the Remote MCP server settings page gains a Publishing section.
+
+### Patch Changes
+
+- e99b6fc: Change the Project Assistant keyboard shortcut from Option+Shift+W to Cmd+/ (Ctrl+/ on PC), updating the trigger's hover hint and tooltip to match, and add a hover tooltip to the sidebar collapse button showing its Cmd+B shortcut.
+- 327fc15: Fix "Server not found" on the catalog detail page for servers whose `registrySpecifier` was not in the first page of the unfiltered catalog list (e.g. `com.pulsemcp.mirror/datadog`). The backend `ListCatalog` aggregates across registries and caps results at 100, and only emits a `nextCursor` for single-registry queries, so the detail page could never reach deep entries. The lookup now passes the specifier's last path segment as a `search` filter so the upstream registry narrows the result set and the target server lands in the first page.
+- de92585: Order and filter agent sessions by their latest persisted chat message instead of original session creation time, and show that activity time in the dashboard sessions list.
+- 30a5bb6: Dim inactive access rules when no blocking Shadow MCP policy exists while keeping rule actions available
+- a1038ec: Fix feature-flag gated UI (e.g. the Device Agent nav link) staying hidden even when the flag is on. PostHog loads feature flags asynchronously, but `useTelemetry()` consumers never re-rendered once flags resolved, so `isFeatureEnabled(...)` reads were stuck on their pre-load value. `useTelemetry` now subscribes to PostHog's `onFeatureFlags` event and re-renders consumers when flags resolve or change, making every `isFeatureEnabled` call site reactive.
+- a0a0ebe: Align Risk Policies page title with design system
+- ee1c922: Remove the `value_hash` field from environment entries. It was documented as a way to identify matching values across environments, but every code path computed it from the already-redacted display value (`val[:3] + "*****"`), so it collided for any two values sharing a 3-character prefix and never reliably identified matching values. The only dashboard consumer grouped by it, and because colliding values also render identical redacted strings, the grouping was never observable. Replaced the dashboard's value-hash grouping with direct per-environment value tracking and dropped the field from the API surface.
+- cfd120a: Removed the deprecated standalone Slack app feature. The dedicated Slack app pages, their backend endpoints, and the associated event-handling workflow have been retired. Slack continues to work through assistants and triggers, which is the supported path.
+
 ## 0.69.0
 
 ### Minor Changes

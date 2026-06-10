@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   useMembers: vi.fn(),
   mutation: vi.fn(),
   invalidate: vi.fn(),
+  useQueryState: vi.fn(),
+  setReviewParam: vi.fn(),
 }));
 
 vi.mock("@/hooks/useRBAC", () => ({
@@ -72,6 +74,10 @@ vi.mock("@gram/client/react-query/roles.js", () => ({
 
 vi.mock("@gram/client/react-query/members.js", () => ({
   useMembers: mocks.useMembers,
+}));
+
+vi.mock("nuqs", () => ({
+  useQueryState: mocks.useQueryState,
 }));
 
 vi.mock("@speakeasy-api/moonshine", () => ({
@@ -353,13 +359,14 @@ function mockAdminRBAC() {
   });
 }
 
-function renderContent(projectId = "project-1") {
+function renderContent(
+  projectId = "project-1",
+  path = "/speakeasy/projects/project-1/approval-requests",
+) {
   const queryClient = new QueryClient();
 
   return render(
-    <MemoryRouter
-      initialEntries={["/speakeasy/projects/project-1/approval-requests"]}
-    >
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route
           path="/:orgSlug/projects/:projectSlug/approval-requests"
@@ -384,6 +391,7 @@ beforeEach(() => {
     isPending: false,
     mutateAsync: vi.fn(),
   });
+  mocks.useQueryState.mockReturnValue([null, mocks.setReviewParam]);
   mocks.useRoles.mockReturnValue({
     data: {
       roles: [
@@ -447,12 +455,12 @@ describe("ApprovalRequestsContent", () => {
     renderContent();
 
     expect(mocks.usePolicyBypassRequests).toHaveBeenCalledWith(
-      { status: "requested" },
+      { status: "requested", gramProject: "project-1" },
       undefined,
       expect.objectContaining({ enabled: false }),
     );
     expect(mocks.usePolicyBypassRequests).toHaveBeenCalledWith(
-      { status: "approved" },
+      { status: "approved", gramProject: "project-1" },
       undefined,
       expect.objectContaining({ enabled: false }),
     );
@@ -468,12 +476,12 @@ describe("ApprovalRequestsContent", () => {
     renderContent("");
 
     expect(mocks.usePolicyBypassRequests).toHaveBeenCalledWith(
-      { status: "requested" },
+      { status: "requested", gramProject: "" },
       undefined,
       expect.objectContaining({ enabled: false }),
     );
     expect(mocks.usePolicyBypassRequests).toHaveBeenCalledWith(
-      { status: "approved" },
+      { status: "approved", gramProject: "" },
       undefined,
       expect.objectContaining({ enabled: false }),
     );
@@ -514,10 +522,37 @@ describe("ApprovalRequestsContent", () => {
     expect(within(requestsSection).getAllByText("Shadow MCP")).toHaveLength(2);
     expect(within(requestsSection).getByText("Second request")).toBeTruthy();
     expect(mocks.usePolicyBypassRequests).toHaveBeenCalledWith(
-      { status: "requested" },
+      { status: "requested", gramProject: "project-1" },
       undefined,
       expect.objectContaining({ enabled: true }),
     );
+  });
+
+  it("opens a requested policy bypass request from the review query param", async () => {
+    mockPolicyBypassLists({
+      requested: [
+        policyBypassRequest({
+          id: "request-linked",
+          label: "Linked request",
+          serverURL: "https://linked.example.com/mcp",
+        }),
+      ],
+    });
+    mocks.useQueryState.mockReturnValue([
+      "request-linked",
+      mocks.setReviewParam,
+    ]);
+    mockAdminRBAC();
+
+    renderContent(
+      "project-1",
+      "/speakeasy/projects/project-1/approval-requests?review=request-linked",
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Review request")).toBeTruthy();
+    });
+    expect(screen.getAllByText("Linked request").length).toBeGreaterThan(0);
   });
 
   it("denies requests through the policy access workflow", async () => {

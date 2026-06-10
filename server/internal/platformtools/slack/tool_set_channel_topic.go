@@ -60,7 +60,7 @@ func callSetChannelTopic(ctx context.Context, client *apiClient, env toolconfig.
 		"topic":   topic,
 	}
 
-	body, err := client.call(ctx, "conversations.setTopic", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "conversations.setTopic", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

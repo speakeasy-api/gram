@@ -40,7 +40,6 @@ import { RemoteSessionIssuers } from "./remotesessionissuers.js";
 import { RemoteSessions } from "./remotesessions.js";
 import { Resources } from "./resources.js";
 import { Risk } from "./risk.js";
-import { Slack } from "./slack.js";
 import { Telemetry } from "./telemetry.js";
 import { Templates } from "./templates.js";
 import { Tools } from "./tools.js";
@@ -242,11 +241,6 @@ export class Gram extends ClientSDK {
   private _risk?: Risk;
   get risk(): Risk {
     return (this._risk ??= new Risk(this._options));
-  }
-
-  private _slack?: Slack;
-  get slack(): Slack {
-    return (this._slack ??= new Slack(this._options));
   }
 
   private _telemetry?: Telemetry;

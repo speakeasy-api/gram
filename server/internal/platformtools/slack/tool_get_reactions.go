@@ -62,7 +62,7 @@ func callGetReactions(ctx context.Context, client *apiClient, env toolconfig.Too
 	}
 	setOptionalBool(request, "full", input.Full)
 
-	body, err := client.call(ctx, "reactions.get", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "reactions.get", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

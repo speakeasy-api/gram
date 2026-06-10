@@ -107,14 +107,15 @@ export function MCPAuthenticationTab({
       return;
     }
 
-    // Create a hash that includes key, state, and valueGroups
+    // Create a hash that includes key, state, and per-environment values
     const createHash = (vars: EnvironmentVariable[]) =>
       vars
         .map((v) => {
-          const valueGroupsHash = v.valueGroups
-            .map((vg) => `${[...vg.environments].sort().join(",")}`)
+          const valuesHash = v.environmentValues
+            .map((ev) => `${ev.environmentSlug}=${ev.value}`)
+            .sort()
             .join("|");
-          return `${v.key}:${v.state}:${valueGroupsHash}`;
+          return `${v.key}:${v.state}:${valuesHash}`;
         })
         .join(",");
 
@@ -411,7 +412,7 @@ export function MCPAuthenticationTab({
     setEditingState(newEditingState);
   };
 
-  // Get editing value for a variable (either from editing state or from valueGroups)
+  // Get editing value for a variable (either from editing state or from environmentValues)
   const getEditingValue = (envVar: EnvironmentVariable): string => {
     if (editingState.has(envVar.id)) {
       return editingState.get(envVar.id)!.value;

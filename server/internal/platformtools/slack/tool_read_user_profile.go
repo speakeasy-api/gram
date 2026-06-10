@@ -56,7 +56,7 @@ func callReadUserProfile(ctx context.Context, client *apiClient, env toolconfig.
 	}
 	setOptionalBool(request, "include_locale", input.IncludeLocale)
 
-	body, err := client.call(ctx, "users.info", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "users.info", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

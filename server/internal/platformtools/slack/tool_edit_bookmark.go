@@ -66,7 +66,7 @@ func callEditBookmark(ctx context.Context, client *apiClient, env toolconfig.Too
 	setOptionalString(request, "link", input.Link)
 	setOptionalString(request, "emoji", input.Emoji)
 
-	body, err := client.call(ctx, "bookmarks.edit", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "bookmarks.edit", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

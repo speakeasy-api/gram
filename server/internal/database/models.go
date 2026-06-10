@@ -26,16 +26,26 @@ type AgentExecution struct {
 }
 
 type AiIntegrationConfig struct {
-	CreatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	OrganizationID  string
-	Provider        string
-	ProjectID       uuid.UUID
-	ApiKeyEncrypted string
-	Enabled         bool
-	ID              uuid.UUID
-	Deleted         bool
+	CreatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	OrganizationID         string
+	Provider               string
+	ProjectID              uuid.UUID
+	ExternalOrganizationID pgtype.Text
+	ApiKeyEncrypted        string
+	Enabled                bool
+	ID                     uuid.UUID
+	Deleted                bool
+}
+
+type AiIntegrationConfigChat struct {
+	ID                    uuid.UUID
+	AiIntegrationConfigID uuid.UUID
+	ChatID                uuid.UUID
+	LastCursorID          pgtype.Text
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
 }
 
 type AiIntegrationSync struct {
@@ -43,6 +53,7 @@ type AiIntegrationSync struct {
 	UpdatedAt             pgtype.Timestamptz
 	AiIntegrationConfigID uuid.UUID
 	PollWatermarkAt       pgtype.Timestamptz
+	LastCursorID          pgtype.Text
 	NextPollAfter         pgtype.Timestamptz
 	LastPollError         pgtype.Text
 	LastPollFailedAt      pgtype.Timestamptz
@@ -241,6 +252,7 @@ type Chat struct {
 	OrganizationID string
 	UserID         pgtype.Text
 	ExternalUserID pgtype.Text
+	ExternalChatID pgtype.Text
 	Title          pgtype.Text
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
@@ -249,36 +261,37 @@ type Chat struct {
 }
 
 type ChatMessage struct {
-	ID               uuid.UUID
-	Seq              int64
-	ChatID           uuid.UUID
-	ProjectID        uuid.NullUUID
-	Role             string
-	Content          string
-	ContentRaw       []byte
-	ContentAssetUrl  pgtype.Text
-	Model            pgtype.Text
-	MessageID        pgtype.Text
-	FinishReason     pgtype.Text
-	ToolCalls        []byte
-	PromptTokens     int64
-	CompletionTokens int64
-	TotalTokens      int64
-	StorageError     pgtype.Text
-	UserID           pgtype.Text
-	ExternalUserID   pgtype.Text
-	Origin           pgtype.Text
-	UserAgent        pgtype.Text
-	IpAddress        pgtype.Text
-	Source           pgtype.Text
-	ToolCallID       pgtype.Text
-	ToolUrn          urn.Tool
-	ToolOutcome      pgtype.Text
-	ToolOutcomeNotes pgtype.Text
-	ContentHash      []byte
-	Generation       int32
-	CreatedAt        pgtype.Timestamptz
-	RiskAnalyzedAt   pgtype.Timestamptz
+	ID                uuid.UUID
+	Seq               int64
+	ChatID            uuid.UUID
+	ProjectID         uuid.NullUUID
+	Role              string
+	Content           string
+	ContentRaw        []byte
+	ContentAssetUrl   pgtype.Text
+	Model             pgtype.Text
+	MessageID         pgtype.Text
+	FinishReason      pgtype.Text
+	ToolCalls         []byte
+	PromptTokens      int64
+	CompletionTokens  int64
+	TotalTokens       int64
+	StorageError      pgtype.Text
+	UserID            pgtype.Text
+	ExternalUserID    pgtype.Text
+	ExternalMessageID pgtype.Text
+	Origin            pgtype.Text
+	UserAgent         pgtype.Text
+	IpAddress         pgtype.Text
+	Source            pgtype.Text
+	ToolCallID        pgtype.Text
+	ToolUrn           urn.Tool
+	ToolOutcome       pgtype.Text
+	ToolOutcomeNotes  pgtype.Text
+	ContentHash       []byte
+	Generation        int32
+	CreatedAt         pgtype.Timestamptz
+	RiskAnalyzedAt    pgtype.Timestamptz
 }
 
 type ChatResolution struct {

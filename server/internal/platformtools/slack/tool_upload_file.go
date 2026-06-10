@@ -92,7 +92,7 @@ func callUploadFile(ctx context.Context, client *apiClient, env toolconfig.ToolC
 	setOptionalString(startRequest, "alt_txt", input.AltText)
 	setOptionalString(startRequest, "snippet_type", input.SnippetType)
 
-	startBody, err := client.call(ctx, "files.getUploadURLExternal", startRequest, tokenPreferBot, env)
+	startBody, err := client.Call(ctx, "files.getUploadURLExternal", startRequest, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}
@@ -105,7 +105,7 @@ func callUploadFile(ctx context.Context, client *apiClient, env toolconfig.ToolC
 		return fmt.Errorf("files.getUploadURLExternal returned empty upload_url or file_id")
 	}
 
-	if err := postBinary(ctx, client.httpClient, start.UploadURL, fileBytes); err != nil {
+	if err := postBinary(ctx, client.HTTPClient(), start.UploadURL, fileBytes); err != nil {
 		return err
 	}
 
@@ -117,7 +117,7 @@ func callUploadFile(ctx context.Context, client *apiClient, env toolconfig.ToolC
 	setOptionalString(completeRequest, "initial_comment", input.InitialComment)
 	setOptionalString(completeRequest, "thread_ts", input.ThreadTS)
 
-	body, err := client.call(ctx, "files.completeUploadExternal", completeRequest, tokenPreferBot, env)
+	body, err := client.Call(ctx, "files.completeUploadExternal", completeRequest, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

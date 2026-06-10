@@ -53,7 +53,6 @@ const UNAUTHENTICATED_PATHS = [
 ];
 
 const SLUG_EXEMPT_PATHS = [
-  "/slack/register",
   "/switch-org",
   "/shadow-mcp/request",
   "/risk-policy-bypass/request",

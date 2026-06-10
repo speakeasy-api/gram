@@ -54,7 +54,7 @@ func callArchiveChannel(ctx context.Context, client *apiClient, env toolconfig.T
 		"channel": channelID,
 	}
 
-	body, err := client.call(ctx, "conversations.archive", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "conversations.archive", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

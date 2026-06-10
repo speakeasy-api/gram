@@ -58,7 +58,7 @@ func (d *DeployFunctionRunners) Do(ctx context.Context, args DeployFunctionRunne
 	err := d.do(ctx, args)
 	if err != nil {
 		var serr *oops.ShareableError
-		if errors.As(err, &serr) && serr.IsTemporary() {
+		if errors.As(err, &serr) && serr.IsTemporary(ctx) {
 			// Temporary errors (e.g. Fly machine startup timeout) are retryable via the Temporal retry policy.
 			return err
 		}

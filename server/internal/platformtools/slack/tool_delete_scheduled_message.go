@@ -60,7 +60,7 @@ func callDeleteScheduledMessage(ctx context.Context, client *apiClient, env tool
 		"scheduled_message_id": scheduledMessageID,
 	}
 
-	body, err := client.call(ctx, "chat.deleteScheduledMessage", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "chat.deleteScheduledMessage", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

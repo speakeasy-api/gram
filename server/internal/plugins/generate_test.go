@@ -628,6 +628,8 @@ func TestRenderHookScriptClaudeUsesGramKeyAndProjectHeaders(t *testing.T) {
 	require.NotContains(t, script, "/hooks/claude", "must not use the legacy /hooks/<platform> path")
 	require.Contains(t, script, "Gram-Key: gram_local_secret_xyz")
 	require.Contains(t, script, "Gram-Project: acme-prod")
+	require.Contains(t, script, `--config "$auth_config"`)
+	require.NotContains(t, script, `-H "Gram-Key:`, "secret headers should not be passed in curl argv")
 	require.NotContains(t, script, "Authorization", "endpoint reads Gram-Key, not Authorization")
 }
 
@@ -646,6 +648,8 @@ func TestRenderHookScriptCursorUsesGramKeyAndProjectHeaders(t *testing.T) {
 	require.Contains(t, script, "https://app.getgram.ai", "server URL must appear as the env var default")
 	require.NotContains(t, script, "/hooks/cursor", "must not use the legacy /hooks/<platform> path")
 	require.Contains(t, script, `Gram-Key: gram_local_secret_xyz`, "cursor reads Gram-Key, not Authorization")
+	require.Contains(t, script, `--config "$auth_config"`)
+	require.NotContains(t, script, `-H "Gram-Key:`, "secret headers should not be passed in curl argv")
 	require.NotContains(t, script, "Authorization", "cursor endpoint does not read Authorization")
 	require.Contains(t, script, `Gram-Project: acme-prod`, "cursor requires the project header per design")
 }
@@ -663,6 +667,7 @@ func TestRenderHookScriptCursorOmitsProjectHeaderWhenSlugMissing(t *testing.T) {
 
 	require.Contains(t, script, "Gram-Key: gram_local_secret_xyz", "key still emitted without a slug")
 	require.NotContains(t, script, "Gram-Project")
+	require.NotContains(t, script, `-H "Gram-Key:`, "secret headers should not be passed in curl argv")
 }
 
 func TestRenderHookScriptUsesDeviceAgentIdentityWhenAvailable(t *testing.T) {
@@ -887,6 +892,8 @@ func TestRenderClaudeMCPInventoryScriptCarriesAuthAndEnrichesPayload(t *testing.
 
 	require.Contains(t, script, "Gram-Key: gram_local_secret_xyz")
 	require.Contains(t, script, "Gram-Project: acme-prod")
+	require.Contains(t, script, `--config "$auth_config"`)
+	require.NotContains(t, script, `-H "Gram-Key:`, "secret headers should not be passed in curl argv")
 	require.Contains(t, script, "${server_url}/rpc/hooks.claude")
 	require.Contains(t, script, "https://app.getgram.ai", "server URL must appear as the env var default")
 	// Server-side parsers key off these field names — see

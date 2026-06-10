@@ -17,6 +17,7 @@ export const SLACK_CAPABILITY_GROUPS: readonly SlackCapabilityGroup[] = [
       "Post replies, schedule messages, and edit or delete its own posts.",
     toolUrns: [
       URN("send_message"),
+      URN("set_thread_status"),
       URN("schedule_message"),
       URN("update_message"),
       URN("delete_message"),

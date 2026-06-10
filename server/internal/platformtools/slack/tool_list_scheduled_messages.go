@@ -58,7 +58,7 @@ func callListScheduledMessages(ctx context.Context, client *apiClient, env toolc
 	setOptionalString(request, "team_id", input.TeamID)
 	setOptionalInt(request, "limit", input.Limit)
 
-	body, err := client.call(ctx, "chat.scheduledMessages.list", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "chat.scheduledMessages.list", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

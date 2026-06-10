@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: e95f67622bb2dd312ff9dfbad37936e5
+  docChecksum: 9867ef65c31569f09c7b319af183474d
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -36,8 +36,6 @@ trackedFiles:
     last_write_checksum: sha1:d0b15193202c961e7d1875864ddb15f9d17c84dd
   .devcontainer/setup.sh:
     last_write_checksum: sha1:f24217ccc99054ee0283dfed141f2a7e35239ade
-  .gitattributes:
-    last_write_checksum: sha1:26d16d8297b104945139da8c25bd38feeaad3e25
   .npmignore:
     last_write_checksum: sha1:6572da81f2e7a978ec29c22c2210bf461c5897b2
   FUNCTIONS.md:
@@ -97,7 +95,7 @@ trackedFiles:
   docs/models/components/assistanttoolsetref.md:
     last_write_checksum: sha1:3e908cbddbd50e3996e5b7b2dbb91ee3800185bc
   docs/models/components/attachserverrequestbody.md:
-    last_write_checksum: sha1:501656c650f1a58b94eb077080074b2206a6a2ae
+    last_write_checksum: sha1:5eec7301524107b1468961a3ed60dbbecb06bcbf
   docs/models/components/auditlog.md:
     last_write_checksum: sha1:2c00f3c5903e507e6648e3f73670a9914ea481f1
   docs/models/components/auditlogfacetoption.md:
@@ -152,8 +150,6 @@ trackedFiles:
     last_write_checksum: sha1:ed0c0ecf80563e919dac680664a82bfa925761ed
   docs/models/components/codexhookresult.md:
     last_write_checksum: sha1:bb931185a9ed66eccb8cbfda492baea1cfe3e65a
-  docs/models/components/configureslackapprequestbody.md:
-    last_write_checksum: sha1:028d8866b4e7924ecf4569eba1335fa533fb7f9c
   docs/models/components/confirm.md:
     last_write_checksum: sha1:c5a415e85b04c3fa090864b11d5d9781fa62ae28
   docs/models/components/createassistantform.md:
@@ -207,7 +203,7 @@ trackedFiles:
   docs/models/components/createrequestbody.md:
     last_write_checksum: sha1:ecb743dbe8d0313e31d32c821947781386bf5ed6
   docs/models/components/createrequestbody2.md:
-    last_write_checksum: sha1:56c6d5fb8d77c2f2afafc0622c0fcb04933bb9b9
+    last_write_checksum: sha1:8ca39969df836a19007165fc2784022a1aefed1e
   docs/models/components/createrequestbody2visibility.md:
     last_write_checksum: sha1:ed547be6d24b8f44c347d9893d4c1333c517da3c
   docs/models/components/createresponsebody.md:
@@ -234,10 +230,6 @@ trackedFiles:
     last_write_checksum: sha1:7e2f08850a3c5bb57adcfe6ae7bbe9ac6a91d33e
   docs/models/components/createsignedchatattachmenturlresult.md:
     last_write_checksum: sha1:f9bfcc443b6f92aa255f06f5851315412c949968
-  docs/models/components/createslackapprequestbody.md:
-    last_write_checksum: sha1:326c4e50492e16dbc7ff8e65c14ed3c55b31ad50
-  docs/models/components/createslackappresult.md:
-    last_write_checksum: sha1:d00f027a09bfb53e3493126343f20cf5899765f2
   docs/models/components/createtoolsetrequestbody.md:
     last_write_checksum: sha1:b158b0aa9edef6e0ab2fed323753c3a472a7dad5
   docs/models/components/createtriggerinstanceform.md:
@@ -295,7 +287,7 @@ trackedFiles:
   docs/models/components/environment.md:
     last_write_checksum: sha1:b3d3b1370b81801891ca3a68daa696310013e49d
   docs/models/components/environmententry.md:
-    last_write_checksum: sha1:6b156efd88e4630d89983598ce1bab1f8c6a686d
+    last_write_checksum: sha1:dc976668fcb703eb3c6fd2053ff7b22d39a6c026
   docs/models/components/environmententryinput.md:
     last_write_checksum: sha1:82e419b9a54dbf5869c1c3e7d15f57ef12673593
   docs/models/components/evolveform.md:
@@ -313,7 +305,7 @@ trackedFiles:
   docs/models/components/externalmcpremotevariable.md:
     last_write_checksum: sha1:e033d008b63ce92099df1591b1e89c632459da34
   docs/models/components/externalmcpserver.md:
-    last_write_checksum: sha1:2c24221b11f3c9ac7d273ef35ff2791e6ed88b87
+    last_write_checksum: sha1:ca245142f4b32155ee6581f7fb02463fe75fb605
   docs/models/components/externalmcptool.md:
     last_write_checksum: sha1:719b8eb5236a84fd95fcc4c72d4f4eeaa77c065d
   docs/models/components/externalmcptooldefinition.md:
@@ -463,7 +455,7 @@ trackedFiles:
   docs/models/components/listdeploymentresult.md:
     last_write_checksum: sha1:e81f46e1358dfcee125fcfb93dfb636b707be998
   docs/models/components/listenvironmentsresult.md:
-    last_write_checksum: sha1:407469156fe816e6d51ea58346d03afc56129391
+    last_write_checksum: sha1:fe802f082c11ca85860a63497dad434d82cb687d
   docs/models/components/listfilteroptionspayload.md:
     last_write_checksum: sha1:37bedf6b5340d625c49f10f62175ef018c836f3c
   docs/models/components/listfilteroptionsresult.md:
@@ -536,8 +528,6 @@ trackedFiles:
     last_write_checksum: sha1:dc00dd569eafedbd3d48727828877765265b7335
   docs/models/components/listshadowmcpapprovalsresult.md:
     last_write_checksum: sha1:eb0d324287bef612d6a1f734364a5b8c6b78bf77
-  docs/models/components/listslackappsresult.md:
-    last_write_checksum: sha1:4c7dbb20f77e5133f881ecdece1da810fd9c7bbc
   docs/models/components/listtoolfiltersresult.md:
     last_write_checksum: sha1:6e251490e5469a45d7ee6e366ad57b4dbd7f2c4a
   docs/models/components/listtoolsetsresult.md:
@@ -944,8 +934,6 @@ trackedFiles:
     last_write_checksum: sha1:d2ce76fa76603a90e6af20e0940d9754c7cacf56
   docs/models/components/skilltimeseriespoint.md:
     last_write_checksum: sha1:198bda00ec5c6014e843db767ac84ff2bdccffde
-  docs/models/components/slackappresult.md:
-    last_write_checksum: sha1:62f9ec605a9bb2193261e13b1790eb9cf957c7c1
   docs/models/components/slug.md:
     last_write_checksum: sha1:e5a19fe857137f86d65968c94344efe3c085f93f
   docs/models/components/sort.md:
@@ -1116,8 +1104,6 @@ trackedFiles:
     last_write_checksum: sha1:622390776d9340e648451cd6bda358543070458e
   docs/models/components/updateshadowmcpaccessruleformmatchbreadth.md:
     last_write_checksum: sha1:c425936a2297e60d5b63c57b19d1049eeba15c00
-  docs/models/components/updateslackapprequestbody.md:
-    last_write_checksum: sha1:5a464bb3c9d5605bf21fe365b43fbe1fd73f8f4c
   docs/models/components/updatetoolsetrequestbody.md:
     last_write_checksum: sha1:2542afcc31d683c901453601e3e4c97264fbb999
   docs/models/components/updatetriggerinstanceform.md:
@@ -1235,7 +1221,7 @@ trackedFiles:
   docs/models/operations/approveshadowmcpsecurityoption2.md:
     last_write_checksum: sha1:d05e1def0b6eceecda2bbce93af6c7c618686e2d
   docs/models/operations/attachservertocollectionrequest.md:
-    last_write_checksum: sha1:5f0ea29e21cfda9bb03f7ed31275d2ea66f02b07
+    last_write_checksum: sha1:ebf5473c1ec09fbfa6ce0982364c1ff4570b891a
   docs/models/operations/attachservertocollectionsecurity.md:
     last_write_checksum: sha1:fb4e478d4225a033877a7381e2baa899632f7ae3
   docs/models/operations/authcallbackrequest.md:
@@ -1300,10 +1286,6 @@ trackedFiles:
     last_write_checksum: sha1:6eeea26b1ef4e02e4b7bf739e26f28c4d46a1f9a
   docs/models/operations/clonetoolsetsecurityoption2.md:
     last_write_checksum: sha1:1c2d0c3c9dae595284d1f883d1e656a848a370f1
-  docs/models/operations/configureslackapprequest.md:
-    last_write_checksum: sha1:ddd4a9b96c63efb9a11bc74ae6db6e5332a485f8
-  docs/models/operations/configureslackappsecurity.md:
-    last_write_checksum: sha1:2a22efa9bd99b5f183ca27fa3e3ae02aa4aa0f52
   docs/models/operations/createapikeyrequest.md:
     last_write_checksum: sha1:566fbc3c6734a64b4d495f1137cd79ba3e5d2bb3
   docs/models/operations/createapikeysecurity.md:
@@ -1458,10 +1440,6 @@ trackedFiles:
     last_write_checksum: sha1:6d1e56c1eb7ae349ecffbc5fd497dd91d0880978
   docs/models/operations/createsignedchatattachmenturlsecurityoption3.md:
     last_write_checksum: sha1:fb3314f5ce3e239005e23f6e2623d6f2dab37b9a
-  docs/models/operations/createslackapprequest.md:
-    last_write_checksum: sha1:29efe265520abe249e20da4c304fa7cd2fd64585
-  docs/models/operations/createslackappsecurity.md:
-    last_write_checksum: sha1:6e727e4512ce13daae8351733dbef40b074628bc
   docs/models/operations/createtemplaterequest.md:
     last_write_checksum: sha1:25a4f37c3d62dbc505af8f664c14bacbe1ca4a1d
   docs/models/operations/createtemplatesecurity.md:
@@ -1622,10 +1600,6 @@ trackedFiles:
     last_write_checksum: sha1:a3f6a3797e7f281c5e7eb5e1877c6b2f8d6edec3
   docs/models/operations/deleteshadowmcpaccessrulesecurity.md:
     last_write_checksum: sha1:d461556504bb0421eee2a78c046549dc1641cb10
-  docs/models/operations/deleteslackapprequest.md:
-    last_write_checksum: sha1:7b0a46f84b3070f65d0e54609f595b2bd7db2969
-  docs/models/operations/deleteslackappsecurity.md:
-    last_write_checksum: sha1:816befef40adf404a1d3d66f3a9978caee9c29d8
   docs/models/operations/deletesourceenvironmentlinkrequest.md:
     last_write_checksum: sha1:6f61f7c2f116871e0d7b03c939aa2223af1d7425
   docs/models/operations/deletesourceenvironmentlinksecurity.md:
@@ -1675,7 +1649,7 @@ trackedFiles:
   docs/models/operations/denyshadowmcpapprovalrequestsecurity.md:
     last_write_checksum: sha1:bbb188a000fd4f699e2e36e6749d1951f3ee8472
   docs/models/operations/detachserverfromcollectionrequest.md:
-    last_write_checksum: sha1:6bb9ff3346b60ef867d9883124595d7ebb061340
+    last_write_checksum: sha1:69ad4ea878d3c8e632a41e42d30807deb791d84a
   docs/models/operations/detachserverfromcollectionsecurity.md:
     last_write_checksum: sha1:927e7098c737ade191413b5e45c9c21bec82eeb5
   docs/models/operations/disablerbacrequest.md:
@@ -2034,10 +2008,6 @@ trackedFiles:
     last_write_checksum: sha1:1c43a6023513f2280a60b25161106740adb42afc
   docs/models/operations/getrolesecurity.md:
     last_write_checksum: sha1:0da4493fe56acbfae2f875807fb155c502d8ff8f
-  docs/models/operations/getslackapprequest.md:
-    last_write_checksum: sha1:c82c24a631702258c1a16a77d6f84e4234d236a9
-  docs/models/operations/getslackappsecurity.md:
-    last_write_checksum: sha1:3d09d44d9643e1344c957f2dad634c21d35352c8
   docs/models/operations/getsourceenvironmentrequest.md:
     last_write_checksum: sha1:14fe232b2ef1bca3730e6156a9b26aa95030a9ae
   docs/models/operations/getsourceenvironmentsecurity.md:
@@ -2173,7 +2143,7 @@ trackedFiles:
   docs/models/operations/listchallengessecurity.md:
     last_write_checksum: sha1:612e100b48e95978d1923e12137035d03b5d6e35
   docs/models/operations/listchatsrequest.md:
-    last_write_checksum: sha1:5fc6e3b50a3bcfa46222dec7dfcbb9ac2612a0bb
+    last_write_checksum: sha1:460c7b32af480277ff08d13562fff1050ff23b66
   docs/models/operations/listchatssecurity.md:
     last_write_checksum: sha1:c76573b8e0ebe2778bfa7b1a48723ab02d93df84
   docs/models/operations/listchatssecurityoption1.md:
@@ -2440,10 +2410,6 @@ trackedFiles:
     last_write_checksum: sha1:e01a33dcfe1a0595c42684cd135ee8cfd5a82fef
   docs/models/operations/listshadowmcpapprovalssecurityoption2.md:
     last_write_checksum: sha1:867ce471e342329aa5880d06be7cafa61865f55a
-  docs/models/operations/listslackappsrequest.md:
-    last_write_checksum: sha1:14dde349ba1c7493ea63341bd6e91d0a89cb2fe0
-  docs/models/operations/listslackappssecurity.md:
-    last_write_checksum: sha1:c4e8f0181008c559e467f0a0bda3f9190de6d00a
   docs/models/operations/listtemplatesrequest.md:
     last_write_checksum: sha1:acb52997002a8c83662c974b8fecc98c43a41388
   docs/models/operations/listtemplatessecurity.md:
@@ -2841,7 +2807,7 @@ trackedFiles:
   docs/models/operations/settoolsetusersessionissuersecurityoption2.md:
     last_write_checksum: sha1:1268c85290fd4f2f3a7d2a2035350bca0e824919
   docs/models/operations/sortby.md:
-    last_write_checksum: sha1:d558b145505c962e750cbf3fec3d8610a7de74b4
+    last_write_checksum: sha1:9c9360decdf99df62744783e30ee4fb568a1578b
   docs/models/operations/sortorder.md:
     last_write_checksum: sha1:4196564e695de57c938e01fd76df0f97b7f19a6b
   docs/models/operations/sourcekind.md:
@@ -3010,10 +2976,6 @@ trackedFiles:
     last_write_checksum: sha1:3e3024805a103b6f9d10b3cf3a810d5fb46aef42
   docs/models/operations/updateshadowmcpaccessrulesecurity.md:
     last_write_checksum: sha1:42eb1922ec03c2e82cac0c2c4edaeb242d46e800
-  docs/models/operations/updateslackapprequest.md:
-    last_write_checksum: sha1:216ebd091c543e9d2f5082b9f56de461af977e0b
-  docs/models/operations/updateslackappsecurity.md:
-    last_write_checksum: sha1:01b39a7317c54dacdf7c66f0dd037f45f81f787f
   docs/models/operations/updatetemplaterequest.md:
     last_write_checksum: sha1:f3b754047c213b61878739f55805a9c23788f022
   docs/models/operations/updatetemplatesecurity.md:
@@ -3151,7 +3113,7 @@ trackedFiles:
   docs/sdks/chatsessions/README.md:
     last_write_checksum: sha1:5931e949f459441faaa30e05840cbaf1fab82836
   docs/sdks/collections/README.md:
-    last_write_checksum: sha1:ddea3a234e5ac30d31983aba98d7f85bcd98c81c
+    last_write_checksum: sha1:c89e96348dfa7bf58b80683a96303e6407b49b59
   docs/sdks/customrules/README.md:
     last_write_checksum: sha1:cec024516ce75ddd5c1411a94ba9f904c9c9a4cf
   docs/sdks/deployments/README.md:
@@ -3214,8 +3176,6 @@ trackedFiles:
     last_write_checksum: sha1:969b153a894004dadd806697bcba02273ae56b9b
   docs/sdks/rules/README.md:
     last_write_checksum: sha1:835fdf585088a0365eb525dfca783bd2efa5438c
-  docs/sdks/slack/README.md:
-    last_write_checksum: sha1:6b45aed94ea43bd45ec8d54f844bb070d1b8829f
   docs/sdks/telemetry/README.md:
     last_write_checksum: sha1:51198da42bde7d0eb49d354969fa7e67aa487c59
   docs/sdks/templates/README.md:
@@ -3385,13 +3345,13 @@ trackedFiles:
   src/funcs/chatSubmitFeedback.ts:
     last_write_checksum: sha1:2b5dfe65502d81e6f4a010683253ae854e29e024
   src/funcs/collectionsAttachServer.ts:
-    last_write_checksum: sha1:09815e4b48e5095e40a000bc16544874c8268a48
+    last_write_checksum: sha1:945bcb8a10b4451adbfbb4924de60f6ac719f5b5
   src/funcs/collectionsCreate.ts:
     last_write_checksum: sha1:cc0090403da91728863d6e57faf81a3c10ef681e
   src/funcs/collectionsDelete.ts:
     last_write_checksum: sha1:b307a5f3e90efd7193c54cfaa383adad27ea0e9d
   src/funcs/collectionsDetachServer.ts:
-    last_write_checksum: sha1:af8b63aea79fd8d4de01c4a1233845aaf2952035
+    last_write_checksum: sha1:6ac6da00d09c8d3f93026eb5c470f4f70baf85a7
   src/funcs/collectionsList.ts:
     last_write_checksum: sha1:3a866c33b433bd50d0554ff61906bc8e8c4b8acc
   src/funcs/collectionsListServers.ts:
@@ -3726,18 +3686,6 @@ trackedFiles:
     last_write_checksum: sha1:0ed3fe424a04033bfc0028338fe5ee3fd2758e57
   src/funcs/riskRulesTest.ts:
     last_write_checksum: sha1:c4a76f9f4070433bc7f1331991a438ffe69c1641
-  src/funcs/slackConfigureSlackApp.ts:
-    last_write_checksum: sha1:8bc4423e8eee9029d10416d94f39ce19518eeeba
-  src/funcs/slackCreateSlackApp.ts:
-    last_write_checksum: sha1:78b60a351c2b3cac18b1544fe5399c17c385afce
-  src/funcs/slackDeleteSlackApp.ts:
-    last_write_checksum: sha1:68628664671b3512d4dccf0b291574bd670f2493
-  src/funcs/slackGetSlackApp.ts:
-    last_write_checksum: sha1:2b308ffe9f04e6b4c8a5933317cee038ee8034c9
-  src/funcs/slackListSlackApps.ts:
-    last_write_checksum: sha1:8675ab07c9f6fbf5cfe931b2e314277119f2391d
-  src/funcs/slackUpdateSlackApp.ts:
-    last_write_checksum: sha1:1183969394c16e800302264c0be5bfecfc387889
   src/funcs/telemetryCaptureEvent.ts:
     last_write_checksum: sha1:f57746fdf53849458bd4f265e8c7296bf03a18c8
   src/funcs/telemetryGetEmployeeDataFlowGraph.ts:
@@ -3953,7 +3901,7 @@ trackedFiles:
   src/models/components/assistanttoolsetref.ts:
     last_write_checksum: sha1:be6022b71afbb569c40c8bff0fe1a96e067177aa
   src/models/components/attachserverrequestbody.ts:
-    last_write_checksum: sha1:545fffad79a3e2e7d30c32477682754e5f30cbe6
+    last_write_checksum: sha1:30444f2f12c584cb8c0c86a235595d25f4a4fb56
   src/models/components/auditlog.ts:
     last_write_checksum: sha1:f2850e269d248a6b51579977ac170210b1278b32
   src/models/components/auditlogfacetoption.ts:
@@ -3990,8 +3938,6 @@ trackedFiles:
     last_write_checksum: sha1:f47e339d3b12572cbee7faca605576c40607c608
   src/models/components/codexhookresult.ts:
     last_write_checksum: sha1:c2fc11be25bf3ec299077675ebe25642409b2aa4
-  src/models/components/configureslackapprequestbody.ts:
-    last_write_checksum: sha1:62c8dae3e65243772f909cb6862a7c4e768fe912
   src/models/components/createassistantform.ts:
     last_write_checksum: sha1:8661cb7dace7db097ac9a071d2a475d85fa5c372
   src/models/components/createcustomdetectionrulerequestbody.ts:
@@ -4033,7 +3979,7 @@ trackedFiles:
   src/models/components/createrequestbody.ts:
     last_write_checksum: sha1:c84072d7b162bb7402a99c3c4b319af9fdbf533b
   src/models/components/createrequestbody2.ts:
-    last_write_checksum: sha1:4d1915a121e96b7ba62886f315fd2fb7b2d68774
+    last_write_checksum: sha1:436823898385bf0f20d2f2c7deb6c926143996d4
   src/models/components/createresponsebody.ts:
     last_write_checksum: sha1:69fe2ce5ad8c1c2a848b034b6cd47f7b3012087c
   src/models/components/createriskpolicyrequestbody.ts:
@@ -4052,10 +3998,6 @@ trackedFiles:
     last_write_checksum: sha1:254cd81a5eadc1ce18e8749e84262150a90e9806
   src/models/components/createsignedchatattachmenturlresult.ts:
     last_write_checksum: sha1:d9e93dc8b6008a9da1a5a43d0bcee4e9ed494aae
-  src/models/components/createslackapprequestbody.ts:
-    last_write_checksum: sha1:7d54c673878056a2da96898c9485b4a28b4f62a3
-  src/models/components/createslackappresult.ts:
-    last_write_checksum: sha1:d460739d1b550566abe9431334331869459be357
   src/models/components/createtoolsetrequestbody.ts:
     last_write_checksum: sha1:5f7afa13e507ca58bcc3eabf5863d2a6a56f9df1
   src/models/components/createtriggerinstanceform.ts:
@@ -4104,7 +4046,7 @@ trackedFiles:
   src/models/components/environment.ts:
     last_write_checksum: sha1:c5af3e46aabad6dbcba00fbfec14734c2f5b7e3d
   src/models/components/environmententry.ts:
-    last_write_checksum: sha1:00cee6b46cbb43ddd86de6414ea21b8375e59907
+    last_write_checksum: sha1:bd335b6e02bd1c19f8802681a2bbafd5e7b41fcd
   src/models/components/environmententryinput.ts:
     last_write_checksum: sha1:985038104847661630b502cc87fb18f40e196ea9
   src/models/components/evolveform.ts:
@@ -4122,7 +4064,7 @@ trackedFiles:
   src/models/components/externalmcpremotevariable.ts:
     last_write_checksum: sha1:ae7f119fd8c1b29805909e4db1a5526d9570d443
   src/models/components/externalmcpserver.ts:
-    last_write_checksum: sha1:5d022a71305e904032b391cfa4b76b3011024b2e
+    last_write_checksum: sha1:1616e32c2edfd82c7b55f53d4b2939af8dc1085c
   src/models/components/externalmcptool.ts:
     last_write_checksum: sha1:55574649b1ec65964750666d902ac9bd87c5e989
   src/models/components/externalmcptooldefinition.ts:
@@ -4211,7 +4153,7 @@ trackedFiles:
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:47225b404b7ef06b443e36443e8f027cb916c395
+    last_write_checksum: sha1:dce864e1c1a9f764ac6a43f87d5dcfdec063c4e3
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     last_write_checksum: sha1:549d388111333748195b4791e63fd64f4a6e7140
@@ -4321,8 +4263,6 @@ trackedFiles:
     last_write_checksum: sha1:69b264d88214305a8344effc6981434be9b713d6
   src/models/components/listshadowmcpapprovalsresult.ts:
     last_write_checksum: sha1:0defd2560105119c5010afb548de34ddef2c5858
-  src/models/components/listslackappsresult.ts:
-    last_write_checksum: sha1:2068c9ccfec61f239632b4a9e20be1fe226b5a8f
   src/models/components/listtoolfiltersresult.ts:
     last_write_checksum: sha1:8cb1c1cd90a7a9cbef9da5dc2fa9c6df95bc00c0
   src/models/components/listtoolsetsresult.ts:
@@ -4658,8 +4598,6 @@ trackedFiles:
     last_write_checksum: sha1:b067ed8898c071727485208bf96c39ba766b28a6
   src/models/components/skilltimeseriespoint.ts:
     last_write_checksum: sha1:59dc9151d38f9ce52fc1b4e7876d81fb29961dce
-  src/models/components/slackappresult.ts:
-    last_write_checksum: sha1:40a7531338243da78e0291b20196bc186fbdf282
   src/models/components/sourceenvironmentlink.ts:
     last_write_checksum: sha1:96fb94daea03a5df8fe57cbbe68becab8f733806
   src/models/components/submitfeedbackrequestbody.ts:
@@ -4772,8 +4710,6 @@ trackedFiles:
     last_write_checksum: sha1:53dffc73708126ca2a78c9e2e1ca5b2e898907f8
   src/models/components/updateshadowmcpaccessruleform.ts:
     last_write_checksum: sha1:2459a847bbe9290feac6e77a87caee2022530617
-  src/models/components/updateslackapprequestbody.ts:
-    last_write_checksum: sha1:e14d54c11f206f273fb529912d6684e14135aec7
   src/models/components/updatetoolsetrequestbody.ts:
     last_write_checksum: sha1:2014f312cf72f15d1a68581c674fb6e9260cd8a7
   src/models/components/updatetriggerinstanceform.ts:
@@ -4878,8 +4814,6 @@ trackedFiles:
     last_write_checksum: sha1:9924c5d3a7174f48f167e36d9b1f77cf2fa24653
   src/models/operations/clonetoolset.ts:
     last_write_checksum: sha1:f36895a19ab29b8c9708394ddef22f1079e694cd
-  src/models/operations/configureslackapp.ts:
-    last_write_checksum: sha1:1ab6780a28be27a51106600bbf12b1c33b357048
   src/models/operations/createapikey.ts:
     last_write_checksum: sha1:e58c09b3ddb5eddc265ae3128a4bc6235ed67de6
   src/models/operations/createassistant.ts:
@@ -4932,8 +4866,6 @@ trackedFiles:
     last_write_checksum: sha1:7531fdb216d44745c6fe828312dda6d37eaf20c8
   src/models/operations/createsignedchatattachmenturl.ts:
     last_write_checksum: sha1:b2e58d16f41494870d94e98add9453c55b89f7ab
-  src/models/operations/createslackapp.ts:
-    last_write_checksum: sha1:84ea9d2f6655b982eb40685518c01203f0ae5ec0
   src/models/operations/createtemplate.ts:
     last_write_checksum: sha1:db2344a77f069f015f610b1e80a1d889cedf3a2e
   src/models/operations/createtoolset.ts:
@@ -4990,8 +4922,6 @@ trackedFiles:
     last_write_checksum: sha1:5ccbd387f91542f93746f7548f653223a00cf5c2
   src/models/operations/deleteshadowmcpaccessrule.ts:
     last_write_checksum: sha1:92aa51f20d268ed741468a2fb3495e8aef994617
-  src/models/operations/deleteslackapp.ts:
-    last_write_checksum: sha1:e35162bdf81f44859b3f21fa646696b43c58eebb
   src/models/operations/deletesourceenvironmentlink.ts:
     last_write_checksum: sha1:0f08a097637c9a619cb74b8c0689b86cdff8f19d
   src/models/operations/deletetemplate.ts:
@@ -5122,8 +5052,6 @@ trackedFiles:
     last_write_checksum: sha1:e74ad976f354475475ed1416203b39bf296e5dca
   src/models/operations/getrole.ts:
     last_write_checksum: sha1:abc068429f77a080d7d1b7f55db371b84f858760
-  src/models/operations/getslackapp.ts:
-    last_write_checksum: sha1:cce96fa93583f3eeaa98454398ceaf789237485f
   src/models/operations/getsourceenvironment.ts:
     last_write_checksum: sha1:0466675ec202c1f69329f39e9fff5fd29b3880c6
   src/models/operations/gettemplate.ts:
@@ -5152,7 +5080,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:a7500bde36e7183444e5609cf23e1d9b2b5cdc93
+    last_write_checksum: sha1:bbb99988fa367e986b214cdb5c0ed32b3bfeeeb3
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     last_write_checksum: sha1:082b8a2ed705b0b42b924e676b651e9431e8fddc
@@ -5177,7 +5105,7 @@ trackedFiles:
   src/models/operations/listchallenges.ts:
     last_write_checksum: sha1:896d134449096d6fe8146621fa4d0ef257cfd16b
   src/models/operations/listchats.ts:
-    last_write_checksum: sha1:83588fac8ac036d1ef953ec20ad9faaa5e846e5b
+    last_write_checksum: sha1:e3973d0a078f37fc86b0df2be5a1db7828e4f5fd
   src/models/operations/listcollections.ts:
     last_write_checksum: sha1:7008055d09d615b4fe08ec3e801dc289b8cc34f3
   src/models/operations/listcollectionservers.ts:
@@ -5258,8 +5186,6 @@ trackedFiles:
     last_write_checksum: sha1:09b5ee7aea36a02228ed1e0f6549df584e9411d8
   src/models/operations/listshadowmcpapprovals.ts:
     last_write_checksum: sha1:ba0961869f678900fc163ec8977ead978d0927ec
-  src/models/operations/listslackapps.ts:
-    last_write_checksum: sha1:b7677375119ac6cf5e631fd8a701b2b6ad93d1ea
   src/models/operations/listtemplates.ts:
     last_write_checksum: sha1:76c181251756ba051b452e0151c0981279127429
   src/models/operations/listtools.ts:
@@ -5434,8 +5360,6 @@ trackedFiles:
     last_write_checksum: sha1:4eda08a792694801bd530679d16118556f3e11fc
   src/models/operations/updateshadowmcpaccessrule.ts:
     last_write_checksum: sha1:de541a22165e7aa3b08612e6fcb53f2ed2af1a82
-  src/models/operations/updateslackapp.ts:
-    last_write_checksum: sha1:d5b045c5976c90e5b83fa8f56cfc504faa232c81
   src/models/operations/updatetemplate.ts:
     last_write_checksum: sha1:aff2701dff0e7ef755412204b3495692d637f29b
   src/models/operations/updatetoolset.ts:
@@ -5549,21 +5473,19 @@ trackedFiles:
   src/react-query/cloneToolset.ts:
     last_write_checksum: sha1:35dec2383390c7bdf5571e7e9f36aaaaf42214b3
   src/react-query/collectionsAttachServer.ts:
-    last_write_checksum: sha1:ec00131e1b70e8ee68912c2e8a1f4445a5d7c373
+    last_write_checksum: sha1:8a22c95c3d605d8ebdfd9f0ec706b4063f9a3b54
   src/react-query/collectionsCreate.ts:
     last_write_checksum: sha1:c0594c5b4f71155e760bc5d441b30f4ad95e8c6a
   src/react-query/collectionsDelete.ts:
     last_write_checksum: sha1:b021d8e90e1de129e8a169a756f19378a320d15c
   src/react-query/collectionsDetachServer.ts:
-    last_write_checksum: sha1:e30731da11a66bf339868e7aa54ba6cff6acdeb4
+    last_write_checksum: sha1:f8c8988ff5b37277dee31273c3d9ed4c1d3ec6cd
   src/react-query/collectionsListServers.core.ts:
     last_write_checksum: sha1:1210e74c16bc26cb9cd659a655ce57c3f5212df2
   src/react-query/collectionsListServers.ts:
     last_write_checksum: sha1:e01651088ce6ce6885632689c133570169b46a7c
   src/react-query/collectionsUpdate.ts:
     last_write_checksum: sha1:412f6161fb9a2c7cf851ecf2a8cdf46854050e7b
-  src/react-query/configureSlackApp.ts:
-    last_write_checksum: sha1:c44aa4f5804e12b79d2f5a477ad6d4b2015a7a8a
   src/react-query/createAPIKey.ts:
     last_write_checksum: sha1:7bdcffa0b0ef55a71bf67beb64741fd14167137f
   src/react-query/createCheckout.ts:
@@ -5604,8 +5526,6 @@ trackedFiles:
     last_write_checksum: sha1:a9ccc4f287682371240a53cb0383e8910b08ef3c
   src/react-query/createSignedChatAttachmentURL.ts:
     last_write_checksum: sha1:4b0b5ac387aab2f1ae8ecaf0fb27d236304527fd
-  src/react-query/createSlackApp.ts:
-    last_write_checksum: sha1:1ab70050b0ed9b44a849e2e9df18bfb372e06918
   src/react-query/createTemplate.ts:
     last_write_checksum: sha1:e3cc61b6b92a63a5a25d3e6101c1bb0fb34e534e
   src/react-query/createToolset.ts:
@@ -5650,8 +5570,6 @@ trackedFiles:
     last_write_checksum: sha1:8705cce850a605f308acc111d1fb2b6530ee23cb
   src/react-query/deleteShadowMCPAccessRule.ts:
     last_write_checksum: sha1:7a1a23734b859975af3c7183504379f4d46b7c66
-  src/react-query/deleteSlackApp.ts:
-    last_write_checksum: sha1:91d62e7732b03a879f5983d6a68fdc26edabf1c4
   src/react-query/deleteSourceEnvironmentLink.ts:
     last_write_checksum: sha1:6585ec816ec576ef15760d37115462b6b2de343b
   src/react-query/deleteTemplate.ts:
@@ -5750,10 +5668,6 @@ trackedFiles:
     last_write_checksum: sha1:ec81dd5d68a3bba36e59b79aad6d75b11417dcb3
   src/react-query/getRemoteMcpServer.ts:
     last_write_checksum: sha1:f305ab807e039ff3e9193137a4094281d8f52e8e
-  src/react-query/getSlackApp.core.ts:
-    last_write_checksum: sha1:f06a8ee74a3e2b13b8a9b641abb1914ac1923aa8
-  src/react-query/getSlackApp.ts:
-    last_write_checksum: sha1:27c139ac3c9c44a92d733eb7850691d7e5eb910e
   src/react-query/getSourceEnvironment.core.ts:
     last_write_checksum: sha1:b217916d9ef07bd321577d5304a5fe802a96f51e
   src/react-query/getSourceEnvironment.ts:
@@ -5798,7 +5712,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:dad9abc9915eb1bc3519d519773a6f1ee6005e40
+    last_write_checksum: sha1:ce62badfe970e0bcfe14110d667052b9d4430498
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     last_write_checksum: sha1:34d434d40565d270fde497f4cec6bb9befffb505
@@ -5896,10 +5810,6 @@ trackedFiles:
     last_write_checksum: sha1:96a8b21a3b16c1656aede13fd764785c2bb82dc2
   src/react-query/listScopes.ts:
     last_write_checksum: sha1:0649c13469015aaf4e0ceb66e85ea04ec22005cd
-  src/react-query/listSlackApps.core.ts:
-    last_write_checksum: sha1:d0141b8eca96cb41504c9dfb9161e27177827608
-  src/react-query/listSlackApps.ts:
-    last_write_checksum: sha1:078c63dc6280e465f9b26d83f2bc76801a17ff31
   src/react-query/listTools.core.ts:
     last_write_checksum: sha1:e788e0d8b52f7dbc06d26e831872011c9dc79b21
   src/react-query/listTools.ts:
@@ -6302,8 +6212,6 @@ trackedFiles:
     last_write_checksum: sha1:b490892bfdec75cb269c3cfb573cdb142f3a4961
   src/react-query/updateShadowMCPAccessRule.ts:
     last_write_checksum: sha1:f6deceff2a203e27bfa61457c7be85424de49178
-  src/react-query/updateSlackApp.ts:
-    last_write_checksum: sha1:f05c404a99c62a18e96a2defb695c75c9ec294f5
   src/react-query/updateTemplate.ts:
     last_write_checksum: sha1:64e2924cb6ccf98c513033b10f229d550ad24d01
   src/react-query/updateToolset.ts:
@@ -6389,7 +6297,7 @@ trackedFiles:
   src/sdk/chatsessions.ts:
     last_write_checksum: sha1:130846542da7bbe81bd0c676bc1513a4a1e4e8a5
   src/sdk/collections.ts:
-    last_write_checksum: sha1:53d57fbcf076df391b069c8edf1537e49d4719cc
+    last_write_checksum: sha1:ebfe07c2d6ae3be7f9f8cac1b612efb2131283fb
   src/sdk/customrules.ts:
     last_write_checksum: sha1:d9fdb64a03817c3149b8db6405e4b1bdc259ebb4
   src/sdk/deployments.ts:
@@ -6457,9 +6365,7 @@ trackedFiles:
   src/sdk/rules.ts:
     last_write_checksum: sha1:c09a7e791d89ef5b985c765b533bf61c1b6b0e9d
   src/sdk/sdk.ts:
-    last_write_checksum: sha1:2653f40126d2f9b15dbbcd3f36a981e1400251bd
-  src/sdk/slack.ts:
-    last_write_checksum: sha1:80bbc3aa171b78204c4950abe6178a082a0d9fb3
+    last_write_checksum: sha1:3f49de13ac37f33d758f257f99a2623acaa18af0
   src/sdk/telemetry.ts:
     last_write_checksum: sha1:b197b7b7cf901e73d83ebf6b5afa086fb937ee0a
   src/sdk/templates.ts:
@@ -7028,7 +6934,7 @@ examples:
         query:
           limit: 50
           offset: 0
-          sort_by: "created_at"
+          sort_by: "last_message_timestamp"
           sort_order: "desc"
       responses:
         "200":
@@ -7084,7 +6990,7 @@ examples:
   attachServerToCollection:
     speakeasy-default-attach-server-to-collection:
       requestBody:
-        application/json: {"collection_id": "2fdd70d5-25bb-4a8c-9c5b-26617709dd8c", "toolset_id": "a7b81e5e-7f92-457c-b660-e94aa9cad651"}
+        application/json: {"collection_id": "2fdd70d5-25bb-4a8c-9c5b-26617709dd8c"}
       responses:
         "200":
           application/json: {"id": "9976aeea-7df2-4ac1-b6c4-12fdbe3d6b1b", "name": "<value>", "slug": "<value>", "visibility": "private"}
@@ -7116,7 +7022,7 @@ examples:
   detachServerFromCollection:
     speakeasy-default-detach-server-from-collection:
       requestBody:
-        application/json: {"collection_id": "59547aeb-f8f7-4066-a521-667aea864446", "toolset_id": "c08b71fe-ab98-4960-97bd-5cc6d815d8c4"}
+        application/json: {"collection_id": "59547aeb-f8f7-4066-a521-667aea864446"}
       responses:
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
@@ -7284,7 +7190,7 @@ examples:
         application/json: {"new_name": "<value>"}
       responses:
         "200":
-          application/json: {"created_at": "2025-10-20T20:04:05.659Z", "entries": [{"created_at": "2025-01-06T15:50:05.639Z", "name": "<value>", "updated_at": "2026-06-15T19:26:29.483Z", "value": "<value>", "value_hash": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2026-12-23T01:37:04.789Z"}
+          application/json: {"created_at": "2025-10-20T20:04:05.659Z", "entries": [{"created_at": "2025-01-06T15:50:05.639Z", "name": "<value>", "updated_at": "2026-06-15T19:26:29.483Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2026-12-23T01:37:04.789Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -7351,7 +7257,7 @@ examples:
           toolset_id: "7003cb87-ab79-4484-b08e-a7afac2dc2b5"
       responses:
         "200":
-          application/json: {"created_at": "2024-10-11T00:52:32.537Z", "entries": [{"created_at": "2025-10-05T02:06:46.478Z", "name": "<value>", "updated_at": "2026-02-11T02:25:29.751Z", "value": "<value>", "value_hash": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-03-14T08:23:10.020Z"}
+          application/json: {"created_at": "2024-10-11T00:52:32.537Z", "entries": [{"created_at": "2025-10-05T02:06:46.478Z", "name": "<value>", "updated_at": "2026-02-11T02:25:29.751Z", "value": "<value>"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "slug": "<value>", "updated_at": "2024-03-14T08:23:10.020Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

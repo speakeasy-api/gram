@@ -29,10 +29,10 @@ var _ = Service("chat", func() {
 			Attribute("has_risk", String, "Filter by whether chat has risk findings: 'true', 'false', or empty for no filter.", func() {
 				Enum("", "true", "false")
 			})
-			Attribute("from", String, "Filter chats created after this timestamp (ISO 8601)", func() {
+			Attribute("from", String, "Filter chats last active after this timestamp (ISO 8601)", func() {
 				Format(FormatDateTime)
 			})
-			Attribute("to", String, "Filter chats created before this timestamp (ISO 8601)", func() {
+			Attribute("to", String, "Filter chats last active before this timestamp (ISO 8601)", func() {
 				Format(FormatDateTime)
 			})
 			Attribute("limit", Int, "Number of results per page", func() {
@@ -45,8 +45,8 @@ var _ = Service("chat", func() {
 				Minimum(0)
 			})
 			Attribute("sort_by", String, "Field to sort by", func() {
-				Enum("created_at", "num_messages")
-				Default("created_at")
+				Enum("last_message_timestamp", "num_messages")
+				Default("last_message_timestamp")
 			})
 			Attribute("sort_order", String, "Sort order", func() {
 				Enum("asc", "desc")

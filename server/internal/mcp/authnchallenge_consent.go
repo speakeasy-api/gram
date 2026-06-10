@@ -86,10 +86,17 @@ type consentTemplateData struct {
 // remoteSessionCard is the per-remote view rendered by the {{range}} block
 // in the consent template. ChallengeURL is the upstream provider's
 // authorize URL with PKCE + state bound for this consent session.
+//
+// Connected and Expired are mutually exclusive and reflect the stored
+// remote_session's usability: Connected means the runtime gate will accept
+// it; Expired means a stale link exists that must be re-established; both
+// false means never connected. Only Connected enables consent — an expired
+// link is no better than none until the user reconnects.
 type remoteSessionCard struct {
 	ClientID     string
 	IssuerSlug   string
 	Connected    bool
+	Expired      bool
 	ChallengeURL string
 }
 
@@ -427,14 +434,15 @@ func (s *Service) buildRemoteSessionCards(
 		return nil, nil
 	}
 
-	// Single round-trip for connected-state across all cards. Empty when
+	// Single round-trip for connection state across all cards. Empty when
 	// the subject hasn't been stamped yet (early render before IDP /
-	// anonymous late-bind); the per-card check below then resolves false.
-	var connectedIDs map[uuid.UUID]struct{}
+	// anonymous late-bind); the per-card check below then resolves to
+	// not-connected.
+	var statuses map[uuid.UUID]remotesessions.RemoteSessionStatus
 	if challengeState.Subject != nil && !challengeState.Subject.IsZero() {
-		connectedIDs, err = s.remoteChallengeMgr.ConnectedClientIDs(ctx, *challengeState.Subject, endpoint.UserSessionIssuerID)
+		statuses, err = s.remoteChallengeMgr.RemoteSessionStatuses(ctx, *challengeState.Subject, endpoint.UserSessionIssuerID)
 		if err != nil {
-			return nil, fmt.Errorf("connected client ids: %w", err)
+			return nil, fmt.Errorf("remote session statuses: %w", err)
 		}
 	}
 
@@ -454,11 +462,12 @@ func (s *Service) buildRemoteSessionCards(
 		if berr != nil {
 			return nil, fmt.Errorf("build authorization url for %s: %w", c.IssuerSlug, berr)
 		}
-		_, connected := connectedIDs[c.ID]
+		status := statuses[c.ID]
 		cards = append(cards, remoteSessionCard{
 			ClientID:     c.ID.String(),
 			IssuerSlug:   c.IssuerSlug,
-			Connected:    connected,
+			Connected:    status == remotesessions.RemoteSessionActive,
+			Expired:      status == remotesessions.RemoteSessionExpired,
 			ChallengeURL: challengeURL,
 		})
 	}

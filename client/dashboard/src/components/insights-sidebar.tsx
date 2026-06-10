@@ -5,7 +5,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
+import { cn, isMacPlatform } from "@/lib/utils";
 import { useRoutes } from "@/routes.tsx";
 import speakeasyIcon from "@/assets/speakeasy-icon.svg";
 import { useAssistantRuntime } from "@assistant-ui/react";
@@ -36,6 +36,7 @@ import {
 } from "react";
 import type { InsightsConfigOptions } from "./insights-context";
 import { InsightsContext, useInsightsState } from "./insights-context";
+import { useAskAiListener } from "./command-palette/askAiBridge";
 
 // Types-only re-export (erased at compile time, won't break Fast Refresh)
 export type { InsightsConfigOptions } from "./insights-context";
@@ -115,19 +116,10 @@ function InsightsRainbowStyles() {
   );
 }
 
-/** Single source of truth for the trigger's keyboard shortcut. Cmd+W is
- *  reserved by the browser (closes the tab before JS sees the event), so we
- *  use Option+Shift+W which matches common app conventions and mirrors the
- *  reference design. */
-const INSIGHTS_SHORTCUT_LABEL_MAC = ["⌥", "⇧", "W"]; // ⌥ ⇧ W
-const INSIGHTS_SHORTCUT_LABEL_PC = ["Alt", "Shift", "W"];
-
-function isMacPlatform(): boolean {
-  if (typeof navigator === "undefined") return true;
-  return /mac|iphone|ipad|ipod/i.test(
-    navigator.platform || navigator.userAgent,
-  );
-}
+/** Single source of truth for the trigger's keyboard shortcut: Cmd+/ on Mac,
+ *  Ctrl+/ on PC — matching the common "open assistant" convention. */
+const INSIGHTS_SHORTCUT_LABEL_MAC = ["⌘", "/"];
+const INSIGHTS_SHORTCUT_LABEL_PC = ["Ctrl", "/"];
 
 /**
  * Header-bar trigger for opening the AI Insights sidebar. Renders only
@@ -187,7 +179,7 @@ export function InsightsTrigger({
   const shortcutKeys = isMacPlatform()
     ? INSIGHTS_SHORTCUT_LABEL_MAC
     : INSIGHTS_SHORTCUT_LABEL_PC;
-  const shortcutAria = isMacPlatform() ? "Option Shift W" : "Alt Shift W";
+  const shortcutAria = isMacPlatform() ? "Meta+/" : "Control+/";
 
   if (!available) return null;
 
@@ -476,6 +468,20 @@ export function InsightsProvider({
 
   const consumePendingPrompt = useCallback(() => setPendingPrompt(null), []);
 
+  // Bridge: the command palette's "Ask AI" row dispatches a window event from
+  // outside this provider. Open the sidebar and, when a prompt was typed, drop
+  // the user straight into a running conversation.
+  useAskAiListener(
+    useCallback(
+      (prompt: string) => {
+        setIsExpanded(true);
+        setTriggerSpinKey((k) => k + 1);
+        if (prompt.trim()) handleSendPrompt(prompt);
+      },
+      [handleSendPrompt],
+    ),
+  );
+
   // Start a brand-new Project Assistant conversation: remount the chat provider
   // (bumping sessionKey) so a fresh thread opens. With server-side id minting,
   // the new thread gets its chat id from the server on the first send.
@@ -483,22 +489,20 @@ export function InsightsProvider({
     setSessionKey((k) => k + 1);
   }, []);
 
-  // Global keyboard shortcut: Option+Shift+W (Mac) / Alt+Shift+W (PC) toggles
-  // the sidebar. Cmd+W is reserved by the browser (closes the tab before JS
-  // sees the event), so we deliberately don't bind it here.
+  // Global keyboard shortcut: Cmd+/ (Mac) / Ctrl+/ (PC) toggles the sidebar.
   //
   // Skips when the trigger is hidden via `hideTrigger`, when a modifier
-  // mismatch is detected (extra Cmd/Ctrl), or when the user is typing in a
-  // contentEditable region — letting Alt+Shift+W still work in plain inputs
-  // since modifier-heavy combos rarely conflict with text entry.
+  // mismatch is detected (extra Alt/Shift), or when the user is typing in a
+  // contentEditable region — letting Cmd+/ still work in plain inputs since
+  // the Cmd/Ctrl modifier means it never inserts text.
   useEffect(() => {
     if (hideTrigger) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!e.altKey || !e.shiftKey) return;
-      if (e.metaKey || e.ctrlKey) return;
-      // KeyboardEvent.code is layout-independent; e.key on Mac with Option
-      // held returns "∑" (the Option+w glyph), which would never match "w".
-      if (e.code !== "KeyW") return;
+      if (!e.metaKey && !e.ctrlKey) return;
+      if (e.altKey) return;
+      // KeyboardEvent.code is layout-independent, unlike e.key which varies
+      // with keyboard layout and held modifiers.
+      if (e.code !== "Slash") return;
       const target = e.target as HTMLElement | null;
       if (target?.isContentEditable) return;
       e.preventDefault();

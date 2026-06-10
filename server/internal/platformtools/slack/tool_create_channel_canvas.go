@@ -60,7 +60,7 @@ func callCreateChannelCanvas(ctx context.Context, client *apiClient, env toolcon
 		request["document_content"] = input.DocumentContent
 	}
 
-	body, err := client.call(ctx, "conversations.canvases.create", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "conversations.canvases.create", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

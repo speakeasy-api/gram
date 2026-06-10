@@ -206,7 +206,8 @@
         color: var(--text-default-success);
       }
 
-      .remote-card .state.disconnected {
+      .remote-card .state.disconnected,
+      .remote-card .state.expired {
         color: var(--text-default-warning);
       }
 
@@ -350,6 +351,8 @@
               <div class="issuer">{{.IssuerSlug}}</div>
               {{if .Connected}}
               <div class="state connected">✓ Connected</div>
+              {{else if .Expired}}
+              <div class="state expired">⚠ Expired — reconnect</div>
               {{else}}
               <div class="state disconnected">Not connected</div>
               {{end}}
@@ -358,7 +361,7 @@
               class="btn-link {{if .Connected}}connected{{end}}"
               href="{{.ChallengeURL}}"
               data-connect-link
-              >{{if .Connected}}Reconnect{{else}}Connect{{end}}</a
+              >{{if or .Connected .Expired}}Reconnect{{else}}Connect{{end}}</a
             >
           </div>
           {{end}}

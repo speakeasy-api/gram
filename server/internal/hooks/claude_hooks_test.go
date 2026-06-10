@@ -31,6 +31,26 @@ func (stubBlockingShadowMCPScanner) HasEnabledShadowMCPPolicy(_ context.Context,
 	return true, nil
 }
 
+func TestResolveClaudeScanProjectID_PrefersAuthContextOverCachedMetadata(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := uuid.NewString()
+	cachedProjectID := uuid.New()
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+		SessionID: sessionID,
+		ProjectID: cachedProjectID.String(),
+	}, 0))
+
+	got, ok := ti.service.resolveClaudeScanProjectID(ctx, sessionID)
+	require.True(t, ok)
+	assert.Equal(t, *authCtx.ProjectID, got)
+}
+
 // When the request authenticated via Gram-Key + Gram-Project, handlePreToolUse
 // must build SessionMetadata from the auth context instead of short-circuiting
 // to "allow" because Redis hasn't been seeded by OTEL Logs yet. Otherwise the

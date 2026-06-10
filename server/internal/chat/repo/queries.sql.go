@@ -49,58 +49,70 @@ func (q *Queries) CountChatMessages(ctx context.Context, arg CountChatMessagesPa
 }
 
 const countChats = `-- name: CountChats :one
-SELECT COUNT(DISTINCT c.id) AS total
-FROM chats c
-WHERE c.project_id = $1
-  AND c.deleted IS FALSE
-  AND ($2 = '' OR c.external_user_id = $2)
-  AND ($3 = '' OR c.user_id = $3)
-  AND ($4::timestamptz IS NULL OR c.created_at >= $4)
-  AND ($5::timestamptz IS NULL OR c.created_at <= $5)
-  AND (
-    $6 = ''
-    OR c.id::text ILIKE '%' || $6 || '%'
-    OR c.external_user_id ILIKE '%' || $6 || '%'
-    OR c.title ILIKE '%' || $6 || '%'
-  )
-  AND (
-    $7 = ''
-    OR EXISTS (
-      SELECT 1 FROM assistant_threads at
-      WHERE at.chat_id = c.id
-        AND at.assistant_id = $7::uuid
-        AND at.deleted IS FALSE
+WITH candidate_chats AS (
+  SELECT c.id, c.created_at
+  FROM chats c
+  WHERE c.project_id = $3
+    AND c.deleted IS FALSE
+    AND ($4 = '' OR c.external_user_id = $4)
+    AND ($5 = '' OR c.user_id = $5)
+    AND (
+      $6 = ''
+      OR c.id::text ILIKE '%' || $6 || '%'
+      OR c.external_user_id ILIKE '%' || $6 || '%'
+      OR c.title ILIKE '%' || $6 || '%'
     )
-  )
-  AND (
-    $8::text = ''
-    OR (
-      $8::text = 'true' AND EXISTS (
-        SELECT 1 FROM risk_results rr
-        JOIN chat_messages cm ON cm.id = rr.chat_message_id
-        WHERE cm.chat_id = c.id
-          AND rr.project_id = $1
-          AND rr.found IS TRUE
+    AND (
+      $7 = ''
+      OR EXISTS (
+        SELECT 1 FROM assistant_threads at
+        WHERE at.chat_id = c.id
+          AND at.assistant_id = $7::uuid
+          AND at.deleted IS FALSE
       )
     )
-    OR (
-      $8::text = 'false' AND NOT EXISTS (
-        SELECT 1 FROM risk_results rr
-        JOIN chat_messages cm ON cm.id = rr.chat_message_id
-        WHERE cm.chat_id = c.id
-          AND rr.project_id = $1
-          AND rr.found IS TRUE
+    AND (
+      $8::text = ''
+      OR (
+        $8::text = 'true' AND EXISTS (
+          SELECT 1 FROM risk_results rr
+          JOIN chat_messages cm ON cm.id = rr.chat_message_id
+          WHERE cm.chat_id = c.id
+            AND rr.project_id = $3
+            AND rr.found IS TRUE
+        )
+      )
+      OR (
+        $8::text = 'false' AND NOT EXISTS (
+          SELECT 1 FROM risk_results rr
+          JOIN chat_messages cm ON cm.id = rr.chat_message_id
+          WHERE cm.chat_id = c.id
+            AND rr.project_id = $3
+            AND rr.found IS TRUE
+        )
       )
     )
-  )
+),
+chat_activity AS (
+  SELECT
+    cc.id,
+    COALESCE(MAX(cm.created_at), cc.created_at) AS last_message_timestamp
+  FROM candidate_chats cc
+  LEFT JOIN chat_messages cm ON cm.chat_id = cc.id
+  GROUP BY cc.id, cc.created_at
+)
+SELECT COUNT(*) AS total
+FROM chat_activity ca
+WHERE ($1::timestamptz IS NULL OR ca.last_message_timestamp >= $1)
+  AND ($2::timestamptz IS NULL OR ca.last_message_timestamp <= $2)
 `
 
 type CountChatsParams struct {
+	FromTime       pgtype.Timestamptz
+	ToTime         pgtype.Timestamptz
 	ProjectID      uuid.UUID
 	ExternalUserID interface{}
 	UserID         interface{}
-	FromTime       pgtype.Timestamptz
-	ToTime         pgtype.Timestamptz
 	Search         interface{}
 	AssistantID    interface{}
 	HasRiskFilter  string
@@ -108,11 +120,11 @@ type CountChatsParams struct {
 
 func (q *Queries) CountChats(ctx context.Context, arg CountChatsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countChats,
+		arg.FromTime,
+		arg.ToTime,
 		arg.ProjectID,
 		arg.ExternalUserID,
 		arg.UserID,
-		arg.FromTime,
-		arg.ToTime,
 		arg.Search,
 		arg.AssistantID,
 		arg.HasRiskFilter,
@@ -346,7 +358,7 @@ func (q *Queries) GetAssistantThreadAssistantIDByChatID(ctx context.Context, arg
 }
 
 const getChat = `-- name: GetChat :one
-SELECT id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at, deleted_at, deleted FROM chats WHERE id = $1 AND deleted IS FALSE
+SELECT id, project_id, organization_id, user_id, external_user_id, external_chat_id, title, created_at, updated_at, deleted_at, deleted FROM chats WHERE id = $1 AND deleted IS FALSE
 `
 
 func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (Chat, error) {
@@ -358,6 +370,7 @@ func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (Chat, error) {
 		&i.OrganizationID,
 		&i.UserID,
 		&i.ExternalUserID,
+		&i.ExternalChatID,
 		&i.Title,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -550,7 +563,7 @@ func (q *Queries) GetMaxGenerationForChat(ctx context.Context, chatID uuid.UUID)
 }
 
 const getToolCallMessages = `-- name: GetToolCallMessages :many
-SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, content_hash, generation, created_at, risk_analyzed_at FROM chat_messages
+SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, content_hash, generation, created_at, risk_analyzed_at FROM chat_messages
 WHERE chat_id = $1
   AND role = 'tool'
 ORDER BY created_at ASC
@@ -584,6 +597,7 @@ func (q *Queries) GetToolCallMessages(ctx context.Context, chatID uuid.UUID) ([]
 			&i.StorageError,
 			&i.UserID,
 			&i.ExternalUserID,
+			&i.ExternalMessageID,
 			&i.Origin,
 			&i.UserAgent,
 			&i.IpAddress,
@@ -766,8 +780,8 @@ func (q *Queries) InsertUserFeedback(ctx context.Context, arg InsertUserFeedback
 }
 
 const listChatMessages = `-- name: ListChatMessages :many
-SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, content_hash, generation, created_at, risk_analyzed_at FROM chat_messages 
-WHERE chat_id = $1 AND (project_id IS NULL OR project_id = $2::uuid) 
+SELECT id, seq, chat_id, project_id, role, content, content_raw, content_asset_url, model, message_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, storage_error, user_id, external_user_id, external_message_id, origin, user_agent, ip_address, source, tool_call_id, tool_urn, tool_outcome, tool_outcome_notes, content_hash, generation, created_at, risk_analyzed_at FROM chat_messages
+WHERE chat_id = $1 AND (project_id IS NULL OR project_id = $2::uuid)
 ORDER BY seq ASC
 `
 
@@ -804,6 +818,7 @@ func (q *Queries) ListChatMessages(ctx context.Context, arg ListChatMessagesPara
 			&i.StorageError,
 			&i.UserID,
 			&i.ExternalUserID,
+			&i.ExternalMessageID,
 			&i.Origin,
 			&i.UserAgent,
 			&i.IpAddress,
@@ -828,7 +843,7 @@ func (q *Queries) ListChatMessages(ctx context.Context, arg ListChatMessagesPara
 }
 
 const listChatMessagesByGeneration = `-- name: ListChatMessagesByGeneration :many
-SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm
+SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm
 WHERE cm.chat_id = $1
   AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
   AND cm.generation = $3::integer
@@ -872,6 +887,7 @@ func (q *Queries) ListChatMessagesByGeneration(ctx context.Context, arg ListChat
 			&i.StorageError,
 			&i.UserID,
 			&i.ExternalUserID,
+			&i.ExternalMessageID,
 			&i.Origin,
 			&i.UserAgent,
 			&i.IpAddress,
@@ -977,51 +993,38 @@ func (q *Queries) ListChatResolutions(ctx context.Context, chatID uuid.UUID) ([]
 }
 
 const listChats = `-- name: ListChats :many
-WITH limited_chats AS (
+WITH candidate_chats AS (
   SELECT
     c.id,
     c.title,
     c.user_id,
     c.external_user_id,
     c.created_at,
-    c.updated_at,
-    (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id)::integer AS num_messages,
-    (SELECT source FROM chat_messages WHERE chat_id = c.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) AS source,
-    (SELECT created_at FROM chat_messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) AS last_message_timestamp,
-    (
-      SELECT COUNT(*)::integer
-      FROM risk_results rr
-      JOIN chat_messages cm ON cm.id = rr.chat_message_id
-      WHERE cm.chat_id = c.id
-        AND rr.project_id = $1
-        AND rr.found IS TRUE
-    ) AS risk_findings_count
+    c.updated_at
   FROM chats c
   WHERE c.project_id = $1
     AND c.deleted IS FALSE
     AND ($2 = '' OR c.external_user_id = $2)
     AND ($3 = '' OR c.user_id = $3)
-    AND ($4::timestamptz IS NULL OR c.created_at >= $4)
-    AND ($5::timestamptz IS NULL OR c.created_at <= $5)
     AND (
-      $6 = ''
-      OR c.id::text ILIKE '%' || $6 || '%'
-      OR c.external_user_id ILIKE '%' || $6 || '%'
-      OR c.title ILIKE '%' || $6 || '%'
+      $4 = ''
+      OR c.id::text ILIKE '%' || $4 || '%'
+      OR c.external_user_id ILIKE '%' || $4 || '%'
+      OR c.title ILIKE '%' || $4 || '%'
     )
     AND (
-      $7 = ''
+      $5 = ''
       OR EXISTS (
         SELECT 1 FROM assistant_threads at
         WHERE at.chat_id = c.id
-          AND at.assistant_id = $7::uuid
+          AND at.assistant_id = $5::uuid
           AND at.deleted IS FALSE
       )
     )
     AND (
-      $8::text = ''
+      $6::text = ''
       OR (
-        $8::text = 'true' AND EXISTS (
+        $6::text = 'true' AND EXISTS (
           SELECT 1 FROM risk_results rr
           JOIN chat_messages cm ON cm.id = rr.chat_message_id
           WHERE cm.chat_id = c.id
@@ -1030,7 +1033,7 @@ WITH limited_chats AS (
         )
       )
       OR (
-        $8::text = 'false' AND NOT EXISTS (
+        $6::text = 'false' AND NOT EXISTS (
           SELECT 1 FROM risk_results rr
           JOIN chat_messages cm ON cm.id = rr.chat_message_id
           WHERE cm.chat_id = c.id
@@ -1039,12 +1042,59 @@ WITH limited_chats AS (
         )
       )
     )
+),
+chat_stats AS (
+  SELECT
+    cc.id,
+    COUNT(cm.id)::integer AS num_messages,
+    COALESCE(MAX(cm.created_at), cc.created_at) AS last_message_timestamp
+  FROM candidate_chats cc
+  LEFT JOIN chat_messages cm ON cm.chat_id = cc.id
+  GROUP BY cc.id, cc.created_at
+),
+filtered_chats AS (
+  SELECT
+    cc.id,
+    cc.title,
+    cc.user_id,
+    cc.external_user_id,
+    cc.created_at,
+    cc.updated_at,
+    cs.num_messages,
+    cs.last_message_timestamp,
+    (
+      SELECT COUNT(*)::integer
+      FROM risk_results rr
+      JOIN chat_messages cm ON cm.id = rr.chat_message_id
+      WHERE cm.chat_id = cc.id
+        AND rr.project_id = $1
+        AND rr.found IS TRUE
+    ) AS risk_findings_count
+  FROM candidate_chats cc
+  JOIN chat_stats cs ON cs.id = cc.id
+  WHERE ($7::timestamptz IS NULL OR cs.last_message_timestamp >= $7)
+    AND ($8::timestamptz IS NULL OR cs.last_message_timestamp <= $8)
+),
+limited_chats AS (
+  SELECT
+    fc.id,
+    fc.title,
+    fc.user_id,
+    fc.external_user_id,
+    fc.created_at,
+    fc.updated_at,
+    fc.num_messages,
+    (SELECT source FROM chat_messages WHERE chat_id = fc.id AND source IS NOT NULL ORDER BY created_at DESC LIMIT 1) AS source,
+    fc.last_message_timestamp,
+    fc.risk_findings_count
+  FROM filtered_chats fc
   ORDER BY
-    CASE WHEN $9 = 'created_at' AND $10 = 'desc' THEN c.created_at END DESC NULLS LAST,
-    CASE WHEN $9 = 'created_at' AND $10 = 'asc' THEN c.created_at END ASC NULLS LAST,
-    CASE WHEN $9 = 'num_messages' AND $10 = 'desc' THEN (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id) END DESC NULLS LAST,
-    CASE WHEN $9 = 'num_messages' AND $10 = 'asc' THEN (SELECT COUNT(*) FROM chat_messages WHERE chat_id = c.id) END ASC NULLS LAST,
-    c.created_at DESC
+    CASE WHEN $9 = 'last_message_timestamp' AND $10 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
+    CASE WHEN $9 = 'last_message_timestamp' AND $10 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
+    CASE WHEN $9 = 'num_messages' AND $10 = 'desc' THEN fc.num_messages END DESC NULLS LAST,
+    CASE WHEN $9 = 'num_messages' AND $10 = 'asc' THEN fc.num_messages END ASC NULLS LAST,
+    fc.last_message_timestamp DESC,
+    fc.id DESC
   LIMIT $12
   OFFSET $11
 )
@@ -1066,11 +1116,11 @@ type ListChatsParams struct {
 	ProjectID      uuid.UUID
 	ExternalUserID interface{}
 	UserID         interface{}
-	FromTime       pgtype.Timestamptz
-	ToTime         pgtype.Timestamptz
 	Search         interface{}
 	AssistantID    interface{}
 	HasRiskFilter  string
+	FromTime       pgtype.Timestamptz
+	ToTime         pgtype.Timestamptz
 	SortBy         interface{}
 	SortOrder      interface{}
 	PageOffset     int32
@@ -1095,11 +1145,11 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 		arg.ProjectID,
 		arg.ExternalUserID,
 		arg.UserID,
-		arg.FromTime,
-		arg.ToTime,
 		arg.Search,
 		arg.AssistantID,
 		arg.HasRiskFilter,
+		arg.FromTime,
+		arg.ToTime,
 		arg.SortBy,
 		arg.SortOrder,
 		arg.PageOffset,
@@ -1135,7 +1185,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 }
 
 const listLatestGenerationChatMessages = `-- name: ListLatestGenerationChatMessages :many
-SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm
+SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.content_hash, cm.generation, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm
 WHERE cm.chat_id = $1
   AND (cm.project_id IS NULL OR cm.project_id = $2::uuid)
   AND cm.generation = (SELECT MAX(generation) FROM chat_messages WHERE chat_id = $1)
@@ -1176,6 +1226,7 @@ func (q *Queries) ListLatestGenerationChatMessages(ctx context.Context, arg List
 			&i.StorageError,
 			&i.UserID,
 			&i.ExternalUserID,
+			&i.ExternalMessageID,
 			&i.Origin,
 			&i.UserAgent,
 			&i.IpAddress,

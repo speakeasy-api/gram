@@ -54,7 +54,7 @@ func callListBookmarks(ctx context.Context, client *apiClient, env toolconfig.To
 		"channel_id": channelID,
 	}
 
-	body, err := client.call(ctx, "bookmarks.list", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "bookmarks.list", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

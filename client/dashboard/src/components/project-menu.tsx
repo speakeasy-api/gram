@@ -9,7 +9,7 @@ import { Combobox } from "./ui/combobox.tsx";
 import { Skeleton } from "./ui/skeleton.tsx";
 import { Type } from "./ui/type.tsx";
 
-import { getProjectColors } from "@/components/project-colors";
+import { getGradientColors } from "@/components/gradient-colors";
 
 export function ProjectAvatar({
   project,
@@ -18,7 +18,7 @@ export function ProjectAvatar({
   project: Pick<ProjectEntry, "id">;
   className?: string;
 }): React.JSX.Element {
-  const colors = getProjectColors(project.id);
+  const colors = getGradientColors(project.id);
   return (
     <div
       className={cn("h-6 w-6 rounded-full bg-gradient-to-br", className)}

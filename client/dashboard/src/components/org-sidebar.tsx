@@ -21,6 +21,7 @@ import { Icon } from "@speakeasy-api/moonshine";
 import * as React from "react";
 import { Link } from "react-router";
 import { GramLogo } from "./gram-logo";
+import { CommandPaletteTrigger } from "./command-palette/CommandPaletteTrigger";
 import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
 import { SidebarUserMenu } from "./sidebar-user-menu";
 import { WorkspaceSwitcher } from "./workspace-switcher";
@@ -113,12 +114,15 @@ export function OrgSidebar({
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader className="gap-3 pb-3">
-        <Link
-          to={orgRoutes.home.href()}
-          className="flex h-(--header-height) items-center px-1 hover:no-underline group-data-[collapsible=icon]:h-auto group-data-[collapsible=icon]:justify-center"
-        >
-          <GramLogo className="w-28 group-data-[collapsible=icon]:hidden" />
-        </Link>
+        <div className="flex items-center justify-between gap-2 group-data-[collapsible=icon]:justify-center">
+          <Link
+            to={orgRoutes.home.href()}
+            className="flex h-(--header-height) items-center px-1 hover:no-underline group-data-[collapsible=icon]:hidden"
+          >
+            <GramLogo className="w-28" />
+          </Link>
+          <CommandPaletteTrigger />
+        </div>
         <WorkspaceSwitcher />
       </SidebarHeader>
       <SidebarContent className="pt-2">

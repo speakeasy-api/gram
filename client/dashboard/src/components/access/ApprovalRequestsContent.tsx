@@ -36,7 +36,8 @@ import { Badge, Button, Column, Dialog, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Inbox, Loader2, ShieldCheck } from "lucide-react";
 import type React from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryState } from "nuqs";
 import { toast } from "sonner";
 import { formatShortDate } from "./shadow-mcp-utils";
 
@@ -738,6 +739,27 @@ export function ApprovalRequestsContent({
   const revokeRequest = useRiskRevokePolicyBypassRequestMutation();
   const isReviewSubmitting = approveRequest.isPending || denyRequest.isPending;
 
+  // The command palette deep-links to pending requests because they do not have
+  // per-request routes.
+  const [reviewParam, setReviewParam] = useQueryState("review");
+  const openedReviewRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!reviewParam || requestsLoading) return;
+    if (openedReviewRef.current === reviewParam) return;
+
+    const request = requests.find((item) => item.id === reviewParam);
+    if (request) {
+      openedReviewRef.current = reviewParam;
+      setReviewRequest(request);
+    }
+  }, [reviewParam, requestsLoading, requests]);
+
+  const closeReviewSheet = useCallback(() => {
+    setReviewRequest(null);
+    openedReviewRef.current = null;
+    void setReviewParam(null);
+  }, [setReviewParam]);
+
   const refreshApprovalRequestsData = async () => {
     await invalidateAllRiskListPolicyBypassRequests(queryClient);
   };
@@ -909,7 +931,7 @@ export function ApprovalRequestsContent({
         open={!!reviewRequest}
         isSubmitting={isReviewSubmitting}
         onOpenChange={(open) => {
-          if (!open) setReviewRequest(null);
+          if (!open) closeReviewSheet();
         }}
         onApprove={async (principalUrns) => {
           if (!reviewRequest) return;
@@ -924,7 +946,7 @@ export function ApprovalRequestsContent({
           });
           await refreshApprovalRequestsData();
           toast.success(approvalSuccessMessage(reviewRequest.status));
-          setReviewRequest(null);
+          closeReviewSheet();
         }}
         onDeny={async () => {
           if (!reviewRequest) return;
@@ -936,7 +958,7 @@ export function ApprovalRequestsContent({
           });
           await refreshApprovalRequestsData();
           toast.success("Request denied");
-          setReviewRequest(null);
+          closeReviewSheet();
         }}
       />
 
