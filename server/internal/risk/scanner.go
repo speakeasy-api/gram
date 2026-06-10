@@ -58,16 +58,14 @@ type ShadowMCPPolicy struct {
 // itself) so that ScanResult is safe to log, store, or serialize. Block
 // messages render PolicyName + Description, never the matched value.
 type ScanResult struct {
-	Action        string // "block"
-	PolicyID      string
-	PolicyVersion int64
-	PolicyName    string
-	Source        string // "gitleaks", "presidio", etc.
-	MessageType   message.Type
-	RuleID        string
-	Description   string
-	Confidence    float64
-	UserMessage   *string // optional override for the rendered block message
+	Action      string // "block"
+	PolicyID    string
+	PolicyName  string
+	Source      string // "gitleaks" or "presidio"
+	MessageType message.Type
+	RuleID      string
+	Description string
+	UserMessage *string // optional override for the rendered block message
 }
 
 type scannerMetrics struct {
@@ -280,16 +278,14 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 			findings := disabled.FilterFindings(s.scanGitleaks(text))
 			if len(findings) > 0 {
 				return &ScanResult{
-					Action:        policy.Action,
-					PolicyID:      policy.ID.String(),
-					PolicyVersion: policy.Version,
-					PolicyName:    policy.Name,
-					Source:        "gitleaks",
-					MessageType:   messageType,
-					RuleID:        findings[0].RuleID,
-					Description:   findings[0].Description,
-					Confidence:    1.0,
-					UserMessage:   conv.FromPGText[string](policy.UserMessage),
+					Action:      policy.Action,
+					PolicyID:    policy.ID.String(),
+					PolicyName:  policy.Name,
+					Source:      "gitleaks",
+					MessageType: messageType,
+					RuleID:      findings[0].RuleID,
+					Description: findings[0].Description,
+					UserMessage: conv.FromPGText[string](policy.UserMessage),
 				}, nil
 			}
 		case "presidio":
@@ -305,16 +301,14 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 				if len(filtered) > 0 {
 					f := filtered[0]
 					return &ScanResult{
-						Action:        policy.Action,
-						PolicyID:      policy.ID.String(),
-						PolicyVersion: policy.Version,
-						PolicyName:    policy.Name,
-						Source:        "presidio",
-						MessageType:   messageType,
-						RuleID:        f.RuleID,
-						Description:   f.Description,
-						Confidence:    f.Confidence,
-						UserMessage:   conv.FromPGText[string](policy.UserMessage),
+						Action:      policy.Action,
+						PolicyID:    policy.ID.String(),
+						PolicyName:  policy.Name,
+						Source:      "presidio",
+						MessageType: messageType,
+						RuleID:      f.RuleID,
+						Description: f.Description,
+						UserMessage: conv.FromPGText[string](policy.UserMessage),
 					}, nil
 				}
 			}
@@ -326,16 +320,14 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 			findings = disabled.FilterFindings(findings)
 			if len(findings) > 0 {
 				return &ScanResult{
-					Action:        policy.Action,
-					PolicyID:      policy.ID.String(),
-					PolicyVersion: policy.Version,
-					PolicyName:    policy.Name,
-					Source:        ra.SourcePromptInjection,
-					MessageType:   messageType,
-					RuleID:        findings[0].RuleID,
-					Description:   findings[0].Description,
-					Confidence:    1.0,
-					UserMessage:   conv.FromPGText[string](policy.UserMessage),
+					Action:      policy.Action,
+					PolicyID:    policy.ID.String(),
+					PolicyName:  policy.Name,
+					Source:      ra.SourcePromptInjection,
+					MessageType: messageType,
+					RuleID:      findings[0].RuleID,
+					Description: findings[0].Description,
+					UserMessage: conv.FromPGText[string](policy.UserMessage),
 				}, nil
 			}
 		}
@@ -348,16 +340,14 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 		findings = disabled.FilterFindings(findings)
 		if len(findings) > 0 {
 			return &ScanResult{
-				Action:        policy.Action,
-				PolicyID:      policy.ID.String(),
-				PolicyVersion: policy.Version,
-				PolicyName:    policy.Name,
-				Source:        ra.SourceCustom,
-				MessageType:   messageType,
-				RuleID:        findings[0].RuleID,
-				Description:   findings[0].Description,
-				Confidence:    findings[0].Confidence,
-				UserMessage:   conv.FromPGText[string](policy.UserMessage),
+				Action:      policy.Action,
+				PolicyID:    policy.ID.String(),
+				PolicyName:  policy.Name,
+				Source:      ra.SourceCustom,
+				MessageType: messageType,
+				RuleID:      findings[0].RuleID,
+				Description: findings[0].Description,
+				UserMessage: conv.FromPGText[string](policy.UserMessage),
 			}, nil
 		}
 	}
@@ -394,16 +384,14 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 
 	finding := ra.JudgeFinding(*verdict)
 	return &ScanResult{
-		Action:        policy.Action,
-		PolicyID:      policy.ID.String(),
-		PolicyVersion: policy.Version,
-		PolicyName:    policy.Name,
-		Source:        ra.SourceLLMJudge,
-		MessageType:   messageType,
-		RuleID:        finding.RuleID,
-		Description:   finding.Description,
-		Confidence:    finding.Confidence,
-		UserMessage:   conv.FromPGText[string](policy.UserMessage),
+		Action:      policy.Action,
+		PolicyID:    policy.ID.String(),
+		PolicyName:  policy.Name,
+		Source:      ra.SourceLLMJudge,
+		MessageType: messageType,
+		RuleID:      finding.RuleID,
+		Description: finding.Description,
+		UserMessage: conv.FromPGText[string](policy.UserMessage),
 	}
 }
 
@@ -424,16 +412,14 @@ func promptPolicyUnavailableResult(policy repo.RiskPolicy, messageType message.T
 		return nil
 	}
 	return &ScanResult{
-		Action:        policy.Action,
-		PolicyID:      policy.ID.String(),
-		PolicyVersion: policy.Version,
-		PolicyName:    policy.Name,
-		Source:        ra.SourceLLMJudge,
-		MessageType:   messageType,
-		RuleID:        ra.RuleLLMJudge,
-		Description:   "Policy judge was unavailable; flagged by fail-closed policy.",
-		Confidence:    1.0,
-		UserMessage:   conv.FromPGText[string](policy.UserMessage),
+		Action:      policy.Action,
+		PolicyID:    policy.ID.String(),
+		PolicyName:  policy.Name,
+		Source:      ra.SourceLLMJudge,
+		MessageType: messageType,
+		RuleID:      ra.RuleLLMJudge,
+		Description: "Policy judge was unavailable; flagged by fail-closed policy.",
+		UserMessage: conv.FromPGText[string](policy.UserMessage),
 	}
 }
 

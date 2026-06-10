@@ -5,7 +5,6 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -15,7 +14,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -26,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
-	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -685,9 +682,8 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 			// Surface the block reason on the trace summary so the dashboard
 			// shows why the call was denied. Always store the technical reason
 			// — the user_message override is for the agent-facing response only.
-			if metadata := s.claudeBlockMetadata(ctx, payload); metadata != nil {
-				s.writeClaudeBlockToClickHouse(ctx, payload, metadata, auditReason)
-				s.recordClaudeEnforcementFinding(ctx, payload, metadata, scanResult)
+			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
+				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
 			}
 			return constructBlockResponse(payload.HookEventName, userReason), nil
 		}
@@ -951,38 +947,6 @@ func mergeClaudeAuthContextMetadata(metadata SessionMetadata, cached SessionMeta
 	return metadata
 }
 
-func (s *Service) claudeBlockMetadata(ctx context.Context, payload *gen.ClaudePayload) *SessionMetadata {
-	sessionID := conv.PtrValOr(payload.SessionID, "")
-	if sessionID == "" {
-		return nil
-	}
-
-	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
-		metadata := SessionMetadata{
-			SessionID:   sessionID,
-			ServiceName: "",
-			UserEmail:   strings.TrimSpace(conv.PtrValOr(payload.UserEmail, "")),
-			UserID:      authCtx.UserID,
-			ClaudeOrgID: "",
-			GramOrgID:   authCtx.ActiveOrganizationID,
-			ProjectID:   authCtx.ProjectID.String(),
-		}
-		if metadata.UserID == "" && metadata.UserEmail != "" {
-			metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
-		}
-		if cached, err := s.getSessionMetadata(ctx, sessionID); err == nil {
-			metadata = mergeClaudeAuthContextMetadata(metadata, cached)
-		}
-		return &metadata
-	}
-
-	metadata, err := s.getSessionMetadata(ctx, sessionID)
-	if err != nil {
-		return nil
-	}
-	return &metadata
-}
-
 // claudeMCPToolName returns the bare tool name and true if rawName follows the
 // "mcp__<server>__<tool>" convention used by Claude Code for MCP-routed tools.
 // Returns ("", false) for native Claude Code tools (Read, Edit, Bash, etc.).
@@ -1023,7 +987,11 @@ func (s *Service) recordShadowMCPBlockFinding(
 	}
 
 	chatID := sessionIDToUUID(*payload.SessionID)
-	msgID, err := s.findClaudeToolCallMessageID(ctx, projectID, chatID, *payload.ToolUseID)
+	msgID, err := s.repo.FindAssistantToolCallMessageID(ctx, repo.FindAssistantToolCallMessageIDParams{
+		ProjectID:  uuid.NullUUID{UUID: projectID, Valid: true},
+		ChatID:     chatID,
+		ToolCallID: *payload.ToolUseID,
+	})
 	if err != nil {
 		// Most common cause: SessionCapture feature flag is off, so the
 		// tool-call chat_message was never persisted. The ClickHouse path
@@ -1088,145 +1056,6 @@ func (s *Service) recordShadowMCPBlockFinding(
 			attr.SlogEvent("claude_hook_block_finding_insert_failed"),
 			attr.SlogError(err),
 		)
-	}
-}
-
-// recordClaudeEnforcementFinding writes a risk_results row for a live Claude
-// policy block, so Recent Findings reflects realtime enforcement just like the
-// batch analyzer does. Best-effort: the hook response has already been decided,
-// so write failures are logged but do not change the allow/deny result.
-func (s *Service) recordClaudeEnforcementFinding(
-	ctx context.Context,
-	payload *gen.ClaudePayload,
-	metadata *SessionMetadata,
-	scanResult *risk.ScanResult,
-) {
-	if s.repo == nil || payload.SessionID == nil || metadata == nil || scanResult == nil {
-		return
-	}
-
-	projectID, err := uuid.Parse(metadata.ProjectID)
-	if err != nil {
-		s.logger.WarnContext(ctx, "claude enforcement block: invalid project id",
-			attr.SlogEvent("claude_hook_enforcement_finding_skip"), attr.SlogError(err))
-		return
-	}
-	policyID, err := uuid.Parse(scanResult.PolicyID)
-	if err != nil {
-		s.logger.WarnContext(ctx, "claude enforcement block: invalid policy id",
-			attr.SlogEvent("claude_hook_enforcement_finding_skip"), attr.SlogError(err))
-		return
-	}
-
-	chatID := sessionIDToUUID(*payload.SessionID)
-	msgID, err := s.findClaudeBlockMessageID(ctx, payload, projectID, chatID, scanResult.MessageType)
-	if err != nil {
-		s.logger.DebugContext(ctx, "claude enforcement block: no chat_message found; skipping risk_result write",
-			attr.SlogEvent("claude_hook_enforcement_finding_no_message"),
-			attr.SlogError(err),
-		)
-		return
-	}
-
-	resultID, err := uuid.NewV7()
-	if err != nil {
-		s.logger.WarnContext(ctx, "claude enforcement block: failed to generate uuidv7",
-			attr.SlogEvent("claude_hook_enforcement_finding_skip"), attr.SlogError(err))
-		return
-	}
-
-	insertParams := repo.InsertHookBlockResultParams{
-		ID:                resultID,
-		ProjectID:         projectID,
-		OrganizationID:    metadata.GramOrgID,
-		RiskPolicyID:      policyID,
-		RiskPolicyVersion: scanResult.PolicyVersion,
-		ChatMessageID:     msgID,
-		Source:            scanResult.Source,
-		RuleID:            pgtype.Text{String: scanResult.RuleID, Valid: scanResult.RuleID != ""},
-		Description:       pgtype.Text{String: scanResult.Description, Valid: scanResult.Description != ""},
-		Match:             pgtype.Text{String: "", Valid: false},
-		Confidence:        pgtype.Float8{Float64: scanResult.Confidence, Valid: true},
-	}
-	if err := s.repo.InsertHookBlockResult(ctx, insertParams); err != nil {
-		s.logger.WarnContext(ctx, "claude enforcement block: failed to insert risk_result",
-			attr.SlogEvent("claude_hook_enforcement_finding_insert_failed"),
-			attr.SlogError(err),
-		)
-	}
-}
-
-func (s *Service) findClaudeBlockMessageID(ctx context.Context, payload *gen.ClaudePayload, projectID, chatID uuid.UUID, messageType message.Type) (uuid.UUID, error) {
-	switch messageType {
-	case message.ToolRequest:
-		if payload.ToolUseID == nil || *payload.ToolUseID == "" {
-			return uuid.Nil, pgx.ErrNoRows
-		}
-		return s.findClaudeToolCallMessageID(ctx, projectID, chatID, *payload.ToolUseID)
-	case message.User:
-		return s.findClaudeMessageIDForRole(ctx, projectID, chatID, "user")
-	default:
-		return uuid.Nil, pgx.ErrNoRows
-	}
-}
-
-func (s *Service) findClaudeToolCallMessageID(ctx context.Context, projectID, chatID uuid.UUID, toolUseID string) (uuid.UUID, error) {
-	var msgID uuid.UUID
-	err := s.retryClaudeMessageLookup(ctx, func(ctx context.Context) error {
-		var err error
-		msgID, err = s.repo.FindAssistantToolCallMessageID(ctx, repo.FindAssistantToolCallMessageIDParams{
-			ProjectID:  uuid.NullUUID{UUID: projectID, Valid: true},
-			ChatID:     chatID,
-			ToolCallID: toolUseID,
-		})
-		if err != nil {
-			return fmt.Errorf("find assistant tool call message id: %w", err)
-		}
-		return nil
-	})
-	return msgID, err
-}
-
-func (s *Service) findClaudeMessageIDForRole(ctx context.Context, projectID, chatID uuid.UUID, role string) (uuid.UUID, error) {
-	var msgID uuid.UUID
-	err := s.retryClaudeMessageLookup(ctx, func(ctx context.Context) error {
-		var err error
-		msgID, err = s.repo.FindLatestChatMessageIDForRole(ctx, repo.FindLatestChatMessageIDForRoleParams{
-			ProjectID: uuid.NullUUID{UUID: projectID, Valid: true},
-			ChatID:    chatID,
-			Role:      role,
-		})
-		if err != nil {
-			return fmt.Errorf("find latest chat message id for role: %w", err)
-		}
-		return nil
-	})
-	return msgID, err
-}
-
-func (s *Service) retryClaudeMessageLookup(ctx context.Context, lookup func(context.Context) error) error {
-	deadline := time.NewTimer(250 * time.Millisecond)
-	defer deadline.Stop()
-
-	ticker := time.NewTicker(25 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		err := lookup(ctx)
-		if err == nil {
-			return nil
-		}
-		if !errors.Is(err, pgx.ErrNoRows) {
-			return err
-		}
-
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("wait for claude message lookup: %w", ctx.Err())
-		case <-deadline.C:
-			return err
-		case <-ticker.C:
-		}
 	}
 }
 

@@ -57,45 +57,6 @@ WHERE project_id = sqlc.arg(project_id)
 ORDER BY created_at DESC
 LIMIT 1;
 
--- name: FindLatestChatMessageIDForRole :one
-SELECT id
-FROM chat_messages
-WHERE project_id = sqlc.arg(project_id)
-  AND chat_id = sqlc.arg(chat_id)
-  AND role = sqlc.arg(role)
-ORDER BY created_at DESC
-LIMIT 1;
-
--- name: InsertHookBlockResult :exec
-INSERT INTO risk_results (
-    id
-  , project_id
-  , organization_id
-  , risk_policy_id
-  , risk_policy_version
-  , chat_message_id
-  , source
-  , found
-  , rule_id
-  , description
-  , match
-  , confidence
-)
-VALUES (
-    sqlc.arg(id)
-  , sqlc.arg(project_id)
-  , sqlc.arg(organization_id)
-  , sqlc.arg(risk_policy_id)
-  , sqlc.arg(risk_policy_version)
-  , sqlc.arg(chat_message_id)
-  , sqlc.arg(source)
-  , TRUE
-  , sqlc.arg(rule_id)
-  , sqlc.arg(description)
-  , sqlc.arg(match)
-  , sqlc.arg(confidence)
-);
-
 -- name: InsertShadowMCPBlockResult :exec
 INSERT INTO risk_results (
     id
