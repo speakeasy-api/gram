@@ -12,25 +12,28 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
-func TestInitialUsagePollWatermarkBackfillsOneHour(t *testing.T) {
+func TestNextUsagePollAfter(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 5, 20, 12, 30, 0, 0, time.FixedZone("test", 2*60*60))
 
-	require.Equal(t, now.UTC().Add(-time.Hour), initialUsagePollWatermark(now))
-	require.Equal(t, now.UTC(), nextUsagePollAfter(initialUsagePollWatermark(now)))
+	// A watermark backfilled by one lookback period is due for its first
+	// poll immediately: the lookback and poll interval cancel out.
+	require.Equal(t, now.UTC().Add(-initialUsagePollLookback), now.UTC().Add(-initialUsagePollLookback).Add(usagePollInterval))
+	require.Equal(t, now.UTC().Add(usagePollInterval), now.UTC().Add(usagePollInterval))
 }
 
 func TestTruncateUsagePollError(t *testing.T) {
 	t.Parallel()
 
-	require.Empty(t, truncateUsagePollError(nil))
-	require.Equal(t, "cursor unavailable", truncateUsagePollError(errors.New(" cursor unavailable ")))
+	require.Empty(t, conv.TruncateString("", maxUsagePollErrorMessage))
+	require.Equal(t, "cursor unavailable", conv.TruncateString(" cursor unavailable ", maxUsagePollErrorMessage))
 
 	longErr := errors.New(strings.Repeat("x", maxUsagePollErrorMessage+1))
-	require.Len(t, truncateUsagePollError(longErr), maxUsagePollErrorMessage)
+	require.Equal(t, strings.Repeat("x", maxUsagePollErrorMessage), conv.TruncateString(longErr.Error(), maxUsagePollErrorMessage))
 }
 
 func TestUpsertWithTxCreatesConfigGeneration(t *testing.T) {
@@ -38,12 +41,12 @@ func TestUpsertWithTxCreatesConfigGeneration(t *testing.T) {
 
 	ctx, conn, store, orgID := newStoreTestDB(t)
 
-	watermark := initialUsagePollWatermark(time.Now())
-	result := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "cursor-key", true, true, &watermark)
+	watermark := time.Now().UTC().Add(-initialUsagePollLookback)
+	result := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "cursor-key", true, true, nil, &watermark)
 	require.True(t, result.CreatedNewGeneration)
 	require.NotNil(t, result.Row)
 	require.Equal(t, result.Row.ID, result.Config.ID)
-	require.Equal(t, nextUsagePollAfter(watermark), result.Config.NextPollAfter)
+	require.Equal(t, watermark.UTC().Add(usagePollInterval), result.Config.NextPollAfter)
 	require.Equal(t, watermark, result.Config.PollWatermarkAt)
 
 	require.Equal(t, int64(1), countAIIntegrationConfigs(t, ctx, conn, orgID, false))
@@ -54,10 +57,10 @@ func TestUpsertWithTxSettingsUpdateKeepsConfigGeneration(t *testing.T) {
 
 	ctx, conn, store, orgID := newStoreTestDB(t)
 
-	watermark := initialUsagePollWatermark(time.Now())
-	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "cursor-key", true, true, &watermark)
+	watermark := time.Now().UTC().Add(-initialUsagePollLookback)
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "cursor-key", true, true, nil, &watermark)
 
-	updated := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "", false, false, nil)
+	updated := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "", false, false, nil, nil)
 	require.False(t, updated.CreatedNewGeneration)
 	require.Equal(t, created.Config.ID, updated.Config.ID)
 	require.False(t, updated.Config.Enabled)
@@ -70,11 +73,11 @@ func TestUpsertWithTxKeyReplacementCreatesNewConfigGeneration(t *testing.T) {
 
 	ctx, conn, store, orgID := newStoreTestDB(t)
 
-	watermark := initialUsagePollWatermark(time.Now())
-	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "cursor-key", true, true, &watermark)
+	watermark := time.Now().UTC().Add(-initialUsagePollLookback)
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "cursor-key", true, true, nil, &watermark)
 
-	replacedWatermark := initialUsagePollWatermark(time.Now())
-	replaced := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "new-cursor-key", true, true, &replacedWatermark)
+	replacedWatermark := time.Now().UTC().Add(-initialUsagePollLookback)
+	replaced := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "new-cursor-key", true, true, nil, &replacedWatermark)
 	require.True(t, replaced.CreatedNewGeneration)
 	require.NotEqual(t, created.Config.ID, replaced.Config.ID)
 
@@ -87,8 +90,8 @@ func TestRecordUsagePollFailureStoresErrorAsData(t *testing.T) {
 
 	ctx, conn, store, orgID := newStoreTestDB(t)
 
-	watermark := initialUsagePollWatermark(time.Now())
-	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "cursor-key", true, true, &watermark)
+	watermark := time.Now().UTC().Add(-initialUsagePollLookback)
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "cursor-key", true, true, nil, &watermark)
 
 	message := `cursor rejected the configured api key'; DROP TABLE ai_integration_syncs; -- <script>alert(1)</script>`
 	require.NoError(t, store.RecordUsagePollFailure(ctx, created.Config.ID, time.Now(), errors.New(message)))
@@ -109,6 +112,7 @@ func upsertConfigWithTx(
 	apiKey string,
 	apiKeySupplied bool,
 	enabled bool,
+	externalOrganizationID *string,
 	resetPollWatermarkAt *time.Time,
 ) UpsertResult {
 	t.Helper()
@@ -116,7 +120,7 @@ func upsertConfigWithTx(
 	var result UpsertResult
 	require.NoError(t, pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
 		var err error
-		result, err = store.upsertWithTx(ctx, tx, orgID, provider, apiKey, apiKeySupplied, enabled, "", resetPollWatermarkAt)
+		result, err = store.upsertWithTx(ctx, tx, orgID, provider, apiKey, apiKeySupplied, enabled, externalOrganizationID, resetPollWatermarkAt)
 		return err
 	}))
 	return result

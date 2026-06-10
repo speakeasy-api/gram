@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -134,15 +135,21 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 		}
 		apiKey = before.APIKey
 	}
-	externalOrganizationID := strings.TrimSpace(providerExternalOrganizationID(payload.ExternalOrganizationID))
-	if externalOrganizationID == "" && beforeRow != nil {
+	//externalOrganizationID := strings.TrimSpace(providerExternalOrganizationID(payload.ExternalOrganizationID))
+	externalOrganizationID := conv.PtrValOr(&payload.ExternalOrganizationID, nil)
+	if externalOrganizationID == nil && beforeRow != nil {
 		externalOrganizationID = before.ExternalOrganizationID
 	}
-	var resetPollWatermarkAt *time.Time
-	if shouldResetUsagePollWatermark(beforeRow != nil, apiKeySupplied) {
-		watermark := initialUsagePollWatermark(time.Now())
-		resetPollWatermarkAt = &watermark
-	}
+	externalOrgChanged := beforeRow != nil && *externalOrganizationID != *before.ExternalOrganizationID
+
+	// Start the watermark one lookback period in the past so the first poll
+	// backfills usage emitted just before the key was configured.
+	watermark := time.Now().UTC().Add(-initialUsagePollLookback)
+	resetPollWatermarkAt := conv.Ternary(
+		beforeRow != nil && (apiKeySupplied || externalOrgChanged),
+		&watermark,
+		nil,
+	)
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -254,10 +261,6 @@ func snapshotFromConfig(cfg Config) audit.AIIntegrationSnapshot {
 	}
 }
 
-func shouldResetUsagePollWatermark(hasExistingConfig bool, apiKeySupplied bool) bool {
-	return !hasExistingConfig || apiKeySupplied
-}
-
 func (s *Service) startUsagePoll(ctx context.Context, organizationSlug string, configID uuid.UUID, provider string) error {
 	if s.configPoller == nil {
 		return nil
@@ -316,7 +319,7 @@ func buildView(cfg Config, idValue uuid.UUID) *gen.AIIntegrationConfig {
 		OrganizationID:         cfg.OrganizationID,
 		Provider:               cfg.Provider,
 		ProjectID:              &projectID,
-		ExternalOrganizationID: providerExternalOrganizationIDPtr(cfg.ExternalOrganizationID),
+		ExternalOrganizationID: conv.PtrValOrEmpty(&cfg.ExternalOrganizationID, nil),
 		Enabled:                cfg.Enabled,
 		HasAPIKey:              cfg.APIKey != "",
 		LastPolledAt:           lastPolledAt,
@@ -327,21 +330,6 @@ func buildView(cfg Config, idValue uuid.UUID) *gen.AIIntegrationConfig {
 		CreatedAt:              &createdAt,
 		UpdatedAt:              &updatedAt,
 	}
-}
-
-func providerExternalOrganizationID(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
-}
-
-func providerExternalOrganizationIDPtr(value string) *string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return nil
-	}
-	return &value
 }
 
 func deriveLastPollStatus(cfg Config) string {

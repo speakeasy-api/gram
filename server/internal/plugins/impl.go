@@ -881,7 +881,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		} else {
 			normalized := raw
 			if addr, ok := strings.CutPrefix(raw, string(urn.PrincipalTypeEmail)+":"); ok {
-				normalized = string(urn.PrincipalTypeEmail) + ":" + strings.ToLower(strings.TrimSpace(addr))
+				normalized = string(urn.PrincipalTypeEmail) + ":" + conv.NormalizeEmail(addr)
 			}
 			parsed, err := urn.ParsePrincipal(normalized)
 			if err != nil {

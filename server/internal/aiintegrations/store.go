@@ -14,6 +14,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -41,7 +42,7 @@ type Config struct {
 	OrganizationID         string
 	Provider               string
 	ProjectID              uuid.UUID
-	ExternalOrganizationID string
+	ExternalOrganizationID *string
 	APIKey                 string
 	Enabled                bool
 	PollWatermarkAt        time.Time
@@ -114,13 +115,13 @@ func (s *Store) loadForOrgAndProviderRow(ctx context.Context, orgID string, prov
 	return cfg, &row, nil
 }
 
-func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, provider string, apiKey string, apiKeySupplied bool, enabled bool, externalOrganizationID string, resetPollWatermarkAt *time.Time) (UpsertResult, error) {
+func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, provider string, apiKey string, apiKeySupplied bool, enabled bool, externalOrganizationID *string, resetPollWatermarkAt *time.Time) (UpsertResult, error) {
 	provider, err := normalizeProvider(provider)
 	if err != nil {
 		return UpsertResult{}, err
 	}
-	externalOrganizationID = strings.TrimSpace(externalOrganizationID)
-	if provider == ProviderAnthropicCompliance && externalOrganizationID == "" {
+
+	if provider == ProviderAnthropicCompliance && externalOrganizationID == nil {
 		return UpsertResult{}, oops.E(oops.CodeInvalid, nil, "external_organization_id is required for anthropic_compliance")
 	}
 
@@ -150,7 +151,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 			OrganizationID:         orgID,
 			Provider:               provider,
 			ProjectID:              projectID,
-			ExternalOrganizationID: nullableText(externalOrganizationID),
+			ExternalOrganizationID: conv.ToPGTextEmpty(*externalOrganizationID),
 			ApiKeyEncrypted:        encrypted,
 			Enabled:                enabled,
 		})
@@ -162,7 +163,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 			OrganizationID:         orgID,
 			Provider:               provider,
 			ProjectID:              projectID,
-			ExternalOrganizationID: nullableText(externalOrganizationID),
+			ExternalOrganizationID: conv.ToPGTextEmpty(*externalOrganizationID),
 			Enabled:                enabled,
 		})
 		if err != nil {
@@ -175,8 +176,8 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 		return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to save ai integration sync")
 	}
 	if resetPollWatermarkAt != nil {
-		syncRow.PollWatermarkAt = timestamptz(*resetPollWatermarkAt)
-		syncRow.NextPollAfter = timestamptz(nextUsagePollAfter(*resetPollWatermarkAt))
+		syncRow.PollWatermarkAt = conv.ToPGTimestamptz(*resetPollWatermarkAt)
+		syncRow.NextPollAfter = conv.ToPGTimestamptz(resetPollWatermarkAt.UTC().Add(usagePollInterval))
 		syncRow.LastPollError = pgtype.Text{String: "", Valid: false}
 		syncRow.LastPollFailedAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
 		syncRow.LastPollSuccessAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
@@ -249,7 +250,7 @@ func (s *Store) ListUsagePollCandidates(ctx context.Context, pollDueBefore time.
 	}
 
 	params := repo.ListUsagePollCandidatesParams{
-		PollDueBefore: timestamptz(pollDueBefore),
+		PollDueBefore: conv.ToPGTimestamptz(pollDueBefore),
 		LimitCount:    limit,
 	}
 
@@ -288,9 +289,9 @@ func (s *Store) GetUsagePollConfig(ctx context.Context, configID uuid.UUID) (Con
 func (s *Store) RecordUsagePollSuccess(ctx context.Context, configID uuid.UUID, t time.Time, lastCursor string) error {
 	if err := s.repo.RecordUsagePollSuccess(ctx, repo.RecordUsagePollSuccessParams{
 		AiIntegrationConfigID: configID,
-		PollWatermarkAt:       timestamptz(t),
-		NextPollAfter:         timestamptz(nextUsagePollAfter(t)),
-		LastCursorID:          nullableText(lastCursor),
+		PollWatermarkAt:       conv.ToPGTimestamptz(t),
+		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(usagePollInterval)),
+		LastCursorID:          conv.ToPGTextEmpty(lastCursor),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to record ai integration usage poll success")
 	}
@@ -300,46 +301,12 @@ func (s *Store) RecordUsagePollSuccess(ctx context.Context, configID uuid.UUID, 
 func (s *Store) RecordUsagePollFailure(ctx context.Context, configID uuid.UUID, t time.Time, cause error) error {
 	if err := s.repo.RecordUsagePollFailure(ctx, repo.RecordUsagePollFailureParams{
 		AiIntegrationConfigID: configID,
-		NextPollAfter:         timestamptz(nextUsagePollAfter(t)),
-		LastPollError:         nullableText(truncateUsagePollError(cause)),
+		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(usagePollInterval)),
+		LastPollError:         conv.ToPGTextEmpty(conv.TruncateString(cause.Error(), maxUsagePollErrorMessage)),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to record ai integration usage poll failure")
 	}
 	return nil
-}
-
-func initialUsagePollWatermark(now time.Time) time.Time {
-	return now.UTC().Add(-initialUsagePollLookback)
-}
-
-func nextUsagePollAfter(t time.Time) time.Time {
-	return t.UTC().Add(usagePollInterval)
-}
-
-func timestamptz(t time.Time) pgtype.Timestamptz {
-	return pgtype.Timestamptz{
-		Time:             t.UTC(),
-		InfinityModifier: pgtype.Finite,
-		Valid:            true,
-	}
-}
-
-func nullableText(s string) pgtype.Text {
-	return pgtype.Text{
-		String: s,
-		Valid:  s != "",
-	}
-}
-
-func truncateUsagePollError(cause error) string {
-	if cause == nil {
-		return ""
-	}
-	msg := strings.TrimSpace(cause.Error())
-	if len(msg) <= maxUsagePollErrorMessage {
-		return msg
-	}
-	return msg[:maxUsagePollErrorMessage]
 }
 
 func (s *Store) configFromGetRow(row repo.GetConfigByOrgAndProviderRow) (Config, error) {
@@ -352,7 +319,7 @@ func (s *Store) configFromGetRow(row repo.GetConfigByOrgAndProviderRow) (Config,
 		OrganizationID:         row.OrganizationID,
 		Provider:               row.Provider,
 		ProjectID:              row.ProjectID,
-		ExternalOrganizationID: row.ExternalOrganizationID.String,
+		ExternalOrganizationID: conv.FromPGText[string](row.ExternalOrganizationID),
 		APIKey:                 apiKey,
 		Enabled:                row.Enabled,
 		PollWatermarkAt:        row.PollWatermarkAt.Time,
@@ -377,7 +344,7 @@ func (s *Store) configFromListRow(row repo.ListEnabledConfigsByProviderRow) (Con
 		OrganizationID:         row.OrganizationID,
 		Provider:               row.Provider,
 		ProjectID:              row.ProjectID,
-		ExternalOrganizationID: row.ExternalOrganizationID.String,
+		ExternalOrganizationID: conv.FromPGText[string](row.ExternalOrganizationID),
 		APIKey:                 apiKey,
 		Enabled:                row.Enabled,
 		PollWatermarkAt:        row.PollWatermarkAt.Time,
@@ -402,7 +369,7 @@ func (s *Store) configFromUsagePollConfigRow(row repo.GetUsagePollConfigByIDRow)
 		OrganizationID:         row.OrganizationID,
 		Provider:               row.Provider,
 		ProjectID:              row.ProjectID,
-		ExternalOrganizationID: row.ExternalOrganizationID.String,
+		ExternalOrganizationID: conv.FromPGText[string](row.ExternalOrganizationID),
 		APIKey:                 apiKey,
 		Enabled:                row.Enabled,
 		PollWatermarkAt:        row.PollWatermarkAt.Time,
@@ -427,7 +394,7 @@ func (s *Store) configFromRows(row repo.AiIntegrationConfig, syncRow repo.Ensure
 		OrganizationID:         row.OrganizationID,
 		Provider:               row.Provider,
 		ProjectID:              row.ProjectID,
-		ExternalOrganizationID: row.ExternalOrganizationID.String,
+		ExternalOrganizationID: conv.FromPGText[string](row.ExternalOrganizationID),
 		APIKey:                 apiKey,
 		Enabled:                row.Enabled,
 		PollWatermarkAt:        syncRow.PollWatermarkAt.Time,
@@ -471,7 +438,7 @@ func emptyConfig(orgID string, provider string) Config {
 		OrganizationID:         orgID,
 		Provider:               provider,
 		ProjectID:              uuid.Nil,
-		ExternalOrganizationID: "",
+		ExternalOrganizationID: nil,
 		APIKey:                 "",
 		Enabled:                false,
 		PollWatermarkAt:        time.Time{},
