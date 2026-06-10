@@ -136,8 +136,13 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 		apiKey = before.APIKey
 	}
 	externalOrganizationID := payload.ExternalOrganizationID
-	if externalOrganizationID == nil && beforeRow != nil {
+	if externalOrganizationID != nil {
+		trimmed := strings.TrimSpace(*externalOrganizationID)
+		externalOrganizationID = conv.PtrEmpty(trimmed)
+	}
+	if payload.ExternalOrganizationID == nil && beforeRow != nil {
 		externalOrganizationID = before.ExternalOrganizationID
+	}
 	}
 	externalOrgChanged := beforeRow != nil &&
 		conv.PtrValOr(externalOrganizationID, "") != conv.PtrValOr(before.ExternalOrganizationID, "")
