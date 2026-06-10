@@ -330,6 +330,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, assistantRuntimeFlags...)
 	flags = append(flags, svixFlags...)
 	flags = append(flags, pluginsFlags...)
+	flags = append(flags, gcpFlags...)
 
 	return &cli.Command{
 		Name:  "worker",
@@ -748,6 +749,7 @@ func newWorkerCommand() *cli.Command {
 				FeatureProvider:                featureFlags,
 				AssetStorage:                   assetStorage,
 				SlackClient:                    slackClient,
+				ChatMessageWriter:              chatWriter,
 				ChatClient:                     chatClient,
 				OpenRouter:                     openRouter,
 				K8sClient:                      k8sClient,

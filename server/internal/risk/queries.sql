@@ -48,6 +48,14 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
+-- name: GetRiskPolicyForUpdate :one
+SELECT *
+FROM risk_policies
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+FOR UPDATE;
+
 -- name: GetRiskPolicyNameIncludingDeleted :one
 SELECT name
 FROM risk_policies
@@ -117,6 +125,14 @@ UPDATE risk_policies
 SET deleted_at = clock_timestamp()
   , updated_at = clock_timestamp()
 WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
+-- name: DeleteRiskPolicyBypassRequestsByPolicy :exec
+UPDATE risk_policy_bypass_requests
+SET deleted_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE risk_policy_id = @risk_policy_id
   AND project_id = @project_id
   AND deleted IS FALSE;
 

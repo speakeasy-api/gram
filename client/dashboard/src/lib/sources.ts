@@ -53,6 +53,17 @@ export function formatRemoteMcpDisplay(server: {
   return formatRemoteMcpUrlForDisplay(server.url);
 }
 
+// formatRemoteSessionIssuerDisplay picks the render-time primary label for a
+// remote session issuer (remote identity provider): a non-empty display name
+// wins, otherwise the protocol-stripped issuer URL. Centralized so the table,
+// sheets, and any issuer cards stay in sync.
+export function formatRemoteSessionIssuerDisplay(issuer: {
+  name?: string | null | undefined;
+  issuer: string;
+}): string {
+  return formatRemoteMcpDisplay({ name: issuer.name, url: issuer.issuer });
+}
+
 // remoteMcpRouteParam returns the value to embed in dashboard URLs for a
 // remote MCP server. Prefers the slug for human-friendly URLs and falls back
 // to the ID; the server's getServer endpoint accepts either.

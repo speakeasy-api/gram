@@ -2441,12 +2441,12 @@ paths:
       operationId: getAIIntegrationConfig
       parameters:
         - allowEmptyValue: true
-          description: AI provider identifier. Initially only cursor is supported.
+          description: AI provider identifier. Supported values include cursor and anthropic_compliance.
           in: query
           name: provider
           required: true
           schema:
-            description: AI provider identifier. Initially only cursor is supported.
+            description: AI provider identifier. Supported values include cursor and anthropic_compliance.
             type: string
         - allowEmptyValue: true
           description: API Key header
@@ -20543,333 +20543,6 @@ paths:
       x-speakeasy-name-override: list
       x-speakeasy-react-hook:
         name: ListResources
-  /rpc/risk.approvals.create:
-    post:
-      description: Approve a shadow-MCP server so the named policy stops blocking calls to it. `match` is the same opaque server identifier surfaced in `RiskResult.match` — typically a server URL, stdio command, or `mcp__<server>__` prefix.
-      operationId: approveShadowMCP
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ApproveShadowMCPRequestBody'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ShadowMCPApproval'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: approveShadowMCP risk
-      tags:
-        - risk
-      x-speakeasy-group: risk.approvals
-      x-speakeasy-name-override: create
-      x-speakeasy-react-hook:
-        name: RiskApproveShadowMCP
-        type: mutation
-  /rpc/risk.approvals.delete:
-    delete:
-      description: Remove a previously-approved shadow-MCP server for a policy.
-      operationId: revokeShadowMCPApproval
-      parameters:
-        - allowEmptyValue: true
-          description: The risk policy ID.
-          in: query
-          name: policy_id
-          required: true
-          schema:
-            description: The risk policy ID.
-            format: uuid
-            type: string
-        - allowEmptyValue: true
-          description: The MCP server identifier to revoke — exactly the value used to approve.
-          in: query
-          name: match
-          required: true
-          schema:
-            description: The MCP server identifier to revoke — exactly the value used to approve.
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      responses:
-        "200":
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: revokeShadowMCPApproval risk
-      tags:
-        - risk
-      x-speakeasy-group: risk.approvals
-      x-speakeasy-name-override: delete
-  /rpc/risk.approvals.list:
-    get:
-      description: List shadow-MCP approvals (URL- or command-keyed) for a policy. Temporary Redis-backed storage; will move to a dedicated table once the feature graduates.
-      operationId: listShadowMCPApprovals
-      parameters:
-        - allowEmptyValue: true
-          description: The risk policy ID.
-          in: query
-          name: policy_id
-          required: true
-          schema:
-            description: The risk policy ID.
-            format: uuid
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ListShadowMCPApprovalsResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: listShadowMCPApprovals risk
-      tags:
-        - risk
-      x-speakeasy-group: risk.approvals
-      x-speakeasy-name-override: list
-      x-speakeasy-react-hook:
-        name: RiskListShadowMCPApprovals
   /rpc/risk.approvePolicyBypassRequest:
     post:
       description: Approve a risk policy bypass request for the requested policy target.
@@ -20900,7 +20573,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RiskIDRequestBody'
+              $ref: '#/components/schemas/RiskPolicyBypassApprovalRequestBody'
         required: true
       responses:
         "200":
@@ -31081,6 +30754,9 @@ components:
         enabled:
           type: boolean
           description: Whether the provider integration is active.
+        external_organization_id:
+          type: string
+          description: Provider organization identifier. Required for anthropic_compliance; omitted for providers that do not need one.
         has_api_key:
           type: boolean
           description: Whether an API key is currently stored. The key itself is never returned.
@@ -31117,7 +30793,7 @@ components:
           description: Project used as the telemetry write target. Omitted when no config is set.
         provider:
           type: string
-          description: AI provider identifier. Initially only cursor is supported.
+          description: AI provider identifier. Supported values include cursor and anthropic_compliance.
         updated_at:
           type: string
           description: ISO 8601 timestamp of the most recent change. Omitted when no config is set.
@@ -31669,22 +31345,6 @@ components:
         - match_breadth
         - match_value
         - display_name
-    ApproveShadowMCPRequestBody:
-      type: object
-      properties:
-        match:
-          type: string
-          description: The MCP server identifier to approve.
-        policy_id:
-          type: string
-          description: The risk policy ID.
-          format: uuid
-        server_name:
-          type: string
-          description: Display name of the MCP server (optional, for UI).
-      required:
-        - policy_id
-        - match
     Asset:
       type: object
       properties:
@@ -33322,6 +32982,13 @@ components:
         jwks_uri:
           type: string
           description: Upstream JWKS URI.
+        logo_asset_id:
+          type: string
+          description: Optional logo asset id.
+          format: uuid
+        name:
+          type: string
+          description: Optional display name. Stored NULL when empty; clients fall back to the issuer URL/slug.
         oidc:
           type: boolean
           description: When true, may unlock OIDC-aware behaviour. Default false.
@@ -34001,7 +33668,7 @@ components:
       properties:
         provider:
           type: string
-          description: AI provider identifier. Initially only cursor is supported.
+          description: AI provider identifier. Supported values include cursor and anthropic_compliance.
       required:
         - provider
     DeleteGlobalToolVariationForm:
@@ -37001,16 +36668,6 @@ components:
             $ref: '#/components/schemas/ShadowMCPApprovalRequest'
       required:
         - requests
-    ListShadowMCPApprovalsResult:
-      type: object
-      properties:
-        approvals:
-          type: array
-          items:
-            $ref: '#/components/schemas/ShadowMCPApproval'
-          description: The approved shadow-MCP servers for the policy (URL- or command-keyed).
-      required:
-        - approvals
     ListToolFiltersResult:
       type: object
       properties:
@@ -39435,6 +39092,13 @@ components:
         jwks_uri:
           type: string
           description: Upstream JWKS URI; null when not advertised.
+        logo_asset_id:
+          type: string
+          description: Optional logo asset id; null when unset.
+          format: uuid
+        name:
+          type: string
+          description: Optional display name; null when unset.
         oidc:
           type: boolean
           description: When true, may unlock OIDC-aware behaviour.
@@ -40017,6 +39681,20 @@ components:
         - updated_at
         - pending_messages
         - total_messages
+    RiskPolicyBypassApprovalRequestBody:
+      type: object
+      properties:
+        granted_principal_urns:
+          type: array
+          items:
+            type: string
+          description: Principal URNs to grant bypass access to. Use user:all for every user in the organization.
+        id:
+          type: string
+          description: The bypass request ID.
+          format: uuid
+      required:
+        - id
     RiskPolicyBypassRequest:
       type: object
       properties:
@@ -41496,30 +41174,6 @@ components:
         - match_breadth
         - match_value
         - display_name
-    ShadowMCPApproval:
-      type: object
-      properties:
-        approved_at:
-          type: string
-          description: When the approval was recorded.
-          format: date-time
-        approved_by:
-          type: string
-          description: User that recorded the approval.
-        match:
-          type: string
-          description: The MCP server identifier this approval covers — typically a server URL, stdio command, or `mcp__<server>__` prefix (the same value surfaced in `RiskResult.match`).
-        policy_id:
-          type: string
-          description: The risk policy ID this approval is scoped to.
-          format: uuid
-        server_name:
-          type: string
-          description: Display name of the MCP server, when known.
-      required:
-        - policy_id
-        - match
-        - approved_at
     ShadowMCPApprovalDecisionResult:
       type: object
       properties:
@@ -43290,6 +42944,13 @@ components:
         jwks_uri:
           type: string
           description: Upstream JWKS URI.
+        logo_asset_id:
+          type: string
+          description: Set the logo asset id.
+          format: uuid
+        name:
+          type: string
+          description: Set or clear the display name. An empty string clears it to NULL.
         oidc:
           type: boolean
         passthrough:
@@ -43796,9 +43457,12 @@ components:
         enabled:
           type: boolean
           description: Whether the integration should be active.
+        external_organization_id:
+          type: string
+          description: Provider organization identifier. Required for anthropic_compliance.
         provider:
           type: string
-          description: AI provider identifier. Initially only cursor is supported.
+          description: AI provider identifier. Supported values include cursor and anthropic_compliance.
       required:
         - provider
         - api_key

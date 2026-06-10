@@ -21,6 +21,11 @@ type CreateOrganizationRemoteSessionIssuerRequestBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Issuer URL; matches the iss claim.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Optional display name. Stored NULL when empty; clients fall back to the
+	// issuer URL/slug.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Optional logo asset id.
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -54,6 +59,10 @@ type UpdateOrganizationRemoteSessionIssuerRequestBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Issuer URL; matches the iss claim.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Set or clear the display name. An empty string clears it to NULL.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Set the logo asset id.
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -84,6 +93,10 @@ type CreateOrganizationRemoteSessionIssuerResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Issuer URL; matches the iss claim.
 	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
+	// Optional display name; null when unset.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Optional logo asset id; null when unset.
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -118,6 +131,10 @@ type UpdateOrganizationRemoteSessionIssuerResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Issuer URL; matches the iss claim.
 	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
+	// Optional display name; null when unset.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Optional logo asset id; null when unset.
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -161,6 +178,10 @@ type GetOrganizationRemoteSessionIssuerResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Issuer URL; matches the iss claim.
 	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
+	// Optional display name; null when unset.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Optional logo asset id; null when unset.
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -1194,6 +1215,10 @@ type RemoteSessionIssuerResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Issuer URL; matches the iss claim.
 	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
+	// Optional display name; null when unset.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Optional logo asset id; null when unset.
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -1224,6 +1249,8 @@ func NewCreateOrganizationRemoteSessionIssuerResponseBody(res *types.RemoteSessi
 		OrganizationID:        res.OrganizationID,
 		Slug:                  res.Slug,
 		Issuer:                res.Issuer,
+		Name:                  res.Name,
+		LogoAssetID:           res.LogoAssetID,
 		AuthorizationEndpoint: res.AuthorizationEndpoint,
 		TokenEndpoint:         res.TokenEndpoint,
 		RegistrationEndpoint:  res.RegistrationEndpoint,
@@ -1270,6 +1297,8 @@ func NewUpdateOrganizationRemoteSessionIssuerResponseBody(res *types.RemoteSessi
 		OrganizationID:        res.OrganizationID,
 		Slug:                  res.Slug,
 		Issuer:                res.Issuer,
+		Name:                  res.Name,
+		LogoAssetID:           res.LogoAssetID,
 		AuthorizationEndpoint: res.AuthorizationEndpoint,
 		TokenEndpoint:         res.TokenEndpoint,
 		RegistrationEndpoint:  res.RegistrationEndpoint,
@@ -1338,6 +1367,8 @@ func NewGetOrganizationRemoteSessionIssuerResponseBody(res *types.RemoteSessionI
 		OrganizationID:        res.OrganizationID,
 		Slug:                  res.Slug,
 		Issuer:                res.Issuer,
+		Name:                  res.Name,
+		LogoAssetID:           res.LogoAssetID,
 		AuthorizationEndpoint: res.AuthorizationEndpoint,
 		TokenEndpoint:         res.TokenEndpoint,
 		RegistrationEndpoint:  res.RegistrationEndpoint,
@@ -2162,6 +2193,8 @@ func NewCreateOrganizationRemoteSessionIssuerPayload(body *CreateOrganizationRem
 	v := &organizationremotesessionissuers.CreateOrganizationRemoteSessionIssuerPayload{
 		Slug:                  *body.Slug,
 		Issuer:                *body.Issuer,
+		Name:                  body.Name,
+		LogoAssetID:           body.LogoAssetID,
 		AuthorizationEndpoint: body.AuthorizationEndpoint,
 		TokenEndpoint:         body.TokenEndpoint,
 		RegistrationEndpoint:  body.RegistrationEndpoint,
@@ -2207,6 +2240,8 @@ func NewUpdateOrganizationRemoteSessionIssuerPayload(body *UpdateOrganizationRem
 		ID:                    *body.ID,
 		Slug:                  body.Slug,
 		Issuer:                body.Issuer,
+		Name:                  body.Name,
+		LogoAssetID:           body.LogoAssetID,
 		AuthorizationEndpoint: body.AuthorizationEndpoint,
 		TokenEndpoint:         body.TokenEndpoint,
 		RegistrationEndpoint:  body.RegistrationEndpoint,
@@ -2290,6 +2325,9 @@ func ValidateCreateOrganizationRemoteSessionIssuerRequestBody(body *CreateOrgani
 	if body.Issuer == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("issuer", "body"))
 	}
+	if body.LogoAssetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
+	}
 	return
 }
 
@@ -2301,6 +2339,9 @@ func ValidateUpdateOrganizationRemoteSessionIssuerRequestBody(body *UpdateOrgani
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.LogoAssetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
 	}
 	return
 }
