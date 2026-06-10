@@ -195,6 +195,7 @@ INSERT INTO risk_policies (
   , project_id
   , organization_id
   , name
+  , policy_type
   , sources
   , presidio_entities
   , prompt_injection_rules
@@ -205,6 +206,8 @@ INSERT INTO risk_policies (
   , action
   , auto_name
   , user_message
+  , prompt
+  , model_config
   , version
 )
 VALUES (
@@ -212,16 +215,19 @@ VALUES (
   , $2
   , $3
   , $4
-  , $5
+  , COALESCE(NULLIF($5, ''), 'standard')
   , $6
   , $7
   , $8
-  , COALESCE($9::text[], '{}'::text[])
-  , $10::text[]
-  , $11
+  , $9
+  , COALESCE($10::text[], '{}'::text[])
+  , $11::text[]
   , $12
   , $13
   , $14
+  , $15
+  , $16::text
+  , $17::jsonb
   , 1
 )
 RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, action, audience_type, auto_name, user_message, prompt, model_config, version, created_at, updated_at, deleted_at, deleted
@@ -232,6 +238,7 @@ type CreateRiskPolicyParams struct {
 	ProjectID            uuid.UUID
 	OrganizationID       string
 	Name                 string
+	PolicyType           interface{}
 	Sources              []string
 	PresidioEntities     []string
 	PromptInjectionRules []string
@@ -242,6 +249,8 @@ type CreateRiskPolicyParams struct {
 	Action               string
 	AutoName             bool
 	UserMessage          pgtype.Text
+	Prompt               pgtype.Text
+	ModelConfig          []byte
 }
 
 func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyParams) (RiskPolicy, error) {
@@ -250,6 +259,7 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 		arg.ProjectID,
 		arg.OrganizationID,
 		arg.Name,
+		arg.PolicyType,
 		arg.Sources,
 		arg.PresidioEntities,
 		arg.PromptInjectionRules,
@@ -260,6 +270,8 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 		arg.Action,
 		arg.AutoName,
 		arg.UserMessage,
+		arg.Prompt,
+		arg.ModelConfig,
 	)
 	var i RiskPolicy
 	err := row.Scan(
@@ -980,6 +992,7 @@ categorized AS (
   SELECT
       date_trunc('hour', rr.created_at)::timestamptz AS bucket_start
     , CASE
+        WHEN rr.source = 'llm_judge' THEN 'prompt_policy'
         WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
         WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
         WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto') THEN 'financial'
@@ -1551,6 +1564,7 @@ FROM (
     AND ($6::text = '' OR c.external_user_id ILIKE '%' || $6::text || '%')
     AND ($7::text = '' OR (
     CASE
+      WHEN rr.source = 'llm_judge' THEN 'prompt_policy'
       WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
       WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
       WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto') THEN 'financial'
@@ -1774,6 +1788,7 @@ WITH categorized AS (
     COALESCE(rr.rule_id, '')::TEXT AS rule_id,
     rr.source,
     CASE
+      WHEN rr.source = 'llm_judge' THEN 'prompt_policy'
       WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
       WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
       WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto') THEN 'financial'
@@ -1875,6 +1890,7 @@ const listRiskUserCategoryBreakdown = `-- name: ListRiskUserCategoryBreakdown :m
 WITH user_findings AS (
   SELECT
     CASE
+      WHEN rr.source = 'llm_judge' THEN 'prompt_policy'
       WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
       WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
       WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto') THEN 'financial'
@@ -2108,6 +2124,8 @@ SET name = $1
   , action = $9
   , auto_name = $10
   , user_message = $11
+  , prompt = $12::text
+  , model_config = $13::jsonb
   , version = CASE
       WHEN sources IS DISTINCT FROM $2
         OR presidio_entities IS DISTINCT FROM $3
@@ -2117,12 +2135,14 @@ SET name = $1
         OR message_types IS DISTINCT FROM $7::text[]
         OR enabled IS DISTINCT FROM $8
         OR action IS DISTINCT FROM $9
+        OR prompt IS DISTINCT FROM $12::text
+        OR model_config IS DISTINCT FROM $13::jsonb
       THEN version + 1
       ELSE version
     END
   , updated_at = clock_timestamp()
-WHERE id = $12
-  AND project_id = $13
+WHERE id = $14
+  AND project_id = $15
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, action, audience_type, auto_name, user_message, prompt, model_config, version, created_at, updated_at, deleted_at, deleted
 `
@@ -2139,6 +2159,8 @@ type UpdateRiskPolicyParams struct {
 	Action               string
 	AutoName             bool
 	UserMessage          pgtype.Text
+	Prompt               pgtype.Text
+	ModelConfig          []byte
 	ID                   uuid.UUID
 	ProjectID            uuid.UUID
 }
@@ -2156,6 +2178,8 @@ func (q *Queries) UpdateRiskPolicy(ctx context.Context, arg UpdateRiskPolicyPara
 		arg.Action,
 		arg.AutoName,
 		arg.UserMessage,
+		arg.Prompt,
+		arg.ModelConfig,
 		arg.ID,
 		arg.ProjectID,
 	)

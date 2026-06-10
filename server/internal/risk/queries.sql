@@ -4,6 +4,7 @@ INSERT INTO risk_policies (
   , project_id
   , organization_id
   , name
+  , policy_type
   , sources
   , presidio_entities
   , prompt_injection_rules
@@ -14,6 +15,8 @@ INSERT INTO risk_policies (
   , action
   , auto_name
   , user_message
+  , prompt
+  , model_config
   , version
 )
 VALUES (
@@ -21,6 +24,7 @@ VALUES (
   , @project_id
   , @organization_id
   , @name
+  , COALESCE(NULLIF(@policy_type, ''), 'standard')
   , @sources
   , @presidio_entities
   , @prompt_injection_rules
@@ -31,6 +35,8 @@ VALUES (
   , @action
   , @auto_name
   , @user_message
+  , sqlc.narg(prompt)::text
+  , sqlc.narg(model_config)::jsonb
   , 1
 )
 RETURNING *;
@@ -83,6 +89,8 @@ SET name = @name
   , action = @action
   , auto_name = @auto_name
   , user_message = @user_message
+  , prompt = sqlc.narg(prompt)::text
+  , model_config = sqlc.narg(model_config)::jsonb
   , version = CASE
       WHEN sources IS DISTINCT FROM @sources
         OR presidio_entities IS DISTINCT FROM @presidio_entities
@@ -92,6 +100,8 @@ SET name = @name
         OR message_types IS DISTINCT FROM sqlc.arg(message_types)::text[]
         OR enabled IS DISTINCT FROM @enabled
         OR action IS DISTINCT FROM @action
+        OR prompt IS DISTINCT FROM sqlc.narg(prompt)::text
+        OR model_config IS DISTINCT FROM sqlc.narg(model_config)::jsonb
       THEN version + 1
       ELSE version
     END
@@ -342,6 +352,7 @@ LIMIT @row_limit;
 WITH user_findings AS (
   SELECT
     CASE
+      WHEN rr.source = 'llm_judge' THEN 'prompt_policy'
       WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
       WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
       WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto') THEN 'financial'
@@ -425,6 +436,7 @@ WITH categorized AS (
     COALESCE(rr.rule_id, '')::TEXT AS rule_id,
     rr.source,
     CASE
+      WHEN rr.source = 'llm_judge' THEN 'prompt_policy'
       WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
       WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
       WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto') THEN 'financial'
@@ -517,6 +529,7 @@ categorized AS (
   SELECT
       date_trunc('hour', rr.created_at)::timestamptz AS bucket_start
     , CASE
+        WHEN rr.source = 'llm_judge' THEN 'prompt_policy'
         WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
         WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
         WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto') THEN 'financial'
@@ -705,6 +718,7 @@ FROM (
     AND (@user_id::text = '' OR c.external_user_id ILIKE '%' || @user_id::text || '%')
     AND (@category::text = '' OR (
     CASE
+      WHEN rr.source = 'llm_judge' THEN 'prompt_policy'
       WHEN rr.source IN ('shadow_mcp', 'destructive_tool', 'cli_destructive', 'prompt_injection') THEN rr.source
       WHEN rr.rule_id LIKE 'secret.%' THEN 'secrets'
       WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto') THEN 'financial'

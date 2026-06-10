@@ -206,6 +206,12 @@ func (s *Service) insertMessageWithFallbackUpsert(
 		return fmt.Errorf("check session_capture feature flag: %w", err)
 	}
 	if !enabled {
+		s.logger.DebugContext(ctx, "session capture disabled; skipping Claude chat persistence",
+			attr.SlogEvent("claude_hook_session_capture_disabled"),
+			attr.SlogOrganizationID(metadata.GramOrgID),
+			attr.SlogProjectID(projectID.String()),
+			attr.SlogGenAIConversationID(metadata.SessionID),
+		)
 		return nil
 	}
 
@@ -265,6 +271,12 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 	}
 
 	if content == "" {
+		s.logger.DebugContext(ctx, "skipping empty Claude conversation event",
+			attr.SlogEvent("claude_hook_conversation_empty"),
+			attr.SlogHookEvent(payload.HookEventName),
+			attr.SlogGenAIConversationID(conv.PtrValOr(payload.SessionID, "")),
+			attr.SlogProjectID(metadata.ProjectID),
+		)
 		return nil
 	}
 

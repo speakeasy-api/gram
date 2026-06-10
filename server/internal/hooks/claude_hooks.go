@@ -555,14 +555,18 @@ func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug s
 	}
 	ctx, err := s.auth.Authorize(ctx, key, keyScheme)
 	if err != nil {
-		return ctx, err
+		return ctx, fmt.Errorf("authorize claude hook api key: %w", err)
 	}
 	projectScheme := &security.APIKeyScheme{
 		Name:           constants.ProjectSlugSecuritySchema,
 		Scopes:         []string{},
 		RequiredScopes: []string{"hooks"},
 	}
-	return s.auth.Authorize(ctx, projectSlug, projectScheme)
+	ctx, err = s.auth.Authorize(ctx, projectSlug, projectScheme)
+	if err != nil {
+		return ctx, fmt.Errorf("authorize claude hook project slug: %w", err)
+	}
+	return ctx, nil
 }
 
 func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
@@ -602,11 +606,20 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 	// fall back to buffering.
 	metadata, err := s.getSessionMetadata(ctx, sessionID)
 	if err == nil {
-		if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil && metadata.UserEmail == "" && payloadUserEmail != "" {
-			metadata.UserEmail = payloadUserEmail
-			if resolvedUserID := s.resolveUserByEmail(ctx, payloadUserEmail, metadata.GramOrgID); resolvedUserID != "" {
-				metadata.UserID = resolvedUserID
+		if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
+			authMetadata := SessionMetadata{
+				SessionID:   sessionID,
+				ServiceName: "",
+				UserEmail:   payloadUserEmail,
+				UserID:      authCtx.UserID,
+				ClaudeOrgID: "",
+				GramOrgID:   authCtx.ActiveOrganizationID,
+				ProjectID:   authCtx.ProjectID.String(),
 			}
+			if authMetadata.UserID == "" && authMetadata.UserEmail != "" {
+				authMetadata.UserID = s.resolveUserByEmail(ctx, authMetadata.UserEmail, authMetadata.GramOrgID)
+			}
+			metadata = mergeClaudeAuthContextMetadata(authMetadata, metadata)
 		}
 		// Persistence does DB writes plus a Temporal workflow start, which
 		// can take longer than Claude Code is willing to wait for a hook
@@ -620,10 +633,13 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 				SessionID:   sessionID,
 				ServiceName: "",
 				UserEmail:   payloadUserEmail,
-				UserID:      s.resolveUserByEmail(ctx, payloadUserEmail, authCtx.ActiveOrganizationID),
+				UserID:      authCtx.UserID,
 				ClaudeOrgID: "",
 				GramOrgID:   authCtx.ActiveOrganizationID,
 				ProjectID:   authCtx.ProjectID.String(),
+			}
+			if metadata.UserID == "" && metadata.UserEmail != "" {
+				metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
 			}
 			go s.persistHook(ctx, payload, &metadata)
 			return

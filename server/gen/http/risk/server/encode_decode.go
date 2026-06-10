@@ -6435,6 +6435,38 @@ func EncodeTestDetectionRuleError(encoder func(context.Context, http.ResponseWri
 	}
 }
 
+// unmarshalRiskPolicyModelConfigRequestBodyToTypesRiskPolicyModelConfig builds
+// a value of type *types.RiskPolicyModelConfig from a value of type
+// *RiskPolicyModelConfigRequestBody.
+func unmarshalRiskPolicyModelConfigRequestBodyToTypesRiskPolicyModelConfig(v *RiskPolicyModelConfigRequestBody) *types.RiskPolicyModelConfig {
+	if v == nil {
+		return nil
+	}
+	res := &types.RiskPolicyModelConfig{
+		Model:       v.Model,
+		Temperature: v.Temperature,
+		FailOpen:    v.FailOpen,
+	}
+
+	return res
+}
+
+// marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigResponseBody builds
+// a value of type *RiskPolicyModelConfigResponseBody from a value of type
+// *types.RiskPolicyModelConfig.
+func marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigResponseBody(v *types.RiskPolicyModelConfig) *RiskPolicyModelConfigResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &RiskPolicyModelConfigResponseBody{
+		Model:       v.Model,
+		Temperature: v.Temperature,
+		FailOpen:    v.FailOpen,
+	}
+
+	return res
+}
+
 // marshalTypesRiskPolicyToRiskPolicyResponseBody builds a value of type
 // *RiskPolicyResponseBody from a value of type *types.RiskPolicy.
 func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPolicyResponseBody {
@@ -6442,10 +6474,12 @@ func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPo
 		ID:              v.ID,
 		ProjectID:       v.ProjectID,
 		Name:            v.Name,
+		PolicyType:      v.PolicyType,
 		Enabled:         v.Enabled,
 		Action:          v.Action,
 		AutoName:        v.AutoName,
 		UserMessage:     v.UserMessage,
+		Prompt:          v.Prompt,
 		Version:         v.Version,
 		CreatedAt:       v.CreatedAt,
 		UpdatedAt:       v.UpdatedAt,
@@ -6489,6 +6523,9 @@ func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPo
 		for i, val := range v.MessageTypes {
 			res.MessageTypes[i] = val
 		}
+	}
+	if v.ModelConfig != nil {
+		res.ModelConfig = marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigResponseBody(v.ModelConfig)
 	}
 
 	return res

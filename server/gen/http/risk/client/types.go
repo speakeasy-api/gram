@@ -18,6 +18,9 @@ import (
 type CreateRiskPolicyRequestBody struct {
 	// The policy name. If omitted, a name will be auto-generated.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Policy type: standard (regex/presidio/custom detection) or prompt_based
+	// (LLM-judge). Defaults to standard.
+	PolicyType string `form:"policy_type" json:"policy_type" xml:"policy_type"`
 	// Detection sources to enable.
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
 	// Presidio entity types to detect.
@@ -42,6 +45,11 @@ type CreateRiskPolicyRequestBody struct {
 	// Optional message shown to end users when this policy blocks an action or
 	// surfaces a flagged finding.
 	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
+	// For prompt_based policies: the guardrail prompt the LLM judge evaluates each
+	// in-scope message against. Required when policy_type is prompt_based.
+	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	// For prompt_based policies: per-policy LLM-judge model configuration.
+	ModelConfig *RiskPolicyModelConfigRequestBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
 }
 
 // UpdateRiskPolicyRequestBody is the type of the "risk" service
@@ -76,6 +84,12 @@ type UpdateRiskPolicyRequestBody struct {
 	// Optional message shown to end users when this policy blocks an action or
 	// surfaces a flagged finding. Send an empty string to clear.
 	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
+	// For prompt_based policies: the guardrail prompt the LLM judge evaluates each
+	// in-scope message against. Omit to preserve the current value.
+	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	// For prompt_based policies: per-policy LLM-judge model configuration. Omit to
+	// preserve the current value.
+	ModelConfig *RiskPolicyModelConfigRequestBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
 }
 
 // CreateRiskPolicyBypassRequestRequestBody is the type of the "risk" service
@@ -189,6 +203,9 @@ type CreateRiskPolicyResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The policy name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Policy type: standard (regex/presidio/custom detection) or prompt_based
+	// (LLM-judge).
+	PolicyType *string `form:"policy_type,omitempty" json:"policy_type,omitempty" xml:"policy_type,omitempty"`
 	// Detection sources enabled for this policy.
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
 	// Presidio entity types to scan for. When empty, scans all entities.
@@ -217,6 +234,12 @@ type CreateRiskPolicyResponseBody struct {
 	// Optional message shown to the end user when this policy blocks an action or
 	// surfaces a flagged finding. When unset, a default message is rendered.
 	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
+	// For prompt_based policies: the guardrail prompt the LLM judge evaluates each
+	// in-scope message against. Null for standard policies.
+	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	// For prompt_based policies: per-policy LLM-judge model configuration. Null
+	// for standard policies.
+	ModelConfig *RiskPolicyModelConfigResponseBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
 	// Policy version, incremented on each update.
 	Version *int64 `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 	// When the policy was created.
@@ -252,6 +275,9 @@ type GetRiskPolicyResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The policy name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Policy type: standard (regex/presidio/custom detection) or prompt_based
+	// (LLM-judge).
+	PolicyType *string `form:"policy_type,omitempty" json:"policy_type,omitempty" xml:"policy_type,omitempty"`
 	// Detection sources enabled for this policy.
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
 	// Presidio entity types to scan for. When empty, scans all entities.
@@ -280,6 +306,12 @@ type GetRiskPolicyResponseBody struct {
 	// Optional message shown to the end user when this policy blocks an action or
 	// surfaces a flagged finding. When unset, a default message is rendered.
 	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
+	// For prompt_based policies: the guardrail prompt the LLM judge evaluates each
+	// in-scope message against. Null for standard policies.
+	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	// For prompt_based policies: per-policy LLM-judge model configuration. Null
+	// for standard policies.
+	ModelConfig *RiskPolicyModelConfigResponseBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
 	// Policy version, incremented on each update.
 	Version *int64 `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 	// When the policy was created.
@@ -301,6 +333,9 @@ type UpdateRiskPolicyResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The policy name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Policy type: standard (regex/presidio/custom detection) or prompt_based
+	// (LLM-judge).
+	PolicyType *string `form:"policy_type,omitempty" json:"policy_type,omitempty" xml:"policy_type,omitempty"`
 	// Detection sources enabled for this policy.
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
 	// Presidio entity types to scan for. When empty, scans all entities.
@@ -329,6 +364,12 @@ type UpdateRiskPolicyResponseBody struct {
 	// Optional message shown to the end user when this policy blocks an action or
 	// surfaces a flagged finding. When unset, a default message is rendered.
 	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
+	// For prompt_based policies: the guardrail prompt the LLM judge evaluates each
+	// in-scope message against. Null for standard policies.
+	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	// For prompt_based policies: per-policy LLM-judge model configuration. Null
+	// for standard policies.
+	ModelConfig *RiskPolicyModelConfigResponseBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
 	// Policy version, incremented on each update.
 	Version *int64 `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 	// When the policy was created.
@@ -5735,6 +5776,34 @@ type TestDetectionRuleGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// RiskPolicyModelConfigRequestBody is used to define fields on request body
+// types.
+type RiskPolicyModelConfigRequestBody struct {
+	// OpenRouter model id the judge should use. Empty selects the default judge
+	// model.
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// Sampling temperature for the judge. Defaults to a low value for
+	// deterministic verdicts.
+	Temperature *float64 `form:"temperature,omitempty" json:"temperature,omitempty" xml:"temperature,omitempty"`
+	// When the judge errors or times out: true allows the message (fail-open),
+	// false blocks it (fail-closed). Defaults to fail-open.
+	FailOpen *bool `form:"fail_open,omitempty" json:"fail_open,omitempty" xml:"fail_open,omitempty"`
+}
+
+// RiskPolicyModelConfigResponseBody is used to define fields on response body
+// types.
+type RiskPolicyModelConfigResponseBody struct {
+	// OpenRouter model id the judge should use. Empty selects the default judge
+	// model.
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// Sampling temperature for the judge. Defaults to a low value for
+	// deterministic verdicts.
+	Temperature *float64 `form:"temperature,omitempty" json:"temperature,omitempty" xml:"temperature,omitempty"`
+	// When the judge errors or times out: true allows the message (fail-open),
+	// false blocks it (fail-closed). Defaults to fail-open.
+	FailOpen *bool `form:"fail_open,omitempty" json:"fail_open,omitempty" xml:"fail_open,omitempty"`
+}
+
 // RiskPolicyResponseBody is used to define fields on response body types.
 type RiskPolicyResponseBody struct {
 	// The risk policy ID.
@@ -5743,6 +5812,9 @@ type RiskPolicyResponseBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The policy name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Policy type: standard (regex/presidio/custom detection) or prompt_based
+	// (LLM-judge).
+	PolicyType *string `form:"policy_type,omitempty" json:"policy_type,omitempty" xml:"policy_type,omitempty"`
 	// Detection sources enabled for this policy.
 	Sources []string `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
 	// Presidio entity types to scan for. When empty, scans all entities.
@@ -5771,6 +5843,12 @@ type RiskPolicyResponseBody struct {
 	// Optional message shown to the end user when this policy blocks an action or
 	// surfaces a flagged finding. When unset, a default message is rendered.
 	UserMessage *string `form:"user_message,omitempty" json:"user_message,omitempty" xml:"user_message,omitempty"`
+	// For prompt_based policies: the guardrail prompt the LLM judge evaluates each
+	// in-scope message against. Null for standard policies.
+	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	// For prompt_based policies: per-policy LLM-judge model configuration. Null
+	// for standard policies.
+	ModelConfig *RiskPolicyModelConfigResponseBody `form:"model_config,omitempty" json:"model_config,omitempty" xml:"model_config,omitempty"`
 	// Policy version, incremented on each update.
 	Version *int64 `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 	// When the policy was created.
@@ -6023,10 +6101,18 @@ type TestDetectionRuleMatchResponseBody struct {
 func NewCreateRiskPolicyRequestBody(p *risk.CreateRiskPolicyPayload) *CreateRiskPolicyRequestBody {
 	body := &CreateRiskPolicyRequestBody{
 		Name:        p.Name,
+		PolicyType:  p.PolicyType,
 		Enabled:     p.Enabled,
 		Action:      p.Action,
 		AutoName:    p.AutoName,
 		UserMessage: p.UserMessage,
+		Prompt:      p.Prompt,
+	}
+	{
+		var zero string
+		if body.PolicyType == zero {
+			body.PolicyType = "standard"
+		}
 	}
 	if p.Sources != nil {
 		body.Sources = make([]string, len(p.Sources))
@@ -6070,6 +6156,9 @@ func NewCreateRiskPolicyRequestBody(p *risk.CreateRiskPolicyPayload) *CreateRisk
 			body.Action = "flag"
 		}
 	}
+	if p.ModelConfig != nil {
+		body.ModelConfig = marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigRequestBody(p.ModelConfig)
+	}
 	return body
 }
 
@@ -6083,6 +6172,7 @@ func NewUpdateRiskPolicyRequestBody(p *risk.UpdateRiskPolicyPayload) *UpdateRisk
 		Action:      p.Action,
 		AutoName:    p.AutoName,
 		UserMessage: p.UserMessage,
+		Prompt:      p.Prompt,
 	}
 	if p.Sources != nil {
 		body.Sources = make([]string, len(p.Sources))
@@ -6119,6 +6209,9 @@ func NewUpdateRiskPolicyRequestBody(p *risk.UpdateRiskPolicyPayload) *UpdateRisk
 		for i, val := range p.MessageTypes {
 			body.MessageTypes[i] = val
 		}
+	}
+	if p.ModelConfig != nil {
+		body.ModelConfig = marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigRequestBody(p.ModelConfig)
 	}
 	return body
 }
@@ -6263,10 +6356,12 @@ func NewCreateRiskPolicyRiskPolicyOK(body *CreateRiskPolicyResponseBody) *types.
 		ID:              *body.ID,
 		ProjectID:       *body.ProjectID,
 		Name:            *body.Name,
+		PolicyType:      *body.PolicyType,
 		Enabled:         *body.Enabled,
 		Action:          *body.Action,
 		AutoName:        *body.AutoName,
 		UserMessage:     body.UserMessage,
+		Prompt:          body.Prompt,
 		Version:         *body.Version,
 		CreatedAt:       *body.CreatedAt,
 		UpdatedAt:       *body.UpdatedAt,
@@ -6306,6 +6401,9 @@ func NewCreateRiskPolicyRiskPolicyOK(body *CreateRiskPolicyResponseBody) *types.
 		for i, val := range body.MessageTypes {
 			v.MessageTypes[i] = val
 		}
+	}
+	if body.ModelConfig != nil {
+		v.ModelConfig = unmarshalRiskPolicyModelConfigResponseBodyToTypesRiskPolicyModelConfig(body.ModelConfig)
 	}
 
 	return v
@@ -6794,10 +6892,12 @@ func NewGetRiskPolicyRiskPolicyOK(body *GetRiskPolicyResponseBody) *types.RiskPo
 		ID:              *body.ID,
 		ProjectID:       *body.ProjectID,
 		Name:            *body.Name,
+		PolicyType:      *body.PolicyType,
 		Enabled:         *body.Enabled,
 		Action:          *body.Action,
 		AutoName:        *body.AutoName,
 		UserMessage:     body.UserMessage,
+		Prompt:          body.Prompt,
 		Version:         *body.Version,
 		CreatedAt:       *body.CreatedAt,
 		UpdatedAt:       *body.UpdatedAt,
@@ -6837,6 +6937,9 @@ func NewGetRiskPolicyRiskPolicyOK(body *GetRiskPolicyResponseBody) *types.RiskPo
 		for i, val := range body.MessageTypes {
 			v.MessageTypes[i] = val
 		}
+	}
+	if body.ModelConfig != nil {
+		v.ModelConfig = unmarshalRiskPolicyModelConfigResponseBodyToTypesRiskPolicyModelConfig(body.ModelConfig)
 	}
 
 	return v
@@ -6999,10 +7102,12 @@ func NewUpdateRiskPolicyRiskPolicyOK(body *UpdateRiskPolicyResponseBody) *types.
 		ID:              *body.ID,
 		ProjectID:       *body.ProjectID,
 		Name:            *body.Name,
+		PolicyType:      *body.PolicyType,
 		Enabled:         *body.Enabled,
 		Action:          *body.Action,
 		AutoName:        *body.AutoName,
 		UserMessage:     body.UserMessage,
+		Prompt:          body.Prompt,
 		Version:         *body.Version,
 		CreatedAt:       *body.CreatedAt,
 		UpdatedAt:       *body.UpdatedAt,
@@ -7042,6 +7147,9 @@ func NewUpdateRiskPolicyRiskPolicyOK(body *UpdateRiskPolicyResponseBody) *types.
 		for i, val := range body.MessageTypes {
 			v.MessageTypes[i] = val
 		}
+	}
+	if body.ModelConfig != nil {
+		v.ModelConfig = unmarshalRiskPolicyModelConfigResponseBodyToTypesRiskPolicyModelConfig(body.ModelConfig)
 	}
 
 	return v
@@ -10944,6 +11052,9 @@ func ValidateCreateRiskPolicyResponseBody(body *CreateRiskPolicyResponseBody) (e
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
+	if body.PolicyType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("policy_type", "body"))
+	}
 	if body.Sources == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("sources", "body"))
 	}
@@ -10976,6 +11087,11 @@ func ValidateCreateRiskPolicyResponseBody(body *CreateRiskPolicyResponseBody) (e
 	}
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.PolicyType != nil {
+		if !(*body.PolicyType == "standard" || *body.PolicyType == "prompt_based") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.policy_type", *body.PolicyType, []any{"standard", "prompt_based"}))
+		}
 	}
 	if body.Action != nil {
 		if !(*body.Action == "flag" || *body.Action == "block") {
@@ -11028,6 +11144,9 @@ func ValidateGetRiskPolicyResponseBody(body *GetRiskPolicyResponseBody) (err err
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
+	if body.PolicyType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("policy_type", "body"))
+	}
 	if body.Sources == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("sources", "body"))
 	}
@@ -11060,6 +11179,11 @@ func ValidateGetRiskPolicyResponseBody(body *GetRiskPolicyResponseBody) (err err
 	}
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.PolicyType != nil {
+		if !(*body.PolicyType == "standard" || *body.PolicyType == "prompt_based") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.policy_type", *body.PolicyType, []any{"standard", "prompt_based"}))
+		}
 	}
 	if body.Action != nil {
 		if !(*body.Action == "flag" || *body.Action == "block") {
@@ -11087,6 +11211,9 @@ func ValidateUpdateRiskPolicyResponseBody(body *UpdateRiskPolicyResponseBody) (e
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
+	if body.PolicyType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("policy_type", "body"))
+	}
 	if body.Sources == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("sources", "body"))
 	}
@@ -11119,6 +11246,11 @@ func ValidateUpdateRiskPolicyResponseBody(body *UpdateRiskPolicyResponseBody) (e
 	}
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.PolicyType != nil {
+		if !(*body.PolicyType == "standard" || *body.PolicyType == "prompt_based") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.policy_type", *body.PolicyType, []any{"standard", "prompt_based"}))
+		}
 	}
 	if body.Action != nil {
 		if !(*body.Action == "flag" || *body.Action == "block") {
@@ -18325,6 +18457,9 @@ func ValidateRiskPolicyResponseBody(body *RiskPolicyResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
+	if body.PolicyType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("policy_type", "body"))
+	}
 	if body.Sources == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("sources", "body"))
 	}
@@ -18357,6 +18492,11 @@ func ValidateRiskPolicyResponseBody(body *RiskPolicyResponseBody) (err error) {
 	}
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.PolicyType != nil {
+		if !(*body.PolicyType == "standard" || *body.PolicyType == "prompt_based") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.policy_type", *body.PolicyType, []any{"standard", "prompt_based"}))
+		}
 	}
 	if body.Action != nil {
 		if !(*body.Action == "flag" || *body.Action == "block") {

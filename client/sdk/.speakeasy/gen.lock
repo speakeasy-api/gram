@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: ea018f86f7371a68384ba8ad71bda4dc
+  docChecksum: e5fdeb12ab2f6d4bc8eab206180112de
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -207,7 +207,7 @@ trackedFiles:
   docs/models/components/createresponsebody.md:
     last_write_checksum: sha1:0c12f06a5d161fb9fa2c04fed3bb05965bd77b3d
   docs/models/components/createriskpolicyrequestbody.md:
-    last_write_checksum: sha1:04f4ab20c362d4dffb7a332f7e5c3019837d0d09
+    last_write_checksum: sha1:9fe340dc955d0a716be10417bf81a1bbc623c3b1
   docs/models/components/createroleform.md:
     last_write_checksum: sha1:2862fd945c42babf0cce10ca510a35cc00b91201
   docs/models/components/createserverform.md:
@@ -686,6 +686,8 @@ trackedFiles:
     last_write_checksum: sha1:8a2bc1a476e55d66c0fa67b222371171ce935f53
   docs/models/components/policy.md:
     last_write_checksum: sha1:4f61847539866024b0d616f84b41de6dc9c64b2d
+  docs/models/components/policytype.md:
+    last_write_checksum: sha1:217542331ab5cd8b81e3f3e374f5a7a8f5b9c78f
   docs/models/components/principaltype.md:
     last_write_checksum: sha1:0b369f84dc15c71aaa2b290aa3a7dcffa514dfd6
   docs/models/components/project.md:
@@ -797,7 +799,7 @@ trackedFiles:
   docs/models/components/riskoverviewuser.md:
     last_write_checksum: sha1:e27f5822bf1197b237ac5f37aab0c8d439d3dfa0
   docs/models/components/riskpolicy.md:
-    last_write_checksum: sha1:22ca1cd63ba2f674c93fb821570c829f6138cd59
+    last_write_checksum: sha1:582c50ff091f29b3fb44ed0d7a30a5241c959622
   docs/models/components/riskpolicyaction.md:
     last_write_checksum: sha1:3729eadfe620fd4d1c367a384ab82ea55ab8b2d3
   docs/models/components/riskpolicybypassapprovalrequestbody.md:
@@ -806,6 +808,10 @@ trackedFiles:
     last_write_checksum: sha1:0410a2bb27b22069c2f9736d689ab591fe3e1174
   docs/models/components/riskpolicybypassrequeststatus.md:
     last_write_checksum: sha1:7b5d61ac685a8db465d91537188bdd37d394effe
+  docs/models/components/riskpolicymodelconfig.md:
+    last_write_checksum: sha1:7caa836b93842d3c6241a7f8f615184df0d6be53
+  docs/models/components/riskpolicypolicytype.md:
+    last_write_checksum: sha1:9522b2e702ff794832ddcb14a54890e2ada009b8
   docs/models/components/riskpolicystatus.md:
     last_write_checksum: sha1:516633e7ddae4a15c8060c4cbcccbab4f9485352
   docs/models/components/riskresult.md:
@@ -1083,7 +1089,7 @@ trackedFiles:
   docs/models/components/updaterequestbodyvisibility.md:
     last_write_checksum: sha1:13e67a9c7df67df83d191831827d14324b2fd409
   docs/models/components/updateriskpolicyrequestbody.md:
-    last_write_checksum: sha1:acdf264af032613c70bd183f48a1246a8637f251
+    last_write_checksum: sha1:11d023d509735160a9870c578cc6060f2f73a2fe
   docs/models/components/updateriskpolicyrequestbodyaction.md:
     last_write_checksum: sha1:d0440dea4e7b2af3804fd303de46f1f8c1472d10
   docs/models/components/updateroleform.md:
@@ -3943,7 +3949,7 @@ trackedFiles:
   src/models/components/createresponsebody.ts:
     last_write_checksum: sha1:69fe2ce5ad8c1c2a848b034b6cd47f7b3012087c
   src/models/components/createriskpolicyrequestbody.ts:
-    last_write_checksum: sha1:968e81d8ed8507fcad5d671ea55574106a466426
+    last_write_checksum: sha1:d794e6c1a544a2740d9a9b113bfbd302be05c3c5
   src/models/components/createroleform.ts:
     last_write_checksum: sha1:85aeb0cf9b2bcc28284e482e51fc8b2d97ca4a1e
   src/models/components/createserverform.ts:
@@ -4113,7 +4119,7 @@ trackedFiles:
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:80624f1a206908070616b365637d5fdc04c30ddb
+    last_write_checksum: sha1:c2835a92acb0d919a7d9a1bebec87bf29a9e0361
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     last_write_checksum: sha1:549d388111333748195b4791e63fd64f4a6e7140
@@ -4451,11 +4457,13 @@ trackedFiles:
   src/models/components/riskoverviewuser.ts:
     last_write_checksum: sha1:eb4da626d8348818266f75b28ae1dac267441b5d
   src/models/components/riskpolicy.ts:
-    last_write_checksum: sha1:068fb5118d6436ea1ccb09d9567648204ba2c4bd
+    last_write_checksum: sha1:f740027320917f265d724dfb4cbb114a4a02ee45
   src/models/components/riskpolicybypassapprovalrequestbody.ts:
     last_write_checksum: sha1:e55bacae622a6a00c2ce0b2825a3294c239bf39a
   src/models/components/riskpolicybypassrequest.ts:
     last_write_checksum: sha1:2122c00738588a12062d99b729d63b1717829575
+  src/models/components/riskpolicymodelconfig.ts:
+    last_write_checksum: sha1:c75ebe652fe7fcbf16a81f0f841c5389aed58fca
   src/models/components/riskpolicystatus.ts:
     last_write_checksum: sha1:478a39101a4d8c9d51b31417839ef68b5b727e77
   src/models/components/riskresult.ts:
@@ -4659,7 +4667,7 @@ trackedFiles:
   src/models/components/updaterequestbody.ts:
     last_write_checksum: sha1:504b230ade27ef53b7f8a825b4fb8da9feead7f8
   src/models/components/updateriskpolicyrequestbody.ts:
-    last_write_checksum: sha1:dd605f0b76c112e771256d3c27ec9bc7c9da180d
+    last_write_checksum: sha1:1355099a70f803a1c7c01faf8b1d63ef5a6aeb9d
   src/models/components/updateroleform.ts:
     last_write_checksum: sha1:8b8b4268330a9ca348f2950ccbba16748c5cb25d
   src/models/components/updateserverform.ts:
@@ -8326,10 +8334,10 @@ examples:
   createRiskPolicy:
     speakeasy-default-create-risk-policy:
       requestBody:
-        application/json: {"action": "flag"}
+        application/json: {"action": "flag", "policy_type": "standard"}
       responses:
         "200":
-          application/json: {"action": "flag", "auto_name": false, "created_at": "2026-11-27T08:06:34.693Z", "enabled": true, "id": "8fa1564d-044e-4c61-89b8-7bbe97a778ca", "name": "<value>", "pending_messages": 291308, "project_id": "e48ffff0-4e01-4690-a5b9-223e3363e5a2", "sources": ["<value 1>"], "total_messages": 415653, "updated_at": "2026-02-03T05:39:04.851Z", "version": 985427}
+          application/json: {"action": "flag", "auto_name": false, "created_at": "2026-11-27T08:06:34.693Z", "enabled": true, "id": "8fa1564d-044e-4c61-89b8-7bbe97a778ca", "name": "<value>", "pending_messages": 291308, "policy_type": "standard", "project_id": "e48ffff0-4e01-4690-a5b9-223e3363e5a2", "sources": ["<value 1>"], "total_messages": 415653, "updated_at": "2026-02-03T05:39:04.851Z", "version": 985427}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -8351,7 +8359,7 @@ examples:
           id: "8fbf5ca1-aa4d-403a-a226-2071123a9a6b"
       responses:
         "200":
-          application/json: {"action": "flag", "auto_name": true, "created_at": "2024-02-15T21:20:30.313Z", "enabled": true, "id": "0f8bca1d-18d7-471f-8408-5b7191c93c99", "name": "<value>", "pending_messages": 267392, "project_id": "7b79acf3-929f-4814-9cda-ff0d4f950b72", "sources": ["<value 1>", "<value 2>"], "total_messages": 752197, "updated_at": "2026-10-17T00:54:10.479Z", "version": 138155}
+          application/json: {"action": "flag", "auto_name": true, "created_at": "2024-02-15T21:20:30.313Z", "enabled": true, "id": "0f8bca1d-18d7-471f-8408-5b7191c93c99", "name": "<value>", "pending_messages": 267392, "policy_type": "standard", "project_id": "7b79acf3-929f-4814-9cda-ff0d4f950b72", "sources": ["<value 1>", "<value 2>"], "total_messages": 752197, "updated_at": "2026-10-17T00:54:10.479Z", "version": 138155}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -8360,7 +8368,7 @@ examples:
     speakeasy-default-list-risk-policies:
       responses:
         "200":
-          application/json: {"policies": [{"action": "flag", "auto_name": false, "created_at": "2026-08-06T06:28:44.327Z", "enabled": false, "id": "7b0becde-53bf-4685-a74f-3cb84422ca25", "name": "<value>", "pending_messages": 203949, "project_id": "198766cc-028d-4e70-8fc4-d9ef15fb1a6a", "sources": ["<value 1>", "<value 2>"], "total_messages": 276564, "updated_at": "2025-08-21T17:12:52.240Z", "version": 358057}]}
+          application/json: {"policies": [{"action": "flag", "auto_name": false, "created_at": "2026-08-06T06:28:44.327Z", "enabled": false, "id": "7b0becde-53bf-4685-a74f-3cb84422ca25", "name": "<value>", "pending_messages": 203949, "policy_type": "standard", "project_id": "198766cc-028d-4e70-8fc4-d9ef15fb1a6a", "sources": ["<value 1>", "<value 2>"], "total_messages": 276564, "updated_at": "2025-08-21T17:12:52.240Z", "version": 358057}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -8392,7 +8400,7 @@ examples:
         application/json: {"id": "843674e6-50ce-48e3-8373-0f97e164413d", "name": "<value>"}
       responses:
         "200":
-          application/json: {"action": "flag", "auto_name": true, "created_at": "2024-08-16T09:14:30.128Z", "enabled": false, "id": "8cfa981a-1dce-4a60-b3a5-be6272d6685f", "name": "<value>", "pending_messages": 625941, "project_id": "7cc9a5e0-4efa-4e61-87ad-977f4945e432", "sources": ["<value 1>", "<value 2>", "<value 3>"], "total_messages": 272683, "updated_at": "2025-10-31T18:54:42.086Z", "version": 171926}
+          application/json: {"action": "flag", "auto_name": true, "created_at": "2024-08-16T09:14:30.128Z", "enabled": false, "id": "8cfa981a-1dce-4a60-b3a5-be6272d6685f", "name": "<value>", "pending_messages": 625941, "policy_type": "standard", "project_id": "7cc9a5e0-4efa-4e61-87ad-977f4945e432", "sources": ["<value 1>", "<value 2>", "<value 3>"], "total_messages": 272683, "updated_at": "2025-10-31T18:54:42.086Z", "version": 171926}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

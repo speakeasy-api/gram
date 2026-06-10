@@ -163,6 +163,9 @@ type CreateRiskPolicyPayload struct {
 	ProjectSlugInput *string
 	// The policy name. If omitted, a name will be auto-generated.
 	Name *string
+	// Policy type: standard (regex/presidio/custom detection) or prompt_based
+	// (LLM-judge). Defaults to standard.
+	PolicyType string
 	// Detection sources to enable.
 	Sources []string
 	// Presidio entity types to detect.
@@ -187,6 +190,11 @@ type CreateRiskPolicyPayload struct {
 	// Optional message shown to end users when this policy blocks an action or
 	// surfaces a flagged finding.
 	UserMessage *string
+	// For prompt_based policies: the guardrail prompt the LLM judge evaluates each
+	// in-scope message against. Required when policy_type is prompt_based.
+	Prompt *string
+	// For prompt_based policies: per-policy LLM-judge model configuration.
+	ModelConfig *types.RiskPolicyModelConfig
 }
 
 // DeleteCustomDetectionRulePayload is the payload type of the risk service
@@ -782,6 +790,12 @@ type UpdateRiskPolicyPayload struct {
 	// Optional message shown to end users when this policy blocks an action or
 	// surfaces a flagged finding. Send an empty string to clear.
 	UserMessage *string
+	// For prompt_based policies: the guardrail prompt the LLM judge evaluates each
+	// in-scope message against. Omit to preserve the current value.
+	Prompt *string
+	// For prompt_based policies: per-policy LLM-judge model configuration. Omit to
+	// preserve the current value.
+	ModelConfig *types.RiskPolicyModelConfig
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

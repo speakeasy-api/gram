@@ -1,6 +1,7 @@
 package risk_analysis_test
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -26,9 +28,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+type recordingPromptJudge struct {
+	texts []string
+}
+
+func (j *recordingPromptJudge) Evaluate(_ context.Context, in risk_analysis.JudgeInput) *risk_analysis.JudgeVerdict {
+	j.texts = append(j.texts, in.Text)
+	return &risk_analysis.JudgeVerdict{Confidence: 0.9, Rationale: "matched tool call"}
+}
+
 func TestAnalyzeBatch_EmptyMessageIDs(t *testing.T) {
 	t.Parallel()
-	ab := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil)
+	ab := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil)
 	require.NotNil(t, ab)
 
 	result, err := ab.Do(t.Context(), risk_analysis.AnalyzeBatchArgs{
@@ -78,6 +89,8 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		testenv.NewMeterProvider(t),
 		conn,
 		piiScanner,
+		nil,
+		nil,
 		nil,
 		nil,
 		nil,
@@ -168,6 +181,8 @@ func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
+		nil,
 	)
 
 	var ts testsuite.WorkflowTestSuite
@@ -227,6 +242,74 @@ func TestAnalyzeBatch_DestructiveToolAnnotationFinding(t *testing.T) {
 	require.Equal(t, shadowmcp.SourceDestructiveTool, rows[0].Source)
 	require.Equal(t, "destructive.tool", rows[0].RuleID.String)
 	require.Equal(t, "delete_records", rows[0].Match.String)
+}
+
+func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+
+	policyID, err := uuid.NewV7()
+	require.NoError(t, err)
+	policy, err := riskrepo.New(conn).CreateRiskPolicy(t.Context(), riskrepo.CreateRiskPolicyParams{
+		ID:             policyID,
+		ProjectID:      td.projectID,
+		OrganizationID: td.orgID,
+		Name:           "prompt policy",
+		PolicyType:     "prompt_based",
+		Sources:        []string{},
+		MessageTypes:   []string{message.ToolRequest},
+		Enabled:        true,
+		Action:         "flag",
+		AutoName:       false,
+		Prompt:         pgtype.Text{String: "Block destructive shell commands", Valid: true},
+	})
+	require.NoError(t, err)
+	td.policyID = policy.ID
+	td.policyVersion = policy.Version
+
+	msgID := insertAssistantToolCallWithArgs(t, conn, td, "Bash", map[string]any{"command": "rm -rf /tmp/data"})
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagPromptPolicies, td.orgID, true)
+	judge := &recordingPromptJudge{}
+	ab := risk_analysis.NewAnalyzeBatch(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		conn,
+		&risk_analysis.StubPIIScanner{},
+		nil,
+		nil,
+		nil,
+		judge,
+		flags,
+	)
+
+	var ts testsuite.WorkflowTestSuite
+	env := ts.NewTestActivityEnvironment()
+	env.RegisterActivity(ab.Do)
+
+	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
+		ProjectID:            td.projectID,
+		OrganizationID:       td.orgID,
+		RiskPolicyID:         td.policyID,
+		PolicyVersion:        td.policyVersion,
+		MessageIDs:           []uuid.UUID{msgID},
+		Sources:              nil,
+		MessageTypes:         []string{message.ToolRequest},
+		PresidioEntities:     nil,
+		PromptInjectionRules: nil,
+		CustomRuleIds:        nil,
+	})
+	require.NoError(t, err)
+
+	var result risk_analysis.AnalyzeBatchResult
+	require.NoError(t, val.Get(&result))
+	require.Equal(t, 1, result.Processed)
+	require.Equal(t, 1, result.Findings)
+	require.Len(t, judge.texts, 1)
+	require.Contains(t, judge.texts[0], `"name": "Bash"`)
+	require.Contains(t, judge.texts[0], `rm -rf /tmp/data`)
 }
 
 func TestAnalyzeBatch_DestructiveToolAnnotationSkipsFalseHint(t *testing.T) {
@@ -544,6 +627,8 @@ func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageI
 		&risk_analysis.StubPIIScanner{},
 		nil,
 		shadowMCPClient,
+		nil,
+		nil,
 		nil,
 	)
 
