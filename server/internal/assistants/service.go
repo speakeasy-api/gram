@@ -1164,7 +1164,14 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 		ProjectID:      assistant.ProjectID,
 		OrganizationID: assistant.OrganizationID,
 		UserID:         conv.ToPGTextEmpty(dashboardChatUserID(sourceKind, normalizedPayloadJSON)),
-		Title:          conv.ToPGText(assistant.Name),
+		// Seed the default placeholder ("New Chat"), NOT the assistant name. The
+		// async title generator only (re)titles a chat whose current title is one
+		// of its recognized sentinel defaults (see isDefaultChatTitle in
+		// background/activities/generate_chat_title.go); any other value is treated
+		// as a deliberately-chosen title and left alone. Seeding assistant.Name —
+		// identical across every thread of the same assistant — made the generator
+		// short-circuit, so all threads kept the assistant name as their title.
+		Title: conv.ToPGText("New Chat"),
 	}); err != nil {
 		return EnqueueResult{}, fmt.Errorf("upsert assistant chat: %w", err)
 	}
