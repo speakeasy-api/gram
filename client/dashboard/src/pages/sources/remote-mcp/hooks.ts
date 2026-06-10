@@ -1,3 +1,4 @@
+import { useFetcher } from "@/contexts/Fetcher";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { formatRemoteMcpDisplay } from "@/lib/sources";
 import { randomSlugSuffix } from "@/lib/slug";
@@ -9,6 +10,9 @@ import {
   invalidateAllMcpEndpoints,
   invalidateAllMcpServers,
   invalidateAllRemoteMcpServers,
+  invalidateAllRemoteSessionClients,
+  invalidateAllRemoteSessionIssuers,
+  invalidateAllUserSessionIssuers,
 } from "@gram/client/react-query/index.js";
 import {
   useMutation,
@@ -16,6 +20,10 @@ import {
   type UseMutationResult,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
+import {
+  autoConfigureRemoteMcpAuth,
+  type AutoConfigureAuthResult,
+} from "./autoConfigureAuth";
 
 type SdkClient = ReturnType<typeof useSdkClient>;
 
@@ -60,6 +68,7 @@ export type CreateRemoteMcpSourceVariables = {
 export type CreateRemoteMcpSourceData = {
   remoteMcpServer: RemoteMcpServer;
   mcpServer: McpServer;
+  authAutoConfig: AutoConfigureAuthResult;
 };
 
 export function useCreateRemoteMcpSource(): UseMutationResult<
@@ -68,6 +77,7 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
   CreateRemoteMcpSourceVariables
 > {
   const client = useSdkClient();
+  const { fetch: authedFetch } = useFetcher();
   const queryClient = useQueryClient();
   const { orgSlug } = useSlugs();
 
@@ -113,11 +123,26 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
           : new Error(String(linkError));
       }
 
+      const authAutoConfig = await autoConfigureRemoteMcpAuth({
+        client,
+        authedFetch,
+        remoteMcpServer,
+        mcpServer,
+      });
+      const configuredMcpServer =
+        authAutoConfig.status === "configured"
+          ? authAutoConfig.mcpServer
+          : mcpServer;
+
       // Pre-stage a default endpoint so the user doesn't have to create one
       // before the server can serve. Best-effort: never rolls back the source.
-      await createDefaultMcpEndpoint(client, mcpServer, orgSlug);
+      await createDefaultMcpEndpoint(client, configuredMcpServer, orgSlug);
 
-      return { remoteMcpServer, mcpServer };
+      return {
+        remoteMcpServer,
+        mcpServer: configuredMcpServer,
+        authAutoConfig,
+      };
     },
     onSuccess: async () => {
       // refetchType "all" forces the refetch even when there are no active
@@ -127,6 +152,9 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
         invalidateAllRemoteMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
+        invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
+        invalidateAllRemoteSessionIssuers(queryClient, { refetchType: "all" }),
+        invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),
       ]);
     },
   });
