@@ -9,17 +9,17 @@ name = "gram-assistant-runner"
 path = "src/main.rs"
 
 [dependencies]
-agentkit-adapter-completions = "0.8.0"
-agentkit-compaction = "0.8.0"
-agentkit-core = "0.8.0"
-agentkit-http = { version = "0.8.0", features = ["reqwest-middleware-client"] }
-agentkit-loop = "0.8.0"
-agentkit-mcp = "0.8.0"
-agentkit-provider-openrouter = "0.8.0"
-agentkit-reporting = { version = "0.8.0", features = ["tracing"] }
-agentkit-tool-fs = "0.8.0"
-agentkit-tools-core = { version = "0.8.0", features = ["schemars"] }
-agentkit-tools-derive = "0.8.0"
+agentkit-adapter-completions = "0.8.1"
+agentkit-compaction = "0.8.1"
+agentkit-core = "0.8.1"
+agentkit-http = { version = "0.8.1", features = ["reqwest-middleware-client"] }
+agentkit-loop = "0.8.1"
+agentkit-mcp = "0.8.1"
+agentkit-provider-openrouter = "0.8.1"
+agentkit-reporting = { version = "0.8.1", features = ["tracing"] }
+agentkit-tool-fs = "0.8.1"
+agentkit-tools-core = { version = "0.8.1", features = ["schemars"] }
+agentkit-tools-derive = "0.8.1"
 opentelemetry = "0.32"
 opentelemetry-otlp = { version = "0.32", default-features = false, features = [
   "grpc-tonic",
