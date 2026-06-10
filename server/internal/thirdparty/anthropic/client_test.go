@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 	"time"
 
@@ -17,13 +18,27 @@ func TestListActivitiesSendsAuthAndFilters(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "/v1/compliance/activities", r.URL.Path)
-		require.Equal(t, "anthropic-key", r.Header.Get("x-api-key"))
-		require.Equal(t, []string{"claude_chat_created", "claude_chat_updated"}, r.URL.Query()["activity_types[]"])
-		require.Equal(t, []string{"91012d09-e48b-438e-a489-1bebfd8fa6f9"}, r.URL.Query()["organization_ids[]"])
-		require.Equal(t, "2026-04-10T08:09:10Z", r.URL.Query().Get("created_at.gte"))
-		require.Equal(t, "activity_last", r.URL.Query().Get("after_id"))
-		require.Equal(t, "5000", r.URL.Query().Get("limit"))
+		if r.URL.Path != "/v1/compliance/activities" {
+			t.Errorf("expected path /v1/compliance/activities, got %s", r.URL.Path)
+		}
+		if got := r.Header.Get("x-api-key"); got != "anthropic-key" {
+			t.Errorf("expected x-api-key anthropic-key, got %s", got)
+		}
+		if got := r.URL.Query()["activity_types[]"]; !slices.Equal(got, []string{"claude_chat_created", "claude_chat_updated"}) {
+			t.Errorf("expected activity_types[] [claude_chat_created claude_chat_updated], got %v", got)
+		}
+		if got := r.URL.Query()["organization_ids[]"]; !slices.Equal(got, []string{"91012d09-e48b-438e-a489-1bebfd8fa6f9"}) {
+			t.Errorf("expected organization_ids[] [91012d09-e48b-438e-a489-1bebfd8fa6f9], got %v", got)
+		}
+		if got := r.URL.Query().Get("created_at.gte"); got != "2026-04-10T08:09:10Z" {
+			t.Errorf("expected created_at.gte 2026-04-10T08:09:10Z, got %s", got)
+		}
+		if got := r.URL.Query().Get("after_id"); got != "activity_last" {
+			t.Errorf("expected after_id activity_last, got %s", got)
+		}
+		if got := r.URL.Query().Get("limit"); got != "5000" {
+			t.Errorf("expected limit 5000, got %s", got)
+		}
 
 		_ = json.NewEncoder(w).Encode(ActivitiesPage{
 			Data: []Activity{{
@@ -56,10 +71,18 @@ func TestGetChatMessagesDecodesDocsShape(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "/v1/compliance/apps/chats/claude_chat_1/messages", r.URL.Path)
-		require.Equal(t, "asc", r.URL.Query().Get("order"))
-		require.Equal(t, "-1", r.URL.Query().Get("tool_result_max_chars"))
-		require.Equal(t, "-1", r.URL.Query().Get("tool_use_input_max_chars"))
+		if r.URL.Path != "/v1/compliance/apps/chats/claude_chat_1/messages" {
+			t.Errorf("expected path /v1/compliance/apps/chats/claude_chat_1/messages, got %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("order"); got != "asc" {
+			t.Errorf("expected order asc, got %s", got)
+		}
+		if got := r.URL.Query().Get("tool_result_max_chars"); got != "-1" {
+			t.Errorf("expected tool_result_max_chars -1, got %s", got)
+		}
+		if got := r.URL.Query().Get("tool_use_input_max_chars"); got != "-1" {
+			t.Errorf("expected tool_use_input_max_chars -1, got %s", got)
+		}
 
 		_, _ = w.Write([]byte(`{
 			"id": "claude_chat_1",

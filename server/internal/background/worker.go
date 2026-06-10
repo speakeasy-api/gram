@@ -336,8 +336,11 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.PublishPluginProject)
 
 	// AI integration usage syncing runs on its own worker and task queue.
+	aiUsageWorker.RegisterActivity(activities.PollAIData)
+	// Legacy alias for workflow histories started before the
+	// PollAIUsage -> PollAIData rename. Remove once drained.
 	aiUsageWorker.RegisterActivityWithOptions(activities.PollAIData, activity.RegisterOptions{
-		Name: "PollAIUsage", /// legacy alias for in-flight workflow histories
+		Name: "PollAIUsage",
 	})
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)

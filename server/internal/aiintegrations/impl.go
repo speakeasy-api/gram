@@ -143,7 +143,6 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 	if payload.ExternalOrganizationID == nil && beforeRow != nil {
 		externalOrganizationID = before.ExternalOrganizationID
 	}
-	}
 	externalOrgChanged := beforeRow != nil &&
 		conv.PtrValOr(externalOrganizationID, "") != conv.PtrValOr(before.ExternalOrganizationID, "")
 
