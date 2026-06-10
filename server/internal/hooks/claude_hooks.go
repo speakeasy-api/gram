@@ -831,8 +831,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		return result, nil
 	}
 
-	target := shadowMCPPolicyBypassTarget(evidence, mcpToolName)
-	if s.canBypassRiskPolicy(ctx, metadata.GramOrgID, metadata.UserID, policy.ID, target) {
+	if _, allowed := s.canBypassPolicy(ctx, metadata.GramOrgID, metadata.UserID, policy.ID, evidence, mcpToolName); allowed {
 		matchedURL, matchedCommand := "", ""
 		if matched != nil {
 			matchedURL = matched.URL
@@ -853,7 +852,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		}
 		return result, nil
 	}
-	if s.canBypassLegacyShadowMCPAccess(ctx, metadata.GramOrgID, metadata.ProjectID, metadata.UserID, policy.ID, evidence) {
+	if s.shadowMCPClient.CanBypassLegacyPolicyAccess(ctx, metadata.GramOrgID, metadata.ProjectID, metadata.UserID, policy.ID, evidence) {
 		matchedURL, matchedCommand := "", ""
 		if matched != nil {
 			matchedURL = matched.URL

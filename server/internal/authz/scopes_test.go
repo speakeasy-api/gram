@@ -170,6 +170,47 @@ func TestGrantsHasAccess_wrongResourceNotSatisfied(t *testing.T) {
 	require.Nil(t, grant)
 }
 
+func TestEvaluateGrants_riskPolicyBypassRequiresCheckDimensionsForScopedGrant(t *testing.T) {
+	t.Parallel()
+
+	grants := []Grant{NewGrantWithSelector(ScopeRiskPolicyBypass, Selector{
+		SelectorKeyResourceKind: ResourceKindRiskPolicy,
+		SelectorKeyResourceID:   "policy_123",
+		SelectorKeyServerURL:    "https://api.example.com",
+	})}
+	checks := RiskPolicyBypassCheck("policy_123", RiskPolicyBypassDimensions{ServerURL: ""}).expand()
+
+	allow, _, denied := evaluateGrants(grants, checks)
+	require.Nil(t, allow)
+	require.False(t, denied)
+}
+
+func TestEvaluateGrants_riskPolicyBypassWholePolicyGrantMatchesScopedCheck(t *testing.T) {
+	t.Parallel()
+
+	grants := []Grant{NewGrant(ScopeRiskPolicyBypass, "policy_123")}
+	checks := RiskPolicyBypassCheck("policy_123", RiskPolicyBypassDimensions{ServerURL: "https://api.example.com"}).expand()
+
+	allow, _, denied := evaluateGrants(grants, checks)
+	require.NotNil(t, allow)
+	require.False(t, denied)
+}
+
+func TestEvaluateGrants_riskPolicyBypassScopedGrantMatchesScopedCheck(t *testing.T) {
+	t.Parallel()
+
+	grants := []Grant{NewGrantWithSelector(ScopeRiskPolicyBypass, Selector{
+		SelectorKeyResourceKind: ResourceKindRiskPolicy,
+		SelectorKeyResourceID:   "policy_123",
+		SelectorKeyServerURL:    "https://api.example.com",
+	})}
+	checks := RiskPolicyBypassCheck("policy_123", RiskPolicyBypassDimensions{ServerURL: "https://api.example.com"}).expand()
+
+	allow, _, denied := evaluateGrants(grants, checks)
+	require.NotNil(t, allow)
+	require.False(t, denied)
+}
+
 // --- Deny-wins evaluation tests ---
 
 func TestEvaluateGrants_denyBlocksAllow(t *testing.T) {

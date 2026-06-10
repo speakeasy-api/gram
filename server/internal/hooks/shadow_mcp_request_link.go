@@ -50,7 +50,7 @@ func (s *Service) shadowMCPApprovalRequestURL(ctx context.Context, params shadow
 		OrganizationID:         params.OrganizationID,
 		ProjectID:              params.ProjectID,
 		RequesterUserID:        params.RequesterUserID,
-		ObservedName:           observedShadowMCPName(evidence, params.ToolName),
+		ObservedName:           shadowmcp.ObservedName(evidence, params.ToolName),
 		ObservedFullURL:        stringPtrOrNil(evidence.FullURL),
 		ObservedURLHost:        stringPtrOrNil(evidence.URLHost),
 		ObservedServerIdentity: stringPtrOrNil(evidence.ServerIdentity),
@@ -70,53 +70,6 @@ func (s *Service) shadowMCPApprovalRequestURL(ctx context.Context, params shadow
 	}
 
 	return requestURL, true
-}
-
-func observedShadowMCPName(evidence shadowmcp.AccessEvidence, toolName string) *string {
-	switch {
-	case evidence.URLHost != "":
-		return &evidence.URLHost
-	case evidence.ServerIdentity != "":
-		name := humanizeShadowMCPServerIdentity(evidence.ServerIdentity)
-		return &name
-	case toolName != "":
-		return &toolName
-	default:
-		return nil
-	}
-}
-
-func humanizeShadowMCPServerIdentity(value string) string {
-	parts := strings.FieldsFunc(value, func(r rune) bool {
-		return r == '_' || r == '-' || r == '.' || r == ':' || r == ' '
-	})
-	if len(parts) == 0 {
-		return value
-	}
-
-	words := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if part == "" {
-			continue
-		}
-		words = append(words, humanizeShadowMCPServerIdentityWord(part))
-	}
-	if len(words) == 0 {
-		return value
-	}
-	return strings.Join(words, " ")
-}
-
-func humanizeShadowMCPServerIdentityWord(value string) string {
-	lower := strings.ToLower(value)
-	switch lower {
-	case "ai", "api", "http", "https", "mcp", "oauth", "url":
-		return strings.ToUpper(lower)
-	case "github":
-		return "GitHub"
-	default:
-		return strings.ToUpper(lower[:1]) + lower[1:]
-	}
 }
 
 func stringPtrOrNil(value string) *string {

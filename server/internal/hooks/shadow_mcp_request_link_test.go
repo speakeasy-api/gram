@@ -92,7 +92,7 @@ func TestShadowMCPApprovalRequestURLRequiresFullURL(t *testing.T) {
 func TestObservedShadowMCPName_HumanizesServerIdentity(t *testing.T) {
 	t.Parallel()
 
-	name := observedShadowMCPName(shadowmcp.AccessEvidence{
+	name := shadowmcp.ObservedName(shadowmcp.AccessEvidence{
 		FullURL:        "",
 		URLHost:        "",
 		ServerIdentity: "claude_ai_calendly",
@@ -105,7 +105,7 @@ func TestObservedShadowMCPName_HumanizesServerIdentity(t *testing.T) {
 func TestObservedShadowMCPName_PrefersURLHostOverServerIdentity(t *testing.T) {
 	t.Parallel()
 
-	name := observedShadowMCPName(shadowmcp.AccessEvidence{
+	name := shadowmcp.ObservedName(shadowmcp.AccessEvidence{
 		FullURL:        "https://mcp.calendly.com/sse",
 		URLHost:        "mcp.calendly.com",
 		ServerIdentity: "claude_ai_calendly",

@@ -19,6 +19,41 @@ type AccessEvidence struct {
 	ServerIdentity string
 }
 
+func ObservedName(evidence AccessEvidence, toolName string) *string {
+	switch {
+	case evidence.URLHost != "":
+		return &evidence.URLHost
+	case evidence.ServerIdentity != "":
+		name := HumanizeServerIdentity(evidence.ServerIdentity)
+		return &name
+	case toolName != "":
+		return &toolName
+	default:
+		return nil
+	}
+}
+
+func HumanizeServerIdentity(value string) string {
+	parts := strings.FieldsFunc(value, func(r rune) bool {
+		return r == '_' || r == '-' || r == '.' || r == ':' || r == ' '
+	})
+	if len(parts) == 0 {
+		return value
+	}
+
+	words := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part == "" {
+			continue
+		}
+		words = append(words, humanizeServerIdentityWord(part))
+	}
+	if len(words) == 0 {
+		return value
+	}
+	return strings.Join(words, " ")
+}
+
 func NormalizeMatchValue(matchBreadth string, matchValue string) (string, error) {
 	value, err := matchvalue.Normalize(matchBreadth, matchValue)
 	if err != nil {
@@ -62,4 +97,16 @@ func NormalizeHost(host string) string {
 
 func NormalizeURLHost(scheme string, host string) string {
 	return matchvalue.NormalizeURLHost(scheme, host)
+}
+
+func humanizeServerIdentityWord(value string) string {
+	lower := strings.ToLower(value)
+	switch lower {
+	case "ai", "api", "http", "https", "mcp", "oauth", "url":
+		return strings.ToUpper(lower)
+	case "github":
+		return "GitHub"
+	default:
+		return strings.ToUpper(lower[:1]) + lower[1:]
+	}
 }

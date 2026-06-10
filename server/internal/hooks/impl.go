@@ -14,7 +14,6 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
-	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -48,7 +47,7 @@ type Service struct {
 	productFeatures    ProductFeaturesClient
 	chatTitleGenerator ChatTitleGenerator
 	riskScanner        risk.RiskScanner
-	accessStore        accesscontrol.Store
+	policyBypass       *risk.PolicyBypassEvaluator
 	shadowMCPClient    *shadowmcp.Client
 	writer             *chat.ChatMessageWriter
 	siteURL            *url.URL
@@ -100,7 +99,7 @@ func NewService(
 	pfClient ProductFeaturesClient,
 	chatTitleGenerator ChatTitleGenerator,
 	riskScanner risk.RiskScanner,
-	accessStore accesscontrol.Store,
+	policyBypass *risk.PolicyBypassEvaluator,
 	shadowMCPClient *shadowmcp.Client,
 	writer *chat.ChatMessageWriter,
 	siteURL *url.URL,
@@ -119,7 +118,7 @@ func NewService(
 		productFeatures:    pfClient,
 		chatTitleGenerator: chatTitleGenerator,
 		riskScanner:        riskScanner,
-		accessStore:        accessStore,
+		policyBypass:       policyBypass,
 		shadowMCPClient:    shadowMCPClient,
 		writer:             writer,
 		siteURL:            siteURL,
