@@ -343,7 +343,7 @@ func TestMergeClaudeAuthContextMetadata_PreservesAuthUserIDWhenCacheIsEmpty(t *t
 	assert.Equal(t, "claude_org", metadata.ClaudeOrgID)
 }
 
-func TestClaude_RecordHook_PersistsPluginAuthProjectOverCachedMetadata(t *testing.T) {
+func TestClaude_RecordHook_PersistsAuthContextProjectOverCachedMetadata(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
@@ -354,7 +354,7 @@ func TestClaude_RecordHook_PersistsPluginAuthProjectOverCachedMetadata(t *testin
 
 	sessionID := uuid.NewString()
 	chatID := sessionIDToUUID(sessionID)
-	prompt := "hello from plugin-auth project"
+	prompt := "hello from auth context project"
 	cachedProjectID := uuid.NewString()
 
 	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
@@ -388,6 +388,27 @@ func TestClaude_RecordHook_PersistsPluginAuthProjectOverCachedMetadata(t *testin
 	require.True(t, msgs[0].ProjectID.Valid)
 	assert.Equal(t, *authCtx.ProjectID, msgs[0].ProjectID.UUID)
 	assert.Equal(t, prompt, msgs[0].Content)
+}
+
+func TestClaude_RecordHook_BuffersAuthContextCacheMissWithoutPayloadEmail(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	sessionID := uuid.NewString()
+	prompt := "hello before otel metadata"
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "UserPromptSubmit",
+		SessionID:     &sessionID,
+		Prompt:        &prompt,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	var buffered []gen.ClaudePayload
+	require.NoError(t, ti.service.cache.ListRange(ctx, hookPendingCacheKey(sessionID), 0, -1, &buffered))
+	require.Len(t, buffered, 1)
+	assert.Equal(t, "UserPromptSubmit", buffered[0].HookEventName)
 }
 
 // When plugin auth headers are present but the API key is invalid/expired,

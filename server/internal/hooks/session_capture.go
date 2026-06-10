@@ -271,7 +271,7 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 	}
 
 	if content == "" {
-		s.logger.WarnContext(ctx, "skipping empty Claude conversation event",
+		s.logger.DebugContext(ctx, "skipping empty Claude conversation event",
 			attr.SlogEvent("claude_hook_conversation_empty"),
 			attr.SlogHookEvent(payload.HookEventName),
 			attr.SlogGenAIConversationID(conv.PtrValOr(payload.SessionID, "")),

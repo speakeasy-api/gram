@@ -555,14 +555,18 @@ func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug s
 	}
 	ctx, err := s.auth.Authorize(ctx, key, keyScheme)
 	if err != nil {
-		return ctx, err
+		return ctx, fmt.Errorf("authorize claude hook api key: %w", err)
 	}
 	projectScheme := &security.APIKeyScheme{
 		Name:           constants.ProjectSlugSecuritySchema,
 		Scopes:         []string{},
 		RequiredScopes: []string{"hooks"},
 	}
-	return s.auth.Authorize(ctx, projectSlug, projectScheme)
+	ctx, err = s.auth.Authorize(ctx, projectSlug, projectScheme)
+	if err != nil {
+		return ctx, fmt.Errorf("authorize claude hook project slug: %w", err)
+	}
+	return ctx, nil
 }
 
 func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
@@ -593,31 +597,30 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 
 	payloadUserEmail := strings.TrimSpace(conv.PtrValOr(payload.UserEmail, ""))
 
-	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
-		metadata := SessionMetadata{
-			SessionID:   sessionID,
-			ServiceName: "",
-			UserEmail:   payloadUserEmail,
-			UserID:      authCtx.UserID,
-			ClaudeOrgID: "",
-			GramOrgID:   authCtx.ActiveOrganizationID,
-			ProjectID:   authCtx.ProjectID.String(),
-		}
-		if metadata.UserID == "" && metadata.UserEmail != "" {
-			metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
-		}
-		if cached, err := s.getSessionMetadata(ctx, sessionID); err == nil {
-			metadata = mergeClaudeAuthContextMetadata(metadata, cached)
-		}
-		go s.persistHook(ctx, payload, &metadata)
-		return
-	}
-
-	// OTEL-only requests go through the Redis-buffered flow: persist when
-	// session metadata is in the cache, buffer otherwise so flushPendingHooks
-	// can re-persist with full attribution once /rpc/hooks.otel.logs lands.
+	// Both plugin-authenticated and OTEL-only requests go through the same
+	// Redis-buffered flow: persist when session metadata is in the cache,
+	// buffer otherwise so flushPendingHooks can re-persist with full
+	// attribution once /rpc/hooks.otel.logs lands. Newer plugin hooks may
+	// carry user_email from the device agent; use it immediately when present
+	// so Claude can attribute hooks before OTEL logs arrive. Older hooks still
+	// fall back to buffering.
 	metadata, err := s.getSessionMetadata(ctx, sessionID)
 	if err == nil {
+		if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
+			authMetadata := SessionMetadata{
+				SessionID:   sessionID,
+				ServiceName: "",
+				UserEmail:   payloadUserEmail,
+				UserID:      authCtx.UserID,
+				ClaudeOrgID: "",
+				GramOrgID:   authCtx.ActiveOrganizationID,
+				ProjectID:   authCtx.ProjectID.String(),
+			}
+			if authMetadata.UserID == "" && authMetadata.UserEmail != "" {
+				authMetadata.UserID = s.resolveUserByEmail(ctx, authMetadata.UserEmail, authMetadata.GramOrgID)
+			}
+			metadata = mergeClaudeAuthContextMetadata(authMetadata, metadata)
+		}
 		// Persistence does DB writes plus a Temporal workflow start, which
 		// can take longer than Claude Code is willing to wait for a hook
 		// response (Stop especially — the client closes the connection
@@ -625,6 +628,19 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 		// returns promptly and the work completes in the background.
 		go s.persistHook(ctx, payload, &metadata)
 	} else {
+		if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil && payloadUserEmail != "" {
+			metadata := SessionMetadata{
+				SessionID:   sessionID,
+				ServiceName: "",
+				UserEmail:   payloadUserEmail,
+				UserID:      s.resolveUserByEmail(ctx, payloadUserEmail, authCtx.ActiveOrganizationID),
+				ClaudeOrgID: "",
+				GramOrgID:   authCtx.ActiveOrganizationID,
+				ProjectID:   authCtx.ProjectID.String(),
+			}
+			go s.persistHook(ctx, payload, &metadata)
+			return
+		}
 		if err := s.bufferHook(ctx, sessionID, payload); err != nil {
 			logger.ErrorContext(ctx, "Failed to buffer hook",
 				attr.SlogEvent("claude_hook_buffer_failed"),

@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	organizationsRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -36,12 +37,12 @@ func NewLocalSessionCache(underlying cache.Cache, db *pgxpool.Pool) cache.Cache 
 	}
 }
 
-// Get for session cache keys: try the underlying cache first so OTEL-validated
-// sessions win, then fall back to hardcoded local dev defaults pinned to the
-// first project in the dev org. Non-session keys always go to the underlying
-// cache.
+// Get for session metadata keys: try the underlying cache first so
+// OTEL-validated sessions win, then fall back to local dev defaults scoped to
+// the authenticated project on ctx. Non-session keys always go to the
+// underlying cache.
 func (c *localSessionCache) Get(ctx context.Context, key string, value any) error {
-	if !strings.HasPrefix(key, "session:") {
+	if !strings.HasPrefix(key, "session:metadata:") {
 		if err := c.Cache.Get(ctx, key, value); err != nil {
 			return fmt.Errorf("get from cache: %w", err)
 		}
@@ -69,11 +70,12 @@ func (c *localSessionCache) Get(ctx context.Context, key string, value any) erro
 }
 
 func (c *localSessionCache) fallbackSessionMetadata(ctx context.Context, sessionID string) (SessionMetadata, error) {
-	// Underlying cache miss — fall back to whatever project happens to
-	// exist so OTEL setup is not required for ad-hoc hook testing. The
-	// org id is read off that project; the email is a synthesized
-	// placeholder.
-	project, err := c.localFallbackProject(ctx, "")
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return SessionMetadata{}, fmt.Errorf("local session metadata fallback requires authenticated project context")
+	}
+
+	project, err := c.localFallbackProject(ctx, authCtx.ProjectID.String())
 	if err != nil {
 		return SessionMetadata{}, err
 	}
