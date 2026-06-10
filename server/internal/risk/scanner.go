@@ -61,7 +61,7 @@ type ScanResult struct {
 	Action      string // "block"
 	PolicyID    string
 	PolicyName  string
-	Source      string // "gitleaks" or "presidio"
+	Source      string // scanner source label, e.g. "gitleaks", "presidio", or "llm_judge"
 	MessageType message.Type
 	RuleID      string
 	Description string

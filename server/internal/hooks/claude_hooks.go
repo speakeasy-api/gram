@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -682,8 +684,8 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 			// Surface the block reason on the trace summary so the dashboard
 			// shows why the call was denied. Always store the technical reason
 			// — the user_message override is for the agent-facing response only.
-			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
-				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
+			if metadata := s.claudeBlockMetadata(ctx, payload); metadata != nil {
+				s.writeClaudeBlockToClickHouse(ctx, payload, metadata, auditReason)
 			}
 			return constructBlockResponse(payload.HookEventName, userReason), nil
 		}
@@ -947,6 +949,38 @@ func mergeClaudeAuthContextMetadata(metadata SessionMetadata, cached SessionMeta
 	return metadata
 }
 
+func (s *Service) claudeBlockMetadata(ctx context.Context, payload *gen.ClaudePayload) *SessionMetadata {
+	sessionID := conv.PtrValOr(payload.SessionID, "")
+	if sessionID == "" {
+		return nil
+	}
+
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
+		metadata := SessionMetadata{
+			SessionID:   sessionID,
+			ServiceName: "",
+			UserEmail:   strings.TrimSpace(conv.PtrValOr(payload.UserEmail, "")),
+			UserID:      authCtx.UserID,
+			ClaudeOrgID: "",
+			GramOrgID:   authCtx.ActiveOrganizationID,
+			ProjectID:   authCtx.ProjectID.String(),
+		}
+		if metadata.UserID == "" && metadata.UserEmail != "" {
+			metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
+		}
+		if cached, err := s.getSessionMetadata(ctx, sessionID); err == nil {
+			metadata = mergeClaudeAuthContextMetadata(metadata, cached)
+		}
+		return &metadata
+	}
+
+	metadata, err := s.getSessionMetadata(ctx, sessionID)
+	if err != nil {
+		return nil
+	}
+	return &metadata
+}
+
 // claudeMCPToolName returns the bare tool name and true if rawName follows the
 // "mcp__<server>__<tool>" convention used by Claude Code for MCP-routed tools.
 // Returns ("", false) for native Claude Code tools (Read, Edit, Bash, etc.).
@@ -987,11 +1021,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 	}
 
 	chatID := sessionIDToUUID(*payload.SessionID)
-	msgID, err := s.repo.FindAssistantToolCallMessageID(ctx, repo.FindAssistantToolCallMessageIDParams{
-		ProjectID:  uuid.NullUUID{UUID: projectID, Valid: true},
-		ChatID:     chatID,
-		ToolCallID: *payload.ToolUseID,
-	})
+	msgID, err := s.findClaudeToolCallMessageID(ctx, projectID, chatID, *payload.ToolUseID)
 	if err != nil {
 		// Most common cause: SessionCapture feature flag is off, so the
 		// tool-call chat_message was never persisted. The ClickHouse path
@@ -1059,12 +1089,55 @@ func (s *Service) recordShadowMCPBlockFinding(
 	}
 }
 
+func (s *Service) findClaudeToolCallMessageID(ctx context.Context, projectID, chatID uuid.UUID, toolUseID string) (uuid.UUID, error) {
+	var msgID uuid.UUID
+	err := s.retryClaudeMessageLookup(ctx, func(ctx context.Context) error {
+		var err error
+		msgID, err = s.repo.FindAssistantToolCallMessageID(ctx, repo.FindAssistantToolCallMessageIDParams{
+			ProjectID:  uuid.NullUUID{UUID: projectID, Valid: true},
+			ChatID:     chatID,
+			ToolCallID: toolUseID,
+		})
+		if err != nil {
+			return fmt.Errorf("find assistant tool call message id: %w", err)
+		}
+		return nil
+	})
+	return msgID, err
+}
+
+func (s *Service) retryClaudeMessageLookup(ctx context.Context, lookup func(context.Context) error) error {
+	deadline := time.NewTimer(250 * time.Millisecond)
+	defer deadline.Stop()
+
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		err := lookup(ctx)
+		if err == nil {
+			return nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("wait for claude message lookup: %w", ctx.Err())
+		case <-deadline.C:
+			return err
+		case <-ticker.C:
+		}
+	}
+}
+
 // writeClaudeBlockToClickHouse writes a companion ClickHouse log entry for a
-// Claude PreToolUse call that the shadow-MCP guard denied. It reuses
-// buildTelemetryAttributesWithMetadata so the new row shares the same trace_id
-// (derived from tool_use_id) as the original PreToolUse log, and adds
-// gram.hook.block_reason. trace_summaries_mv aggregates with max(), so the
-// trace will surface as blocked regardless of which row arrives first.
+// blocked Claude hook. It reuses buildTelemetryAttributesWithMetadata so
+// PreToolUse rows share the same trace_id (derived from tool_use_id) as the
+// original hook log, and adds gram.hook.block_reason. trace_summaries_mv
+// aggregates with max(), so the trace will surface as blocked regardless of
+// which row arrives first.
 func (s *Service) writeClaudeBlockToClickHouse(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata, reason string) {
 	if s.telemetryLogger == nil || reason == "" {
 		return
