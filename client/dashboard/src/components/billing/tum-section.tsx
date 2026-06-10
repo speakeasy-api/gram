@@ -117,7 +117,6 @@ function TumHistoryChart({
   monthlyTokenLimit: number | undefined;
 }): JSX.Element {
   const [granularity, setGranularity] = useState<TumGranularity>("day");
-  const [expandedChart, setExpandedChart] = useState<string | null>(null);
 
   const hasData = history.some((p) => p.tokens > 0);
 
@@ -216,35 +215,34 @@ function TumHistoryChart({
   );
 
   return (
-    <div className="relative">
-      <ChartCard
-        title="Usage History"
-        chartId="tum-history"
-        expandedChart={expandedChart}
-        onExpand={setExpandedChart}
-        hasData={hasData}
-      >
-        <div className="mb-2 flex items-center gap-1">
-          {granularityButton("day", "By day")}
-          {granularityButton("cycle", "By billing cycle")}
+    <ChartCard
+      title="Usage History"
+      chartId="tum-history"
+      expandedChart={null}
+      onExpand={() => {}}
+      hasData={hasData}
+      expandable={false}
+    >
+      <div className="mb-2 flex items-center gap-1">
+        {granularityButton("day", "By day")}
+        {granularityButton("cycle", "By billing cycle")}
+      </div>
+      {hasData ? (
+        <div style={{ height: 260 }}>
+          {/* `<Chart>` with an explicit `"bar" | "line"` generic accepts the
+              bar series plus the line limit overlay (see InsightsAgents). */}
+          <Chart<"bar" | "line", number[], string>
+            type="bar"
+            data={chartData}
+            options={chartOptions}
+          />
         </div>
-        {hasData ? (
-          <div style={{ height: expandedChart ? 420 : 260 }}>
-            {/* `<Chart>` with an explicit `"bar" | "line"` generic accepts the
-                bar series plus the line limit overlay (see InsightsAgents). */}
-            <Chart<"bar" | "line", number[], string>
-              type="bar"
-              data={chartData}
-              options={chartOptions}
-            />
-          </div>
-        ) : (
-          <Type muted small>
-            No tokens under management recorded yet.
-          </Type>
-        )}
-      </ChartCard>
-    </div>
+      ) : (
+        <Type muted small>
+          No tokens under management recorded yet.
+        </Type>
+      )}
+    </ChartCard>
   );
 }
 
