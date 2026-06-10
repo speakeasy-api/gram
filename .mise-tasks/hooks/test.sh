@@ -40,9 +40,9 @@ else
   if [ -z "$user_id" ]; then
     echo "Warning: no users in DB — skipping API key provisioning."
   else
-    # Soft-delete any prior dev key for this project so we can stash a
-    # new plaintext we know.
-    db_query -v project_id="$project_id" >/dev/null <<<"UPDATE api_keys SET deleted_at = NOW() WHERE project_id = :'project_id' AND name = 'dev-hooks-test' AND deleted IS FALSE"
+    # API key names are unique per organization, so clear any prior local
+    # fixture for this org before stashing a new plaintext we know.
+    db_query -v org_id="$org_id" >/dev/null <<<"UPDATE api_keys SET deleted_at = NOW() WHERE organization_id = :'org_id' AND name = 'dev-hooks-test' AND deleted IS FALSE"
 
     token_hex=$(openssl rand -hex 32)
     api_key="gram_local_${token_hex}"
