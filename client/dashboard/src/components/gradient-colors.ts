@@ -1,5 +1,5 @@
-// Generate colors from project label
-export function getProjectColors(label: string): {
+// Deterministic gradient colors from any string label (project/org/assistant id).
+export function getGradientColors(label: string): {
   from: string;
   to: string;
   angle: number;
