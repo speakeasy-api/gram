@@ -1253,6 +1253,8 @@ type RemoteSessionIssuer struct {
 	TokenEndpointAuthMethodsSupported []string
 	Oidc                              bool
 	Passthrough                       bool
+	Name                              pgtype.Text
+	LogoAssetID                       uuid.NullUUID
 	CreatedAt                         pgtype.Timestamptz
 	UpdatedAt                         pgtype.Timestamptz
 	DeletedAt                         pgtype.Timestamptz
