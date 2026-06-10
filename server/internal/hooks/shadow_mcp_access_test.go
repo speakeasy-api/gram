@@ -2,13 +2,11 @@ package hooks
 
 import (
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
-	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -215,113 +213,4 @@ func TestCanBypassPolicy_EmptyEvidenceDoesNotUseWholePolicyGrant(t *testing.T) {
 
 	require.False(t, allowed)
 	require.Nil(t, target)
-}
-
-func TestEnforceShadowMCPToolAccess_LegacyAccessRuleAllowsBlockedCall(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestHooksService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	policyID := uuid.NewString()
-	serverURL := "https://legacy-blocked.example.com/mcp"
-	createHookAccessRule(
-		t,
-		ctx,
-		ti,
-		authCtx.ProjectID.String(),
-		accesscontrol.AccessScopeProject,
-		accesscontrol.DispositionAllowed,
-		accesscontrol.MatchKindFullURL,
-		serverURL,
-		"Legacy blocked server",
-	)
-
-	detail, denied := ti.service.enforceShadowMCPToolAccess(
-		ctx,
-		authCtx.ActiveOrganizationID,
-		authCtx.ProjectID.String(),
-		authCtx.UserID,
-		policyID,
-		map[string]any{},
-		"do_thing",
-		shadowmcp.AccessEvidence{FullURL: serverURL, URLHost: "", ServerIdentity: "legacy-blocked-server"},
-	)
-
-	require.False(t, denied)
-	require.Empty(t, detail)
-}
-
-func TestEnforceShadowMCPToolAccess_LegacyRequestRuleRequiresRequester(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestHooksService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	now := time.Now().UTC()
-	request, _, err := ti.accessStore.UpsertRequest(ctx, accesscontrol.AccessApprovalRequest{
-		ID:                 uuid.NewString(),
-		OrganizationID:     authCtx.ActiveOrganizationID,
-		ProjectID:          authCtx.ProjectID.String(),
-		ResourceType:       accesscontrol.ResourceTypeShadowMCP,
-		Status:             accesscontrol.RequestStatusApproved,
-		RequesterUserID:    authCtx.UserID,
-		RequestFingerprint: "request-derived-legacy-rule",
-		DisplayName:        "Request derived legacy server",
-		RequestedAt:        now,
-		CreatedAt:          now,
-		UpdatedAt:          now,
-	})
-	require.NoError(t, err)
-
-	policyID := uuid.NewString()
-	serverURL := "https://legacy-request.example.com/mcp"
-	_, err = ti.accessStore.CreateRule(ctx, accesscontrol.AccessRule{
-		ID:              uuid.NewString(),
-		OrganizationID:  authCtx.ActiveOrganizationID,
-		ProjectID:       authCtx.ProjectID.String(),
-		AccessScope:     accesscontrol.AccessScopeProject,
-		ResourceType:    accesscontrol.ResourceTypeShadowMCP,
-		Disposition:     accesscontrol.DispositionAllowed,
-		MatchKind:       accesscontrol.MatchKindFullURL,
-		MatchValue:      serverURL,
-		DisplayName:     "Request derived legacy server",
-		ObservedSummary: accesscontrol.ObservedSummary{RiskPolicyID: &policyID},
-		SourceRequestID: request.ID,
-		CreatedBy:       authCtx.UserID,
-		UpdatedBy:       authCtx.UserID,
-		CreatedAt:       now,
-		UpdatedAt:       now,
-	})
-	require.NoError(t, err)
-
-	detail, denied := ti.service.enforceShadowMCPToolAccess(
-		ctx,
-		authCtx.ActiveOrganizationID,
-		authCtx.ProjectID.String(),
-		"user_other",
-		policyID,
-		map[string]any{},
-		"do_thing",
-		shadowmcp.AccessEvidence{FullURL: serverURL, URLHost: "", ServerIdentity: "legacy-request-server"},
-	)
-	require.True(t, denied)
-	require.NotEmpty(t, detail)
-
-	detail, denied = ti.service.enforceShadowMCPToolAccess(
-		ctx,
-		authCtx.ActiveOrganizationID,
-		authCtx.ProjectID.String(),
-		authCtx.UserID,
-		policyID,
-		map[string]any{},
-		"do_thing",
-		shadowmcp.AccessEvidence{FullURL: serverURL, URLHost: "", ServerIdentity: "legacy-request-server"},
-	)
-	require.False(t, denied)
-	require.Empty(t, detail)
 }
