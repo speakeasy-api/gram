@@ -28680,6 +28680,88 @@ paths:
       x-speakeasy-name-override: getPeriodUsage
       x-speakeasy-react-hook:
         name: getPeriodUsage
+  /rpc/usage.getTokensUnderManagement:
+    get:
+      description: Get tokens under management for the active billing cycle alongside the contracted terms
+      operationId: getTokensUnderManagement
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokensUnderManagement'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getTokensUnderManagement usage
+      tags:
+        - usage
+      x-speakeasy-name-override: getTokensUnderManagement
+      x-speakeasy-react-hook:
+        name: getTokensUnderManagement
   /rpc/usage.getUsageTiers:
     get:
       description: Get the usage tiers
@@ -28751,6 +28833,94 @@ paths:
       x-speakeasy-name-override: getUsageTiers
       x-speakeasy-react-hook:
         name: getUsageTiers
+  /rpc/usage.setBillingMetadata:
+    post:
+      description: Set an organization's billing contract terms. Restricted to platform admins.
+      operationId: setBillingMetadata
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetBillingMetadataRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokensUnderManagement'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: setBillingMetadata usage
+      tags:
+        - usage
+      x-speakeasy-name-override: setBillingMetadata
+      x-speakeasy-react-hook:
+        name: setBillingMetadata
   /rpc/userSessionClients.get:
     get:
       description: Get a user_session_client by id.
@@ -40882,6 +41052,26 @@ components:
       description: Service information
       required:
         - name
+    SetBillingMetadataRequestBody:
+      type: object
+      properties:
+        alert_email:
+          type: string
+          description: Email address to notify on TUM threshold events. Omit to clear.
+          format: email
+        billing_cycle_anchor_day:
+          type: integer
+          description: Day of month (1-31) the billing cycle starts, at 00:00 UTC
+          format: int64
+          minimum: 1
+          maximum: 31
+        monthly_token_limit:
+          type: integer
+          description: The contracted monthly tokens under management limit. Omit to clear.
+          format: int64
+          minimum: 0
+      required:
+        - billing_cycle_anchor_day
     SetMcpMetadataRequestBody:
       type: object
       properties:
@@ -41684,6 +41874,37 @@ components:
         - failed_tool_calls
         - avg_tool_latency_ms
         - avg_session_duration_ms
+    TokensUnderManagement:
+      type: object
+      properties:
+        alert_email:
+          type: string
+          description: Email address to notify on TUM threshold events. Only populated for platform admins.
+        billing_cycle_anchor_day:
+          type: integer
+          description: Day of month (1-31) the billing cycle starts, at 00:00 UTC
+          format: int64
+        monthly_token_limit:
+          type: integer
+          description: The contracted monthly tokens under management limit, if one has been configured
+          format: int64
+        period_end:
+          type: string
+          description: End of the active billing cycle (exclusive)
+          format: date-time
+        period_start:
+          type: string
+          description: Start of the active billing cycle
+          format: date-time
+        tokens:
+          type: integer
+          description: Tokens under management consumed during the active billing cycle
+          format: int64
+      required:
+        - period_start
+        - period_end
+        - tokens
+        - billing_cycle_anchor_day
     Tool:
       type: object
       properties:

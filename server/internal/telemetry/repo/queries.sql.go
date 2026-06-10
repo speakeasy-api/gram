@@ -2807,3 +2807,70 @@ func (q *Queries) CountRecentHookEventsForOnboarding(ctx context.Context, projec
 	}
 	return cnt, nil
 }
+
+// GetTokensUnderManagementParams contains the parameters for computing tokens
+// under management for a set of projects over a time window.
+type GetTokensUnderManagementParams struct {
+	ProjectIDs    []string
+	StartUnixNano int64
+	EndUnixNano   int64
+}
+
+// GetTokensUnderManagement sums token usage for the billing window, counting
+// only sessions Gram has stored non-metrics data for (chats, tool calls).
+// OTEL forwarding can report token usage for an entire customer org while
+// Gram is installed for a subset of users, so token-usage rows only count
+// when their chat id also appears on at least one non-metrics row: a
+// tool-call row, a hook event, or any row without a token-usage attribute.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetTokensUnderManagement(ctx context.Context, arg GetTokensUnderManagementParams) (int64, error) {
+	if len(arg.ProjectIDs) == 0 {
+		return 0, nil
+	}
+
+	storedChats := sq.Select("DISTINCT chat_id").
+		From("telemetry_logs").
+		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
+		Where("time_unix_nano >= ?", arg.StartUnixNano).
+		Where("time_unix_nano < ?", arg.EndUnixNano).
+		Where("chat_id != ''").
+		Where("(startsWith(gram_urn, 'tools:') OR event_source != '' OR toString(attributes.gen_ai.usage.total_tokens) = '')")
+
+	storedChatsSQL, storedChatsArgs, err := storedChats.ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("building stored chats subquery: %w", err)
+	}
+
+	sb := sq.Select("sum(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens))) AS tum_tokens").
+		From("telemetry_logs").
+		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
+		Where("time_unix_nano >= ?", arg.StartUnixNano).
+		Where("time_unix_nano < ?", arg.EndUnixNano).
+		Where("toString(attributes.gen_ai.usage.total_tokens) != ''").
+		Where("chat_id != ''").
+		Where(squirrel.Expr("chat_id IN ("+storedChatsSQL+")", storedChatsArgs...))
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("building tokens under management query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	var tokens int64
+	if rows.Next() {
+		if err := rows.Scan(&tokens); err != nil {
+			return 0, fmt.Errorf("scanning tokens under management row: %w", err)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+
+	return tokens, nil
+}

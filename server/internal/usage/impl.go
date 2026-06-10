@@ -13,6 +13,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/usage/server"
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -23,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
@@ -37,16 +39,19 @@ type Service struct {
 	auth          *auth.Auth
 	authz         *authz.Engine
 	serverURL     *url.URL
+	db            *pgxpool.Pool
 	repo          *repo.Queries
 	billingRepo   billing.Repository
 	orgRepo       *orgRepo.Queries
+	telemetryRepo *telemetryrepo.Queries
+	auditLogger   *audit.Logger
 	posthogClient *posthog.Posthog
 	openRouter    openrouter.Provisioner
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, authzEngine *authz.Engine) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger) *Service {
 	logger = logger.With(attr.SlogComponent("usage"))
 
 	return &Service{
@@ -55,9 +60,12 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		auth:          auth.New(logger, db, sessions, authzEngine),
 		authz:         authzEngine,
 		serverURL:     serverURL,
+		db:            db,
 		repo:          repo.New(db),
 		billingRepo:   billingRepo,
 		orgRepo:       orgRepo.New(db),
+		telemetryRepo: telemetryRepo,
+		auditLogger:   auditLogger,
 		posthogClient: posthogClient,
 		openRouter:    openRouter,
 	}

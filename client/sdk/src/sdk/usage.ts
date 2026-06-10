@@ -6,7 +6,9 @@ import { usageCreateCheckout } from "../funcs/usageCreateCheckout.js";
 import { usageCreateCustomerSession } from "../funcs/usageCreateCustomerSession.js";
 import { usageCreateTopUpCheckout } from "../funcs/usageCreateTopUpCheckout.js";
 import { usageGetPeriodUsage } from "../funcs/usageGetPeriodUsage.js";
+import { usageGetTokensUnderManagement } from "../funcs/usageGetTokensUnderManagement.js";
 import { usageGetUsageTiers } from "../funcs/usageGetUsageTiers.js";
+import { usageSetBillingMetadata } from "../funcs/usageSetBillingMetadata.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -90,6 +92,25 @@ export class Usage extends ClientSDK {
   }
 
   /**
+   * getTokensUnderManagement usage
+   *
+   * @remarks
+   * Get tokens under management for the active billing cycle alongside the contracted terms
+   */
+  async getTokensUnderManagement(
+    request?: operations.GetTokensUnderManagementRequest | undefined,
+    security?: operations.GetTokensUnderManagementSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.TokensUnderManagement> {
+    return unwrapAsync(usageGetTokensUnderManagement(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * getUsageTiers usage
    *
    * @remarks
@@ -100,6 +121,25 @@ export class Usage extends ClientSDK {
   ): Promise<components.UsageTiers> {
     return unwrapAsync(usageGetUsageTiers(
       this,
+      options,
+    ));
+  }
+
+  /**
+   * setBillingMetadata usage
+   *
+   * @remarks
+   * Set an organization's billing contract terms. Restricted to platform admins.
+   */
+  async setBillingMetadata(
+    request: operations.SetBillingMetadataRequest,
+    security?: operations.SetBillingMetadataSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.TokensUnderManagement> {
+    return unwrapAsync(usageSetBillingMetadata(
+      this,
+      request,
+      security,
       options,
     ));
   }
