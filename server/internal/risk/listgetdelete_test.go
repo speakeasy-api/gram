@@ -112,6 +112,40 @@ func TestDeleteRiskPolicy_NotInList(t *testing.T) {
 	require.Empty(t, result.Policies)
 }
 
+func TestDeleteRiskPolicy_DeletesBypassRequests(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	created, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Delete Requests")})
+	require.NoError(t, err)
+
+	request, err := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
+		RequestToken: riskPolicyBypassRequestToken(t, authCtx, created.ID, "https://mcp.example.com/delete-policy"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, created.ID, request.PolicyID)
+
+	before, err := ti.service.ListRiskPolicyBypassRequests(ctx, &gen.ListRiskPolicyBypassRequestsPayload{
+		PolicyID: &created.ID,
+	})
+	require.NoError(t, err)
+	require.Len(t, before.Requests, 1)
+
+	err = ti.service.DeleteRiskPolicy(ctx, &gen.DeleteRiskPolicyPayload{ID: created.ID})
+	require.NoError(t, err)
+
+	after, err := ti.service.ListRiskPolicyBypassRequests(ctx, &gen.ListRiskPolicyBypassRequestsPayload{
+		PolicyID: &created.ID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, after.Requests)
+}
+
 func TestListRiskResults_EmptyProject(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)

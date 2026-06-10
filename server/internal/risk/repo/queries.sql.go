@@ -322,6 +322,25 @@ func (q *Queries) DeleteRiskPolicy(ctx context.Context, arg DeleteRiskPolicyPara
 	return err
 }
 
+const deleteRiskPolicyBypassRequestsByPolicy = `-- name: DeleteRiskPolicyBypassRequestsByPolicy :exec
+UPDATE risk_policy_bypass_requests
+SET deleted_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE risk_policy_id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+`
+
+type DeleteRiskPolicyBypassRequestsByPolicyParams struct {
+	RiskPolicyID uuid.UUID
+	ProjectID    uuid.UUID
+}
+
+func (q *Queries) DeleteRiskPolicyBypassRequestsByPolicy(ctx context.Context, arg DeleteRiskPolicyBypassRequestsByPolicyParams) error {
+	_, err := q.db.Exec(ctx, deleteRiskPolicyBypassRequestsByPolicy, arg.RiskPolicyID, arg.ProjectID)
+	return err
+}
+
 const deleteRiskResultsForMessages = `-- name: DeleteRiskResultsForMessages :exec
 DELETE FROM risk_results
 WHERE risk_policy_id = $1

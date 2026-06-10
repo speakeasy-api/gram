@@ -110,6 +110,14 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
+-- name: DeleteRiskPolicyBypassRequestsByPolicy :exec
+UPDATE risk_policy_bypass_requests
+SET deleted_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE risk_policy_id = @risk_policy_id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
 -- name: UpsertRiskPolicyBypassRequest :one
 INSERT INTO risk_policy_bypass_requests (
     id

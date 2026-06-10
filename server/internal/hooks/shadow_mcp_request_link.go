@@ -42,7 +42,7 @@ func (s *Service) shadowMCPApprovalRequestURL(ctx context.Context, params shadow
 	}
 
 	evidence := shadowmcp.NormalizeAccessEvidence(params.Evidence)
-	if evidence.FullURL == "" {
+	if evidence.FullURL == "" && evidence.URLHost == "" && evidence.ServerIdentity == "" {
 		return "", false
 	}
 

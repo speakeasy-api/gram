@@ -52,7 +52,7 @@ func TestShadowMCPApprovalRequestURLUsesFragmentToken(t *testing.T) {
 	require.Less(t, len(requestURL), 1200, "approval link should not embed full tool input")
 }
 
-func TestShadowMCPApprovalRequestURLRequiresFullURL(t *testing.T) {
+func TestShadowMCPApprovalRequestURLRequiresEvidence(t *testing.T) {
 	t.Parallel()
 
 	siteURL, err := url.Parse("https://app.example.test")
@@ -72,8 +72,20 @@ func TestShadowMCPApprovalRequestURLRequiresFullURL(t *testing.T) {
 		ToolName:        "list_issues",
 	})
 	require.False(t, ok)
+}
 
-	_, ok = service.shadowMCPApprovalRequestURL(t.Context(), shadowMCPRequestLinkParams{
+func TestShadowMCPApprovalRequestURLAllowsServerIdentityEvidence(t *testing.T) {
+	t.Parallel()
+
+	siteURL, err := url.Parse("https://app.example.test")
+	require.NoError(t, err)
+	service := &Service{
+		logger:    testenv.NewLogger(t),
+		siteURL:   siteURL,
+		jwtSecret: "test-jwt-secret",
+	}
+
+	requestURL, ok := service.shadowMCPApprovalRequestURL(t.Context(), shadowMCPRequestLinkParams{
 		OrganizationID:  "org_test",
 		ProjectID:       "00000000-0000-0000-0000-000000000001",
 		RequesterUserID: "user_test",
@@ -86,7 +98,8 @@ func TestShadowMCPApprovalRequestURLRequiresFullURL(t *testing.T) {
 		ToolName:     "search",
 		RiskPolicyID: "00000000-0000-0000-0000-000000000002",
 	})
-	require.False(t, ok)
+	require.True(t, ok)
+	require.Contains(t, requestURL, "/risk-policy-bypass/request#request_token=rpbr1.")
 }
 
 func TestObservedShadowMCPName_HumanizesServerIdentity(t *testing.T) {
