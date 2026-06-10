@@ -1,0 +1,39 @@
+# OpenTelemetry Collector for Gram's Fly-hosted workloads (assistant
+# runtimes and, later, function runners). VMs export OTLP to this app over
+# the org's private network; the collector forwards traces to Datadog using
+# credentials that live only on this app as Fly secrets:
+#
+#   DD_API_KEY  Datadog API key
+#   DD_SITE     Datadog site (defaults to datadoghq.com)
+# Receivers bind the IPv6 wildcard: Fly's .internal DNS resolves to the
+# machines' 6PN IPv6 addresses, which an IPv4-only 0.0.0.0 bind would
+# refuse. Go listens dual-stack on [::], so IPv4 paths keep working too.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "[::]:4317"
+      http:
+        endpoint: "[::]:4318"
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 20
+  batch:
+    send_batch_size: 512
+    timeout: 5s
+
+exporters:
+  datadog:
+    api:
+      key: ${env:DD_API_KEY}
+      site: ${env:DD_SITE:-datadoghq.com}
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [datadog]
