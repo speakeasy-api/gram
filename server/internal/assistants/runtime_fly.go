@@ -919,6 +919,20 @@ func (f *FlyRuntimeBackend) machineConfig(runtime assistantRuntimeRecord) *fly.M
 		"GRAM_ASSISTANT_PROJECT_ID": runtime.ProjectID.String(),
 		"GRAM_SERVER_URL":           f.config.ServerURL.String(),
 	}
+	if f.config.OTLPEndpoint != "" {
+		env["GRAM_ENABLE_OTEL_TRACES"] = "true"
+		env["OTEL_EXPORTER_OTLP_ENDPOINT"] = f.config.OTLPEndpoint
+		env["OTEL_RESOURCE_ATTRIBUTES"] = fmt.Sprintf(
+			"gram.assistant.id=%s,gram.project.id=%s",
+			runtime.AssistantID, runtime.ProjectID,
+		)
+		if f.config.OTLPProtocol != "" {
+			env["OTEL_EXPORTER_OTLP_PROTOCOL"] = f.config.OTLPProtocol
+		}
+		if f.config.OTLPHeaders != "" {
+			env["OTEL_EXPORTER_OTLP_HEADERS"] = f.config.OTLPHeaders
+		}
+	}
 	metadata := map[string]string{
 		fly.MachineConfigMetadataKeyFlyPlatformVersion: "v2",
 		fly.MachineConfigMetadataKeyFlyProcessGroup:    flyMachineMetadataRoleAssistant,

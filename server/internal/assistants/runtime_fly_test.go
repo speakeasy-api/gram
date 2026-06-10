@@ -839,6 +839,57 @@ func TestFlyRuntimeConfigValidateRequiresServerURL(t *testing.T) {
 	require.ErrorContains(t, err, "server URL")
 }
 
+func TestFlyRuntimeConfigValidateRejectsUnknownOTLPProtocol(t *testing.T) {
+	t.Parallel()
+
+	cfg := FlyRuntimeConfig{
+		FlyTokens:        tokens.Parse("test"),
+		DefaultFlyOrg:    "speakeasy-lab",
+		DefaultFlyRegion: "iad",
+		OCIImage:         "registry.fly.io/assistant-runtime",
+		ImageTag:         "dev",
+		ServerURL:        mustParseURL(t, "https://gram.example.com"),
+		OTLPProtocol:     "carrier-pigeon",
+	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	require.ErrorContains(t, err, "assistant-runtime-otlp-protocol")
+}
+
+func TestFlyRuntimeBackendMachineConfigStampsOTLPEnv(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.NewServeMux())
+	t.Cleanup(srv.Close)
+
+	rec := assistantRuntimeRecord{
+		AssistantID: uuid.New(),
+		ProjectID:   uuid.New(),
+	}
+
+	backend, _, _ := newTestFlyRuntimeBackend(t, srv)
+	cfg := backend.machineConfig(rec)
+	require.NotContains(t, cfg.Env, "GRAM_ENABLE_OTEL_TRACES")
+	require.NotContains(t, cfg.Env, "OTEL_EXPORTER_OTLP_ENDPOINT")
+	require.NotContains(t, cfg.Env, "OTEL_EXPORTER_OTLP_PROTOCOL")
+	require.NotContains(t, cfg.Env, "OTEL_EXPORTER_OTLP_HEADERS")
+	require.NotContains(t, cfg.Env, "OTEL_RESOURCE_ATTRIBUTES")
+
+	backend.config.OTLPEndpoint = "https://otlp.example.com:4317"
+	backend.config.OTLPProtocol = "grpc"
+	backend.config.OTLPHeaders = "x-api-key=secret"
+	cfg = backend.machineConfig(rec)
+	require.Equal(t, "true", cfg.Env["GRAM_ENABLE_OTEL_TRACES"])
+	require.Equal(t, "https://otlp.example.com:4317", cfg.Env["OTEL_EXPORTER_OTLP_ENDPOINT"])
+	require.Equal(t, "grpc", cfg.Env["OTEL_EXPORTER_OTLP_PROTOCOL"])
+	require.Equal(t, "x-api-key=secret", cfg.Env["OTEL_EXPORTER_OTLP_HEADERS"])
+	require.Equal(
+		t,
+		fmt.Sprintf("gram.assistant.id=%s,gram.project.id=%s", rec.AssistantID, rec.ProjectID),
+		cfg.Env["OTEL_RESOURCE_ATTRIBUTES"],
+	)
+}
+
 type testFlyRuntimeAPIClient struct {
 	app               *fly.App
 	getAppErr         error

@@ -60,6 +60,30 @@ var assistantRuntimeFlags = []cli.Flag{
 		Usage:   "The OCI image repository for the assistant runtime image. It must not include a tag.",
 		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_OCI_IMAGE"},
 	},
+	&cli.StringFlag{
+		Name:    "assistant-runtime-otlp-endpoint",
+		Usage:   "OTLP endpoint assistant runtimes export traces to. Trace export is disabled when unset.",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_OTLP_ENDPOINT"},
+	},
+	&cli.StringFlag{
+		Name:    "assistant-runtime-otlp-protocol",
+		Usage:   "OTLP transport for assistant runtime traces. Allowed values: grpc, http/protobuf, http/json.",
+		Value:   "grpc",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_OTLP_PROTOCOL"},
+		Action: func(_ *cli.Context, val string) error {
+			switch val {
+			case "", "grpc", "http/protobuf", "http/json":
+				return nil
+			default:
+				return fmt.Errorf("invalid assistant runtime otlp protocol: %s", val)
+			}
+		},
+	},
+	&cli.StringFlag{
+		Name:    "assistant-runtime-otlp-headers",
+		Usage:   "Headers for the assistant runtime OTLP exporter as comma-separated key=value pairs.",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_OTLP_HEADERS"},
+	},
 }
 
 func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistants.RuntimeBackendConfig, error) {
@@ -94,6 +118,9 @@ func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistan
 			ImageTag:           AssistantRuntimeImageHash,
 			AppNamePrefix:      c.String("assistant-runtime-flyio-app-name-prefix"),
 			ServerURL:          resolvedServerURL,
+			OTLPEndpoint:       c.String("assistant-runtime-otlp-endpoint"),
+			OTLPProtocol:       c.String("assistant-runtime-otlp-protocol"),
+			OTLPHeaders:        c.String("assistant-runtime-otlp-headers"),
 		},
 	}, nil
 }

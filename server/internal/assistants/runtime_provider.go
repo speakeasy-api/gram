@@ -35,6 +35,13 @@ type FlyRuntimeConfig struct {
 	ImageTag           string
 	AppNamePrefix      string
 	ServerURL          *url.URL
+
+	// OTLP exporter settings stamped into runtime machine env as standard
+	// OTEL_EXPORTER_OTLP_* variables so the runner exports agentkit spans.
+	// Trace export is disabled when OTLPEndpoint is empty.
+	OTLPEndpoint string
+	OTLPProtocol string
+	OTLPHeaders  string
 }
 
 func (c FlyRuntimeConfig) Validate() error {
@@ -52,6 +59,11 @@ func (c FlyRuntimeConfig) Validate() error {
 	}
 	if c.ServerURL.Hostname() == "" {
 		return fmt.Errorf("assistant fly runtime requires a public --assistant-runtime-server-url or --server-url; got %q", c.ServerURL.String())
+	}
+	switch c.OTLPProtocol {
+	case "", "grpc", "http/protobuf", "http/json":
+	default:
+		return fmt.Errorf("invalid --assistant-runtime-otlp-protocol: %s (allowed: grpc, http/protobuf, http/json)", c.OTLPProtocol)
 	}
 	return nil
 }
