@@ -847,46 +847,6 @@ func (q *Queries) InsertRemoteSession(ctx context.Context, arg InsertRemoteSessi
 	return i, err
 }
 
-const listConnectedClientIDsForSubject = `-- name: ListConnectedClientIDsForSubject :many
-SELECT remote_session_client_id
-FROM remote_sessions
-WHERE subject_urn = $1
-  AND user_session_issuer_id = $2
-  AND deleted IS FALSE
-`
-
-type ListConnectedClientIDsForSubjectParams struct {
-	SubjectUrn          urn.SessionSubject
-	UserSessionIssuerID uuid.UUID
-}
-
-// Bulk lookup for the consent renderer: returns the set of
-// remote_session_client_ids that have an active remote_sessions row for
-// the given subject under a single user_session_issuer. Folds the N
-// per-card IsConnected lookups into one round-trip. The partial unique
-// index on (subject_urn, remote_session_client_id) WHERE deleted IS
-// FALSE means at most one row per (subject, client), so the result set
-// doubles as a membership set without DISTINCT.
-func (q *Queries) ListConnectedClientIDsForSubject(ctx context.Context, arg ListConnectedClientIDsForSubjectParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listConnectedClientIDsForSubject, arg.SubjectUrn, arg.UserSessionIssuerID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var remote_session_client_id uuid.UUID
-		if err := rows.Scan(&remote_session_client_id); err != nil {
-			return nil, err
-		}
-		items = append(items, remote_session_client_id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listOrganizationRemoteSessionIssuers = `-- name: ListOrganizationRemoteSessionIssuers :many
 SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
 FROM remote_session_issuers
@@ -1427,6 +1387,68 @@ func (q *Queries) ListRemoteSessionIssuersByProjectID(ctx context.Context, arg L
 			&i.DeletedAt,
 			&i.Deleted,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRemoteSessionStatusesForSubject = `-- name: ListRemoteSessionStatusesForSubject :many
+SELECT
+  remote_session_client_id,
+  (CASE
+    WHEN access_expires_at > now()
+      OR (refresh_token_encrypted IS NOT NULL
+          AND (refresh_expires_at IS NULL OR refresh_expires_at > now())) THEN 'active'
+    ELSE 'expired'
+  END)::text AS status
+FROM remote_sessions
+WHERE subject_urn = $1
+  AND user_session_issuer_id = $2
+  AND deleted IS FALSE
+`
+
+type ListRemoteSessionStatusesForSubjectParams struct {
+	SubjectUrn          urn.SessionSubject
+	UserSessionIssuerID uuid.UUID
+}
+
+type ListRemoteSessionStatusesForSubjectRow struct {
+	RemoteSessionClientID uuid.UUID
+	Status                string
+}
+
+// Bulk lookup for the consent renderer: returns each non-deleted
+// remote_session for the given subject under a single user_session_issuer,
+// tagged with whether it is still usable. Folds the N per-card lookups into
+// one round-trip. The partial unique index on (subject_urn,
+// remote_session_client_id) WHERE deleted IS FALSE means at most one row per
+// (subject, client), so the result doubles as a per-client map without
+// DISTINCT. A soft-deleted row is absent here entirely (truly disconnected).
+//
+// The 'active' predicate mirrors validateAndRefresh in tokenservice.go: a
+// session is usable only when its access token is unexpired, or it carries a
+// refresh token that is not itself known-expired to renew with. A
+// refresh_expires_at of NULL means no known expiry (non-expiring refresh
+// token), so it still counts as usable. A present-but-unusable row is
+// 'expired' rather than dropped, so the consent UI can distinguish "reconnect
+// this expired link" from "never connected" — and so the runtime gate (which
+// rejects the same row as ErrNoValidToken) stops disagreeing with a green
+// "Connected" badge.
+func (q *Queries) ListRemoteSessionStatusesForSubject(ctx context.Context, arg ListRemoteSessionStatusesForSubjectParams) ([]ListRemoteSessionStatusesForSubjectRow, error) {
+	rows, err := q.db.Query(ctx, listRemoteSessionStatusesForSubject, arg.SubjectUrn, arg.UserSessionIssuerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRemoteSessionStatusesForSubjectRow
+	for rows.Next() {
+		var i ListRemoteSessionStatusesForSubjectRow
+		if err := rows.Scan(&i.RemoteSessionClientID, &i.Status); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
