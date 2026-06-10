@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Type } from "@/components/ui/type";
 import { useSlugs } from "@/contexts/Sdk";
+import { useProductTier } from "@/hooks/useProductTier";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useOrgRoutes } from "@/routes";
 import { ArrowRight, Wrench } from "lucide-react";
@@ -29,12 +30,14 @@ function storeDismissed(orgSlug: string) {
 export function OnboardingBanner(): JSX.Element | null {
   const { orgSlug } = useSlugs();
   const { hasScope } = useRBAC();
+  const productTier = useProductTier();
   const orgRoutes = useOrgRoutes();
   const [dismissed, setDismissed] = useState(() =>
     orgSlug ? getStoredDismissed(orgSlug) : false,
   );
 
   if (!orgSlug) return null;
+  if (productTier !== "enterprise") return null;
   if (!hasScope("org:admin")) return null;
   if (dismissed) return null;
 
