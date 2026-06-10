@@ -3,6 +3,7 @@ package audit
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -61,10 +62,12 @@ func (l *Logger) LogRemoteSessionIssuerCreate(ctx context.Context, dbtx repo.DBT
 
 // remoteSessionIssuerDisplayName picks the human-facing subject label for an
 // issuer audit entry: the optional display name when set, otherwise the issuer
-// URL.
+// URL. A whitespace-only name falls back to the issuer URL.
 func remoteSessionIssuerDisplayName(name *string, issuerURL string) string {
-	if name != nil && *name != "" {
-		return *name
+	if name != nil {
+		if trimmed := strings.TrimSpace(*name); trimmed != "" {
+			return trimmed
+		}
 	}
 	return issuerURL
 }
