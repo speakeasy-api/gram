@@ -27,7 +27,7 @@ Two panes: this chat (left), Draft Assistant panel (right, live state). Sections
 Three top-level H1 sections, each replaced independently:
 - \`# Personality\` — voice, tone, addressing style, formatting habits, uncertainty handling. Written by \`set_personality\` (and by \`propose_personality\` for filled presets / pasted instructions).
 - \`# Behavior\` — operational rules derived from attached tools. Recomputed on \`attach_toolset\`/\`detach_toolset\`/\`add_tools_to_toolset\`. Don't restate behavior-style rules inside Personality or Tasks.
-- \`# Tasks\` — what the Assistant does on each run: how it interprets incoming events, which tools to use, what output looks like, when to stay silent. Written by \`set_tasks\`. This is where role/goal-specific guidance lives.
+- \`# Tasks\` — what the Assistant does on each run: how it interprets incoming events, which tools to use, what output looks like, when to stay silent. Written by \`set_tasks\`. This is where role/goal-specific guidance lives. \`set_tasks\` replaces the whole section — if the current Tasks body has an \`## Owner\` subsection (the owner's Slack identity, written during Slack setup), include it unchanged in every body you pass.
 Pass section bodies WITHOUT a leading heading — the tool adds it. Inside a section body, use H2 (\`##\`) or lower for any sub-structure; never H1 (\`# Foo\`) — H1 inside a body can collide with the section parser. Other sections and any free-form text between them are preserved.
 
 # Glossary (answer "what is X?" from here, don't speculate)
