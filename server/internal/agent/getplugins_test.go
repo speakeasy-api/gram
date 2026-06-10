@@ -116,6 +116,38 @@ func TestGetPlugins_MultiProjectPrefersDefault(t *testing.T) {
 	require.NotContains(t, res.Marketplaces[0].URL, "adam-token")
 }
 
+// TestGetPlugins_DistinctOverridesYieldSeparateMarketplaces covers the
+// multi-marketplace path: when projects publish under *distinct* names (via the
+// per-project override), each surfaces as its own marketplace instead of
+// collapsing. Also pins that the agent honors the override at all — recomputing
+// the org default would emit a name the project never published under.
+func TestGetPlugins_DistinctOverridesYieldSeparateMarketplaces(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+
+	// Default project keeps the org-derived name.
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "default-token")
+
+	// A second project published under a distinct override name.
+	adam := seedProject(t, ctx, ti.conn, ti.orgID, "adam")
+	setMarketplaceOverride(t, ctx, ti.conn, adam, "team-adam")
+	publishMarketplace(t, ctx, ti.conn, adam, "adam-token")
+
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
+	require.NoError(t, err)
+
+	require.Len(t, res.Marketplaces, 2, "distinct names must not collapse")
+
+	byName := make(map[string]string, len(res.Marketplaces))
+	for _, m := range res.Marketplaces {
+		byName[m.Name] = m.URL
+	}
+	require.Contains(t, byName, wantMarketplace, "default project keeps the org-derived name")
+	require.Contains(t, byName, "team-adam", "override project surfaces under its published name")
+	require.Contains(t, byName[wantMarketplace], "default-token")
+	require.Contains(t, byName["team-adam"], "adam-token")
+}
+
 func TestGetPlugins_CrossOrgIsolation(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)

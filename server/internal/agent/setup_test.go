@@ -115,6 +115,18 @@ func seedProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID, s
 	return p.ID
 }
 
+// setMarketplaceOverride sets a project's per-project marketplace name override,
+// the same row UpdateMarketplaceSettings writes. Used to exercise the agent
+// emitting a project's published (override) name rather than the org default.
+func setMarketplaceOverride(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, name string) {
+	t.Helper()
+	_, err := pluginsrepo.New(conn).UpsertMarketplaceSettings(ctx, pluginsrepo.UpsertMarketplaceSettingsParams{
+		ProjectID:       projectID,
+		MarketplaceName: pgtype.Text{String: name, Valid: true},
+	})
+	require.NoError(t, err)
+}
+
 func seedPlugin(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID string, projectID uuid.UUID, slug string) uuid.UUID {
 	t.Helper()
 	p, err := pluginsrepo.New(conn).CreatePlugin(ctx, pluginsrepo.CreatePluginParams{
