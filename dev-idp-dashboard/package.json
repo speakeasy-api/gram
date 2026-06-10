@@ -23,7 +23,7 @@
     "lucide-react": "catalog:",
     "motion": "^12.20.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0",
+    "react-dom": "^19.2.7",
     "shadcn": "^4.5.0",
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.2.4",
