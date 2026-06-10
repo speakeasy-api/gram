@@ -47,7 +47,7 @@ const PROVIDERS: AIIntegrationProvider[] = [
     name: "Cursor",
     description: "Track Cursor usage and spend across your organization.",
     icon: CursorIcon,
-    apiKeyLabel: "Cursor API key",
+    apiKeyLabel: "Cursor Admin API key",
     apiKeyPlaceholder: "key_xxx",
     requiresOrganizationId: false,
   },
@@ -57,10 +57,10 @@ const PROVIDERS: AIIntegrationProvider[] = [
     description:
       "Import Claude.ai chat transcripts and files for compliance review.",
     icon: ClaudeCodeIcon,
-    apiKeyLabel: "Anthropic API key",
+    apiKeyLabel: "Compliance Access API Key",
     apiKeyPlaceholder: "sk-ant-admin...",
     requiresOrganizationId: true,
-    organizationIdLabel: "Anthropic organization ID",
+    organizationIdLabel: "Anthropic Organization ID",
     organizationIdPlaceholder: "org_xxx",
     helpText: (
       <>
