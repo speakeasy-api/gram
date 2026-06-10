@@ -69,7 +69,7 @@ export function WorkspaceSwitcher(): JSX.Element {
         >
           <div
             aria-label={orgLabel}
-            className="flex size-6 shrink-0 items-center justify-center rounded-md bg-gradient-to-br text-xs font-semibold text-white group-data-[collapsible=icon]:size-7"
+            className="flex size-6 shrink-0 items-center justify-center rounded-md bg-gradient-to-br text-xs font-semibold text-white group-data-[collapsible=icon]:size-7 group-data-[collapsible=icon]:text-[14px]"
             style={{
               backgroundImage: `linear-gradient(${orgColors.angle}deg, ${orgColors.from}, ${orgColors.to})`,
             }}
