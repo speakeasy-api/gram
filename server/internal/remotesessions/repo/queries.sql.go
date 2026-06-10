@@ -216,7 +216,7 @@ VALUES (
     $13,
     $14
 )
-RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, name, logo_asset_id, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateRemoteSessionIssuerParams struct {
@@ -275,6 +275,8 @@ func (q *Queries) CreateRemoteSessionIssuer(ctx context.Context, arg CreateRemot
 		&i.TokenEndpointAuthMethodsSupported,
 		&i.Oidc,
 		&i.Passthrough,
+		&i.Name,
+		&i.LogoAssetID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -287,7 +289,7 @@ const deleteOrganizationRemoteSessionIssuer = `-- name: DeleteOrganizationRemote
 UPDATE remote_session_issuers
 SET deleted_at = clock_timestamp()
 WHERE id = $1 AND organization_id = $2 AND project_id IS NULL AND deleted IS FALSE
-RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, name, logo_asset_id, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteOrganizationRemoteSessionIssuerParams struct {
@@ -314,6 +316,8 @@ func (q *Queries) DeleteOrganizationRemoteSessionIssuer(ctx context.Context, arg
 		&i.TokenEndpointAuthMethodsSupported,
 		&i.Oidc,
 		&i.Passthrough,
+		&i.Name,
+		&i.LogoAssetID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -362,7 +366,7 @@ const deleteRemoteSessionIssuer = `-- name: DeleteRemoteSessionIssuer :one
 UPDATE remote_session_issuers
 SET deleted_at = clock_timestamp()
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
-RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, name, logo_asset_id, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteRemoteSessionIssuerParams struct {
@@ -389,6 +393,8 @@ func (q *Queries) DeleteRemoteSessionIssuer(ctx context.Context, arg DeleteRemot
 		&i.TokenEndpointAuthMethodsSupported,
 		&i.Oidc,
 		&i.Passthrough,
+		&i.Name,
+		&i.LogoAssetID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -491,7 +497,7 @@ func (q *Queries) GetOAuthProxyProviderForClone(ctx context.Context, arg GetOAut
 
 const getOrganizationRemoteSessionIssuerByID = `-- name: GetOrganizationRemoteSessionIssuerByID :one
 
-SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, name, logo_asset_id, created_at, updated_at, deleted_at, deleted
 FROM remote_session_issuers
 WHERE id = $1
   AND organization_id = $2
@@ -526,6 +532,8 @@ func (q *Queries) GetOrganizationRemoteSessionIssuerByID(ctx context.Context, ar
 		&i.TokenEndpointAuthMethodsSupported,
 		&i.Oidc,
 		&i.Passthrough,
+		&i.Name,
+		&i.LogoAssetID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -693,7 +701,7 @@ func (q *Queries) GetRemoteSessionClientWithIssuerByID(ctx context.Context, id u
 }
 
 const getRemoteSessionIssuerByID = `-- name: GetRemoteSessionIssuerByID :one
-SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, name, logo_asset_id, created_at, updated_at, deleted_at, deleted
 FROM remote_session_issuers
 WHERE id = $1
   AND (project_id = $2 OR (project_id IS NULL AND organization_id = $3))
@@ -727,6 +735,8 @@ func (q *Queries) GetRemoteSessionIssuerByID(ctx context.Context, arg GetRemoteS
 		&i.TokenEndpointAuthMethodsSupported,
 		&i.Oidc,
 		&i.Passthrough,
+		&i.Name,
+		&i.LogoAssetID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -736,7 +746,7 @@ func (q *Queries) GetRemoteSessionIssuerByID(ctx context.Context, arg GetRemoteS
 }
 
 const getRemoteSessionIssuerBySlug = `-- name: GetRemoteSessionIssuerBySlug :one
-SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, name, logo_asset_id, created_at, updated_at, deleted_at, deleted
 FROM remote_session_issuers
 WHERE slug = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -768,6 +778,8 @@ func (q *Queries) GetRemoteSessionIssuerBySlug(ctx context.Context, arg GetRemot
 		&i.TokenEndpointAuthMethodsSupported,
 		&i.Oidc,
 		&i.Passthrough,
+		&i.Name,
+		&i.LogoAssetID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -848,7 +860,7 @@ func (q *Queries) InsertRemoteSession(ctx context.Context, arg InsertRemoteSessi
 }
 
 const listOrganizationRemoteSessionIssuers = `-- name: ListOrganizationRemoteSessionIssuers :many
-SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, name, logo_asset_id, created_at, updated_at, deleted_at, deleted
 FROM remote_session_issuers
 WHERE organization_id = $1
   AND project_id IS NULL
@@ -889,6 +901,8 @@ func (q *Queries) ListOrganizationRemoteSessionIssuers(ctx context.Context, arg 
 			&i.TokenEndpointAuthMethodsSupported,
 			&i.Oidc,
 			&i.Passthrough,
+			&i.Name,
+			&i.LogoAssetID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -1334,7 +1348,7 @@ func (q *Queries) ListRemoteSessionClientsForUserSessionIssuerLegacy(ctx context
 }
 
 const listRemoteSessionIssuersByProjectID = `-- name: ListRemoteSessionIssuersByProjectID :many
-SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, name, logo_asset_id, created_at, updated_at, deleted_at, deleted
 FROM remote_session_issuers
 WHERE (project_id = $1 OR (project_id IS NULL AND organization_id = $2))
   AND deleted IS FALSE
@@ -1382,6 +1396,8 @@ func (q *Queries) ListRemoteSessionIssuersByProjectID(ctx context.Context, arg L
 			&i.TokenEndpointAuthMethodsSupported,
 			&i.Oidc,
 			&i.Passthrough,
+			&i.Name,
+			&i.LogoAssetID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -1602,7 +1618,7 @@ SET
     passthrough = COALESCE($12, passthrough),
     updated_at = clock_timestamp()
 WHERE id = $13 AND organization_id = $14 AND project_id IS NULL AND deleted IS FALSE
-RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, name, logo_asset_id, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateOrganizationRemoteSessionIssuerParams struct {
@@ -1658,6 +1674,8 @@ func (q *Queries) UpdateOrganizationRemoteSessionIssuer(ctx context.Context, arg
 		&i.TokenEndpointAuthMethodsSupported,
 		&i.Oidc,
 		&i.Passthrough,
+		&i.Name,
+		&i.LogoAssetID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1753,7 +1771,7 @@ SET
     passthrough = COALESCE($12, passthrough),
     updated_at = clock_timestamp()
 WHERE id = $13 AND project_id = $14 AND deleted IS FALSE
-RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, oidc, passthrough, name, logo_asset_id, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateRemoteSessionIssuerParams struct {
@@ -1813,6 +1831,8 @@ func (q *Queries) UpdateRemoteSessionIssuer(ctx context.Context, arg UpdateRemot
 		&i.TokenEndpointAuthMethodsSupported,
 		&i.Oidc,
 		&i.Passthrough,
+		&i.Name,
+		&i.LogoAssetID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

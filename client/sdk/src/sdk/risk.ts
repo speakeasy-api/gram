@@ -3,7 +3,6 @@
  */
 
 import { ClientSDK } from "../lib/sdks.js";
-import { Approvals } from "./approvals.js";
 import { Capabilities } from "./capabilities.js";
 import { Categories } from "./categories.js";
 import { CustomRules } from "./customrules.js";
@@ -15,11 +14,6 @@ import { Results } from "./results.js";
 import { Rules } from "./rules.js";
 
 export class Risk extends ClientSDK {
-  private _approvals?: Approvals;
-  get approvals(): Approvals {
-    return (this._approvals ??= new Approvals(this._options));
-  }
-
   private _policyBypassRequests?: PolicyBypassRequests;
   get policyBypassRequests(): PolicyBypassRequests {
     return (this._policyBypassRequests ??= new PolicyBypassRequests(

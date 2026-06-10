@@ -1093,7 +1093,6 @@ func newStartCommand() *cli.Command {
 				riskReconciler,
 				completionsClient,
 				shadowMCPClient,
-				accessStore,
 				auditLogger,
 				c.String(usersessions.JWTSigningKeyFlag),
 				c.String("pi-classifier-url") != "",
