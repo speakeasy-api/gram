@@ -28,6 +28,7 @@ opentelemetry-otlp = { version = "0.32", default-features = false, features = [
   "internal-logs",
   "reqwest-blocking-client",
   "reqwest-rustls",
+  "tls-aws-lc",
   "tls-webpki-roots",
   "trace",
 ] }
