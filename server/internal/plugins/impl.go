@@ -1921,7 +1921,7 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 		// always seen as a newer version and triggers a refresh.
 		Version:          fmt.Sprintf("0.1.%d", time.Now().Unix()),
 		MarketplaceName:  "",
-		IsDefaultProject: s.isDefaultProject(ctx, orgID, projectID),
+		IsDefaultProject: s.isDefaultProject(ctx, projectID),
 	}
 	orgName, err := s.repo.GetOrganizationName(ctx, orgID)
 	switch {
@@ -1952,17 +1952,16 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 // endpoint emits. On error it treats the project as non-default — the safe
 // direction, since a stray bare org name colliding with the real default is
 // worse than an extra project-scoped one.
-func (s *Service) isDefaultProject(ctx context.Context, orgID string, projectID uuid.UUID) bool {
-	defaultID, err := s.repo.GetOrgDefaultProjectID(ctx, orgID)
+func (s *Service) isDefaultProject(ctx context.Context, projectID uuid.UUID) bool {
+	pctx, err := s.repo.GetProjectMarketplaceNameContext(ctx, projectID)
 	if err != nil {
 		s.logger.WarnContext(ctx, "failed to resolve org default project; treating as non-default",
-			attr.SlogOrganizationID(orgID),
 			attr.SlogProjectID(projectID.String()),
 			attr.SlogError(err),
 		)
 		return false
 	}
-	return defaultID == projectID
+	return pctx.IsDefaultProject
 }
 
 func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, error) {

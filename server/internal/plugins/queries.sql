@@ -285,18 +285,6 @@ FROM projects pr
 WHERE pr.id = @project_id
   AND pr.deleted IS FALSE;
 
--- name: GetOrgDefaultProjectID :one
--- The org's default project is its oldest non-deleted project (lowest id; ids
--- are time-ordered uuidv7, so this is creation order). Used to decide whether a
--- project keeps the bare org-derived marketplace name or gets a project-scoped
--- one. Must match the device-agent endpoint's default-project resolution.
-SELECT id
-FROM projects
-WHERE organization_id = @organization_id
-  AND deleted IS FALSE
-ORDER BY id ASC
-LIMIT 1;
-
 -- name: UpsertMarketplaceSettings :one
 -- Sets the marketplace name override for a project. Pass NULL to clear the
 -- override and fall back to the server-side default.
