@@ -14,8 +14,10 @@ import (
 // helpers the publish path uses, so the test pins the actual cross-surface
 // contract rather than a hardcoded string.
 var (
-	wantMarketplace   = naming.MarketplaceName(mockidp.MockOrgName)   // local-dev-org-speakeasy
-	wantObservability = naming.ObservabilitySlug(mockidp.MockOrgName) // local-dev-org-observability
+	// The test instance's project is its org's default (oldest) project, so it
+	// keeps the bare org-derived name; slug is irrelevant when isDefault is true.
+	wantMarketplace   = naming.MarketplaceName(mockidp.MockOrgName, "", true) // local-dev-org-speakeasy
+	wantObservability = naming.ObservabilitySlug(mockidp.MockOrgName)         // local-dev-org-observability
 )
 
 func pluginSlugs(res *gen.GetPluginsResult) []string {
@@ -87,32 +89,59 @@ func TestGetPlugins_UnpublishedProjectExcluded(t *testing.T) {
 	require.Empty(t, res.Plugins)
 }
 
-// TestGetPlugins_MultiProjectPrefersDefault pins DNO-228: an org with multiple
-// published projects must collapse to the *default* project's marketplace (the
-// one created at org setup, lowest id), not the alphabetically-first one.
-//
-// The default project (from InitAuthContext) has slug "test-<hex>", so a second
-// project named "adam" sorts ahead of it alphabetically but is created later, so
-// it has a higher id. With the old `ORDER BY pr.slug` "adam" won; with the
-// id-ordered query the default project's token is the one returned.
-func TestGetPlugins_MultiProjectPrefersDefault(t *testing.T) {
+// TestGetPlugins_MultiProjectDistinctByDefault covers project-scoped naming: an
+// org with multiple published projects surfaces each as its own marketplace. The
+// default project (from InitAuthContext, the org's oldest) keeps the bare
+// org-derived name; a non-default project is scoped by its slug. Both are
+// returned, each with its own token.
+func TestGetPlugins_MultiProjectDistinctByDefault(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)
 
-	// Default project: publish with a recognizable token.
 	publishMarketplace(t, ctx, ti.conn, ti.projectID, "default-token")
 
-	// A second project in the same org that sorts first alphabetically.
 	adam := seedProject(t, ctx, ti.conn, ti.orgID, "adam")
+	publishMarketplace(t, ctx, ti.conn, adam, "adam-token")
+	wantAdam := naming.MarketplaceName(mockidp.MockOrgName, "adam", false) // local-dev-org-adam-speakeasy
+
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
+	require.NoError(t, err)
+
+	require.Len(t, res.Marketplaces, 2, "distinct project-scoped names do not collapse")
+	byName := make(map[string]string, len(res.Marketplaces))
+	for _, m := range res.Marketplaces {
+		byName[m.Name] = m.URL
+	}
+	require.Contains(t, byName, wantMarketplace, "default project keeps the bare org name")
+	require.Contains(t, byName, wantAdam, "non-default project is scoped by slug")
+	require.Contains(t, byName[wantMarketplace], "default-token")
+	require.Contains(t, byName[wantAdam], "adam-token")
+}
+
+// TestGetPlugins_CollidingNamesPreferDefault pins the DNO-228 tiebreak that still
+// matters when names genuinely collide: if a non-default project's override is
+// set to the default project's name, they can't both exist on the device, so the
+// view collapses them and the `ORDER BY pr.id` ordering keeps the *default*
+// project's token (not whichever sorts first by slug).
+func TestGetPlugins_CollidingNamesPreferDefault(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "default-token")
+
+	// "adam" sorts before the default project's "test-<hex>" slug, but overrides
+	// its name to collide with the default's bare org name.
+	adam := seedProject(t, ctx, ti.conn, ti.orgID, "adam")
+	setMarketplaceOverride(t, ctx, ti.conn, adam, wantMarketplace)
 	publishMarketplace(t, ctx, ti.conn, adam, "adam-token")
 
 	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
 	require.NoError(t, err)
 
-	require.Len(t, res.Marketplaces, 1, "an org's projects collapse to one marketplace")
+	require.Len(t, res.Marketplaces, 1, "colliding names collapse to one")
 	require.Equal(t, wantMarketplace, res.Marketplaces[0].Name)
 	require.Contains(t, res.Marketplaces[0].URL, "default-token",
-		"the default project's marketplace must win, not the alphabetically-first one")
+		"the default project's token must win the collision, not the alphabetically-first one")
 	require.NotContains(t, res.Marketplaces[0].URL, "adam-token")
 }
 

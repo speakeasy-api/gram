@@ -610,6 +610,36 @@ func TestGenerateMarketplaceManifestUsesMarketplaceNameOverride(t *testing.T) {
 	require.Equal(t, "acme-custom", codexManifest.Name)
 }
 
+func TestGenerateMarketplaceManifestScopesNonDefaultProject(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{{Name: "A", Slug: "a"}}
+
+	// Non-default project: the name is scoped by the project slug so it doesn't
+	// collide with the org's other projects.
+	scoped, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:          "Acme",
+		ServerURL:        "https://app.getgram.ai",
+		ProjectSlug:      "sales",
+		IsDefaultProject: false,
+	})
+	require.NoError(t, err)
+	var scopedManifest marketplaceManifest
+	require.NoError(t, json.Unmarshal(scoped[".claude-plugin/marketplace.json"], &scopedManifest))
+	require.Equal(t, "acme-sales-speakeasy", scopedManifest.Name)
+
+	// Default project keeps the bare org-derived name even with a slug set.
+	def, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:          "Acme",
+		ServerURL:        "https://app.getgram.ai",
+		ProjectSlug:      "sales",
+		IsDefaultProject: true,
+	})
+	require.NoError(t, err)
+	var defManifest marketplaceManifest
+	require.NoError(t, json.Unmarshal(def[".claude-plugin/marketplace.json"], &defManifest))
+	require.Equal(t, "acme-speakeasy", defManifest.Name)
+}
+
 func TestRenderHookScriptClaudeUsesGramKeyAndProjectHeaders(t *testing.T) {
 	t.Parallel()
 	// Claude's hook endpoint accepts Gram-Key + Gram-Project as optional

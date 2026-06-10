@@ -265,6 +265,26 @@ func (q *Queries) GetMcpServerForPluginServer(ctx context.Context, arg GetMcpSer
 	return i, err
 }
 
+const getOrgDefaultProjectID = `-- name: GetOrgDefaultProjectID :one
+SELECT id
+FROM projects
+WHERE organization_id = $1
+  AND deleted IS FALSE
+ORDER BY id ASC
+LIMIT 1
+`
+
+// The org's default project is its oldest non-deleted project (lowest id; ids
+// are time-ordered uuidv7, so this is creation order). Used to decide whether a
+// project keeps the bare org-derived marketplace name or gets a project-scoped
+// one. Must match the device-agent endpoint's default-project resolution.
+func (q *Queries) GetOrgDefaultProjectID(ctx context.Context, organizationID string) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getOrgDefaultProjectID, organizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getOrganizationName = `-- name: GetOrganizationName :one
 SELECT name FROM organization_metadata WHERE id = $1
 `

@@ -26,6 +26,19 @@ SELECT
   pgc.marketplace_token,
   pgc.updated_at AS marketplace_updated_at,
   pms.marketplace_name AS marketplace_name_override,
+  -- The org's default project (oldest, by id ASC over ALL non-deleted projects,
+  -- not just published ones) keeps the bare org-derived marketplace name; others
+  -- are project-scoped. Resolved the same way the publish path does so the names
+  -- match. The subquery spans unpublished projects too, so an unpublished default
+  -- doesn't hand the bare name to a different project.
+  (pr.id = (
+    SELECT p2.id
+    FROM projects p2
+    WHERE p2.organization_id = pr.organization_id
+      AND p2.deleted IS FALSE
+    ORDER BY p2.id ASC
+    LIMIT 1
+  )) AS is_default_project,
   p.id AS plugin_id,
   p.slug AS plugin_slug,
   p.updated_at AS plugin_updated_at

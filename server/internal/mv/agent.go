@@ -23,18 +23,21 @@ import (
 //
 // Each project's marketplace name is resolved the same way the publish path
 // resolves it: the per-project override (project_marketplace_settings) when set,
-// else the org-derived default from the shared `naming` package. Matching the
-// publish path exactly matters because tools resolve marketplaces by that name —
-// any mismatch silently fails to enable plugins. The observability slug stays
-// org-derived; plugin slugs are scoped within a marketplace, so the same slug in
-// two differently-named marketplaces does not collide.
+// else the shared `naming` default — the bare org-derived name for the org's
+// default project, project-scoped (`<org>-<project>-speakeasy`) for the rest.
+// Matching the publish path exactly matters because tools resolve marketplaces
+// by that name — any mismatch silently fails to enable plugins. The
+// observability slug stays org-derived; plugin slugs are scoped within a
+// marketplace, so the same slug in two differently-named marketplaces does not
+// collide.
 //
-// Projects with distinct names surface as distinct marketplaces. Projects that
-// share a name still collapse to one (a marketplace.json name is a single
-// identifier, so two same-named marketplaces can't coexist on the device): the
-// collapse keeps the first row's token, and the query orders by pr.id so that
-// first row is the org's default project (created at org setup, lowest id)
-// rather than an arbitrary alphabetically-first one.
+// Because names are project-scoped, an org's projects now surface as distinct
+// marketplaces instead of collapsing. Projects can still share a name (e.g. two
+// overrides set to the same value), and a marketplace.json name is a single
+// identifier that can't coexist twice on the device — so same-named rows still
+// collapse to one, keeping the first row's token. The query orders by pr.id so
+// that first row is the org's default project (oldest, lowest id) rather than an
+// arbitrary alphabetically-first one.
 //
 // marketplaceURL constructs the public marketplace git URL from a token; the
 // caller owns the URL shape so this builder stays free of server-side config.
@@ -52,7 +55,7 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 		// The per-project override, when set, is the name the project actually
 		// published under (UpdateMarketplaceSettings republishes on change), so
 		// prefer it over the org-derived default.
-		name := naming.MarketplaceName(row.OrganizationName)
+		name := naming.MarketplaceName(row.OrganizationName, row.ProjectSlug, row.IsDefaultProject)
 		if row.MarketplaceNameOverride.Valid && row.MarketplaceNameOverride.String != "" {
 			name = row.MarketplaceNameOverride.String
 		}
