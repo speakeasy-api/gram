@@ -1,0 +1,38 @@
+# OpenTelemetry Collector for Gram's Fly-hosted workloads (assistant
+# runtimes and, later, function runners). VMs export OTLP to this app over
+# the org's private network; the collector forwards to the configured
+# backend using credentials that live only on this app as Fly secrets:
+#
+#   GRAM_OTLP_FORWARD_ENDPOINT       e.g. https://o1234.ingest.sentry.io/api/567/integration/otlp
+#   GRAM_OTLP_FORWARD_AUTHORIZATION  optional `authorization` header value
+#   GRAM_OTLP_FORWARD_SENTRY_AUTH    optional `x-sentry-auth` header value
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 20
+  batch:
+    send_batch_size: 512
+    timeout: 5s
+
+exporters:
+  otlphttp/forward:
+    endpoint: ${env:GRAM_OTLP_FORWARD_ENDPOINT}
+    headers:
+      authorization: ${env:GRAM_OTLP_FORWARD_AUTHORIZATION:-}
+      x-sentry-auth: ${env:GRAM_OTLP_FORWARD_SENTRY_AUTH:-}
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/forward]
