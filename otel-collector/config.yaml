@@ -5,13 +5,16 @@
 #
 #   DD_API_KEY  Datadog API key
 #   DD_SITE     Datadog site (defaults to datadoghq.com)
+# Receivers bind the IPv6 wildcard: Fly's .internal DNS resolves to the
+# machines' 6PN IPv6 addresses, which an IPv4-only 0.0.0.0 bind would
+# refuse. Go listens dual-stack on [::], so IPv4 paths keep working too.
 receivers:
   otlp:
     protocols:
       grpc:
-        endpoint: 0.0.0.0:4317
+        endpoint: "[::]:4317"
       http:
-        endpoint: 0.0.0.0:4318
+        endpoint: "[::]:4318"
 
 processors:
   memory_limiter:
