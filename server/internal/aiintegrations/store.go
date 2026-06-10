@@ -25,7 +25,7 @@ const (
 )
 
 const (
-	initialUsagePollLookback             = time.Hour
+	initialUsagePollLookback             = time.Hour * 24
 	cursorUsagePollInterval              = time.Hour
 	anthropicComplianceUsagePollInterval = 5 * time.Minute
 	maxUsagePollErrorMessage             = 4000

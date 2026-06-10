@@ -26,7 +26,7 @@ const (
 	anthropicComplianceActivityCreated = "claude_chat_created"
 	anthropicComplianceActivityUpdated = "claude_chat_updated"
 
-	anthropicComplianceSourceWeb     = "Claude Web"
+	anthropicComplianceSourceWeb     = "Claude Chat Web"
 	anthropicComplianceSourceDesktop = "Claude Chat Desktop"
 
 	anthropicCompliancePageLimit          = 1000
