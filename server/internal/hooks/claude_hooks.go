@@ -852,27 +852,6 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 		}
 		return result, nil
 	}
-	if s.shadowMCPClient.CanBypassLegacyPolicyAccess(ctx, metadata.GramOrgID, metadata.ProjectID, metadata.UserID, policy.ID, evidence) {
-		matchedURL, matchedCommand := "", ""
-		if matched != nil {
-			matchedURL = matched.URL
-			matchedCommand = matched.Command
-		}
-		s.logger.InfoContext(ctx, "shadow-mcp call allowed via legacy shadow mcp access rule",
-			attr.SlogEvent("claude_hook_legacy_access_allow"),
-			attr.SlogToolName(rawToolName),
-			attr.SlogRiskPolicyID(policy.ID),
-			attr.SlogValueAny(map[string]any{
-				"serverPrefix":   serverPrefix,
-				"matchedURL":     matchedURL,
-				"matchedCommand": matchedCommand,
-			}),
-		)
-		if output != nil {
-			output.PermissionDecision = &allow
-		}
-		return result, nil
-	}
 
 	auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
 	userReason := s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{

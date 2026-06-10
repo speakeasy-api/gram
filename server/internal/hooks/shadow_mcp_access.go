@@ -39,18 +39,6 @@ func (s *Service) enforceShadowMCPToolAccess(
 		)
 		return "", false
 	}
-	if s.shadowMCPClient.CanBypassLegacyPolicyAccess(ctx, organizationID, projectID, userID, policyID, evidence) {
-		s.logger.InfoContext(ctx, "shadow-mcp call allowed via legacy shadow mcp access rule",
-			attr.SlogEvent("shadow_mcp_legacy_access_allow"),
-			attr.SlogOrganizationID(organizationID),
-			attr.SlogProjectID(projectID),
-			attr.SlogRiskPolicyID(policyID),
-			attr.SlogValueAny(map[string]any{
-				"tool_name": toolName,
-			}),
-		)
-		return "", false
-	}
 	return detail, true
 }
 
