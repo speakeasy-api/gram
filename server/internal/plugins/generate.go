@@ -778,7 +778,7 @@ func renderDeviceAgentIdentityScript() []byte {
 gram_enrich_identity_payload() {
   local payload="$1"
   local email=""
-  local commands="${GRAM_DEVICE_AGENT_COMMANDS:-speakeasyd,device-agent,speakeasy-device-agent}"
+  local commands="${GRAM_DEVICE_AGENT_COMMANDS:-speakeasyd}"
   local timeout_tenths="${GRAM_DEVICE_AGENT_TIMEOUT_TENTHS:-15}"
   local old_ifs="$IFS"
   local command output tmp pid elapsed prefix trimmed
