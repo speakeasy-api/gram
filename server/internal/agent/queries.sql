@@ -32,9 +32,12 @@ SELECT
   -- match. The subquery spans unpublished projects too, so an unpublished default
   -- doesn't hand the bare name to a different project.
   (pr.id = (
+    -- Pinned to the @organization_id parameter (not pr.organization_id) so this
+    -- stays uncorrelated and Postgres evaluates the org's default project once,
+    -- not per row.
     SELECT p2.id
     FROM projects p2
-    WHERE p2.organization_id = pr.organization_id
+    WHERE p2.organization_id = @organization_id
       AND p2.deleted IS FALSE
     ORDER BY p2.id ASC
     LIMIT 1
