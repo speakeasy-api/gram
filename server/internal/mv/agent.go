@@ -18,7 +18,7 @@ import (
 // For every published marketplace in the org it emits the marketplace and its
 // always-required observability plugin, then layers on the user's assigned
 // plugins (the non-null plugin rows). Rows arrive grouped by project
-// (`ORDER BY pr.slug, p.slug`), one row per project even when the user has no
+// (`ORDER BY pr.id, p.slug`), one row per project even when the user has no
 // assignment there (null plugin columns).
 //
 // The marketplace name and observability slug come from the shared `naming`
@@ -28,9 +28,11 @@ import (
 //
 // Note: gram publishes one marketplace name per *org* (naming.MarketplaceName
 // is org-derived, not project-scoped), and a marketplace.json name is a single
-// identifier. So if an org ever publishes multiple projects, they collapse to a
+// identifier. So if an org publishes multiple projects, they collapse to a
 // single marketplace here — matching gram's existing publish limitation rather
-// than introducing a new one.
+// than introducing a new one. The collapse keeps the first row's token, and the
+// query orders by pr.id so that first row is the org's default project (created
+// at org setup, lowest id) rather than an arbitrary alphabetically-first one.
 //
 // marketplaceURL constructs the public marketplace git URL from a token; the
 // caller owns the URL shape so this builder stays free of server-side config.

@@ -7,6 +7,12 @@
 -- is returned even when the user has no explicit assignments. Plugins the user
 -- is assigned to (via principal_urn) are LEFT JOINed on top; projects with no
 -- matching assignment still yield one row with null plugin columns.
+--
+-- Rows are ordered by pr.id so the org's default project (first by id ASC, the
+-- one created at org setup) sorts first. The view collapses an org's published
+-- projects to a single marketplace and keeps the first row's token, so this
+-- ordering makes that collapse resolve to the default project rather than the
+-- arbitrary alphabetically-first one.
 SELECT
   pr.id AS project_id,
   pr.slug AS project_slug,
@@ -33,4 +39,4 @@ LEFT JOIN plugins p
   )
 WHERE pr.organization_id = @organization_id
   AND pgc.marketplace_token IS NOT NULL
-ORDER BY pr.slug, p.slug;
+ORDER BY pr.id, p.slug;

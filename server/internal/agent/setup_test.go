@@ -102,6 +102,19 @@ func publishMarketplace(t *testing.T, ctx context.Context, conn *pgxpool.Pool, p
 	require.NoError(t, err)
 }
 
+// seedProject creates an additional project in an existing org, used to exercise
+// multi-project orgs (e.g. the default-project selection in GetAgentPluginSet).
+func seedProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID, slug string) uuid.UUID {
+	t.Helper()
+	p, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           slug,
+		Slug:           slug,
+		OrganizationID: orgID,
+	})
+	require.NoError(t, err)
+	return p.ID
+}
+
 func seedPlugin(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID string, projectID uuid.UUID, slug string) uuid.UUID {
 	t.Helper()
 	p, err := pluginsrepo.New(conn).CreatePlugin(ctx, pluginsrepo.CreatePluginParams{

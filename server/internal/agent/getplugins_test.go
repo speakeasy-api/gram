@@ -87,6 +87,35 @@ func TestGetPlugins_UnpublishedProjectExcluded(t *testing.T) {
 	require.Empty(t, res.Plugins)
 }
 
+// TestGetPlugins_MultiProjectPrefersDefault pins DNO-228: an org with multiple
+// published projects must collapse to the *default* project's marketplace (the
+// one created at org setup, lowest id), not the alphabetically-first one.
+//
+// The default project (from InitAuthContext) has slug "test-<hex>", so a second
+// project named "adam" sorts ahead of it alphabetically but is created later, so
+// it has a higher id. With the old `ORDER BY pr.slug` "adam" won; with the
+// id-ordered query the default project's token is the one returned.
+func TestGetPlugins_MultiProjectPrefersDefault(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+
+	// Default project: publish with a recognizable token.
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "default-token")
+
+	// A second project in the same org that sorts first alphabetically.
+	adam := seedProject(t, ctx, ti.conn, ti.orgID, "adam")
+	publishMarketplace(t, ctx, ti.conn, adam, "adam-token")
+
+	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
+	require.NoError(t, err)
+
+	require.Len(t, res.Marketplaces, 1, "an org's projects collapse to one marketplace")
+	require.Equal(t, wantMarketplace, res.Marketplaces[0].Name)
+	require.Contains(t, res.Marketplaces[0].URL, "default-token",
+		"the default project's marketplace must win, not the alphabetically-first one")
+	require.NotContains(t, res.Marketplaces[0].URL, "adam-token")
+}
+
 func TestGetPlugins_CrossOrgIsolation(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)
