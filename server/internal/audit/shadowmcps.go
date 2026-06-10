@@ -90,7 +90,7 @@ func (l *Logger) logShadowMCPApprovalRequest(ctx context.Context, dbtx repo.DBTX
 		Metadata:       metadata,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.ShadowMCPApprovalV1})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AccessRequestV1})
 }
 
 type LogShadowMCPAccessRuleEvent struct {
@@ -157,5 +157,5 @@ func (l *Logger) logShadowMCPAccessRule(ctx context.Context, dbtx repo.DBTX, act
 		Metadata:       metadata,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.ShadowMCPAccessRuleV1})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AccessRuleV1})
 }
