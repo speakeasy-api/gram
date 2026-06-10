@@ -1,0 +1,11 @@
+-- create "chat_token_summaries" table
+CREATE TABLE `chat_token_summaries` (
+  `gram_project_id` UUID,
+  `chat_id` String,
+  `time_bucket` DateTime('UTC'),
+  `total_tokens` SimpleAggregateFunction(sum, Int64),
+  `stored_event_count` SimpleAggregateFunction(sum, UInt64)
+) ENGINE = AggregatingMergeTree
+PRIMARY KEY (`gram_project_id`, `chat_id`, `time_bucket`) ORDER BY (`gram_project_id`, `chat_id`, `time_bucket`) TTL time_bucket + toIntervalDay(730) SETTINGS index_granularity = 8192 COMMENT 'Per-chat daily token usage and stored-session evidence, retained beyond the raw telemetry TTL to support tokens-under-management billing across historical billing cycles';
+-- create "chat_token_summaries_mv" view
+CREATE MATERIALIZED VIEW `chat_token_summaries_mv` TO `chat_token_summaries` AS SELECT gram_project_id, toString(attributes.gen_ai.conversation.id) AS chat_id, toStartOfDay(fromUnixTimestamp64Nano(time_unix_nano)) AS time_bucket, sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS total_tokens, toUInt64(countIf(startsWith(gram_urn, 'tools:') OR (toString(attributes.gram.tool.urn) != '') OR (toString(attributes.gram.event.source) != '') OR (toString(attributes.gen_ai.usage.total_tokens) = ''))) AS stored_event_count FROM telemetry_logs WHERE toString(attributes.gen_ai.conversation.id) != '' GROUP BY gram_project_id, chat_id, time_bucket;
