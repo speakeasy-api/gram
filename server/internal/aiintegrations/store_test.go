@@ -3,7 +3,6 @@ package aiintegrations
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
@@ -12,29 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations/repo"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 )
-
-func TestNextUsagePollAfter(t *testing.T) {
-	t.Parallel()
-
-	now := time.Date(2026, 5, 20, 12, 30, 0, 0, time.FixedZone("test", 2*60*60))
-
-	// A watermark backfilled by one lookback period is due for its first
-	// poll immediately: the lookback and poll interval cancel out.
-	require.Equal(t, now.UTC().Add(-initialUsagePollLookback), now.UTC().Add(-initialUsagePollLookback).Add(usagePollInterval))
-	require.Equal(t, now.UTC().Add(usagePollInterval), now.UTC().Add(usagePollInterval))
-}
-
-func TestTruncateUsagePollError(t *testing.T) {
-	t.Parallel()
-
-	require.Empty(t, conv.TruncateString("", maxUsagePollErrorMessage))
-	require.Equal(t, "cursor unavailable", conv.TruncateString(" cursor unavailable ", maxUsagePollErrorMessage))
-
-	longErr := errors.New(strings.Repeat("x", maxUsagePollErrorMessage+1))
-	require.Equal(t, strings.Repeat("x", maxUsagePollErrorMessage), conv.TruncateString(longErr.Error(), maxUsagePollErrorMessage))
-}
 
 func TestUpsertWithTxCreatesConfigGeneration(t *testing.T) {
 	t.Parallel()

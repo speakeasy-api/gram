@@ -159,6 +159,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to save ai integration config")
 		}
 	} else {
+
 		row, err = q.UpdateConfigSettings(ctx, repo.UpdateConfigSettingsParams{
 			OrganizationID:         orgID,
 			Provider:               provider,
