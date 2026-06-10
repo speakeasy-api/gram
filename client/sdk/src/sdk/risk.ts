@@ -37,14 +37,14 @@ export class Risk extends ClientSDK {
     return (this._categories ??= new Categories(this._options));
   }
 
-  private _customRules?: CustomRules;
-  get customRules(): CustomRules {
-    return (this._customRules ??= new CustomRules(this._options));
-  }
-
   private _exclusions?: Exclusions;
   get exclusions(): Exclusions {
     return (this._exclusions ??= new Exclusions(this._options));
+  }
+
+  private _customRules?: CustomRules;
+  get customRules(): CustomRules {
+    return (this._customRules ??= new CustomRules(this._options));
   }
 
   private _overview?: Overview;

@@ -110,10 +110,10 @@ func New(
 			{"GetCustomDetectionRule", "GET", "/rpc/risk.customRules.get"},
 			{"UpdateCustomDetectionRule", "POST", "/rpc/risk.customRules.update"},
 			{"DeleteCustomDetectionRule", "POST", "/rpc/risk.customRules.delete"},
-			{"ListRiskExclusions", "GET", "/rpc/risk.exclusions.list"},
-			{"CreateRiskExclusion", "POST", "/rpc/risk.exclusions.create"},
-			{"UpdateRiskExclusion", "PUT", "/rpc/risk.exclusions.update"},
-			{"DeleteRiskExclusion", "DELETE", "/rpc/risk.exclusions.delete"},
+			{"ListRiskExclusions", "GET", "/rpc/risk.listExclusions"},
+			{"CreateRiskExclusion", "POST", "/rpc/risk.createExclusions"},
+			{"UpdateRiskExclusion", "PUT", "/rpc/risk.updateExclusions"},
+			{"DeleteRiskExclusion", "DELETE", "/rpc/risk.deleteExclusions"},
 			{"SuggestCustomDetectionRule", "POST", "/rpc/risk.customRules.suggest"},
 			{"TestDetectionRule", "POST", "/rpc/risk.rules.test"},
 		},
@@ -1743,7 +1743,7 @@ func MountListRiskExclusionsHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/risk.exclusions.list", f)
+	mux.Handle("GET", "/rpc/risk.listExclusions", f)
 }
 
 // NewListRiskExclusionsHandler creates a HTTP handler which loads the HTTP
@@ -1796,7 +1796,7 @@ func MountCreateRiskExclusionHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/risk.exclusions.create", f)
+	mux.Handle("POST", "/rpc/risk.createExclusions", f)
 }
 
 // NewCreateRiskExclusionHandler creates a HTTP handler which loads the HTTP
@@ -1849,7 +1849,7 @@ func MountUpdateRiskExclusionHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("PUT", "/rpc/risk.exclusions.update", f)
+	mux.Handle("PUT", "/rpc/risk.updateExclusions", f)
 }
 
 // NewUpdateRiskExclusionHandler creates a HTTP handler which loads the HTTP
@@ -1902,7 +1902,7 @@ func MountDeleteRiskExclusionHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("DELETE", "/rpc/risk.exclusions.delete", f)
+	mux.Handle("DELETE", "/rpc/risk.deleteExclusions", f)
 }
 
 // NewDeleteRiskExclusionHandler creates a HTTP handler which loads the HTTP

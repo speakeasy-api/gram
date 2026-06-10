@@ -97,7 +97,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/risk.exclusions.list")();
+  const path = pathToFunc("/rpc/risk.listExclusions")();
 
   const query = encodeFormQuery({
     "risk_policy_id": payload?.risk_policy_id,

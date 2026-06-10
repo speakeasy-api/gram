@@ -96,7 +96,7 @@ async function $do(
     explode: true,
   });
 
-  const path = pathToFunc("/rpc/risk.exclusions.update")();
+  const path = pathToFunc("/rpc/risk.updateExclusions")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",

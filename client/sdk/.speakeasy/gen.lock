@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 7546790e1b041695f09783818d15aa56
+  docChecksum: 5abc8c035cc69489d4ef77735f2e0a18
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -3167,7 +3167,7 @@ trackedFiles:
   docs/sdks/environments/README.md:
     last_write_checksum: sha1:6e3cf385846dc2b2da70e4bb9101ef11e01126a9
   docs/sdks/exclusions/README.md:
-    last_write_checksum: sha1:49a1f669337e9cc5639cd6a91419ccfe23928125
+    last_write_checksum: sha1:eb72f4e952a67504b17b06a2b6b9d0eca34926f5
   docs/sdks/external/README.md:
     last_write_checksum: sha1:aee21905afb158ea2169e3b8816af5d847616c85
   docs/sdks/features/README.md:
@@ -3695,13 +3695,13 @@ trackedFiles:
   src/funcs/riskCustomRulesUpdate.ts:
     last_write_checksum: sha1:64fdad46266de792afd338bd3f8690cd66982ea6
   src/funcs/riskExclusionsCreate.ts:
-    last_write_checksum: sha1:337e8a5310ac3d81973c0f2f44b360c52348aa5e
+    last_write_checksum: sha1:cf5dad9b5c1de70878f36835fa86b8cddb7fc8f2
   src/funcs/riskExclusionsDelete.ts:
-    last_write_checksum: sha1:c5babaefdf96236a2dd1e9957d166a31db251268
+    last_write_checksum: sha1:25eda4d6a8cb8b8fa8768c0ce84fd23656f9176f
   src/funcs/riskExclusionsList.ts:
-    last_write_checksum: sha1:dc3965e9913e40377394560071f374cd4037bd83
+    last_write_checksum: sha1:9b131c1eedf5a863d3a047221afc326c99291dfa
   src/funcs/riskExclusionsUpdate.ts:
-    last_write_checksum: sha1:976c55c7d8eab7c6238a6cd6463edbdda877a660
+    last_write_checksum: sha1:199088fed815d31f3044b20342d362e865820839
   src/funcs/riskOverviewGet.ts:
     last_write_checksum: sha1:10dc0bdfc2d651c3b001ddb50ce4fe7c0a9a2307
   src/funcs/riskOverviewRules.ts:
@@ -6441,7 +6441,7 @@ trackedFiles:
   src/sdk/results.ts:
     last_write_checksum: sha1:220552d21499d1871f15ca050009d2ec7646bbad
   src/sdk/risk.ts:
-    last_write_checksum: sha1:c6cd23107cc73f5dd0e00f4fddf5a48751215df8
+    last_write_checksum: sha1:63971074d4ee1b98f9bad35388d0d7893e06636f
   src/sdk/rules.ts:
     last_write_checksum: sha1:c09a7e791d89ef5b985c765b533bf61c1b6b0e9d
   src/sdk/sdk.ts:

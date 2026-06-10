@@ -937,7 +937,7 @@ var _ = Service("risk", func() {
 		Result(ListRiskExclusionsResult)
 
 		HTTP(func() {
-			GET("/rpc/risk.exclusions.list")
+			GET("/rpc/risk.listExclusions")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -980,7 +980,7 @@ var _ = Service("risk", func() {
 		Result(shared.RiskExclusion)
 
 		HTTP(func() {
-			POST("/rpc/risk.exclusions.create")
+			POST("/rpc/risk.createExclusions")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -1025,7 +1025,7 @@ var _ = Service("risk", func() {
 		Result(shared.RiskExclusion)
 
 		HTTP(func() {
-			PUT("/rpc/risk.exclusions.update")
+			PUT("/rpc/risk.updateExclusions")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
@@ -1052,7 +1052,7 @@ var _ = Service("risk", func() {
 		})
 
 		HTTP(func() {
-			DELETE("/rpc/risk.exclusions.delete")
+			DELETE("/rpc/risk.deleteExclusions")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()

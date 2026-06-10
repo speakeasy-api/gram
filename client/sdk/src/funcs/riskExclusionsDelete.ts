@@ -93,7 +93,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/risk.exclusions.delete")();
+  const path = pathToFunc("/rpc/risk.deleteExclusions")();
 
   const query = encodeFormQuery({
     "id": payload.id,
