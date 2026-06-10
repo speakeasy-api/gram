@@ -110,7 +110,7 @@ func processSecurity(
 
 					if username == "" || password == "" {
 						logger.InfoContext(ctx, "tool defines basic auth but its username or password env var is empty, proceeding without Authorization header",
-							attr.SlogValueString(fmt.Sprintf("env_username_present=%t env_password_present=%t", security.EnvVariables[0] == "", security.EnvVariables[1] == "")),
+							attr.SlogValueString(fmt.Sprintf("env_username_present=%t env_password_present=%t", username != "", password != "")),
 							attr.SlogSecurityScheme(security.Scheme.Value))
 					} else {
 						req.SetBasicAuth(username, password)
