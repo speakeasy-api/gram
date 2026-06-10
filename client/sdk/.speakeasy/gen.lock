@@ -36,8 +36,6 @@ trackedFiles:
     last_write_checksum: sha1:d0b15193202c961e7d1875864ddb15f9d17c84dd
   .devcontainer/setup.sh:
     last_write_checksum: sha1:f24217ccc99054ee0283dfed141f2a7e35239ade
-  .gitattributes:
-    last_write_checksum: sha1:26d16d8297b104945139da8c25bd38feeaad3e25
   .npmignore:
     last_write_checksum: sha1:6572da81f2e7a978ec29c22c2210bf461c5897b2
   FUNCTIONS.md:
