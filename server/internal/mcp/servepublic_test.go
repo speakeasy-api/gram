@@ -236,6 +236,62 @@ func TestServePublic_InitializeSucceeds(t *testing.T) {
 	require.NotNil(t, result["serverInfo"])
 }
 
+// TestServePublic_InitializeWithMalformedParamsSucceeds verifies the commit's
+// guarantee that capturing client info never breaks the RPC: even when the
+// initialize params can't be decoded into our recorded shape, the handshake
+// still returns a valid initialize result.
+func TestServePublic_InitializeWithMalformedParamsSucceeds(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolsetsRepo := toolsets_repo.New(ti.conn)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Malformed Params MCP",
+		Slug:                   "malformed-params-mcp",
+		Description:            conv.ToPGText("A test MCP server"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpSlug:                conv.ToPGText("malformed-params-mcp"),
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	toolset, err = toolsetsRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
+		Name:                   toolset.Name,
+		Description:            toolset.Description,
+		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
+		McpSlug:                toolset.McpSlug,
+		McpIsPublic:            true,
+		McpEnabled:             toolset.McpEnabled,
+		Slug:                   toolset.Slug,
+		ProjectID:              toolset.ProjectID,
+	})
+	require.NoError(t, err)
+
+	// params is an array rather than the expected object, so decoding into our
+	// recorded shape fails — but the RPC must still succeed.
+	body := []byte(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":["unexpected"]}`)
+
+	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, body, "", nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NotEmpty(t, w.Header().Get("Mcp-Session-Id"))
+
+	var response map[string]any
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err, "response body: %s", w.Body.String())
+	require.Nil(t, response["error"])
+	result, ok := response["result"].(map[string]any)
+	require.True(t, ok, "result should be a map: %v", response)
+	require.Equal(t, "2025-03-26", result["protocolVersion"])
+}
+
 func TestServePublic_PrivateDisabledMCP_Returns404(t *testing.T) {
 	t.Parallel()
 
