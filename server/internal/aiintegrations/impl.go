@@ -135,12 +135,12 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 		}
 		apiKey = before.APIKey
 	}
-	//externalOrganizationID := strings.TrimSpace(providerExternalOrganizationID(payload.ExternalOrganizationID))
-	externalOrganizationID := conv.PtrValOr(&payload.ExternalOrganizationID, nil)
+	externalOrganizationID := payload.ExternalOrganizationID
 	if externalOrganizationID == nil && beforeRow != nil {
 		externalOrganizationID = before.ExternalOrganizationID
 	}
-	externalOrgChanged := beforeRow != nil && *externalOrganizationID != *before.ExternalOrganizationID
+	externalOrgChanged := beforeRow != nil &&
+		conv.PtrValOr(externalOrganizationID, "") != conv.PtrValOr(before.ExternalOrganizationID, "")
 
 	// Start the watermark one lookback period in the past so the first poll
 	// backfills usage emitted just before the key was configured.

@@ -151,7 +151,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 			OrganizationID:         orgID,
 			Provider:               provider,
 			ProjectID:              projectID,
-			ExternalOrganizationID: conv.ToPGTextEmpty(*externalOrganizationID),
+			ExternalOrganizationID: conv.PtrToPGTextEmpty(externalOrganizationID),
 			ApiKeyEncrypted:        encrypted,
 			Enabled:                enabled,
 		})
@@ -159,12 +159,11 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to save ai integration config")
 		}
 	} else {
-
 		row, err = q.UpdateConfigSettings(ctx, repo.UpdateConfigSettingsParams{
 			OrganizationID:         orgID,
 			Provider:               provider,
 			ProjectID:              projectID,
-			ExternalOrganizationID: conv.ToPGTextEmpty(*externalOrganizationID),
+			ExternalOrganizationID: conv.PtrToPGTextEmpty(externalOrganizationID),
 			Enabled:                enabled,
 		})
 		if err != nil {
@@ -300,10 +299,15 @@ func (s *Store) RecordUsagePollSuccess(ctx context.Context, configID uuid.UUID, 
 }
 
 func (s *Store) RecordUsagePollFailure(ctx context.Context, configID uuid.UUID, t time.Time, cause error) error {
+	var errStr string
+	if cause != nil {
+		errStr = cause.Error()
+	}
+
 	if err := s.repo.RecordUsagePollFailure(ctx, repo.RecordUsagePollFailureParams{
 		AiIntegrationConfigID: configID,
 		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(usagePollInterval)),
-		LastPollError:         conv.ToPGTextEmpty(conv.TruncateString(cause.Error(), maxUsagePollErrorMessage)),
+		LastPollError:         conv.ToPGTextEmpty(conv.TruncateString(errStr, maxUsagePollErrorMessage)),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to record ai integration usage poll failure")
 	}
