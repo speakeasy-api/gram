@@ -199,8 +199,8 @@ type UpdateRiskExclusionRequestBody struct {
 	RuleIDFilter string `form:"rule_id_filter" json:"rule_id_filter" xml:"rule_id_filter"`
 	// Optional: only apply within this source. Empty means any.
 	SourceFilter string `form:"source_filter" json:"source_filter" xml:"source_filter"`
-	// Whether the exclusion is active.
-	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Whether the exclusion is active. Omit to leave unchanged.
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 }
 
 // SuggestCustomDetectionRuleRequestBody is the type of the "risk" service
@@ -7771,12 +7771,6 @@ func NewUpdateRiskExclusionRequestBody(p *risk.UpdateRiskExclusionPayload) *Upda
 		var zero string
 		if body.SourceFilter == zero {
 			body.SourceFilter = ""
-		}
-	}
-	{
-		var zero bool
-		if body.Enabled == zero {
-			body.Enabled = true
 		}
 	}
 	return body

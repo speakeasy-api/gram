@@ -25,7 +25,7 @@ export type UpdateRiskExclusionRequestBodyMatchType = ClosedEnum<
 
 export type UpdateRiskExclusionRequestBody = {
   /**
-   * Whether the exclusion is active.
+   * Whether the exclusion is active. Omit to leave unchanged.
    */
   enabled?: boolean | undefined;
   /**
@@ -62,7 +62,7 @@ export const UpdateRiskExclusionRequestBodyMatchType$outboundSchema:
 
 /** @internal */
 export type UpdateRiskExclusionRequestBody$Outbound = {
-  enabled: boolean;
+  enabled?: boolean | undefined;
   id: string;
   match_type: string;
   match_value: string;
@@ -77,7 +77,7 @@ export const UpdateRiskExclusionRequestBody$outboundSchema: z.ZodMiniType<
   UpdateRiskExclusionRequestBody
 > = z.pipe(
   z.object({
-    enabled: z._default(z.boolean(), true),
+    enabled: z.optional(z.boolean()),
     id: z.string(),
     matchType: UpdateRiskExclusionRequestBodyMatchType$outboundSchema,
     matchValue: z.string(),

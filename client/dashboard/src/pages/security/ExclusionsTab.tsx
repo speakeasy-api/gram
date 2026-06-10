@@ -184,7 +184,7 @@ function ExclusionActionsMenu({
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <Button variant="tertiary" size="sm">
+        <Button variant="tertiary" size="sm" aria-label="Exclusion actions">
           <Button.Icon>
             <Ellipsis className="h-4 w-4" />
           </Button.Icon>

@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: bb746b814034f0c3ee92dd0439814d29
+  docChecksum: d0a11f5834844f49366fca26a398dfb8
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -1109,7 +1109,7 @@ trackedFiles:
   docs/models/components/updaterequestbodyvisibility.md:
     last_write_checksum: sha1:13e67a9c7df67df83d191831827d14324b2fd409
   docs/models/components/updateriskexclusionrequestbody.md:
-    last_write_checksum: sha1:63c3ccc21f5f08961481c0534705325316ad320d
+    last_write_checksum: sha1:17e1362516ef2c96f9770eff3959ef38d3e594ff
   docs/models/components/updateriskexclusionrequestbodymatchtype.md:
     last_write_checksum: sha1:ec9f6d08a9258982255cf0e134a82f8e2f7cd348
   docs/models/components/updateriskpolicyrequestbody.md:
@@ -4823,7 +4823,7 @@ trackedFiles:
   src/models/components/updaterequestbody.ts:
     last_write_checksum: sha1:504b230ade27ef53b7f8a825b4fb8da9feead7f8
   src/models/components/updateriskexclusionrequestbody.ts:
-    last_write_checksum: sha1:0cfc7ab1b8f24157e030e589d41bcc842e876e34
+    last_write_checksum: sha1:c39b1489c4edc24484c2e8709ac3d90fabc02962
   src/models/components/updateriskpolicyrequestbody.ts:
     last_write_checksum: sha1:dd605f0b76c112e771256d3c27ec9bc7c9da180d
   src/models/components/updateroleform.ts:
@@ -9877,7 +9877,7 @@ examples:
   updateRiskExclusion:
     speakeasy-default-update-risk-exclusion:
       requestBody:
-        application/json: {"enabled": true, "id": "1b87971b-d2d1-49aa-9908-06eebf43177e", "match_type": "exact", "match_value": "<value>", "rule_id_filter": "", "source_filter": ""}
+        application/json: {"id": "1b87971b-d2d1-49aa-9908-06eebf43177e", "match_type": "exact", "match_value": "<value>", "rule_id_filter": "", "source_filter": ""}
       responses:
         "200":
           application/json: {"created_at": "2026-05-30T04:28:17.866Z", "enabled": false, "id": "42721870-33bf-49ee-9ee7-50ea4b6a9e96", "match_type": "entity_type", "match_value": "<value>", "project_id": "75c71e9d-68ff-4dd6-b37f-5b37dd657ada", "rule_id_filter": "<value>", "source_filter": "<value>", "updated_at": "2026-11-28T01:19:07.790Z"}

@@ -80,6 +80,36 @@ describe("parseExclusionExpression", () => {
       false,
     );
   });
+
+  it("rejects a second rule_id clause when rule_id is primary", () => {
+    // Otherwise the second clause is silently dropped on serialization,
+    // broadening the saved exclusion vs. what the user typed.
+    expect(
+      parseExclusionExpression('rule_id == "a" && rule_id == "b"').ok,
+    ).toBe(false);
+  });
+
+  it("rejects a second source clause when source is primary", () => {
+    expect(parseExclusionExpression('source == "a" && source == "b"').ok).toBe(
+      false,
+    );
+  });
+
+  it("splits on && correctly when a value ends in an escaped backslash", () => {
+    // The `\\` before the closing quote is an escaped backslash, so the quote
+    // is a real delimiter and the `&&` that follows is a clause separator.
+    expect(
+      parseExclusionExpression('match == "a\\\\" && rule_id == "r"'),
+    ).toEqual({
+      ok: true,
+      value: {
+        matchType: "exact",
+        matchValue: "a\\",
+        ruleIdFilter: "r",
+        sourceFilter: "",
+      },
+    });
+  });
 });
 
 describe("serializeExclusionExpression", () => {

@@ -71,19 +71,39 @@ func (a *Reconcile) Do(ctx context.Context, args ReconcileArgs) (err error) {
 	q := repo.New(a.db)
 	exclusionID := uuid.NullUUID{UUID: args.ExclusionID, Valid: true}
 
-	// 1. Reverse: clear any flags this exclusion previously set.
-	if err := a.batchLoop(ctx, func(bctx context.Context, cursor uuid.UUID) ([]uuid.UUID, error) {
-		return q.ReverseExclusionFlagsBatch(bctx, repo.ReverseExclusionFlagsBatchParams{
-			ExclusionID: exclusionID,
-			Cursor:      cursor,
-			BatchLimit:  reconcileBatchLimit,
-		})
-	}); err != nil {
-		return fmt.Errorf("reverse exclusion flags: %w", err)
+	// Resume progress from the last heartbeat so a retried attempt does not
+	// re-walk batches it already completed. Phase distinguishes the two keyset
+	// loops (which use independent cursors) so we never start the reverse loop
+	// partway through and skip rows it must clear.
+	var resume reconcileProgress
+	if activity.HasHeartbeatDetails(ctx) {
+		if err := activity.GetHeartbeatDetails(ctx, &resume); err != nil {
+			a.logger.WarnContext(ctx, "failed to read reconcile heartbeat details", attr.SlogError(err))
+			resume = reconcileProgress{Phase: "", Cursor: uuid.UUID{}}
+		}
+	}
+
+	// 1. Reverse: clear any flags this exclusion previously set. Skipped if a
+	// prior attempt already advanced into the apply phase.
+	if resume.Phase != phaseApply {
+		if err := a.batchLoop(ctx, phaseReverse, resume.Cursor, func(bctx context.Context, cursor uuid.UUID) ([]uuid.UUID, error) {
+			return q.ReverseExclusionFlagsBatch(bctx, repo.ReverseExclusionFlagsBatchParams{
+				ExclusionID: exclusionID,
+				Cursor:      cursor,
+				BatchLimit:  reconcileBatchLimit,
+			})
+		}); err != nil {
+			return fmt.Errorf("reverse exclusion flags: %w", err)
+		}
 	}
 
 	// 2. Load current state. If gone, deleted, or disabled, reversal was enough.
-	ex, err := q.GetRiskExclusionForReconcile(ctx, args.ExclusionID)
+	// Scoped by the project from args; applies use the row's own project_id so a
+	// bad project argument can never touch another tenant's findings.
+	ex, err := q.GetRiskExclusionForReconcile(ctx, repo.GetRiskExclusionForReconcileParams{
+		ID:        args.ExclusionID,
+		ProjectID: args.ProjectID,
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
@@ -95,6 +115,7 @@ func (a *Reconcile) Do(ctx context.Context, args ReconcileArgs) (err error) {
 	}
 
 	// 3. Apply: flag findings matching the current predicate.
+	projectID := ex.ProjectID
 	policyID := ex.RiskPolicyID
 	matchValue := pgtype.Text{String: ex.MatchValue, Valid: true}
 
@@ -102,32 +123,32 @@ func (a *Reconcile) Do(ctx context.Context, args ReconcileArgs) (err error) {
 		switch ex.MatchType {
 		case "exact":
 			return q.ApplyExactExclusionBatch(bctx, repo.ApplyExactExclusionBatchParams{
-				ExclusionID: exclusionID, ProjectID: args.ProjectID, PolicyID: policyID,
+				ExclusionID: exclusionID, ProjectID: projectID, PolicyID: policyID,
 				MatchValue: matchValue, RuleIDFilter: ex.RuleIDFilter, SourceFilter: ex.SourceFilter,
 				Cursor: cursor, BatchLimit: reconcileBatchLimit,
 			})
 		case "regex":
 			return q.ApplyRegexExclusionBatch(bctx, repo.ApplyRegexExclusionBatchParams{
-				ExclusionID: exclusionID, ProjectID: args.ProjectID, PolicyID: policyID,
+				ExclusionID: exclusionID, ProjectID: projectID, PolicyID: policyID,
 				Pattern: matchValue, RuleIDFilter: ex.RuleIDFilter, SourceFilter: ex.SourceFilter,
 				Cursor: cursor, BatchLimit: reconcileBatchLimit,
 			})
 		case "rule_id":
 			return q.ApplyRuleIDExclusionBatch(bctx, repo.ApplyRuleIDExclusionBatchParams{
-				ExclusionID: exclusionID, ProjectID: args.ProjectID, PolicyID: policyID,
+				ExclusionID: exclusionID, ProjectID: projectID, PolicyID: policyID,
 				MatchValue: matchValue, SourceFilter: ex.SourceFilter,
 				Cursor: cursor, BatchLimit: reconcileBatchLimit,
 			})
 		case "source":
 			return q.ApplySourceExclusionBatch(bctx, repo.ApplySourceExclusionBatchParams{
-				ExclusionID: exclusionID, ProjectID: args.ProjectID, PolicyID: policyID,
+				ExclusionID: exclusionID, ProjectID: projectID, PolicyID: policyID,
 				MatchValue: ex.MatchValue, RuleIDFilter: ex.RuleIDFilter,
 				Cursor: cursor, BatchLimit: reconcileBatchLimit,
 			})
 		case "entity_type":
 			// Presidio entities map to rule_id "pii.<entity>".
 			return q.ApplyRuleIDExclusionBatch(bctx, repo.ApplyRuleIDExclusionBatchParams{
-				ExclusionID: exclusionID, ProjectID: args.ProjectID, PolicyID: policyID,
+				ExclusionID: exclusionID, ProjectID: projectID, PolicyID: policyID,
 				MatchValue:   pgtype.Text{String: "pii." + strings.ToLower(ex.MatchValue), Valid: true},
 				SourceFilter: ex.SourceFilter,
 				Cursor:       cursor, BatchLimit: reconcileBatchLimit,
@@ -136,17 +157,35 @@ func (a *Reconcile) Do(ctx context.Context, args ReconcileArgs) (err error) {
 			return nil, fmt.Errorf("unknown match_type %q", ex.MatchType)
 		}
 	}
-	if err := a.batchLoop(ctx, apply); err != nil {
+	applyStart := uuid.UUID{}
+	if resume.Phase == phaseApply {
+		applyStart = resume.Cursor
+	}
+	if err := a.batchLoop(ctx, phaseApply, applyStart, apply); err != nil {
 		return fmt.Errorf("apply exclusion (%s): %w", ex.MatchType, err)
 	}
 
 	return nil
 }
 
+// reconcile phases, recorded in heartbeat details so a retry can resume the
+// correct keyset loop at the correct cursor.
+const (
+	phaseReverse = "reverse"
+	phaseApply   = "apply"
+)
+
+// reconcileProgress is the heartbeat payload: which phase was in flight and the
+// keyset cursor reached within it.
+type reconcileProgress struct {
+	Phase  string
+	Cursor uuid.UUID
+}
+
 // batchLoop runs a keyset-paginated batch fn until it returns a short batch,
-// advancing the cursor to the max id seen and heartbeating between batches.
-func (a *Reconcile) batchLoop(ctx context.Context, fn func(ctx context.Context, cursor uuid.UUID) ([]uuid.UUID, error)) error {
-	var cursor uuid.UUID
+// advancing the cursor to the max id seen and heartbeating (phase + cursor)
+// between batches so a retried attempt can resume from the last cursor.
+func (a *Reconcile) batchLoop(ctx context.Context, phase string, cursor uuid.UUID, fn func(ctx context.Context, cursor uuid.UUID) ([]uuid.UUID, error)) error {
 	for {
 		batchCtx, cancel := context.WithTimeout(ctx, perBatchTimeout)
 		ids, err := fn(batchCtx, cursor)
@@ -162,7 +201,7 @@ func (a *Reconcile) batchLoop(ctx context.Context, fn func(ctx context.Context, 
 				cursor = id
 			}
 		}
-		activity.RecordHeartbeat(ctx, cursor.String())
+		activity.RecordHeartbeat(ctx, reconcileProgress{Phase: phase, Cursor: cursor})
 		if len(ids) < int(reconcileBatchLimit) {
 			return nil
 		}

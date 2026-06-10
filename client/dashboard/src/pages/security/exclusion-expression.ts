@@ -56,8 +56,16 @@ function splitClauses(input: string): string[] {
   let inQuote = false;
   for (let i = 0; i < input.length; i++) {
     const ch = input[i];
-    if (ch === '"' && input[i - 1] !== "\\") {
-      inQuote = !inQuote;
+    if (ch === '"') {
+      // A `"` is a string delimiter only when preceded by an even number of
+      // backslashes (an odd count means the quote itself is escaped).
+      let backslashes = 0;
+      for (let j = i - 1; j >= 0 && input[j] === "\\"; j--) {
+        backslashes++;
+      }
+      if (backslashes % 2 === 0) {
+        inQuote = !inQuote;
+      }
     }
     if (!inQuote && ch === "&" && input[i + 1] === "&") {
       clauses.push(current);
@@ -119,6 +127,10 @@ export function parseExclusionExpression(input: string): ParseResult {
       case "rule_id": {
         if (!primary) {
           primary = { matchType: "rule_id", value };
+        } else if (primary.matchType === "rule_id") {
+          // The primary clause is already a rule_id match; a second rule_id
+          // clause would be silently dropped on serialization, so reject it.
+          return { ok: false, error: "Only one rule_id clause is allowed." };
         } else if (ruleIdFilter) {
           return { ok: false, error: "Only one rule_id filter is allowed." };
         } else {
@@ -129,6 +141,10 @@ export function parseExclusionExpression(input: string): ParseResult {
       case "source": {
         if (!primary) {
           primary = { matchType: "source", value };
+        } else if (primary.matchType === "source") {
+          // The primary clause is already a source match; a second source
+          // clause would be silently dropped on serialization, so reject it.
+          return { ok: false, error: "Only one source clause is allowed." };
         } else if (sourceFilter) {
           return { ok: false, error: "Only one source filter is allowed." };
         } else {

@@ -51,10 +51,9 @@ func reconcileWorkflowID(exclusionID uuid.UUID) string {
 	return "risk-exclusion-reconcile:" + exclusionID.String()
 }
 
-// RiskExclusionReconciler triggers the retroactive reconcile for an exclusion.
-type RiskExclusionReconciler interface {
-	Reconcile(ctx context.Context, projectID, exclusionID uuid.UUID) error
-}
+// The consumer-side reconciler interface lives in the risk service
+// (risk.RiskExclusionReconciler); TemporalRiskExclusionReconciler is its
+// concrete implementation, wired in cmd/gram/start.go.
 
 // TemporalRiskExclusionReconciler starts the reconcile workflow. A new trigger
 // terminates any in-flight run for the same exclusion so the latest config

@@ -1669,12 +1669,6 @@ func BuildUpdateRiskExclusionPayload(riskUpdateRiskExclusionBody string, riskUpd
 			v.SourceFilter = ""
 		}
 	}
-	{
-		var zero bool
-		if v.Enabled == zero {
-			v.Enabled = true
-		}
-	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

@@ -1016,9 +1016,9 @@ var _ = Service("risk", func() {
 			Attribute("source_filter", String, "Optional: only apply within this source. Empty means any.", func() {
 				Default("")
 			})
-			Attribute("enabled", Boolean, "Whether the exclusion is active.", func() {
-				Default(true)
-			})
+			// No default: an omitted `enabled` must leave the exclusion's
+			// current state untouched rather than silently re-enabling it.
+			Attribute("enabled", Boolean, "Whether the exclusion is active. Omit to leave unchanged.")
 			Required("id", "match_type", "match_value")
 		})
 

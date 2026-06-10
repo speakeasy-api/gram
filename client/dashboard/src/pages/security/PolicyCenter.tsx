@@ -445,67 +445,61 @@ function PolicyCenterContent() {
     });
   };
 
-  if (!isLoading && policies.length === 0) {
-    return (
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs />
-        </Page.Header>
-        <Page.Body>
-          <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
-            <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-              <Shield className="text-muted-foreground h-6 w-6" />
-            </div>
-            <Type variant="subheading" className="mb-1">
-              No Risk Policies
-            </Type>
-            <Type small muted className="mb-4 max-w-md text-center">
-              Risk policies scan your chat messages for secrets and sensitive
-              data. Create your first policy to get started.
-            </Type>
-            <Button
-              onClick={() => {
-                const {
-                  sources,
-                  presidioEntities,
-                  promptInjectionRules,
-                  disabledRules: payloadDisabled,
-                } = categoriesToPayload(
-                  new Set<RuleCategory>(["secrets", "pii"]),
-                  new Set(),
-                );
-                createMutation.mutate({
-                  request: {
-                    createRiskPolicyRequestBody: {
-                      autoName: true,
-                      enabled: true,
-                      sources,
-                      presidioEntities,
-                      promptInjectionRules,
-                      disabledRules: payloadDisabled,
-                      customRuleIds: [],
-                    },
-                  },
-                });
-              }}
-              disabled={createMutation.isPending}
-            >
-              <Button.Text>
-                {createMutation.isPending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Creating...
-                  </>
-                ) : (
-                  "Get Started"
-                )}
-              </Button.Text>
-            </Button>
-          </div>
-        </Page.Body>
-      </Page>
-    );
-  }
+  // Empty state for the Policies tab only. It must NOT short-circuit the whole
+  // page, otherwise the Exclusions tab (and global exclusions) would be
+  // unreachable for projects that have no policies yet.
+  const policiesEmptyState = (
+    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
+      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+        <Shield className="text-muted-foreground h-6 w-6" />
+      </div>
+      <Type variant="subheading" className="mb-1">
+        No Risk Policies
+      </Type>
+      <Type small muted className="mb-4 max-w-md text-center">
+        Risk policies scan your chat messages for secrets and sensitive data.
+        Create your first policy to get started.
+      </Type>
+      <Button
+        onClick={() => {
+          const {
+            sources,
+            presidioEntities,
+            promptInjectionRules,
+            disabledRules: payloadDisabled,
+          } = categoriesToPayload(
+            new Set<RuleCategory>(["secrets", "pii"]),
+            new Set(),
+          );
+          createMutation.mutate({
+            request: {
+              createRiskPolicyRequestBody: {
+                autoName: true,
+                enabled: true,
+                sources,
+                presidioEntities,
+                promptInjectionRules,
+                disabledRules: payloadDisabled,
+                customRuleIds: [],
+              },
+            },
+          });
+        }}
+        disabled={createMutation.isPending}
+      >
+        <Button.Text>
+          {createMutation.isPending ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Creating...
+            </>
+          ) : (
+            "Get Started"
+          )}
+        </Button.Text>
+      </Button>
+    </div>
+  );
 
   const enabledPolicies = policies.filter((p) => p.enabled);
   const insightsContext = [
@@ -688,6 +682,8 @@ function PolicyCenterContent() {
         <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
       </div>
     );
+  } else if (policies.length === 0) {
+    policiesBody = policiesEmptyState;
   }
 
   const cta = isLoading ? null : (

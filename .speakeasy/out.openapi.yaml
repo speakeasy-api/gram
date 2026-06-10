@@ -44513,8 +44513,7 @@ components:
       properties:
         enabled:
           type: boolean
-          description: Whether the exclusion is active.
-          default: true
+          description: Whether the exclusion is active. Omit to leave unchanged.
         id:
           type: string
           description: The exclusion ID.

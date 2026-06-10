@@ -875,8 +875,8 @@ type UpdateRiskExclusionPayload struct {
 	RuleIDFilter string
 	// Optional: only apply within this source. Empty means any.
 	SourceFilter string
-	// Whether the exclusion is active.
-	Enabled bool
+	// Whether the exclusion is active. Omit to leave unchanged.
+	Enabled *bool
 }
 
 // UpdateRiskPolicyPayload is the payload type of the risk service

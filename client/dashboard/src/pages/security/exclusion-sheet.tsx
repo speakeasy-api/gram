@@ -20,6 +20,10 @@ import { Type } from "@/components/ui/type";
 import { Button } from "@speakeasy-api/moonshine";
 import {
   invalidateAllRiskListExclusions,
+  invalidateAllRiskListResults,
+  invalidateAllRiskListResultsByChat,
+  invalidateAllRiskListResultsForAgent,
+  invalidateAllRiskOverview,
   useRiskCreateExclusionMutation,
   useRiskListPolicies,
   useRiskUpdateExclusionMutation,
@@ -59,7 +63,17 @@ export function ExclusionSheet({
   const { data: policyData } = useRiskListPolicies();
   const policies = policyData?.policies ?? [];
 
-  const invalidate = () => invalidateAllRiskListExclusions(queryClient);
+  // Saving an exclusion suppresses/restores findings retroactively, so refresh
+  // the exclusion list AND every risk-results surface (chat detail, agent,
+  // overview) so stale findings disappear without a manual reload.
+  const invalidate = () =>
+    Promise.all([
+      invalidateAllRiskListExclusions(queryClient),
+      invalidateAllRiskListResults(queryClient),
+      invalidateAllRiskListResultsByChat(queryClient),
+      invalidateAllRiskListResultsForAgent(queryClient),
+      invalidateAllRiskOverview(queryClient),
+    ]);
 
   const createMutation = useRiskCreateExclusionMutation({
     onSuccess: () => {

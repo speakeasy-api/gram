@@ -201,7 +201,7 @@ type UpdateRiskExclusionRequestBody struct {
 	RuleIDFilter *string `form:"rule_id_filter,omitempty" json:"rule_id_filter,omitempty" xml:"rule_id_filter,omitempty"`
 	// Optional: only apply within this source. Empty means any.
 	SourceFilter *string `form:"source_filter,omitempty" json:"source_filter,omitempty" xml:"source_filter,omitempty"`
-	// Whether the exclusion is active.
+	// Whether the exclusion is active. Omit to leave unchanged.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 }
 
@@ -13760,6 +13760,7 @@ func NewUpdateRiskExclusionPayload(body *UpdateRiskExclusionRequestBody, apikeyT
 		RiskPolicyID: body.RiskPolicyID,
 		MatchType:    *body.MatchType,
 		MatchValue:   *body.MatchValue,
+		Enabled:      body.Enabled,
 	}
 	if body.RuleIDFilter != nil {
 		v.RuleIDFilter = *body.RuleIDFilter
@@ -13767,17 +13768,11 @@ func NewUpdateRiskExclusionPayload(body *UpdateRiskExclusionRequestBody, apikeyT
 	if body.SourceFilter != nil {
 		v.SourceFilter = *body.SourceFilter
 	}
-	if body.Enabled != nil {
-		v.Enabled = *body.Enabled
-	}
 	if body.RuleIDFilter == nil {
 		v.RuleIDFilter = ""
 	}
 	if body.SourceFilter == nil {
 		v.SourceFilter = ""
-	}
-	if body.Enabled == nil {
-		v.Enabled = true
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken

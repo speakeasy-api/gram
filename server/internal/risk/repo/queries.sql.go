@@ -847,12 +847,20 @@ const getRiskExclusionForReconcile = `-- name: GetRiskExclusionForReconcile :one
 SELECT id, project_id, organization_id, risk_policy_id, match_type, match_value, rule_id_filter, source_filter, enabled, created_at, updated_at, deleted_at, deleted
 FROM risk_exclusions
 WHERE id = $1
+  AND project_id = $2
 `
+
+type GetRiskExclusionForReconcileParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
 
 // Fetches an exclusion regardless of deleted/enabled state so the reconcile
 // sweep can decide whether to apply (enabled) or only reverse (deleted/disabled).
-func (q *Queries) GetRiskExclusionForReconcile(ctx context.Context, id uuid.UUID) (RiskExclusion, error) {
-	row := q.db.QueryRow(ctx, getRiskExclusionForReconcile, id)
+// Scoped by project_id to keep the IDOR-mitigation invariant (every query is
+// bounded to a tenant) even though the caller is an internal activity.
+func (q *Queries) GetRiskExclusionForReconcile(ctx context.Context, arg GetRiskExclusionForReconcileParams) (RiskExclusion, error) {
+	row := q.db.QueryRow(ctx, getRiskExclusionForReconcile, arg.ID, arg.ProjectID)
 	var i RiskExclusion
 	err := row.Scan(
 		&i.ID,

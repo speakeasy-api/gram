@@ -865,9 +865,12 @@ WHERE id = @id
 -- name: GetRiskExclusionForReconcile :one
 -- Fetches an exclusion regardless of deleted/enabled state so the reconcile
 -- sweep can decide whether to apply (enabled) or only reverse (deleted/disabled).
+-- Scoped by project_id to keep the IDOR-mitigation invariant (every query is
+-- bounded to a tenant) even though the caller is an internal activity.
 SELECT *
 FROM risk_exclusions
-WHERE id = @id;
+WHERE id = @id
+  AND project_id = @project_id;
 
 -- name: ListRiskExclusionsByProject :many
 -- Lists a project's exclusions. Pass a null risk_policy_id to return all

@@ -661,8 +661,21 @@ func validateExclusionMatchValue(matchType, matchValue string) error {
 	return nil
 }
 
+// redactExclusionValue replaces a raw exclusion pattern/filter with a stable,
+// non-reversible fingerprint. An exact match_value can be the literal sensitive
+// string the author wants suppressed (an email, a secret), so it must never
+// reach the audit log or the outbound webhook payload verbatim. The fingerprint
+// still lets update snapshots show that a value changed without revealing it.
+func redactExclusionValue(value string) string {
+	if value == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(value))
+	return "redacted:sha256:" + hex.EncodeToString(sum[:])[:12]
+}
+
 func exclusionDisplayName(matchType, matchValue string) string {
-	name := matchType + ":" + matchValue
+	name := matchType + ":" + redactExclusionValue(matchValue)
 	if len([]rune(name)) > exclusionDisplayNameMaxRunes {
 		return string([]rune(name)[:exclusionDisplayNameMaxRunes])
 	}
@@ -687,6 +700,17 @@ func exclusionToType(row repo.RiskExclusion) *types.RiskExclusion {
 		CreatedAt:    row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:    row.UpdatedAt.Time.Format(time.RFC3339),
 	}
+}
+
+// exclusionAuditSnapshot is exclusionToType with the sensitive pattern/filter
+// fields redacted, for use in audit before/after snapshots that are emitted to
+// webhook consumers.
+func exclusionAuditSnapshot(row repo.RiskExclusion) *types.RiskExclusion {
+	t := exclusionToType(row)
+	t.MatchValue = redactExclusionValue(t.MatchValue)
+	t.RuleIDFilter = redactExclusionValue(t.RuleIDFilter)
+	t.SourceFilter = redactExclusionValue(t.SourceFilter)
+	return t
 }
 
 // reconcile triggers the retroactive sweep best-effort. A failed trigger is
@@ -758,8 +782,10 @@ func (s *Service) CreateRiskExclusion(ctx context.Context, payload *gen.CreateRi
 		}
 	}
 
-	// Enforce the per-scope regex cap.
-	if payload.MatchType == "regex" {
+	// Enforce the per-scope regex cap. The cap only bounds *enabled* regex
+	// exclusions (they drive matching load), so a disabled regex draft is
+	// always allowed even when the scope is already at the limit.
+	if payload.MatchType == "regex" && payload.Enabled {
 		count, err := s.repo.CountEnabledRegexExclusionsInScope(ctx, repo.CountEnabledRegexExclusionsInScopeParams{
 			ProjectID:    *authCtx.ProjectID,
 			RiskPolicyID: policyID,
@@ -844,6 +870,33 @@ func (s *Service) UpdateRiskExclusion(ctx context.Context, payload *gen.UpdateRi
 		return nil, oops.E(oops.CodeNotFound, err, "risk exclusion not found").Log(ctx, s.logger)
 	}
 
+	// An omitted `enabled` leaves the current state untouched rather than
+	// silently re-enabling a disabled exclusion.
+	enabled := before.Enabled
+	if payload.Enabled != nil {
+		enabled = *payload.Enabled
+	}
+
+	// Enforce the per-scope regex cap when this update moves the exclusion into
+	// the enabled-regex set of a scope it wasn't already counted in (newly
+	// enabling, switching match_type to regex, or moving to another scope).
+	if payload.MatchType == "regex" && enabled {
+		wasCountedInScope := before.MatchType == "regex" && before.Enabled &&
+			before.RiskPolicyID == policyID
+		if !wasCountedInScope {
+			count, err := s.repo.CountEnabledRegexExclusionsInScope(ctx, repo.CountEnabledRegexExclusionsInScopeParams{
+				ProjectID:    *authCtx.ProjectID,
+				RiskPolicyID: policyID,
+			})
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "count regex exclusions").Log(ctx, s.logger)
+			}
+			if count >= exclusionMaxRegexPerScope {
+				return nil, oops.E(oops.CodeInvalid, nil, "too many regex exclusions in scope (max %d)", exclusionMaxRegexPerScope)
+			}
+		}
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
@@ -858,7 +911,7 @@ func (s *Service) UpdateRiskExclusion(ctx context.Context, payload *gen.UpdateRi
 		MatchValue:   payload.MatchValue,
 		RuleIDFilter: nullableText(payload.RuleIDFilter),
 		SourceFilter: nullableText(payload.SourceFilter),
-		Enabled:      payload.Enabled,
+		Enabled:      enabled,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update risk exclusion").Log(ctx, s.logger)
@@ -872,8 +925,8 @@ func (s *Service) UpdateRiskExclusion(ctx context.Context, payload *gen.UpdateRi
 		ActorSlug:        nil,
 		RiskExclusionID:  row.ID,
 		DisplayName:      exclusionDisplayName(row.MatchType, row.MatchValue),
-		SnapshotBefore:   exclusionToType(before),
-		SnapshotAfter:    exclusionToType(row),
+		SnapshotBefore:   exclusionAuditSnapshot(before),
+		SnapshotAfter:    exclusionAuditSnapshot(row),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log risk exclusion update").Log(ctx, s.logger)
 	}
