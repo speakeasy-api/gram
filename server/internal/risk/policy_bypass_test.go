@@ -388,6 +388,41 @@ func TestCreatePolicyBypassRequest_AfterApprove_PreservesApprovedStateAndGrant(t
 	assert.True(t, userHasRiskPolicyBypassGrant(t, ti, authCtx.ActiveOrganizationID, authCtx.UserID, policy.ID, fullURL))
 }
 
+func TestDenyPolicyBypassRequest_RejectsApprovedRequest(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name: new("Policy Bypass Deny Approved"),
+	})
+	require.NoError(t, err)
+
+	fullURL := "https://mcp.example.com/deny-approved"
+	token := riskPolicyBypassRequestToken(t, authCtx, policy.ID, fullURL)
+	request, err := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
+		RequestToken: token,
+	})
+	require.NoError(t, err)
+
+	approved, err := ti.service.ApproveRiskPolicyBypassRequest(ctx, &gen.ApproveRiskPolicyBypassRequestPayload{
+		ID: request.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "approved", approved.Status)
+
+	_, err = ti.service.DenyRiskPolicyBypassRequest(ctx, &gen.DenyRiskPolicyBypassRequestPayload{
+		ID: request.ID,
+	})
+	require.Error(t, err)
+	assert.True(t, userHasRiskPolicyBypassGrant(t, ti, authCtx.ActiveOrganizationID, authCtx.UserID, policy.ID, fullURL))
+}
+
 func TestCreatePolicyBypassRequest_WithoutFullURLCreatesWholePolicyTarget(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)

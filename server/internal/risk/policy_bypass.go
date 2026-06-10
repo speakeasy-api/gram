@@ -291,6 +291,9 @@ func (s *Service) DenyRiskPolicyBypassRequest(ctx context.Context, payload *gen.
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "risk policy bypass request not found").Log(ctx, s.logger)
 	}
+	if current.Status != riskPolicyBypassRequestStatusRequested {
+		return nil, oops.E(oops.CodeInvalid, nil, "risk policy bypass request must be pending")
+	}
 	policy, err := q.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
 		ID:        current.RiskPolicyID,
 		ProjectID: current.ProjectID,

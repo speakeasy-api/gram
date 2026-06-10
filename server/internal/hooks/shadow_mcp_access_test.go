@@ -185,6 +185,38 @@ func TestEnforceShadowMCPToolAccess_WholePolicyBypassGrantAllowsIdentityOnlyTarg
 	require.Empty(t, detail)
 }
 
+func TestCanBypassPolicy_EmptyEvidenceDoesNotUseWholePolicyGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	policyID := uuid.NewString()
+	selector := authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID)
+	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
+		Resource: authz.Resource{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Scope:          authz.ScopeRiskPolicyBypass,
+			ResourceID:     policyID,
+		},
+		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
+		Selector:   selector,
+	}))
+
+	target, allowed := ti.service.canBypassPolicy(
+		ctx,
+		authCtx.ActiveOrganizationID,
+		authCtx.UserID,
+		policyID,
+		shadowmcp.AccessEvidence{FullURL: "", URLHost: "", ServerIdentity: ""},
+		"do_thing",
+	)
+
+	require.False(t, allowed)
+	require.Nil(t, target)
+}
+
 func TestEnforceShadowMCPToolAccess_LegacyAccessRuleAllowsBlockedCall(t *testing.T) {
 	t.Parallel()
 

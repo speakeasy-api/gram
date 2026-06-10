@@ -63,6 +63,9 @@ func (s *Service) canBypassPolicy(
 	toolName string,
 ) (*risk.PolicyBypassTarget, bool) {
 	target := risk.ShadowMCPPolicyBypassTarget(evidence, toolName)
+	if target == nil {
+		return nil, false
+	}
 	allowed := s.policyBypass.CanBypass(ctx, risk.PolicyBypassEvaluation{
 		OrganizationID: organizationID,
 		UserID:         userID,

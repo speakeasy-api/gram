@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"unicode"
 
 	"github.com/speakeasy-api/gram/server/internal/matchvalue"
 )
@@ -107,6 +108,11 @@ func humanizeServerIdentityWord(value string) string {
 	case "github":
 		return "GitHub"
 	default:
-		return strings.ToUpper(lower[:1]) + lower[1:]
+		runes := []rune(lower)
+		if len(runes) == 0 {
+			return ""
+		}
+		runes[0] = unicode.ToUpper(runes[0])
+		return string(runes)
 	}
 }
