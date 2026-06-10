@@ -10,8 +10,8 @@ use agentkit_loop::{
     PromptCacheRetention, SessionConfig,
 };
 use agentkit_mcp::{
-    McpError, McpServerConfig, McpServerId, McpServerManager, McpTransportBinding,
-    StreamableHttpTransportConfig,
+    McpError, McpServerConfig, McpServerId, McpServerManager, McpServerOptions,
+    McpTransportBinding, StreamableHttpTransportConfig,
 };
 use agentkit_provider_openrouter::{OpenRouterConfig, OpenRouterProvider};
 use agentkit_reporting::TracingReporter;
@@ -38,6 +38,12 @@ use crate::workdir::ASSISTANT_WORKDIR;
 
 const TOOL_RESULT_SPILL_DIR: &str = "tool-results";
 const MCP_CMD_CAPACITY: usize = 32;
+
+/// TCP/TLS connect bound for runner-originated HTTP requests.
+const HTTP_CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// Per-server bound on the MCP discovery handshake at connect time.
+const MCP_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// How long a thread's per-task state can sit idle before the host evicts
 /// it. The VM stays alive across all per-thread events; only individual
@@ -125,6 +131,7 @@ pub async fn build_host(
     let http_client = reqwest::Client::builder()
         .user_agent(concat!("gram-assistant-runner/", env!("CARGO_PKG_VERSION")))
         .default_headers(default_headers)
+        .connect_timeout(HTTP_CONNECT_TIMEOUT)
         .build()?;
 
     let spill_root = PathBuf::from(ASSISTANT_WORKDIR).join(TOOL_RESULT_SPILL_DIR);
@@ -447,28 +454,51 @@ async fn build_thread_mcp(
 
     for server in servers {
         let config = build_mcp_server_config(server, &host.http_client, tokens)?;
-        let server_id = McpServerId::new(server.id.clone());
-        manager.register_server(config);
-        if let Err(err) = connect_and_log(&mut manager, &server_id, "register").await
-            && err.auth_required
+        manager.register_server_with_options(
+            config,
+            McpServerOptions::new().with_timeout(MCP_HANDSHAKE_TIMEOUT),
+        );
+    }
+
+    let settled = manager.connect_all_settled().await;
+    for handle in settled.connected() {
+        tracing::info!(
+            server_id = %handle.server_id(),
+            tools = handle.snapshot().tools.len(),
+            action = "register",
+            "mcp connect ok"
+        );
+    }
+    for failure in settled.failed() {
+        let server_id = &failure.server_id;
+        tracing::warn!(
+            server_id = %server_id,
+            error = %failure.error,
+            action = "register",
+            "mcp connect failed"
+        );
+        if !matches!(failure.error, McpError::AuthRequired(_)) {
+            continue;
+        }
+        let Some(server) = servers.iter().find(|s| s.id == server_id.0) else {
+            continue;
+        };
+        match host
+            .gram_client
+            .create_mcp_auth_flow(thread_id, &server.id, &server.url, tokens)
+            .await
         {
-            match host
-                .gram_client
-                .create_mcp_auth_flow(thread_id, &server.id, &server.url, tokens)
-                .await
-            {
-                Ok(flow) => auth_notices.push(format!(
-                    "<message-context>\nEventType: assistant_mcp_auth_required\nMCPServerID: {server_id}\nMCPSlug: {mcp_slug}\nAuthURL: {auth_url}\n</message-context>",
-                    server_id = flow.server_id,
-                    mcp_slug = flow.mcp_slug,
-                    auth_url = flow.auth_url,
-                )),
-                Err(flow_err) => tracing::warn!(
-                    server_id = %server_id,
-                    error = %flow_err,
-                    "failed to create assistant mcp auth flow"
-                ),
-            }
+            Ok(flow) => auth_notices.push(format!(
+                "<message-context>\nEventType: assistant_mcp_auth_required\nMCPServerID: {server_id}\nMCPSlug: {mcp_slug}\nAuthURL: {auth_url}\n</message-context>",
+                server_id = flow.server_id,
+                mcp_slug = flow.mcp_slug,
+                auth_url = flow.auth_url,
+            )),
+            Err(flow_err) => tracing::warn!(
+                server_id = %server_id,
+                error = %flow_err,
+                "failed to create assistant mcp auth flow"
+            ),
         }
     }
 
@@ -477,16 +507,11 @@ async fn build_thread_mcp(
     Ok((cmd_tx, catalog, auth_notices))
 }
 
-struct McpConnectFailure {
-    message: String,
-    auth_required: bool,
-}
-
 async fn connect_and_log(
     manager: &mut McpServerManager,
     server_id: &McpServerId,
     action: &'static str,
-) -> Result<(), McpConnectFailure> {
+) -> Result<(), String> {
     match manager.connect_server(server_id).await {
         Ok(handle) => {
             tracing::info!(
@@ -498,12 +523,8 @@ async fn connect_and_log(
             Ok(())
         }
         Err(e) => {
-            let auth_required = matches!(e, McpError::AuthRequired(_));
             tracing::warn!(server_id = %server_id, error = %e, action, "mcp connect failed");
-            Err(McpConnectFailure {
-                message: e.to_string(),
-                auth_required,
-            })
+            Err(e.to_string())
         }
     }
 }
@@ -549,9 +570,7 @@ async fn run_mcp_actor(mut manager: McpServerManager, mut cmd_rx: mpsc::Receiver
                 if let Err(e) = manager.disconnect_server(&server_id).await {
                     tracing::debug!(server_id = %server_id, error = %e, "disconnect during force reconnect");
                 }
-                let result = connect_and_log(&mut manager, &server_id, "force_reconnect")
-                    .await
-                    .map_err(|err| err.message);
+                let result = connect_and_log(&mut manager, &server_id, "force_reconnect").await;
                 let _ = reply.send(result);
             }
         }
