@@ -607,6 +607,48 @@ func (q *Queries) GetRiskPolicyBypassRequest(ctx context.Context, arg GetRiskPol
 	return i, err
 }
 
+const getRiskPolicyForUpdate = `-- name: GetRiskPolicyForUpdate :one
+SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, action, audience_type, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
+FROM risk_policies
+WHERE id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type GetRiskPolicyForUpdateParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) GetRiskPolicyForUpdate(ctx context.Context, arg GetRiskPolicyForUpdateParams) (RiskPolicy, error) {
+	row := q.db.QueryRow(ctx, getRiskPolicyForUpdate, arg.ID, arg.ProjectID)
+	var i RiskPolicy
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Enabled,
+		&i.Name,
+		&i.Sources,
+		&i.PresidioEntities,
+		&i.PromptInjectionRules,
+		&i.DisabledRules,
+		&i.CustomRuleIds,
+		&i.MessageTypes,
+		&i.Action,
+		&i.AudienceType,
+		&i.AutoName,
+		&i.UserMessage,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getRiskPolicyNameIncludingDeleted = `-- name: GetRiskPolicyNameIncludingDeleted :one
 SELECT name
 FROM risk_policies

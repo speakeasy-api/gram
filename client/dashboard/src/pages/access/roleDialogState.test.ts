@@ -80,6 +80,16 @@ describe("visiblePermissionCount", () => {
       ]),
     ).toBe(2);
   });
+
+  it("excludes grants without scopes from role permission counts", () => {
+    expect(
+      visiblePermissionCount([
+        { scope: "org:read" },
+        {},
+        { scope: "risk_policy:bypass" },
+      ]),
+    ).toBe(1);
+  });
 });
 
 // --- membersHaveChanged ---

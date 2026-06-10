@@ -42,6 +42,14 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
+-- name: GetRiskPolicyForUpdate :one
+SELECT *
+FROM risk_policies
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+FOR UPDATE;
+
 -- name: GetRiskPolicyNameIncludingDeleted :one
 SELECT name
 FROM risk_policies

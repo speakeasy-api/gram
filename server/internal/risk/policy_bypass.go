@@ -120,7 +120,7 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 		return nil, oops.E(oops.CodeNotFound, err, "project not found").Log(ctx, s.logger)
 	}
 	q := repo.New(dbtx)
-	policy, err := q.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
+	policy, err := q.GetRiskPolicyForUpdate(ctx, repo.GetRiskPolicyForUpdateParams{
 		ID:        policyID,
 		ProjectID: projectID,
 	})
