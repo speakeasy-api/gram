@@ -12,6 +12,7 @@ import (
 	svix "github.com/svix/svix-webhooks/go"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
@@ -335,7 +336,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.PublishPluginProject)
 
 	// AI integration usage syncing runs on its own worker and task queue.
-	aiUsageWorker.RegisterActivity(activities.PollAIData)
+	aiUsageWorker.RegisterActivityWithOptions(activities.PollAIData, activity.RegisterOptions{
+		Name: "PollAIUsage", /// legacy alias for in-flight workflow histories
+	})
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
