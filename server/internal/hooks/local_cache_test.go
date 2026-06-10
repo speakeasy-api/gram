@@ -72,6 +72,23 @@ func TestLocalSessionCache_FallbackRequiresAuthContextProject(t *testing.T) {
 	require.Error(t, localCache.Get(t.Context(), sessionCacheKey(uuid.NewString()), &metadata))
 }
 
+func TestLocalSessionCache_FallbackDoesNotUseOtherProjectWhenAuthProjectMissing(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	missingProjectID := uuid.New()
+	nextAuthCtx := *authCtx
+	nextAuthCtx.ProjectID = &missingProjectID
+	ctx = contextvalues.SetAuthContext(ctx, &nextAuthCtx)
+
+	localCache := NewLocalSessionCache(cache.NewRedisCacheAdapter(ti.redisClient), ti.conn)
+	var metadata SessionMetadata
+	require.Error(t, localCache.Get(ctx, sessionCacheKey(uuid.NewString()), &metadata))
+}
+
 func TestLocalSessionCache_EnrichesCachedMetadataMissingUserID(t *testing.T) {
 	t.Parallel()
 

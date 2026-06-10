@@ -411,6 +411,43 @@ func TestClaude_RecordHook_BuffersAuthContextCacheMissWithoutPayloadEmail(t *tes
 	assert.Equal(t, "UserPromptSubmit", buffered[0].HookEventName)
 }
 
+func TestClaude_RecordHook_UsesAuthContextUserIDOnCacheMissWithPayloadEmail(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+	prompt := "hello with payload email"
+	payloadEmail := "unknown-user@example.com"
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "UserPromptSubmit",
+		SessionID:     &sessionID,
+		Prompt:        &prompt,
+		UserEmail:     &payloadEmail,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	var msgs []chatRepo.ChatMessage
+	require.Eventually(t, func() bool {
+		var err error
+		msgs, err = chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+			ChatID:    chatID,
+			ProjectID: *authCtx.ProjectID,
+		})
+		return err == nil && len(msgs) == 1
+	}, 2*time.Second, 25*time.Millisecond)
+
+	assert.Equal(t, authCtx.UserID, msgs[0].UserID.String)
+	assert.Equal(t, payloadEmail, msgs[0].ExternalUserID.String)
+}
+
 // When plugin auth headers are present but the API key is invalid/expired,
 // Claude() must NOT return a 401 error — that causes the client-side hook
 // script to block ALL tool calls, deadlocking the user. Instead it should

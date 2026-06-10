@@ -133,12 +133,14 @@ func (c *localSessionCache) localFallbackProject(ctx context.Context, projectID 
 	projects := projectsRepo.New(c.db)
 	if projectID != "" {
 		id, err := uuid.Parse(projectID)
-		if err == nil {
-			project, err := projects.GetProjectByID(ctx, id)
-			if err == nil {
-				return project, nil
-			}
+		if err != nil {
+			return projectsRepo.Project{}, fmt.Errorf("parse project id: %w", err)
 		}
+		project, err := projects.GetProjectByID(ctx, id)
+		if err != nil {
+			return projectsRepo.Project{}, fmt.Errorf("get project by id: %w", err)
+		}
+		return project, nil
 	}
 
 	project, err := projects.GetFirstProject(ctx)

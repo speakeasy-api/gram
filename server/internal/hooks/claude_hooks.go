@@ -633,10 +633,13 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 				SessionID:   sessionID,
 				ServiceName: "",
 				UserEmail:   payloadUserEmail,
-				UserID:      s.resolveUserByEmail(ctx, payloadUserEmail, authCtx.ActiveOrganizationID),
+				UserID:      authCtx.UserID,
 				ClaudeOrgID: "",
 				GramOrgID:   authCtx.ActiveOrganizationID,
 				ProjectID:   authCtx.ProjectID.String(),
+			}
+			if metadata.UserID == "" && metadata.UserEmail != "" {
+				metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
 			}
 			go s.persistHook(ctx, payload, &metadata)
 			return
