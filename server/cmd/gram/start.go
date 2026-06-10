@@ -431,6 +431,7 @@ func newStartCommand() *cli.Command {
 	flags = append(flags, assistantRuntimeFlags...)
 	flags = append(flags, pulseMCPFlags...)
 	flags = append(flags, svixFlags...)
+	flags = append(flags, gcpFlags...)
 
 	return &cli.Command{
 		Name:  "start",
