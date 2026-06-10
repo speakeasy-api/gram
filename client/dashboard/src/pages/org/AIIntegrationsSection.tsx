@@ -22,15 +22,97 @@ import {
   TimerReset,
   Trash2,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { ReactNode, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { CursorIcon } from "../hooks/HookSourceIcon";
+import { ClaudeCodeIcon, CursorIcon } from "../hooks/HookSourceIcon";
 
-const CURSOR_PROVIDER = "cursor";
+type ProviderIcon = (props: { className?: string }) => JSX.Element;
+
+type AIIntegrationProvider = {
+  provider: string;
+  name: string;
+  description: string;
+  icon: ProviderIcon;
+  apiKeyLabel: string;
+  apiKeyPlaceholder: string;
+  requiresOrganizationId: boolean;
+  organizationIdLabel?: string;
+  organizationIdPlaceholder?: string;
+  helpText?: ReactNode;
+};
+
+const PROVIDERS: AIIntegrationProvider[] = [
+  {
+    provider: "cursor",
+    name: "Cursor",
+    description: "Track Cursor usage and spend across your organization.",
+    icon: CursorIcon,
+    apiKeyLabel: "Cursor Admin API key",
+    apiKeyPlaceholder: "key_xxx",
+    requiresOrganizationId: false,
+  },
+  {
+    provider: "anthropic_compliance",
+    name: "Anthropic Compliance",
+    description:
+      "Import Claude Chats from claude.ai web and desktop for security review.",
+    icon: ClaudeCodeIcon,
+    apiKeyLabel: "Compliance Access API Key",
+    apiKeyPlaceholder: "sk-ant-admin...",
+    requiresOrganizationId: true,
+    organizationIdLabel: "Anthropic Organization ID",
+    organizationIdPlaceholder: "org_xxx",
+    helpText: (
+      <>
+        The API key must include the{" "}
+        <code className="text-foreground">read:compliance_activities</code> and{" "}
+        <code className="text-foreground">read:compliance_user_data</code>{" "}
+        scopes.{" "}
+        <a
+          href="https://platform.claude.com/docs/en/manage-claude/compliance-api-access"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-foreground underline underline-offset-4"
+        >
+          Learn more
+        </a>
+        .
+      </>
+    ),
+  },
+];
 
 export function AIIntegrationsSection(): JSX.Element {
+  return (
+    <Stack gap={4}>
+      <div>
+        <Stack direction="horizontal" gap={2} align="center" className="mb-2">
+          <Heading variant="h4">AI Integrations</Heading>
+          <ReleaseStageBadge stage="preview" />
+        </Stack>
+        <Type muted small>
+          Connect AI providers for usage and cost reporting, with room for more
+          use cases as providers expose more data.
+        </Type>
+      </div>
+
+      {PROVIDERS.map((provider) => (
+        <AIIntegrationProviderCard
+          key={provider.provider}
+          provider={provider}
+        />
+      ))}
+    </Stack>
+  );
+}
+
+function AIIntegrationProviderCard({
+  provider,
+}: {
+  provider: AIIntegrationProvider;
+}): JSX.Element {
   const { data, isLoading } = useAiIntegrationConfig({
-    provider: CURSOR_PROVIDER,
+    provider: provider.provider,
   });
   const queryClient = useQueryClient();
   const { mutate: upsert, status: upsertStatus } =
@@ -57,29 +139,59 @@ export function AIIntegrationsSection(): JSX.Element {
 
   const [enabled, setEnabled] = useState(false);
   const [apiKey, setApiKey] = useState("");
+  const [organizationId, setOrganizationId] = useState("");
 
   const isConfigured = Boolean(data?.id);
   const hasSavedKey = Boolean(data?.hasApiKey);
 
+  // Sync form state from the persisted config. Depend on primitive values
+  // rather than `data` itself: refetches produce new object references even
+  // when nothing changed, and resetting on every refetch would discard
+  // unsaved edits. The config id is included so that loading a *different*
+  // config record (e.g. after the active organization changes) resets the
+  // form even when the saved values happen to match the previous config.
+  const hasData = Boolean(data);
+  const savedId = data?.id ?? "";
+  const savedEnabled = data?.enabled ?? false;
+  const savedOrganizationId = data?.externalOrganizationId ?? "";
+
   useEffect(() => {
-    if (!data) return;
-    setEnabled(data.enabled);
+    if (!hasData) return;
+    setEnabled(savedEnabled);
     setApiKey("");
-  }, [data]);
+    setOrganizationId(savedOrganizationId);
+  }, [hasData, savedId, savedEnabled, savedOrganizationId]);
+
+  const Icon = provider.icon;
+  const apiKeyFieldId = `${provider.provider}-ai-integration-api-key`;
+  const orgIdFieldId = `${provider.provider}-ai-integration-org-id`;
 
   const isMutating = upsertStatus === "pending" || deleteStatus === "pending";
-  const canSave = useMemo(
-    () => (apiKey.trim() !== "" || hasSavedKey) && !isMutating,
-    [apiKey, hasSavedKey, isMutating],
-  );
+  const canSave = useMemo(() => {
+    if (isMutating) return false;
+    if (apiKey.trim() === "" && !hasSavedKey) return false;
+    if (provider.requiresOrganizationId && organizationId.trim() === "") {
+      return false;
+    }
+    return true;
+  }, [
+    apiKey,
+    hasSavedKey,
+    isMutating,
+    organizationId,
+    provider.requiresOrganizationId,
+  ]);
 
   const handleSave = () => {
     upsert({
       request: {
         upsertAIIntegrationConfigRequest: {
-          provider: CURSOR_PROVIDER,
+          provider: provider.provider,
           apiKey: apiKey.trim(),
           enabled,
+          ...(provider.requiresOrganizationId
+            ? { externalOrganizationId: organizationId.trim() }
+            : {}),
         },
       },
     });
@@ -87,99 +199,111 @@ export function AIIntegrationsSection(): JSX.Element {
 
   const handleDelete = () => {
     if (!isConfigured) return;
-    if (!window.confirm("Delete the Cursor AI integration?")) return;
+    if (!window.confirm(`Delete the ${provider.name} AI integration?`)) return;
     deleteConfig({
       request: {
         deleteAIIntegrationConfigRequest: {
-          provider: CURSOR_PROVIDER,
+          provider: provider.provider,
         },
       },
     });
     setEnabled(false);
     setApiKey("");
+    setOrganizationId("");
   };
 
   return (
-    <Stack gap={4}>
-      <div>
-        <Stack direction="horizontal" gap={2} align="center" className="mb-2">
-          <Heading variant="h4">AI Integrations</Heading>
-          <ReleaseStageBadge stage="preview" />
-        </Stack>
-        <Type muted small>
-          Connect AI providers for usage and cost reporting, with room for more
-          use cases as providers expose more data.
-        </Type>
-      </div>
-
-      <div className="border-border bg-card flex flex-col gap-4 rounded-lg border p-4">
-        <Stack direction="horizontal" justify="space-between" align="center">
-          <Stack gap={1}>
-            <Stack direction="horizontal" align="center" gap={2}>
-              <CursorIcon className="text-foreground h-4 w-4" />
-              <Type variant="body" className="font-medium">
-                Cursor
-              </Type>
-              <CursorPollStatusIcon config={data} />
-              <CursorNextPollBadge config={data} />
-            </Stack>
-            <Type variant="body" className="text-muted-foreground ml-6 text-sm">
-              Track Cursor usage and spend across your organization.
+    <div className="border-border bg-card flex flex-col gap-4 rounded-lg border p-4">
+      <Stack direction="horizontal" justify="space-between" align="center">
+        <Stack gap={1}>
+          <Stack direction="horizontal" align="center" gap={2}>
+            <Icon className="text-foreground h-4 w-4" />
+            <Type variant="body" className="font-medium">
+              {provider.name}
             </Type>
+            <PollStatusIcon config={data} label={provider.name} />
+            <NextPollBadge config={data} />
           </Stack>
-          <RequireScope scope="org:admin" level="component">
-            <Switch
-              checked={enabled}
-              onCheckedChange={setEnabled}
-              disabled={isLoading || isMutating}
-              aria-label="Enable Cursor AI integration"
-            />
-          </RequireScope>
+          <Type variant="body" className="text-muted-foreground ml-6 text-sm">
+            {provider.description}
+          </Type>
         </Stack>
+        <RequireScope scope="org:admin" level="component">
+          <Switch
+            checked={enabled}
+            onCheckedChange={setEnabled}
+            disabled={isLoading || isMutating}
+            aria-label={`Enable ${provider.name} AI integration`}
+          />
+        </RequireScope>
+      </Stack>
 
-        <div className="border-border border-t" />
+      <div className="border-border border-t" />
 
+      <Stack gap={2}>
+        <Label htmlFor={apiKeyFieldId}>{provider.apiKeyLabel}</Label>
+        <Input
+          id={apiKeyFieldId}
+          placeholder={
+            hasSavedKey ? "•••••• (saved)" : provider.apiKeyPlaceholder
+          }
+          value={apiKey}
+          onChange={setApiKey}
+          type="password"
+          disabled={isLoading || isMutating}
+        />
+        {provider.helpText ? (
+          <Type variant="body" className="text-muted-foreground text-xs">
+            {provider.helpText}
+          </Type>
+        ) : null}
+      </Stack>
+
+      {provider.requiresOrganizationId ? (
         <Stack gap={2}>
-          <Label htmlFor="cursor-ai-integration-api-key">Cursor API key</Label>
+          <Label htmlFor={orgIdFieldId}>
+            {provider.organizationIdLabel ?? "Organization ID"}
+          </Label>
           <Input
-            id="cursor-ai-integration-api-key"
-            placeholder={hasSavedKey ? "•••••• (saved)" : "key_xxx"}
-            value={apiKey}
-            onChange={setApiKey}
-            type="password"
+            id={orgIdFieldId}
+            placeholder={provider.organizationIdPlaceholder}
+            value={organizationId}
+            onChange={setOrganizationId}
             disabled={isLoading || isMutating}
           />
         </Stack>
+      ) : null}
 
-        <div className="border-border border-t" />
+      <div className="border-border border-t" />
 
-        <Stack direction="horizontal" justify="space-between" align="center">
-          <RequireScope scope="org:admin" level="component">
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={handleDelete}
-              disabled={!isConfigured || isMutating}
-            >
-              <Trash2 className="mr-1 h-3.5 w-3.5" />
-              Delete
-            </Button>
-          </RequireScope>
-          <RequireScope scope="org:admin" level="component">
-            <Button onClick={handleSave} disabled={!canSave}>
-              Save
-            </Button>
-          </RequireScope>
-        </Stack>
-      </div>
-    </Stack>
+      <Stack direction="horizontal" justify="space-between" align="center">
+        <RequireScope scope="org:admin" level="component">
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={handleDelete}
+            disabled={!isConfigured || isMutating}
+          >
+            <Trash2 className="mr-1 h-3.5 w-3.5" />
+            Delete
+          </Button>
+        </RequireScope>
+        <RequireScope scope="org:admin" level="component">
+          <Button onClick={handleSave} disabled={!canSave}>
+            Save
+          </Button>
+        </RequireScope>
+      </Stack>
+    </div>
   );
 }
 
-function CursorPollStatusIcon({
+function PollStatusIcon({
   config,
+  label,
 }: {
   config: ReturnType<typeof useAiIntegrationConfig>["data"];
+  label: string;
 }) {
   if (!config?.id || !config.lastPollStatus) {
     return null;
@@ -192,7 +316,7 @@ function CursorPollStatusIcon({
     const tooltip = [
       config.lastPollFailedAt
         ? `Failed at ${config.lastPollFailedAt.toLocaleString()}.`
-        : "The latest Cursor usage sync failed.",
+        : `The latest ${label} sync failed.`,
       `Error: ${config.lastPollError ?? "We will retry automatically."}`,
     ].join(" ");
 
@@ -210,8 +334,8 @@ function CursorPollStatusIcon({
 
   if (config.lastPollStatus === "success") {
     const tooltip = config.lastPolledAt
-      ? `Cursor usage last synced ${config.lastPolledAt.toLocaleString()}.`
-      : "Cursor usage sync succeeded.";
+      ? `${label} last synced ${config.lastPolledAt.toLocaleString()}.`
+      : `${label} sync succeeded.`;
 
     return (
       <SimpleTooltip tooltip={tooltip}>
@@ -226,7 +350,7 @@ function CursorPollStatusIcon({
   }
 
   return (
-    <SimpleTooltip tooltip="Waiting for the first Cursor usage sync.">
+    <SimpleTooltip tooltip={`Waiting for the first ${label} sync.`}>
       <Badge variant="warning" background className="shrink-0">
         <Badge.LeftIcon>
           <Clock3 className="h-3.5 w-3.5" />
@@ -237,13 +361,13 @@ function CursorPollStatusIcon({
   );
 }
 
-function CursorNextPollBadge({
+function NextPollBadge({
   config,
 }: {
   config: ReturnType<typeof useAiIntegrationConfig>["data"];
 }) {
   const [now, setNow] = useState(() => new Date());
-  const nextPollAt = getCursorNextPollAt(config);
+  const nextPollAt = getNextPollAt(config);
   const nextPollAtTime = nextPollAt?.getTime();
 
   useEffect(() => {
@@ -266,7 +390,7 @@ function CursorNextPollBadge({
   );
 }
 
-function getCursorNextPollAt(
+function getNextPollAt(
   config: ReturnType<typeof useAiIntegrationConfig>["data"],
 ) {
   if (config?.nextPollAfter) {

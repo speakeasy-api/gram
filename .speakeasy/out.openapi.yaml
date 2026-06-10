@@ -2441,12 +2441,12 @@ paths:
       operationId: getAIIntegrationConfig
       parameters:
         - allowEmptyValue: true
-          description: AI provider identifier. Initially only cursor is supported.
+          description: AI provider identifier. Supported values include cursor and anthropic_compliance.
           in: query
           name: provider
           required: true
           schema:
-            description: AI provider identifier. Initially only cursor is supported.
+            description: AI provider identifier. Supported values include cursor and anthropic_compliance.
             type: string
         - allowEmptyValue: true
           description: API Key header
@@ -30754,6 +30754,9 @@ components:
         enabled:
           type: boolean
           description: Whether the provider integration is active.
+        external_organization_id:
+          type: string
+          description: Provider organization identifier. Required for anthropic_compliance; omitted for providers that do not need one.
         has_api_key:
           type: boolean
           description: Whether an API key is currently stored. The key itself is never returned.
@@ -30790,7 +30793,7 @@ components:
           description: Project used as the telemetry write target. Omitted when no config is set.
         provider:
           type: string
-          description: AI provider identifier. Initially only cursor is supported.
+          description: AI provider identifier. Supported values include cursor and anthropic_compliance.
         updated_at:
           type: string
           description: ISO 8601 timestamp of the most recent change. Omitted when no config is set.
@@ -33653,7 +33656,7 @@ components:
       properties:
         provider:
           type: string
-          description: AI provider identifier. Initially only cursor is supported.
+          description: AI provider identifier. Supported values include cursor and anthropic_compliance.
       required:
         - provider
     DeleteGlobalToolVariationForm:
@@ -43411,9 +43414,12 @@ components:
         enabled:
           type: boolean
           description: Whether the integration should be active.
+        external_organization_id:
+          type: string
+          description: Provider organization identifier. Required for anthropic_compliance.
         provider:
           type: string
-          description: AI provider identifier. Initially only cursor is supported.
+          description: AI provider identifier. Supported values include cursor and anthropic_compliance.
       required:
         - provider
         - api_key

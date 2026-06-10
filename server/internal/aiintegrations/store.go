@@ -14,17 +14,31 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-const ProviderCursor = "cursor"
+const (
+	ProviderCursor              = "cursor"
+	ProviderAnthropicCompliance = "anthropic_compliance"
+)
 
 const (
-	initialUsagePollLookback = time.Hour
-	usagePollInterval        = time.Hour
-	maxUsagePollErrorMessage = 4000
+	initialUsagePollLookback             = time.Hour * 24
+	cursorUsagePollInterval              = time.Hour
+	anthropicComplianceUsagePollInterval = 5 * time.Minute
+	maxUsagePollErrorMessage             = 4000
 )
+
+// usagePollIntervalFor returns the delay between polls for a provider.
+// Unknown providers fall back to the cursor interval.
+func usagePollIntervalFor(provider string) time.Duration {
+	if provider == ProviderAnthropicCompliance {
+		return anthropicComplianceUsagePollInterval
+	}
+	return cursorUsagePollInterval
+}
 
 type Store struct {
 	logger *slog.Logger
@@ -34,20 +48,22 @@ type Store struct {
 }
 
 type Config struct {
-	ID                  uuid.UUID
-	OrganizationID      string
-	Provider            string
-	ProjectID           uuid.UUID
-	APIKey              string
-	Enabled             bool
-	PollWatermarkAt     time.Time
-	NextPollAfter       time.Time
-	LastPollError       string
-	LastPollFailedAt    time.Time
-	LastPollSuccessAt   time.Time
-	ConsecutiveFailures int32
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
+	ID                     uuid.UUID
+	OrganizationID         string
+	Provider               string
+	ProjectID              uuid.UUID
+	ExternalOrganizationID *string
+	APIKey                 string
+	Enabled                bool
+	PollWatermarkAt        time.Time
+	NextPollAfter          time.Time
+	LastPollError          string
+	LastPollFailedAt       time.Time
+	LastPollSuccessAt      time.Time
+	ConsecutiveFailures    int32
+	LastCursor             string
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
 }
 
 type UsagePollCandidate struct {
@@ -77,7 +93,9 @@ func normalizeProvider(provider string) (string, error) {
 	if provider == "" {
 		return "", oops.E(oops.CodeInvalid, nil, "provider is required")
 	}
-	if provider != ProviderCursor {
+	switch provider {
+	case ProviderCursor, ProviderAnthropicCompliance:
+	default:
 		return "", oops.E(oops.CodeInvalid, nil, "unsupported ai integration provider: %s", provider)
 	}
 	return provider, nil
@@ -107,10 +125,14 @@ func (s *Store) loadForOrgAndProviderRow(ctx context.Context, orgID string, prov
 	return cfg, &row, nil
 }
 
-func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, provider string, apiKey string, apiKeySupplied bool, enabled bool, resetPollWatermarkAt *time.Time) (UpsertResult, error) {
+func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, provider string, apiKey string, apiKeySupplied bool, enabled bool, externalOrganizationID *string, resetPollWatermarkAt *time.Time) (UpsertResult, error) {
 	provider, err := normalizeProvider(provider)
 	if err != nil {
 		return UpsertResult{}, err
+	}
+
+	if provider == ProviderAnthropicCompliance && externalOrganizationID == nil {
+		return UpsertResult{}, oops.E(oops.CodeInvalid, nil, "external_organization_id is required for anthropic_compliance")
 	}
 
 	q := repo.New(dbtx)
@@ -136,21 +158,23 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 			return UpsertResult{}, err
 		}
 		row, err = q.InsertConfig(ctx, repo.InsertConfigParams{
-			OrganizationID:  orgID,
-			Provider:        provider,
-			ProjectID:       projectID,
-			ApiKeyEncrypted: encrypted,
-			Enabled:         enabled,
+			OrganizationID:         orgID,
+			Provider:               provider,
+			ProjectID:              projectID,
+			ExternalOrganizationID: conv.PtrToPGTextEmpty(externalOrganizationID),
+			ApiKeyEncrypted:        encrypted,
+			Enabled:                enabled,
 		})
 		if err != nil {
 			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to save ai integration config")
 		}
 	} else {
 		row, err = q.UpdateConfigSettings(ctx, repo.UpdateConfigSettingsParams{
-			OrganizationID: orgID,
-			Provider:       provider,
-			ProjectID:      projectID,
-			Enabled:        enabled,
+			OrganizationID:         orgID,
+			Provider:               provider,
+			ProjectID:              projectID,
+			ExternalOrganizationID: conv.PtrToPGTextEmpty(externalOrganizationID),
+			Enabled:                enabled,
 		})
 		if err != nil {
 			return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to save ai integration config")
@@ -162,12 +186,13 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 		return UpsertResult{}, oops.E(oops.CodeUnexpected, err, "failed to save ai integration sync")
 	}
 	if resetPollWatermarkAt != nil {
-		syncRow.PollWatermarkAt = timestamptz(*resetPollWatermarkAt)
-		syncRow.NextPollAfter = timestamptz(nextUsagePollAfter(*resetPollWatermarkAt))
+		syncRow.PollWatermarkAt = conv.ToPGTimestamptz(*resetPollWatermarkAt)
+		syncRow.NextPollAfter = conv.ToPGTimestamptz(resetPollWatermarkAt.UTC().Add(usagePollIntervalFor(provider)))
 		syncRow.LastPollError = pgtype.Text{String: "", Valid: false}
 		syncRow.LastPollFailedAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
 		syncRow.LastPollSuccessAt = pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
 		syncRow.ConsecutiveFailures = 0
+		syncRow.LastCursorID = pgtype.Text{String: "", Valid: false}
 		if err := q.ResetUsagePollState(ctx, repo.ResetUsagePollStateParams{
 			AiIntegrationConfigID: row.ID,
 			PollWatermarkAt:       syncRow.PollWatermarkAt,
@@ -229,18 +254,13 @@ func (s *Store) ListEnabledConfigsByProvider(ctx context.Context, provider strin
 	return configs, nil
 }
 
-func (s *Store) ListUsagePollCandidates(ctx context.Context, provider string, pollDueBefore time.Time, limit int32) ([]UsagePollCandidate, error) {
-	provider, err := normalizeProvider(provider)
-	if err != nil {
-		return nil, err
-	}
+func (s *Store) ListUsagePollCandidates(ctx context.Context, pollDueBefore time.Time, limit int32) ([]UsagePollCandidate, error) {
 	if limit <= 0 {
 		return nil, nil
 	}
 
 	params := repo.ListUsagePollCandidatesParams{
-		Provider:      provider,
-		PollDueBefore: timestamptz(pollDueBefore),
+		PollDueBefore: conv.ToPGTimestamptz(pollDueBefore),
 		LimitCount:    limit,
 	}
 
@@ -276,60 +296,32 @@ func (s *Store) GetUsagePollConfig(ctx context.Context, configID uuid.UUID) (Con
 	return cfg, nil
 }
 
-func (s *Store) RecordUsagePollSuccess(ctx context.Context, configID uuid.UUID, t time.Time) error {
+func (s *Store) RecordUsagePollSuccess(ctx context.Context, configID uuid.UUID, provider string, t time.Time, lastCursor string) error {
 	if err := s.repo.RecordUsagePollSuccess(ctx, repo.RecordUsagePollSuccessParams{
 		AiIntegrationConfigID: configID,
-		PollWatermarkAt:       timestamptz(t),
-		NextPollAfter:         timestamptz(nextUsagePollAfter(t)),
+		PollWatermarkAt:       conv.ToPGTimestamptz(t),
+		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(usagePollIntervalFor(provider))),
+		LastCursorID:          conv.ToPGTextEmpty(lastCursor),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to record ai integration usage poll success")
 	}
 	return nil
 }
 
-func (s *Store) RecordUsagePollFailure(ctx context.Context, configID uuid.UUID, t time.Time, cause error) error {
+func (s *Store) RecordUsagePollFailure(ctx context.Context, configID uuid.UUID, provider string, t time.Time, cause error) error {
+	var errStr string
+	if cause != nil {
+		errStr = cause.Error()
+	}
+
 	if err := s.repo.RecordUsagePollFailure(ctx, repo.RecordUsagePollFailureParams{
 		AiIntegrationConfigID: configID,
-		NextPollAfter:         timestamptz(nextUsagePollAfter(t)),
-		LastPollError:         nullableText(truncateUsagePollError(cause)),
+		NextPollAfter:         conv.ToPGTimestamptz(t.UTC().Add(usagePollIntervalFor(provider))),
+		LastPollError:         conv.ToPGTextEmpty(conv.TruncateString(errStr, maxUsagePollErrorMessage)),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to record ai integration usage poll failure")
 	}
 	return nil
-}
-
-func initialUsagePollWatermark(now time.Time) time.Time {
-	return now.UTC().Add(-initialUsagePollLookback)
-}
-
-func nextUsagePollAfter(t time.Time) time.Time {
-	return t.UTC().Add(usagePollInterval)
-}
-
-func timestamptz(t time.Time) pgtype.Timestamptz {
-	return pgtype.Timestamptz{
-		Time:             t.UTC(),
-		InfinityModifier: pgtype.Finite,
-		Valid:            true,
-	}
-}
-
-func nullableText(s string) pgtype.Text {
-	return pgtype.Text{
-		String: s,
-		Valid:  s != "",
-	}
-}
-
-func truncateUsagePollError(cause error) string {
-	if cause == nil {
-		return ""
-	}
-	msg := strings.TrimSpace(cause.Error())
-	if len(msg) <= maxUsagePollErrorMessage {
-		return msg
-	}
-	return msg[:maxUsagePollErrorMessage]
 }
 
 func (s *Store) configFromGetRow(row repo.GetConfigByOrgAndProviderRow) (Config, error) {
@@ -338,20 +330,22 @@ func (s *Store) configFromGetRow(row repo.GetConfigByOrgAndProviderRow) (Config,
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
 	return Config{
-		ID:                  row.ID,
-		OrganizationID:      row.OrganizationID,
-		Provider:            row.Provider,
-		ProjectID:           row.ProjectID,
-		APIKey:              apiKey,
-		Enabled:             row.Enabled,
-		PollWatermarkAt:     row.PollWatermarkAt.Time,
-		NextPollAfter:       row.NextPollAfter.Time,
-		LastPollError:       row.LastPollError.String,
-		LastPollFailedAt:    row.LastPollFailedAt.Time,
-		LastPollSuccessAt:   row.LastPollSuccessAt.Time,
-		ConsecutiveFailures: row.ConsecutiveFailures,
-		CreatedAt:           row.CreatedAt.Time,
-		UpdatedAt:           row.UpdatedAt.Time,
+		ID:                     row.ID,
+		OrganizationID:         row.OrganizationID,
+		Provider:               row.Provider,
+		ProjectID:              row.ProjectID,
+		ExternalOrganizationID: conv.FromPGText[string](row.ExternalOrganizationID),
+		APIKey:                 apiKey,
+		Enabled:                row.Enabled,
+		PollWatermarkAt:        row.PollWatermarkAt.Time,
+		NextPollAfter:          row.NextPollAfter.Time,
+		LastPollError:          row.LastPollError.String,
+		LastPollFailedAt:       row.LastPollFailedAt.Time,
+		LastPollSuccessAt:      row.LastPollSuccessAt.Time,
+		ConsecutiveFailures:    row.ConsecutiveFailures,
+		LastCursor:             row.LastCursorID.String,
+		CreatedAt:              row.CreatedAt.Time,
+		UpdatedAt:              row.UpdatedAt.Time,
 	}, nil
 }
 
@@ -361,20 +355,22 @@ func (s *Store) configFromListRow(row repo.ListEnabledConfigsByProviderRow) (Con
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
 	return Config{
-		ID:                  row.ID,
-		OrganizationID:      row.OrganizationID,
-		Provider:            row.Provider,
-		ProjectID:           row.ProjectID,
-		APIKey:              apiKey,
-		Enabled:             row.Enabled,
-		PollWatermarkAt:     row.PollWatermarkAt.Time,
-		NextPollAfter:       row.NextPollAfter.Time,
-		LastPollError:       row.LastPollError.String,
-		LastPollFailedAt:    row.LastPollFailedAt.Time,
-		LastPollSuccessAt:   row.LastPollSuccessAt.Time,
-		ConsecutiveFailures: row.ConsecutiveFailures,
-		CreatedAt:           row.CreatedAt.Time,
-		UpdatedAt:           row.UpdatedAt.Time,
+		ID:                     row.ID,
+		OrganizationID:         row.OrganizationID,
+		Provider:               row.Provider,
+		ProjectID:              row.ProjectID,
+		ExternalOrganizationID: conv.FromPGText[string](row.ExternalOrganizationID),
+		APIKey:                 apiKey,
+		Enabled:                row.Enabled,
+		PollWatermarkAt:        row.PollWatermarkAt.Time,
+		NextPollAfter:          row.NextPollAfter.Time,
+		LastPollError:          row.LastPollError.String,
+		LastPollFailedAt:       row.LastPollFailedAt.Time,
+		LastPollSuccessAt:      row.LastPollSuccessAt.Time,
+		ConsecutiveFailures:    row.ConsecutiveFailures,
+		LastCursor:             row.LastCursorID.String,
+		CreatedAt:              row.CreatedAt.Time,
+		UpdatedAt:              row.UpdatedAt.Time,
 	}, nil
 }
 
@@ -384,20 +380,22 @@ func (s *Store) configFromUsagePollConfigRow(row repo.GetUsagePollConfigByIDRow)
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
 	return Config{
-		ID:                  row.ID,
-		OrganizationID:      row.OrganizationID,
-		Provider:            row.Provider,
-		ProjectID:           row.ProjectID,
-		APIKey:              apiKey,
-		Enabled:             row.Enabled,
-		PollWatermarkAt:     row.PollWatermarkAt.Time,
-		NextPollAfter:       row.NextPollAfter.Time,
-		LastPollError:       row.LastPollError.String,
-		LastPollFailedAt:    row.LastPollFailedAt.Time,
-		LastPollSuccessAt:   row.LastPollSuccessAt.Time,
-		ConsecutiveFailures: row.ConsecutiveFailures,
-		CreatedAt:           row.CreatedAt.Time,
-		UpdatedAt:           row.UpdatedAt.Time,
+		ID:                     row.ID,
+		OrganizationID:         row.OrganizationID,
+		Provider:               row.Provider,
+		ProjectID:              row.ProjectID,
+		ExternalOrganizationID: conv.FromPGText[string](row.ExternalOrganizationID),
+		APIKey:                 apiKey,
+		Enabled:                row.Enabled,
+		PollWatermarkAt:        row.PollWatermarkAt.Time,
+		NextPollAfter:          row.NextPollAfter.Time,
+		LastPollError:          row.LastPollError.String,
+		LastPollFailedAt:       row.LastPollFailedAt.Time,
+		LastPollSuccessAt:      row.LastPollSuccessAt.Time,
+		ConsecutiveFailures:    row.ConsecutiveFailures,
+		LastCursor:             row.LastCursorID.String,
+		CreatedAt:              row.CreatedAt.Time,
+		UpdatedAt:              row.UpdatedAt.Time,
 	}, nil
 }
 
@@ -407,20 +405,22 @@ func (s *Store) configFromRows(row repo.AiIntegrationConfig, syncRow repo.Ensure
 		return emptyConfig(row.OrganizationID, row.Provider), err
 	}
 	return Config{
-		ID:                  row.ID,
-		OrganizationID:      row.OrganizationID,
-		Provider:            row.Provider,
-		ProjectID:           row.ProjectID,
-		APIKey:              apiKey,
-		Enabled:             row.Enabled,
-		PollWatermarkAt:     syncRow.PollWatermarkAt.Time,
-		NextPollAfter:       syncRow.NextPollAfter.Time,
-		LastPollError:       syncRow.LastPollError.String,
-		LastPollFailedAt:    syncRow.LastPollFailedAt.Time,
-		LastPollSuccessAt:   syncRow.LastPollSuccessAt.Time,
-		ConsecutiveFailures: syncRow.ConsecutiveFailures,
-		CreatedAt:           row.CreatedAt.Time,
-		UpdatedAt:           row.UpdatedAt.Time,
+		ID:                     row.ID,
+		OrganizationID:         row.OrganizationID,
+		Provider:               row.Provider,
+		ProjectID:              row.ProjectID,
+		ExternalOrganizationID: conv.FromPGText[string](row.ExternalOrganizationID),
+		APIKey:                 apiKey,
+		Enabled:                row.Enabled,
+		PollWatermarkAt:        syncRow.PollWatermarkAt.Time,
+		NextPollAfter:          syncRow.NextPollAfter.Time,
+		LastPollError:          syncRow.LastPollError.String,
+		LastPollFailedAt:       syncRow.LastPollFailedAt.Time,
+		LastPollSuccessAt:      syncRow.LastPollSuccessAt.Time,
+		ConsecutiveFailures:    syncRow.ConsecutiveFailures,
+		LastCursor:             syncRow.LastCursorID.String,
+		CreatedAt:              row.CreatedAt.Time,
+		UpdatedAt:              row.UpdatedAt.Time,
 	}, nil
 }
 
@@ -449,19 +449,21 @@ func (s *Store) decryptAPIKey(stored string) (string, error) {
 
 func emptyConfig(orgID string, provider string) Config {
 	return Config{
-		ID:                  uuid.Nil,
-		OrganizationID:      orgID,
-		Provider:            provider,
-		ProjectID:           uuid.Nil,
-		APIKey:              "",
-		Enabled:             false,
-		PollWatermarkAt:     time.Time{},
-		NextPollAfter:       time.Time{},
-		LastPollError:       "",
-		LastPollFailedAt:    time.Time{},
-		LastPollSuccessAt:   time.Time{},
-		ConsecutiveFailures: 0,
-		CreatedAt:           time.Time{},
-		UpdatedAt:           time.Time{},
+		ID:                     uuid.Nil,
+		OrganizationID:         orgID,
+		Provider:               provider,
+		ProjectID:              uuid.Nil,
+		ExternalOrganizationID: nil,
+		APIKey:                 "",
+		Enabled:                false,
+		PollWatermarkAt:        time.Time{},
+		NextPollAfter:          time.Time{},
+		LastPollError:          "",
+		LastPollFailedAt:       time.Time{},
+		LastPollSuccessAt:      time.Time{},
+		ConsecutiveFailures:    0,
+		LastCursor:             "",
+		CreatedAt:              time.Time{},
+		UpdatedAt:              time.Time{},
 	}
 }

@@ -12,6 +12,7 @@ import (
 	svix "github.com/svix/svix-webhooks/go"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
@@ -54,6 +55,7 @@ type WorkerOptions struct {
 	FeatureProvider                feature.Provider
 	AssetStorage                   assets.BlobStore
 	SlackClient                    *slack_client.SlackClient
+	ChatMessageWriter              *chat.ChatMessageWriter
 	ChatClient                     *chat.Client
 	OpenRouter                     openrouter.Provisioner
 	K8sClient                      *k8s.KubernetesClients
@@ -105,6 +107,7 @@ func ForDeploymentProcessing(
 		MCPRegistryClient:              mcpRegistryClient,
 		AuditLogger:                    auditLogger,
 		SlackClient:                    nil,
+		ChatMessageWriter:              nil,
 		ChatClient:                     nil,
 		OpenRouter:                     nil,
 		K8sClient:                      nil,
@@ -146,6 +149,7 @@ func NewTemporalWorker(
 		FeatureProvider:                nil,
 		AssetStorage:                   nil,
 		SlackClient:                    nil,
+		ChatMessageWriter:              nil,
 		ChatClient:                     nil,
 		OpenRouter:                     nil,
 		K8sClient:                      nil,
@@ -184,6 +188,7 @@ func NewTemporalWorker(
 			FeatureProvider:                conv.Default(o.FeatureProvider, opts.FeatureProvider),
 			AssetStorage:                   conv.Default(o.AssetStorage, opts.AssetStorage),
 			SlackClient:                    conv.Default(o.SlackClient, opts.SlackClient),
+			ChatMessageWriter:              conv.Default(o.ChatMessageWriter, opts.ChatMessageWriter),
 			OpenRouter:                     conv.Default(o.OpenRouter, opts.OpenRouter),
 			ChatClient:                     conv.Default(o.ChatClient, opts.ChatClient),
 			K8sClient:                      conv.Default(o.K8sClient, opts.K8sClient),
@@ -272,6 +277,7 @@ func NewTemporalWorker(
 		opts.SvixClient,
 		opts.ProductFeatures,
 		opts.PluginPublisher,
+		opts.ChatMessageWriter,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -331,7 +337,12 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.PublishPluginProject)
 
 	// AI integration usage syncing runs on its own worker and task queue.
-	aiUsageWorker.RegisterActivity(activities.PollAIUsage)
+	aiUsageWorker.RegisterActivity(activities.PollAIData)
+	// Legacy alias for workflow histories started before the
+	// PollAIUsage -> PollAIData rename. Remove once drained.
+	aiUsageWorker.RegisterActivityWithOptions(activities.PollAIData, activity.RegisterOptions{
+		Name: "PollAIUsage",
+	})
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
