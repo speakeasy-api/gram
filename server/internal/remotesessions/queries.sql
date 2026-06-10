@@ -412,18 +412,22 @@ WHERE subject_urn = @subject_urn
 -- DISTINCT. A soft-deleted row is absent here entirely (truly disconnected).
 --
 -- The 'active' predicate mirrors validateAndRefresh in tokenservice.go: a
--- session is usable only when its access token is unexpired, or it carries a
--- refresh token that is not itself known-expired to renew with. A
--- refresh_expires_at of NULL means no known expiry (non-expiring refresh
--- token), so it still counts as usable. A present-but-unusable row is
--- 'expired' rather than dropped, so the consent UI can distinguish "reconnect
--- this expired link" from "never connected" — and so the runtime gate (which
--- rejects the same row as ErrNoValidToken) stops disagreeing with a green
--- "Connected" badge.
+-- session is usable when its access token is unexpired, or it is a NULL-expiry
+-- token with no refresh path (non-expiring, e.g. Slack non-rotating xoxp), or
+-- it carries a refresh token that is not itself known-expired to renew with. A
+-- NULL access_expires_at counts as usable on its own ONLY when there is no
+-- refresh token: with a refresh token present the gate re-validates on an
+-- hourly cadence, so usability defers to the refresh-token clause. A
+-- refresh_expires_at of NULL is a non-expiring refresh token. A
+-- present-but-unusable row is 'expired' rather than dropped, so the consent UI
+-- can distinguish "reconnect this expired link" from "never connected" — and
+-- so the runtime gate (which rejects the same row as ErrNoValidToken) stops
+-- disagreeing with a green "Connected" badge.
 SELECT
   remote_session_client_id,
   (CASE
     WHEN access_expires_at > now()
+      OR (access_expires_at IS NULL AND refresh_token_encrypted IS NULL)
       OR (refresh_token_encrypted IS NOT NULL
           AND (refresh_expires_at IS NULL OR refresh_expires_at > now())) THEN 'active'
     ELSE 'expired'
@@ -432,6 +436,19 @@ FROM remote_sessions
 WHERE subject_urn = @subject_urn
   AND user_session_issuer_id = @user_session_issuer_id
   AND deleted IS FALSE;
+
+-- name: SetRemoteSessionUpdatedAt :exec
+-- Sets updated_at on a remote session. Scoped through the owning
+-- remote_session_client's project so the write cannot cross tenant boundaries.
+-- Currently used by tests to backdate updated_at and exercise the
+-- application-layer refresh cadence in validateAndRefresh (NULL
+-- access_expires_at with a refresh token) without waiting wall-clock time.
+UPDATE remote_sessions s
+SET updated_at = @updated_at
+FROM remote_session_clients c
+WHERE s.id = @id
+  AND s.remote_session_client_id = c.id
+  AND c.project_id = @project_id;
 
 -- name: GetRemoteSessionClientWithIssuerByID :one
 -- Joined client + issuer view scoped to a single client_id. Used by
