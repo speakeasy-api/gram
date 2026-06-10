@@ -6,6 +6,7 @@ import (
 	"net"
 	"runtime"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -39,6 +40,12 @@ var UsePublishedPorts = sync.OnceValue(func() bool {
 		return true
 	}
 	defer func() { _ = cli.Close() }()
+
+	// A remote daemon (tcp:// or ssh:// DOCKER_HOST) runs containers on
+	// another machine, where container IPs are not routable from here.
+	if !strings.HasPrefix(cli.DaemonHost(), "unix://") {
+		return true
+	}
 
 	res, err := cli.Info(ctx, client.InfoOptions{})
 	if err != nil {

@@ -2,7 +2,6 @@ package testenv
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 
@@ -18,7 +17,8 @@ type PostgresDBCloneFunc = testinfra.PostgresDBCloneFunc
 func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, PostgresDBCloneFunc, error) {
 	container, cloner, err := testinfra.NewTestPostgres(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("start postgres container: %w", err)
+		//nolint:wrapcheck // delegation; testinfra already wraps with context
+		return nil, nil, err
 	}
 	return container, cloner, nil
 }

@@ -57,7 +57,7 @@ func newRedisClientFunc(container *tcr.RedisContainer) RedisClientFunc {
 
 		var pingErr error
 		for attempt := range 10 {
-			if pingErr = client.Ping(ctx).Err(); pingErr == nil {
+			if pingErr = client.Ping(ctx).Err(); pingErr == nil || ctx.Err() != nil {
 				break
 			}
 			if attempt < 9 {

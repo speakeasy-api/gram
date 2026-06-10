@@ -17,7 +17,7 @@ import (
 )
 
 func nextRandom() string {
-	return fmt.Sprintf("%d", uuid.New().ID())
+	return uuid.NewString()
 }
 
 func NewTemporalDevServer(ctx context.Context) (*testsuite.DevServer, error) {

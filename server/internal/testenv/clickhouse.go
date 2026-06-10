@@ -2,7 +2,6 @@ package testenv
 
 import (
 	"context"
-	"fmt"
 
 	clickhousecontainer "github.com/testcontainers/testcontainers-go/modules/clickhouse"
 
@@ -17,7 +16,8 @@ type ClickhouseClientFunc = testinfra.ClickhouseClientFunc
 func NewTestClickhouse(ctx context.Context) (*clickhousecontainer.ClickHouseContainer, ClickhouseClientFunc, error) {
 	container, clientFunc, err := testinfra.NewTestClickhouse(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("start clickhouse container: %w", err)
+		//nolint:wrapcheck // delegation; testinfra already wraps with context
+		return nil, nil, err
 	}
 	return container, clientFunc, nil
 }

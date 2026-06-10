@@ -68,7 +68,7 @@ func newClickhouseClientFunc(container *clickhousecontainer.ClickHouseContainer)
 		// instance; retry until the final server accepts connections.
 		var pingErr error
 		for attempt := range 50 {
-			if pingErr = conn.Ping(ctx); pingErr == nil {
+			if pingErr = conn.Ping(ctx); pingErr == nil || ctx.Err() != nil {
 				break
 			}
 			if attempt < 49 {
