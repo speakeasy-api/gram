@@ -40,7 +40,11 @@ type GetServerDetailsResponseBody struct {
 	// Description of what the server does
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// ID of the attached toolset when this server is listed from a Collection
+	// (toolset-backed attachment)
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// ID of the attached MCP server when this server is listed from a Collection
+	// (mcp_server-backed attachment)
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// ID of the external MCP registry this server came from
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
 	// ID of the internal collection registry this server came from
@@ -825,7 +829,11 @@ type ExternalMCPServerResponseBody struct {
 	// Description of what the server does
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// ID of the attached toolset when this server is listed from a Collection
+	// (toolset-backed attachment)
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// ID of the attached MCP server when this server is listed from a Collection
+	// (mcp_server-backed attachment)
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// ID of the external MCP registry this server came from
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
 	// ID of the internal collection registry this server came from
@@ -1390,6 +1398,7 @@ func NewGetServerDetailsExternalMCPServerOK(body *GetServerDetailsResponseBody) 
 		Version:                             *body.Version,
 		Description:                         *body.Description,
 		ToolsetID:                           body.ToolsetID,
+		McpServerID:                         body.McpServerID,
 		RegistryID:                          body.RegistryID,
 		OrganizationMcpCollectionRegistryID: body.OrganizationMcpCollectionRegistryID,
 		Title:                               body.Title,
@@ -1616,6 +1625,9 @@ func ValidateGetServerDetailsResponseBody(body *GetServerDetailsResponseBody) (e
 	}
 	if body.ToolsetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
 	}
 	if body.RegistryID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.registry_id", *body.RegistryID, goa.FormatUUID))
@@ -2628,6 +2640,9 @@ func ValidateExternalMCPServerResponseBody(body *ExternalMCPServerResponseBody) 
 	}
 	if body.ToolsetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
 	}
 	if body.RegistryID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.registry_id", *body.RegistryID, goa.FormatUUID))

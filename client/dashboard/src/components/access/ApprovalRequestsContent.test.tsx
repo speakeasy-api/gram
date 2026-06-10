@@ -1021,6 +1021,83 @@ describe("ApprovalRequestsContent", () => {
     });
   });
 
+  it("dims access rule content but keeps actions active when no blocking policy exists", async () => {
+    const listShadowMCPApprovalRequests = vi.fn().mockResolvedValue({
+      requests: [],
+    });
+    const listShadowMCPAccessRules = vi.fn().mockResolvedValue({
+      rules: [
+        {
+          id: "rule-inactive",
+          displayName: "Inactive access rule",
+          resourceType: "shadow_mcp",
+          disposition: "allowed",
+          accessScope: "project",
+          projectId: "project-1",
+          matchBreadth: "url_host",
+          matchValue: "inactive.example.com",
+          updatedAt: new Date("2026-01-01"),
+        },
+      ],
+    });
+    mocks.useSdkClient.mockReturnValue({
+      access: {
+        listShadowMCPApprovalRequests,
+        listShadowMCPAccessRules,
+      },
+    });
+    mocks.useRBAC.mockReturnValue({
+      hasScope: (scope: string) => scope === "org:admin",
+      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
+      hasAllScopes: () => true,
+      isLoading: false,
+    });
+    mocks.useRiskListPolicies.mockReturnValue({
+      data: {
+        policies: [
+          {
+            id: "policy-flag-only",
+            enabled: true,
+            action: "flag",
+            sources: ["shadow_mcp"],
+          },
+        ],
+      },
+      isLoading: false,
+      error: null,
+    });
+
+    renderContent();
+
+    await waitFor(() => {
+      expect(screen.getByText("Inactive access rule")).toBeTruthy();
+    });
+    const inactiveRuleRow = screen
+      .getByText("Inactive access rule")
+      .closest("tr");
+    if (!inactiveRuleRow) throw new Error("Inactive rule row not found");
+
+    const ruleNameCell = screen
+      .getByText("Inactive access rule")
+      .closest("[data-inactive-rule-cell='true']");
+    expect(ruleNameCell).not.toBeNull();
+    expect(ruleNameCell?.className).toContain("opacity-50");
+
+    const deleteButton = within(inactiveRuleRow).getByRole("button", {
+      name: "Delete",
+    });
+    expect(deleteButton.closest("[data-inactive-rule-cell='true']")).toBeNull();
+
+    fireEvent.click(deleteButton);
+
+    await waitFor(() => {
+      expect(screen.getByRole("dialog")).toBeTruthy();
+    });
+    expect(
+      within(screen.getByRole("dialog")).getByText("Inactive access rule"),
+    ).toBeTruthy();
+  });
+
   it("confirms access rule deletion with a design system dialog", async () => {
     const deleteRule = vi.fn().mockResolvedValue({});
     const browserConfirm = vi.fn().mockReturnValue(true);

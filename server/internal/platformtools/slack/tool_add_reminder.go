@@ -75,7 +75,7 @@ func callAddReminder(ctx context.Context, client *apiClient, env toolconfig.Tool
 		request["recurrence"] = input.Recurrence
 	}
 
-	body, err := client.call(ctx, "reminders.add", request, tokenRequireUser, env)
+	body, err := client.Call(ctx, "reminders.add", request, tokenRequireUser, env)
 	if err != nil {
 		return err
 	}

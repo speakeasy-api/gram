@@ -68,7 +68,7 @@ func callRemoveReaction(ctx context.Context, client *apiClient, env toolconfig.T
 		"name":      name,
 	}
 
-	body, err := client.call(ctx, "reactions.remove", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "reactions.remove", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

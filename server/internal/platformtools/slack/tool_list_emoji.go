@@ -48,7 +48,7 @@ func callListEmoji(ctx context.Context, client *apiClient, env toolconfig.ToolCa
 	request := map[string]any{}
 	setOptionalBool(request, "include_categories", input.IncludeCategories)
 
-	body, err := client.call(ctx, "emoji.list", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "emoji.list", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

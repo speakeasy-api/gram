@@ -54,7 +54,7 @@ func callListUsergroups(ctx context.Context, client *apiClient, env toolconfig.T
 	setOptionalBool(request, "include_users", input.IncludeUsers)
 	setOptionalString(request, "team_id", input.TeamID)
 
-	body, err := client.call(ctx, "usergroups.list", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "usergroups.list", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

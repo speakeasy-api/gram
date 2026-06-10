@@ -11,6 +11,7 @@ import {
   CreateMarketplaceStep,
   InstrumentAgentsStep,
   ConfirmTrafficStep,
+  ConfigurePoliciesStep,
 } from "./steps";
 
 const STEPS: Step[] = [
@@ -38,6 +39,11 @@ const STEPS: Step[] = [
     id: "confirm-traffic",
     title: "Confirm traffic",
     description: "Verify connectivity and compliance",
+  },
+  {
+    id: "configure-policies",
+    title: "Configure policies",
+    description: "Pick the categories to flag in agent traffic",
   },
 ];
 
@@ -178,6 +184,13 @@ export function SetupWizard(): JSX.Element | null {
       case 4:
         return (
           <ConfirmTrafficStep
+            onComplete={completeCurrentStep}
+            onBack={goBack}
+          />
+        );
+      case 5:
+        return (
+          <ConfigurePoliciesStep
             onComplete={completeCurrentStep}
             onBack={goBack}
           />

@@ -58,7 +58,7 @@ func callListUsergroupMembers(ctx context.Context, client *apiClient, env toolco
 	setOptionalBool(request, "include_disabled", input.IncludeDisabled)
 	setOptionalString(request, "team_id", input.TeamID)
 
-	body, err := client.call(ctx, "usergroups.users.list", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "usergroups.users.list", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

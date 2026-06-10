@@ -68,7 +68,7 @@ func callScheduleMessage(ctx context.Context, client *apiClient, env toolconfig.
 	}
 	setOptionalString(request, "thread_ts", input.ThreadTS)
 
-	body, err := client.call(ctx, "chat.scheduleMessage", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "chat.scheduleMessage", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

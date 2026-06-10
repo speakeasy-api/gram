@@ -56,7 +56,7 @@ func callGetReminder(ctx context.Context, client *apiClient, env toolconfig.Tool
 	}
 	setOptionalString(request, "team_id", input.TeamID)
 
-	body, err := client.call(ctx, "reminders.info", request, tokenRequireUser, env)
+	body, err := client.Call(ctx, "reminders.info", request, tokenRequireUser, env)
 	if err != nil {
 		return err
 	}

@@ -60,7 +60,7 @@ func callUnpinMessage(ctx context.Context, client *apiClient, env toolconfig.Too
 		"timestamp": timestamp,
 	}
 
-	body, err := client.call(ctx, "pins.remove", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "pins.remove", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

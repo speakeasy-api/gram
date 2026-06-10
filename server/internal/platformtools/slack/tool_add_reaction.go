@@ -68,7 +68,7 @@ func callAddReaction(ctx context.Context, client *apiClient, env toolconfig.Tool
 		"name":      name,
 	}
 
-	body, err := client.call(ctx, "reactions.add", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "reactions.add", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

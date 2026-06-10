@@ -64,12 +64,11 @@ func OpenrouterKeyRefreshWorkflow(ctx workflow.Context, params OpenRouterKeyRefr
 	})
 
 	var a *Activities
-	var toolsResponse activities.SlackProjectContextResponse
 	err := workflow.ExecuteActivity(
 		ctx,
 		a.RefreshOpenRouterKey,
 		activities.RefreshOpenRouterKeyArgs{OrgID: params.OrgID, Limit: params.Limit},
-	).Get(ctx, &toolsResponse)
+	).Get(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to refresh openrouter key: %w", err)
 	}

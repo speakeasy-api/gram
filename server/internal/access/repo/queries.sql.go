@@ -201,6 +201,36 @@ func (q *Queries) DeletePrincipalGrantsByResource(ctx context.Context, arg Delet
 	return result.RowsAffected(), nil
 }
 
+const deletePrincipalGrantsByTarget = `-- name: DeletePrincipalGrantsByTarget :execrows
+DELETE FROM principal_grants
+WHERE organization_id = $1
+  AND scope = $2
+  AND COALESCE(effect, 'allow') = COALESCE($3::text, 'allow')
+  AND selectors = $4
+`
+
+type DeletePrincipalGrantsByTargetParams struct {
+	OrganizationID string
+	Scope          string
+	Effect         string
+	Selectors      []byte
+}
+
+// Removes every principal row for one exact grant target. Used by audience
+// replacement writes where the caller supplies the full desired principal set.
+func (q *Queries) DeletePrincipalGrantsByTarget(ctx context.Context, arg DeletePrincipalGrantsByTargetParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deletePrincipalGrantsByTarget,
+		arg.OrganizationID,
+		arg.Scope,
+		arg.Effect,
+		arg.Selectors,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getActiveOrganizationRoleBySlug = `-- name: GetActiveOrganizationRoleBySlug :one
 WITH active_roles AS (
   SELECT id, workos_slug, workos_name, workos_description, workos_created_at, workos_updated_at, 'global'::text AS role_kind

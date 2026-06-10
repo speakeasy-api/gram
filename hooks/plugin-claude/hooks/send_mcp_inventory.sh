@@ -22,6 +22,25 @@ hook_hostname_header=()
 if [ -n "$hook_hostname" ]; then
   hook_hostname_header=(-H "X-Gram-Hook-Hostname: ${hook_hostname}")
 fi
+auth_config=""
+auth_config_arg=()
+cleanup_auth_config() {
+  if [ -n "$auth_config" ]; then
+    rm -f "$auth_config"
+  fi
+}
+trap cleanup_auth_config EXIT
+if [ -n "${GRAM_HOOKS_API_KEY:-}" ] || [ -n "${GRAM_HOOKS_PROJECT_SLUG:-}" ]; then
+  auth_config=$(mktemp "${TMPDIR:-/tmp}/gram-hooks-curl.XXXXXX") || exit 0
+  chmod 600 "$auth_config" || true
+  if [ -n "${GRAM_HOOKS_API_KEY:-}" ]; then
+    printf 'header = "Gram-Key: %s"\n' "$GRAM_HOOKS_API_KEY" >>"$auth_config"
+  fi
+  if [ -n "${GRAM_HOOKS_PROJECT_SLUG:-}" ]; then
+    printf 'header = "Gram-Project: %s"\n' "$GRAM_HOOKS_PROJECT_SLUG" >>"$auth_config"
+  fi
+  auth_config_arg=(--config "$auth_config")
+fi
 
 payload=$(cat)
 
@@ -126,6 +145,7 @@ print(json.dumps(p))
 curl -s -o /dev/null -X POST \
   -H "Content-Type: application/json" \
   ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
+  ${auth_config_arg[@]+"${auth_config_arg[@]}"} \
   -d "$enriched" \
   --max-time 30 \
   "${server_url}/rpc/hooks.claude" >/dev/null 2>&1 || true

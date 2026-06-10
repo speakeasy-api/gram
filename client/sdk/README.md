@@ -510,15 +510,6 @@ run();
 
 * [test](docs/sdks/rules/README.md#test) - testDetectionRule risk
 
-### [Slack](docs/sdks/slack/README.md)
-
-* [configureSlackApp](docs/sdks/slack/README.md#configureslackapp) - configureSlackApp slack
-* [createSlackApp](docs/sdks/slack/README.md#createslackapp) - createSlackApp slack
-* [deleteSlackApp](docs/sdks/slack/README.md#deleteslackapp) - deleteSlackApp slack
-* [getSlackApp](docs/sdks/slack/README.md#getslackapp) - getSlackApp slack
-* [listSlackApps](docs/sdks/slack/README.md#listslackapps) - listSlackApps slack
-* [updateSlackApp](docs/sdks/slack/README.md#updateslackapp) - updateSlackApp slack
-
 ### [Telemetry](docs/sdks/telemetry/README.md)
 
 * [captureEvent](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
@@ -878,12 +869,6 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskResultsList`](docs/sdks/results/README.md#list) - listRiskResults risk
 - [`riskResultsListForAgent`](docs/sdks/results/README.md#listforagent) - listRiskResultsForAgent risk
 - [`riskRulesTest`](docs/sdks/rules/README.md#test) - testDetectionRule risk
-- [`slackConfigureSlackApp`](docs/sdks/slack/README.md#configureslackapp) - configureSlackApp slack
-- [`slackCreateSlackApp`](docs/sdks/slack/README.md#createslackapp) - createSlackApp slack
-- [`slackDeleteSlackApp`](docs/sdks/slack/README.md#deleteslackapp) - deleteSlackApp slack
-- [`slackGetSlackApp`](docs/sdks/slack/README.md#getslackapp) - getSlackApp slack
-- [`slackListSlackApps`](docs/sdks/slack/README.md#listslackapps) - listSlackApps slack
-- [`slackUpdateSlackApp`](docs/sdks/slack/README.md#updateslackapp) - updateSlackApp slack
 - [`telemetryCaptureEvent`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
 - [`telemetryGetEmployeeDataFlowGraph`](docs/sdks/telemetry/README.md#getemployeedataflowgraph) - getEmployeeDataFlowGraph telemetry
 - [`telemetryGetHooksSummary`](docs/sdks/telemetry/README.md#gethookssummary) - getHooksSummary telemetry
@@ -1011,7 +996,6 @@ To learn about this feature and how to get started, check
 - [`useCollectionsDetachServerMutation`](docs/sdks/collections/README.md#detachserver) - detachServer collections
 - [`useCollectionsListServers`](docs/sdks/collections/README.md#listservers) - listServers collections
 - [`useCollectionsUpdateMutation`](docs/sdks/collections/README.md#update) - update collections
-- [`useConfigureSlackAppMutation`](docs/sdks/slack/README.md#configureslackapp) - configureSlackApp slack
 - [`useCreateAPIKeyMutation`](docs/sdks/keys/README.md#create) - createKey keys
 - [`useCreateCheckoutMutation`](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
 - [`useCreateCustomerSessionMutation`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
@@ -1032,7 +1016,6 @@ To learn about this feature and how to get started, check
 - [`useCreateShadowMCPAccessRuleMutation`](docs/sdks/access/README.md#createshadowmcpaccessrule) - createShadowMCPAccessRule access
 - [`useCreateShadowMCPApprovalRequestMutation`](docs/sdks/access/README.md#createshadowmcpapprovalrequest) - createShadowMCPApprovalRequest access
 - [`useCreateSignedChatAttachmentURLMutation`](docs/sdks/assets/README.md#createsignedchatattachmenturl) - createSignedChatAttachmentURL assets
-- [`useCreateSlackAppMutation`](docs/sdks/slack/README.md#createslackapp) - createSlackApp slack
 - [`useCreateTemplateMutation`](docs/sdks/templates/README.md#create) - createTemplate templates
 - [`useCreateToolsetMutation`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
 - [`useCreateTopUpCheckoutMutation`](docs/sdks/usage/README.md#createtopupcheckout) - createTopUpCheckout usage
@@ -1054,7 +1037,6 @@ To learn about this feature and how to get started, check
 - [`useDeleteRemoteSessionIssuerMutation`](docs/sdks/remotesessionissuers/README.md#delete) - deleteRemoteSessionIssuer remoteSessionIssuers
 - [`useDeleteRoleMutation`](docs/sdks/access/README.md#deleterole) - deleteRole access
 - [`useDeleteShadowMCPAccessRuleMutation`](docs/sdks/access/README.md#deleteshadowmcpaccessrule) - deleteShadowMCPAccessRule access
-- [`useDeleteSlackAppMutation`](docs/sdks/slack/README.md#deleteslackapp) - deleteSlackApp slack
 - [`useDeleteSourceEnvironmentLinkMutation`](docs/sdks/environments/README.md#deletesourcelink) - deleteSourceEnvironmentLink environments
 - [`useDeleteTemplateMutation`](docs/sdks/templates/README.md#delete) - deleteTemplate templates
 - [`useDeleteToolsetEnvironmentLinkMutation`](docs/sdks/environments/README.md#deletetoolsetlink) - deleteToolsetEnvironmentLink environments
@@ -1089,7 +1071,6 @@ To learn about this feature and how to get started, check
 - [`useGetProjectMetricsSummary`](docs/sdks/telemetry/README.md#getprojectmetricssummary) - getProjectMetricsSummary telemetry
 - [`useGetProjectOverview`](docs/sdks/telemetry/README.md#getprojectoverview) - getProjectOverview telemetry
 - [`useGetRemoteMcpServer`](docs/sdks/remotemcp/README.md#getserver) - getServer remoteMcp
-- [`useGetSlackApp`](docs/sdks/slack/README.md#getslackapp) - getSlackApp slack
 - [`useGetSourceEnvironment`](docs/sdks/environments/README.md#getbysource) - getSourceEnvironment environments
 - [`useGetToolsetEnvironment`](docs/sdks/environments/README.md#getbytoolset) - getToolsetEnvironment environments
 - [`useGetUsageTiers`](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
@@ -1128,7 +1109,6 @@ To learn about this feature and how to get started, check
 - [`useListProjects`](docs/sdks/projects/README.md#list) - listProjects projects
 - [`useListResources`](docs/sdks/resources/README.md#list) - listResources resources
 - [`useListScopes`](docs/sdks/access/README.md#listscopes) - listScopes access
-- [`useListSlackApps`](docs/sdks/slack/README.md#listslackapps) - listSlackApps slack
 - [`useListTools`](docs/sdks/tools/README.md#list) - listTools tools
 - [`useListToolsets`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 - [`useListToolsetsForOrg`](docs/sdks/toolsets/README.md#listfororg) - listToolsetsForOrg toolsets
@@ -1267,7 +1247,6 @@ To learn about this feature and how to get started, check
 - [`useUpdateRemoteSessionIssuerMutation`](docs/sdks/remotesessionissuers/README.md#update) - updateRemoteSessionIssuer remoteSessionIssuers
 - [`useUpdateRoleMutation`](docs/sdks/access/README.md#updaterole) - updateRole access
 - [`useUpdateShadowMCPAccessRuleMutation`](docs/sdks/access/README.md#updateshadowmcpaccessrule) - updateShadowMCPAccessRule access
-- [`useUpdateSlackAppMutation`](docs/sdks/slack/README.md#updateslackapp) - updateSlackApp slack
 - [`useUpdateTemplateMutation`](docs/sdks/templates/README.md#update) - updateTemplate templates
 - [`useUpdateToolsetMutation`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 - [`useUpdateTriggerMutation`](docs/sdks/triggers/README.md#update) - updateTriggerInstance triggers

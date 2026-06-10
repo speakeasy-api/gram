@@ -58,7 +58,7 @@ func callGetChannelInfo(ctx context.Context, client *apiClient, env toolconfig.T
 	setOptionalBool(request, "include_locale", input.IncludeLocale)
 	setOptionalBool(request, "include_num_members", input.IncludeNumMembers)
 
-	body, err := client.call(ctx, "conversations.info", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "conversations.info", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

@@ -192,8 +192,13 @@ const PageSection = Object.assign(PageSectionComponent, {
   MoreActions: MoreActions,
 });
 
+function PageBanner({ children }: { children: React.ReactNode }) {
+  return <div className="flex w-full shrink-0 flex-col">{children}</div>;
+}
+
 export const Page = Object.assign(PageLayout, {
   Header: PageHeader,
+  Banner: PageBanner,
   Body: PageBody,
   Section: PageSection,
 });

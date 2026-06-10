@@ -109,17 +109,61 @@ func (e *ShareableError) LogValue() slog.Value {
 	return slog.StringValue(e.Error())
 }
 
+// effectiveCode returns CodeCanceled only for a client-initiated cancellation:
+// the underlying cause is context.Canceled AND the inbound request context
+// (ctx) has itself been canceled. Otherwise it returns the authored Code.
+//
+// Requiring the request context to be canceled is what distinguishes a client
+// disconnect from server- and application-initiated cancellations, which all
+// surface the same context.Canceled sentinel:
+//
+//   - Client disconnect: net/http cancels the request context, so ctx.Err() is
+//     context.Canceled. Promoted.
+//   - Application-initiated (e.g. an errgroup or an explicitly cancelled child
+//     of the request context): only the derived context is canceled; the
+//     request context passed to the error boundary is still live, so
+//     ctx.Err() is nil. Not promoted, keeps full error severity.
+//   - Server-initiated (e.g. graceful Server.Shutdown): does not cancel
+//     in-flight request contexts, so ctx.Err() is nil. Not promoted.
+//
+// This mirrors the access log middleware, which classifies a request as 499 on
+// the same ctx.Err() signal. context.DeadlineExceeded and all other causes keep
+// their authored code. The authored Code field is left untouched so call sites
+// that branch on it still see what they constructed; only the logging, span,
+// and HTTP status outputs observe the promotion.
+func (e *ShareableError) effectiveCode(ctx context.Context) Code {
+	if errors.Is(e.cause, context.Canceled) && errors.Is(ctx.Err(), context.Canceled) {
+		return CodeCanceled
+	}
+	return e.Code
+}
+
 // Log logs the error using the provided logger and context. It also sets the
 // OpenTelemetry span status to error. Additional arguments can be provided to
 // include more context in the log entry.
+//
+// A client-initiated cancellation (context.Canceled cause with a canceled
+// request context) is not a server fault: it is logged at info level and does
+// not mark the span as errored or record an exception, to avoid drowning real
+// faults in disconnect noise. Server- and application-initiated cancellations,
+// where the request context is still live, keep full error severity.
 func (e *ShareableError) Log(ctx context.Context, logger *slog.Logger, args ...slog.Attr) *ShareableError {
+	canceled := e.effectiveCode(ctx) == CodeCanceled
+
 	span := trace.SpanFromContext(ctx)
-	span.SetStatus(codes.Error, e.String())
-	span.RecordError(e, trace.WithStackTrace(true))
+	if !canceled {
+		span.SetStatus(codes.Error, e.String())
+		span.RecordError(e, trace.WithStackTrace(true))
+	}
+
+	level := slog.LevelError
+	if canceled {
+		level = slog.LevelInfo
+	}
 
 	var pcs [1]uintptr
 	runtime.Callers(2, pcs[:]) // skip [Callers, Log]
-	r := slog.NewRecord(time.Now(), slog.LevelError, e.public, pcs[0])
+	r := slog.NewRecord(time.Now(), level, e.public, pcs[0])
 
 	if len(args) > 0 {
 		r.AddAttrs(append(args, attr.SlogErrorID(e.id), attr.SlogErrorMessage(e.String()))...)
@@ -131,26 +175,29 @@ func (e *ShareableError) Log(ctx context.Context, logger *slog.Logger, args ...s
 	return e
 }
 
-func (e *ShareableError) IsTemporary() bool {
-	return !errors.Is(e.cause, ErrPermanent) && e.Code.IsTemporary()
+func (e *ShareableError) IsTemporary(ctx context.Context) bool {
+	return !errors.Is(e.cause, ErrPermanent) && e.effectiveCode(ctx).IsTemporary()
 }
 
 // AsGoa converts the ShareableError to a goa.ServiceError, preserving the error
 // code, id, and cause. It also sets the timeout, temporary, and fault flags
-// based on the error code and cause.
-func (e *ShareableError) AsGoa() *goa.ServiceError {
+// based on the error code and cause. The context is used to detect a
+// client-initiated cancellation (see effectiveCode).
+func (e *ShareableError) AsGoa(ctx context.Context) *goa.ServiceError {
 	var timeout, temporary, fault bool
 
-	temporary = e.IsTemporary()
+	temporary = e.IsTemporary(ctx)
 
-	switch e.Code {
+	code := e.effectiveCode(ctx)
+
+	switch code {
 	case CodeUnexpected, CodeInvariantViolation:
 		fault = true
 	default:
 		fault = false
 	}
 
-	goaErr := goa.NewServiceError(e, string(e.Code), timeout, temporary, fault)
+	goaErr := goa.NewServiceError(e, string(code), timeout, temporary, fault)
 	goaErr.ID = e.id
 	return goaErr
 }
@@ -158,6 +205,6 @@ func (e *ShareableError) AsGoa() *goa.ServiceError {
 // HTTPStatus returns the appropriate HTTP status code for the error based on
 // its code. If the code is not recognized, it defaults to 500 Internal Server
 // Error.
-func (e *ShareableError) HTTPStatus() int {
-	return conv.Default(StatusCodes[e.Code], http.StatusInternalServerError)
+func (e *ShareableError) HTTPStatus(ctx context.Context) int {
+	return conv.Default(StatusCodes[e.effectiveCode(ctx)], http.StatusInternalServerError)
 }

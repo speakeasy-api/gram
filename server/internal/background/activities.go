@@ -42,7 +42,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
-	slacktypes "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/types"
 )
 
 type Activities struct {
@@ -57,15 +56,12 @@ type Activities struct {
 	firePlatformUsageMetrics        *activities.FirePlatformUsageMetrics
 	generateChatTitle               *activities.GenerateChatTitle
 	getAllOrganizations             *activities.GetAllOrganizations
-	getSlackProjectContext          *activities.GetSlackProjectContext
-	postSlackMessage                *activities.PostSlackMessage
 	processDeployment               *activities.ProcessDeployment
 	provisionFunctionsAccess        *activities.ProvisionFunctionsAccess
 	deployFunctionRunners           *activities.DeployFunctionRunners
 	reapFlyApps                     *activities.ReapFlyApps
 	refreshBillingUsage             *activities.RefreshBillingUsage
 	refreshOpenRouterKey            *activities.RefreshOpenRouterKey
-	slackChatCompletion             *activities.SlackChatCompletion
 	transitionDeployment            *activities.TransitionDeployment
 	validateDeployment              *activities.ValidateDeployment
 	verifyCustomDomain              *activities.VerifyCustomDomain
@@ -153,15 +149,12 @@ func NewActivities(
 		firePlatformUsageMetrics:        activities.NewFirePlatformUsageMetrics(logger, billingTracker),
 		generateChatTitle:               activities.NewGenerateChatTitle(logger, db, chatClient),
 		getAllOrganizations:             activities.NewGetAllOrganizations(logger, db),
-		getSlackProjectContext:          activities.NewSlackProjectContextActivity(logger, db, slackClient),
-		postSlackMessage:                activities.NewPostSlackMessageActivity(logger, slackClient),
 		processDeployment:               activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo, mcpRegistryClient),
 		provisionFunctionsAccess:        activities.NewProvisionFunctionsAccess(logger, db, encryption),
 		deployFunctionRunners:           activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
 		reapFlyApps:                     activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
 		refreshBillingUsage:             activities.NewRefreshBillingUsage(logger, db, billingRepo),
 		refreshOpenRouterKey:            activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
-		slackChatCompletion:             activities.NewSlackChatCompletionActivity(logger, slackClient, chatClient),
 		transitionDeployment:            activities.NewTransitionDeployment(logger, db),
 		validateDeployment:              activities.NewValidateDeployment(logger, db, billingRepo),
 		verifyCustomDomain:              activities.NewVerifyCustomDomain(logger, db, auditLogger, expectedTargetCNAME),
@@ -228,18 +221,6 @@ func (a *Activities) TransitionDeployment(ctx context.Context, projectID uuid.UU
 
 func (a *Activities) ProcessDeployment(ctx context.Context, projectID uuid.UUID, deploymentID uuid.UUID) error {
 	return a.processDeployment.Do(ctx, projectID, deploymentID)
-}
-
-func (a *Activities) GetSlackProjectContext(ctx context.Context, event slacktypes.SlackEvent) (*activities.SlackProjectContextResponse, error) {
-	return a.getSlackProjectContext.Do(ctx, event)
-}
-
-func (a *Activities) PostSlackMessage(ctx context.Context, input activities.PostSlackMessageInput) error {
-	return a.postSlackMessage.Do(ctx, input)
-}
-
-func (a *Activities) SlackChatCompletion(ctx context.Context, input activities.SlackChatCompletionInput) (string, error) {
-	return a.slackChatCompletion.Do(ctx, input)
 }
 
 func (a *Activities) RefreshOpenRouterKey(ctx context.Context, input activities.RefreshOpenRouterKeyArgs) error {

@@ -279,9 +279,6 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ProvisionFunctionsAccess)
 	temporalWorker.RegisterActivity(activities.DeployFunctionRunners)
 	temporalWorker.RegisterActivity(activities.ReapFlyApps)
-	temporalWorker.RegisterActivity(activities.GetSlackProjectContext)
-	temporalWorker.RegisterActivity(activities.PostSlackMessage)
-	temporalWorker.RegisterActivity(activities.SlackChatCompletion)
 	temporalWorker.RegisterActivity(activities.RefreshOpenRouterKey)
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomain)
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
@@ -339,7 +336,6 @@ func NewTemporalWorker(
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
-	temporalWorker.RegisterWorkflow(SlackEventWorkflow)
 	temporalWorker.RegisterWorkflow(OpenrouterKeyRefreshWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainRegistrationWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainDeletionWorkflow)

@@ -65,7 +65,7 @@ func callEditCanvas(ctx context.Context, client *apiClient, env toolconfig.ToolC
 		"changes":   []canvasEditChange{input.Change},
 	}
 
-	body, err := client.call(ctx, "canvases.edit", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "canvases.edit", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

@@ -56,7 +56,7 @@ func callDeleteReminder(ctx context.Context, client *apiClient, env toolconfig.T
 	}
 	setOptionalString(request, "team_id", input.TeamID)
 
-	body, err := client.call(ctx, "reminders.delete", request, tokenRequireUser, env)
+	body, err := client.Call(ctx, "reminders.delete", request, tokenRequireUser, env)
 	if err != nil {
 		return err
 	}
