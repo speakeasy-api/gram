@@ -45,6 +45,31 @@ var UsageTiers = Type("UsageTiers", func() {
 	Required("free", "pro", "enterprise")
 })
 
+// TUMPeriodDay is one UTC day of tokens under management within a billing
+// cycle.
+var TUMPeriodDay = Type("TUMPeriodDay", func() {
+	Attribute("date", String, "The UTC day", func() {
+		Format(FormatDate)
+	})
+	Attribute("tokens", Int64, "Tokens under management consumed on this day")
+
+	Required("date", "tokens")
+})
+
+// TUMPeriod is tokens under management for one billing cycle.
+var TUMPeriod = Type("TUMPeriod", func() {
+	Attribute("period_start", String, "Start of the billing cycle", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("period_end", String, "End of the billing cycle (exclusive)", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("tokens", Int64, "Tokens under management consumed during the cycle")
+	Attribute("days", ArrayOf(TUMPeriodDay), "Daily breakdown of TUM within the cycle. Days without usage are omitted.")
+
+	Required("period_start", "period_end", "tokens", "days")
+})
+
 // TokensUnderManagement reports TUM consumption for the active billing cycle
 // alongside the contracted terms for the organization.
 var TokensUnderManagement = Type("TokensUnderManagement", func() {
@@ -58,8 +83,9 @@ var TokensUnderManagement = Type("TokensUnderManagement", func() {
 	Attribute("monthly_token_limit", Int64, "The contracted monthly tokens under management limit, if one has been configured")
 	Attribute("billing_cycle_anchor_day", Int, "Day of month (1-31) the billing cycle starts, at 00:00 UTC")
 	Attribute("alert_email", String, "Email address to notify on TUM threshold events. Only populated for platform admins.")
+	Attribute("history", ArrayOf(TUMPeriod), "TUM usage per billing cycle for the trailing cycles, oldest first. The last entry is the active cycle.")
 
-	Required("period_start", "period_end", "tokens", "billing_cycle_anchor_day")
+	Required("period_start", "period_end", "tokens", "billing_cycle_anchor_day", "history")
 })
 
 var _ = Service("usage", func() {

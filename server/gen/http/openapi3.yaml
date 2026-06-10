@@ -42059,6 +42059,45 @@ components:
                 - description
                 - regex
                 - severity
+        TUMPeriod:
+            type: object
+            properties:
+                days:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/TUMPeriodDay'
+                    description: Daily breakdown of TUM within the cycle. Days without usage are omitted.
+                period_end:
+                    type: string
+                    description: End of the billing cycle (exclusive)
+                    format: date-time
+                period_start:
+                    type: string
+                    description: Start of the billing cycle
+                    format: date-time
+                tokens:
+                    type: integer
+                    description: Tokens under management consumed during the cycle
+                    format: int64
+            required:
+                - period_start
+                - period_end
+                - tokens
+                - days
+        TUMPeriodDay:
+            type: object
+            properties:
+                date:
+                    type: string
+                    description: The UTC day
+                    format: date
+                tokens:
+                    type: integer
+                    description: Tokens under management consumed on this day
+                    format: int64
+            required:
+                - date
+                - tokens
         TelemetryFilter:
             type: object
             properties:
@@ -42344,6 +42383,11 @@ components:
                     type: integer
                     description: Day of month (1-31) the billing cycle starts, at 00:00 UTC
                     format: int64
+                history:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/TUMPeriod'
+                    description: TUM usage per billing cycle for the trailing cycles, oldest first. The last entry is the active cycle.
                 monthly_token_limit:
                     type: integer
                     description: The contracted monthly tokens under management limit, if one has been configured
@@ -42365,6 +42409,7 @@ components:
                 - period_end
                 - tokens
                 - billing_cycle_anchor_day
+                - history
         Tool:
             type: object
             properties:

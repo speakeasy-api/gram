@@ -61,6 +61,9 @@ type GetTokensUnderManagementResponseBody struct {
 	// Email address to notify on TUM threshold events. Only populated for platform
 	// admins.
 	AlertEmail *string `form:"alert_email,omitempty" json:"alert_email,omitempty" xml:"alert_email,omitempty"`
+	// TUM usage per billing cycle for the trailing cycles, oldest first. The last
+	// entry is the active cycle.
+	History []*TUMPeriodResponseBody `form:"history" json:"history" xml:"history"`
 }
 
 // SetBillingMetadataResponseBody is the type of the "usage" service
@@ -80,6 +83,9 @@ type SetBillingMetadataResponseBody struct {
 	// Email address to notify on TUM threshold events. Only populated for platform
 	// admins.
 	AlertEmail *string `form:"alert_email,omitempty" json:"alert_email,omitempty" xml:"alert_email,omitempty"`
+	// TUM usage per billing cycle for the trailing cycles, oldest first. The last
+	// entry is the active cycle.
+	History []*TUMPeriodResponseBody `form:"history" json:"history" xml:"history"`
 }
 
 // GetUsageTiersResponseBody is the type of the "usage" service "getUsageTiers"
@@ -1386,6 +1392,26 @@ type CreateTopUpCheckoutGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// TUMPeriodResponseBody is used to define fields on response body types.
+type TUMPeriodResponseBody struct {
+	// Start of the billing cycle
+	PeriodStart string `form:"period_start" json:"period_start" xml:"period_start"`
+	// End of the billing cycle (exclusive)
+	PeriodEnd string `form:"period_end" json:"period_end" xml:"period_end"`
+	// Tokens under management consumed during the cycle
+	Tokens int64 `form:"tokens" json:"tokens" xml:"tokens"`
+	// Daily breakdown of TUM within the cycle. Days without usage are omitted.
+	Days []*TUMPeriodDayResponseBody `form:"days" json:"days" xml:"days"`
+}
+
+// TUMPeriodDayResponseBody is used to define fields on response body types.
+type TUMPeriodDayResponseBody struct {
+	// The UTC day
+	Date string `form:"date" json:"date" xml:"date"`
+	// Tokens under management consumed on this day
+	Tokens int64 `form:"tokens" json:"tokens" xml:"tokens"`
+}
+
 // TierLimitsResponseBody is used to define fields on response body types.
 type TierLimitsResponseBody struct {
 	// The base price for the tier
@@ -1436,6 +1462,18 @@ func NewGetTokensUnderManagementResponseBody(res *usage.TokensUnderManagement) *
 		BillingCycleAnchorDay: res.BillingCycleAnchorDay,
 		AlertEmail:            res.AlertEmail,
 	}
+	if res.History != nil {
+		body.History = make([]*TUMPeriodResponseBody, len(res.History))
+		for i, val := range res.History {
+			if val == nil {
+				body.History[i] = nil
+				continue
+			}
+			body.History[i] = marshalUsageTUMPeriodToTUMPeriodResponseBody(val)
+		}
+	} else {
+		body.History = []*TUMPeriodResponseBody{}
+	}
 	return body
 }
 
@@ -1449,6 +1487,18 @@ func NewSetBillingMetadataResponseBody(res *usage.TokensUnderManagement) *SetBil
 		MonthlyTokenLimit:     res.MonthlyTokenLimit,
 		BillingCycleAnchorDay: res.BillingCycleAnchorDay,
 		AlertEmail:            res.AlertEmail,
+	}
+	if res.History != nil {
+		body.History = make([]*TUMPeriodResponseBody, len(res.History))
+		for i, val := range res.History {
+			if val == nil {
+				body.History[i] = nil
+				continue
+			}
+			body.History[i] = marshalUsageTUMPeriodToTUMPeriodResponseBody(val)
+		}
+	} else {
+		body.History = []*TUMPeriodResponseBody{}
 	}
 	return body
 }

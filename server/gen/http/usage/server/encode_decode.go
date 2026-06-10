@@ -1365,6 +1365,41 @@ func EncodeCreateTopUpCheckoutError(encoder func(context.Context, http.ResponseW
 	}
 }
 
+// marshalUsageTUMPeriodToTUMPeriodResponseBody builds a value of type
+// *TUMPeriodResponseBody from a value of type *usage.TUMPeriod.
+func marshalUsageTUMPeriodToTUMPeriodResponseBody(v *usage.TUMPeriod) *TUMPeriodResponseBody {
+	res := &TUMPeriodResponseBody{
+		PeriodStart: v.PeriodStart,
+		PeriodEnd:   v.PeriodEnd,
+		Tokens:      v.Tokens,
+	}
+	if v.Days != nil {
+		res.Days = make([]*TUMPeriodDayResponseBody, len(v.Days))
+		for i, val := range v.Days {
+			if val == nil {
+				res.Days[i] = nil
+				continue
+			}
+			res.Days[i] = marshalUsageTUMPeriodDayToTUMPeriodDayResponseBody(val)
+		}
+	} else {
+		res.Days = []*TUMPeriodDayResponseBody{}
+	}
+
+	return res
+}
+
+// marshalUsageTUMPeriodDayToTUMPeriodDayResponseBody builds a value of type
+// *TUMPeriodDayResponseBody from a value of type *usage.TUMPeriodDay.
+func marshalUsageTUMPeriodDayToTUMPeriodDayResponseBody(v *usage.TUMPeriodDay) *TUMPeriodDayResponseBody {
+	res := &TUMPeriodDayResponseBody{
+		Date:   v.Date,
+		Tokens: v.Tokens,
+	}
+
+	return res
+}
+
 // marshalUsageTierLimitsToTierLimitsResponseBody builds a value of type
 // *TierLimitsResponseBody from a value of type *usage.TierLimits.
 func marshalUsageTierLimitsToTierLimitsResponseBody(v *usage.TierLimits) *TierLimitsResponseBody {

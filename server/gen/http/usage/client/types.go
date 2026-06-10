@@ -61,6 +61,9 @@ type GetTokensUnderManagementResponseBody struct {
 	// Email address to notify on TUM threshold events. Only populated for platform
 	// admins.
 	AlertEmail *string `form:"alert_email,omitempty" json:"alert_email,omitempty" xml:"alert_email,omitempty"`
+	// TUM usage per billing cycle for the trailing cycles, oldest first. The last
+	// entry is the active cycle.
+	History []*TUMPeriodResponseBody `form:"history,omitempty" json:"history,omitempty" xml:"history,omitempty"`
 }
 
 // SetBillingMetadataResponseBody is the type of the "usage" service
@@ -80,6 +83,9 @@ type SetBillingMetadataResponseBody struct {
 	// Email address to notify on TUM threshold events. Only populated for platform
 	// admins.
 	AlertEmail *string `form:"alert_email,omitempty" json:"alert_email,omitempty" xml:"alert_email,omitempty"`
+	// TUM usage per billing cycle for the trailing cycles, oldest first. The last
+	// entry is the active cycle.
+	History []*TUMPeriodResponseBody `form:"history,omitempty" json:"history,omitempty" xml:"history,omitempty"`
 }
 
 // GetUsageTiersResponseBody is the type of the "usage" service "getUsageTiers"
@@ -1386,6 +1392,26 @@ type CreateTopUpCheckoutGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// TUMPeriodResponseBody is used to define fields on response body types.
+type TUMPeriodResponseBody struct {
+	// Start of the billing cycle
+	PeriodStart *string `form:"period_start,omitempty" json:"period_start,omitempty" xml:"period_start,omitempty"`
+	// End of the billing cycle (exclusive)
+	PeriodEnd *string `form:"period_end,omitempty" json:"period_end,omitempty" xml:"period_end,omitempty"`
+	// Tokens under management consumed during the cycle
+	Tokens *int64 `form:"tokens,omitempty" json:"tokens,omitempty" xml:"tokens,omitempty"`
+	// Daily breakdown of TUM within the cycle. Days without usage are omitted.
+	Days []*TUMPeriodDayResponseBody `form:"days,omitempty" json:"days,omitempty" xml:"days,omitempty"`
+}
+
+// TUMPeriodDayResponseBody is used to define fields on response body types.
+type TUMPeriodDayResponseBody struct {
+	// The UTC day
+	Date *string `form:"date,omitempty" json:"date,omitempty" xml:"date,omitempty"`
+	// Tokens under management consumed on this day
+	Tokens *int64 `form:"tokens,omitempty" json:"tokens,omitempty" xml:"tokens,omitempty"`
+}
+
 // TierLimitsResponseBody is used to define fields on response body types.
 type TierLimitsResponseBody struct {
 	// The base price for the tier
@@ -1598,6 +1624,14 @@ func NewGetTokensUnderManagementTokensUnderManagementOK(body *GetTokensUnderMana
 		BillingCycleAnchorDay: *body.BillingCycleAnchorDay,
 		AlertEmail:            body.AlertEmail,
 	}
+	v.History = make([]*usage.TUMPeriod, len(body.History))
+	for i, val := range body.History {
+		if val == nil {
+			v.History[i] = nil
+			continue
+		}
+		v.History[i] = unmarshalTUMPeriodResponseBodyToUsageTUMPeriod(val)
+	}
 
 	return v
 }
@@ -1762,6 +1796,14 @@ func NewSetBillingMetadataTokensUnderManagementOK(body *SetBillingMetadataRespon
 		MonthlyTokenLimit:     body.MonthlyTokenLimit,
 		BillingCycleAnchorDay: *body.BillingCycleAnchorDay,
 		AlertEmail:            body.AlertEmail,
+	}
+	v.History = make([]*usage.TUMPeriod, len(body.History))
+	for i, val := range body.History {
+		if val == nil {
+			v.History[i] = nil
+			continue
+		}
+		v.History[i] = unmarshalTUMPeriodResponseBodyToUsageTUMPeriod(val)
 	}
 
 	return v
@@ -2573,11 +2615,21 @@ func ValidateGetTokensUnderManagementResponseBody(body *GetTokensUnderManagement
 	if body.BillingCycleAnchorDay == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("billing_cycle_anchor_day", "body"))
 	}
+	if body.History == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("history", "body"))
+	}
 	if body.PeriodStart != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.period_start", *body.PeriodStart, goa.FormatDateTime))
 	}
 	if body.PeriodEnd != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.period_end", *body.PeriodEnd, goa.FormatDateTime))
+	}
+	for _, e := range body.History {
+		if e != nil {
+			if err2 := ValidateTUMPeriodResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }
@@ -2597,11 +2649,21 @@ func ValidateSetBillingMetadataResponseBody(body *SetBillingMetadataResponseBody
 	if body.BillingCycleAnchorDay == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("billing_cycle_anchor_day", "body"))
 	}
+	if body.History == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("history", "body"))
+	}
 	if body.PeriodStart != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.period_start", *body.PeriodStart, goa.FormatDateTime))
 	}
 	if body.PeriodEnd != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.period_end", *body.PeriodEnd, goa.FormatDateTime))
+	}
+	for _, e := range body.History {
+		if e != nil {
+			if err2 := ValidateTUMPeriodResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }
@@ -4315,6 +4377,52 @@ func ValidateCreateTopUpCheckoutGatewayErrorResponseBody(body *CreateTopUpChecko
 	}
 	if body.Fault == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTUMPeriodResponseBody runs the validations defined on
+// TUMPeriodResponseBody
+func ValidateTUMPeriodResponseBody(body *TUMPeriodResponseBody) (err error) {
+	if body.PeriodStart == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("period_start", "body"))
+	}
+	if body.PeriodEnd == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("period_end", "body"))
+	}
+	if body.Tokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tokens", "body"))
+	}
+	if body.Days == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("days", "body"))
+	}
+	if body.PeriodStart != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.period_start", *body.PeriodStart, goa.FormatDateTime))
+	}
+	if body.PeriodEnd != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.period_end", *body.PeriodEnd, goa.FormatDateTime))
+	}
+	for _, e := range body.Days {
+		if e != nil {
+			if err2 := ValidateTUMPeriodDayResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateTUMPeriodDayResponseBody runs the validations defined on
+// TUMPeriodDayResponseBody
+func ValidateTUMPeriodDayResponseBody(body *TUMPeriodDayResponseBody) (err error) {
+	if body.Date == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("date", "body"))
+	}
+	if body.Tokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tokens", "body"))
+	}
+	if body.Date != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.date", *body.Date, goa.FormatDate))
 	}
 	return
 }

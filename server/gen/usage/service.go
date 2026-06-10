@@ -117,6 +117,24 @@ type SetBillingMetadataPayload struct {
 	BillingCycleAnchorDay int
 }
 
+type TUMPeriod struct {
+	// Start of the billing cycle
+	PeriodStart string
+	// End of the billing cycle (exclusive)
+	PeriodEnd string
+	// Tokens under management consumed during the cycle
+	Tokens int64
+	// Daily breakdown of TUM within the cycle. Days without usage are omitted.
+	Days []*TUMPeriodDay
+}
+
+type TUMPeriodDay struct {
+	// The UTC day
+	Date string
+	// Tokens under management consumed on this day
+	Tokens int64
+}
+
 type TierLimits struct {
 	// The base price for the tier
 	BasePrice float64
@@ -156,6 +174,9 @@ type TokensUnderManagement struct {
 	// Email address to notify on TUM threshold events. Only populated for platform
 	// admins.
 	AlertEmail *string
+	// TUM usage per billing cycle for the trailing cycles, oldest first. The last
+	// entry is the active cycle.
+	History []*TUMPeriod
 }
 
 // UsageTiers is the result type of the usage service getUsageTiers method.

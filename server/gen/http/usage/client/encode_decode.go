@@ -1604,6 +1604,37 @@ func DecodeCreateTopUpCheckoutResponse(decoder func(*http.Response) goahttp.Deco
 	}
 }
 
+// unmarshalTUMPeriodResponseBodyToUsageTUMPeriod builds a value of type
+// *usage.TUMPeriod from a value of type *TUMPeriodResponseBody.
+func unmarshalTUMPeriodResponseBodyToUsageTUMPeriod(v *TUMPeriodResponseBody) *usage.TUMPeriod {
+	res := &usage.TUMPeriod{
+		PeriodStart: *v.PeriodStart,
+		PeriodEnd:   *v.PeriodEnd,
+		Tokens:      *v.Tokens,
+	}
+	res.Days = make([]*usage.TUMPeriodDay, len(v.Days))
+	for i, val := range v.Days {
+		if val == nil {
+			res.Days[i] = nil
+			continue
+		}
+		res.Days[i] = unmarshalTUMPeriodDayResponseBodyToUsageTUMPeriodDay(val)
+	}
+
+	return res
+}
+
+// unmarshalTUMPeriodDayResponseBodyToUsageTUMPeriodDay builds a value of type
+// *usage.TUMPeriodDay from a value of type *TUMPeriodDayResponseBody.
+func unmarshalTUMPeriodDayResponseBodyToUsageTUMPeriodDay(v *TUMPeriodDayResponseBody) *usage.TUMPeriodDay {
+	res := &usage.TUMPeriodDay{
+		Date:   *v.Date,
+		Tokens: *v.Tokens,
+	}
+
+	return res
+}
+
 // unmarshalTierLimitsResponseBodyToUsageTierLimits builds a value of type
 // *usage.TierLimits from a value of type *TierLimitsResponseBody.
 func unmarshalTierLimitsResponseBodyToUsageTierLimits(v *TierLimitsResponseBody) *usage.TierLimits {

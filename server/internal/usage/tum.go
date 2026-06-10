@@ -103,11 +103,16 @@ func (s *Service) SetBillingMetadata(ctx context.Context, payload *gen.SetBillin
 	return s.buildTokensUnderManagement(ctx, authCtx, row)
 }
 
-// buildTokensUnderManagement computes TUM consumption for the active billing
-// cycle and combines it with the organization's contract terms. A zero-value
-// meta row represents an unconfigured contract.
+// tumHistoryCycles is how many trailing billing cycles (including the active
+// one) the TUM endpoint reports. Bounded by the 2-year retention of
+// chat_token_summaries; older cycles simply come back empty.
+const tumHistoryCycles = 12
+
+// buildTokensUnderManagement computes TUM consumption per billing cycle for
+// the trailing cycles and combines it with the organization's contract terms.
+// A zero-value meta row represents an unconfigured contract.
 func (s *Service) buildTokensUnderManagement(ctx context.Context, authCtx *contextvalues.AuthContext, meta repo.BillingMetadatum) (*gen.TokensUnderManagement, error) {
-	start, end := CurrentBillingCycle(time.Now(), int(meta.BillingCycleAnchorDay))
+	cycles := BillingCycles(time.Now(), int(meta.BillingCycleAnchorDay), tumHistoryCycles)
 
 	projectIDs, err := s.repo.ListProjectIDsByOrganization(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
@@ -119,14 +124,38 @@ func (s *Service) buildTokensUnderManagement(ctx context.Context, authCtx *conte
 		ids = append(ids, id.String())
 	}
 
-	tokens, err := s.telemetryRepo.GetTokensUnderManagement(ctx, telemetryrepo.GetTokensUnderManagementParams{
-		ProjectIDs:    ids,
-		StartUnixNano: start.UnixNano(),
-		EndUnixNano:   end.UnixNano(),
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to compute tokens under management").Log(ctx, s.logger)
+	// Chat qualification (stored non-metrics evidence) is evaluated per cycle,
+	// so each cycle's daily points sum exactly to that cycle's TUM.
+	history := make([]*gen.TUMPeriod, 0, len(cycles))
+	for _, cycle := range cycles {
+		days, err := s.telemetryRepo.GetTokensUnderManagementByDay(ctx, telemetryrepo.GetTokensUnderManagementParams{
+			ProjectIDs:    ids,
+			StartUnixNano: cycle.Start.UnixNano(),
+			EndUnixNano:   cycle.End.UnixNano(),
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to compute tokens under management").Log(ctx, s.logger)
+		}
+
+		var cycleTokens int64
+		dayItems := make([]*gen.TUMPeriodDay, 0, len(days))
+		for _, day := range days {
+			cycleTokens += day.Tokens
+			dayItems = append(dayItems, &gen.TUMPeriodDay{
+				Date:   day.Day.UTC().Format(time.DateOnly),
+				Tokens: day.Tokens,
+			})
+		}
+
+		history = append(history, &gen.TUMPeriod{
+			PeriodStart: cycle.Start.Format(time.RFC3339),
+			PeriodEnd:   cycle.End.Format(time.RFC3339),
+			Tokens:      cycleTokens,
+			Days:        dayItems,
+		})
 	}
+
+	current := history[len(history)-1]
 
 	var tokenLimit *int64
 	if meta.TumMonthlyTokenLimit.Valid {
@@ -141,12 +170,13 @@ func (s *Service) buildTokensUnderManagement(ctx context.Context, authCtx *conte
 	}
 
 	return &gen.TokensUnderManagement{
-		PeriodStart:           start.Format(time.RFC3339),
-		PeriodEnd:             end.Format(time.RFC3339),
-		Tokens:                tokens,
+		PeriodStart:           current.PeriodStart,
+		PeriodEnd:             current.PeriodEnd,
+		Tokens:                current.Tokens,
 		MonthlyTokenLimit:     tokenLimit,
 		BillingCycleAnchorDay: int(max(meta.BillingCycleAnchorDay, 1)),
 		AlertEmail:            alertEmail,
+		History:               history,
 	}, nil
 }
 

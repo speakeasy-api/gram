@@ -27,6 +27,33 @@ func CurrentBillingCycle(now time.Time, anchorDay int) (start time.Time, end tim
 	return start, end
 }
 
+// BillingCyclePeriod is a single [Start, End) billing cycle window.
+type BillingCyclePeriod struct {
+	Start time.Time
+	End   time.Time
+}
+
+// BillingCycles returns the trailing count billing cycles anchored at
+// anchorDay, in chronological order, ending with the cycle containing now.
+func BillingCycles(now time.Time, anchorDay int, count int) []BillingCyclePeriod {
+	count = max(count, 1)
+
+	current, _ := CurrentBillingCycle(now, anchorDay)
+	if anchorDay < 1 || anchorDay > 31 {
+		anchorDay = 1
+	}
+
+	cycles := make([]BillingCyclePeriod, count)
+	for i := range count {
+		monthsBack := count - 1 - i
+		start := anchoredCycleStart(current.Year(), current.Month()-time.Month(monthsBack), anchorDay)
+		end := anchoredCycleStart(current.Year(), current.Month()-time.Month(monthsBack)+1, anchorDay)
+		cycles[i] = BillingCyclePeriod{Start: start, End: end}
+	}
+
+	return cycles
+}
+
 // anchoredCycleStart returns 00:00 UTC on the anchor day of the given month,
 // clamped to the month's last day. Out-of-range months are normalized by
 // time.Date (e.g. month 0 becomes December of the prior year).

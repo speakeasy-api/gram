@@ -399,6 +399,8 @@ export * from "./triggerdefinition.js";
 export * from "./triggerenvrequirement.js";
 export * from "./triggerinstance.js";
 export * from "./triggerriskanalysisrequestbody.js";
+export * from "./tumperiod.js";
+export * from "./tumperiodday.js";
 export * from "./updateassistantform.js";
 export * from "./updatecustomdetectionrulerequestbody.js";
 export * from "./updatedomainrequestbody.js";

@@ -7,6 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import { TUMPeriod, TUMPeriod$inboundSchema } from "./tumperiod.js";
 
 export type TokensUnderManagement = {
   /**
@@ -17,6 +18,10 @@ export type TokensUnderManagement = {
    * Day of month (1-31) the billing cycle starts, at 00:00 UTC
    */
   billingCycleAnchorDay: number;
+  /**
+   * TUM usage per billing cycle for the trailing cycles, oldest first. The last entry is the active cycle.
+   */
+  history: Array<TUMPeriod>;
   /**
    * The contracted monthly tokens under management limit, if one has been configured
    */
@@ -43,6 +48,7 @@ export const TokensUnderManagement$inboundSchema: z.ZodMiniType<
   z.object({
     alert_email: z.optional(z.string()),
     billing_cycle_anchor_day: z.int(),
+    history: z.array(TUMPeriod$inboundSchema),
     monthly_token_limit: z.optional(z.int()),
     period_end: z.pipe(
       z.iso.datetime({ offset: true }),

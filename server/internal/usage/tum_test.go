@@ -188,13 +188,56 @@ func TestGetTokensUnderManagementQuery_FiltersUnstoredSessions(t *testing.T) {
 	// Wait for ClickHouse eventual consistency.
 	time.Sleep(200 * time.Millisecond)
 
-	tokens, err := telemetryrepo.New(chConn).GetTokensUnderManagement(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
+	buckets, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
 		ProjectIDs:    []string{projectID.String()},
 		StartUnixNano: windowStart.UnixNano(),
 		EndUnixNano:   windowEnd.UnixNano(),
 	})
 	require.NoError(t, err)
-	require.Equal(t, int64(1300), tokens, "should count only sessions with stored non-metrics data inside the window")
+	require.Equal(t, int64(1300), sumTumBuckets(buckets), "should count only sessions with stored non-metrics data inside the window")
+	require.Len(t, buckets, 1, "all in-window rows share one day bucket")
+	require.Equal(t, dayStart, buckets[0].Day.UTC())
+}
+
+func sumTumBuckets(buckets []telemetryrepo.TumDayBucket) int64 {
+	var total int64
+	for _, b := range buckets {
+		total += b.Tokens
+	}
+	return total
+}
+
+func TestGetTokensUnderManagementQuery_DailyBreakdown(t *testing.T) {
+	t.Parallel()
+
+	_, _, chConn, projectID := newTUMTestService(t, "org-tum-daily")
+
+	now := time.Now().UTC()
+	dayStart := now.Truncate(24 * time.Hour)
+	windowStart := dayStart.Add(-2 * 24 * time.Hour)
+	windowEnd := dayStart.Add(24 * time.Hour)
+
+	chatID := uuid.New().String()
+
+	// Evidence on one day qualifies the chat for the whole window; token rows
+	// land in their own day buckets.
+	insertToolCallRow(t, chConn, projectID.String(), now, chatID)
+	insertTokenUsageRow(t, chConn, projectID.String(), now, chatID, 300)
+	insertTokenUsageRow(t, chConn, projectID.String(), now.Add(-24*time.Hour), chatID, 200)
+
+	time.Sleep(200 * time.Millisecond)
+
+	buckets, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
+		ProjectIDs:    []string{projectID.String()},
+		StartUnixNano: windowStart.UnixNano(),
+		EndUnixNano:   windowEnd.UnixNano(),
+	})
+	require.NoError(t, err)
+	require.Len(t, buckets, 2)
+	require.Equal(t, dayStart.Add(-24*time.Hour), buckets[0].Day.UTC())
+	require.Equal(t, int64(200), buckets[0].Tokens)
+	require.Equal(t, dayStart, buckets[1].Day.UTC())
+	require.Equal(t, int64(300), buckets[1].Tokens)
 }
 
 func TestGetTokensUnderManagementQuery_EvidenceOutsideWindowDoesNotCount(t *testing.T) {
@@ -216,13 +259,13 @@ func TestGetTokensUnderManagementQuery_EvidenceOutsideWindowDoesNotCount(t *test
 
 	time.Sleep(200 * time.Millisecond)
 
-	tokens, err := telemetryrepo.New(chConn).GetTokensUnderManagement(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
+	buckets, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
 		ProjectIDs:    []string{projectID.String()},
 		StartUnixNano: windowStart.UnixNano(),
 		EndUnixNano:   windowEnd.UnixNano(),
 	})
 	require.NoError(t, err)
-	require.Equal(t, int64(0), tokens)
+	require.Empty(t, buckets)
 }
 
 func TestGetTokensUnderManagementQuery_NoProjects(t *testing.T) {
@@ -230,13 +273,13 @@ func TestGetTokensUnderManagementQuery_NoProjects(t *testing.T) {
 
 	_, _, chConn, _ := newTUMTestService(t, "org-tum-no-projects")
 
-	tokens, err := telemetryrepo.New(chConn).GetTokensUnderManagement(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
+	buckets, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
 		ProjectIDs:    nil,
 		StartUnixNano: time.Now().Add(-1 * time.Hour).UnixNano(),
 		EndUnixNano:   time.Now().UnixNano(),
 	})
 	require.NoError(t, err)
-	require.Equal(t, int64(0), tokens)
+	require.Empty(t, buckets)
 }
 
 func TestGetTokensUnderManagement_Unconfigured(t *testing.T) {
@@ -252,6 +295,11 @@ func TestGetTokensUnderManagement_Unconfigured(t *testing.T) {
 	require.Nil(t, result.MonthlyTokenLimit)
 	require.Nil(t, result.AlertEmail)
 	require.Equal(t, 1, result.BillingCycleAnchorDay)
+
+	require.Len(t, result.History, 12)
+	last := result.History[len(result.History)-1]
+	require.Equal(t, result.PeriodStart, last.PeriodStart, "last history entry is the active cycle")
+	require.Equal(t, result.PeriodEnd, last.PeriodEnd)
 
 	start, err := time.Parse(time.RFC3339, result.PeriodStart)
 	require.NoError(t, err)
@@ -282,6 +330,15 @@ func TestGetTokensUnderManagement_CountsStoredSessions(t *testing.T) {
 	result, err := svc.GetTokensUnderManagement(testAuthContext(orgID), &gen.GetTokensUnderManagementPayload{})
 	require.NoError(t, err)
 	require.Equal(t, int64(450), result.Tokens)
+
+	// The active cycle's daily points sum to the headline number.
+	last := result.History[len(result.History)-1]
+	require.Equal(t, int64(450), last.Tokens)
+	var daySum int64
+	for _, day := range last.Days {
+		daySum += day.Tokens
+	}
+	require.Equal(t, int64(450), daySum)
 }
 
 func TestSetBillingMetadata_RequiresPlatformAdmin(t *testing.T) {

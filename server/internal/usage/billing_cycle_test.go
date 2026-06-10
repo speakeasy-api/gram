@@ -108,3 +108,45 @@ func TestCurrentBillingCycle(t *testing.T) {
 		require.Equal(t, tt.wantEnd, end, "%s: end", tt.name)
 	}
 }
+
+func TestBillingCycles(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.June, 10, 12, 0, 0, 0, time.UTC)
+	cycles := usage.BillingCycles(now, 15, 4)
+
+	require.Equal(t, []usage.BillingCyclePeriod{
+		{Start: date(2026, time.February, 15), End: date(2026, time.March, 15)},
+		{Start: date(2026, time.March, 15), End: date(2026, time.April, 15)},
+		{Start: date(2026, time.April, 15), End: date(2026, time.May, 15)},
+		{Start: date(2026, time.May, 15), End: date(2026, time.June, 15)},
+	}, cycles)
+}
+
+func TestBillingCycles_Anchor31ClampsShortMonths(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 10, 0, 0, 0, 0, time.UTC)
+	cycles := usage.BillingCycles(now, 31, 4)
+
+	require.Equal(t, []usage.BillingCyclePeriod{
+		{Start: date(2025, time.December, 31), End: date(2026, time.January, 31)},
+		{Start: date(2026, time.January, 31), End: date(2026, time.February, 28)},
+		{Start: date(2026, time.February, 28), End: date(2026, time.March, 31)},
+		{Start: date(2026, time.March, 31), End: date(2026, time.April, 30)},
+	}, cycles)
+}
+
+func TestBillingCycles_ContiguousAcrossYearBoundary(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2027, time.February, 1, 0, 0, 0, 0, time.UTC)
+	cycles := usage.BillingCycles(now, 1, 12)
+
+	require.Len(t, cycles, 12)
+	require.Equal(t, date(2026, time.March, 1), cycles[0].Start)
+	require.Equal(t, date(2027, time.February, 1), cycles[len(cycles)-1].Start)
+	for i := 1; i < len(cycles); i++ {
+		require.Equal(t, cycles[i-1].End, cycles[i].Start, "cycles must be contiguous")
+	}
+}
