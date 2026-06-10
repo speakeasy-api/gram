@@ -130,10 +130,14 @@ func TestGetPlugins_CollidingNamesPreferDefault(t *testing.T) {
 	publishMarketplace(t, ctx, ti.conn, ti.projectID, "default-token")
 
 	// "adam" sorts before the default project's "test-<hex>" slug, but overrides
-	// its name to collide with the default's bare org name.
+	// its name to collide with the default's bare org name. It also has an
+	// assigned plugin — which must NOT leak onto the winning marketplace, since
+	// adam's repo isn't the one served under that name.
 	adam := seedProject(t, ctx, ti.conn, ti.orgID, "adam")
 	setMarketplaceOverride(t, ctx, ti.conn, adam, wantMarketplace)
 	publishMarketplace(t, ctx, ti.conn, adam, "adam-token")
+	adamPlugin := seedPlugin(t, ctx, ti.conn, ti.orgID, adam, "adam-only-tool")
+	assignPlugin(t, ctx, ti.conn, adamPlugin, ti.orgID, "*")
 
 	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
 	require.NoError(t, err)
@@ -143,6 +147,8 @@ func TestGetPlugins_CollidingNamesPreferDefault(t *testing.T) {
 	require.Contains(t, res.Marketplaces[0].URL, "default-token",
 		"the default project's token must win the collision, not the alphabetically-first one")
 	require.NotContains(t, res.Marketplaces[0].URL, "adam-token")
+	require.NotContains(t, pluginSlugs(res), "adam-only-tool",
+		"the collapsed project's plugin must not be attached to the winning marketplace")
 }
 
 // TestGetPlugins_DistinctOverridesYieldSeparateMarketplaces covers the

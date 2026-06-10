@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/google/uuid"
+
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
@@ -44,7 +46,12 @@ import (
 func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func(token string) string) *gen.GetPluginsResult {
 	var marketplaces []*gen.AgentMarketplace
 	var plugins []*gen.AgentPlugin
-	seenMarketplace := make(map[string]struct{})
+	// marketplace name -> the project that owns it (the first/lowest-pr.id row to
+	// claim that name). Used to drop assigned plugins from projects whose name
+	// collided and collapsed: their plugins live in a different repo than the one
+	// served under this name, so emitting them would reference a marketplace that
+	// doesn't contain them.
+	marketplaceOwner := make(map[string]uuid.UUID)
 	etag := sha256.New()
 
 	for _, row := range rows {
@@ -59,8 +66,10 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 		if row.MarketplaceNameOverride.Valid && row.MarketplaceNameOverride.String != "" {
 			name = row.MarketplaceNameOverride.String
 		}
-		if _, ok := seenMarketplace[name]; !ok {
-			seenMarketplace[name] = struct{}{}
+		owner, seen := marketplaceOwner[name]
+		if !seen {
+			owner = row.ProjectID
+			marketplaceOwner[name] = owner
 			marketplaces = append(marketplaces, &gen.AgentMarketplace{
 				Name: name,
 				URL:  marketplaceURL(row.MarketplaceToken.String),
@@ -83,8 +92,11 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 			writeAgentPluginsETag(etag, "plugin\x00%s\x00%s\x00%d\n", name, observabilitySlug, int64(0))
 		}
 
-		// Assigned plugin for this project, if the LEFT JOIN matched one.
-		if row.PluginID.Valid && row.PluginSlug.Valid {
+		// Assigned plugin for this project, if the LEFT JOIN matched one — but
+		// only when this row's project owns the marketplace under this name. A
+		// collapsed (losing) project's marketplace isn't served, so its plugins
+		// would reference a repo that doesn't contain them.
+		if row.ProjectID == owner && row.PluginID.Valid && row.PluginSlug.Valid {
 			plugins = append(plugins, &gen.AgentPlugin{
 				Slug:            row.PluginSlug.String,
 				MarketplaceName: name,

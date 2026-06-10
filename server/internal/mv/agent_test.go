@@ -108,12 +108,45 @@ func TestBuildAgentPluginsView_MultipleProjectsYieldDistinctMarketplaces(t *test
 	require.Equal(t, "https://app.getgram.ai/marketplace/tokA.git", byName["acme-corp-speakeasy"], "default project keeps the bare org name")
 	require.Equal(t, "https://app.getgram.ai/marketplace/tokB.git", byName["acme-corp-sales-speakeasy"], "non-default project is scoped by slug")
 
+	// Each marketplace gets its own observability plugin, attached to that
+	// marketplace's name — not just the right count of plugins.
+	obsByMarketplace := map[string]int{}
+	for _, p := range result.Plugins {
+		require.Equal(t, "acme-corp-observability", p.Slug)
+		obsByMarketplace[p.MarketplaceName]++
+	}
+	require.Equal(t, map[string]int{
+		"acme-corp-speakeasy":       1,
+		"acme-corp-sales-speakeasy": 1,
+	}, obsByMarketplace, "observability must be emitted once per marketplace, against the correct marketplace name")
+}
+
+func TestBuildAgentPluginsView_CollapsedProjectPluginsDropped(t *testing.T) {
+	t.Parallel()
+
+	// Two projects collide on a name (here both default-flagged, standing in for
+	// two equal overrides). The losing project's marketplace isn't served, so its
+	// assigned plugins must NOT be emitted — they'd reference the winner's repo,
+	// which doesn't contain them.
+	now := time.Date(2026, 5, 29, 12, 0, 0, 0, time.UTC)
+	winner := marketplaceRow("acme", "Acme Corp", "default", true, "tokA", now)
+	loser := marketplaceRow("acme", "Acme Corp", "other", true, "tokB", now)
+	rows := []repo.GetAgentPluginSetRow{
+		withPlugin(winner, "winner-plugin", now),
+		withPlugin(loser, "loser-plugin", now),
+	}
+
+	result := mv.BuildAgentPluginsView(rows, testMarketplaceURL)
+
+	require.Len(t, result.Marketplaces, 1)
 	slugs := make([]string, 0, len(result.Plugins))
 	for _, p := range result.Plugins {
+		require.Equal(t, "acme-corp-speakeasy", p.MarketplaceName)
 		slugs = append(slugs, p.Slug)
 	}
-	require.ElementsMatch(t, []string{"acme-corp-observability", "acme-corp-observability"}, slugs,
-		"each marketplace gets its own observability plugin (same org-derived slug, distinct marketplace)")
+	require.ElementsMatch(t, []string{"acme-corp-observability", "winner-plugin"}, slugs,
+		"the collapsed project's plugin must be dropped, not attached to the winner's marketplace")
+	require.NotContains(t, slugs, "loser-plugin")
 }
 
 func TestBuildAgentPluginsView_SameNameRowsCollapseToDefault(t *testing.T) {

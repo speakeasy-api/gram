@@ -1494,7 +1494,7 @@ func (s *Service) GetMarketplaceSettings(ctx context.Context, payload *gen.GetMa
 		return nil, oops.E(oops.CodeUnexpected, err, "get marketplace settings").Log(ctx, s.logger)
 	}
 
-	defaultName := s.resolveDefaultMarketplaceName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, conv.PtrValOr(ac.ProjectSlug, ""), *ac.ProjectID)
+	defaultName := s.resolveDefaultMarketplaceName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectID)
 
 	effective := override
 	if effective == "" {
@@ -1568,7 +1568,7 @@ func (s *Service) UpdateMarketplaceSettings(ctx context.Context, payload *gen.Up
 		}
 	}
 
-	defaultName := s.resolveDefaultMarketplaceName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, conv.PtrValOr(ac.ProjectSlug, ""), *ac.ProjectID)
+	defaultName := s.resolveDefaultMarketplaceName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectID)
 
 	effective := override
 	if effective == "" {
@@ -1588,9 +1588,11 @@ func (s *Service) UpdateMarketplaceSettings(ctx context.Context, payload *gen.Up
 // resolveDefaultMarketplaceName mirrors generateConfig's name resolution: prefer
 // the human-readable org name from organization_metadata so the displayed
 // default matches what the publish flow actually generates, falling back to the
-// org slug from the auth context if the lookup fails. The default is
-// project-scoped for non-default projects, so it takes the project too.
-func (s *Service) resolveDefaultMarketplaceName(ctx context.Context, orgID, orgSlug, projectSlug string, projectID uuid.UUID) string {
+// org slug from the auth context if the lookup fails. The project slug and
+// default-ness are read from the project row (not the auth context, which some
+// flows like project-scoped API keys leave unset) so non-default projects get
+// their correct project-scoped name.
+func (s *Service) resolveDefaultMarketplaceName(ctx context.Context, orgID, orgSlug string, projectID uuid.UUID) string {
 	orgName := orgSlug
 	switch fetched, err := s.repo.GetOrganizationName(ctx, orgID); {
 	case err == nil:
@@ -1603,7 +1605,18 @@ func (s *Service) resolveDefaultMarketplaceName(ctx context.Context, orgID, orgS
 			attr.SlogError(err),
 		)
 	}
-	return DefaultMarketplaceName(orgName, projectSlug, s.isDefaultProject(ctx, orgID, projectID))
+
+	pctx, err := s.repo.GetProjectMarketplaceNameContext(ctx, projectID)
+	if err != nil {
+		// Without the project row we can't safely scope the name; the bare
+		// org-derived default is the least-surprising fallback for display.
+		s.logger.WarnContext(ctx, "failed to resolve project marketplace context, falling back to org default name",
+			attr.SlogProjectID(projectID.String()),
+			attr.SlogError(err),
+		)
+		return DefaultMarketplaceName(orgName, "", true)
+	}
+	return DefaultMarketplaceName(orgName, pctx.ProjectSlug, pctx.IsDefaultProject)
 }
 
 // pluginAPIKeyCandidate is the in-memory shape of a generated plugin API key
