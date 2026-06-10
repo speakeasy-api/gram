@@ -150,6 +150,17 @@ const MESSAGE_TYPES: PolicyMessageType[] = [
   "assistant_message",
 ];
 
+// The risk policy API returns `action`/`messageTypes` as free-form strings, so
+// values are validated before entering local state — an unknown value would
+// otherwise crash `formatMessageTypes` (POLICY_MESSAGE_TYPE_META[t].label).
+function isPolicyAction(value: unknown): value is PolicyAction {
+  return value === "flag" || value === "block";
+}
+
+function isPolicyMessageType(value: unknown): value is PolicyMessageType {
+  return (MESSAGE_TYPES as string[]).includes(value as string);
+}
+
 const PRESIDIO_CATEGORIES: RuleCategory[] = [
   "financial",
   "pii",
@@ -301,13 +312,17 @@ export function ConfigurePoliciesStep({
           }
           continue;
         }
-        const serverAction =
-          (existing.action as PolicyAction) ?? next[cat].action;
-        const serverMessageTypes = new Set(
-          (existing.messageTypes as PolicyMessageType[] | undefined) ?? [
-            ...next[cat].messageTypes,
-          ],
+        const serverAction = isPolicyAction(existing.action)
+          ? existing.action
+          : next[cat].action;
+        const serverMessageTypes = new Set<PolicyMessageType>(
+          (existing.messageTypes ?? []).filter(isPolicyMessageType),
         );
+        // Server returned no recognizable message types — keep local defaults
+        // rather than rendering an empty ("Off") policy.
+        if (serverMessageTypes.size === 0) {
+          for (const t of next[cat].messageTypes) serverMessageTypes.add(t);
+        }
         const messageTypesEqual =
           formatMessageTypes(serverMessageTypes) ===
           formatMessageTypes(next[cat].messageTypes);
@@ -393,18 +408,28 @@ export function ConfigurePoliciesStep({
   );
 
   const updateConfig = (cat: RuleCategory, patch: Partial<CategoryConfig>) => {
-    const next = { ...configs[cat], ...patch };
-    setConfigs((prev) => ({ ...prev, [cat]: next }));
-    persistConfigChange(cat, next);
+    // Derive `next` from the latest state inside the updater (not the captured
+    // `configs` closure) so rapid successive edits don't clobber each other.
+    // The persist call stays outside the updater to avoid duplicate API writes
+    // under React Strict Mode's double-invoked updaters.
+    let next: CategoryConfig | undefined;
+    setConfigs((prev) => {
+      next = { ...prev[cat], ...patch };
+      return { ...prev, [cat]: next };
+    });
+    if (next) persistConfigChange(cat, next);
   };
 
   const toggleMessageType = (cat: RuleCategory, t: PolicyMessageType) => {
-    const types = new Set(configs[cat].messageTypes);
-    if (types.has(t)) types.delete(t);
-    else types.add(t);
-    const next = { ...configs[cat], messageTypes: types };
-    setConfigs((prev) => ({ ...prev, [cat]: next }));
-    persistConfigChange(cat, next);
+    let next: CategoryConfig | undefined;
+    setConfigs((prev) => {
+      const types = new Set(prev[cat].messageTypes);
+      if (types.has(t)) types.delete(t);
+      else types.add(t);
+      next = { ...prev[cat], messageTypes: types };
+      return { ...prev, [cat]: next };
+    });
+    if (next) persistConfigChange(cat, next);
   };
 
   const shadow = configs.shadow_mcp;
