@@ -1376,7 +1376,7 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
   prompt_policy: [
     {
       id: "llm_judge",
-      title: "Prompt Policy Judge",
+      title: "LLM Judge",
       source: "llm_judge",
       hidden: true,
     },

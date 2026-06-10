@@ -87,7 +87,7 @@ const SYNTHETIC_CATEGORY_RULES: Partial<
   },
   prompt_policy: {
     id: "llm_judge",
-    title: "Prompt Policy Judge",
+    title: "LLM Judge",
   },
   shadow_mcp: {
     id: "shadow_mcp.default",

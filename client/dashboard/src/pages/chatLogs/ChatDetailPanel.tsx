@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/accordion";
 import { CodeBlock } from "@/components/ui/code-block";
 import { ruleIdCategoryLabel } from "@/pages/security/rule-ids";
+import { getRuleTitleFallback } from "@/pages/security/risk-utils";
 import type {
   ChatMessage,
   TelemetryLogRecord,
@@ -72,6 +73,15 @@ function getTraceId(chatId: string): string {
 }
 
 const PANEL_TELEMETRY_LOG_LIMIT = 100;
+
+function getRiskBadgeLabel(result: RiskResult): string {
+  if (result.ruleId === "llm_judge") return getRuleTitleFallback(result.ruleId);
+  return ruleIdCategoryLabel(result.ruleId) || result.source.toUpperCase();
+}
+
+function shouldShowRiskRuleId(result: RiskResult): boolean {
+  return Boolean(result.ruleId) && result.ruleId !== "llm_judge";
+}
 
 export function ChatDetailSheet({
   chatId,
@@ -952,9 +962,9 @@ function RiskBadgePopover({ results }: { results: RiskResult[] }) {
               <div key={r.id} className="py-2 first:pt-0 last:pb-0">
                 <div className="flex items-center gap-2">
                   <Badge variant="destructive" className="shrink-0 text-[10px]">
-                    {ruleIdCategoryLabel(r.ruleId) || r.source.toUpperCase()}
+                    {getRiskBadgeLabel(r)}
                   </Badge>
-                  {r.ruleId && (
+                  {shouldShowRiskRuleId(r) && (
                     <span className="text-muted-foreground truncate font-mono text-xs">
                       {r.ruleId}
                     </span>
