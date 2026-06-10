@@ -291,6 +291,15 @@ func (s *Service) CloneClientFromOAuthProxyProvider(ctx context.Context, payload
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to attach remote session client to user session issuer").LogError(ctx, logger)
 	}
 
+	// Lift the legacy dynamic client registrations (Redis) for every MCP
+	// server attached to this proxy provider into user_session_clients, on
+	// the same transaction: a failure here aborts the whole clone so a
+	// partial migration never commits.
+	migrated, err := s.migrateLegacyClientRegistrations(ctx, txRepo, *authCtx.ProjectID, provider.OauthProxyServerID, userIssuerID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "migrate legacy client registrations").LogError(ctx, logger)
+	}
+
 	if err := s.auditLogger.LogRemoteSessionClientCreate(ctx, dbtx, audit.LogRemoteSessionClientCreateEvent{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
@@ -306,6 +315,12 @@ func (s *Service) CloneClientFromOAuthProxyProvider(ctx context.Context, payload
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+
+	logger.InfoContext(ctx, "cloned oauth proxy provider client",
+		attr.SlogRemoteSessionClientID(created.ID.String()),
+		attr.SlogUserSessionIssuerID(userIssuerID.String()),
+		attr.SlogUserSessionClientMigratedCount(migrated),
+	)
 
 	view, err := mv.BuildRemoteSessionClientView(created)
 	if err != nil {
