@@ -1,11 +1,10 @@
 # OpenTelemetry Collector for Gram's Fly-hosted workloads (assistant
 # runtimes and, later, function runners). VMs export OTLP to this app over
-# the org's private network; the collector forwards to the configured
-# backend using credentials that live only on this app as Fly secrets:
+# the org's private network; the collector forwards traces to Datadog using
+# credentials that live only on this app as Fly secrets:
 #
-#   GRAM_OTLP_FORWARD_ENDPOINT       e.g. https://o1234.ingest.sentry.io/api/567/integration/otlp
-#   GRAM_OTLP_FORWARD_AUTHORIZATION  optional `authorization` header value
-#   GRAM_OTLP_FORWARD_SENTRY_AUTH    optional `x-sentry-auth` header value
+#   DD_API_KEY  Datadog API key
+#   DD_SITE     Datadog site (defaults to datadoghq.com)
 receivers:
   otlp:
     protocols:
@@ -24,15 +23,14 @@ processors:
     timeout: 5s
 
 exporters:
-  otlphttp/forward:
-    endpoint: ${env:GRAM_OTLP_FORWARD_ENDPOINT}
-    headers:
-      authorization: ${env:GRAM_OTLP_FORWARD_AUTHORIZATION:-}
-      x-sentry-auth: ${env:GRAM_OTLP_FORWARD_SENTRY_AUTH:-}
+  datadog:
+    api:
+      key: ${env:DD_API_KEY}
+      site: ${env:DD_SITE:-datadoghq.com}
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [otlphttp/forward]
+      exporters: [datadog]
