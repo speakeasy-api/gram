@@ -25,6 +25,8 @@ func BuildRemoteSessionIssuerView(row repo.RemoteSessionIssuer) *types.RemoteSes
 		OrganizationID:                    organizationID,
 		Slug:                              row.Slug,
 		Issuer:                            row.Issuer,
+		Name:                              conv.FromPGText[string](row.Name),
+		LogoAssetID:                       conv.FromNullableUUID(row.LogoAssetID),
 		AuthorizationEndpoint:             conv.FromPGText[string](row.AuthorizationEndpoint),
 		TokenEndpoint:                     conv.FromPGText[string](row.TokenEndpoint),
 		RegistrationEndpoint:              conv.FromPGText[string](row.RegistrationEndpoint),

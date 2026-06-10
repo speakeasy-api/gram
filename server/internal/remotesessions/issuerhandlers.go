@@ -121,6 +121,11 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		return nil, oops.E(oops.CodeBadRequest, nil, "issuer is required").Log(ctx, logger)
 	}
 
+	logoAssetID, err := conv.PtrToNullUUID(payload.LogoAssetID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset id").Log(ctx, logger)
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, logger)
@@ -134,6 +139,8 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
 		Slug:                              payload.Slug,
 		Issuer:                            payload.Issuer,
+		Name:                              conv.PtrToPGTextTrimmed(payload.Name),
+		LogoAssetID:                       logoAssetID,
 		AuthorizationEndpoint:             conv.PtrToPGText(payload.AuthorizationEndpoint),
 		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
 		RegistrationEndpoint:              conv.PtrToPGText(payload.RegistrationEndpoint),
@@ -158,6 +165,7 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		RemoteSessionIssuerURN: urn.NewRemoteSessionIssuer(issuer.ID),
 		Slug:                   issuer.Slug,
 		IssuerURL:              issuer.Issuer,
+		Name:                   conv.FromPGText[string](issuer.Name),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log remote session issuer creation").Log(ctx, logger)
 	}
@@ -200,6 +208,11 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 		return nil, err
 	}
 
+	logoAssetID, err := conv.PtrToNullUUID(payload.LogoAssetID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset id").Log(ctx, logger)
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, logger)
@@ -228,6 +241,8 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 	updated, err := txRepo.UpdateRemoteSessionIssuer(ctx, repo.UpdateRemoteSessionIssuerParams{
 		Slug:                              conv.PtrToPGText(payload.Slug),
 		Issuer:                            conv.PtrToPGText(payload.Issuer),
+		Name:                              conv.PtrToPGText(payload.Name),
+		LogoAssetID:                       logoAssetID,
 		AuthorizationEndpoint:             conv.PtrToPGText(payload.AuthorizationEndpoint),
 		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
 		RegistrationEndpoint:              conv.PtrToPGText(payload.RegistrationEndpoint),
@@ -259,6 +274,7 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 		RemoteSessionIssuerURN: urn.NewRemoteSessionIssuer(updated.ID),
 		Slug:                   updated.Slug,
 		IssuerURL:              updated.Issuer,
+		Name:                   conv.FromPGText[string](updated.Name),
 		SnapshotBefore:         beforeView,
 		SnapshotAfter:          afterView,
 	}); err != nil {
@@ -427,6 +443,7 @@ func (s *Service) DeleteRemoteSessionIssuer(ctx context.Context, payload *gen.De
 		RemoteSessionIssuerURN: urn.NewRemoteSessionIssuer(deleted.ID),
 		Slug:                   deleted.Slug,
 		IssuerURL:              deleted.Issuer,
+		Name:                   conv.FromPGText[string](deleted.Name),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "log remote session issuer deletion").Log(ctx, logger)
 	}

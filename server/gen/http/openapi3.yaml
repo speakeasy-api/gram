@@ -33445,6 +33445,13 @@ components:
                 jwks_uri:
                     type: string
                     description: Upstream JWKS URI.
+                logo_asset_id:
+                    type: string
+                    description: Optional logo asset id.
+                    format: uuid
+                name:
+                    type: string
+                    description: Optional display name. Stored NULL when empty; clients fall back to the issuer URL/slug.
                 oidc:
                     type: boolean
                     description: When true, may unlock OIDC-aware behaviour. Default false.
@@ -39535,6 +39542,13 @@ components:
                 jwks_uri:
                     type: string
                     description: Upstream JWKS URI; null when not advertised.
+                logo_asset_id:
+                    type: string
+                    description: Optional logo asset id; null when unset.
+                    format: uuid
+                name:
+                    type: string
+                    description: Optional display name; null when unset.
                 oidc:
                     type: boolean
                     description: When true, may unlock OIDC-aware behaviour.
@@ -43354,6 +43368,13 @@ components:
                 jwks_uri:
                     type: string
                     description: Upstream JWKS URI.
+                logo_asset_id:
+                    type: string
+                    description: Set the logo asset id.
+                    format: uuid
+                name:
+                    type: string
+                    description: Set or clear the display name. An empty string clears it to NULL.
                 oidc:
                     type: boolean
                 passthrough:
