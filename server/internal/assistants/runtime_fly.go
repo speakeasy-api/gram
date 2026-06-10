@@ -922,10 +922,14 @@ func (f *FlyRuntimeBackend) machineConfig(runtime assistantRuntimeRecord) *fly.M
 	if f.config.OTLPEndpoint != "" {
 		env["GRAM_ENABLE_OTEL_TRACES"] = "true"
 		env["OTEL_EXPORTER_OTLP_ENDPOINT"] = f.config.OTLPEndpoint
-		env["OTEL_RESOURCE_ATTRIBUTES"] = fmt.Sprintf(
+		attrs := fmt.Sprintf(
 			"gram.assistant.id=%s,gram.project.id=%s",
 			runtime.AssistantID, runtime.ProjectID,
 		)
+		if f.config.Environment != "" {
+			attrs += ",deployment.environment.name=" + f.config.Environment
+		}
+		env["OTEL_RESOURCE_ATTRIBUTES"] = attrs
 		if f.config.OTLPProtocol != "" {
 			env["OTEL_EXPORTER_OTLP_PROTOCOL"] = f.config.OTLPProtocol
 		}

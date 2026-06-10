@@ -121,6 +121,7 @@ func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistan
 			OTLPEndpoint:       c.String("assistant-runtime-otlp-endpoint"),
 			OTLPProtocol:       c.String("assistant-runtime-otlp-protocol"),
 			OTLPHeaders:        c.String("assistant-runtime-otlp-headers"),
+			Environment:        c.String("environment"),
 		},
 	}, nil
 }

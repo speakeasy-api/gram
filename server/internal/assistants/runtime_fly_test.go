@@ -878,6 +878,7 @@ func TestFlyRuntimeBackendMachineConfigStampsOTLPEnv(t *testing.T) {
 	backend.config.OTLPEndpoint = "https://otlp.example.com:4317"
 	backend.config.OTLPProtocol = "grpc"
 	backend.config.OTLPHeaders = "x-api-key=secret"
+	backend.config.Environment = "test"
 	cfg = backend.machineConfig(rec)
 	require.Equal(t, "true", cfg.Env["GRAM_ENABLE_OTEL_TRACES"])
 	require.Equal(t, "https://otlp.example.com:4317", cfg.Env["OTEL_EXPORTER_OTLP_ENDPOINT"])
@@ -885,7 +886,10 @@ func TestFlyRuntimeBackendMachineConfigStampsOTLPEnv(t *testing.T) {
 	require.Equal(t, "x-api-key=secret", cfg.Env["OTEL_EXPORTER_OTLP_HEADERS"])
 	require.Equal(
 		t,
-		fmt.Sprintf("gram.assistant.id=%s,gram.project.id=%s", rec.AssistantID, rec.ProjectID),
+		fmt.Sprintf(
+			"gram.assistant.id=%s,gram.project.id=%s,deployment.environment.name=test",
+			rec.AssistantID, rec.ProjectID,
+		),
 		cfg.Env["OTEL_RESOURCE_ATTRIBUTES"],
 	)
 }

@@ -42,6 +42,9 @@ type FlyRuntimeConfig struct {
 	OTLPEndpoint string
 	OTLPProtocol string
 	OTLPHeaders  string
+	// Environment is stamped into OTEL_RESOURCE_ATTRIBUTES as
+	// deployment.environment.name, matching the server's own resource tags.
+	Environment string
 }
 
 func (c FlyRuntimeConfig) Validate() error {
