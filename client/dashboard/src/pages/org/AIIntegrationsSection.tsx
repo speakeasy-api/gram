@@ -135,12 +135,20 @@ function AIIntegrationProviderCard({
   const isConfigured = Boolean(data?.id);
   const hasSavedKey = Boolean(data?.hasApiKey);
 
+  // Sync form state from the persisted config. Depend on primitive values
+  // rather than `data` itself: refetches produce new object references even
+  // when nothing changed, and resetting on every refetch would discard
+  // unsaved edits.
+  const hasData = Boolean(data);
+  const savedEnabled = data?.enabled ?? false;
+  const savedOrganizationId = data?.externalOrganizationId ?? "";
+
   useEffect(() => {
-    if (!data) return;
-    setEnabled(data.enabled);
+    if (!hasData) return;
+    setEnabled(savedEnabled);
     setApiKey("");
-    setOrganizationId(data.externalOrganizationId ?? "");
-  }, [data]);
+    setOrganizationId(savedOrganizationId);
+  }, [hasData, savedEnabled, savedOrganizationId]);
 
   const Icon = provider.icon;
   const apiKeyFieldId = `${provider.provider}-ai-integration-api-key`;

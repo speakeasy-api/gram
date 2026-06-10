@@ -1134,6 +1134,7 @@ func newStartCommand() *cli.Command {
 						FeatureProvider:                featureFlags,
 						AssetStorage:                   assetStorage,
 						SlackClient:                    slackClient,
+						ChatMessageWriter:              chatWriter,
 						ChatClient:                     chatClient,
 						OpenRouter:                     openRouter,
 						K8sClient:                      k8sClient,
