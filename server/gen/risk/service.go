@@ -134,6 +134,9 @@ type ApproveRiskPolicyBypassRequestPayload struct {
 	ProjectSlugInput *string
 	// The bypass request ID.
 	ID string
+	// Principal URNs to grant bypass access to. Defaults to the requester when
+	// omitted.
+	GrantedPrincipalUrns []string
 }
 
 // ApproveShadowMCPPayload is the payload type of the risk service

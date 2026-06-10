@@ -3,16 +3,15 @@ package risk
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"maps"
 	"slices"
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -22,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -30,6 +30,11 @@ const (
 	riskPolicyBypassRequestStatusApproved  = "approved"
 	riskPolicyBypassRequestStatusDenied    = "denied"
 	riskPolicyBypassRequestStatusRevoked   = "revoked"
+
+	// PolicyBypassTargetKindShadowMCPServer identifies a Shadow MCP server target.
+	PolicyBypassTargetKindShadowMCPServer = "shadow_mcp_server"
+	// PolicyBypassWholePolicyTargetKey identifies a whole-policy target.
+	PolicyBypassWholePolicyTargetKey = "policy"
 )
 
 func (s *Service) ListRiskPolicyBypassRequests(ctx context.Context, payload *gen.ListRiskPolicyBypassRequestsPayload) (*gen.ListRiskPolicyBypassRequestsResult, error) {
@@ -115,7 +120,7 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 		return nil, oops.E(oops.CodeNotFound, err, "project not found").Log(ctx, s.logger)
 	}
 	q := repo.New(dbtx)
-	policy, err := q.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
+	policy, err := q.GetRiskPolicyForUpdate(ctx, repo.GetRiskPolicyForUpdateParams{
 		ID:        policyID,
 		ProjectID: projectID,
 	})
@@ -132,9 +137,9 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 		OrganizationID:   claims.OrganizationID,
 		ProjectID:        projectID,
 		RiskPolicyID:     policyID,
-		TargetKind:       conv.ToPGText(target.kind),
-		TargetLabel:      conv.ToPGTextEmpty(target.label),
-		TargetKey:        conv.ToPGText(target.key),
+		TargetKind:       conv.ToPGTextEmpty(target.Kind),
+		TargetLabel:      conv.ToPGTextEmpty(target.Label),
+		TargetKey:        conv.ToPGText(target.Key),
 		TargetDimensions: target.dimensions,
 		RequesterUserID:  authCtx.UserID,
 		RequesterEmail:   conv.ToPGTextEmpty(conv.PtrValOrEmpty(authCtx.Email, "")),
@@ -184,14 +189,44 @@ func (s *Service) ApproveRiskPolicyBypassRequest(ctx context.Context, payload *g
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "risk policy bypass request not found").Log(ctx, s.logger)
 	}
-	policyName, err := riskPolicyNameForAudit(ctx, q, current.RiskPolicyID, current.ProjectID)
+	policy, err := q.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
+		ID:        current.RiskPolicyID,
+		ProjectID: current.ProjectID,
+	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get risk policy name for audit").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").Log(ctx, s.logger)
 	}
-	principal := urn.NewPrincipal(urn.PrincipalTypeUser, current.RequesterUserID)
+	principals, principalURNs, err := riskPolicyBypassGrantPrincipals(current.RequesterUserID, payload.GrantedPrincipalUrns)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid risk policy bypass grant principals")
+	}
+	if err := validateRiskPolicyBypassGrantPrincipals(ctx, dbtx, authCtx.ActiveOrganizationID, principals); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid risk policy bypass grant principals")
+	}
 	selector, err := riskPolicyBypassGrantSelector(current)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build risk policy bypass selector").Log(ctx, s.logger)
+	}
+	if current.Status == riskPolicyBypassRequestStatusApproved {
+		currentPrincipals, _, err := riskPolicyBypassGrantPrincipals(current.RequesterUserID, current.GrantedPrincipalUrns)
+		if err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid current risk policy bypass grant principals")
+		}
+		principalsToRevoke := riskPolicyBypassGrantPrincipalDifference(currentPrincipals, principals)
+		if len(principalsToRevoke) > 0 {
+			if err := authz.RevokeResourceFromPrincipals(ctx, dbtx, authz.ResourceGrant{
+				Resource: authz.Resource{
+					OrganizationID: authCtx.ActiveOrganizationID,
+					Scope:          authz.ScopeRiskPolicyBypass,
+					ResourceID:     current.RiskPolicyID.String(),
+				},
+				Effect:     authz.PolicyEffectAllow,
+				Principals: principalsToRevoke,
+				Selector:   selector,
+			}); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "revoke replaced risk policy bypass grants").Log(ctx, s.logger)
+			}
+		}
 	}
 	if err := authz.GrantResourceToPrincipals(ctx, dbtx, authz.ResourceGrant{
 		Resource: authz.Resource{
@@ -200,7 +235,7 @@ func (s *Service) ApproveRiskPolicyBypassRequest(ctx context.Context, payload *g
 			ResourceID:     current.RiskPolicyID.String(),
 		},
 		Effect:     authz.PolicyEffectAllow,
-		Principals: []urn.Principal{principal},
+		Principals: principals,
 		Selector:   selector,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "grant risk policy bypass").Log(ctx, s.logger)
@@ -209,7 +244,7 @@ func (s *Service) ApproveRiskPolicyBypassRequest(ctx context.Context, payload *g
 	row, err := q.UpdateRiskPolicyBypassRequestStatus(ctx, repo.UpdateRiskPolicyBypassRequestStatusParams{
 		Status:               riskPolicyBypassRequestStatusApproved,
 		DecidedBy:            conv.ToPGText(authCtx.UserID),
-		GrantedPrincipalUrns: []string{principal.String()},
+		GrantedPrincipalUrns: principalURNs,
 		ID:                   requestID,
 		ProjectID:            *authCtx.ProjectID,
 	})
@@ -217,7 +252,7 @@ func (s *Service) ApproveRiskPolicyBypassRequest(ctx context.Context, payload *g
 		return nil, oops.E(oops.CodeUnexpected, err, "approve risk policy bypass request").Log(ctx, s.logger)
 	}
 
-	if err := s.logRiskPolicyBypassRequestAudit(ctx, dbtx, audit.ActionRiskPolicyBypassRequestApprove, authCtx, current.RiskPolicyID, current.ProjectID, policyName, &current, &row); err != nil {
+	if err := s.logRiskPolicyBypassRequestAudit(ctx, dbtx, audit.ActionRiskPolicyBypassRequestApprove, authCtx, current.RiskPolicyID, current.ProjectID, policy.Name, &current, &row); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy bypass request approval").Log(ctx, s.logger)
 	}
 
@@ -256,9 +291,15 @@ func (s *Service) DenyRiskPolicyBypassRequest(ctx context.Context, payload *gen.
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "risk policy bypass request not found").Log(ctx, s.logger)
 	}
-	policyName, err := riskPolicyNameForAudit(ctx, q, current.RiskPolicyID, current.ProjectID)
+	if current.Status != riskPolicyBypassRequestStatusRequested {
+		return nil, oops.E(oops.CodeInvalid, nil, "risk policy bypass request must be pending")
+	}
+	policy, err := q.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
+		ID:        current.RiskPolicyID,
+		ProjectID: current.ProjectID,
+	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get risk policy name for audit").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").Log(ctx, s.logger)
 	}
 	row, err := q.UpdateRiskPolicyBypassRequestStatus(ctx, repo.UpdateRiskPolicyBypassRequestStatusParams{
 		Status:               riskPolicyBypassRequestStatusDenied,
@@ -271,7 +312,7 @@ func (s *Service) DenyRiskPolicyBypassRequest(ctx context.Context, payload *gen.
 		return nil, oops.E(oops.CodeNotFound, err, "risk policy bypass request not found").Log(ctx, s.logger)
 	}
 
-	if err := s.logRiskPolicyBypassRequestAudit(ctx, dbtx, audit.ActionRiskPolicyBypassRequestDeny, authCtx, current.RiskPolicyID, current.ProjectID, policyName, &current, &row); err != nil {
+	if err := s.logRiskPolicyBypassRequestAudit(ctx, dbtx, audit.ActionRiskPolicyBypassRequestDeny, authCtx, current.RiskPolicyID, current.ProjectID, policy.Name, &current, &row); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy bypass request denial").Log(ctx, s.logger)
 	}
 
@@ -310,9 +351,16 @@ func (s *Service) RevokeRiskPolicyBypassRequest(ctx context.Context, payload *ge
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "risk policy bypass request not found").Log(ctx, s.logger)
 	}
-	policyName, err := riskPolicyNameForAudit(ctx, q, current.RiskPolicyID, current.ProjectID)
+	policy, err := q.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
+		ID:        current.RiskPolicyID,
+		ProjectID: current.ProjectID,
+	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get risk policy name for audit").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").Log(ctx, s.logger)
+	}
+	principals, _, err := riskPolicyBypassGrantPrincipals(current.RequesterUserID, current.GrantedPrincipalUrns)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid granted risk policy bypass principals")
 	}
 	selector, err := riskPolicyBypassGrantSelector(current)
 	if err != nil {
@@ -325,7 +373,7 @@ func (s *Service) RevokeRiskPolicyBypassRequest(ctx context.Context, payload *ge
 			ResourceID:     current.RiskPolicyID.String(),
 		},
 		Effect:     authz.PolicyEffectAllow,
-		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, current.RequesterUserID)},
+		Principals: principals,
 		Selector:   selector,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "revoke risk policy bypass").Log(ctx, s.logger)
@@ -342,7 +390,7 @@ func (s *Service) RevokeRiskPolicyBypassRequest(ctx context.Context, payload *ge
 		return nil, oops.E(oops.CodeUnexpected, err, "revoke risk policy bypass request").Log(ctx, s.logger)
 	}
 
-	if err := s.logRiskPolicyBypassRequestAudit(ctx, dbtx, audit.ActionRiskPolicyBypassRequestRevoke, authCtx, current.RiskPolicyID, current.ProjectID, policyName, &current, &row); err != nil {
+	if err := s.logRiskPolicyBypassRequestAudit(ctx, dbtx, audit.ActionRiskPolicyBypassRequestRevoke, authCtx, current.RiskPolicyID, current.ProjectID, policy.Name, &current, &row); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy bypass request revocation").Log(ctx, s.logger)
 	}
 
@@ -423,21 +471,6 @@ func (s *Service) logRiskPolicyBypassRequestAudit(
 	return nil
 }
 
-func riskPolicyNameForAudit(ctx context.Context, q *repo.Queries, policyID uuid.UUID, projectID uuid.UUID) (string, error) {
-	name, err := q.GetRiskPolicyNameIncludingDeleted(ctx, repo.GetRiskPolicyNameIncludingDeletedParams{
-		ID:        policyID,
-		ProjectID: projectID,
-	})
-	switch {
-	case err == nil:
-		return name, nil
-	case errors.Is(err, pgx.ErrNoRows):
-		return "", nil
-	default:
-		return "", fmt.Errorf("get risk policy name including deleted: %w", err)
-	}
-}
-
 func riskPolicyBypassRequestSnapshot(row repo.RiskPolicyBypassRequest) (*audit.RiskPolicyBypassRequestSnapshot, error) {
 	view, err := riskPolicyBypassRequestView(row)
 	if err != nil {
@@ -507,35 +540,32 @@ func validateRiskPolicyBypassRequestStatus(status *string) error {
 }
 
 type riskPolicyBypassRequestTarget struct {
-	kind       string
-	label      string
-	key        string
+	PolicyBypassTarget
 	dimensions []byte
 }
 
 func riskPolicyBypassTargetFromClaims(claims *policyBypassRequestClaims) (riskPolicyBypassRequestTarget, error) {
-	key := strings.TrimSpace(conv.PtrValOr(claims.ObservedFullURL, ""))
-	if key == "" {
-		return riskPolicyBypassRequestTarget{}, fmt.Errorf("observed_full_url is required")
+	evidence := shadowmcp.AccessEvidence{
+		FullURL:        conv.PtrValOr(claims.ObservedFullURL, ""),
+		URLHost:        conv.PtrValOr(claims.ObservedURLHost, ""),
+		ServerIdentity: conv.PtrValOr(claims.ObservedServerIdentity, ""),
+	}
+	target := ShadowMCPPolicyBypassTarget(evidence, conv.PtrValOr(claims.ToolName, ""))
+	if target == nil {
+		return riskPolicyBypassRequestTarget{}, fmt.Errorf("policy bypass request target evidence is required")
+	}
+	if observedName := strings.TrimSpace(conv.PtrValOr(claims.ObservedName, "")); observedName != "" && target.Kind == PolicyBypassTargetKindShadowMCPServer {
+		target.Label = observedName
 	}
 
-	dimensions, err := json.Marshal(map[string]string{
-		authz.SelectorKeyServerURL: key,
-	})
+	dimensions, err := json.Marshal(target.Dimensions)
 	if err != nil {
 		return riskPolicyBypassRequestTarget{}, fmt.Errorf("marshal dimensions: %w", err)
 	}
 
-	label := strings.TrimSpace(conv.PtrValOr(claims.ObservedName, ""))
-	if label == "" {
-		label = key
-	}
-
 	return riskPolicyBypassRequestTarget{
-		kind:       authz.SelectorKeyServerURL,
-		label:      label,
-		key:        key,
-		dimensions: dimensions,
+		PolicyBypassTarget: *target,
+		dimensions:         dimensions,
 	}, nil
 }
 
@@ -546,7 +576,13 @@ func riskPolicyBypassGrantSelector(row repo.RiskPolicyBypassRequest) (authz.Sele
 	}
 
 	targetKind := conv.FromPGTextOrEmpty[string](row.TargetKind)
-	if targetKind != "" && targetKind != authz.SelectorKeyServerURL && dimensions[authz.SelectorKeyServerURL] == "" {
+	switch targetKind {
+	case "":
+	case PolicyBypassTargetKindShadowMCPServer:
+		if dimensions[authz.SelectorKeyServerURL] == "" && dimensions[authz.SelectorKeyServerIdentity] == "" {
+			return nil, fmt.Errorf("shadow mcp server bypass target missing server_url or server_identity dimension")
+		}
+	default:
 		return nil, fmt.Errorf("unsupported risk policy bypass target kind %q", targetKind)
 	}
 
@@ -554,6 +590,118 @@ func riskPolicyBypassGrantSelector(row repo.RiskPolicyBypassRequest) (authz.Sele
 	maps.Copy(selector, dimensions)
 
 	return selector, nil
+}
+
+func riskPolicyBypassGrantPrincipals(requesterUserID string, principalURNs []string) ([]urn.Principal, []string, error) {
+	if len(principalURNs) == 0 {
+		principalURNs = []string{urn.NewPrincipal(urn.PrincipalTypeUser, requesterUserID).String()}
+	}
+
+	principals := make([]urn.Principal, 0, len(principalURNs))
+	grantedPrincipalURNs := make([]string, 0, len(principalURNs))
+	seen := make(map[string]struct{}, len(principalURNs))
+	hasAllUsers := false
+
+	for _, rawPrincipalURN := range principalURNs {
+		principalURN := strings.TrimSpace(rawPrincipalURN)
+		if principalURN == "" {
+			continue
+		}
+
+		principal, err := urn.ParsePrincipal(principalURN)
+		if err != nil {
+			return nil, nil, fmt.Errorf("parse principal urn %q: %w", principalURN, err)
+		}
+		switch principal.Type {
+		case urn.PrincipalTypeUser, urn.PrincipalTypeRole:
+		default:
+			return nil, nil, fmt.Errorf("unsupported principal type %q", principal.Type)
+		}
+
+		key := principal.String()
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		principals = append(principals, principal)
+		grantedPrincipalURNs = append(grantedPrincipalURNs, key)
+		hasAllUsers = hasAllUsers || key == authz.AllUsersPrincipal().String()
+	}
+
+	if len(principals) == 0 {
+		return nil, nil, fmt.Errorf("at least one principal is required")
+	}
+	if hasAllUsers && len(principals) > 1 {
+		return nil, nil, fmt.Errorf("user:all cannot be combined with narrower principals")
+	}
+
+	return principals, grantedPrincipalURNs, nil
+}
+
+func validateRiskPolicyBypassGrantPrincipals(ctx context.Context, db accessrepo.DBTX, organizationID string, principals []urn.Principal) error {
+	for _, principal := range principals {
+		switch principal.Type {
+		case urn.PrincipalTypeUser:
+			if principal.String() == authz.AllUsersPrincipal().String() {
+				continue
+			}
+			if _, err := authz.ResolveUserPrincipals(ctx, db, organizationID, principal.ID); err != nil {
+				return fmt.Errorf("validate user principal %q: %w", principal.String(), err)
+			}
+		case urn.PrincipalTypeRole:
+			if err := validateRiskPolicyBypassRolePrincipal(ctx, db, organizationID, principal); err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("unsupported principal type %q", principal.Type)
+		}
+	}
+
+	return nil
+}
+
+func validateRiskPolicyBypassRolePrincipal(ctx context.Context, db accessrepo.DBTX, organizationID string, principal urn.Principal) error {
+	roleKind, rawRoleID, ok := strings.Cut(principal.ID, ":")
+	if !ok {
+		return fmt.Errorf("invalid role principal %q", principal.String())
+	}
+	if roleKind != "organization" && roleKind != "global" {
+		return fmt.Errorf("invalid role principal %q", principal.String())
+	}
+	roleID, err := uuid.Parse(rawRoleID)
+	if err != nil {
+		return fmt.Errorf("invalid role principal %q: %w", principal.String(), err)
+	}
+
+	row, err := accessrepo.New(db).GetOrganizationRoleByID(ctx, accessrepo.GetOrganizationRoleByIDParams{
+		OrganizationID: organizationID,
+		ID:             roleID,
+	})
+	if err != nil {
+		return fmt.Errorf("validate role principal %q: %w", principal.String(), err)
+	}
+	if row.RoleUrn != principal.String() {
+		return fmt.Errorf("role principal %q does not match active role %q", principal.String(), row.RoleUrn)
+	}
+
+	return nil
+}
+
+func riskPolicyBypassGrantPrincipalDifference(currentPrincipals []urn.Principal, nextPrincipals []urn.Principal) []urn.Principal {
+	next := make(map[string]struct{}, len(nextPrincipals))
+	for _, principal := range nextPrincipals {
+		next[principal.String()] = struct{}{}
+	}
+
+	diff := make([]urn.Principal, 0, len(currentPrincipals))
+	for _, principal := range currentPrincipals {
+		if _, ok := next[principal.String()]; ok {
+			continue
+		}
+		diff = append(diff, principal)
+	}
+
+	return diff
 }
 
 func riskPolicyBypassRequestView(row repo.RiskPolicyBypassRequest) (*gen.RiskPolicyBypassRequest, error) {

@@ -21454,7 +21454,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/RiskIDRequestBody'
+                            $ref: '#/components/schemas/RiskPolicyBypassApprovalRequestBody'
                 required: true
             responses:
                 "200":
@@ -40451,6 +40451,20 @@ components:
                 - updated_at
                 - pending_messages
                 - total_messages
+        RiskPolicyBypassApprovalRequestBody:
+            type: object
+            properties:
+                granted_principal_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: Principal URNs to grant bypass access to. Use user:all for every user in the organization.
+                id:
+                    type: string
+                    description: The bypass request ID.
+                    format: uuid
+            required:
+                - id
         RiskPolicyBypassRequest:
             type: object
             properties:
