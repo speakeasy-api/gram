@@ -629,7 +629,7 @@ func (q *Queries) GetRiskPolicyBypassRequest(ctx context.Context, arg GetRiskPol
 }
 
 const getRiskPolicyForUpdate = `-- name: GetRiskPolicyForUpdate :one
-SELECT id, project_id, organization_id, enabled, name, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, action, audience_type, auto_name, user_message, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, action, audience_type, auto_name, user_message, prompt, model_config, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE id = $1
   AND project_id = $2
@@ -651,6 +651,7 @@ func (q *Queries) GetRiskPolicyForUpdate(ctx context.Context, arg GetRiskPolicyF
 		&i.OrganizationID,
 		&i.Enabled,
 		&i.Name,
+		&i.PolicyType,
 		&i.Sources,
 		&i.PresidioEntities,
 		&i.PromptInjectionRules,
@@ -661,6 +662,8 @@ func (q *Queries) GetRiskPolicyForUpdate(ctx context.Context, arg GetRiskPolicyF
 		&i.AudienceType,
 		&i.AutoName,
 		&i.UserMessage,
+		&i.Prompt,
+		&i.ModelConfig,
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
