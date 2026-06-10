@@ -26,6 +26,14 @@ export type CreateRemoteSessionIssuerForm = {
    */
   jwksUri?: string | undefined;
   /**
+   * Optional logo asset id.
+   */
+  logoAssetId?: string | undefined;
+  /**
+   * Optional display name. Stored NULL when empty; clients fall back to the issuer URL/slug.
+   */
+  name?: string | undefined;
+  /**
    * When true, may unlock OIDC-aware behaviour. Default false.
    */
   oidc?: boolean | undefined;
@@ -65,6 +73,8 @@ export type CreateRemoteSessionIssuerForm$Outbound = {
   grant_types_supported?: Array<string> | undefined;
   issuer: string;
   jwks_uri?: string | undefined;
+  logo_asset_id?: string | undefined;
+  name?: string | undefined;
   oidc?: boolean | undefined;
   passthrough?: boolean | undefined;
   registration_endpoint?: string | undefined;
@@ -85,6 +95,8 @@ export const CreateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
     grantTypesSupported: z.optional(z.array(z.string())),
     issuer: z.string(),
     jwksUri: z.optional(z.string()),
+    logoAssetId: z.optional(z.string()),
+    name: z.optional(z.string()),
     oidc: z.optional(z.boolean()),
     passthrough: z.optional(z.boolean()),
     registrationEndpoint: z.optional(z.string()),
@@ -99,6 +111,7 @@ export const CreateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
       authorizationEndpoint: "authorization_endpoint",
       grantTypesSupported: "grant_types_supported",
       jwksUri: "jwks_uri",
+      logoAssetId: "logo_asset_id",
       registrationEndpoint: "registration_endpoint",
       responseTypesSupported: "response_types_supported",
       scopesSupported: "scopes_supported",

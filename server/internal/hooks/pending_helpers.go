@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 
@@ -37,7 +38,7 @@ func (s *Service) bufferHook(ctx context.Context, sessionID string, payload *gen
 // resolveUserByEmail looks up a connected user by email within an org.
 // Returns the user ID if found, or empty string if not found or if email is empty.
 func (s *Service) resolveUserByEmail(ctx context.Context, email, orgID string) string {
-	lookup := strings.ToLower(strings.TrimSpace(email))
+	lookup := conv.NormalizeEmail(email)
 	if lookup == "" {
 		return ""
 	}
@@ -254,7 +255,7 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 	// data points sharing the same email don't each trigger a DB round-trip.
 	emailToUserID := make(map[string]string)
 	for _, m := range metrics {
-		email := strings.ToLower(strings.TrimSpace(m.UserEmail))
+		email := conv.NormalizeEmail(m.UserEmail)
 		if email == "" {
 			continue
 		}
@@ -310,7 +311,7 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 		}
 		if m.UserEmail != "" {
 			attrs[attr.UserEmailKey] = m.UserEmail
-			if userID := emailToUserID[strings.ToLower(strings.TrimSpace(m.UserEmail))]; userID != "" {
+			if userID := emailToUserID[conv.NormalizeEmail(m.UserEmail)]; userID != "" {
 				attrs[attr.UserIDKey] = userID
 			}
 		}

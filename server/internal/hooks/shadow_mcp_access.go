@@ -6,6 +6,8 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
@@ -14,51 +16,67 @@ func (s *Service) enforceShadowMCPToolAccess(
 	organizationID string,
 	projectID string,
 	userID string,
+	policyID string,
 	toolInput any,
 	toolName string,
 	evidence shadowmcp.AccessEvidence,
 ) (string, bool) {
-	if s.shadowMCPClient == nil {
-		return "Shadow MCP validation is unavailable", true
-	}
-
-	decision := s.shadowMCPClient.EvaluateAccessRules(ctx, organizationID, projectID, evidence)
-	s.logger.InfoContext(ctx, "evaluated shadow mcp access rules",
-		attr.SlogEvent("shadow_mcp_access_rule_evaluated"),
-		attr.SlogOrganizationID(organizationID),
-		attr.SlogProjectID(projectID),
-		attr.SlogValueAny(map[string]any{
-			"outcome":                   decision.Outcome,
-			"shadow_mcp_access_rule_id": decision.RuleID,
-			"reason":                    decision.Reason,
-			"tool_name":                 toolName,
-		}),
-	)
-	switch decision.Outcome {
-	case shadowmcp.AccessRuleOutcomeDenied, shadowmcp.AccessRuleOutcomeError:
-		return decision.Reason, true
-	case shadowmcp.AccessRuleOutcomeAllowed:
-		return "", false
-	}
-
 	detail, denied := s.shadowMCPClient.ValidateToolsetCall(ctx, toolInput, toolName, organizationID)
 	if !denied {
 		return "", false
 	}
+	if target, allowed := s.canBypassPolicy(ctx, organizationID, userID, policyID, evidence, toolName); allowed {
+		s.logger.InfoContext(ctx, "shadow-mcp call allowed via risk policy bypass grant",
+			attr.SlogEvent("shadow_mcp_policy_bypass_allow"),
+			attr.SlogOrganizationID(organizationID),
+			attr.SlogProjectID(projectID),
+			attr.SlogRiskPolicyID(policyID),
+			attr.SlogValueAny(map[string]any{
+				"target_kind": target.Kind,
+				"target_key":  target.Key,
+				"tool_name":   toolName,
+			}),
+		)
+		return "", false
+	}
 	return detail, true
+}
+
+func (s *Service) canBypassPolicy(
+	ctx context.Context,
+	organizationID string,
+	userID string,
+	policyID string,
+	evidence shadowmcp.AccessEvidence,
+	toolName string,
+) (*risk.PolicyBypassTarget, bool) {
+	target := risk.ShadowMCPPolicyBypassTarget(evidence, toolName)
+	if target == nil {
+		return nil, false
+	}
+	allowed := s.policyBypass.CanBypass(ctx, risk.PolicyBypassEvaluation{
+		OrganizationID: organizationID,
+		UserID:         userID,
+		PolicyID:       policyID,
+		Target:         target,
+	})
+	if !allowed {
+		return nil, false
+	}
+	return target, true
 }
 
 func codexShadowMCPEvidence(payload *gen.CodexPayload) shadowmcp.AccessEvidence {
 	return shadowmcp.AccessEvidence{
 		FullURL:        "",
 		URLHost:        "",
-		ServerIdentity: mcpServerIdentityFromToolName(ptrString(payload.ToolName)),
+		ServerIdentity: mcpServerIdentityFromToolName(conv.PtrValOr(payload.ToolName, "")),
 	}
 }
 
 func cursorShadowMCPEvidence(payload *gen.CursorPayload) shadowmcp.AccessEvidence {
 	return shadowmcp.AccessEvidence{
-		FullURL:        ptrString(payload.URL),
+		FullURL:        conv.PtrValOr(payload.URL, ""),
 		URLHost:        "",
 		ServerIdentity: cursorMCPToolSource(payload),
 	}
@@ -81,11 +99,4 @@ func mcpServerIdentityFromToolName(rawName string) string {
 		return ""
 	}
 	return parts[1]
-}
-
-func ptrString(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
 }

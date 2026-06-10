@@ -61,7 +61,6 @@ func AIUsagePollerCoordinatorWorkflow(ctx workflow.Context) error {
 	for {
 		var candidates []aiintegrations.UsagePollCandidate
 		if err := workflow.ExecuteActivity(activityCtx, a.GetAIIntegrationsCandidates, activities.GetAIIntegrationsCandidatesInput{
-			Provider:      aiintegrations.ProviderCursor,
 			PollDueBefore: workflow.Now(ctx).UTC(),
 			Limit:         aiUsagePollerCoordinatorChildConcurrency,
 		}).Get(activityCtx, &candidates); err != nil {
@@ -71,26 +70,28 @@ func AIUsagePollerCoordinatorWorkflow(ctx workflow.Context) error {
 			break
 		}
 
-		type runningAIUsagePoller struct {
+		type runningPoller struct {
 			candidate aiintegrations.UsagePollCandidate
 			child     workflow.ChildWorkflowFuture
 		}
 
-		batch := make([]runningAIUsagePoller, 0, len(candidates))
+		batch := make([]runningPoller, 0, len(candidates))
 		for _, candidate := range candidates {
 			childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
 				WorkflowID:            buildAIUsagePollerWorkflowID(candidate.OrganizationSlug, candidate.ID, candidate.Provider),
 				WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 				WaitForCancellation:   true,
 			})
+
 			child := workflow.ExecuteChildWorkflow(childCtx, AIUsagePollerWorkflow, candidate.ID.String())
 			if err := child.GetChildWorkflowExecution().Get(ctx, nil); err != nil {
 				if !temporal.IsWorkflowExecutionAlreadyStartedError(err) {
-					return fmt.Errorf("start ai integration usage poll child: %w", err)
+					return fmt.Errorf("start poller child: %w", err)
 				}
 				continue
 			}
-			batch = append(batch, runningAIUsagePoller{
+
+			batch = append(batch, runningPoller{
 				candidate: candidate,
 				child:     child,
 			})
@@ -128,7 +129,7 @@ func AIUsagePollerWorkflow(ctx workflow.Context, configID string) error {
 	})
 
 	var a *Activities
-	if err := workflow.ExecuteActivity(ctx, a.PollAIUsage, configID).Get(ctx, nil); err != nil {
+	if err := workflow.ExecuteActivity(ctx, a.PollAIData, configID).Get(ctx, nil); err != nil {
 		return fmt.Errorf("poll and persist ai integration usage: %w", err)
 	}
 

@@ -64,7 +64,6 @@ type testInstance struct {
 	sessionManager *sessions.Manager
 	signaler       *signalerStub
 	chatRepo       *chatrepo.Queries
-	accessStore    accesscontrol.Store
 }
 
 func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
@@ -98,7 +97,7 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore)
 	auditLogger := audit.NewLogger()
 
-	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, shadowMCPClient, accessStore, auditLogger, "test-jwt-secret", false, nil, nil)
+	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, shadowMCPClient, auditLogger, "test-jwt-secret", false, nil, nil)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -106,7 +105,6 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 		sessionManager: sessionManager,
 		signaler:       sig,
 		chatRepo:       chatrepo.New(conn),
-		accessStore:    accessStore,
 	}
 }
 

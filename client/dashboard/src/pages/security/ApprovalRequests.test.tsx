@@ -52,8 +52,8 @@ vi.mock("@speakeasy-api/moonshine", () => ({
 }));
 
 vi.mock("@/components/access/ApprovalRequestsContent", () => ({
-  ApprovalRequestsContent: ({ projectId }: { projectId: string }) => (
-    <div>Approval Requests Content for {projectId}</div>
+  ApprovalRequestsContent: ({ projectSlug }: { projectSlug: string }) => (
+    <div>Approval Requests Content for {projectSlug}</div>
   ),
 }));
 
@@ -85,9 +85,7 @@ describe("ApprovalRequests", () => {
 
     render(<ApprovalRequests />);
 
-    expect(
-      screen.getByText("Approval Requests Content for project-1"),
-    ).toBeTruthy();
+    expect(screen.getByText("Approval Requests Content for demo")).toBeTruthy();
   });
 
   it("requires org admin access", () => {
@@ -107,9 +105,7 @@ describe("ApprovalRequests", () => {
 
     render(<ApprovalRequests />);
 
-    expect(
-      screen.queryByText("Approval Requests Content for project-1"),
-    ).toBeNull();
+    expect(screen.queryByText("Approval Requests Content for demo")).toBeNull();
     expect(screen.getByText("Access restricted")).toBeTruthy();
   });
 });

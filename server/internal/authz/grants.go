@@ -454,8 +454,7 @@ func evaluateGrants(grants []Grant, checks []Check) (allowGrant *Grant, allowChe
 				continue
 			}
 
-			// Allow: permissive matching (skip missing dimensions).
-			if !grant.Selector.Matches(check.selector()) {
+			if !check.matchesAllowSelector(grant.Selector) {
 				continue
 			}
 			return grant, check, false

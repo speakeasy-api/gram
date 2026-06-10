@@ -813,110 +813,94 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 	evidence := shadowmcp.AccessEvidence{
 		FullURL:        "",
 		URLHost:        "",
-		ServerIdentity: mcpServerIdentityFromToolName(rawToolName),
+		ServerIdentity: "",
 	}
 	if matched != nil {
 		evidence.FullURL = matched.URL
-		evidence.ServerIdentity = serverPrefix
-		if matched.URL == "" && matched.Command != "" {
+		if matched.Command != "" {
 			evidence.ServerIdentity = matched.Command
 		}
 	}
-	// Access Rules can explicitly allow a shadow MCP server by URL, command,
-	// or server identity. Deny rules win inside EvaluateAccessRules.
-	if detail != "" && matched != nil {
-		if s.shadowMCPClient == nil {
-			detail = "Shadow MCP validation is unavailable"
-		} else {
-			decision := s.shadowMCPClient.EvaluateAccessRules(ctx, metadata.GramOrgID, metadata.ProjectID, evidence)
-			s.logger.InfoContext(ctx, "evaluated shadow mcp access rules",
-				attr.SlogEvent("shadow_mcp_access_rule_evaluated"),
-				attr.SlogOrganizationID(metadata.GramOrgID),
-				attr.SlogProjectID(metadata.ProjectID),
-				attr.SlogValueAny(map[string]any{
-					"outcome":                   decision.Outcome,
-					"shadow_mcp_access_rule_id": decision.RuleID,
-					"reason":                    decision.Reason,
-					"tool_name":                 mcpToolName,
-				}),
-			)
-			if decision.Allows() {
-				matchedURL, matchedCommand := "", ""
-				if matched != nil {
-					matchedURL = matched.URL
-					matchedCommand = matched.Command
-				}
-				s.logger.InfoContext(ctx, "shadow-mcp call allowed via approval",
-					attr.SlogEvent("claude_hook_allowlist_allow"),
-					attr.SlogToolName(rawToolName),
-					attr.SlogRiskPolicyID(policy.ID),
-					attr.SlogValueAny(map[string]any{
-						"serverPrefix":   serverPrefix,
-						"matchedURL":     matchedURL,
-						"matchedCommand": matchedCommand,
-					}),
-				)
-				detail = ""
-			} else if decision.Reason != "" {
-				detail = decision.Reason
-			}
+	// A non-empty detail means this call is blocked. Return immediately for
+	// clean allows; otherwise give a URL-scoped bypass grant a chance to allow
+	// the call before recording and returning the block below.
+	if detail == "" {
+		if output != nil {
+			output.PermissionDecision = &allow
 		}
+		return result, nil
 	}
-	if detail != "" {
-		auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
-		userReason := s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
-			OrganizationID:  metadata.GramOrgID,
-			ProjectID:       metadata.ProjectID,
-			RequesterUserID: metadata.UserID,
-			UserMessage:     policy.UserMessage,
-			AuditReason:     auditReason,
-			Evidence:        evidence,
-			ToolName:        mcpToolName,
-			ToolInput:       payload.ToolInput,
-			RiskPolicyID:    policy.ID,
-		})
-		matchedURL := ""
+
+	if _, allowed := s.canBypassPolicy(ctx, metadata.GramOrgID, metadata.UserID, policy.ID, evidence, mcpToolName); allowed {
+		matchedURL, matchedCommand := "", ""
 		if matched != nil {
 			matchedURL = matched.URL
+			matchedCommand = matched.Command
 		}
-		s.logger.With(
-			attr.SlogHookSource("claude"),
-			attr.SlogHookEvent(payload.HookEventName),
-			attr.SlogOrganizationID(metadata.GramOrgID),
-			attr.SlogProjectID(metadata.ProjectID),
-			attr.SlogGenAIConversationID(sessionID),
+		s.logger.InfoContext(ctx, "shadow-mcp call allowed via risk policy bypass grant",
+			attr.SlogEvent("claude_hook_policy_bypass_allow"),
 			attr.SlogToolName(rawToolName),
-		).InfoContext(ctx, "denying claude tool call: non-gram MCP server",
-			attr.SlogEvent("claude_hook_denied"),
-			attr.SlogHookBlockReason(detail),
 			attr.SlogRiskPolicyID(policy.ID),
-			attr.SlogRiskPolicyName(policy.Name),
 			attr.SlogValueAny(map[string]any{
-				"serverPrefix": serverPrefix,
-				"matchedURL":   matchedURL,
+				"serverPrefix":   serverPrefix,
+				"matchedURL":     matchedURL,
+				"matchedCommand": matchedCommand,
 			}),
 		)
-		// Record a companion ClickHouse entry with gram.hook.block_reason set
-		// so the trace_summaries materialized view can flag this trace as
-		// blocked. Shares the original PreToolUse trace_id (derived from
-		// tool_use_id) so both rows aggregate into the same trace summary.
-		// Always store the technical reason — the user_message override
-		// is for the agent-facing response only.
-		s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
-
-		// Surface the block in the Recent Findings table (risk_results)
-		// alongside batch-scanner findings, with the URL in the match
-		// column so the dashboard can filter and offer "Exclude from
-		// policy" actions against the URL itself.
-		s.recordShadowMCPBlockFinding(ctx, payload, &metadata, policy, matched, serverPrefix, detail)
-
-		return constructBlockResponse(payload.HookEventName, userReason), nil
+		if output != nil {
+			output.PermissionDecision = &allow
+		}
+		return result, nil
 	}
 
-	if output != nil {
-		output.PermissionDecision = &allow
+	auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
+	userReason := s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
+		OrganizationID:  metadata.GramOrgID,
+		ProjectID:       metadata.ProjectID,
+		RequesterUserID: metadata.UserID,
+		UserMessage:     policy.UserMessage,
+		AuditReason:     auditReason,
+		Evidence:        evidence,
+		ToolName:        mcpToolName,
+		ToolInput:       payload.ToolInput,
+		RiskPolicyID:    policy.ID,
+	})
+	matchedURL := ""
+	if matched != nil {
+		matchedURL = matched.URL
 	}
-	return result, nil
+	s.logger.With(
+		attr.SlogHookSource("claude"),
+		attr.SlogHookEvent(payload.HookEventName),
+		attr.SlogOrganizationID(metadata.GramOrgID),
+		attr.SlogProjectID(metadata.ProjectID),
+		attr.SlogGenAIConversationID(sessionID),
+		attr.SlogToolName(rawToolName),
+	).InfoContext(ctx, "denying claude tool call: non-gram MCP server",
+		attr.SlogEvent("claude_hook_denied"),
+		attr.SlogHookBlockReason(detail),
+		attr.SlogRiskPolicyID(policy.ID),
+		attr.SlogRiskPolicyName(policy.Name),
+		attr.SlogValueAny(map[string]any{
+			"serverPrefix": serverPrefix,
+			"matchedURL":   matchedURL,
+		}),
+	)
+	// Record a companion ClickHouse entry with gram.hook.block_reason set
+	// so the trace_summaries materialized view can flag this trace as
+	// blocked. Shares the original PreToolUse trace_id (derived from
+	// tool_use_id) so both rows aggregate into the same trace summary.
+	// Always store the technical reason — the user_message override
+	// is for the agent-facing response only.
+	s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
+
+	// Surface the block in the Recent Findings table (risk_results)
+	// alongside batch-scanner findings, with the URL in the match
+	// column so the dashboard can filter and offer "Exclude from
+	// policy" actions against the URL itself.
+	s.recordShadowMCPBlockFinding(ctx, payload, &metadata, policy, matched, serverPrefix, detail)
+
+	return constructBlockResponse(payload.HookEventName, userReason), nil
 }
 
 func mergeClaudeAuthContextMetadata(metadata SessionMetadata, cached SessionMetadata) SessionMetadata {

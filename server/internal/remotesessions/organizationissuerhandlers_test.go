@@ -189,6 +189,44 @@ func TestUpdateOrganizationRemoteSessionIssuer(t *testing.T) {
 	require.Empty(t, updated.ProjectID)
 }
 
+func TestCreateOrganizationRemoteSessionIssuer_NameTrimmedAndStored(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	name := "  Org IdP  "
+	payload := newOrgIssuerPayload("org-idp-name")
+	payload.Name = &name
+
+	result, err := ti.service.CreateOrganizationRemoteSessionIssuer(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result.Name)
+	require.Equal(t, "Org IdP", *result.Name)
+}
+
+// An explicit empty string clears the name to NULL on the organization-scoped
+// update path too.
+func TestUpdateOrganizationRemoteSessionIssuer_ClearsName(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	name := "Org Initial"
+	createPayload := newOrgIssuerPayload("org-idp-clear-name")
+	createPayload.Name = &name
+	created, err := ti.service.CreateOrganizationRemoteSessionIssuer(ctx, createPayload)
+	require.NoError(t, err)
+	require.NotNil(t, created.Name)
+
+	empty := ""
+	updated, err := ti.service.UpdateOrganizationRemoteSessionIssuer(ctx, &orggen.UpdateOrganizationRemoteSessionIssuerPayload{
+		ID:   created.ID,
+		Name: &empty,
+	})
+	require.NoError(t, err)
+	require.Nil(t, updated.Name)
+}
+
 func TestDeleteOrganizationRemoteSessionIssuer(t *testing.T) {
 	t.Parallel()
 

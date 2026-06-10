@@ -86,6 +86,38 @@ func TestEngineRequire_mapsMissingGrantsToUnexpected(t *testing.T) {
 	require.ErrorIs(t, err, ErrMissingGrants)
 }
 
+func TestEvaluateLoadedGrants_doesNotConsultShouldEnforce(t *testing.T) {
+	t.Parallel()
+
+	chConn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(false), staticChallengeLogging(true), workos.NewStubClient())
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
+		ActiveOrganizationID:  "org_123",
+		UserID:                "user_123",
+		ExternalUserID:        "",
+		APIKeyID:              "apikey_123",
+		SessionID:             nil,
+		ProjectID:             nil,
+		OrganizationSlug:      "",
+		Email:                 nil,
+		AccountType:           "pro",
+		HasActiveSubscription: false,
+		Whitelisted:           false,
+		ProjectSlug:           nil,
+		APIKeyScopes:          nil,
+	})
+
+	enforce, err := engine.ShouldEnforce(ctx)
+	require.NoError(t, err)
+	require.False(t, enforce)
+
+	err = engine.EvaluateLoadedGrants(ctx, nil, Check{Scope: ScopeProjectRead, ResourceID: "proj_123"})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
 func TestEngineRequire_returnsUnexpectedWhenFeatureCheckFails(t *testing.T) {
 	t.Parallel()
 
