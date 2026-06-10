@@ -1,3 +1,4 @@
+import { AssetImage } from "@/components/asset-image";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
 import {
@@ -6,6 +7,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
+import { formatRemoteSessionIssuerDisplay } from "@/lib/sources";
 import type { RemoteSessionIssuer } from "@gram/client/models/components";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 import { Lock, Plus, Trash2 } from "lucide-react";
@@ -114,9 +116,15 @@ function RemoteIdentityProviderRow({
   return (
     <div className="rounded-md border p-3">
       <Stack direction="horizontal" gap={2} align="center">
+        {issuer.logoAssetId ? (
+          <AssetImage
+            assetId={issuer.logoAssetId}
+            className="size-8 shrink-0 rounded"
+          />
+        ) : null}
         <Stack gap={0} className="min-w-0 flex-1">
-          <Type small className="truncate font-mono">
-            {issuer.slug}
+          <Type small className="truncate font-medium">
+            {formatRemoteSessionIssuerDisplay(issuer)}
           </Type>
           <Type muted mono variant="small" className="break-all">
             {issuer.issuer}

@@ -26,6 +26,14 @@ export type UpdateRemoteSessionIssuerForm = {
    * Upstream JWKS URI.
    */
   jwksUri?: string | undefined;
+  /**
+   * Set the logo asset id.
+   */
+  logoAssetId?: string | undefined;
+  /**
+   * Set or clear the display name. An empty string clears it to NULL.
+   */
+  name?: string | undefined;
   oidc?: boolean | undefined;
   passthrough?: boolean | undefined;
   /**
@@ -52,6 +60,8 @@ export type UpdateRemoteSessionIssuerForm$Outbound = {
   id: string;
   issuer?: string | undefined;
   jwks_uri?: string | undefined;
+  logo_asset_id?: string | undefined;
+  name?: string | undefined;
   oidc?: boolean | undefined;
   passthrough?: boolean | undefined;
   registration_endpoint?: string | undefined;
@@ -73,6 +83,8 @@ export const UpdateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
     id: z.string(),
     issuer: z.optional(z.string()),
     jwksUri: z.optional(z.string()),
+    logoAssetId: z.optional(z.string()),
+    name: z.optional(z.string()),
     oidc: z.optional(z.boolean()),
     passthrough: z.optional(z.boolean()),
     registrationEndpoint: z.optional(z.string()),
@@ -87,6 +99,7 @@ export const UpdateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
       authorizationEndpoint: "authorization_endpoint",
       grantTypesSupported: "grant_types_supported",
       jwksUri: "jwks_uri",
+      logoAssetId: "logo_asset_id",
       registrationEndpoint: "registration_endpoint",
       responseTypesSupported: "response_types_supported",
       scopesSupported: "scopes_supported",
