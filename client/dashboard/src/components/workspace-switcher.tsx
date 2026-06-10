@@ -1,7 +1,10 @@
-import { useOrganization, useProject } from "@/contexts/Auth";
+import { getGradientColors } from "@/components/gradient-colors";
+import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
-import { CheckIcon, ChevronsUpDown, PlusIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { CheckIcon, ChevronDown, ChevronsUpDown, PlusIcon } from "lucide-react";
 import { useState } from "react";
+import { useNavigate } from "react-router";
 import { InputDialog } from "./input-dialog";
 import { ProjectAvatar } from "./project-menu";
 import { Button } from "./ui/button";
@@ -18,8 +21,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 export function WorkspaceSwitcher(): JSX.Element {
   const organization = useOrganization();
   const project = useProject();
+  const session = useSession();
+  const navigate = useNavigate();
   const { projectSlug } = useSlugs();
   const client = useSdkClient();
+  const isMultiOrg = session.organizations.length > 1;
   const [open, setOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
@@ -42,14 +48,59 @@ export function WorkspaceSwitcher(): JSX.Element {
     project.switchProject(result.project.slug);
   };
 
-  // Org-level pages have no project — render org context only.
+  // Org-level pages have no project — render org context only. Collapsed,
+  // swap the truncated name for a gradient initial tile (mirrors ProjectAvatar).
+  // With multiple orgs the row becomes a button that opens the org switcher.
   if (!projectSlug) {
-    return (
-      <div className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm font-medium">
-        <span className="truncate">
-          {organization.name || organization.slug}
+    const orgLabel = organization.name || organization.slug;
+    const orgColors = getGradientColors(organization.id);
+    const orgInitial = orgLabel.charAt(0).toUpperCase();
+    const rowClass =
+      "flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-sm font-medium group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:p-0";
+    const content = (
+      <>
+        <div
+          className={cn(
+            "flex shrink-0 items-center justify-center transition-shadow",
+            "group-data-[collapsible=icon]:ring-border/50 group-data-[collapsible=icon]:bg-card group-data-[collapsible=icon]:rounded-lg group-data-[collapsible=icon]:p-1 group-data-[collapsible=icon]:ring-1",
+            isMultiOrg &&
+              "group-data-[collapsible=icon]:hover:ring-foreground/15 group-data-[collapsible=icon]:hover:ring-2",
+          )}
+        >
+          <div
+            aria-label={orgLabel}
+            className="flex size-6 shrink-0 items-center justify-center rounded-md bg-gradient-to-br text-xs font-semibold text-white group-data-[collapsible=icon]:size-7"
+            style={{
+              backgroundImage: `linear-gradient(${orgColors.angle}deg, ${orgColors.from}, ${orgColors.to})`,
+            }}
+          >
+            {orgInitial}
+          </div>
+        </div>
+        <span className="truncate group-data-[collapsible=icon]:hidden">
+          {orgLabel}
         </span>
-      </div>
+        {isMultiOrg && (
+          <ChevronDown className="text-muted-foreground ml-auto h-4 w-4 shrink-0 group-data-[collapsible=icon]:hidden" />
+        )}
+      </>
+    );
+
+    if (!isMultiOrg) {
+      return <div className={rowClass}>{content}</div>;
+    }
+
+    return (
+      <button
+        type="button"
+        onClick={() => void navigate("/switch-org")}
+        className={cn(
+          rowClass,
+          "hover:bg-accent cursor-pointer text-left transition-colors group-data-[collapsible=icon]:hover:bg-transparent",
+        )}
+      >
+        {content}
+      </button>
     );
   }
 
