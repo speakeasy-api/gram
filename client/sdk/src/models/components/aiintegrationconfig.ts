@@ -75,7 +75,7 @@ export type AIIntegrationConfig = {
    */
   projectId?: string | undefined;
   /**
-   * AI provider identifier. Initially only cursor is supported.
+   * AI provider identifier. Supported values include cursor and anthropic_compliance.
    */
   provider: string;
   /**
