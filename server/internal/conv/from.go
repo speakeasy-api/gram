@@ -153,6 +153,18 @@ func PtrToPGTextEmpty(t *string) pgtype.Text {
 	return pgtype.Text{String: *t, Valid: *t != ""}
 }
 
+// PtrToPGTextTrimmed converts a string pointer to a pgtype.Text, trimming
+// surrounding whitespace and setting Valid to true only if the trimmed result
+// is not empty. A nil pointer or a whitespace-only value yields an invalid
+// (NULL) Text.
+func PtrToPGTextTrimmed(t *string) pgtype.Text {
+	if t == nil {
+		return pgtype.Text{Valid: false, String: ""}
+	}
+
+	return ToPGTextEmpty(strings.TrimSpace(*t))
+}
+
 // ToPGTimestamptz converts a time.Time to a pgtype.Timestamptz with Valid set
 // to true and InfinityModifier set to Finite.
 func ToPGTimestamptz(t time.Time) pgtype.Timestamptz {
