@@ -30,6 +30,7 @@ type LogRemoteSessionIssuerCreateEvent struct {
 	RemoteSessionIssuerURN urn.RemoteSessionIssuer
 	Slug                   string
 	IssuerURL              string
+	Name                   *string
 }
 
 func (l *Logger) LogRemoteSessionIssuerCreate(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionIssuerCreateEvent) error {
@@ -47,7 +48,7 @@ func (l *Logger) LogRemoteSessionIssuerCreate(ctx context.Context, dbtx repo.DBT
 
 		SubjectID:          event.RemoteSessionIssuerURN.ID.String(),
 		SubjectType:        string(subjectTypeRemoteSessionIssuer),
-		SubjectDisplayName: conv.ToPGTextEmpty(event.IssuerURL),
+		SubjectDisplayName: conv.ToPGTextEmpty(remoteSessionIssuerDisplayName(event.Name, event.IssuerURL)),
 		SubjectSlug:        conv.ToPGTextEmpty(event.Slug),
 
 		BeforeSnapshot: nil,
@@ -56,6 +57,16 @@ func (l *Logger) LogRemoteSessionIssuerCreate(ctx context.Context, dbtx repo.DBT
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteSessionIssuerV1})
+}
+
+// remoteSessionIssuerDisplayName picks the human-facing subject label for an
+// issuer audit entry: the optional display name when set, otherwise the issuer
+// URL.
+func remoteSessionIssuerDisplayName(name *string, issuerURL string) string {
+	if name != nil && *name != "" {
+		return *name
+	}
+	return issuerURL
 }
 
 type LogRemoteSessionIssuerUpdateEvent struct {
@@ -69,6 +80,7 @@ type LogRemoteSessionIssuerUpdateEvent struct {
 	RemoteSessionIssuerURN urn.RemoteSessionIssuer
 	Slug                   string
 	IssuerURL              string
+	Name                   *string
 
 	SnapshotBefore *types.RemoteSessionIssuer
 	SnapshotAfter  *types.RemoteSessionIssuer
@@ -100,7 +112,7 @@ func (l *Logger) LogRemoteSessionIssuerUpdate(ctx context.Context, dbtx repo.DBT
 
 		SubjectID:          event.RemoteSessionIssuerURN.ID.String(),
 		SubjectType:        string(subjectTypeRemoteSessionIssuer),
-		SubjectDisplayName: conv.ToPGTextEmpty(event.IssuerURL),
+		SubjectDisplayName: conv.ToPGTextEmpty(remoteSessionIssuerDisplayName(event.Name, event.IssuerURL)),
 		SubjectSlug:        conv.ToPGTextEmpty(event.Slug),
 
 		BeforeSnapshot: beforeSnapshot,
@@ -122,6 +134,7 @@ type LogRemoteSessionIssuerDeleteEvent struct {
 	RemoteSessionIssuerURN urn.RemoteSessionIssuer
 	Slug                   string
 	IssuerURL              string
+	Name                   *string
 }
 
 func (l *Logger) LogRemoteSessionIssuerDelete(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionIssuerDeleteEvent) error {
@@ -139,7 +152,7 @@ func (l *Logger) LogRemoteSessionIssuerDelete(ctx context.Context, dbtx repo.DBT
 
 		SubjectID:          event.RemoteSessionIssuerURN.ID.String(),
 		SubjectType:        string(subjectTypeRemoteSessionIssuer),
-		SubjectDisplayName: conv.ToPGTextEmpty(event.IssuerURL),
+		SubjectDisplayName: conv.ToPGTextEmpty(remoteSessionIssuerDisplayName(event.Name, event.IssuerURL)),
 		SubjectSlug:        conv.ToPGTextEmpty(event.Slug),
 
 		BeforeSnapshot: nil,

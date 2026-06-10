@@ -1,3 +1,4 @@
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Sheet,
@@ -164,6 +165,12 @@ function ModifyRemoteIdentityProviderSheetBody({
     endpointWarnings,
   } = discovery;
 
+  // Editable display name, seeded from the saved record. The body remounts on
+  // each open (the `{open && <Body />}` pattern), so seeding from props here is
+  // fresh per open. Submitting an empty string clears the name to NULL on the
+  // backend.
+  const [name, setName] = useState(issuer.name ?? "");
+
   // Client-side form state. clientId is informational only — the API has no
   // rotate path, so it stays read-only. clientSecret starts blank; a typed
   // value rotates the secret, blank means "leave unchanged".
@@ -192,6 +199,9 @@ function ModifyRemoteIdentityProviderSheetBody({
         updateRemoteSessionIssuerForm: {
           id: issuer.id,
           issuer: issuerUrl.trim(),
+          // Empty string clears the saved display name to NULL, same three-state
+          // semantics the backend applies to the nullable endpoint fields.
+          name: name.trim(),
           authorizationEndpoint: authorizationEndpoint.trim(),
           tokenEndpoint: tokenEndpoint.trim(),
           registrationEndpoint: registrationEndpoint.trim(),
@@ -321,6 +331,21 @@ function ModifyRemoteIdentityProviderSheetBody({
           <Type muted small>
             Slug is the stable identifier for this identity provider and can't
             be renamed here.
+          </Type>
+        </Stack>
+
+        <Stack gap={2}>
+          <Label className="text-muted-foreground text-xs">
+            Display name (optional)
+          </Label>
+          <Input
+            value={name}
+            onChange={setName}
+            placeholder="My Identity Provider"
+          />
+          <Type muted small>
+            Friendly label shown in the dashboard. Clear it to fall back to the
+            Issuer URL.
           </Type>
         </Stack>
 

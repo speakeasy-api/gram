@@ -89,6 +89,10 @@ export function AttachRemoteIdentityProviderSheet({
   );
   const [selectedIssuerId, setSelectedIssuerId] = useState<string>("");
 
+  // Optional display name. Empty submits as undefined so the backend stores
+  // NULL and consumers fall back to the issuer URL.
+  const [name, setName] = useState("");
+
   const [slug, setSlug] = useState("");
   // When the operator hasn't manually edited Slug, we keep it in lockstep
   // with a slugified form of the Issuer URL hostname (similar to the remote
@@ -171,6 +175,7 @@ export function AttachRemoteIdentityProviderSheet({
           createRemoteSessionIssuerForm: {
             slug: slug.trim(),
             issuer: issuerUrl.trim(),
+            name: name.trim() || undefined,
             authorizationEndpoint: authorizationEndpoint.trim() || undefined,
             tokenEndpoint: tokenEndpoint.trim() || undefined,
             registrationEndpoint: registrationEndpoint.trim() || undefined,
@@ -334,6 +339,7 @@ export function AttachRemoteIdentityProviderSheet({
         buildUserSessionResourceSlug(mcpServer.slug ?? "mcp"),
     );
     setSlugDirty(false);
+    setName("");
     setIssuerUrl(initialIssuerUrl ?? "");
     resetEndpointState();
     clearDiscoverError();
@@ -482,6 +488,21 @@ export function AttachRemoteIdentityProviderSheet({
                 </Type>
               </Stack>
 
+              <Stack gap={2}>
+                <Label className="text-muted-foreground text-xs">
+                  Display name (optional)
+                </Label>
+                <Input
+                  value={name}
+                  onChange={setName}
+                  placeholder="My Identity Provider"
+                />
+                <Type muted small>
+                  Friendly label shown in the dashboard. Falls back to the
+                  Issuer URL when left blank.
+                </Type>
+              </Stack>
+
               <EndpointsFields
                 issuerUrl={issuerUrl}
                 authorizationEndpoint={authorizationEndpoint}
@@ -609,7 +630,7 @@ function SelectExistingFields({
         <SelectContent>
           {selectableIssuers.map((issuer) => (
             <SelectItem key={issuer.id} value={issuer.id}>
-              {issuer.slug} — {issuer.issuer}
+              {issuer.name?.trim() || issuer.slug} — {issuer.issuer}
             </SelectItem>
           ))}
         </SelectContent>

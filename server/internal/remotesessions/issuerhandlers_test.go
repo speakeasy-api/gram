@@ -103,6 +103,74 @@ func TestCreateRemoteSessionIssuer_BadRequestEmptySlug(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
+func TestCreateRemoteSessionIssuer_NameStored(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	name := "My IdP"
+	payload := newIssuerPayload("idp-name-stored")
+	payload.Name = &name
+
+	result, err := ti.service.CreateRemoteSessionIssuer(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result.Name)
+	require.Equal(t, "My IdP", *result.Name)
+
+	// The audit subject display name reflects the name when set.
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerCreate)
+	require.NoError(t, err)
+	require.Equal(t, "My IdP", record.SubjectDisplay)
+}
+
+func TestCreateRemoteSessionIssuer_NameTrimmed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	name := "  Trimmed Name  "
+	payload := newIssuerPayload("idp-name-trimmed")
+	payload.Name = &name
+
+	result, err := ti.service.CreateRemoteSessionIssuer(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result.Name)
+	require.Equal(t, "Trimmed Name", *result.Name)
+}
+
+func TestCreateRemoteSessionIssuer_NameEmptyTreatedAsNull(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	name := "   "
+	payload := newIssuerPayload("idp-name-empty")
+	payload.Name = &name
+
+	result, err := ti.service.CreateRemoteSessionIssuer(ctx, payload)
+	require.NoError(t, err)
+	require.Nil(t, result.Name)
+
+	// With no name, the audit subject display name falls back to the issuer URL.
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerCreate)
+	require.NoError(t, err)
+	require.Equal(t, "https://idp.example.com", record.SubjectDisplay)
+}
+
+func TestCreateRemoteSessionIssuer_InvalidLogoAssetID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	badID := "not-a-uuid"
+	payload := newIssuerPayload("idp-bad-logo")
+	payload.LogoAssetID = &badID
+
+	_, err := ti.service.CreateRemoteSessionIssuer(ctx, payload)
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
 func TestGetRemoteSessionIssuer_ByID(t *testing.T) {
 	t.Parallel()
 
@@ -296,6 +364,71 @@ func TestUpdateRemoteSessionIssuer(t *testing.T) {
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerUpdate)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount+1, afterCount)
+}
+
+func TestUpdateRemoteSessionIssuer_SetsName(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayload("idp-update-name"))
+	require.NoError(t, err)
+	require.Nil(t, created.Name)
+
+	name := "Renamed IdP"
+	updated, err := ti.service.UpdateRemoteSessionIssuer(ctx, &gen.UpdateRemoteSessionIssuerPayload{
+		ID:   created.ID,
+		Name: &name,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.Name)
+	require.Equal(t, "Renamed IdP", *updated.Name)
+}
+
+// An explicit empty string clears the name to NULL, mirroring the nullable
+// endpoint columns.
+func TestUpdateRemoteSessionIssuer_ClearsName(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	name := "Initial Name"
+	createPayload := newIssuerPayload("idp-clear-name")
+	createPayload.Name = &name
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, createPayload)
+	require.NoError(t, err)
+	require.NotNil(t, created.Name)
+
+	empty := ""
+	updated, err := ti.service.UpdateRemoteSessionIssuer(ctx, &gen.UpdateRemoteSessionIssuerPayload{
+		ID:   created.ID,
+		Name: &empty,
+	})
+	require.NoError(t, err)
+	require.Nil(t, updated.Name)
+}
+
+// An omitted name (nil) leaves the existing value untouched.
+func TestUpdateRemoteSessionIssuer_OmittedNameKeepsExisting(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	name := "Keep Me"
+	createPayload := newIssuerPayload("idp-keep-name")
+	createPayload.Name = &name
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, createPayload)
+	require.NoError(t, err)
+
+	newSlug := "idp-keep-name-renamed"
+	updated, err := ti.service.UpdateRemoteSessionIssuer(ctx, &gen.UpdateRemoteSessionIssuerPayload{
+		ID:   created.ID,
+		Slug: &newSlug,
+		Name: nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.Name)
+	require.Equal(t, "Keep Me", *updated.Name)
 }
 
 func TestUpdateRemoteSessionIssuer_NotFound(t *testing.T) {
