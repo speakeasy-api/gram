@@ -360,7 +360,7 @@ function mockAdminRBAC() {
 }
 
 function renderContent(
-  projectId = "project-1",
+  projectSlug = "project-1",
   path = "/speakeasy/projects/project-1/approval-requests",
 ) {
   const queryClient = new QueryClient();
@@ -372,7 +372,7 @@ function renderContent(
           path="/:orgSlug/projects/:projectSlug/approval-requests"
           element={
             <QueryClientProvider client={queryClient}>
-              <ApprovalRequestsContent projectId={projectId} />
+              <ApprovalRequestsContent projectSlug={projectSlug} />
             </QueryClientProvider>
           }
         />
@@ -584,6 +584,7 @@ describe("ApprovalRequestsContent", () => {
     await waitFor(() => {
       expect(denyRequest).toHaveBeenCalledWith({
         request: {
+          gramProject: "project-1",
           riskIDRequestBody: { id: "request-deny" },
         },
       });
@@ -618,6 +619,7 @@ describe("ApprovalRequestsContent", () => {
     await waitFor(() => {
       expect(approveRequest).toHaveBeenCalledWith({
         request: {
+          gramProject: "project-1",
           riskPolicyBypassApprovalRequestBody: {
             id: "request-approve",
             grantedPrincipalUrns: ["user:user-1"],
@@ -656,6 +658,7 @@ describe("ApprovalRequestsContent", () => {
     await waitFor(() => {
       expect(approveRequest).toHaveBeenCalledWith({
         request: {
+          gramProject: "project-1",
           riskPolicyBypassApprovalRequestBody: {
             id: "request-everyone",
             grantedPrincipalUrns: ["user:all"],
@@ -698,6 +701,7 @@ describe("ApprovalRequestsContent", () => {
     await waitFor(() => {
       expect(approveRequest).toHaveBeenCalledWith({
         request: {
+          gramProject: "project-1",
           riskPolicyBypassApprovalRequestBody: {
             id: "request-role",
             grantedPrincipalUrns: ["role:organization:role-reviewers"],
@@ -784,6 +788,7 @@ describe("ApprovalRequestsContent", () => {
     await waitFor(() => {
       expect(approveRequest).toHaveBeenCalledWith({
         request: {
+          gramProject: "project-1",
           riskPolicyBypassApprovalRequestBody: {
             id: "request-edit",
             grantedPrincipalUrns: ["role:organization:role-reviewers"],
@@ -834,7 +839,10 @@ describe("ApprovalRequestsContent", () => {
 
     await waitFor(() => {
       expect(revokeRequest).toHaveBeenCalledWith({
-        request: { riskIDRequestBody: { id: "request-revoke" } },
+        request: {
+          gramProject: "project-1",
+          riskIDRequestBody: { id: "request-revoke" },
+        },
       });
     });
   });
@@ -861,7 +869,7 @@ describe("ApprovalRequestsContent", () => {
       }),
     );
     const queryClient = new QueryClient();
-    const renderWithProject = (projectId: string) => (
+    const renderWithProject = (projectSlug: string) => (
       <MemoryRouter
         initialEntries={["/speakeasy/projects/project-1/approval-requests"]}
       >
@@ -870,7 +878,7 @@ describe("ApprovalRequestsContent", () => {
             path="/:orgSlug/projects/:projectSlug/approval-requests"
             element={
               <QueryClientProvider client={queryClient}>
-                <ApprovalRequestsContent projectId={projectId} />
+                <ApprovalRequestsContent projectSlug={projectSlug} />
               </QueryClientProvider>
             }
           />

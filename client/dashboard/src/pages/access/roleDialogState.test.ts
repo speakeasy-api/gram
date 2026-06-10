@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   effectiveGrantCount,
+  visiblePermissionCount,
   grantKeysString,
   hasFormChanges,
   isSaveDisabled,
@@ -65,6 +66,19 @@ describe("effectiveGrantCount", () => {
 
   it("returns 0 for empty grants", () => {
     expect(effectiveGrantCount({})).toBe(0);
+  });
+});
+
+describe("visiblePermissionCount", () => {
+  it("excludes risk policy grants from role permission counts", () => {
+    expect(
+      visiblePermissionCount([
+        { scope: "org:read" },
+        { scope: "org:admin" },
+        { scope: "risk_policy:evaluate" },
+        { scope: "risk_policy:bypass" },
+      ]),
+    ).toBe(2);
   });
 });
 

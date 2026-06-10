@@ -358,7 +358,7 @@ function getPolicyBypassRequesterDetail(request: RiskPolicyBypassRequest) {
 
 function ReviewRequestSheet({
   request,
-  projectId,
+  projectSlug,
   roles,
   members,
   open,
@@ -368,7 +368,7 @@ function ReviewRequestSheet({
   onDeny,
 }: {
   request: RiskPolicyBypassRequest | null;
-  projectId: string;
+  projectSlug: string;
   roles: Role[];
   members: AccessMember[];
   open: boolean;
@@ -424,7 +424,7 @@ function ReviewRequestSheet({
           roles,
         });
   const approveReady = action !== "approve" || principalUrns.length > 0;
-  const canSubmit = projectId.length > 0 && approveReady;
+  const canSubmit = projectSlug.length > 0 && approveReady;
   const submitLabel = reviewRequestSubmitLabel(isEditingAccess, action);
   const sheetCopy = reviewRequestSheetCopy(isEditingAccess);
   const selectApprovalAudience = (audience: ApprovalAudience) => {
@@ -687,9 +687,9 @@ function ReviewRequestSheet({
 }
 
 export function ApprovalRequestsContent({
-  projectId,
+  projectSlug,
 }: {
-  projectId: string;
+  projectSlug: string;
 }): JSX.Element {
   const queryClient = useQueryClient();
   const { hasScope } = useRBAC();
@@ -701,17 +701,17 @@ export function ApprovalRequestsContent({
 
   useEffect(() => {
     setRulePendingDelete(null);
-  }, [projectId]);
+  }, [projectSlug]);
 
   const requestsQuery = useRiskListPolicyBypassRequests(
-    { status: "requested", gramProject: projectId },
+    { status: "requested", gramProject: projectSlug },
     undefined,
-    { enabled: canAdmin && projectId.length > 0 },
+    { enabled: canAdmin && projectSlug.length > 0 },
   );
   const rulesQuery = useRiskListPolicyBypassRequests(
-    { status: "approved", gramProject: projectId },
+    { status: "approved", gramProject: projectSlug },
     undefined,
-    { enabled: canAdmin && projectId.length > 0 },
+    { enabled: canAdmin && projectSlug.length > 0 },
   );
   const rolesQuery = useRoles(undefined, undefined, { enabled: canAdmin });
   const membersQuery = useMembers(undefined, undefined, { enabled: canAdmin });
@@ -774,7 +774,10 @@ export function ApprovalRequestsContent({
 
     try {
       await revokeRequest.mutateAsync({
-        request: { riskIDRequestBody: { id: rulePendingDelete.id } },
+        request: {
+          gramProject: projectSlug,
+          riskIDRequestBody: { id: rulePendingDelete.id },
+        },
       });
       await refreshApprovalRequestsData();
       toast.success("Access revoked");
@@ -925,7 +928,7 @@ export function ApprovalRequestsContent({
     <div className="space-y-8">
       <ReviewRequestSheet
         request={reviewRequest}
-        projectId={projectId}
+        projectSlug={projectSlug}
         roles={roles}
         members={members}
         open={!!reviewRequest}
@@ -938,6 +941,7 @@ export function ApprovalRequestsContent({
 
           await approveRequest.mutateAsync({
             request: {
+              gramProject: projectSlug,
               riskPolicyBypassApprovalRequestBody: {
                 id: reviewRequest.id,
                 grantedPrincipalUrns: principalUrns,
@@ -953,6 +957,7 @@ export function ApprovalRequestsContent({
 
           await denyRequest.mutateAsync({
             request: {
+              gramProject: projectSlug,
               riskIDRequestBody: { id: reviewRequest.id },
             },
           });
