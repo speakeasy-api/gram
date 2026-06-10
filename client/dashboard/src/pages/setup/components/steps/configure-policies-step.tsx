@@ -202,7 +202,9 @@ function formatMessageTypes(types: Set<PolicyMessageType>): string {
     .join(", ");
 }
 
-export function ConfigurePoliciesStep({ onBack }: ConfigurePoliciesStepProps) {
+export function ConfigurePoliciesStep({
+  onBack,
+}: ConfigurePoliciesStepProps): JSX.Element {
   const { orgSlug = "" } = useSlugs();
   const navigate = useNavigate();
   const location = useLocation();
@@ -213,7 +215,7 @@ export function ConfigurePoliciesStep({ onBack }: ConfigurePoliciesStepProps) {
   );
 
   const handleComplete = () => {
-    navigate(`/${orgSlug}/projects/${projectSlug}`);
+    void navigate(`/${orgSlug}/projects/${projectSlug}`);
   };
   const [configs, setConfigs] = useState<Record<RuleCategory, CategoryConfig>>(
     () => {
@@ -231,7 +233,7 @@ export function ConfigurePoliciesStep({ onBack }: ConfigurePoliciesStepProps) {
 
   const queryClient = useQueryClient();
   const { data: policiesData } = useRiskListPolicies();
-  const policies = policiesData?.policies ?? [];
+  const policies = useMemo(() => policiesData?.policies ?? [], [policiesData]);
 
   const policyForCategory = useMemo(() => {
     const map = new Map<RuleCategory, (typeof policies)[number]>();
@@ -245,8 +247,8 @@ export function ConfigurePoliciesStep({ onBack }: ConfigurePoliciesStepProps) {
   }, [policies]);
 
   const invalidatePolicies = () => {
-    invalidateAllRiskListPolicies(queryClient);
-    invalidateAllRiskPoliciesStatus(queryClient);
+    void invalidateAllRiskListPolicies(queryClient);
+    void invalidateAllRiskPoliciesStatus(queryClient);
   };
 
   const createPolicyMutation = useRiskCreatePolicyMutation({
@@ -327,9 +329,9 @@ export function ConfigurePoliciesStep({ onBack }: ConfigurePoliciesStepProps) {
     });
     if (!settledRef.current) {
       settledRef.current = true;
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => setAnimationsReady(true)),
-      );
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => setAnimationsReady(true));
+      });
     }
   }, [policiesData, policyForCategory]);
 
