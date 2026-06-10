@@ -101,7 +101,10 @@ impl Tool for McpForceReconnectTool {
         let total = senders.len();
         let (text, is_error) = if total == 0 {
             (
-                format!("no live threads to reconnect mcp server {}", input.server_id),
+                format!(
+                    "no live threads to reconnect mcp server {}",
+                    input.server_id
+                ),
                 true,
             )
         } else {
