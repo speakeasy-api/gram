@@ -144,18 +144,30 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
         authAutoConfig,
       };
     },
-    onSuccess: async () => {
+    onSuccess: async ({ authAutoConfig }) => {
       // refetchType "all" forces the refetch even when there are no active
       // observers — Sources isn't mounted while the create form is, so without
       // this the listServers cache stays stale until the next mount.
-      await Promise.all([
+      const invalidations = [
         invalidateAllRemoteMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
-        invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
-        invalidateAllRemoteSessionIssuers(queryClient, { refetchType: "all" }),
-        invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),
-      ]);
+      ];
+      // The auth caches only change when auto-configuration actually ran to
+      // completion; a skipped run leaves them untouched, so don't force three
+      // extra refetches on the common no-OAuth path.
+      if (authAutoConfig.status === "configured") {
+        invalidations.push(
+          invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
+          invalidateAllRemoteSessionIssuers(queryClient, {
+            refetchType: "all",
+          }),
+          invalidateAllRemoteSessionClients(queryClient, {
+            refetchType: "all",
+          }),
+        );
+      }
+      await Promise.all(invalidations);
     },
   });
 }
