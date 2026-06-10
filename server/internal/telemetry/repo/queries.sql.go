@@ -2819,9 +2819,15 @@ type GetTokensUnderManagementParams struct {
 // GetTokensUnderManagement sums token usage for the billing window, counting
 // only sessions Gram has stored non-metrics data for (chats, tool calls).
 // OTEL forwarding can report token usage for an entire customer org while
-// Gram is installed for a subset of users, so token-usage rows only count
-// when their chat id also appears on at least one non-metrics row: a
-// tool-call row, a hook event, or any row without a token-usage attribute.
+// Gram is installed for a subset of users, so a chat's tokens only count
+// when at least one non-metrics row (a tool call, a hook event, or any row
+// without a token-usage attribute) was recorded for it inside the window.
+//
+// Reads the chat_token_summaries aggregate, which buckets by day and is
+// retained well beyond the raw telemetry TTL, so historical billing cycles
+// stay computable. Window boundaries are day-granular: the start rounds down
+// to its UTC day and the end is expected to be a UTC day boundary, which
+// billing cycle boundaries always are.
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetTokensUnderManagement(ctx context.Context, arg GetTokensUnderManagementParams) (int64, error) {
@@ -2829,27 +2835,20 @@ func (q *Queries) GetTokensUnderManagement(ctx context.Context, arg GetTokensUnd
 		return 0, nil
 	}
 
-	storedChats := sq.Select("DISTINCT chat_id").
-		From("telemetry_logs").
+	perChat := sq.Select(
+		"chat_id",
+		"sum(total_tokens) AS tokens",
+		"sum(stored_event_count) AS stored_events",
+	).
+		From("chat_token_summaries").
 		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
-		Where("time_unix_nano >= ?", arg.StartUnixNano).
-		Where("time_unix_nano < ?", arg.EndUnixNano).
+		Where("time_bucket >= toStartOfDay(fromUnixTimestamp64Nano(?))", arg.StartUnixNano).
+		Where("time_bucket < fromUnixTimestamp64Nano(?)", arg.EndUnixNano).
 		Where("chat_id != ''").
-		Where("(startsWith(gram_urn, 'tools:') OR event_source != '' OR toString(attributes.gen_ai.usage.total_tokens) = '')")
+		GroupBy("chat_id").
+		Having("stored_events > 0")
 
-	storedChatsSQL, storedChatsArgs, err := storedChats.ToSql()
-	if err != nil {
-		return 0, fmt.Errorf("building stored chats subquery: %w", err)
-	}
-
-	sb := sq.Select("sum(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens))) AS tum_tokens").
-		From("telemetry_logs").
-		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
-		Where("time_unix_nano >= ?", arg.StartUnixNano).
-		Where("time_unix_nano < ?", arg.EndUnixNano).
-		Where("toString(attributes.gen_ai.usage.total_tokens) != ''").
-		Where("chat_id != ''").
-		Where(squirrel.Expr("chat_id IN ("+storedChatsSQL+")", storedChatsArgs...))
+	sb := sq.Select("sum(tokens) AS tum_tokens").FromSelect(perChat, "per_chat")
 
 	query, args, err := sb.ToSql()
 	if err != nil {

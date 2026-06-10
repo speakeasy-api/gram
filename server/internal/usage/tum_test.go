@@ -155,40 +155,74 @@ func TestGetTokensUnderManagementQuery_FiltersUnstoredSessions(t *testing.T) {
 
 	_, _, chConn, projectID := newTUMTestService(t, "org-tum-query")
 
+	// The summary table buckets by UTC day, so the window is day-aligned and
+	// the out-of-window rows sit several days back.
 	now := time.Now().UTC()
+	dayStart := now.Truncate(24 * time.Hour)
+	windowStart := dayStart.Add(-2 * 24 * time.Hour)
+	windowEnd := dayStart.Add(24 * time.Hour)
+
 	storedToolChat := uuid.New().String()
 	storedChatEventChat := uuid.New().String()
 	forwardedOnlyChat := uuid.New().String()
 
 	// Stored session: token rows plus a tool-call row. Counted.
-	insertTokenUsageRow(t, chConn, projectID.String(), now.Add(-10*time.Minute), storedToolChat, 100)
-	insertTokenUsageRow(t, chConn, projectID.String(), now.Add(-9*time.Minute), storedToolChat, 200)
-	insertToolCallRow(t, chConn, projectID.String(), now.Add(-9*time.Minute), storedToolChat)
+	insertTokenUsageRow(t, chConn, projectID.String(), now, storedToolChat, 100)
+	insertTokenUsageRow(t, chConn, projectID.String(), now, storedToolChat, 200)
+	insertToolCallRow(t, chConn, projectID.String(), now, storedToolChat)
 
 	// Stored session: token row plus a chat event row without usage. Counted.
-	insertTokenUsageRow(t, chConn, projectID.String(), now.Add(-8*time.Minute), storedChatEventChat, 1000)
-	insertChatEventRow(t, chConn, projectID.String(), now.Add(-8*time.Minute), storedChatEventChat)
+	insertTokenUsageRow(t, chConn, projectID.String(), now, storedChatEventChat, 1000)
+	insertChatEventRow(t, chConn, projectID.String(), now, storedChatEventChat)
 
 	// OTEL-forwarded-only session: token rows with no stored chat or tool
 	// call data. Excluded.
-	insertTokenUsageRow(t, chConn, projectID.String(), now.Add(-7*time.Minute), forwardedOnlyChat, 5000)
+	insertTokenUsageRow(t, chConn, projectID.String(), now, forwardedOnlyChat, 5000)
 
 	// Token row with no chat id at all. Excluded.
-	insertTokenUsageRow(t, chConn, projectID.String(), now.Add(-6*time.Minute), "", 777)
+	insertTokenUsageRow(t, chConn, projectID.String(), now, "", 777)
 
 	// Stored session rows outside the window. Excluded.
-	insertTokenUsageRow(t, chConn, projectID.String(), now.Add(-3*time.Hour), storedToolChat, 9000)
+	insertTokenUsageRow(t, chConn, projectID.String(), now.Add(-5*24*time.Hour), storedToolChat, 9000)
 
 	// Wait for ClickHouse eventual consistency.
 	time.Sleep(200 * time.Millisecond)
 
 	tokens, err := telemetryrepo.New(chConn).GetTokensUnderManagement(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
 		ProjectIDs:    []string{projectID.String()},
-		StartUnixNano: now.Add(-1 * time.Hour).UnixNano(),
-		EndUnixNano:   now.UnixNano(),
+		StartUnixNano: windowStart.UnixNano(),
+		EndUnixNano:   windowEnd.UnixNano(),
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1300), tokens, "should count only sessions with stored non-metrics data inside the window")
+}
+
+func TestGetTokensUnderManagementQuery_EvidenceOutsideWindowDoesNotCount(t *testing.T) {
+	t.Parallel()
+
+	_, _, chConn, projectID := newTUMTestService(t, "org-tum-stale-evidence")
+
+	now := time.Now().UTC()
+	dayStart := now.Truncate(24 * time.Hour)
+	windowStart := dayStart.Add(-2 * 24 * time.Hour)
+	windowEnd := dayStart.Add(24 * time.Hour)
+
+	chatID := uuid.New().String()
+
+	// Token usage inside the window, but the only stored evidence for the
+	// chat predates the window — the session does not count this cycle.
+	insertTokenUsageRow(t, chConn, projectID.String(), now, chatID, 4000)
+	insertToolCallRow(t, chConn, projectID.String(), now.Add(-5*24*time.Hour), chatID)
+
+	time.Sleep(200 * time.Millisecond)
+
+	tokens, err := telemetryrepo.New(chConn).GetTokensUnderManagement(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
+		ProjectIDs:    []string{projectID.String()},
+		StartUnixNano: windowStart.UnixNano(),
+		EndUnixNano:   windowEnd.UnixNano(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(0), tokens)
 }
 
 func TestGetTokensUnderManagementQuery_NoProjects(t *testing.T) {
