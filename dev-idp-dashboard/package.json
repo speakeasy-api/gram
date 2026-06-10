@@ -14,7 +14,7 @@
     "@fontsource-variable/space-grotesk": "^5.2.10",
     "@tailwindcss/vite": "^4.2.4",
     "@tanstack/match-sorter-utils": "^8.19.4",
-    "@tanstack/react-form": "^1.29.1",
+    "@tanstack/react-form": "^1.33.0",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-router": "^1.166.0",
     "@tanstack/react-start": "^1.166.0",
