@@ -55,7 +55,7 @@ const PROVIDERS: AIIntegrationProvider[] = [
     provider: "anthropic_compliance",
     name: "Anthropic Compliance",
     description:
-      "Import Claude.ai chat transcripts and files for compliance review.",
+      "Import Claude Chats from claude.ai web and desktop for security review.",
     icon: ClaudeCodeIcon,
     apiKeyLabel: "Compliance Access API Key",
     apiKeyPlaceholder: "sk-ant-admin...",
@@ -67,7 +67,16 @@ const PROVIDERS: AIIntegrationProvider[] = [
         The API key must include the{" "}
         <code className="text-foreground">read:compliance_activities</code> and{" "}
         <code className="text-foreground">read:compliance_user_data</code>{" "}
-        scopes.
+        scopes.{" "}
+        <a
+          href="https://platform.claude.com/docs/en/manage-claude/compliance-api-access"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-foreground underline underline-offset-4"
+        >
+          Learn more
+        </a>
+        .
       </>
     ),
   },
