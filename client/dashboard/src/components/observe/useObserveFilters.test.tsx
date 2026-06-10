@@ -5,6 +5,8 @@ import { MemoryRouter, useNavigate } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { AccessMember, Role } from "@gram/client/models/components";
 import { Operator } from "@gram/client/models/components";
+import { useMembers } from "@gram/client/react-query/members.js";
+import { useRoles } from "@gram/client/react-query/roles.js";
 import { DEFAULT_HOOK_TYPES } from "./observeFilterConstants";
 import { useObserveFilters } from "./useObserveFilters";
 
@@ -14,9 +16,15 @@ vi.mock("@gram/client/react-query/members.js", () => ({
 vi.mock("@gram/client/react-query/roles.js", () => ({
   useRoles: vi.fn(),
 }));
-
-import { useMembers } from "@gram/client/react-query/members.js";
-import { useRoles } from "@gram/client/react-query/roles.js";
+vi.mock("@gram/client/react-query", () => ({
+  useGramContext: () => ({}),
+}));
+vi.mock("@gram/client/funcs/telemetryGetHooksSummary", () => ({
+  telemetryGetHooksSummary: vi.fn().mockResolvedValue({
+    ok: true,
+    value: { servers: [], users: [] },
+  }),
+}));
 
 function useObserveFiltersWithNavigation() {
   const filters = useObserveFilters();
