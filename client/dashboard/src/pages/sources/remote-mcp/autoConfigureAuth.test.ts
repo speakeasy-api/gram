@@ -2,6 +2,7 @@ import type { Gram } from "@gram/client";
 import type {
   McpServer,
   RemoteMcpServer,
+  RemoteSessionClient,
   RemoteSessionIssuer,
 } from "@gram/client/models/components";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -128,6 +129,129 @@ describe("autoConfigureRemoteMcpAuth", () => {
     });
   });
 
+  it("reuses an existing issuer's client even when the IdP lacks DCR", async () => {
+    const projectIssuer = remoteSessionIssuer({
+      id: "project-issuer",
+      projectId: "project-1",
+      issuer: "https://idp.example.com",
+    });
+    const client = mockClient({
+      issuers: [projectIssuer],
+      issuerClients: [
+        remoteSessionClient({
+          remoteSessionIssuerId: "project-issuer",
+          userSessionIssuerId: "existing-user-session-issuer",
+        }),
+      ],
+      issuerDraft: {
+        issuer: "https://idp.example.com",
+        authorizationEndpoint: "https://idp.example.com/authorize",
+        tokenEndpoint: "https://idp.example.com/token",
+        scopesSupported: [],
+        tokenEndpointAuthMethodsSupported: [],
+        oidc: false,
+        passthrough: false,
+        discoveryWarnings: [],
+      },
+    });
+
+    const result = await autoConfigureRemoteMcpAuth({
+      client: client as unknown as Gram,
+      authedFetch: vi.fn(),
+      remoteMcpServer: remoteMcpServer(),
+      mcpServer: mcpServer(),
+    });
+
+    expect(result).toMatchObject({
+      status: "configured",
+      remoteSessionIssuerId: "project-issuer",
+      userSessionIssuerId: "existing-user-session-issuer",
+    });
+    expect(client.remoteSessionClients.list).toHaveBeenCalledWith({
+      remoteSessionIssuerId: "project-issuer",
+      limit: 1,
+    });
+    expect(proxyRegisterMock).not.toHaveBeenCalled();
+    expect(client.remoteSessionIssuers.create).not.toHaveBeenCalled();
+    expect(client.userSessionIssuers.create).not.toHaveBeenCalled();
+    expect(client.remoteSessionClients.create).not.toHaveBeenCalled();
+    expect(client.mcpServers.update).toHaveBeenCalledWith({
+      updateMcpServerForm: expect.objectContaining({
+        id: "mcp-server-1",
+        visibility: "private",
+        userSessionIssuerId: "existing-user-session-issuer",
+      }),
+    });
+  });
+
+  it("prefers reusing an existing client over registering a new one", async () => {
+    const projectIssuer = remoteSessionIssuer({
+      id: "project-issuer",
+      projectId: "project-1",
+      issuer: "https://idp.example.com",
+    });
+    const client = mockClient({
+      issuers: [projectIssuer],
+      issuerClients: [
+        remoteSessionClient({
+          remoteSessionIssuerId: "project-issuer",
+          userSessionIssuerId: "existing-user-session-issuer",
+        }),
+      ],
+    });
+
+    const result = await autoConfigureRemoteMcpAuth({
+      client: client as unknown as Gram,
+      authedFetch: vi.fn(),
+      remoteMcpServer: remoteMcpServer(),
+      mcpServer: mcpServer(),
+    });
+
+    expect(result).toMatchObject({
+      status: "configured",
+      userSessionIssuerId: "existing-user-session-issuer",
+    });
+    expect(proxyRegisterMock).not.toHaveBeenCalled();
+    expect(client.remoteSessionClients.create).not.toHaveBeenCalled();
+  });
+
+  it("skips when an existing issuer has no client and the IdP lacks DCR", async () => {
+    const client = mockClient({
+      issuers: [
+        remoteSessionIssuer({
+          id: "project-issuer",
+          projectId: "project-1",
+          issuer: "https://idp.example.com",
+        }),
+      ],
+      issuerDraft: {
+        issuer: "https://idp.example.com",
+        authorizationEndpoint: "https://idp.example.com/authorize",
+        tokenEndpoint: "https://idp.example.com/token",
+        scopesSupported: [],
+        tokenEndpointAuthMethodsSupported: [],
+        oidc: false,
+        passthrough: false,
+        discoveryWarnings: [],
+      },
+    });
+
+    const result = await autoConfigureRemoteMcpAuth({
+      client: client as unknown as Gram,
+      authedFetch: vi.fn(),
+      remoteMcpServer: remoteMcpServer(),
+      mcpServer: mcpServer(),
+    });
+
+    expect(result).toEqual({
+      status: "skipped",
+      message:
+        "OAuth metadata was found, but automatic authentication setup requires dynamic client registration.",
+      warn: true,
+    });
+    expect(client.mcpServers.update).not.toHaveBeenCalled();
+  });
+
   it("skips when issuer discovery does not advertise DCR", async () => {
     const client = mockClient({
       issuerDraft: {
@@ -186,6 +310,7 @@ describe("autoConfigureRemoteMcpAuth", () => {
 
 function mockClient({
   issuers = [],
+  issuerClients = [],
   protectedResource = {
     available: true,
     discoveryWarnings: [],
@@ -207,6 +332,7 @@ function mockClient({
   },
 }: {
   issuers?: RemoteSessionIssuer[];
+  issuerClients?: RemoteSessionClient[];
   protectedResource?: unknown;
   issuerDraft?: unknown;
 } = {}) {
@@ -218,7 +344,7 @@ function mockClient({
     },
     remoteSessionIssuers: {
       discover: vi.fn().mockResolvedValue(issuerDraft),
-      list: vi.fn().mockResolvedValue(issuerPageIterator(issuers)),
+      list: vi.fn().mockResolvedValue(pageIterator(issuers)),
       create: vi.fn().mockResolvedValue(
         remoteSessionIssuer({
           id: "created-issuer",
@@ -233,6 +359,7 @@ function mockClient({
       delete: vi.fn().mockResolvedValue(undefined),
     },
     remoteSessionClients: {
+      list: vi.fn().mockResolvedValue(pageIterator(issuerClients)),
       create: vi.fn().mockResolvedValue({ id: "remote-session-client-1" }),
     },
     mcpServers: {
@@ -245,7 +372,7 @@ function mockClient({
   };
 }
 
-function issuerPageIterator(items: RemoteSessionIssuer[]) {
+function pageIterator<T>(items: T[]) {
   return {
     result: { items },
     next: () => null,
@@ -275,6 +402,22 @@ function remoteSessionIssuer(
     tokenEndpointAuthMethodsSupported: [],
     oidc: false,
     passthrough: false,
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+  };
+}
+
+function remoteSessionClient(
+  overrides: Partial<RemoteSessionClient>,
+): RemoteSessionClient {
+  return {
+    id: overrides.id ?? "existing-client-1",
+    projectId: overrides.projectId ?? "project-1",
+    remoteSessionIssuerId: overrides.remoteSessionIssuerId ?? "issuer-1",
+    userSessionIssuerId:
+      overrides.userSessionIssuerId ?? "existing-user-session-issuer",
+    clientId: overrides.clientId ?? "existing-upstream-client",
+    clientIdIssuedAt: new Date(0),
     createdAt: new Date(0),
     updatedAt: new Date(0),
   };

@@ -3,6 +3,7 @@ import {
   type McpServer,
   type ProtectedResourceMetadata,
   type RemoteMcpServer,
+  type RemoteSessionClient,
   type RemoteSessionIssuer,
   type RemoteSessionIssuerDraft,
 } from "@gram/client/models/components";
@@ -92,13 +93,6 @@ export async function autoConfigureRemoteMcpAuth({
     );
   }
 
-  if (!draft.registrationEndpoint) {
-    return skipped(
-      "OAuth metadata was found, but automatic authentication setup requires dynamic client registration.",
-      true,
-    );
-  }
-
   let existingIssuer: RemoteSessionIssuer | null;
   try {
     existingIssuer = await findMatchingIssuer(
@@ -123,6 +117,60 @@ export async function autoConfigureRemoteMcpAuth({
   ) {
     return skipped(
       "A matching identity provider already exists, but it is missing OAuth endpoints.",
+      true,
+    );
+  }
+
+  // When the matched issuer already has a working remote session client,
+  // reuse the whole stack — point the server at the client's
+  // user_session_issuer instead of registering a duplicate client. This is
+  // also the only path that works when the IdP doesn't support DCR.
+  if (existingIssuer) {
+    let existingClient: RemoteSessionClient | null;
+    try {
+      existingClient = await findIssuerClient(client, existingIssuer.id);
+    } catch (error) {
+      console.info("Remote MCP issuer client lookup failed.", {
+        remoteMcpServerId: remoteMcpServer.id,
+        remoteSessionIssuerId: existingIssuer.id,
+        error,
+      });
+      return skipped(
+        "A matching identity provider was found, but its OAuth clients could not be checked.",
+        true,
+      );
+    }
+    if (existingClient) {
+      try {
+        const updatedMcpServer = await pointMcpServerAtUserSessionIssuer(
+          client,
+          mcpServer,
+          existingClient.userSessionIssuerId,
+        );
+        return {
+          status: "configured",
+          mcpServer: updatedMcpServer,
+          remoteSessionIssuerId: existingIssuer.id,
+          userSessionIssuerId: existingClient.userSessionIssuerId,
+        };
+      } catch (error) {
+        console.info("Remote MCP existing issuer attachment failed.", {
+          remoteMcpServerId: remoteMcpServer.id,
+          remoteSessionIssuerId: existingIssuer.id,
+          userSessionIssuerId: existingClient.userSessionIssuerId,
+          error,
+        });
+        return skipped(
+          "A matching identity provider was found, but attaching it failed. You can configure it from the Authentication tab.",
+          true,
+        );
+      }
+    }
+  }
+
+  if (!draft.registrationEndpoint) {
+    return skipped(
+      "OAuth metadata was found, but automatic authentication setup requires dynamic client registration.",
       true,
     );
   }
@@ -215,18 +263,11 @@ export async function autoConfigureRemoteMcpAuth({
       },
     });
 
-    const updatedMcpServer = await client.mcpServers.update({
-      updateMcpServerForm: {
-        id: mcpServer.id,
-        name: mcpServer.name ?? undefined,
-        remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
-        toolsetId: mcpServer.toolsetId ?? undefined,
-        environmentId: mcpServer.environmentId ?? undefined,
-        toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
-        visibility: "private",
-        userSessionIssuerId: userSessionIssuer.id,
-      },
-    });
+    const updatedMcpServer = await pointMcpServerAtUserSessionIssuer(
+      client,
+      mcpServer,
+      userSessionIssuer.id,
+    );
 
     return {
       status: "configured",
@@ -248,6 +289,44 @@ export async function autoConfigureRemoteMcpAuth({
       true,
     );
   }
+}
+
+// Full-record replace: updateMcpServer nulls omitted fields, so re-send the
+// server's existing references alongside the new issuer linkage.
+async function pointMcpServerAtUserSessionIssuer(
+  client: Gram,
+  mcpServer: McpServer,
+  userSessionIssuerId: string,
+): Promise<McpServer> {
+  return await client.mcpServers.update({
+    updateMcpServerForm: {
+      id: mcpServer.id,
+      name: mcpServer.name ?? undefined,
+      remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
+      toolsetId: mcpServer.toolsetId ?? undefined,
+      environmentId: mcpServer.environmentId ?? undefined,
+      toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
+      visibility: "private",
+      userSessionIssuerId,
+    },
+  });
+}
+
+async function findIssuerClient(
+  client: Gram,
+  remoteSessionIssuerId: string,
+): Promise<RemoteSessionClient | null> {
+  const pages = await client.remoteSessionClients.list({
+    remoteSessionIssuerId,
+    limit: 1,
+  });
+
+  for await (const page of pages) {
+    const match = page.result.items[0];
+    if (match) return match;
+  }
+
+  return null;
 }
 
 async function findMatchingIssuer(
