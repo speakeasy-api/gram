@@ -65,7 +65,10 @@ export function formatRemoteSessionIssuerDisplay(issuer: {
 }
 
 // Derive a default display name from an Issuer URL's hostname. Unlike the slug
-// transform this keeps the hostname human-readable (no hyphenation/lowercasing).
+// transform this keeps the hostname human-readable: dots are preserved rather
+// than hyphenated. (URL parsing lowercases the host either way.) Returns null
+// for empty or unparseable URLs so callers can leave the prior value intact
+// while a partial URL is being typed.
 export function deriveRemoteSessionIssuerNameFromUrl(
   url: string,
 ): string | null {
