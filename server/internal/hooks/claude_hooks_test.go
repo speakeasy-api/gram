@@ -6,14 +6,18 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
+	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
 // stubBlockingShadowMCPScanner is a RiskScanner that always reports a
@@ -31,6 +35,22 @@ func (stubBlockingShadowMCPScanner) LookupShadowMCPBlockingPolicy(_ context.Cont
 
 func (stubBlockingShadowMCPScanner) HasEnabledShadowMCPPolicy(_ context.Context, _ uuid.UUID) (bool, error) {
 	return true, nil
+}
+
+type stubEnforcementScanner struct {
+	result *risk.ScanResult
+}
+
+func (s stubEnforcementScanner) ScanForEnforcement(_ context.Context, _ uuid.UUID, _ string, _ string) (*risk.ScanResult, error) {
+	return s.result, nil
+}
+
+func (stubEnforcementScanner) LookupShadowMCPBlockingPolicy(_ context.Context, _ uuid.UUID) (*risk.ShadowMCPPolicy, error) {
+	return nil, nil
+}
+
+func (stubEnforcementScanner) HasEnabledShadowMCPPolicy(_ context.Context, _ uuid.UUID) (bool, error) {
+	return false, nil
 }
 
 func TestResolveClaudeScanProjectID_PrefersAuthContextOverCachedMetadata(t *testing.T) {
@@ -51,6 +71,94 @@ func TestResolveClaudeScanProjectID_PrefersAuthContextOverCachedMetadata(t *test
 	got, ok := ti.service.resolveClaudeScanProjectID(ctx, sessionID)
 	require.True(t, ok)
 	assert.Equal(t, *authCtx.ProjectID, got)
+}
+
+func TestClaude_PreToolUse_EnforcementBlockWritesRiskResult(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	policyID := uuid.New()
+	policy, err := riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
+		ID:             policyID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Name:           "no destructive deletes",
+		PolicyType:     "prompt_based",
+		Sources:        []string{},
+		MessageTypes:   []string{message.ToolRequest},
+		Enabled:        true,
+		Action:         "block",
+		AutoName:       false,
+		Prompt:         pgtype.Text{String: "Block destructive deletes", Valid: true},
+		ModelConfig:    []byte(`{"fail_open":false}`),
+	})
+	require.NoError(t, err)
+
+	ti.service.riskScanner = stubEnforcementScanner{result: &risk.ScanResult{
+		Action:        "block",
+		PolicyID:      policy.ID.String(),
+		PolicyVersion: policy.Version,
+		PolicyName:    policy.Name,
+		Source:        risk_analysis.SourceLLMJudge,
+		MessageType:   message.ToolRequest,
+		RuleID:        risk_analysis.RuleLLMJudge,
+		Description:   "destructive delete",
+		Confidence:    0.92,
+		UserMessage:   nil,
+	}}
+
+	sessionID := uuid.NewString()
+	toolName := "Bash"
+	toolUseID := "toolu_enforced_policy_finding"
+	userEmail := "tester@example.com"
+	metadata := &SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "claude-code",
+		UserEmail:   userEmail,
+		UserID:      authCtx.UserID,
+		ClaudeOrgID: "",
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), *metadata, 0))
+
+	payload := &gen.ClaudePayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		ToolInput:     map[string]any{"command": "rm -rf /data"},
+		UserEmail:     &userEmail,
+	}
+	require.NoError(t, ti.service.persistToolCallEvent(ctx, payload, metadata))
+
+	result, err := ti.service.handlePreToolUse(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok)
+	require.NotNil(t, output.PermissionDecision)
+	assert.Equal(t, "deny", *output.PermissionDecision)
+
+	rows, err := riskrepo.New(ti.conn).ListRiskResultsByProjectAndPolicy(ctx, riskrepo.ListRiskResultsByProjectAndPolicyParams{
+		ProjectID:              *authCtx.ProjectID,
+		RiskPolicyID:           policy.ID,
+		CursorMessageCreatedAt: pgtype.Timestamptz{},
+		CursorID:               uuid.NullUUID{},
+		PageLimit:              10,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, risk_analysis.SourceLLMJudge, rows[0].Source)
+	assert.Equal(t, risk_analysis.RuleLLMJudge, rows[0].RuleID.String)
+	assert.Equal(t, "destructive delete", rows[0].Description.String)
+	assert.False(t, rows[0].Match.Valid)
+	assert.InDelta(t, 0.92, rows[0].Confidence.Float64, 0.001)
 }
 
 // When the request authenticated via Gram-Key + Gram-Project, handlePreToolUse

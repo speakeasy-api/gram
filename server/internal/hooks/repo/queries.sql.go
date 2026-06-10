@@ -56,6 +56,91 @@ func (q *Queries) FindAssistantToolCallMessageID(ctx context.Context, arg FindAs
 	return id, err
 }
 
+const findLatestChatMessageIDForRole = `-- name: FindLatestChatMessageIDForRole :one
+SELECT id
+FROM chat_messages
+WHERE project_id = $1
+  AND chat_id = $2
+  AND role = $3
+ORDER BY created_at DESC
+LIMIT 1
+`
+
+type FindLatestChatMessageIDForRoleParams struct {
+	ProjectID uuid.NullUUID
+	ChatID    uuid.UUID
+	Role      string
+}
+
+func (q *Queries) FindLatestChatMessageIDForRole(ctx context.Context, arg FindLatestChatMessageIDForRoleParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, findLatestChatMessageIDForRole, arg.ProjectID, arg.ChatID, arg.Role)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const insertHookBlockResult = `-- name: InsertHookBlockResult :exec
+INSERT INTO risk_results (
+    id
+  , project_id
+  , organization_id
+  , risk_policy_id
+  , risk_policy_version
+  , chat_message_id
+  , source
+  , found
+  , rule_id
+  , description
+  , match
+  , confidence
+)
+VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+  , TRUE
+  , $8
+  , $9
+  , $10
+  , $11
+)
+`
+
+type InsertHookBlockResultParams struct {
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	OrganizationID    string
+	RiskPolicyID      uuid.UUID
+	RiskPolicyVersion int64
+	ChatMessageID     uuid.UUID
+	Source            string
+	RuleID            pgtype.Text
+	Description       pgtype.Text
+	Match             pgtype.Text
+	Confidence        pgtype.Float8
+}
+
+func (q *Queries) InsertHookBlockResult(ctx context.Context, arg InsertHookBlockResultParams) error {
+	_, err := q.db.Exec(ctx, insertHookBlockResult,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.RiskPolicyID,
+		arg.RiskPolicyVersion,
+		arg.ChatMessageID,
+		arg.Source,
+		arg.RuleID,
+		arg.Description,
+		arg.Match,
+		arg.Confidence,
+	)
+	return err
+}
+
 const insertShadowMCPBlockResult = `-- name: InsertShadowMCPBlockResult :exec
 INSERT INTO risk_results (
     id

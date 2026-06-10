@@ -160,8 +160,9 @@ func (s *Service) handleUserPromptSubmit(ctx context.Context, payload *gen.Claud
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			// ClickHouse always gets the technical reason; the user_message
 			// override only changes what the agent / end user sees.
-			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
-				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
+			if metadata := s.claudeBlockMetadata(ctx, payload); metadata != nil {
+				s.writeClaudeBlockToClickHouse(ctx, payload, metadata, auditReason)
+				s.recordClaudeEnforcementFinding(ctx, payload, metadata, scanResult)
 			}
 			return constructBlockResponse(payload.HookEventName, userReason), nil
 		}
