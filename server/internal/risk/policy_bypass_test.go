@@ -105,6 +105,45 @@ func TestCreateApproveAndRevokePolicyBypassRequest_AddsAndRemovesServerURLGrant(
 	require.Equal(t, beforeRevokeAuditCount+1, afterRevokeAuditCount)
 }
 
+func TestCreateApprovePolicyBypassRequest_AddsServerIdentityGrant(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name: new("Policy Bypass Identity Token"),
+	})
+	require.NoError(t, err)
+
+	serverIdentity := "mise mcp"
+	token := riskPolicyBypassRequestTokenForServerIdentity(t, authCtx, policy.ID, serverIdentity)
+	request, err := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
+		RequestToken: token,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, request)
+	assert.Equal(t, policy.ID, request.PolicyID)
+	assert.Equal(t, "requested", request.Status)
+	require.NotNil(t, request.TargetKind)
+	assert.Equal(t, "shadow_mcp_server", *request.TargetKind)
+	require.NotNil(t, request.TargetKey)
+	assert.Equal(t, serverIdentity, *request.TargetKey)
+	assert.Equal(t, serverIdentity, request.TargetDimensions[authz.SelectorKeyServerIdentity])
+	assert.Equal(t, authCtx.UserID, request.RequesterUserID)
+
+	approved, err := ti.service.ApproveRiskPolicyBypassRequest(ctx, &gen.ApproveRiskPolicyBypassRequestPayload{
+		ID: request.ID,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "approved", approved.Status)
+	assert.True(t, userHasRiskPolicyBypassServerIdentityGrant(t, ti, authCtx.ActiveOrganizationID, authCtx.UserID, policy.ID, serverIdentity))
+}
+
 func TestApprovePolicyBypassRequest_CanGrantAllUsers(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
@@ -434,6 +473,27 @@ func riskPolicyBypassRequestToken(t *testing.T, authCtx *contextvalues.AuthConte
 	return token
 }
 
+func riskPolicyBypassRequestTokenForServerIdentity(t *testing.T, authCtx *contextvalues.AuthContext, policyID string, serverIdentity string) string {
+	t.Helper()
+
+	token, _, err := risk.GeneratePolicyBypassRequestToken("test-jwt-secret", risk.PolicyBypassRequestTokenInput{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              authCtx.ProjectID.String(),
+		RequesterUserID:        authCtx.UserID,
+		ObservedName:           nil,
+		ObservedFullURL:        nil,
+		ObservedURLHost:        nil,
+		ObservedServerIdentity: &serverIdentity,
+		ToolName:               nil,
+		ToolCall:               nil,
+		BlockReason:            nil,
+		RiskPolicyID:           policyID,
+		RiskResultID:           nil,
+	}, 5*time.Minute)
+	require.NoError(t, err)
+	return token
+}
+
 func seedRiskPolicyBypassOrganizationUser(t *testing.T, organizationID string, userID string, ti *testInstance) {
 	t.Helper()
 
@@ -480,6 +540,30 @@ func userHasRiskPolicyBypassGrant(t *testing.T, ti *testInstance, organizationID
 	require.NoError(t, err)
 
 	return principalsHaveRiskPolicyBypassGrant(t, ti, organizationID, principals, policyID, serverURL)
+}
+
+func userHasRiskPolicyBypassServerIdentityGrant(t *testing.T, ti *testInstance, organizationID, userID, policyID, serverIdentity string) bool {
+	t.Helper()
+
+	principals, err := authz.ResolveUserPrincipals(t.Context(), ti.conn, organizationID, userID)
+	require.NoError(t, err)
+
+	grants, err := authz.LoadGrants(t.Context(), ti.conn, organizationID, principals)
+	require.NoError(t, err)
+
+	for _, grant := range grants {
+		if grant.Scope != authz.ScopeRiskPolicyBypass {
+			continue
+		}
+		if grant.Selector[authz.SelectorKeyResourceID] != policyID {
+			continue
+		}
+		if grant.Selector[authz.SelectorKeyServerIdentity] != serverIdentity {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 func principalHasRiskPolicyBypassGrant(t *testing.T, ti *testInstance, organizationID string, principal urn.Principal, policyID, serverURL string) bool {

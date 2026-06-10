@@ -113,6 +113,43 @@ func TestEnforceShadowMCPToolAccess_URLScopedBypassGrantDoesNotAllowIdentityOnly
 	require.Contains(t, detail, "missing required")
 }
 
+func TestEnforceShadowMCPToolAccess_IdentityScopedBypassGrantAllowsIdentityOnlyTarget(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	policyID := uuid.NewString()
+	serverIdentity := "local-server"
+	selector := authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID)
+	selector[authz.SelectorKeyServerIdentity] = serverIdentity
+	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
+		Resource: authz.Resource{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Scope:          authz.ScopeRiskPolicyBypass,
+			ResourceID:     policyID,
+		},
+		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
+		Selector:   selector,
+	}))
+
+	detail, denied := ti.service.enforceShadowMCPToolAccess(
+		ctx,
+		authCtx.ActiveOrganizationID,
+		authCtx.ProjectID.String(),
+		authCtx.UserID,
+		policyID,
+		map[string]any{},
+		"do_thing",
+		shadowmcp.AccessEvidence{FullURL: "", URLHost: "", ServerIdentity: serverIdentity},
+	)
+
+	require.False(t, denied)
+	require.Empty(t, detail)
+}
+
 func TestEnforceShadowMCPToolAccess_WholePolicyBypassGrantAllowsIdentityOnlyTarget(t *testing.T) {
 	t.Parallel()
 

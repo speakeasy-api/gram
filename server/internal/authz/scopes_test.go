@@ -178,7 +178,7 @@ func TestEvaluateGrants_riskPolicyBypassRequiresCheckDimensionsForScopedGrant(t 
 		SelectorKeyResourceID:   "policy_123",
 		SelectorKeyServerURL:    "https://api.example.com",
 	})}
-	checks := RiskPolicyBypassCheck("policy_123", RiskPolicyBypassDimensions{ServerURL: ""}).expand()
+	checks := RiskPolicyBypassCheck("policy_123", RiskPolicyBypassDimensions{ServerURL: "", ServerIdentity: ""}).expand()
 
 	allow, _, denied := evaluateGrants(grants, checks)
 	require.Nil(t, allow)
@@ -189,7 +189,7 @@ func TestEvaluateGrants_riskPolicyBypassWholePolicyGrantMatchesScopedCheck(t *te
 	t.Parallel()
 
 	grants := []Grant{NewGrant(ScopeRiskPolicyBypass, "policy_123")}
-	checks := RiskPolicyBypassCheck("policy_123", RiskPolicyBypassDimensions{ServerURL: "https://api.example.com"}).expand()
+	checks := RiskPolicyBypassCheck("policy_123", RiskPolicyBypassDimensions{ServerURL: "https://api.example.com", ServerIdentity: ""}).expand()
 
 	allow, _, denied := evaluateGrants(grants, checks)
 	require.NotNil(t, allow)
@@ -204,7 +204,22 @@ func TestEvaluateGrants_riskPolicyBypassScopedGrantMatchesScopedCheck(t *testing
 		SelectorKeyResourceID:   "policy_123",
 		SelectorKeyServerURL:    "https://api.example.com",
 	})}
-	checks := RiskPolicyBypassCheck("policy_123", RiskPolicyBypassDimensions{ServerURL: "https://api.example.com"}).expand()
+	checks := RiskPolicyBypassCheck("policy_123", RiskPolicyBypassDimensions{ServerURL: "https://api.example.com", ServerIdentity: ""}).expand()
+
+	allow, _, denied := evaluateGrants(grants, checks)
+	require.NotNil(t, allow)
+	require.False(t, denied)
+}
+
+func TestEvaluateGrants_riskPolicyBypassServerIdentityGrantMatchesScopedCheck(t *testing.T) {
+	t.Parallel()
+
+	grants := []Grant{NewGrantWithSelector(ScopeRiskPolicyBypass, Selector{
+		SelectorKeyResourceKind:   ResourceKindRiskPolicy,
+		SelectorKeyResourceID:     "policy_123",
+		SelectorKeyServerIdentity: "github",
+	})}
+	checks := RiskPolicyBypassCheck("policy_123", RiskPolicyBypassDimensions{ServerURL: "", ServerIdentity: "github"}).expand()
 
 	allow, _, denied := evaluateGrants(grants, checks)
 	require.NotNil(t, allow)

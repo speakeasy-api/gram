@@ -576,8 +576,8 @@ func riskPolicyBypassGrantSelector(row repo.RiskPolicyBypassRequest) (authz.Sele
 	switch targetKind {
 	case "":
 	case PolicyBypassTargetKindShadowMCPServer:
-		if dimensions[authz.SelectorKeyServerURL] == "" {
-			return nil, fmt.Errorf("shadow mcp server bypass target missing server_url dimension")
+		if dimensions[authz.SelectorKeyServerURL] == "" && dimensions[authz.SelectorKeyServerIdentity] == "" {
+			return nil, fmt.Errorf("shadow mcp server bypass target missing server_url or server_identity dimension")
 		}
 	default:
 		return nil, fmt.Errorf("unsupported risk policy bypass target kind %q", targetKind)

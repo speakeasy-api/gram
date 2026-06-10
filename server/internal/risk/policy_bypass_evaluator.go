@@ -1,6 +1,7 @@
 package risk
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"log/slog"
@@ -46,13 +47,20 @@ func WholePolicyBypassTarget() PolicyBypassTarget {
 	}
 }
 
-// ShadowMCPServerPolicyBypassTarget applies to a specific Shadow MCP server URL.
-func ShadowMCPServerPolicyBypassTarget(serverURL string, label string) PolicyBypassTarget {
+// ShadowMCPServerPolicyBypassTarget applies to a specific Shadow MCP server.
+func ShadowMCPServerPolicyBypassTarget(serverURL string, serverIdentity string, label string) PolicyBypassTarget {
+	dimensions := map[string]string{}
+	if serverURL != "" {
+		dimensions[authz.SelectorKeyServerURL] = serverURL
+	}
+	if serverIdentity != "" {
+		dimensions[authz.SelectorKeyServerIdentity] = serverIdentity
+	}
 	return PolicyBypassTarget{
 		Kind:       PolicyBypassTargetKindShadowMCPServer,
 		Label:      label,
-		Key:        serverURL,
-		Dimensions: map[string]string{authz.SelectorKeyServerURL: serverURL},
+		Key:        cmp.Or(serverURL, serverIdentity),
+		Dimensions: dimensions,
 	}
 }
 
@@ -112,9 +120,12 @@ func (e *PolicyBypassEvaluator) loadGrants(ctx context.Context, input PolicyBypa
 
 func policyBypassCheckDimensions(target *PolicyBypassTarget) authz.RiskPolicyBypassDimensions {
 	if target == nil {
-		return authz.RiskPolicyBypassDimensions{ServerURL: ""}
+		return authz.RiskPolicyBypassDimensions{ServerURL: "", ServerIdentity: ""}
 	}
-	return authz.RiskPolicyBypassDimensions{ServerURL: target.Dimensions[authz.SelectorKeyServerURL]}
+	return authz.RiskPolicyBypassDimensions{
+		ServerURL:      target.Dimensions[authz.SelectorKeyServerURL],
+		ServerIdentity: target.Dimensions[authz.SelectorKeyServerIdentity],
+	}
 }
 
 func ShadowMCPPolicyBypassTarget(evidence shadowmcp.AccessEvidence, toolName string) *PolicyBypassTarget {
@@ -124,10 +135,18 @@ func ShadowMCPPolicyBypassTarget(evidence shadowmcp.AccessEvidence, toolName str
 		if observed := shadowmcp.ObservedName(normalized, toolName); observed != nil && *observed != "" {
 			label = *observed
 		}
-		target := ShadowMCPServerPolicyBypassTarget(serverURL, label)
+		target := ShadowMCPServerPolicyBypassTarget(serverURL, normalized.ServerIdentity, label)
 		return &target
 	}
-	if normalized.URLHost != "" || normalized.ServerIdentity != "" {
+	if normalized.ServerIdentity != "" {
+		label := normalized.ServerIdentity
+		if observed := shadowmcp.ObservedName(normalized, toolName); observed != nil && *observed != "" {
+			label = *observed
+		}
+		target := ShadowMCPServerPolicyBypassTarget("", normalized.ServerIdentity, label)
+		return &target
+	}
+	if normalized.URLHost != "" {
 		target := WholePolicyBypassTarget()
 		return &target
 	}
