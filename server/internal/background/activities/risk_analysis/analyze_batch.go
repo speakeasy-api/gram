@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -22,6 +23,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/activity"
 
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/message"
@@ -56,18 +59,28 @@ func DescribeDestructiveTool(toolName string) (string, string) {
 // AnalyzeBatch scans a batch of messages against enabled detection sources
 // and writes the results back to the database.
 type AnalyzeBatch struct {
-	logger          *slog.Logger
-	tracer          trace.Tracer
-	metrics         *riskMetrics
-	db              *pgxpool.Pool
-	scanner         *Scanner
-	piiScanner      PIIScanner
-	piScanner       *PromptInjectionScanner
-	shadowMCPClient *shadowmcp.Client
-	mcpMatchLookup  MCPMatchLookup
+	logger            *slog.Logger
+	tracer            trace.Tracer
+	metrics           *riskMetrics
+	db                *pgxpool.Pool
+	scanner           *Scanner
+	piiScanner        PIIScanner
+	piScanner         *PromptInjectionScanner
+	shadowMCPClient   *shadowmcp.Client
+	mcpMatchLookup    MCPMatchLookup
+	presidioPublisher gcp.Publisher[*riskv1.PresidioRequest]
 }
 
-func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, piiScanner PIIScanner, piScanner *PromptInjectionScanner, shadowMCPClient *shadowmcp.Client, mcpMatchLookup MCPMatchLookup) *AnalyzeBatch {
+func NewAnalyzeBatch(logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	meterProvider metric.MeterProvider,
+	db *pgxpool.Pool,
+	piiScanner PIIScanner,
+	piScanner *PromptInjectionScanner,
+	shadowMCPClient *shadowmcp.Client,
+	mcpMatchLookup MCPMatchLookup,
+	presidioPublisher gcp.Publisher[*riskv1.PresidioRequest],
+) *AnalyzeBatch {
 	if piiScanner == nil {
 		piiScanner = &StubPIIScanner{}
 	}
@@ -75,15 +88,16 @@ func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, m
 		piScanner = NewPromptInjectionScanner(logger, StubClassifier{}, nil)
 	}
 	return &AnalyzeBatch{
-		logger:          logger,
-		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"),
-		metrics:         newRiskMetrics(meterProvider, logger),
-		db:              db,
-		scanner:         NewScanner(),
-		piiScanner:      piiScanner,
-		piScanner:       piScanner,
-		shadowMCPClient: shadowMCPClient,
-		mcpMatchLookup:  mcpMatchLookup,
+		logger:            logger,
+		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"),
+		metrics:           newRiskMetrics(meterProvider, logger),
+		db:                db,
+		scanner:           NewScanner(),
+		piiScanner:        piiScanner,
+		piScanner:         piScanner,
+		shadowMCPClient:   shadowMCPClient,
+		mcpMatchLookup:    mcpMatchLookup,
+		presidioPublisher: presidioPublisher,
 	}
 }
 
@@ -177,7 +191,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		return nil, err
 	}
 
-	findings, err := a.scan(ctx, args, messages, customRules)
+	findings, err := a.scan(ctx, a.logger, args, messages, customRules)
 	if err != nil {
 		return nil, err
 	}
@@ -264,10 +278,15 @@ func messageRowMessageType(msg repo.GetMessageContentBatchRow) (message.Type, bo
 // destructive_tool, cli_destructive) run serially after the parallel scans
 // — shadow_mcp/destructive_tool make per-message DB calls; cli_destructive
 // is purely in-memory regex but kept in the same lane for consistency.
-func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages []repo.GetMessageContentBatchRow, customRules []CompiledCustomDetectionRule) ([][]Finding, error) {
+func (a *AnalyzeBatch) scan(ctx context.Context, logger *slog.Logger, args AnalyzeBatchArgs, messages []repo.GetMessageContentBatchRow, customRules []CompiledCustomDetectionRule) ([][]Finding, error) {
 	ctx, scanSpan := a.tracer.Start(ctx, "risk.scanMessages")
 	defer scanSpan.End()
 	activity.RecordHeartbeat(ctx, 0)
+
+	reqID, err := uuid.NewV7()
+	if err != nil {
+		return nil, fmt.Errorf("generate request ID: %w", err)
+	}
 
 	n := len(messages)
 	contents := make([]string, n)
@@ -286,6 +305,8 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 	var wg sync.WaitGroup
 	var gitleaksErr error
 	var presidioErr error
+
+	nowpb := timestamppb.Now()
 
 	if slices.Contains(args.Sources, "gitleaks") {
 		wg.Go(func() {
@@ -311,10 +332,20 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 			}
 			if err != nil {
 				presidioErr = err
-				a.logger.WarnContext(ctx, "presidio scan returned errors, using partial results", attr.SlogError(err))
+				logger.WarnContext(ctx, "presidio scan returned errors, using partial results", attr.SlogError(err))
 				if a.metrics.presidioScanSkipped != nil {
 					a.metrics.presidioScanSkipped.Add(ctx, 1)
 				}
+			}
+
+			if _, err := a.presidioPublisher.Publish(ctx, riskv1.PresidioRequest_builder{
+				Id:        new(reqID.String()),
+				CreatedAt: nowpb,
+				ReplyUrn:  new(fmt.Sprintf("rsr:presidio:%s", reqID.String())),
+				Contents:  contents,
+				Entities:  args.PresidioEntities,
+			}.Build()).Get(ctx); err != nil {
+				logger.ErrorContext(ctx, "failed to publish presidio scan request", attr.SlogError(err))
 			}
 		})
 	}
@@ -323,7 +354,7 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 		wg.Go(func() {
 			results, err := a.piScanner.ScanBatch(ctx, contents, args.OrganizationID)
 			if err != nil {
-				a.logger.WarnContext(ctx, "prompt injection scan failed", attr.SlogError(err))
+				logger.WarnContext(ctx, "prompt injection scan failed", attr.SlogError(err))
 				return
 			}
 			promptInjectionFindings = results

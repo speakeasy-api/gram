@@ -19,6 +19,7 @@ import (
 
 	"github.com/speakeasy-api/gram/infra/gen"
 	pingv1 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v1"
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -26,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ping"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/streams"
 )
 
@@ -44,11 +46,6 @@ func newStreamsCommand() *cli.Command {
 			Usage:    "The current server environment", // local, dev, prod
 			Required: true,
 			EnvVars:  []string{"GRAM_ENVIRONMENT"},
-		},
-		&cli.StringFlag{
-			Name:    "gcp-project-id",
-			Usage:   "Google Cloud project ID",
-			EnvVars: []string{"GRAM_GCP_PROJECT_ID"},
 		},
 		&cli.StringFlag{
 			Name:     "database-url",
@@ -88,11 +85,6 @@ func newStreamsCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_DISALLOWED_CIDR_BLOCKS"},
 			Required: false,
 		},
-		&cli.StringFlag{
-			Name:    "pubsub-emulator-host",
-			Usage:   "Host to use for the PubSub emulator",
-			EnvVars: []string{"PUBSUB_EMULATOR_HOST"},
-		},
 		&cli.PathFlag{
 			Name:     "config-file",
 			Usage:    "Path to a config file to load. Supported formats are JSON, TOML and YAML.",
@@ -100,6 +92,8 @@ func newStreamsCommand() *cli.Command {
 			Required: false,
 		},
 	}
+
+	flags = append(flags, gcpFlags...)
 
 	return &cli.Command{
 		Name:  "streams",
@@ -169,13 +163,11 @@ func newStreamsCommand() *cli.Command {
 			}
 			_ = redisClient
 
-			psclient, shutdown, err := newPubSubClient(ctx, c, logger)
+			_, psbroker, shutdown, err := newPubSubClient(ctx, c, logger)
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 			if err != nil {
 				return fmt.Errorf("failed to create pubsub client: %w", err)
 			}
-
-			broker := gcp.NewPubSubBroker(logger, psclient, gen.Descriptors)
 
 			{
 				controlServer := control.Server{
@@ -203,19 +195,20 @@ func newStreamsCommand() *cli.Command {
 				getContext: func() context.Context { return ctx },
 				tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/cmd/gram/streams"),
 				logger:     logger,
-				broker:     broker,
+				broker:     psbroker,
 			}
 
 			// Start subscription receivers in this block
 			{
 				mustReceive(rg, &pingv1.Message{}, &pingv1.Processor{}, ping.NewHandler(logger))
+				mustReceive(rg, &riskv1.PresidioRequest{}, &riskv1.PresidioScanner{}, risk.NewPresidioRequestHandler(logger))
 			}
 
 			// This is just a heartbeat publisher that validates the publisher-
 			// subscriber flow is working by driving a simple message through
 			// the system every N seconds and logging it in the subscriber.
 			group.Go(func() error {
-				if err := ping.StartPublisher(ctx, logger, broker); err != nil {
+				if err := ping.StartPublisher(ctx, logger, psbroker); err != nil {
 					return fmt.Errorf("publish pings: %w", err)
 				}
 				return nil

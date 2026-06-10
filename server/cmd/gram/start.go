@@ -25,6 +25,8 @@ import (
 	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
 
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/auditapi"
 	"github.com/speakeasy-api/gram/server/internal/external"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -431,6 +433,7 @@ func newStartCommand() *cli.Command {
 	flags = append(flags, assistantRuntimeFlags...)
 	flags = append(flags, pulseMCPFlags...)
 	flags = append(flags, svixFlags...)
+	flags = append(flags, gcpFlags...)
 
 	return &cli.Command{
 		Name:  "start",
@@ -886,6 +889,17 @@ func newStartCommand() *cli.Command {
 				}
 			}
 
+			_, psbroker, shutdown, err := newPubSubClient(ctx, c, logger)
+			shutdownFuncs = append(shutdownFuncs, shutdown)
+			if err != nil {
+				return fmt.Errorf("failed to create pubsub client: %w", err)
+			}
+
+			presidioPub, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.PresidioRequest{})
+			if err != nil {
+				return fmt.Errorf("failed to create pubsub publisher for presidio scan requests: %w", err)
+			}
+
 			// Marketplace proxy routes (URL-based marketplace.json + git Smart
 			// HTTP for plugin source clones). Mounted via the outermost
 			// mux.Use middleware so /m/ and /p/ paths short-circuit the Goa
@@ -1108,6 +1122,10 @@ func newStartCommand() *cli.Command {
 					}
 					piScanner := risk_analysis.NewPromptInjectionScanner(logger, promptInjectionClassifier, featureFlags)
 
+					publishers := background.Publishers{
+						PresidioRequest: presidioPub,
+					}
+
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 						GuardianPolicy:                 guardianPolicy,
 						DB:                             db,
@@ -1143,6 +1161,7 @@ func newStartCommand() *cli.Command {
 						SvixClient:                     svixClient,
 						ProductFeatures:                productFeatures,
 						PluginPublisher:                pluginPublisher,
+						Publishers:                     &publishers,
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))

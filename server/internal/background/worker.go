@@ -82,6 +82,7 @@ type WorkerOptions struct {
 	SvixClient                     *svix.Svix
 	ProductFeatures                *productfeatures.Client
 	PluginPublisher                *plugins.Service
+	Publishers                     *Publishers
 }
 
 func ForDeploymentProcessing(
@@ -129,6 +130,7 @@ func ForDeploymentProcessing(
 		ProductFeatures:                nil,
 		ClickhouseConn:                 nil,
 		PluginPublisher:                nil,
+		Publishers:                     nil,
 	}
 }
 
@@ -174,6 +176,7 @@ func NewTemporalWorker(
 		ProductFeatures:                nil,
 		ClickhouseConn:                 nil,
 		PluginPublisher:                nil,
+		Publishers:                     nil,
 	}
 
 	for _, o := range options {
@@ -212,6 +215,7 @@ func NewTemporalWorker(
 			ProductFeatures:                conv.Default(o.ProductFeatures, opts.ProductFeatures),
 			ClickhouseConn:                 conv.Default(o.ClickhouseConn, opts.ClickhouseConn),
 			PluginPublisher:                conv.Default(o.PluginPublisher, opts.PluginPublisher),
+			Publishers:                     conv.Default(o.Publishers, opts.Publishers),
 		}
 	}
 
@@ -272,6 +276,7 @@ func NewTemporalWorker(
 		opts.SvixClient,
 		opts.ProductFeatures,
 		opts.PluginPublisher,
+		opts.Publishers,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)

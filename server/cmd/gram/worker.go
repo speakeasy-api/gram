@@ -16,6 +16,8 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -330,6 +332,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, assistantRuntimeFlags...)
 	flags = append(flags, svixFlags...)
 	flags = append(flags, pluginsFlags...)
+	flags = append(flags, gcpFlags...)
 
 	return &cli.Command{
 		Name:  "worker",
@@ -728,6 +731,21 @@ func newWorkerCommand() *cli.Command {
 			 * END -- Agent client
 			 */
 
+			_, psbroker, shutdown, err := newPubSubClient(ctx, c, logger)
+			shutdownFuncs = append(shutdownFuncs, shutdown)
+			if err != nil {
+				return fmt.Errorf("failed to create pub/sub client: %w", err)
+			}
+
+			presidioPub, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.PresidioRequest{})
+			if err != nil {
+				return fmt.Errorf("failed to create pubsub publisher for presidio scan requests: %w", err)
+			}
+
+			publishers := background.Publishers{
+				PresidioRequest: presidioPub,
+			}
+
 			var piiScanner risk_analysis.PIIScanner = &risk_analysis.StubPIIScanner{}
 			if presidioURL := c.String("presidio-analyzer-url"); presidioURL != "" {
 				piiScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
@@ -776,6 +794,7 @@ func newWorkerCommand() *cli.Command {
 				SvixClient:                     svixClient,
 				ProductFeatures:                productFeatures,
 				PluginPublisher:                pluginPublisher,
+				Publishers:                     &publishers,
 			})
 
 			return temporalWorker.Run(worker.InterruptCh())
