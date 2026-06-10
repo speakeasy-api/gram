@@ -4,7 +4,7 @@
 #MISE dir="{{ config_root }}"
 
 #USAGE flag "--local" help="Always use local plugin directory instead of published plugin"
-#USAGE flag "--project <slug>" help="Project slug for OTEL session validation (enables blocking)" default="ecommerce-api"
+#USAGE flag "--project <slug>" help="Project slug for OTEL session validation (enables blocking)" default="default"
 
 set -euo pipefail
 
