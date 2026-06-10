@@ -20,10 +20,8 @@ import {
 } from "react-router";
 import { AppLayout, LoginCheck, OrgLayout } from "./components/app-layout.tsx";
 import { CommandPalette } from "./components/command-palette";
-import {
-  recordVisit,
-  useRecentsUserId,
-} from "./components/command-palette/recentlyVisited";
+import { recordVisit } from "./components/command-palette/recentlyVisited";
+import { useUser } from "./contexts/Auth";
 import { useProjectNavRoutes } from "./hooks/useProjectNavRoutes";
 import { useRBAC } from "./hooks/useRBAC";
 import { AuthProvider, ProjectProvider } from "./contexts/AuthProvider.tsx";
@@ -160,7 +158,9 @@ const RouteProvider = () => {
   const location = useLocation();
   const projectNavRoutes = useProjectNavRoutes();
   const { hasAnyScope } = useRBAC();
-  const recentsUserId = useRecentsUserId();
+  // RouteProvider is inside AuthProvider, so reuse the already-fetched session
+  // instead of issuing another auth.info request.
+  const recentsUserId = useUser().id || undefined;
 
   // Update document title based on active route
   usePageTitle(routes, orgRoutes);

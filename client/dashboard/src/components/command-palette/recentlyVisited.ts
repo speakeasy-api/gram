@@ -24,13 +24,17 @@ const UPDATED_EVENT = "gram:recents-updated";
 
 /**
  * The current user's id, used to scope recents per authenticated user. Derived
- * from the SDK session hook rather than `useUser()` so it works outside the
- * `AuthProvider` (the command palette is mounted above it). Both the write
- * (`recordVisit`) and read (`useRecentlyVisited`) paths resolve the id this way
- * so their storage keys always match.
+ * from the SDK session hook so it works outside the `AuthProvider` (the command
+ * palette is mounted above it).
+ *
+ * `enabled` gates the underlying `auth.info` request: the command palette passes
+ * its open state so we never poll `auth.info` on every page (including the
+ * unauthenticated login page, where it 401s). Inside `AuthProvider`, prefer
+ * `useUser()` instead — the session is already fetched there.
  */
-export function useRecentsUserId(): string | undefined {
+export function useRecentsUserId(enabled = true): string | undefined {
   const { data } = useSessionInfo(undefined, undefined, {
+    enabled,
     refetchOnWindowFocus: false,
     retry: false,
     throwOnError: false,
