@@ -89,9 +89,12 @@ export function AttachRemoteIdentityProviderSheet({
   );
   const [selectedIssuerId, setSelectedIssuerId] = useState<string>("");
 
-  // Optional display name. Empty submits as undefined so the backend stores
-  // NULL and consumers fall back to the issuer URL.
+  // Optional display name. Auto-derived from the Issuer URL hostname (like Slug
+  // below) until the operator edits it, after which nameDirty locks it to their
+  // value. Empty submits as undefined so the backend stores NULL and consumers
+  // fall back to the issuer URL.
   const [name, setName] = useState("");
+  const [nameDirty, setNameDirty] = useState(false);
 
   const [slug, setSlug] = useState("");
   // When the operator hasn't manually edited Slug, we keep it in lockstep
@@ -339,7 +342,8 @@ export function AttachRemoteIdentityProviderSheet({
         buildUserSessionResourceSlug(mcpServer.slug ?? "mcp"),
     );
     setSlugDirty(false);
-    setName("");
+    setName(deriveNameFromUrl(initialIssuerUrl ?? "") ?? "");
+    setNameDirty(false);
     setIssuerUrl(initialIssuerUrl ?? "");
     resetEndpointState();
     clearDiscoverError();
@@ -453,6 +457,12 @@ export function AttachRemoteIdentityProviderSheet({
                     const derived = deriveSlugFromUrl(value);
                     if (derived) setSlug(derived);
                   }
+                  // Same auto-derive-until-edited behavior for the Display name,
+                  // seeded from the URL hostname.
+                  if (!nameDirty) {
+                    const derivedName = deriveNameFromUrl(value);
+                    if (derivedName) setName(derivedName);
+                  }
                   // When the URL diverges from a settled discovery, every
                   // downstream field (endpoints, credentials, scope/audience,
                   // DCR-vs-manual decision) was tied to that prior URL and is
@@ -494,12 +504,16 @@ export function AttachRemoteIdentityProviderSheet({
                 </Label>
                 <Input
                   value={name}
-                  onChange={setName}
+                  onChange={(value) => {
+                    setName(value);
+                    setNameDirty(true);
+                  }}
                   placeholder="My Identity Provider"
                 />
                 <Type muted small>
-                  Friendly label shown in the dashboard. Falls back to the
-                  Issuer URL when left blank.
+                  Friendly label shown in the dashboard. Auto-derived from the
+                  Issuer URL until you edit it; falls back to the Issuer URL
+                  when left blank.
                 </Type>
               </Stack>
 
@@ -658,6 +672,21 @@ function deriveSlugFromUrl(url: string): string | null {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "");
     return slug || null;
+  } catch {
+    return null;
+  }
+}
+
+// Derive a default Display name from the Issuer URL's hostname. Unlike the slug
+// transform this keeps the hostname human-readable (no hyphenation/lowercasing).
+// Returns null for unparseable URLs so the caller leaves the prior value intact
+// while a partial URL is being typed.
+function deriveNameFromUrl(url: string): string | null {
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  try {
+    const host = new URL(trimmed).hostname;
+    return host || null;
   } catch {
     return null;
   }
