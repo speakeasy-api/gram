@@ -1529,6 +1529,22 @@ async function seedObservabilityData(init: {
   const RESOLUTIONS = ["success", "partial", "failure"] as const;
   const RESOLUTION_WEIGHTS = [65, 15, 20]; // success: 65%, partial: 15%, failure: 20%
 
+  // Models attached to chat completion token usage events
+  const MODELS: [model: string, provider: string][] = [
+    ["claude-sonnet-4-6", "anthropic"],
+    ["claude-haiku-4-5", "anthropic"],
+    ["gpt-4", "openai"],
+    ["gpt-4o-mini", "openai"],
+  ];
+  const MODEL_WEIGHTS = [45, 25, 20, 10];
+  const MODEL_WEIGHT_TOTAL = MODEL_WEIGHTS.reduce((s, w) => s + w, 0);
+
+  // OTEL-forwarded-only sessions: token usage captured by org-wide OTEL
+  // forwarding for users who don't have Gram installed. These produce raw
+  // token metrics but no stored chats or tool calls, so they must be
+  // EXCLUDED from tokens under management on the billing page.
+  const NUM_FORWARDED_ONLY_SESSIONS = 150;
+
   // Sample user messages for chat content
   const USER_MESSAGES = [
     "Can you help me list all my GitHub repositories?",
@@ -2015,6 +2031,8 @@ async function seedObservabilityData(init: {
     const traceId = crypto.randomBytes(16).toString("hex");
 
     // Tool call event - TOOLS now contains full URNs like "tools:http:gram:operation"
+    // Carries gen_ai.conversation.id so the chat registers as a stored session
+    // in chat_token_summaries (the tokens-under-management evidence signal).
     const toolUrn = TOOLS[Math.floor(Math.random() * TOOLS.length)];
     const statusCode =
       Math.random() < 0.92
@@ -2023,17 +2041,26 @@ async function seedObservabilityData(init: {
     const latency = (0.05 + Math.random() * 2).toFixed(3);
 
     chInserts.push(
-      `(${timeNano}, ${timeNano}, 'INFO', 'Tool call: ${toolUrn}', '${traceId}', '{"http.response.status_code": ${statusCode}, "http.server.request.duration": ${latency}, "gram.tool.urn": "${toolUrn}", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}"}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', '${toolUrn}', 'gram-mcp-gateway', '${chatId}')`,
+      `(${timeNano}, ${timeNano}, 'INFO', 'Tool call: ${toolUrn}', '${traceId}', '{"http.response.status_code": ${statusCode}, "http.server.request.duration": ${latency}, "gram.tool.urn": "${toolUrn}", "gen_ai.conversation.id": "${chatId}", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}"}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', '${toolUrn}', 'gram-mcp-gateway', '${chatId}')`,
     );
 
-    // Chat completion event - same trace ID links it to the tool call
+    // Chat completion event - same trace ID links it to the tool call.
+    // Token usage attributes feed metrics_summaries (raw "total tokens") and
+    // chat_token_summaries (tokens under management).
     const finishReason =
       Math.random() < 0.65 ? "stop" : Math.random() < 0.9 ? "length" : "error";
     const duration = 30 + Math.floor(Math.random() * 150);
     const completionStatus = Math.random() < 0.92 ? 200 : 500;
+    const [model, provider] = weightedPick(
+      MODELS,
+      MODEL_WEIGHTS,
+      MODEL_WEIGHT_TOTAL,
+    );
+    const inputTokens = 500 + Math.floor(Math.random() * 4500);
+    const outputTokens = 100 + Math.floor(Math.random() * 1900);
 
     chInserts.push(
-      `(${timeNano + BigInt(1000000)}, ${timeNano + BigInt(1000000)}, 'INFO', 'Chat completion', '${traceId}', '{"gen_ai.response.finish_reasons": ["${finishReason}"], "gen_ai.conversation.id": "${chatId}", "gen_ai.conversation.duration": ${duration}, "gram.resource.urn": "agents:chat:completion", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}", "http.response.status_code": ${completionStatus}}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'agents:chat:completion', 'gram-mcp-gateway', '${chatId}')`,
+      `(${timeNano + BigInt(1000000)}, ${timeNano + BigInt(1000000)}, 'INFO', 'Chat completion', '${traceId}', '{"gen_ai.response.finish_reasons": ["${finishReason}"], "gen_ai.conversation.id": "${chatId}", "gen_ai.conversation.duration": ${duration}, "gen_ai.usage.input_tokens": ${inputTokens}, "gen_ai.usage.output_tokens": ${outputTokens}, "gen_ai.usage.total_tokens": ${inputTokens + outputTokens}, "gen_ai.response.model": "${model}", "gen_ai.provider.name": "${provider}", "gram.resource.urn": "agents:chat:completion", "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}", "http.response.status_code": ${completionStatus}}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'agents:chat:completion', 'gram-mcp-gateway', '${chatId}')`,
     );
 
     // Resolution event (70% of chats) - same trace ID
@@ -2055,6 +2082,36 @@ async function seedObservabilityData(init: {
 
       chInserts.push(
         `(${timeNano + BigInt(2000000)}, ${timeNano + BigInt(2000000)}, 'INFO', 'Chat resolution: ${resolution}', '${traceId}', '{"gen_ai.evaluation.name": "chat_resolution", "gen_ai.evaluation.score.label": "${resolution}", "gen_ai.evaluation.score.value": ${score}, "gen_ai.conversation.id": "${chatId}", "gen_ai.conversation.duration": ${duration}, "gram.project.id": "${projectId}", "user.id": "${userId}", "gram.external_user.id": "${extUserId}", "gram.api_key.id": "${apiKeyId}"}', '{"gram.deployment.id": "deployment-1"}', '${projectId}', 'chat_resolution', 'gram-resolution-analyzer', '${chatId}')`,
+      );
+    }
+  }
+
+  // OTEL-forwarded-only sessions: token usage rows with a conversation id but
+  // no stored chats, tool calls, or hook events. The billing page's tokens
+  // under management number should stay below the raw total tokens shown on
+  // the insights page by roughly the sum of these.
+  for (let i = 0; i < NUM_FORWARDED_ONLY_SESSIONS; i++) {
+    const chatId = generateChatUUID(100_000 + i);
+    const daysAgo = Math.random() * DAYS_BACK;
+    const sessionTime = new Date(now - daysAgo * msPerDay);
+    const [model, provider] = weightedPick(
+      MODELS,
+      MODEL_WEIGHTS,
+      MODEL_WEIGHT_TOTAL,
+    );
+
+    // 1-3 completion events per forwarded session
+    const numCompletions = 1 + Math.floor(Math.random() * 3);
+    for (let j = 0; j < numCompletions; j++) {
+      const traceId = crypto.randomBytes(16).toString("hex");
+      const timeNano =
+        BigInt(sessionTime.getTime()) * BigInt(1000000) +
+        BigInt(j) * BigInt(60_000_000_000); // one minute apart
+      const inputTokens = 500 + Math.floor(Math.random() * 4500);
+      const outputTokens = 100 + Math.floor(Math.random() * 1900);
+
+      chInserts.push(
+        `(${timeNano}, ${timeNano}, 'INFO', 'Chat completion (OTEL forwarded)', '${traceId}', '{"gen_ai.conversation.id": "${chatId}", "gen_ai.usage.input_tokens": ${inputTokens}, "gen_ai.usage.output_tokens": ${outputTokens}, "gen_ai.usage.total_tokens": ${inputTokens + outputTokens}, "gen_ai.response.model": "${model}", "gen_ai.provider.name": "${provider}", "gram.resource.urn": "agents:chat:completion", "gram.project.id": "${projectId}"}', '{}', '${projectId}', 'agents:chat:completion', 'otel-collector', '${chatId}')`,
       );
     }
   }
@@ -2390,6 +2447,7 @@ async function seedObservabilityData(init: {
     SET mutations_sync = 1;
     ALTER TABLE telemetry_logs DELETE WHERE gram_project_id = '${projectId}';
     ALTER TABLE trace_summaries DELETE WHERE gram_project_id = '${projectId}';
+    ALTER TABLE chat_token_summaries DELETE WHERE gram_project_id = '${projectId}';
     INSERT INTO telemetry_logs (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id, attributes, resource_attributes, gram_project_id, gram_urn, service_name, gram_chat_id) VALUES
     ${chInserts.join(",\n")};
   `;
