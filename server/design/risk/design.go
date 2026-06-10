@@ -660,6 +660,7 @@ var _ = Service("risk", func() {
 			Attribute("id", String, "The bypass request ID.", func() {
 				Format(FormatUUID)
 			})
+			Attribute("granted_principal_urns", ArrayOf(String), "Principal URNs to grant bypass access to. Defaults to the requester when omitted.")
 			Required("id")
 		})
 
@@ -670,7 +671,7 @@ var _ = Service("risk", func() {
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
-			Body(RiskIDRequestBody)
+			Body(RiskPolicyBypassApprovalRequestBody)
 			Response(StatusOK)
 		})
 
@@ -1340,6 +1341,16 @@ var RiskIDRequestBody = Type("RiskIDRequestBody", func() {
 	Attribute("id", String, "The resource ID.", func() {
 		Format(FormatUUID)
 	})
+	Required("id")
+})
+
+var RiskPolicyBypassApprovalRequestBody = Type("RiskPolicyBypassApprovalRequestBody", func() {
+	Meta("openapi:typename", "RiskPolicyBypassApprovalRequestBody")
+
+	Attribute("id", String, "The bypass request ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("granted_principal_urns", ArrayOf(String), "Principal URNs to grant bypass access to. Use user:all for every user in the organization.")
 	Required("id")
 })
 

@@ -1,6 +1,6 @@
 import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
 import { Page } from "@/components/page-layout";
-import { getProjectColors } from "@/components/project-colors";
+import { getGradientColors } from "@/components/gradient-colors";
 import { RequireScope } from "@/components/require-scope";
 import { CardContextMenu } from "@/components/card-context-menu";
 import { Badge } from "@/components/ui/badge";
@@ -231,7 +231,7 @@ function UsageSection() {
 // Each assistant gets a deterministic gradient tile behind its Bot icon,
 // derived from its id via the same hash that powers project avatar colors.
 function AssistantIcon({ assistant }: { assistant: Pick<Assistant, "id"> }) {
-  const colors = getProjectColors(assistant.id);
+  const colors = getGradientColors(assistant.id);
   return (
     <div
       className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br"

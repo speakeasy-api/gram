@@ -35,6 +35,15 @@ export function effectiveGrantCount(grants: Record<string, RoleGrant>): number {
   ).length;
 }
 
+export function visiblePermissionCount(
+  grants: Array<{ scope?: string }>,
+): number {
+  return grants.filter(
+    (grant) =>
+      grant.scope !== undefined && !grant.scope.startsWith("risk_policy:"),
+  ).length;
+}
+
 /** Whether the selected members differ from the initial snapshot */
 export function membersHaveChanged(
   selected: Set<string>,

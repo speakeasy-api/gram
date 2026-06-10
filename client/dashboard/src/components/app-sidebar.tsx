@@ -147,9 +147,9 @@ export function AppSidebar({
         <div className="flex items-center justify-between gap-2 group-data-[collapsible=icon]:justify-center">
           <Link
             to={`/${orgSlug}`}
-            className="flex h-(--header-height) items-center px-1 hover:no-underline group-data-[collapsible=icon]:h-auto group-data-[collapsible=icon]:justify-center"
+            className="flex h-(--header-height) items-center px-1 hover:no-underline group-data-[collapsible=icon]:hidden"
           >
-            <GramLogo className="w-28 group-data-[collapsible=icon]:hidden" />
+            <GramLogo className="w-28" />
           </Link>
           <CommandPaletteTrigger />
         </div>

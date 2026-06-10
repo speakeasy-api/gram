@@ -99,8 +99,11 @@ type CreateRiskPolicyBypassRequestRequestBody struct {
 // ApproveRiskPolicyBypassRequestRequestBody is the type of the "risk" service
 // "approveRiskPolicyBypassRequest" endpoint HTTP request body.
 type ApproveRiskPolicyBypassRequestRequestBody struct {
-	// The resource ID.
+	// The bypass request ID.
 	ID string `form:"id" json:"id" xml:"id"`
+	// Principal URNs to grant bypass access to. Use user:all for every user in the
+	// organization.
+	GrantedPrincipalUrns []string `form:"granted_principal_urns,omitempty" json:"granted_principal_urns,omitempty" xml:"granted_principal_urns,omitempty"`
 }
 
 // DenyRiskPolicyBypassRequestRequestBody is the type of the "risk" service
@@ -7633,6 +7636,12 @@ func NewCreateRiskPolicyBypassRequestRequestBody(p *risk.CreateRiskPolicyBypassR
 func NewApproveRiskPolicyBypassRequestRequestBody(p *risk.ApproveRiskPolicyBypassRequestPayload) *ApproveRiskPolicyBypassRequestRequestBody {
 	body := &ApproveRiskPolicyBypassRequestRequestBody{
 		ID: p.ID,
+	}
+	if p.GrantedPrincipalUrns != nil {
+		body.GrantedPrincipalUrns = make([]string, len(p.GrantedPrincipalUrns))
+		for i, val := range p.GrantedPrincipalUrns {
+			body.GrantedPrincipalUrns[i] = val
+		}
 	}
 	return body
 }

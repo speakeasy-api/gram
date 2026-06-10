@@ -2,11 +2,12 @@ import { GramLogo } from "@/components/gram-logo";
 import { Type } from "@/components/ui/type";
 import { useSession } from "@/contexts/Auth";
 import { buildLoginRedirectURL } from "@/lib/utils";
-import { useCreateShadowMCPApprovalRequestMutation } from "@gram/client/react-query";
+import { useRiskCreatePolicyBypassRequestMutation } from "@gram/client/react-query/riskCreatePolicyBypassRequest.js";
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useEffect, useState } from "react";
 
-const REQUEST_TOKEN_STORAGE_KEY = "shadowMcpApprovalRequestToken";
+const REQUEST_TOKEN_STORAGE_KEY = "riskPolicyBypassRequestToken";
+const LEGACY_REQUEST_TOKEN_STORAGE_KEY = "shadowMcpApprovalRequestToken";
 const inFlightSubmissions = new Map<string, Promise<void>>();
 
 type RequestAccessState =
@@ -25,7 +26,7 @@ export function ShadowMCPRequestAccessContent(): JSX.Element {
     useState<SubmissionResult>("idle");
   const [retryCount, setRetryCount] = useState(0);
   const { mutateAsync: createApprovalRequest } =
-    useCreateShadowMCPApprovalRequestMutation();
+    useRiskCreatePolicyBypassRequestMutation();
 
   useEffect(() => {
     const meta = document.createElement("meta");
@@ -41,17 +42,20 @@ export function ShadowMCPRequestAccessContent(): JSX.Element {
     if (requestToken) {
       setSubmissionResult("idle");
       sessionStorage.setItem(REQUEST_TOKEN_STORAGE_KEY, requestToken);
+      sessionStorage.removeItem(LEGACY_REQUEST_TOKEN_STORAGE_KEY);
       window.history.replaceState(null, "", window.location.pathname);
     }
   }, [requestToken]);
 
   const storedRequestToken =
-    requestToken ?? sessionStorage.getItem(REQUEST_TOKEN_STORAGE_KEY);
+    requestToken ??
+    sessionStorage.getItem(REQUEST_TOKEN_STORAGE_KEY) ??
+    sessionStorage.getItem(LEGACY_REQUEST_TOKEN_STORAGE_KEY);
 
   useEffect(() => {
     if (!storedRequestToken || session.session) return;
 
-    window.location.href = buildLoginRedirectURL("/shadow-mcp/request");
+    window.location.href = buildLoginRedirectURL(window.location.pathname);
   }, [session.session, storedRequestToken]);
 
   useEffect(() => {
@@ -79,6 +83,7 @@ export function ShadowMCPRequestAccessContent(): JSX.Element {
         if (!active) return;
         setSubmissionResult("complete");
         sessionStorage.removeItem(REQUEST_TOKEN_STORAGE_KEY);
+        sessionStorage.removeItem(LEGACY_REQUEST_TOKEN_STORAGE_KEY);
       })
       .catch(() => {
         if (!active) return;
