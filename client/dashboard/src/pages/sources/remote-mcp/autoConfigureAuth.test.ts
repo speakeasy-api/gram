@@ -88,6 +88,7 @@ describe("autoConfigureRemoteMcpAuth", () => {
     expect(client.remoteSessionIssuers.create).toHaveBeenCalledWith({
       createRemoteSessionIssuerForm: expect.objectContaining({
         issuer: "https://idp.example.com",
+        name: "idp.example.com",
         authorizationEndpoint: "https://idp.example.com/authorize",
         tokenEndpoint: "https://idp.example.com/token",
         registrationEndpoint: "https://idp.example.com/register",

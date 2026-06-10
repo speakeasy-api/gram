@@ -15,6 +15,7 @@ import {
   type AuthedFetch,
   proxyRegisterUpstreamClient,
 } from "@/lib/proxyRegisterUpstreamClient";
+import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
 import {
   narrowTokenEndpointAuthMethod,
   pickPreferredAuthMethod,
@@ -173,6 +174,7 @@ export async function autoConfigureRemoteMcpAuth({
         createRemoteSessionIssuerForm: {
           slug: resourceSlug,
           issuer: draft.issuer,
+          name: deriveRemoteSessionIssuerNameFromUrl(draft.issuer) ?? undefined,
           authorizationEndpoint: draft.authorizationEndpoint,
           tokenEndpoint: draft.tokenEndpoint,
           registrationEndpoint: draft.registrationEndpoint,

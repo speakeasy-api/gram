@@ -64,6 +64,21 @@ export function formatRemoteSessionIssuerDisplay(issuer: {
   return formatRemoteMcpDisplay({ name: issuer.name, url: issuer.issuer });
 }
 
+// Derive a default display name from an Issuer URL's hostname. Unlike the slug
+// transform this keeps the hostname human-readable (no hyphenation/lowercasing).
+export function deriveRemoteSessionIssuerNameFromUrl(
+  url: string,
+): string | null {
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  try {
+    const host = new URL(trimmed).hostname;
+    return host || null;
+  } catch {
+    return null;
+  }
+}
+
 // remoteMcpRouteParam returns the value to embed in dashboard URLs for a
 // remote MCP server. Prefers the slug for human-friendly URLs and falls back
 // to the ID; the server's getServer endpoint accepts either.
