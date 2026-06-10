@@ -962,7 +962,7 @@ func newStartCommand() *cli.Command {
 			}
 			hookPIScanner := risk_analysis.NewPromptInjectionScanner(logger, hookPromptInjectionClassifier, featureFlags)
 
-			hookPromptJudge := riskjudge.New(logger, completionsClient)
+			hookPromptJudge := riskjudge.New(logger, tracerProvider, meterProvider, completionsClient)
 			riskScanner, err := risk.NewScanner(logger, db, hookPIIScanner, hookPIScanner, hookPromptJudge, featureFlags, meterProvider)
 			if err != nil {
 				return fmt.Errorf("create risk scanner: %w", err)

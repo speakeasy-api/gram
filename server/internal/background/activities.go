@@ -166,7 +166,7 @@ func NewActivities(
 		analyzeSegment:                  resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
 		getUserFeedbackForChat:          resolution_activities.NewGetUserFeedbackForChat(logger, db),
 		fetchUnanalyzedMessages:         risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
-		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, piScanner, shadowMCPClient, telemetryrepo.New(chConn), riskjudge.New(logger, chatClient), features),
+		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, piScanner, shadowMCPClient, telemetryrepo.New(chConn), riskjudge.New(logger, tracerProvider, meterProvider, chatClient), features),
 		markMessagesAnalyzed:            risk_analysis.NewMarkMessagesAnalyzed(logger, tracerProvider, db),
 		admitAssistantThreads:           activities.NewAdmitAssistantThreads(assistantsCore),
 		processAssistantThread:          activities.NewProcessAssistantThread(assistantsCore),
