@@ -194,7 +194,7 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@storybook/addon-themes": "^10.1.11",
     "@tanstack/react-query": "^5.90.10",
-    "ai": "5.0.90",
+    "ai": "6.0.199",
     "assistant-stream": "^0.2.46",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
