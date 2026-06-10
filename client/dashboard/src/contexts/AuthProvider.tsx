@@ -51,11 +51,7 @@ const UNAUTHENTICATED_PATHS = [
   "/shadow-mcp/request",
 ];
 
-const SLUG_EXEMPT_PATHS = [
-  "/slack/register",
-  "/switch-org",
-  "/shadow-mcp/request",
-];
+const SLUG_EXEMPT_PATHS = ["/switch-org", "/shadow-mcp/request"];
 
 export const AuthProvider = ({
   children,

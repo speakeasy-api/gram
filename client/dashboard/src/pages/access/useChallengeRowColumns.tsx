@@ -17,7 +17,11 @@ import { KeyRound } from "lucide-react";
 import { useMemo } from "react";
 import { OutcomeBadge } from "./ChallengesTab";
 import { ResourceLink } from "./ResourceLink";
-import { getInitials, reasonLabel } from "./challengeHelpers";
+import {
+  getInitials,
+  principalDisplayName,
+  reasonLabel,
+} from "./challengeHelpers";
 
 export function useChallengeRowColumns(
   animatingOutIds?: Set<string>,
@@ -76,7 +80,7 @@ export function useChallengeRowColumns(
         render: (row: ChallengeBucket) => {
           if (isChild(row)) return null;
           const isApiKey = row.principalType === "api_key";
-          const display = row.userEmail ?? row.principalUrn;
+          const display = principalDisplayName(row.userEmail, row.principalUrn);
           return (
             <div className={cn(rowFade(row))}>
               <Avatar className="h-8 w-8">
@@ -101,6 +105,7 @@ export function useChallengeRowColumns(
         width: "1.2fr",
         render: (row: ChallengeBucket) => {
           if (isChild(row)) return null;
+          const display = principalDisplayName(row.userEmail, row.principalUrn);
           return (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -111,7 +116,7 @@ export function useChallengeRowColumns(
                     rowFade(row),
                   )}
                 >
-                  {row.userEmail ?? row.principalUrn}
+                  {display}
                 </Type>
               </TooltipTrigger>
               {row.roleSlugs.length > 0 && (

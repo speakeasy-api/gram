@@ -314,6 +314,8 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 
 	principals, err := authz.ResolveUserPrincipals(ctx, s.db, ac.ActiveOrganizationID, ac.UserID)
 	switch {
+	case errors.Is(err, authz.ErrPrincipalInvalid):
+		return nil, oops.E(oops.CodeUnauthorized, err, "invalid user principal").Log(ctx, logger)
 	case errors.Is(err, authz.ErrPrincipalNotFound):
 		return nil, oops.E(oops.CodeNotFound, nil, "current user has not joined this organization").Log(ctx, logger)
 	case err != nil:

@@ -2,8 +2,6 @@ package environments
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"log/slog"
 	"time"
@@ -82,13 +80,6 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		mux,
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
-}
-
-// computeValueHash computes a SHA-256 hash of the given value.
-// This hash is used to identify matching values across environments without exposing the actual value.
-func computeValueHash(value string) string {
-	hash := sha256.Sum256([]byte(value))
-	return hex.EncodeToString(hash[:])
 }
 
 func (s *Service) CreateEnvironment(ctx context.Context, payload *gen.CreateEnvironmentPayload) (*types.Environment, error) {
@@ -187,28 +178,7 @@ func (s *Service) ListEnvironments(ctx context.Context, payload *gen.ListEnviron
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to list environment entries").Log(ctx, s.logger)
 		}
 
-		var genEntries []*types.EnvironmentEntry
-		for _, entry := range entries {
-			genEntries = append(genEntries, &types.EnvironmentEntry{
-				Name:      entry.Name,
-				Value:     entry.Value,
-				ValueHash: computeValueHash(entry.Value),
-				CreatedAt: entry.CreatedAt.Time.Format(time.RFC3339),
-				UpdatedAt: entry.UpdatedAt.Time.Format(time.RFC3339),
-			})
-		}
-
-		result = append(result, &types.Environment{
-			ID:             environment.ID.String(),
-			OrganizationID: environment.OrganizationID,
-			ProjectID:      environment.ProjectID.String(),
-			Name:           environment.Name,
-			Slug:           types.Slug(environment.Slug),
-			Description:    conv.FromPGText[string](environment.Description),
-			Entries:        genEntries,
-			CreatedAt:      environment.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt:      environment.UpdatedAt.Time.Format(time.RFC3339),
-		})
+		result = append(result, buildEnvironmentView(environment, entries))
 	}
 
 	return &gen.ListEnvironmentsResult{Environments: result}, nil
@@ -499,7 +469,6 @@ func buildEnvironmentEntries(entries []repo.EnvironmentEntry) []*types.Environme
 		genEntries[i] = &types.EnvironmentEntry{
 			Name:      entry.Name,
 			Value:     entry.Value,
-			ValueHash: computeValueHash(entry.Value),
 			CreatedAt: entry.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt: entry.UpdatedAt.Time.Format(time.RFC3339),
 		}
@@ -614,28 +583,7 @@ func (s *Service) GetSourceEnvironment(ctx context.Context, payload *gen.GetSour
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list environment entries").Log(ctx, s.logger)
 	}
 
-	genEntries := make([]*types.EnvironmentEntry, len(entries))
-	for i, entry := range entries {
-		genEntries[i] = &types.EnvironmentEntry{
-			Name:      entry.Name,
-			Value:     entry.Value,
-			ValueHash: computeValueHash(entry.Value),
-			CreatedAt: entry.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt: entry.UpdatedAt.Time.Format(time.RFC3339),
-		}
-	}
-
-	return &types.Environment{
-		ID:             environment.ID.String(),
-		OrganizationID: environment.OrganizationID,
-		ProjectID:      environment.ProjectID.String(),
-		Name:           environment.Name,
-		Slug:           types.Slug(environment.Slug),
-		Description:    conv.FromPGText[string](environment.Description),
-		Entries:        genEntries,
-		CreatedAt:      environment.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:      environment.UpdatedAt.Time.Format(time.RFC3339),
-	}, nil
+	return buildEnvironmentView(environment, entries), nil
 }
 
 func (s *Service) SetToolsetEnvironmentLink(ctx context.Context, payload *gen.SetToolsetEnvironmentLinkPayload) (*gen.ToolsetEnvironmentLink, error) {
@@ -741,28 +689,7 @@ func (s *Service) GetToolsetEnvironment(ctx context.Context, payload *gen.GetToo
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list environment entries").Log(ctx, s.logger)
 	}
 
-	genEntries := make([]*types.EnvironmentEntry, len(entries))
-	for i, entry := range entries {
-		genEntries[i] = &types.EnvironmentEntry{
-			Name:      entry.Name,
-			Value:     entry.Value,
-			ValueHash: computeValueHash(entry.Value),
-			CreatedAt: entry.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt: entry.UpdatedAt.Time.Format(time.RFC3339),
-		}
-	}
-
-	return &types.Environment{
-		ID:             environment.ID.String(),
-		OrganizationID: environment.OrganizationID,
-		ProjectID:      environment.ProjectID.String(),
-		Name:           environment.Name,
-		Slug:           types.Slug(environment.Slug),
-		Description:    conv.FromPGText[string](environment.Description),
-		Entries:        genEntries,
-		CreatedAt:      environment.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:      environment.UpdatedAt.Time.Format(time.RFC3339),
-	}, nil
+	return buildEnvironmentView(environment, entries), nil
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {

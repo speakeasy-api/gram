@@ -206,7 +206,8 @@
         color: var(--text-default-success);
       }
 
-      .remote-card .state.disconnected {
+      .remote-card .state.disconnected,
+      .remote-card .state.expired {
         color: var(--text-default-warning);
       }
 
@@ -235,6 +236,11 @@
       .remote-card a.btn-link.connected:hover {
         background: var(--color-neutral-200);
         color: var(--fill-neutral-highlight);
+      }
+
+      .remote-card a.btn-link[aria-disabled="true"] {
+        pointer-events: none;
+        opacity: 0.65;
       }
 
       .actions {
@@ -290,6 +296,30 @@
         background: var(--bg-surface-secondary-default);
         color: var(--fill-neutral-highlight);
       }
+
+      .spinner {
+        display: inline-block;
+        width: 0.85em;
+        height: 0.85em;
+        margin-right: 0.5em;
+        vertical-align: -0.15em;
+        border: 2px solid currentColor;
+        border-right-color: transparent;
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .spinner {
+          animation-duration: 1.5s;
+        }
+      }
     </style>
   </head>
   <body>
@@ -321,6 +351,8 @@
               <div class="issuer">{{.IssuerSlug}}</div>
               {{if .Connected}}
               <div class="state connected">✓ Connected</div>
+              {{else if .Expired}}
+              <div class="state expired">⚠ Expired — reconnect</div>
               {{else}}
               <div class="state disconnected">Not connected</div>
               {{end}}
@@ -328,7 +360,8 @@
             <a
               class="btn-link {{if .Connected}}connected{{end}}"
               href="{{.ChallengeURL}}"
-              >{{if .Connected}}Reconnect{{else}}Connect{{end}}</a
+              data-connect-link
+              >{{if or .Connected .Expired}}Reconnect{{else}}Connect{{end}}</a
             >
           </div>
           {{end}}
@@ -336,7 +369,11 @@
         {{end}}
 
         <div class="actions">
-          <form method="POST" action="/{{.MCPRouteBase}}/{{.MCPSlug}}/connect">
+          <form
+            method="POST"
+            action="/{{.MCPRouteBase}}/{{.MCPSlug}}/connect"
+            data-approve-form
+          >
             <input type="hidden" name="state" value="{{.State}}" />
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
             <button
@@ -366,5 +403,6 @@
         </div>
       </div>
     </main>
+    <script src="{{.ScriptURL}}"></script>
   </body>
 </html>

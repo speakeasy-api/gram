@@ -72,7 +72,7 @@ func callSendMessage(ctx context.Context, client *apiClient, env toolconfig.Tool
 		request["blocks"] = input.Blocks
 	}
 
-	body, err := client.call(ctx, "chat.postMessage", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "chat.postMessage", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

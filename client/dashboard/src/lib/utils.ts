@@ -28,6 +28,17 @@ export function buildLoginRedirectURL(redirectTo: string | null): string {
   return href;
 }
 
+/**
+ * True on macOS/iOS — used to pick ⌘ vs Ctrl in keyboard shortcut hints.
+ * Defaults to true during SSR/tests where `navigator` is unavailable.
+ */
+export function isMacPlatform(): boolean {
+  if (typeof navigator === "undefined") return true;
+  return /mac|iphone|ipad|ipod/i.test(
+    navigator.platform || navigator.userAgent,
+  );
+}
+
 export function capitalize(str: string): string {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }

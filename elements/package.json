@@ -201,7 +201,7 @@
     "lucide-react": "catalog:",
     "radix-ui": "^1.4.3",
     "recharts": "^2.15.4",
-    "tailwind-merge": "^3.5.0",
+    "tailwind-merge": "^3.6.0",
     "tw-shimmer": "^0.4.0",
     "vega": "^6.2.0",
     "vega-interpreter": "^1.0.5",

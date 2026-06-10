@@ -66,7 +66,7 @@ func callRemoveCanvasAccess(ctx context.Context, client *apiClient, env toolconf
 		request["user_ids"] = input.UserIDs
 	}
 
-	body, err := client.call(ctx, "canvases.access.delete", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "canvases.access.delete", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

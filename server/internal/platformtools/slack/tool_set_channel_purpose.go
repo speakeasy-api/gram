@@ -60,7 +60,7 @@ func callSetChannelPurpose(ctx context.Context, client *apiClient, env toolconfi
 		"purpose": purpose,
 	}
 
-	body, err := client.call(ctx, "conversations.setPurpose", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "conversations.setPurpose", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

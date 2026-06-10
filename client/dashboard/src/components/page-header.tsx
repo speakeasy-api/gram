@@ -9,6 +9,7 @@ import { cn, titleCaseSlug } from "@/lib/utils.ts";
 import React from "react";
 import { Link, useLocation, useParams } from "react-router";
 import { BrandGradientLine } from "./brand-gradient-line.tsx";
+import { OnboardingBanner } from "./onboarding-banner.tsx";
 import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge.tsx";
 import { Heading } from "./ui/heading.tsx";
 
@@ -44,6 +45,7 @@ function PageHeaderComponent({
       {/* Brand gradient signature, relocated here from the old top bar — it now
           divides the main panel's header from its content on the right side. */}
       <BrandGradientLine />
+      <OnboardingBanner />
     </>
   );
 }

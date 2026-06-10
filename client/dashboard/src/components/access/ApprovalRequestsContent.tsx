@@ -55,7 +55,8 @@ import {
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { Ellipsis, Inbox, Loader2, Plus, ShieldCheck } from "lucide-react";
 import type React from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryState } from "nuqs";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import {
@@ -258,6 +259,23 @@ function RuleDispositionBadge({
     <Badge variant={disposition === "allowed" ? "success" : "destructive"}>
       <Badge.Text>{getDispositionLabel(disposition)}</Badge.Text>
     </Badge>
+  );
+}
+
+function AccessRuleTableCell({
+  inactive,
+  children,
+}: {
+  inactive: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      data-inactive-rule-cell={inactive ? "true" : undefined}
+      className={cn("min-w-0", inactive && "opacity-50")}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -915,16 +933,20 @@ export function ApprovalRequestsContent({
   );
   const canCreateAccessRules = useMemo(
     () =>
-      policiesQuery.error
+      // Policies are only fetched for admins; without policy data we can't
+      // know rules are inactive, so default to treating them as active.
+      !canAdmin || policiesQuery.error
         ? true
         : (policiesQuery.data?.policies.some(policyEnablesAccessRules) ??
           false),
-    [policiesQuery.data?.policies, policiesQuery.error],
+    [canAdmin, policiesQuery.data?.policies, policiesQuery.error],
   );
   const accessRuleCreateAvailability = getAccessRuleCreateAvailability({
     canCreateAccessRules,
     isLoadingPolicies: policiesQuery.isLoading,
   });
+  const inactiveAccessRules =
+    accessRuleCreateAvailability.status === "missing_blocking_policy";
   const addRuleDisabledReason =
     accessRuleCreateAvailability.status === "available"
       ? undefined
@@ -938,6 +960,30 @@ export function ApprovalRequestsContent({
   const requestsError = requestsQuery.error;
   const rulesLoading = rulesQuery.isLoading;
   const rulesError = rulesQuery.error;
+
+  // Deep-link support: `?review=<id>` opens that request's review sheet. The
+  // command palette uses this since requests have no per-item route. Only
+  // pending ("requested") requests are listed, matching what the palette shows.
+  const [reviewParam, setReviewParam] = useQueryState("review");
+  const openedReviewRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!reviewParam || requestsLoading) return;
+    if (openedReviewRef.current === reviewParam) return;
+    const request = requests.find((r) => r.id === reviewParam);
+    if (request) {
+      openedReviewRef.current = reviewParam;
+      setReviewRequest(request);
+    }
+  }, [reviewParam, requestsLoading, requests]);
+
+  // Close the review sheet and drop its deep-link param. Called from both the
+  // user-initiated close (onOpenChange) and the programmatic approve/deny close,
+  // since Radix's onOpenChange does not fire when the sheet closes via state.
+  const closeReviewSheet = useCallback(() => {
+    setReviewRequest(null);
+    openedReviewRef.current = null;
+    void setReviewParam(null);
+  }, [setReviewParam]);
 
   const renderPaginationFooter = ({
     count,
@@ -1102,10 +1148,12 @@ export function ApprovalRequestsContent({
       header: "Server",
       width: "1.5fr",
       render: (rule) => (
-        <ServerCell
-          name={getRuleDisplayName(rule)}
-          detail={getRuleServerDetail(rule)}
-        />
+        <AccessRuleTableCell inactive={inactiveAccessRules}>
+          <ServerCell
+            name={getRuleDisplayName(rule)}
+            detail={getRuleServerDetail(rule)}
+          />
+        </AccessRuleTableCell>
       ),
     },
     {
@@ -1113,9 +1161,11 @@ export function ApprovalRequestsContent({
       header: "Type",
       width: "0.75fr",
       render: (rule) => (
-        <Badge variant="neutral">
-          <Badge.Text>{getResourceTypeLabel(rule.resourceType)}</Badge.Text>
-        </Badge>
+        <AccessRuleTableCell inactive={inactiveAccessRules}>
+          <Badge variant="neutral">
+            <Badge.Text>{getResourceTypeLabel(rule.resourceType)}</Badge.Text>
+          </Badge>
+        </AccessRuleTableCell>
       ),
     },
     {
@@ -1123,35 +1173,43 @@ export function ApprovalRequestsContent({
       header: "Match",
       width: "1.25fr",
       render: (rule) => (
-        <div className="min-w-0 space-y-1">
-          <Type variant="small" className="font-medium">
-            {getMatchBreadthLabel(rule.matchBreadth)}
-          </Type>
-          <Type
-            variant="small"
-            className="text-muted-foreground truncate text-xs"
-          >
-            {rule.matchValue}
-          </Type>
-        </div>
+        <AccessRuleTableCell inactive={inactiveAccessRules}>
+          <div className="min-w-0 space-y-1">
+            <Type variant="small" className="font-medium">
+              {getMatchBreadthLabel(rule.matchBreadth)}
+            </Type>
+            <Type
+              variant="small"
+              className="text-muted-foreground truncate text-xs"
+            >
+              {rule.matchValue}
+            </Type>
+          </div>
+        </AccessRuleTableCell>
       ),
     },
     {
       key: "disposition",
       header: "Status",
       width: "0.5fr",
-      render: (rule) => <RuleDispositionBadge disposition={rule.disposition} />,
+      render: (rule) => (
+        <AccessRuleTableCell inactive={inactiveAccessRules}>
+          <RuleDispositionBadge disposition={rule.disposition} />
+        </AccessRuleTableCell>
+      ),
     },
     {
       key: "scope",
       header: "Scope",
       width: "0.5fr",
       render: (rule) => (
-        <Type variant="small">
-          {rule.accessScope === "project"
-            ? projectName(organization.projects, rule.projectId)
-            : getAccessScopeLabel(rule.accessScope)}
-        </Type>
+        <AccessRuleTableCell inactive={inactiveAccessRules}>
+          <Type variant="small">
+            {rule.accessScope === "project"
+              ? projectName(organization.projects, rule.projectId)
+              : getAccessScopeLabel(rule.accessScope)}
+          </Type>
+        </AccessRuleTableCell>
       ),
     },
     {
@@ -1159,7 +1217,9 @@ export function ApprovalRequestsContent({
       header: "Updated",
       width: "0.75fr",
       render: (rule) => (
-        <Type variant="small">{formatShortDate(rule.updatedAt)}</Type>
+        <AccessRuleTableCell inactive={inactiveAccessRules}>
+          <Type variant="small">{formatShortDate(rule.updatedAt)}</Type>
+        </AccessRuleTableCell>
       ),
     },
     {
@@ -1191,7 +1251,7 @@ export function ApprovalRequestsContent({
         open={!!reviewRequest}
         isSubmitting={isReviewSubmitting}
         onOpenChange={(open) => {
-          if (!open) setReviewRequest(null);
+          if (!open) closeReviewSheet();
         }}
         onApprove={async (input) => {
           if (!reviewRequest) return;
@@ -1214,7 +1274,7 @@ export function ApprovalRequestsContent({
           });
           await refreshApprovalRequestsData();
           toast.success("Request approved");
-          setReviewRequest(null);
+          closeReviewSheet();
         }}
         onDeny={async (input) => {
           if (!reviewRequest) return;
@@ -1237,7 +1297,7 @@ export function ApprovalRequestsContent({
           });
           await refreshApprovalRequestsData();
           toast.success("Request denied");
-          setReviewRequest(null);
+          closeReviewSheet();
         }}
       />
 

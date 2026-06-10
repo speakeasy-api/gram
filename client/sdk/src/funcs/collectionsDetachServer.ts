@@ -30,7 +30,7 @@ import { Result } from "../types/fp.js";
  * detachServer collections
  *
  * @remarks
- * Detach a server (toolset) from a collection
+ * Detach a server from a collection. Provide exactly one of toolset_id or mcp_server_id.
  */
 export function collectionsDetachServer(
   client: GramCore,

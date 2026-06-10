@@ -309,6 +309,7 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 			Version:                             s.Server.Version,
 			Description:                         s.Server.Description,
 			ToolsetID:                           nil,
+			McpServerID:                         nil,
 			RegistryID:                          &registryID,
 			OrganizationMcpCollectionRegistryID: nil,
 			Title:                               s.Server.Title,

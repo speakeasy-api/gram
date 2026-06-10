@@ -62,7 +62,7 @@ func callListFiles(ctx context.Context, client *apiClient, env toolconfig.ToolCa
 	setOptionalInt(request, "count", input.Count)
 	setOptionalBool(request, "show_files_hidden_by_limit", input.ShowFilesHiddenByLimit)
 
-	body, err := client.call(ctx, "files.list", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "files.list", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

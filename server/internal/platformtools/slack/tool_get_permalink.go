@@ -63,7 +63,7 @@ func callGetPermalink(ctx context.Context, client *apiClient, env toolconfig.Too
 	// Slack documents chat.getPermalink as a GET endpoint, but it also accepts
 	// form-encoded POST requests like the rest of the Web API, which keeps the
 	// shared apiClient transport in play.
-	body, err := client.call(ctx, "chat.getPermalink", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "chat.getPermalink", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

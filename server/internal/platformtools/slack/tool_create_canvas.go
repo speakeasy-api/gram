@@ -54,7 +54,7 @@ func callCreateCanvas(ctx context.Context, client *apiClient, env toolconfig.Too
 		request["document_content"] = input.DocumentContent
 	}
 
-	body, err := client.call(ctx, "canvases.create", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "canvases.create", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

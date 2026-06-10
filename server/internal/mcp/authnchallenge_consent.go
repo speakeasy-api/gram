@@ -10,6 +10,7 @@ import (
 	"crypto/subtle"
 	_ "embed"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"html/template"
@@ -35,6 +36,26 @@ var consentTemplateHTML string
 
 var consentTemplate = template.Must(template.New("consent").Parse(consentTemplateHTML))
 
+// consentScriptData is the consent page's client-side script. It is served
+// as an external file (not inlined into the template) because the ingress
+// CSP forbids inline scripts.
+//
+//go:embed consent_script.js
+var consentScriptData []byte
+
+// consentScriptHash is the first 8 hex chars of the SHA-256 of
+// consentScriptData, used to cache-bust the immutable script URL. Matches
+// the install-page script convention in the mcpmetadata package.
+var consentScriptHash = func() string {
+	sum := sha256.Sum256(consentScriptData)
+	return hex.EncodeToString(sum[:])[:8]
+}()
+
+// consentScriptURL is the path the consent template loads the script from.
+// Hardcoded to the /mcp surface (like the install-page script) so the
+// /x/mcp surface reuses the same route rather than registering its own.
+var consentScriptURL = "/mcp/consent-page-" + consentScriptHash + ".js"
+
 // remoteSetHashEmpty is the SHA-256 of an empty remote-set, used by the
 // consent record's remote_set_hash column when the issuer has no remote
 // session clients (the only case today). The empty case is NOT skipped —
@@ -54,6 +75,7 @@ type consentTemplateData struct {
 	CSRFToken          string
 	SubjectDisplay     string
 	RedirectURI        string
+	ScriptURL          string
 	RemoteSessionCards []remoteSessionCard
 	// ConsentEnabled gates the "Give Access" button. True when there are no
 	// remote-session challenges, or when at least one challenge has been
@@ -64,10 +86,17 @@ type consentTemplateData struct {
 // remoteSessionCard is the per-remote view rendered by the {{range}} block
 // in the consent template. ChallengeURL is the upstream provider's
 // authorize URL with PKCE + state bound for this consent session.
+//
+// Connected and Expired are mutually exclusive and reflect the stored
+// remote_session's usability: Connected means the runtime gate will accept
+// it; Expired means a stale link exists that must be re-established; both
+// false means never connected. Only Connected enables consent — an expired
+// link is no better than none until the user reconnects.
 type remoteSessionCard struct {
 	ClientID     string
 	IssuerSlug   string
 	Connected    bool
+	Expired      bool
 	ChallengeURL string
 }
 
@@ -99,6 +128,24 @@ func (s *Service) HandleConsent(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	return s.ServeConsent(w, r, endpoint)
+}
+
+// ServeConsentScript serves the consent page's client-side script with
+// immutable cache headers. Mounted at `GET /mcp/consent-page-{hash}.js`.
+// The hash in the path is content-derived, so a mismatch is a stale URL.
+func (s *Service) ServeConsentScript(w http.ResponseWriter, r *http.Request) error {
+	if chi.URLParam(r, "hash") != consentScriptHash {
+		w.WriteHeader(http.StatusNotFound)
+		return nil
+	}
+
+	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(consentScriptData); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "write consent script response").Log(r.Context(), s.logger)
+	}
+	return nil
 }
 
 // ServeConsent is the post-resolution entry point for the consent UI
@@ -171,6 +218,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		CSRFToken:          challengeState.CSRFToken,
 		SubjectDisplay:     subjectDisplay,
 		RedirectURI:        challengeState.RedirectURI,
+		ScriptURL:          consentScriptURL,
 		RemoteSessionCards: cards,
 		ConsentEnabled:     consentEnabled,
 	}
@@ -386,14 +434,15 @@ func (s *Service) buildRemoteSessionCards(
 		return nil, nil
 	}
 
-	// Single round-trip for connected-state across all cards. Empty when
+	// Single round-trip for connection state across all cards. Empty when
 	// the subject hasn't been stamped yet (early render before IDP /
-	// anonymous late-bind); the per-card check below then resolves false.
-	var connectedIDs map[uuid.UUID]struct{}
+	// anonymous late-bind); the per-card check below then resolves to
+	// not-connected.
+	var statuses map[uuid.UUID]remotesessions.RemoteSessionStatus
 	if challengeState.Subject != nil && !challengeState.Subject.IsZero() {
-		connectedIDs, err = s.remoteChallengeMgr.ConnectedClientIDs(ctx, *challengeState.Subject, endpoint.UserSessionIssuerID)
+		statuses, err = s.remoteChallengeMgr.RemoteSessionStatuses(ctx, *challengeState.Subject, endpoint.UserSessionIssuerID)
 		if err != nil {
-			return nil, fmt.Errorf("connected client ids: %w", err)
+			return nil, fmt.Errorf("remote session statuses: %w", err)
 		}
 	}
 
@@ -413,11 +462,12 @@ func (s *Service) buildRemoteSessionCards(
 		if berr != nil {
 			return nil, fmt.Errorf("build authorization url for %s: %w", c.IssuerSlug, berr)
 		}
-		_, connected := connectedIDs[c.ID]
+		status := statuses[c.ID]
 		cards = append(cards, remoteSessionCard{
 			ClientID:     c.ID.String(),
 			IssuerSlug:   c.IssuerSlug,
-			Connected:    connected,
+			Connected:    status == remotesessions.RemoteSessionActive,
+			Expired:      status == remotesessions.RemoteSessionExpired,
 			ChallengeURL: challengeURL,
 		})
 	}

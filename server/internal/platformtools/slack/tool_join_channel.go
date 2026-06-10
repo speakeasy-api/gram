@@ -54,7 +54,7 @@ func callJoinChannel(ctx context.Context, client *apiClient, env toolconfig.Tool
 		"channel": channelID,
 	}
 
-	body, err := client.call(ctx, "conversations.join", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "conversations.join", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

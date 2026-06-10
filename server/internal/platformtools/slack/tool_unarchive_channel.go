@@ -54,7 +54,7 @@ func callUnarchiveChannel(ctx context.Context, client *apiClient, env toolconfig
 		"channel": channelID,
 	}
 
-	body, err := client.call(ctx, "conversations.unarchive", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "conversations.unarchive", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}
