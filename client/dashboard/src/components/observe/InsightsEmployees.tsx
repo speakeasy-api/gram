@@ -575,7 +575,11 @@ export function InsightsEmployeesContent(): JSX.Element {
                 />
               </section>
 
-              <EmployeeTable employees={employees} onSelectUser={openUser} />
+              <EmployeeTable
+                key={view}
+                employees={employees}
+                onSelectUser={openUser}
+              />
               <EnrollmentLegend />
             </>
           )}
