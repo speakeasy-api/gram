@@ -99,6 +99,10 @@ const PLATFORM_LOGOS: Record<string, string> = {
   cursor: "/icons/platforms/cursor.svg",
 };
 
+// Monochrome black logos that are invisible on a dark background — flip them in
+// dark mode. The Claude logo is full-color, so it must NOT be inverted.
+const INVERT_LOGO_IN_DARK = new Set<string>(["codex", "cursor"]);
+
 export function InstrumentAgentsStep({
   onComplete,
   onBack,
@@ -635,7 +639,10 @@ export function InstrumentAgentsStep({
                   <img
                     src={PLATFORM_LOGOS[platform.id]}
                     alt={platform.name}
-                    className="h-5 w-5"
+                    className={cn(
+                      "h-5 w-5",
+                      INVERT_LOGO_IN_DARK.has(platform.id) && "dark:invert",
+                    )}
                   />
                 ) : (
                   <span className="text-foreground text-sm font-semibold">
