@@ -936,7 +936,9 @@ CREATE TABLE IF NOT EXISTS remote_sessions (
   remote_session_client_id uuid NOT NULL,
 
   access_token_encrypted TEXT NOT NULL,
-  access_expires_at timestamptz NOT NULL,
+  -- NULL when the upstream omitted expires_in: the token has no known expiry
+  -- (e.g. Slack non-rotating tokens). Readers treat NULL as non-expiring.
+  access_expires_at timestamptz,
   refresh_token_encrypted TEXT,
   refresh_expires_at timestamptz,
   scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
