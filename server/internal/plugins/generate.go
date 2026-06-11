@@ -1045,6 +1045,7 @@ if command -v python3 >/dev/null 2>&1; then
 import base64
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -1083,7 +1084,35 @@ if data.get("hook_event_name") == "SessionStart" and not data.get("user_email"):
 #
 # Only the fields Gram consumes are shipped — the raw transport object also
 # carries env vars and HTTP headers, which often contain credentials and
-# must never leave the machine.
+# must never leave the machine. Stdio launch args are kept for server
+# identity (e.g. npx package names) but credential-shaped values are
+# redacted: values following a secret-named flag, inline flag=value pairs,
+# and well-known token prefixes.
+secret_flag = re.compile(r"(key|token|secret|password|passwd|auth|credential)", re.I)
+secret_value = re.compile(r"^(sk-|pk-|ghp_|gho_|github_pat_|xox[a-z]-|ya29\.|AKIA|eyJ)")
+
+def redact_args(args):
+    if not isinstance(args, list):
+        return None
+    out = []
+    redact_next = False
+    for a in args:
+        if not isinstance(a, str):
+            continue
+        if redact_next:
+            out.append("[REDACTED]")
+            redact_next = False
+        elif "=" in a and secret_flag.search(a.split("=", 1)[0]):
+            out.append(a.split("=", 1)[0] + "=[REDACTED]")
+        elif a.startswith("-") and secret_flag.search(a):
+            out.append(a)
+            redact_next = True
+        elif secret_value.match(a):
+            out.append("[REDACTED]")
+        else:
+            out.append(a)
+    return out
+
 if data.get("hook_event_name") == "SessionStart" and shutil.which("codex"):
     try:
         out = subprocess.run(
@@ -1111,7 +1140,7 @@ if data.get("hook_event_name") == "SessionStart" and shutil.which("codex"):
                     "type": transport.get("type"),
                     "url": transport.get("url"),
                     "command": transport.get("command"),
-                    "args": transport.get("args"),
+                    "args": redact_args(transport.get("args")),
                 },
             })
         additional = data.get("additional_data") or {}
