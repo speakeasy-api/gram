@@ -392,6 +392,7 @@ type GetToolUsageSummaryResponseBody struct {
 // GetToolUsageFilterOptionsResponseBody is the type of the "telemetry" service
 // "getToolUsageFilterOptions" endpoint HTTP response body.
 type GetToolUsageFilterOptionsResponseBody struct {
+	HostedServers []*ToolUsageHostedServerFilterOptionResponseBody `form:"hosted_servers" json:"hosted_servers" xml:"hosted_servers"`
 	ShadowServers []*ToolUsageShadowServerFilterOptionResponseBody `form:"shadow_servers" json:"shadow_servers" xml:"shadow_servers"`
 	Users         []*ToolUsageUserFilterOptionResponseBody         `form:"users" json:"users" xml:"users"`
 }
@@ -3984,6 +3985,13 @@ type ToolUsageTargetToolBreakdownRowResponseBody struct {
 	FailureRate  float64 `form:"failure_rate" json:"failure_rate" xml:"failure_rate"`
 }
 
+// ToolUsageHostedServerFilterOptionResponseBody is used to define fields on
+// response body types.
+type ToolUsageHostedServerFilterOptionResponseBody struct {
+	ToolsetSlug string `form:"toolset_slug" json:"toolset_slug" xml:"toolset_slug"`
+	EventCount  int64  `form:"event_count" json:"event_count" xml:"event_count"`
+}
+
 // ToolUsageShadowServerFilterOptionResponseBody is used to define fields on
 // response body types.
 type ToolUsageShadowServerFilterOptionResponseBody struct {
@@ -4573,6 +4581,18 @@ func NewGetToolUsageSummaryResponseBody(res *telemetry.GetToolUsageSummaryResult
 // service.
 func NewGetToolUsageFilterOptionsResponseBody(res *telemetry.GetToolUsageFilterOptionsResult) *GetToolUsageFilterOptionsResponseBody {
 	body := &GetToolUsageFilterOptionsResponseBody{}
+	if res.HostedServers != nil {
+		body.HostedServers = make([]*ToolUsageHostedServerFilterOptionResponseBody, len(res.HostedServers))
+		for i, val := range res.HostedServers {
+			if val == nil {
+				body.HostedServers[i] = nil
+				continue
+			}
+			body.HostedServers[i] = marshalTelemetryToolUsageHostedServerFilterOptionToToolUsageHostedServerFilterOptionResponseBody(val)
+		}
+	} else {
+		body.HostedServers = []*ToolUsageHostedServerFilterOptionResponseBody{}
+	}
 	if res.ShadowServers != nil {
 		body.ShadowServers = make([]*ToolUsageShadowServerFilterOptionResponseBody, len(res.ShadowServers))
 		for i, val := range res.ShadowServers {
@@ -7712,8 +7732,8 @@ func ValidateGetToolUsageFilterOptionsRequestBody(body *GetToolUsageFilterOption
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
 	}
 	for _, e := range body.OptionTypes {
-		if !(e == "shadow_servers" || e == "users") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.option_types[*]", e, []any{"shadow_servers", "users"}))
+		if !(e == "hosted_servers" || e == "shadow_servers" || e == "users") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.option_types[*]", e, []any{"hosted_servers", "shadow_servers", "users"}))
 		}
 	}
 	return

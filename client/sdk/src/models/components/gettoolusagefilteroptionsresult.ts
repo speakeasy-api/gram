@@ -8,6 +8,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  ToolUsageHostedServerFilterOption,
+  ToolUsageHostedServerFilterOption$inboundSchema,
+} from "./toolusagehostedserverfilteroption.js";
+import {
   ToolUsageShadowServerFilterOption,
   ToolUsageShadowServerFilterOption$inboundSchema,
 } from "./toolusageshadowserverfilteroption.js";
@@ -20,6 +24,7 @@ import {
  * Filter options for target-aware MCP and tool usage metrics
  */
 export type GetToolUsageFilterOptionsResult = {
+  hostedServers: Array<ToolUsageHostedServerFilterOption>;
   shadowServers: Array<ToolUsageShadowServerFilterOption>;
   users: Array<ToolUsageUserFilterOption>;
 };
@@ -30,11 +35,13 @@ export const GetToolUsageFilterOptionsResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    hosted_servers: z.array(ToolUsageHostedServerFilterOption$inboundSchema),
     shadow_servers: z.array(ToolUsageShadowServerFilterOption$inboundSchema),
     users: z.array(ToolUsageUserFilterOption$inboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "hosted_servers": "hostedServers",
       "shadow_servers": "shadowServers",
     });
   }),

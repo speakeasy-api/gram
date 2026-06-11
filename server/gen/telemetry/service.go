@@ -340,6 +340,7 @@ type GetToolUsageFilterOptionsPayload struct {
 // GetToolUsageFilterOptionsResult is the result type of the telemetry service
 // getToolUsageFilterOptions method.
 type GetToolUsageFilterOptionsResult struct {
+	HostedServers []*ToolUsageHostedServerFilterOption
 	ShadowServers []*ToolUsageShadowServerFilterOption
 	Users         []*ToolUsageUserFilterOption
 }
@@ -1089,6 +1090,12 @@ type ToolUsage struct {
 
 // Tool usage filter option type
 type ToolUsageFilterOptionType string
+
+// Hosted MCP server filter option with usage in the selected time window
+type ToolUsageHostedServerFilterOption struct {
+	ToolsetSlug string
+	EventCount  int64
+}
 
 // Shadow MCP server filter option with usage in the selected time window
 type ToolUsageShadowServerFilterOption struct {

@@ -22,6 +22,7 @@ import { telemetryGetToolUsageSummary } from "@gram/client/funcs/telemetryGetToo
 import type {
   GetToolUsageSummaryResult,
   ToolsetEntry,
+  ToolUsageHostedServerFilterOption,
   ToolUsageShadowServerFilterOption,
   ToolUsageTargetTimeSeriesPoint,
   ToolUsageTargetToolBreakdownRow,
@@ -192,23 +193,28 @@ function displayTargetLabel(
 
 function buildServerOptionGroups({
   hostedToolsets,
+  hostedServers,
   shadowServers,
   activeFilters,
   serverNameMappings,
 }: {
   hostedToolsets: ToolsetEntry[];
+  hostedServers: ToolUsageHostedServerFilterOption[];
   shadowServers: ToolUsageShadowServerFilterOption[];
   activeFilters: FilterChip[];
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
 }): MultiSelectGroup[] {
   const hosted = new Map<string, { label: string; count: number }>();
   const shadow = new Map<string, { label: string; count: number }>();
+  const hostedCounts = new Map(
+    hostedServers.map((server) => [server.toolsetSlug, server.eventCount]),
+  );
 
   for (const toolset of hostedToolsets) {
     if (!toolset.mcpEnabled) continue;
     hosted.set(encodeHostedServerFilter(toolset.slug), {
       label: toolset.name || toolset.slug,
-      count: 0,
+      count: hostedCounts.get(toolset.slug) ?? 0,
     });
   }
 
@@ -433,12 +439,14 @@ export function InsightsToolsContent(): JSX.Element {
     () =>
       buildServerOptionGroups({
         hostedToolsets: toolsetsData?.toolsets ?? [],
+        hostedServers: filterOptionsData?.hostedServers ?? [],
         shadowServers: filterOptionsData?.shadowServers ?? [],
         activeFilters,
         serverNameMappings,
       }),
     [
       activeFilters,
+      filterOptionsData?.hostedServers,
       filterOptionsData?.shadowServers,
       serverNameMappings,
       toolsetsData?.toolsets,

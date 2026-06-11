@@ -4615,6 +4615,18 @@ func marshalTelemetryToolUsageTargetToolBreakdownRowToToolUsageTargetToolBreakdo
 	return res
 }
 
+// marshalTelemetryToolUsageHostedServerFilterOptionToToolUsageHostedServerFilterOptionResponseBody
+// builds a value of type *ToolUsageHostedServerFilterOptionResponseBody from a
+// value of type *telemetry.ToolUsageHostedServerFilterOption.
+func marshalTelemetryToolUsageHostedServerFilterOptionToToolUsageHostedServerFilterOptionResponseBody(v *telemetry.ToolUsageHostedServerFilterOption) *ToolUsageHostedServerFilterOptionResponseBody {
+	res := &ToolUsageHostedServerFilterOptionResponseBody{
+		ToolsetSlug: v.ToolsetSlug,
+		EventCount:  v.EventCount,
+	}
+
+	return res
+}
+
 // marshalTelemetryToolUsageShadowServerFilterOptionToToolUsageShadowServerFilterOptionResponseBody
 // builds a value of type *ToolUsageShadowServerFilterOptionResponseBody from a
 // value of type *telemetry.ToolUsageShadowServerFilterOption.

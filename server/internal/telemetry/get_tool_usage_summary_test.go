@@ -231,6 +231,7 @@ func TestGetToolUsageFilterOptions_ReturnsUncappedShadowServersAndUsers(t *testi
 	})
 
 	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Empty(t, options.HostedServers)
 	require.Len(t, options.ShadowServers, 30)
 	require.Len(t, options.Users, 30)
 
@@ -241,6 +242,7 @@ func TestGetToolUsageFilterOptions_ReturnsUncappedShadowServersAndUsers(t *testi
 	})
 
 	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Empty(t, userOptionsOnly.HostedServers)
 	require.Empty(t, userOptionsOnly.ShadowServers)
 	require.Len(t, userOptionsOnly.Users, 30)
 
@@ -297,9 +299,23 @@ func TestGetToolUsageFilterOptions_ClassifiesHookObservedHostedMCP(t *testing.T)
 	})
 
 	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Len(t, options.HostedServers, 1)
+	require.Equal(t, "hosted-payments", options.HostedServers[0].ToolsetSlug)
+	require.Equal(t, int64(1), options.HostedServers[0].EventCount)
 	require.Empty(t, options.ShadowServers)
 	require.Len(t, options.Users, 1)
 	require.Equal(t, "alice@example.com", options.Users[0].UserKey)
+
+	hostedOptionsOnly, err := ti.service.GetToolUsageFilterOptions(ctx, &gen.GetToolUsageFilterOptionsPayload{
+		From:        now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:          now.Add(1 * time.Hour).Format(time.RFC3339),
+		OptionTypes: []gen.ToolUsageFilterOptionType{"hosted_servers"},
+	})
+
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Len(t, hostedOptionsOnly.HostedServers, 1)
+	require.Empty(t, hostedOptionsOnly.ShadowServers)
+	require.Empty(t, hostedOptionsOnly.Users)
 }
 
 type hostedToolEventParams struct {

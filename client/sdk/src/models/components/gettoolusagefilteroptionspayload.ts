@@ -10,6 +10,7 @@ import { ClosedEnum } from "../../types/enums.js";
  * Tool usage filter option type
  */
 export const OptionTypes = {
+  HostedServers: "hosted_servers",
   ShadowServers: "shadow_servers",
   Users: "users",
 } as const;

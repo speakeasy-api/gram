@@ -397,6 +397,7 @@ export * from "./toolsetenvironmentlink.js";
 export * from "./toolsetorigin.js";
 export * from "./toolsetsummary.js";
 export * from "./toolusage.js";
+export * from "./toolusagehostedserverfilteroption.js";
 export * from "./toolusageshadowserverfilteroption.js";
 export * from "./toolusagetargetsummary.js";
 export * from "./toolusagetargettimeseriespoint.js";

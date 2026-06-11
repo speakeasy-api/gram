@@ -1793,8 +1793,14 @@ type GetToolUsageFilterOptionsParams struct {
 
 // ToolUsageFilterOptions contains all selectable usage-derived filter options for a time window.
 type ToolUsageFilterOptions struct {
+	HostedServers []ToolUsageHostedServerFilterOptionRow
 	ShadowServers []ToolUsageShadowServerFilterOptionRow
 	Users         []ToolUsageUserFilterOptionRow
+}
+
+type ToolUsageHostedServerFilterOptionRow struct {
+	ToolsetSlug string `ch:"toolset_slug"`
+	EventCount  uint64 `ch:"event_count"`
 }
 
 type ToolUsageShadowServerFilterOptionRow struct {
@@ -1953,6 +1959,11 @@ func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsag
 		UserSeriesRowLimit: 0,
 	}
 
+	hostedServers, err := q.getToolUsageHostedServerFilterOptions(ctx, summaryArg)
+	if err != nil {
+		return nil, err
+	}
+
 	shadowServers, err := q.getToolUsageShadowServerFilterOptions(ctx, summaryArg)
 	if err != nil {
 		return nil, err
@@ -1964,6 +1975,7 @@ func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsag
 	}
 
 	return &ToolUsageFilterOptions{
+		HostedServers: hostedServers,
 		ShadowServers: shadowServers,
 		Users:         users,
 	}, nil
@@ -2266,6 +2278,44 @@ func (q *Queries) getToolUsageTargetToolBreakdown(ctx context.Context, arg GetTo
 		var row ToolUsageTargetToolBreakdownRow
 		if err = rows.ScanStruct(&row); err != nil {
 			return nil, fmt.Errorf("scan tool usage target tool row: %w", err)
+		}
+		result = append(result, row)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func (q *Queries) getToolUsageHostedServerFilterOptions(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageHostedServerFilterOptionRow, error) {
+	sb, err := toolUsageBaseSelect(arg,
+		"target_id AS toolset_slug",
+		"count() AS event_count",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("building tool usage hosted server filter options source: %w", err)
+	}
+	sb = sb.
+		Where(squirrel.Eq{"target_type": ToolUsageTargetTypeHostedMCP}).
+		GroupBy("toolset_slug").
+		OrderBy("event_count DESC", "toolset_slug ASC")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building tool usage hosted server filter options query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []ToolUsageHostedServerFilterOptionRow{}
+	for rows.Next() {
+		var row ToolUsageHostedServerFilterOptionRow
+		if err = rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scan tool usage hosted server filter option row: %w", err)
 		}
 		result = append(result, row)
 	}

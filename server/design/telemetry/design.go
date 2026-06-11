@@ -1501,7 +1501,7 @@ var ToolUsageUserFilter = Type("ToolUsageUserFilter", func() {
 
 var ToolUsageFilterOptionType = Type("ToolUsageFilterOptionType", String, func() {
 	Description("Tool usage filter option type")
-	Enum("shadow_servers", "users")
+	Enum("hosted_servers", "shadow_servers", "users")
 })
 
 var GetToolUsageSummaryPayload = Type("GetToolUsageSummaryPayload", func() {
@@ -1556,10 +1556,20 @@ var GetToolUsageFilterOptionsPayload = Type("GetToolUsageFilterOptionsPayload", 
 var GetToolUsageFilterOptionsResult = Type("GetToolUsageFilterOptionsResult", func() {
 	Description("Filter options for target-aware MCP and tool usage metrics")
 
+	Attribute("hosted_servers", ArrayOf(ToolUsageHostedServerFilterOption))
 	Attribute("shadow_servers", ArrayOf(ToolUsageShadowServerFilterOption))
 	Attribute("users", ArrayOf(ToolUsageUserFilterOption))
 
-	Required("shadow_servers", "users")
+	Required("hosted_servers", "shadow_servers", "users")
+})
+
+var ToolUsageHostedServerFilterOption = Type("ToolUsageHostedServerFilterOption", func() {
+	Description("Hosted MCP server filter option with usage in the selected time window")
+
+	Attribute("toolset_slug", String)
+	Attribute("event_count", Int64)
+
+	Required("toolset_slug", "event_count")
 })
 
 var ToolUsageShadowServerFilterOption = Type("ToolUsageShadowServerFilterOption", func() {

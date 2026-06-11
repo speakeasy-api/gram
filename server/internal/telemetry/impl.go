@@ -2352,11 +2352,22 @@ func (s *Service) toolUsageHostedMCPMatchers(ctx context.Context, projectID uuid
 }
 
 func toToolUsageFilterOptionsResult(options *repo.ToolUsageFilterOptions, optionTypes []telem_gen.ToolUsageFilterOptionType) *telem_gen.GetToolUsageFilterOptionsResult {
-	includeShadowServers, includeUsers := toolUsageFilterOptionTypeSet(optionTypes)
+	includeHostedServers, includeShadowServers, includeUsers := toolUsageFilterOptionTypeSet(optionTypes)
 	if options == nil {
 		return &telem_gen.GetToolUsageFilterOptionsResult{
+			HostedServers: []*telem_gen.ToolUsageHostedServerFilterOption{},
 			ShadowServers: []*telem_gen.ToolUsageShadowServerFilterOption{},
 			Users:         []*telem_gen.ToolUsageUserFilterOption{},
+		}
+	}
+
+	hostedServers := make([]*telem_gen.ToolUsageHostedServerFilterOption, 0, len(options.HostedServers))
+	if includeHostedServers {
+		for _, row := range options.HostedServers {
+			hostedServers = append(hostedServers, &telem_gen.ToolUsageHostedServerFilterOption{
+				ToolsetSlug: row.ToolsetSlug,
+				EventCount:  uint64ToInt64(row.EventCount),
+			})
 		}
 	}
 
@@ -2383,18 +2394,21 @@ func toToolUsageFilterOptionsResult(options *repo.ToolUsageFilterOptions, option
 	}
 
 	return &telem_gen.GetToolUsageFilterOptionsResult{
+		HostedServers: hostedServers,
 		ShadowServers: shadowServers,
 		Users:         users,
 	}
 }
 
-func toolUsageFilterOptionTypeSet(optionTypes []telem_gen.ToolUsageFilterOptionType) (includeShadowServers bool, includeUsers bool) {
+func toolUsageFilterOptionTypeSet(optionTypes []telem_gen.ToolUsageFilterOptionType) (includeHostedServers bool, includeShadowServers bool, includeUsers bool) {
 	if len(optionTypes) == 0 {
-		return true, true
+		return true, true, true
 	}
 
 	for _, optionType := range optionTypes {
 		switch string(optionType) {
+		case "hosted_servers":
+			includeHostedServers = true
 		case "shadow_servers":
 			includeShadowServers = true
 		case "users":
@@ -2402,7 +2416,7 @@ func toolUsageFilterOptionTypeSet(optionTypes []telem_gen.ToolUsageFilterOptionT
 		}
 	}
 
-	return includeShadowServers, includeUsers
+	return includeHostedServers, includeShadowServers, includeUsers
 }
 
 func toToolUsageSummaryResult(summary *repo.ToolUsageSummary) *telem_gen.GetToolUsageSummaryResult {

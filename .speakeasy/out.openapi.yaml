@@ -36264,6 +36264,7 @@ components:
             type: string
             description: Tool usage filter option type
             enum:
+              - hosted_servers
               - shadow_servers
               - users
           description: Filter option types to include. Empty means all option types.
@@ -36279,6 +36280,10 @@ components:
     GetToolUsageFilterOptionsResult:
       type: object
       properties:
+        hosted_servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolUsageHostedServerFilterOption'
         shadow_servers:
           type: array
           items:
@@ -36289,6 +36294,7 @@ components:
             $ref: '#/components/schemas/ToolUsageUserFilterOption'
       description: Filter options for target-aware MCP and tool usage metrics
       required:
+        - hosted_servers
         - shadow_servers
         - users
     GetToolUsageSummaryPayload:
@@ -43002,6 +43008,18 @@ components:
         - count
         - success_count
         - failure_count
+    ToolUsageHostedServerFilterOption:
+      type: object
+      properties:
+        event_count:
+          type: integer
+          format: int64
+        toolset_slug:
+          type: string
+      description: Hosted MCP server filter option with usage in the selected time window
+      required:
+        - toolset_slug
+        - event_count
     ToolUsageShadowServerFilterOption:
       type: object
       properties:

@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 80c3c028f6ddc77d7eb7bab200fdec96
+  docChecksum: a7bf7adb753ecd056ec57d77211e0512
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -385,7 +385,7 @@ trackedFiles:
   docs/models/components/gettoolusagefilteroptionspayload.md:
     last_write_checksum: sha1:13d50e7d45953d87b137da17e77f5ef5f8835452
   docs/models/components/gettoolusagefilteroptionsresult.md:
-    last_write_checksum: sha1:d64df6ddae487affc088efee215e2286a52eef43
+    last_write_checksum: sha1:8e79676d72e3a81fc8b1c6c78f735d08132c7cf6
   docs/models/components/gettoolusagesummarypayload.md:
     last_write_checksum: sha1:2f8e4086c753bbf48db3910e2795af6df187ca9b
   docs/models/components/gettoolusagesummaryresult.md:
@@ -637,7 +637,7 @@ trackedFiles:
   docs/models/components/operator.md:
     last_write_checksum: sha1:a278250c76553362effdfb720017a38808eb6283
   docs/models/components/optiontypes.md:
-    last_write_checksum: sha1:0fcca1bc40cf36cc20876c315a7cf4a4f18a3fab
+    last_write_checksum: sha1:4167f240dd169960ce3fed3759fa51d5cd174b7d
   docs/models/components/organization.md:
     last_write_checksum: sha1:66c352c06492ea3b63ce335fb63136ad0367082b
   docs/models/components/organizationentry.md:
@@ -1034,6 +1034,8 @@ trackedFiles:
     last_write_checksum: sha1:289a5d6654e8b7ab46dc1db62709ad97ba43fd3f
   docs/models/components/toolusage.md:
     last_write_checksum: sha1:8e7c7baf87404355b4ba6b0cc6ae83b688cfa009
+  docs/models/components/toolusagehostedserverfilteroption.md:
+    last_write_checksum: sha1:da9ebaae658be78bc8e8e9d90ec5aa3854c1c6b6
   docs/models/components/toolusageshadowserverfilteroption.md:
     last_write_checksum: sha1:567dd6ad44d5350eb6b652d662a9834bc8a088c3
   docs/models/components/toolusagetargetsummary.md:
@@ -4256,9 +4258,9 @@ trackedFiles:
   src/models/components/getsignedasseturlform.ts:
     last_write_checksum: sha1:5c29a63e63563b3c5ea9fc4189660a5257d54d0e
   src/models/components/gettoolusagefilteroptionspayload.ts:
-    last_write_checksum: sha1:81bcd11faaec81ae2b0be78f4aa2f238e69a5f86
+    last_write_checksum: sha1:42f81db872bdd4482ec445a64e83c0d9c486e827
   src/models/components/gettoolusagefilteroptionsresult.ts:
-    last_write_checksum: sha1:40f0d9ee3ffec3637507be049ef3fc102f0f8bcb
+    last_write_checksum: sha1:740f55904055eafeb62d5b8cad2afedbf33be689
   src/models/components/gettoolusagesummarypayload.ts:
     last_write_checksum: sha1:a83d27672e4051d1b8c4d9e76949ce22f4a14e30
   src/models/components/gettoolusagesummaryresult.ts:
@@ -4285,7 +4287,7 @@ trackedFiles:
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:8174dcdd0fa584cc55ace775bb25fc78532fa38f
+    last_write_checksum: sha1:d0ca06224429ce28fd9acb778858df4a44140a8e
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     last_write_checksum: sha1:549d388111333748195b4791e63fd64f4a6e7140
@@ -4782,6 +4784,8 @@ trackedFiles:
     last_write_checksum: sha1:a74fcd92753f488bd57840bab7af62a3ec4f0a70
   src/models/components/toolusage.ts:
     last_write_checksum: sha1:afa11676e6aca32a23cae82bbc3472152265112c
+  src/models/components/toolusagehostedserverfilteroption.ts:
+    last_write_checksum: sha1:55605d3a6b214c3d80eea15c0ce0685257794937
   src/models/components/toolusageshadowserverfilteroption.ts:
     last_write_checksum: sha1:79c73d992101a6c804d2705252c2e57879da5aeb
   src/models/components/toolusagetargetsummary.ts:
@@ -9927,11 +9931,11 @@ examples:
         application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
       responses:
         "200":
-          application/json: {"shadow_servers": [{"event_count": 411092, "server_name": "<value>"}], "users": []}
+          application/json: {"hosted_servers": [{"event_count": 411092, "toolset_slug": "<value>"}], "shadow_servers": [], "users": []}
         "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   getToolUsageSummary:
     speakeasy-default-get-tool-usage-summary:
       requestBody:

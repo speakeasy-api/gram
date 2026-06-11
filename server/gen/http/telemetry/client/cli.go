@@ -859,13 +859,13 @@ func BuildGetToolUsageFilterOptionsPayload(telemetryGetToolUsageFilterOptionsBod
 	{
 		err = json.Unmarshal([]byte(telemetryGetToolUsageFilterOptionsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"option_types\": [\n         \"users\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"option_types\": [\n         \"shadow_servers\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
 		for _, e := range body.OptionTypes {
-			if !(e == "shadow_servers" || e == "users") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.option_types[*]", e, []any{"shadow_servers", "users"}))
+			if !(e == "hosted_servers" || e == "shadow_servers" || e == "users") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.option_types[*]", e, []any{"hosted_servers", "shadow_servers", "users"}))
 			}
 		}
 		if err != nil {

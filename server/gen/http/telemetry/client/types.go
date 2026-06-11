@@ -392,6 +392,7 @@ type GetToolUsageSummaryResponseBody struct {
 // GetToolUsageFilterOptionsResponseBody is the type of the "telemetry" service
 // "getToolUsageFilterOptions" endpoint HTTP response body.
 type GetToolUsageFilterOptionsResponseBody struct {
+	HostedServers []*ToolUsageHostedServerFilterOptionResponseBody `form:"hosted_servers,omitempty" json:"hosted_servers,omitempty" xml:"hosted_servers,omitempty"`
 	ShadowServers []*ToolUsageShadowServerFilterOptionResponseBody `form:"shadow_servers,omitempty" json:"shadow_servers,omitempty" xml:"shadow_servers,omitempty"`
 	Users         []*ToolUsageUserFilterOptionResponseBody         `form:"users,omitempty" json:"users,omitempty" xml:"users,omitempty"`
 }
@@ -4091,6 +4092,13 @@ type ToolUsageTargetToolBreakdownRowResponseBody struct {
 	FailureRate  *float64 `form:"failure_rate,omitempty" json:"failure_rate,omitempty" xml:"failure_rate,omitempty"`
 }
 
+// ToolUsageHostedServerFilterOptionResponseBody is used to define fields on
+// response body types.
+type ToolUsageHostedServerFilterOptionResponseBody struct {
+	ToolsetSlug *string `form:"toolset_slug,omitempty" json:"toolset_slug,omitempty" xml:"toolset_slug,omitempty"`
+	EventCount  *int64  `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
+}
+
 // ToolUsageShadowServerFilterOptionResponseBody is used to define fields on
 // response body types.
 type ToolUsageShadowServerFilterOptionResponseBody struct {
@@ -6932,6 +6940,14 @@ func NewGetToolUsageSummaryGatewayError(body *GetToolUsageSummaryGatewayErrorRes
 // "getToolUsageFilterOptions" endpoint result from a HTTP "OK" response.
 func NewGetToolUsageFilterOptionsResultOK(body *GetToolUsageFilterOptionsResponseBody) *telemetry.GetToolUsageFilterOptionsResult {
 	v := &telemetry.GetToolUsageFilterOptionsResult{}
+	v.HostedServers = make([]*telemetry.ToolUsageHostedServerFilterOption, len(body.HostedServers))
+	for i, val := range body.HostedServers {
+		if val == nil {
+			v.HostedServers[i] = nil
+			continue
+		}
+		v.HostedServers[i] = unmarshalToolUsageHostedServerFilterOptionResponseBodyToTelemetryToolUsageHostedServerFilterOption(val)
+	}
 	v.ShadowServers = make([]*telemetry.ToolUsageShadowServerFilterOption, len(body.ShadowServers))
 	for i, val := range body.ShadowServers {
 		if val == nil {
@@ -7673,11 +7689,21 @@ func ValidateGetToolUsageSummaryResponseBody(body *GetToolUsageSummaryResponseBo
 // ValidateGetToolUsageFilterOptionsResponseBody runs the validations defined
 // on GetToolUsageFilterOptionsResponseBody
 func ValidateGetToolUsageFilterOptionsResponseBody(body *GetToolUsageFilterOptionsResponseBody) (err error) {
+	if body.HostedServers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("hosted_servers", "body"))
+	}
 	if body.ShadowServers == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("shadow_servers", "body"))
 	}
 	if body.Users == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("users", "body"))
+	}
+	for _, e := range body.HostedServers {
+		if e != nil {
+			if err2 := ValidateToolUsageHostedServerFilterOptionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	for _, e := range body.ShadowServers {
 		if e != nil {
@@ -12710,6 +12736,18 @@ func ValidateToolUsageTargetToolBreakdownRowResponseBody(body *ToolUsageTargetTo
 		if !(*body.TargetKind == "server" || *body.TargetKind == "local_tools" || *body.TargetKind == "skill") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_kind", *body.TargetKind, []any{"server", "local_tools", "skill"}))
 		}
+	}
+	return
+}
+
+// ValidateToolUsageHostedServerFilterOptionResponseBody runs the validations
+// defined on ToolUsageHostedServerFilterOptionResponseBody
+func ValidateToolUsageHostedServerFilterOptionResponseBody(body *ToolUsageHostedServerFilterOptionResponseBody) (err error) {
+	if body.ToolsetSlug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_slug", "body"))
+	}
+	if body.EventCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("event_count", "body"))
 	}
 	return
 }
