@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"context"
+	"fmt"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -67,11 +68,12 @@ func (s *Service) canBypassPolicy(
 }
 
 // codexShadowMCPEvidence builds the access evidence for a Codex shadow-MCP
-// tool call. The tool-name prefix gives the server identity; when the
-// SessionStart inventory snapshot resolves that prefix to a configured
-// server, its URL is attached so bypass grants and access requests can be
-// scoped to the server URL rather than just the name.
-func (s *Service) codexShadowMCPEvidence(ctx context.Context, payload *gen.CodexPayload) shadowmcp.AccessEvidence {
+// tool call and returns the inventory entry it resolved to, if any. The
+// tool-name prefix gives the server identity; when the SessionStart
+// inventory snapshot resolves that prefix to a configured server, its URL is
+// attached so bypass grants and access requests can be scoped to the server
+// URL rather than just the name.
+func (s *Service) codexShadowMCPEvidence(ctx context.Context, payload *gen.CodexPayload) (shadowmcp.AccessEvidence, *MCPServerEntry) {
 	evidence := shadowmcp.AccessEvidence{
 		FullURL:        "",
 		URLHost:        "",
@@ -79,16 +81,37 @@ func (s *Service) codexShadowMCPEvidence(ctx context.Context, payload *gen.Codex
 	}
 	sessionID := conv.PtrValOr(payload.SessionID, "")
 	if evidence.ServerIdentity == "" || sessionID == "" {
-		return evidence
+		return evidence, nil
 	}
 	entries, err := s.getCachedMCPList(ctx, sessionID)
 	if err != nil {
-		return evidence
+		return evidence, nil
 	}
-	if matched := matchCachedMCPEntry(entries, evidence.ServerIdentity); matched != nil && matched.URL != "" {
+	matched := matchCachedMCPEntry(entries, evidence.ServerIdentity)
+	if matched != nil && matched.URL != "" {
 		evidence.FullURL = matched.URL
 	}
-	return evidence
+	return evidence, matched
+}
+
+// codexInventoryProvenanceDetail reports why a Codex MCP call should be
+// denied based on where the SessionStart inventory says the matched server
+// actually routes: an external (non-Gram) URL or a local stdio server. An
+// empty string means the inventory raises no objection — either the entry is
+// Gram-hosted or there is nothing to cross-check (nil entry). Mirrors the
+// target checks of the Claude PreToolUse guard.
+func (s *Service) codexInventoryProvenanceDetail(ctx context.Context, matched *MCPServerEntry, serverIdentity, orgID string) string {
+	if matched == nil {
+		return ""
+	}
+	switch {
+	case matched.URL != "" && !s.isGramHostedMCPURLForOrg(ctx, matched.URL, orgID):
+		return fmt.Sprintf("MCP server %q is not Gram-hosted (URL: %s)", serverIdentity, matched.URL)
+	case matched.URL == "" && matched.Command != "":
+		return fmt.Sprintf("MCP server %q is a local stdio server (command: %s)", serverIdentity, matched.Command)
+	default:
+		return ""
+	}
 }
 
 func cursorShadowMCPEvidence(payload *gen.CursorPayload) shadowmcp.AccessEvidence {

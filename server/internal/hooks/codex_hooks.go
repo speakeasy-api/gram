@@ -62,8 +62,22 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 		policy := s.lookupShadowMCPBlockingPolicy(ctx, orgID, projectID, metadata.UserID)
 		if policy != nil {
 			toolName := conv.PtrValOr(payload.ToolName, "")
-		evidence := codexShadowMCPEvidence(payload)
-			if detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, metadata.UserID, policy.ID, payload.ToolInput, toolName, evidence); denied {
+			evidence, matched := s.codexShadowMCPEvidence(ctx, payload)
+			detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, metadata.UserID, policy.ID, payload.ToolInput, toolName, evidence)
+			if !denied {
+				// Toolset validation proves a valid x-gram-toolset-id was
+				// echoed, but a shadow server's schema can coach the client
+				// into copying one. The inventory snapshot pins where the
+				// call actually routes — deny when it points at a non-Gram
+				// target. Unmatched prefixes and missing snapshots stay
+				// allowed: older plugin installs ship no inventory.
+				if d := s.codexInventoryProvenanceDetail(ctx, matched, evidence.ServerIdentity, orgID); d != "" {
+					if _, allowed := s.canBypassPolicy(ctx, orgID, metadata.UserID, policy.ID, evidence, toolName); !allowed {
+						detail, denied = d, true
+					}
+				}
+			}
+			if denied {
 				logger.InfoContext(ctx, "denying codex tool call: failed gram toolset validation",
 					attr.SlogEvent("codex_hook_denied"),
 					attr.SlogHookBlockReason(detail),

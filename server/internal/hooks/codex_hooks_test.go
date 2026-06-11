@@ -144,22 +144,76 @@ func TestCodexShadowMCPEvidence_ResolvesURLFromInventory(t *testing.T) {
 	}}, sessionMCPListTTL))
 
 	toolName := "mcp__int-linear__get_issue"
-	evidence := ti.service.codexShadowMCPEvidence(ctx, &gen.CodexPayload{
+	evidence, matched := ti.service.codexShadowMCPEvidence(ctx, &gen.CodexPayload{
 		HookEventName: "PreToolUse",
 		SessionID:     &sessionID,
 		ToolName:      &toolName,
 	})
 	require.Equal(t, "int-linear", evidence.ServerIdentity)
 	require.Equal(t, "https://chat.example.com/mcp/int-linear", evidence.FullURL)
+	require.NotNil(t, matched)
 
 	unknownTool := "mcp__unknown__do_thing"
-	evidence = ti.service.codexShadowMCPEvidence(ctx, &gen.CodexPayload{
+	evidence, matched = ti.service.codexShadowMCPEvidence(ctx, &gen.CodexPayload{
 		HookEventName: "PreToolUse",
 		SessionID:     &sessionID,
 		ToolName:      &unknownTool,
 	})
 	require.Equal(t, "unknown", evidence.ServerIdentity)
 	require.Empty(t, evidence.FullURL)
+	require.Nil(t, matched)
+}
+
+func TestCodexInventoryProvenanceDetail(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	external := &MCPServerEntry{
+		RawLine:       "",
+		Source:        "local",
+		PluginName:    "",
+		Name:          "evil",
+		URL:           "https://mcp.attacker.example/mcp",
+		Command:       "",
+		Transport:     "HTTP",
+		Status:        "unknown",
+		StatusRaw:     "",
+		ConnectorUUID: "",
+	}
+	detail := ti.service.codexInventoryProvenanceDetail(ctx, external, "evil", "org-id")
+	require.Contains(t, detail, "not Gram-hosted")
+	require.Contains(t, detail, "https://mcp.attacker.example/mcp")
+
+	stdio := &MCPServerEntry{
+		RawLine:       "",
+		Source:        "local",
+		PluginName:    "",
+		Name:          "local-tool",
+		URL:           "",
+		Command:       "npx -y some-server",
+		Transport:     "STDIO",
+		Status:        "unknown",
+		StatusRaw:     "",
+		ConnectorUUID: "",
+	}
+	detail = ti.service.codexInventoryProvenanceDetail(ctx, stdio, "local-tool", "org-id")
+	require.Contains(t, detail, "local stdio server")
+
+	gramHosted := &MCPServerEntry{
+		RawLine:       "",
+		Source:        "local",
+		PluginName:    "",
+		Name:          "gram",
+		URL:           "https://app.getgram.ai/mcp/acme",
+		Command:       "",
+		Transport:     "HTTP",
+		Status:        "unknown",
+		StatusRaw:     "",
+		ConnectorUUID: "",
+	}
+	require.Empty(t, ti.service.codexInventoryProvenanceDetail(ctx, gramHosted, "gram", "org-id"))
+
+	require.Empty(t, ti.service.codexInventoryProvenanceDetail(ctx, nil, "anything", "org-id"))
 }
 
 func TestCodexSessionMetadata_CachesSessionStartEmail(t *testing.T) {
