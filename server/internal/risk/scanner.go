@@ -167,6 +167,22 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, projectID uuid.UUID, t
 		return nil, nil
 	}
 
+	// Resolve the prompt-policy flag once per scan (on the parent ctx, before
+	// fan-out) so prompt_based policies don't each repeat the slug lookup and
+	// so the lookup is never cancelled by a sibling match. Gated on the exact
+	// conditions under which the fan-out would run the judge — a tool-request
+	// message and a prompt_based policy whose message_types apply to it — so
+	// the lookup is skipped entirely for scans that can never enforce one.
+	promptPoliciesOn := false
+	if messageType == message.ToolRequest &&
+		slices.ContainsFunc(policies, func(p repo.RiskPolicy) bool {
+			return p.PolicyType == "prompt_based" &&
+				(len(p.MessageTypes) == 0 || slices.Contains(p.MessageTypes, messageType))
+		}) {
+		// All enforcing policies for a project belong to the same org.
+		promptPoliciesOn = s.promptPoliciesEnabled(ctx, policies[0].OrganizationID, projectID)
+	}
+
 	// Fan out across policies. The first goroutine that finds a match returns
 	// errMatchFound, which causes errgroup to cancel its context — sibling
 	// goroutines stop their in-flight Presidio HTTP calls early instead of
@@ -183,7 +199,7 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, projectID uuid.UUID, t
 		}
 
 		g.Go(func() error {
-			result, scanErr := s.scanPolicy(gctx, p, text, messageType)
+			result, scanErr := s.scanPolicy(gctx, p, text, messageType, promptPoliciesOn)
 			if scanErr != nil {
 				if errors.Is(scanErr, context.Canceled) {
 					return nil
@@ -266,9 +282,9 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 // text per call — its internal worker pool only fans out when n > 1, so
 // per-policy parallelism over sources buys roughly nothing. The
 // across-policies fan-out in ScanForEnforcement is the real win.
-func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type) (*ScanResult, error) {
+func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type, promptPoliciesOn bool) (*ScanResult, error) {
 	if policy.PolicyType == "prompt_based" {
-		return s.scanPromptPolicy(ctx, policy, text, messageType), nil
+		return s.scanPromptPolicy(ctx, policy, text, messageType, promptPoliciesOn), nil
 	}
 
 	disabled := ra.NewDisabledRuleSet(policy.DisabledRules)
@@ -374,12 +390,12 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 // hard-scoped to tool-call messages regardless of the policy's message_types,
 // so a misconfigured policy can never judge other message types inline. Returns
 // nil when the judge does not match (including fail-open on judge error).
-func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type) *ScanResult {
+func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type, promptPoliciesOn bool) *ScanResult {
 	if messageType != message.ToolRequest {
 		return nil
 	}
 	cfg := ra.ParseJudgeConfig(policy.ModelConfig)
-	if !s.promptPoliciesEnabled(ctx, policy.OrganizationID) {
+	if !promptPoliciesOn {
 		return nil
 	}
 	if s.judge == nil || !policy.Prompt.Valid || strings.TrimSpace(policy.Prompt.String) == "" {
@@ -410,11 +426,18 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 	}
 }
 
-func (s *Scanner) promptPoliciesEnabled(ctx context.Context, orgID string) bool {
+func (s *Scanner) promptPoliciesEnabled(ctx context.Context, orgID string, projectID uuid.UUID) bool {
 	if s.flags == nil {
 		return false
 	}
-	on, err := s.flags.IsFlagEnabled(ctx, feature.FlagPromptPolicies, orgID)
+	// Resolve the org/project slugs so the flag evaluates against the same
+	// PostHog groups the dashboard uses. A failed lookup degrades to disabled.
+	groups, err := s.repo.GetProjectFlagGroups(ctx, projectID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve prompt policy flag groups failed", attr.SlogError(err), attr.SlogOrganizationID(orgID), attr.SlogProjectID(projectID.String()))
+		return false
+	}
+	on, err := s.flags.IsFlagEnabled(ctx, feature.FlagPromptPolicies, orgID, feature.OrgProjectGroups(groups.OrganizationSlug, groups.ProjectSlug))
 	if err != nil {
 		s.logger.WarnContext(ctx, "prompt policy flag check failed", attr.SlogError(err), attr.SlogOrganizationID(orgID))
 		return false

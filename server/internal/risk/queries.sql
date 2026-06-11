@@ -831,6 +831,16 @@ WHERE project_id = @project_id
   AND action = 'block'
   AND deleted IS FALSE;
 
+-- name: GetProjectFlagGroups :one
+-- Resolves the org and project slugs used to build PostHog flag-evaluation
+-- groups for background paths that only carry IDs. Both joins are on
+-- primary/unique keys, so this is a cheap indexed lookup.
+SELECT om.slug AS organization_slug, p.slug AS project_slug
+FROM projects p
+JOIN organization_metadata om ON om.id = p.organization_id
+WHERE p.id = @project_id
+  AND p.deleted IS FALSE;
+
 -- name: ListEnabledShadowMCPPoliciesByProject :many
 SELECT *
 FROM risk_policies
