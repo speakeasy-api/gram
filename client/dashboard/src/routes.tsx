@@ -30,12 +30,7 @@ import Home from "./pages/home/Home";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
-import {
-  LogsRoot,
-  LogsMCPPage,
-  LogsRiskEventsPage,
-  LogsToolsPage,
-} from "./pages/logs/Logs";
+import { LogsRoot, LogsMCPPage, LogsToolsPage } from "./pages/logs/Logs";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
@@ -78,6 +73,7 @@ import TriggersIndex, { TriggersRoot } from "./pages/triggers/Triggers";
 import SecurityOverview, {
   RiskOverviewRoot,
 } from "./pages/security/SecurityOverview";
+import RiskEventsPage from "./pages/security/RiskEventsPage";
 import ApprovalRequests from "./pages/security/ApprovalRequests";
 import RiskOverviewCategoriesIndex from "./pages/security/RiskOverviewCategoriesIndex";
 import RiskOverviewCategoryDetail from "./pages/security/RiskOverviewCategoryDetail";
@@ -519,7 +515,7 @@ const ROUTE_STRUCTURE = {
     title: "Risk Events",
     url: "risk-events",
     icon: "flag",
-    component: LogsRiskEventsPage,
+    component: RiskEventsPage,
   },
   sdks: {
     title: "SDKs",
