@@ -495,6 +495,28 @@ func (q *Queries) GetMessageContentBatch(ctx context.Context, arg GetMessageCont
 	return items, nil
 }
 
+const getProjectFlagGroups = `-- name: GetProjectFlagGroups :one
+SELECT om.slug AS organization_slug, p.slug AS project_slug
+FROM projects p
+JOIN organization_metadata om ON om.id = p.organization_id
+WHERE p.id = $1
+`
+
+type GetProjectFlagGroupsRow struct {
+	OrganizationSlug string
+	ProjectSlug      string
+}
+
+// Resolves the org and project slugs used to build PostHog flag-evaluation
+// groups for background paths that only carry IDs. Both joins are on
+// primary/unique keys, so this is a cheap indexed lookup.
+func (q *Queries) GetProjectFlagGroups(ctx context.Context, projectID uuid.UUID) (GetProjectFlagGroupsRow, error) {
+	row := q.db.QueryRow(ctx, getProjectFlagGroups, projectID)
+	var i GetProjectFlagGroupsRow
+	err := row.Scan(&i.OrganizationSlug, &i.ProjectSlug)
+	return i, err
+}
+
 const getRiskOverviewCounts = `-- name: GetRiskOverviewCounts :one
 SELECT
     COUNT(DISTINCT rr.chat_message_id)::BIGINT AS messages_scanned

@@ -364,7 +364,7 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 		return nil
 	}
 	cfg := ra.ParseJudgeConfig(policy.ModelConfig)
-	if !s.promptPoliciesEnabled(ctx, policy.OrganizationID) {
+	if !s.promptPoliciesEnabled(ctx, policy.OrganizationID, policy.ProjectID) {
 		return nil
 	}
 	if s.judge == nil || !policy.Prompt.Valid || strings.TrimSpace(policy.Prompt.String) == "" {
@@ -395,11 +395,18 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 	}
 }
 
-func (s *Scanner) promptPoliciesEnabled(ctx context.Context, orgID string) bool {
+func (s *Scanner) promptPoliciesEnabled(ctx context.Context, orgID string, projectID uuid.UUID) bool {
 	if s.flags == nil {
 		return false
 	}
-	on, err := s.flags.IsFlagEnabled(ctx, feature.FlagPromptPolicies, orgID)
+	// Resolve the org/project slugs so the flag evaluates against the same
+	// PostHog groups the dashboard uses. A failed lookup degrades to disabled.
+	groups, err := s.repo.GetProjectFlagGroups(ctx, projectID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve prompt policy flag groups failed", attr.SlogError(err), attr.SlogOrganizationID(orgID), attr.SlogProjectID(projectID.String()))
+		return false
+	}
+	on, err := s.flags.IsFlagEnabled(ctx, feature.FlagPromptPolicies, orgID, feature.OrgProjectGroups(groups.OrganizationSlug, groups.ProjectSlug))
 	if err != nil {
 		s.logger.WarnContext(ctx, "prompt policy flag check failed", attr.SlogError(err), attr.SlogOrganizationID(orgID))
 		return false

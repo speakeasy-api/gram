@@ -428,7 +428,7 @@ const judgeConcurrency = 8
 func (a *AnalyzeBatch) scanPromptJudge(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []repo.GetMessageContentBatchRow) [][]Finding {
 	out := make([][]Finding, len(messages))
 	cfg := ParseJudgeConfig(policy.ModelConfig)
-	if !a.promptPoliciesEnabled(ctx, args.OrganizationID) {
+	if !a.promptPoliciesEnabled(ctx, args.OrganizationID, args.ProjectID) {
 		return out
 	}
 
@@ -479,11 +479,18 @@ func (a *AnalyzeBatch) scanPromptJudge(ctx context.Context, args AnalyzeBatchArg
 	return out
 }
 
-func (a *AnalyzeBatch) promptPoliciesEnabled(ctx context.Context, orgID string) bool {
+func (a *AnalyzeBatch) promptPoliciesEnabled(ctx context.Context, orgID string, projectID uuid.UUID) bool {
 	if a.flags == nil {
 		return false
 	}
-	on, err := a.flags.IsFlagEnabled(ctx, feature.FlagPromptPolicies, orgID)
+	// Resolve the org/project slugs so the flag evaluates against the same
+	// PostHog groups the dashboard uses. A failed lookup degrades to disabled.
+	groups, err := repo.New(a.db).GetProjectFlagGroups(ctx, projectID)
+	if err != nil {
+		a.logger.WarnContext(ctx, "resolve prompt policy flag groups failed", attr.SlogError(err), attr.SlogOrganizationID(orgID), attr.SlogProjectID(projectID.String()))
+		return false
+	}
+	on, err := a.flags.IsFlagEnabled(ctx, feature.FlagPromptPolicies, orgID, feature.OrgProjectGroups(groups.OrganizationSlug, groups.ProjectSlug))
 	if err != nil {
 		a.logger.WarnContext(ctx, "prompt policy flag check failed", attr.SlogError(err), attr.SlogOrganizationID(orgID))
 		return false
