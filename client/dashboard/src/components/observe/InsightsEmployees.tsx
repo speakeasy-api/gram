@@ -22,14 +22,15 @@ import {
 import { SearchBar } from "@/components/ui/search-bar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
-import { dateTimeFormatters } from "@/lib/dates";
 import { cn } from "@/lib/utils";
+import {
+  buildEmployees,
+  type Employee,
+  type EmployeeStatus,
+  isUnattributedEmployee,
+} from "@/components/observe/insightsEmployeesData";
 import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
-import type {
-  AccessMember,
-  Role,
-  UserSummary,
-} from "@gram/client/models/components";
+import type { UserSummary } from "@gram/client/models/components";
 import { useGramContext, useMembers, useRoles } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
@@ -42,8 +43,8 @@ import {
   ChevronRight,
   Info,
 } from "lucide-react";
-import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { useCallback, useMemo, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { useRoutes } from "@/routes";
 import { useSlugs } from "@/contexts/Sdk";
 import { slugify } from "@/lib/constants";
@@ -58,6 +59,16 @@ import { HooksSetupDialog } from "@/pages/hooks/HooksSetupDialog";
 
 type EmployeeFilterDimension = "all" | "user" | "role";
 type FilterOption = { id: string; label: string };
+
+type EmployeeView = "employees" | "unattributed";
+
+const VIEW_SEARCH_PARAM = "view";
+
+const EMPLOYEE_VIEWS: EmployeeView[] = ["employees", "unattributed"];
+const VIEW_LABELS: Record<EmployeeView, string> = {
+  employees: "Employees",
+  unattributed: "Unknown users",
+};
 
 const EMPLOYEE_FILTER_DIMENSIONS: EmployeeFilterDimension[] = [
   "all",
@@ -93,6 +104,9 @@ function presetRangeLabel(preset: DateRangePreset): string {
 }
 
 function EmployeeFilterBar({
+  view,
+  onViewChange,
+  dimensions,
   dimension,
   onDimensionChange,
   selectedValue,
@@ -100,6 +114,9 @@ function EmployeeFilterBar({
   options,
   disabled,
 }: {
+  view: EmployeeView;
+  onViewChange: (view: EmployeeView) => void;
+  dimensions: EmployeeFilterDimension[];
   dimension: EmployeeFilterDimension;
   onDimensionChange: (dimension: EmployeeFilterDimension) => void;
   selectedValue: string | null;
@@ -125,7 +142,30 @@ function EmployeeFilterBar({
         Filter by
       </span>
       <div className="border-border flex h-[42px] items-center rounded-md border p-1">
-        {EMPLOYEE_FILTER_DIMENSIONS.map((value) => {
+        {EMPLOYEE_VIEWS.map((value) => {
+          const isSelected = view === value;
+          return (
+            <button
+              key={value}
+              onClick={() => onViewChange(value)}
+              disabled={disabled}
+              className={`
+                h-8 rounded px-3 text-sm font-medium transition-all duration-150
+                ${
+                  isSelected
+                    ? "text-foreground bg-white shadow-sm dark:bg-gray-900"
+                    : "text-muted-foreground hover:text-foreground"
+                }
+                disabled:cursor-not-allowed
+              `}
+            >
+              {VIEW_LABELS[value]}
+            </button>
+          );
+        })}
+
+        <div className="bg-border/50 mx-1 h-6 w-px" />
+        {dimensions.map((value) => {
           const isSelected = dimension === value;
           return (
             <button
@@ -215,20 +255,6 @@ function EmployeeFilterBar({
   );
 }
 
-type EmployeeStatus = "enrolled" | "not_enrolled";
-
-type Employee = {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  status: EmployeeStatus;
-  tokenCount: number;
-  lastActivity: string;
-  lastActivityTimestamp: number | null;
-  photoUrl?: string | null;
-};
-
 const statusMeta: Record<
   EmployeeStatus,
   { label: string; variant: "success" | "destructive" }
@@ -264,10 +290,39 @@ export function InsightsEmployeesContent(): JSX.Element {
     to: Date;
   } | null>(null);
   const [customRangeLabel, setCustomRangeLabel] = useState<string | null>(null);
-  const [filterDimension, setFilterDimension] =
+  const [rawFilterDimension, setFilterDimension] =
     useState<EmployeeFilterDimension>("all");
   const [selectedFilterValue, setSelectedFilterValue] = useState<string | null>(
     null,
+  );
+  const [searchParams, setSearchParams] = useSearchParams();
+  const view: EmployeeView =
+    searchParams.get(VIEW_SEARCH_PARAM) === "unattributed"
+      ? "unattributed"
+      : "employees";
+  const isUnattributedView = view === "unattributed";
+  // Unknown users have no role, so the role dimension doesn't apply there.
+  // Derived (rather than reset in the view-change handler) so it also holds
+  // when the view changes through the URL, e.g. back/forward navigation.
+  const filterDimension: EmployeeFilterDimension =
+    isUnattributedView && rawFilterDimension === "role"
+      ? "all"
+      : rawFilterDimension;
+  const handleViewChange = useCallback(
+    (next: EmployeeView) => {
+      setSearchParams((prev) => {
+        const params = new URLSearchParams(prev);
+        if (next === "employees") {
+          params.delete(VIEW_SEARCH_PARAM);
+        } else {
+          params.set(VIEW_SEARCH_PARAM, next);
+        }
+        return params;
+      });
+      // The selected user/role may not exist in the other view.
+      setSelectedFilterValue(null);
+    },
+    [setSearchParams],
   );
 
   const { from, to } = useMemo(
@@ -306,19 +361,37 @@ export function InsightsEmployeesContent(): JSX.Element {
     () => new Map(roles.map((role) => [role.id, role.name])),
     [roles],
   );
+  const viewEmployees = useMemo(
+    () =>
+      allEmployees.filter((item) =>
+        isUnattributedView
+          ? isUnattributedEmployee(item)
+          : !isUnattributedEmployee(item),
+      ),
+    [allEmployees, isUnattributedView],
+  );
   const employees = useMemo(() => {
-    if (filterDimension === "all" || !selectedFilterValue) return allEmployees;
+    if (filterDimension === "all" || !selectedFilterValue) return viewEmployees;
     if (filterDimension === "user") {
-      return allEmployees.filter((item) => item.id === selectedFilterValue);
+      return viewEmployees.filter((item) => item.id === selectedFilterValue);
     }
     const roleName = roleNameById.get(selectedFilterValue);
-    return allEmployees.filter((item) =>
+    return viewEmployees.filter((item) =>
       roleName ? item.role === roleName : false,
     );
-  }, [allEmployees, filterDimension, roleNameById, selectedFilterValue]);
+  }, [viewEmployees, filterDimension, roleNameById, selectedFilterValue]);
+  // Unattributed rows carry a placeholder role, so role filtering would
+  // always come back empty in that view.
+  const filterDimensions = useMemo<EmployeeFilterDimension[]>(
+    () =>
+      isUnattributedView
+        ? EMPLOYEE_FILTER_DIMENSIONS.filter((value) => value !== "role")
+        : EMPLOYEE_FILTER_DIMENSIONS,
+    [isUnattributedView],
+  );
   const filterOptions = useMemo<FilterOption[]>(() => {
     if (filterDimension === "user") {
-      return allEmployees.map((item) => ({
+      return viewEmployees.map((item) => ({
         id: item.id,
         label: item.name,
       }));
@@ -330,7 +403,7 @@ export function InsightsEmployeesContent(): JSX.Element {
       }));
     }
     return [];
-  }, [allEmployees, filterDimension, roles]);
+  }, [viewEmployees, filterDimension, roles]);
   const totalEmployees = employees.length;
   const enrolledEmployees = employees.filter(
     (item) => item.status === "enrolled",
@@ -433,6 +506,9 @@ export function InsightsEmployeesContent(): JSX.Element {
               )}
             >
               <EmployeeFilterBar
+                view={view}
+                onViewChange={handleViewChange}
+                dimensions={filterDimensions}
                 dimension={filterDimension}
                 onDimensionChange={handleFilterDimensionChange}
                 selectedValue={selectedFilterValue}
@@ -471,36 +547,58 @@ export function InsightsEmployeesContent(): JSX.Element {
                 )}
               >
                 <MetricCard
-                  title="Employees"
+                  title={isUnattributedView ? "Unknown users" : "Employees"}
                   value={totalEmployees}
                   icon="user"
                   accentColor="blue"
-                  subtext="Members plus unmatched usage"
+                  subtext={
+                    isUnattributedView
+                      ? "Usage not matched to a member"
+                      : "Organization members"
+                  }
                 />
                 <MetricCard
                   title="Enrolled"
                   value={enrolledEmployees}
+                  displayValue={isUnattributedView ? "-" : undefined}
                   icon="circle-check"
                   accentColor="green"
-                  subtext="Platform activity present"
+                  subtext={
+                    isUnattributedView
+                      ? "Not applicable to unknown users"
+                      : "Platform activity present"
+                  }
                 />
                 <MetricCard
                   title="Not Enrolled"
                   value={notEnrolledEmployees}
+                  displayValue={isUnattributedView ? "-" : undefined}
                   icon="triangle-alert"
                   accentColor="orange"
-                  subtext="No platform activity found"
+                  subtext={
+                    isUnattributedView
+                      ? "Not applicable to unknown users"
+                      : "No platform activity found"
+                  }
                 />
                 <MetricCard
                   title="Token Count"
                   value={totalTokenCount}
                   icon="gauge"
                   accentColor="purple"
-                  subtext={`${enrollmentRate.toFixed(0)}% enrolled`}
+                  subtext={
+                    isUnattributedView
+                      ? undefined
+                      : `${enrollmentRate.toFixed(0)}% enrolled`
+                  }
                 />
               </section>
 
-              <EmployeeTable employees={employees} onSelectUser={openUser} />
+              <EmployeeTable
+                key={view}
+                employees={employees}
+                onSelectUser={openUser}
+              />
               <EnrollmentLegend />
             </>
           )}
@@ -718,7 +816,7 @@ function EmployeeTable({
 }
 
 function routeSegmentForEmployee(employee: Employee) {
-  if (employee.id.startsWith("usage:") && employee.name.includes("@")) {
+  if (isUnattributedEmployee(employee) && employee.name.includes("@")) {
     return encodeURIComponent(employee.name);
   }
   return slugify(employee.name);
@@ -817,84 +915,6 @@ function getInitials(name: string) {
     .toUpperCase();
 }
 
-function buildEmployees(
-  members: AccessMember[],
-  roles: Role[],
-  summaries: UserSummary[],
-): Employee[] {
-  const roleNameById = new Map(roles.map((role) => [role.id, role.name]));
-  const summaryByUserId = new Map(
-    summaries.map((summary) => [summary.userId, summary]),
-  );
-  const summaryByEmail = new Map(
-    summaries
-      .filter((summary) => summary.userId.includes("@"))
-      .map((summary) => [summary.userId.toLowerCase(), summary]),
-  );
-  const matchedSummaryIds = new Set<string>();
-
-  const employees = members.map((member) => {
-    const summary =
-      summaryByUserId.get(member.id) ??
-      summaryByEmail.get(member.email.toLowerCase());
-    if (summary) {
-      matchedSummaryIds.add(summary.userId);
-    }
-    const tokenCount =
-      (summary?.totalInputTokens ?? 0) + (summary?.totalOutputTokens ?? 0);
-    const status: EmployeeStatus =
-      summary != null ? "enrolled" : "not_enrolled";
-    const role =
-      member.roleIds
-        .map((id) => roleNameById.get(id))
-        .filter(Boolean)
-        .join(", ") || "Unknown";
-
-    return {
-      id: member.id,
-      name: member.name,
-      email: member.email,
-      role,
-      status,
-      tokenCount,
-      photoUrl: member.photoUrl,
-      lastActivityTimestamp: summary
-        ? Number(BigInt(summary.lastSeenUnixNano) / 1_000_000n)
-        : null,
-      lastActivity: summary
-        ? formatUnixNano(summary.lastSeenUnixNano)
-        : "No activity found",
-    };
-  });
-
-  const unmatchedUsage = summaries
-    .filter((summary) => !matchedSummaryIds.has(summary.userId))
-    .map((summary) => {
-      const tokenCount = summary.totalInputTokens + summary.totalOutputTokens;
-      return {
-        id: `usage:${summary.userId}`,
-        name: summary.userId,
-        email: summary.userId.includes("@") ? summary.userId : "",
-        role: "-",
-        status: "enrolled" as const,
-        tokenCount,
-        photoUrl: null,
-        lastActivityTimestamp: Number(
-          BigInt(summary.lastSeenUnixNano) / 1_000_000n,
-        ),
-        lastActivity: formatUnixNano(summary.lastSeenUnixNano),
-      };
-    });
-
-  return [...employees, ...unmatchedUsage].sort((a, b) => {
-    if (a.status !== b.status) {
-      return a.status === "not_enrolled" ? -1 : 1;
-    }
-
-    return a.name.localeCompare(b.name);
-  });
-}
-
 async function fetchEmployeeUsage(
   client: Parameters<typeof telemetrySearchUsers>[0],
   from: Date,
@@ -924,11 +944,4 @@ async function fetchEmployeeUsage(
   } while (cursor);
 
   return users;
-}
-
-function formatUnixNano(value: string) {
-  const nanos = BigInt(value);
-  const millis = Number(nanos / 1_000_000n);
-
-  return dateTimeFormatters.humanize(new Date(millis));
 }
