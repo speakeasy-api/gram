@@ -451,11 +451,6 @@ const ROUTE_STRUCTURE = {
         url: "mcp",
         component: LogsMCPPage,
       },
-      riskEvents: {
-        title: "Risk Events",
-        url: "risk-events",
-        component: LogsRiskEventsPage,
-      },
       agents: {
         title: "Agent Sessions",
         url: "agents",
@@ -520,6 +515,12 @@ const ROUTE_STRUCTURE = {
     url: "risk-policies",
     icon: "shield-check",
     component: PolicyCenter,
+  },
+  riskEvents: {
+    title: "Risk Events",
+    url: "risk-events",
+    icon: "flag",
+    component: LogsRiskEventsPage,
   },
   sdks: {
     title: "SDKs",

@@ -28,15 +28,7 @@ export function ObserveTabNav({
     { label: "Tools", href: `${baseSlug}/tools` },
     { label: "MCP Servers", href: `${baseSlug}/mcp` },
     ...(base === "logs"
-      ? ([
-          {
-            label: "Risk Events",
-            href: `${baseSlug}/risk-events`,
-            stage: "beta",
-            scope: "org:admin",
-          },
-          { label: "Agents", href: `${baseSlug}/agents` },
-        ] satisfies Tab[])
+      ? ([{ label: "Agents", href: `${baseSlug}/agents` }] satisfies Tab[])
       : []),
     ...(base === "insights"
       ? ([

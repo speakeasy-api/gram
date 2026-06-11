@@ -110,6 +110,7 @@ export function AppSidebar({
   const securityActive = [
     routes.riskOverview,
     routes.policyCenter,
+    routes.riskEvents,
     routes.approvalRequests,
     routes.detectionRules,
   ].some((r) => r.active);
@@ -263,6 +264,10 @@ export function AppSidebar({
                 <ScopeGatedNavItem
                   item={routes.policyCenter}
                   scope={scopeFor(routes.policyCenter)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.riskEvents}
+                  scope={scopeFor(routes.riskEvents)}
                 />
                 <ScopeGatedNavItem
                   item={routes.approvalRequests}
