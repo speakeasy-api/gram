@@ -1,6 +1,7 @@
 import {
   Field,
   FieldDescription,
+  FieldError,
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
@@ -38,10 +39,13 @@ export function AuthenticationSection({
   const userSessionIssuerId = mcpServer.userSessionIssuerId;
   const issuerConfigured = !!userSessionIssuerId;
 
-  const { data: userSessionIssuer, isLoading: isLoadingUserSessionIssuer } =
-    useUserSessionIssuer({ id: userSessionIssuerId }, undefined, {
-      enabled: issuerConfigured,
-    });
+  const {
+    data: userSessionIssuer,
+    isLoading: isLoadingUserSessionIssuer,
+    isError: isUserSessionIssuerError,
+  } = useUserSessionIssuer({ id: userSessionIssuerId }, undefined, {
+    enabled: issuerConfigured,
+  });
 
   // Probe the remote MCP server's protected-resource metadata so setup can
   // offer discovery when the server advertises OAuth metadata.
@@ -122,8 +126,10 @@ export function AuthenticationSection({
         onStartManual={() => openSheet(undefined)}
       />
     );
-  } else if (isLoadingUserSessionIssuer || !userSessionIssuer) {
+  } else if (isLoadingUserSessionIssuer) {
     authenticationFields = <AuthenticationLoadingField />;
+  } else if (isUserSessionIssuerError || !userSessionIssuer) {
+    authenticationFields = <AuthenticationLoadErrorField />;
   } else {
     authenticationFields = (
       <>
@@ -230,6 +236,18 @@ function AuthenticationLoadingField() {
       <Type muted small>
         Loading authentication configuration...
       </Type>
+    </Field>
+  );
+}
+
+function AuthenticationLoadErrorField() {
+  return (
+    <Field>
+      <FieldLabel>Authentication</FieldLabel>
+      <FieldError>
+        Failed to load the authentication configuration. Refresh the page to try
+        again.
+      </FieldError>
     </Field>
   );
 }
