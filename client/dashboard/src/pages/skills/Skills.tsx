@@ -12,12 +12,22 @@ export function SkillsIndexRedirect() {
 export function SkillsRoot() {
   const routes = useRoutes();
   const { skillSlug } = useParams();
-  const { data: featuresData } = useProductFeatures(undefined, undefined, {
-    throwOnError: false,
-  });
+  const { data: featuresData, isPending: featuresPending } = useProductFeatures(
+    undefined,
+    undefined,
+    {
+      throwOnError: false,
+    },
+  );
   const { data } = useListSkills(undefined, undefined, {
     enabled: Boolean(skillSlug),
   });
+
+  // Wait for the feature flags to resolve before gating — redirecting while
+  // the query is in flight would bounce direct navigations to skills URLs.
+  if (featuresPending) {
+    return null;
+  }
 
   if (!featuresData?.skillsCaptureEnabled) {
     return <Navigate to=".." replace />;
