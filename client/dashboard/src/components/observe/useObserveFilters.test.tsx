@@ -264,4 +264,42 @@ describe("useObserveFilters", () => {
     act(() => result.current.filters.handleRoleSelectionChange([]));
     expect(result.current.filters.selectedRoleIds).toEqual([]);
   });
+
+  it("parses source URL param into a gram.hook.source chip and logFilters", () => {
+    const { result } = renderHook(() => useObserveFilters(), {
+      wrapper: makeWrapper("/?source=claude-code,codex"),
+    });
+    expect(result.current.activeFilters).toEqual([
+      {
+        display: "claude-code, codex",
+        filters: ["claude-code", "codex"],
+        path: "gram.hook.source",
+      },
+    ]);
+    expect(result.current.logFilters).toEqual([
+      {
+        path: "gram.hook.source",
+        operator: Operator.In,
+        values: ["claude-code", "codex"],
+      },
+    ]);
+  });
+
+  it("handleHookSourceSelectionChange sets and clears the source URL param", () => {
+    const { result } = renderHook(() => useObserveFiltersWithNavigation(), {
+      wrapper: makeWrapper("/"),
+    });
+    act(() =>
+      result.current.filters.handleHookSourceSelectionChange(["cursor"]),
+    );
+    expect(result.current.filters.activeFilters).toEqual([
+      {
+        display: "cursor",
+        filters: ["cursor"],
+        path: "gram.hook.source",
+      },
+    ]);
+    act(() => result.current.filters.handleHookSourceSelectionChange([]));
+    expect(result.current.filters.activeFilters).toEqual([]);
+  });
 });
