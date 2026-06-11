@@ -136,6 +136,25 @@ WHERE risk_policy_id = @risk_policy_id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
+-- name: DeleteRiskResultsByPolicy :exec
+DELETE FROM risk_results
+WHERE risk_policy_id = @risk_policy_id
+  AND project_id = @project_id;
+
+-- name: DeleteRiskExclusionsByPolicy :exec
+UPDATE risk_exclusions
+SET deleted_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE risk_policy_id = @risk_policy_id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
+-- name: CountRiskResultsByPolicyID :one
+SELECT COUNT(*)::BIGINT
+FROM risk_results
+WHERE risk_policy_id = @risk_policy_id
+  AND project_id = @project_id;
+
 -- name: UpsertRiskPolicyBypassRequest :one
 INSERT INTO risk_policy_bypass_requests (
     id

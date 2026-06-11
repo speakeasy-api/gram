@@ -966,6 +966,22 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 
 	txRepo := repo.New(a.db).WithTx(tx)
 
+	if _, err := txRepo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
+		ID:        args.RiskPolicyID,
+		ProjectID: args.ProjectID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Policy was soft-deleted while analysis was running — drop results.
+			writeSpan.SetAttributes(attribute.Bool("risk.policy_deleted", true))
+			a.logger.InfoContext(ctx, "risk policy deleted mid-analysis, dropping results",
+				attr.SlogRiskPolicyID(args.RiskPolicyID.String()),
+			)
+			return nil
+		}
+		writeSpan.SetStatus(codes.Error, err.Error())
+		return fmt.Errorf("re-check risk policy before writing results: %w", err)
+	}
+
 	if err := txRepo.DeleteRiskResultsForMessages(ctx, repo.DeleteRiskResultsForMessagesParams{
 		RiskPolicyID: args.RiskPolicyID,
 		ProjectID:    args.ProjectID,
