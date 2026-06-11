@@ -500,6 +500,7 @@ SELECT om.slug AS organization_slug, p.slug AS project_slug
 FROM projects p
 JOIN organization_metadata om ON om.id = p.organization_id
 WHERE p.id = $1
+  AND p.deleted IS FALSE
 `
 
 type GetProjectFlagGroupsRow struct {

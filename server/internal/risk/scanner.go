@@ -167,6 +167,15 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, projectID uuid.UUID, t
 		return nil, nil
 	}
 
+	// Resolve the prompt-policy flag once per scan (on the parent ctx, before
+	// fan-out) so prompt_based policies don't each repeat the slug lookup and
+	// so the lookup is never cancelled by a sibling match. Only paid when a
+	// prompt_based policy is actually enforcing.
+	promptPoliciesOn := false
+	if i := slices.IndexFunc(policies, func(p repo.RiskPolicy) bool { return p.PolicyType == "prompt_based" }); i >= 0 {
+		promptPoliciesOn = s.promptPoliciesEnabled(ctx, policies[i].OrganizationID, projectID)
+	}
+
 	// Fan out across policies. The first goroutine that finds a match returns
 	// errMatchFound, which causes errgroup to cancel its context — sibling
 	// goroutines stop their in-flight Presidio HTTP calls early instead of
@@ -183,7 +192,7 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, projectID uuid.UUID, t
 		}
 
 		g.Go(func() error {
-			result, scanErr := s.scanPolicy(gctx, p, text, messageType)
+			result, scanErr := s.scanPolicy(gctx, p, text, messageType, promptPoliciesOn)
 			if scanErr != nil {
 				if errors.Is(scanErr, context.Canceled) {
 					return nil
@@ -266,9 +275,9 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 // text per call — its internal worker pool only fans out when n > 1, so
 // per-policy parallelism over sources buys roughly nothing. The
 // across-policies fan-out in ScanForEnforcement is the real win.
-func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type) (*ScanResult, error) {
+func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type, promptPoliciesOn bool) (*ScanResult, error) {
 	if policy.PolicyType == "prompt_based" {
-		return s.scanPromptPolicy(ctx, policy, text, messageType), nil
+		return s.scanPromptPolicy(ctx, policy, text, messageType, promptPoliciesOn), nil
 	}
 
 	disabled := ra.NewDisabledRuleSet(policy.DisabledRules)
@@ -359,12 +368,12 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 // hard-scoped to tool-call messages regardless of the policy's message_types,
 // so a misconfigured policy can never judge other message types inline. Returns
 // nil when the judge does not match (including fail-open on judge error).
-func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type) *ScanResult {
+func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type, promptPoliciesOn bool) *ScanResult {
 	if messageType != message.ToolRequest {
 		return nil
 	}
 	cfg := ra.ParseJudgeConfig(policy.ModelConfig)
-	if !s.promptPoliciesEnabled(ctx, policy.OrganizationID, policy.ProjectID) {
+	if !promptPoliciesOn {
 		return nil
 	}
 	if s.judge == nil || !policy.Prompt.Valid || strings.TrimSpace(policy.Prompt.String) == "" {
