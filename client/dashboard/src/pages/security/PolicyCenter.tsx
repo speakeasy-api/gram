@@ -1528,7 +1528,9 @@ function JudgeConfigSection({
             ticks={TEMPERATURE_TICKS}
           />
           <p className="text-muted-foreground text-xs">
-            Lower is more consistent. 0 is recommended for repeatable verdicts.
+            Lower is more consistent and repeatable (0 recommended). Higher adds
+            variation, which can surface borderline or unusual violations a
+            rigid read might miss.
           </p>
         </div>
 
