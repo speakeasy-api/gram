@@ -41,10 +41,15 @@ const (
 	StatusActive = "active"
 	StatusPaused = "paused"
 
-	sourceKindSlack      = bgtriggers.DefinitionSlugSlack
-	sourceKindCron       = bgtriggers.DefinitionSlugCron
-	sourceKindWake       = bgtriggers.DefinitionSlugWake
-	sourceKindDashboard  = bgtriggers.DefinitionSlugDashboard
+	sourceKindSlack     = bgtriggers.DefinitionSlugSlack
+	sourceKindCron      = bgtriggers.DefinitionSlugCron
+	sourceKindWake      = bgtriggers.DefinitionSlugWake
+	sourceKindDashboard = bgtriggers.DefinitionSlugDashboard
+	// sourceKindWarmup marks the event-less thread that eager-boots the
+	// runtime at assistant creation. It has no source adapter — adapters are
+	// only consulted while processing events, and this thread never has any.
+	sourceKindWarmup     = "warmup"
+	warmupCorrelationID  = "runtime-warmup"
 	runtimeStateStarting = "starting"
 	runtimeStateActive   = "active"
 	runtimeStateExpiring = "expiring"
@@ -281,14 +286,13 @@ type ExpireThreadRuntimeResult struct {
 	RemainingSeconds int
 }
 
-// WarmAssistantRuntimeResult reports whether warmup booted the runtime and,
-// if so, the warm window the caller must expire after. Booted is false on
-// every no-op path (assistant gone/paused, traffic owns the row, Ensure
-// failed) — those need no warm timer.
-type WarmAssistantRuntimeResult struct {
-	Booted         bool
-	ProjectID      uuid.UUID
-	WarmTTLSeconds int
+// WarmupThreadResult identifies the warmup thread to signal. ShouldSignal is
+// false on every no-op path (assistant gone/paused, organic traffic owns the
+// runtime row).
+type WarmupThreadResult struct {
+	ThreadID     uuid.UUID
+	ProjectID    uuid.UUID
+	ShouldSignal bool
 }
 
 // WakeCanceller cancels every pending wake trigger owned by an assistant on
@@ -1468,129 +1472,36 @@ func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assis
 	return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: admitted}, nil
 }
 
-// WarmAssistantRuntime eagerly boots the assistant's Fly app + VM so the
-// first turn doesn't pay the cold-start cost (app create, IP allocation, DNS
-// propagation, image pull, machine boot). Best-effort: every failure path
-// leaves a state the lazy boot in ProcessThreadEvents recovers from, so an
-// error is returned only when retrying the whole warmup can help.
+// EnsureWarmupThread sets up the assistant's event-less warmup thread and
+// reserves the v2 runtime row against it, so that signalling the standard
+// thread workflow boots the runtime exactly as a turn would — Ensure,
+// coordinator kicks and the warm window all run through the existing
+// machinery; the thread simply never has events to process.
 //
-// The caller (warmup workflow) owns the warm timer: when Booted is true it
-// must drive expiry after WarmTTLSeconds, because a runtime that never
-// receives a turn has no thread workflow to stop it and the machine config
-// disables Fly autostop. The backend metadata kept on the stopped row makes
-// the next admit a warm start, which is the point of paying the
-// provisioning cost at creation time.
-func (s *ServiceCore) WarmAssistantRuntime(ctx context.Context, assistantID uuid.UUID) (WarmAssistantRuntimeResult, error) {
+// Idempotent under the same advisory lock admit uses. ShouldSignal is false
+// when a live runtime row exists that the warmup thread doesn't own —
+// organic traffic got there first and its threads drive the boot.
+func (s *ServiceCore) EnsureWarmupThread(ctx context.Context, assistantID uuid.UUID) (WarmupThreadResult, error) {
+	noop := WarmupThreadResult{ThreadID: uuid.Nil, ProjectID: uuid.Nil, ShouldSignal: false}
+
 	dispatchRow, err := assistantrepo.New(s.db).GetAssistantForDispatch(ctx, assistantID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		// Deleted between creation and the warmup workflow running.
-		return WarmAssistantRuntimeResult{Booted: false, ProjectID: uuid.Nil, WarmTTLSeconds: 0}, nil
+		// Deleted between creation and the warmup running.
+		return noop, nil
 	case err != nil:
-		return WarmAssistantRuntimeResult{Booted: false, ProjectID: uuid.Nil, WarmTTLSeconds: 0}, fmt.Errorf("select assistant for warmup: %w", err)
+		return noop, fmt.Errorf("select assistant for warmup: %w", err)
 	}
 	// Skip getAssistantForDispatch's toolset hydration — warmup only needs
 	// the scalar fields.
 	assistant := assistantRecordFromDispatchRow(dispatchRow)
 	if assistant.Status != StatusActive {
-		return WarmAssistantRuntimeResult{Booted: false, ProjectID: uuid.Nil, WarmTTLSeconds: 0}, nil
+		return noop, nil
 	}
 
-	reserved, err := s.reserveRuntimeForWarmup(ctx, assistant)
-	if err != nil || !reserved {
-		return WarmAssistantRuntimeResult{Booted: false, ProjectID: uuid.Nil, WarmTTLSeconds: 0}, err
-	}
-
-	row, err := assistantrepo.New(s.db).GetAssistantRuntimeV2(ctx, assistantrepo.GetAssistantRuntimeV2Params{
-		ProjectID:   assistant.ProjectID,
-		AssistantID: assistant.ID,
-	})
-	if err != nil {
-		return WarmAssistantRuntimeResult{Booted: false, ProjectID: uuid.Nil, WarmTTLSeconds: 0}, fmt.Errorf("load reserved assistant runtime for warmup: %w", err)
-	}
-	runtimeRecord := assistantRuntimeRecord{
-		ID:                  row.ID,
-		AssistantThreadID:   uuid.Nil,
-		AssistantID:         row.AssistantID,
-		ProjectID:           row.ProjectID,
-		Backend:             row.Backend,
-		BackendMetadataJSON: row.BackendMetadataJson,
-		State:               row.State,
-		WarmUntil:           row.WarmUntil,
-	}
-
-	ctx = withAssistantLogContext(ctx, assistantLogContext{
-		OrganizationID:    assistant.OrganizationID,
-		ProjectID:         assistant.ProjectID.String(),
-		AssistantID:       assistant.ID.String(),
-		AssistantName:     assistant.Name,
-		ThreadID:          "",
-		CorrelationID:     "",
-		RuntimeID:         runtimeRecord.ID.String(),
-		RuntimeBackend:    runtimeRecord.Backend,
-		EventID:           "",
-		TriggerEventID:    "",
-		TriggerInstanceID: "",
-		Attempt:           0,
-	})
-
-	ensureResult, err := s.runtime.Ensure(ctx, runtimeRecord)
-	if err != nil {
-		// Same contract as ProcessThreadEvents: mark the row failed so a
-		// later admit can reserve afresh, and swallow the error — the first
-		// real turn falls back to booting lazily.
-		s.logger.ErrorContext(ctx, "warm assistant runtime ensure failed",
-			attr.SlogAssistantID(assistant.ID.String()),
-			attr.SlogError(err),
-		)
-		_ = s.stopRuntimeRecord(ctx, assistant.ProjectID, runtimeRecord.ID, runtimeStateFailed)
-		return WarmAssistantRuntimeResult{Booted: false, ProjectID: uuid.Nil, WarmTTLSeconds: 0}, nil
-	}
-	// Activation failures after a successful Ensure must stop the machine
-	// before erroring: the error path leaves no expiry driver, and a running
-	// VM behind a `starting` row would only be soft-deleted by the reaper.
-	// The Temporal retry resumes the row and re-runs Ensure, which restarts
-	// the stopped machine cheaply.
-	if err := s.updateRuntimeEnsureResult(ctx, &runtimeRecord, ensureResult); err != nil {
-		s.stopWarmupMachine(ctx, runtimeRecord)
-		return WarmAssistantRuntimeResult{Booted: false, ProjectID: uuid.Nil, WarmTTLSeconds: 0}, err
-	}
-	if err := s.setRuntimeActive(ctx, assistant.ProjectID, runtimeRecord.ID, time.Now().UTC().Add(time.Duration(assistant.WarmTTLSeconds)*time.Second)); err != nil {
-		s.stopWarmupMachine(ctx, runtimeRecord)
-		return WarmAssistantRuntimeResult{Booted: false, ProjectID: uuid.Nil, WarmTTLSeconds: 0}, err
-	}
-	return WarmAssistantRuntimeResult{
-		Booted:         true,
-		ProjectID:      assistant.ProjectID,
-		WarmTTLSeconds: assistant.WarmTTLSeconds,
-	}, nil
-}
-
-// stopWarmupMachine best-effort stops a machine warmup booted but could not
-// activate, and marks the row failed. Both writes may themselves fail (the
-// activation failure is usually a DB outage) — that's fine, the retried
-// activity resumes the starting row and converges.
-func (s *ServiceCore) stopWarmupMachine(ctx context.Context, record assistantRuntimeRecord) {
-	if err := s.runtime.Stop(ctx, record); err != nil {
-		s.logger.WarnContext(ctx, "stop assistant runtime after failed warmup activation",
-			attr.SlogAssistantRuntimeID(record.ID.String()),
-			attr.SlogError(err),
-		)
-	}
-	_ = s.stopRuntimeRecord(ctx, record.ProjectID, record.ID, runtimeStateFailed)
-}
-
-// reserveRuntimeForWarmup inserts the v2 runtime row warmup will drive,
-// using the same advisory lock as admit so it never races a concurrent
-// thread admission into a second VM. Returns true when warmup owns the boot:
-// either it reserved a fresh row, or it found one a prior warmup attempt
-// left in `starting`. Returns false when organic traffic owns the row. The
-// transaction only covers the reservation: Ensure can run for minutes and
-// must not hold a pool connection.
-func (s *ServiceCore) reserveRuntimeForWarmup(ctx context.Context, assistant assistantRecord) (bool, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return false, fmt.Errorf("begin assistant warmup tx: %w", err)
+		return noop, fmt.Errorf("begin assistant warmup tx: %w", err)
 	}
 	defer func() {
 		_ = tx.Rollback(ctx)
@@ -1598,7 +1509,29 @@ func (s *ServiceCore) reserveRuntimeForWarmup(ctx context.Context, assistant ass
 
 	queries := assistantrepo.New(tx)
 	if err := queries.AcquireAssistantAdvisoryLock(ctx, assistant.ID.String()); err != nil {
-		return false, fmt.Errorf("acquire assistant advisory lock: %w", err)
+		return noop, fmt.Errorf("acquire assistant advisory lock: %w", err)
+	}
+
+	chatID := deterministicChatID(assistant.ID, warmupCorrelationID)
+	if err := queries.UpsertAssistantChat(ctx, assistantrepo.UpsertAssistantChatParams{
+		ChatID:         chatID,
+		ProjectID:      assistant.ProjectID,
+		OrganizationID: assistant.OrganizationID,
+		UserID:         pgtype.Text{String: "", Valid: false},
+		Title:          conv.ToPGText(chat.DefaultChatTitle),
+	}); err != nil {
+		return noop, fmt.Errorf("upsert warmup chat: %w", err)
+	}
+	threadID, err := queries.UpsertAssistantThread(ctx, assistantrepo.UpsertAssistantThreadParams{
+		AssistantID:   assistant.ID,
+		ProjectID:     assistant.ProjectID,
+		CorrelationID: warmupCorrelationID,
+		ChatID:        chatID,
+		SourceKind:    sourceKindWarmup,
+		SourceRefJson: []byte("{}"),
+	})
+	if err != nil {
+		return noop, fmt.Errorf("upsert warmup thread: %w", err)
 	}
 
 	row, err := queries.GetAssistantRuntimeV2(ctx, assistantrepo.GetAssistantRuntimeV2Params{
@@ -1607,37 +1540,30 @@ func (s *ServiceCore) reserveRuntimeForWarmup(ctx context.Context, assistant ass
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		// No live row — fall through to reserve one.
+		if err := queries.ReserveAssistantRuntimeV2(ctx, assistantrepo.ReserveAssistantRuntimeV2Params{
+			AssistantThreadID: threadID,
+			AssistantID:       assistant.ID,
+			ProjectID:         assistant.ProjectID,
+			Backend:           s.runtime.Backend(),
+			State:             runtimeStateStarting,
+		}); err != nil {
+			return noop, fmt.Errorf("reserve v2 assistant runtime for warmup: %w", err)
+		}
 	case err != nil:
-		return false, fmt.Errorf("lookup v2 runtime for warmup: %w", err)
-	case row.State == runtimeStateStarting && row.AssistantThreadID == uuid.Nil:
-		// A previous warmup attempt reserved the row but died before marking
-		// it active or failed, and Temporal retried us. Nothing else can own
-		// a starting row with no admitting thread (warmups are serialized on
-		// the workflow id; thread admits stamp a real thread id), so resume
-		// driving Ensure rather than stranding the row in `starting` — admit
-		// holds every thread back while it stays there.
-		return true, nil
-	default:
-		return false, nil
-	}
-
-	// uuid.Nil thread sentinel: there is no admitting thread, the runtime is
-	// being provisioned ahead of traffic.
-	if err := queries.ReserveAssistantRuntimeV2(ctx, assistantrepo.ReserveAssistantRuntimeV2Params{
-		AssistantThreadID: uuid.Nil,
-		AssistantID:       assistant.ID,
-		ProjectID:         assistant.ProjectID,
-		Backend:           s.runtime.Backend(),
-		State:             runtimeStateStarting,
-	}); err != nil {
-		return false, fmt.Errorf("reserve v2 assistant runtime for warmup: %w", err)
+		return noop, fmt.Errorf("lookup v2 runtime for warmup: %w", err)
+	case row.AssistantThreadID != threadID || row.State == runtimeStateExpiring:
+		// A real thread owns the boot, or the row is mid-teardown — either
+		// way the existing workflows drive the lifecycle from here.
+		return noop, nil
+		// Else: the warmup thread already owns a live row (an earlier signal
+		// was lost or the workflow died mid-boot) — fall through and
+		// re-signal; SignalWithStart and ProcessThreadEvents are idempotent.
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return false, fmt.Errorf("commit assistant warmup tx: %w", err)
+		return noop, fmt.Errorf("commit assistant warmup tx: %w", err)
 	}
-	return true, nil
+	return WarmupThreadResult{ThreadID: threadID, ProjectID: assistant.ProjectID, ShouldSignal: true}, nil
 }
 
 func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, threadID uuid.UUID) (ProcessThreadEventsResult, error) {
@@ -2240,52 +2166,12 @@ func (s *ServiceCore) ExpireThreadRuntime(ctx context.Context, projectID, thread
 		WarmUntil:           row.WarmUntil,
 	}
 
-	return s.finishExpireRuntime(ctx, projectID, runtimeRecord, warmTTLSeconds)
-}
-
-// ExpireWarmupRuntime is the warm-timer expire for a warmup-booted runtime,
-// keyed by assistant because no admitting thread exists to resolve the row
-// through. Same CAS + /state-poll contract as ExpireThreadRuntime, so it
-// coexists with sibling thread expire drivers.
-func (s *ServiceCore) ExpireWarmupRuntime(ctx context.Context, projectID, assistantID uuid.UUID, warmTTLSeconds int) (ExpireThreadRuntimeResult, error) {
-	row, err := assistantrepo.New(s.db).BeginExpireAssistantRuntimeV2ByAssistant(ctx, assistantrepo.BeginExpireAssistantRuntimeV2ByAssistantParams{
-		ExpiringState: runtimeStateExpiring,
-		ProjectID:     projectID,
-		AssistantID:   assistantID,
-		ActiveState:   runtimeStateActive,
-	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		// No live row, or another actor already finalized it.
-		return ExpireThreadRuntimeResult{Stopped: true, RemainingSeconds: 0}, nil
-	case err != nil:
-		return ExpireThreadRuntimeResult{}, fmt.Errorf("begin expire assistant runtime by assistant: %w", err)
-	}
-
-	runtimeRecord := assistantRuntimeRecord{
-		ID:                  row.ID,
-		AssistantThreadID:   row.AssistantThreadID,
-		AssistantID:         row.AssistantID,
-		ProjectID:           row.ProjectID,
-		Backend:             row.Backend,
-		BackendMetadataJSON: row.BackendMetadataJson,
-		State:               row.State,
-		WarmUntil:           row.WarmUntil,
-	}
-
-	return s.finishExpireRuntime(ctx, projectID, runtimeRecord, warmTTLSeconds)
-}
-
-// finishExpireRuntime is the post-CAS half of an expire attempt: poll the
-// runner and either revert the expiring row to active (a turn slipped in
-// past the warm timer) or stop the backend and finalize the row.
-func (s *ServiceCore) finishExpireRuntime(ctx context.Context, projectID uuid.UUID, runtimeRecord assistantRuntimeRecord, warmTTLSeconds int) (ExpireThreadRuntimeResult, error) {
 	status, statusErr := s.runtime.Status(ctx, runtimeRecord)
 	if statusErr != nil {
 		// Runtime is already gone or unhealthy — fall through to Stop so the
 		// row + backend resources get cleaned up.
 		s.logger.WarnContext(ctx, "runtime status failed during expire; tearing down",
-			attr.SlogAssistantRuntimeID(runtimeRecord.ID.String()),
+			attr.SlogAssistantThreadID(threadID.String()),
 			attr.SlogError(statusErr),
 		)
 	} else if remaining := warmRemainingSeconds(status.IdleSeconds, warmTTLSeconds); remaining > 0 {
@@ -2293,7 +2179,7 @@ func (s *ServiceCore) finishExpireRuntime(ctx context.Context, projectID uuid.UU
 		// Revert to active and let the workflow re-arm with the remaining
 		// window measured against the runner's current idle.
 		warmUntil := time.Now().UTC().Add(time.Duration(remaining) * time.Second)
-		revertErr := assistantrepo.New(s.db).RevertExpireAssistantRuntimeToActive(ctx, assistantrepo.RevertExpireAssistantRuntimeToActiveParams{
+		revertErr := q.RevertExpireAssistantRuntimeToActive(ctx, assistantrepo.RevertExpireAssistantRuntimeToActiveParams{
 			ActiveState:   runtimeStateActive,
 			WarmUntil:     conv.ToPGTimestamptz(warmUntil),
 			RuntimeID:     runtimeRecord.ID,

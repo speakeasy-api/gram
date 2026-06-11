@@ -329,14 +329,28 @@ func (s *Service) Dispatch(ctx context.Context, task bgtriggers.Task) error {
 }
 
 // startRuntimeWarmup eagerly boots the assistant's runtime so the first turn
-// doesn't pay the Fly cold-start cost. Best-effort: a failure to start the
-// workflow never fails the request — the first turn boots lazily instead.
+// doesn't pay the Fly cold-start cost. It rides the standard turn machinery:
+// an event-less warmup thread reserves the runtime row, and its thread
+// workflow runs Ensure, coordinator kicks and the warm window exactly as a
+// turn would. Best-effort: a failure here never fails the request — the
+// first turn boots lazily instead.
 func (s *Service) startRuntimeWarmup(ctx context.Context, record assistantRecord) {
 	if record.Status != StatusActive {
 		return
 	}
-	if err := s.signaler.StartRuntimeWarmup(ctx, record.ID); err != nil {
-		s.logger.WarnContext(ctx, "start assistant runtime warmup failed",
+	result, err := s.core.EnsureWarmupThread(ctx, record.ID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "ensure assistant warmup thread failed",
+			attr.SlogAssistantID(record.ID.String()),
+			attr.SlogError(err),
+		)
+		return
+	}
+	if !result.ShouldSignal {
+		return
+	}
+	if err := s.signaler.SignalThread(ctx, result.ThreadID, result.ProjectID); err != nil {
+		s.logger.WarnContext(ctx, "signal assistant warmup thread failed",
 			attr.SlogAssistantID(record.ID.String()),
 			attr.SlogError(err),
 		)

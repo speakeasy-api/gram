@@ -828,33 +828,6 @@ WHERE id = (
   AND ended IS FALSE
 RETURNING id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until;
 
--- name: BeginExpireAssistantRuntimeV2ByAssistant :one
--- Assistant-keyed sibling of BeginExpireAssistantRuntime for the warmup
--- workflow's warm timer: a warmup-booted v2 runtime has no admitting thread
--- to resolve the row through. Accepts both `active` and `expiring` for the
--- same idempotent-retry reasons; ErrNoRows means another actor already
--- finalized the row and callers must not then call Stop.
-UPDATE assistant_runtimes
-SET
-  state = @expiring_state,
-  updated_at = clock_timestamp()
-WHERE id = (
-  SELECT r.id
-  FROM assistant_runtimes r
-  WHERE r.project_id = @project_id
-    AND r.assistant_id = @assistant_id
-    AND r.runtime_version = 2
-    AND r.state IN (@active_state, @expiring_state)
-    AND r.deleted IS FALSE
-    AND r.ended IS FALSE
-  LIMIT 1
-)
-  AND project_id = @project_id
-  AND state IN (@active_state, @expiring_state)
-  AND deleted IS FALSE
-  AND ended IS FALSE
-RETURNING id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until;
-
 -- name: RevertExpireAssistantRuntimeToActive :exec
 UPDATE assistant_runtimes
 SET

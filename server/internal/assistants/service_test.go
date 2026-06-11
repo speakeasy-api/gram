@@ -139,7 +139,7 @@ func TestServiceCoreAdmitPendingThreadsBypassesCapForReservedStarter(t *testing.
 	require.Equal(t, []uuid.UUID{pending[0]}, admitted.ThreadIDs, "cold-admit must release the starter even when active count is at the cap")
 }
 
-func TestServiceCoreWarmAssistantRuntimeBootsRuntime(t *testing.T) {
+func TestServiceCoreEnsureWarmupThreadBootsRuntimeViaTurnMachinery(t *testing.T) {
 	t.Parallel()
 
 	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_warmup")
@@ -151,25 +151,67 @@ func TestServiceCoreWarmAssistantRuntimeBootsRuntime(t *testing.T) {
 	metadata := []byte(`{"app_name":"gram-asst-warm"}`)
 	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, ensureResult: RuntimeBackendEnsureResult{ColdStart: true, BackendMetadataJSON: metadata}}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
 
-	result, err := core.WarmAssistantRuntime(ctx, assistantID)
+	result, err := core.EnsureWarmupThread(ctx, assistantID)
 	require.NoError(t, err)
-	require.True(t, result.Booted)
+	require.True(t, result.ShouldSignal)
 	require.Equal(t, projectID, result.ProjectID)
-	require.Equal(t, 300, result.WarmTTLSeconds)
 
 	row, err := assistantsrepo.New(conn).GetAssistantRuntimeV2(ctx, assistantsrepo.GetAssistantRuntimeV2Params{
 		ProjectID:   projectID,
 		AssistantID: assistantID,
 	})
 	require.NoError(t, err)
+	require.Equal(t, runtimeStateStarting, row.State)
+	require.Equal(t, result.ThreadID, row.AssistantThreadID, "the runtime row must be keyed to the warmup thread")
+
+	// Signalling the thread workflow runs ProcessThreadEvents — the same
+	// path a turn takes. With no events it boots the runtime and returns.
+	processResult, err := core.ProcessThreadEvents(ctx, projectID, result.ThreadID)
+	require.NoError(t, err)
+	require.True(t, processResult.RuntimeActive)
+	require.True(t, processResult.BootstrappedRuntime, "warmup boot must report bootstrap so siblings get admitted")
+	require.False(t, processResult.ProcessedAnyEvent, "the warmup thread must never process events")
+
+	row, err = assistantsrepo.New(conn).GetAssistantRuntimeV2(ctx, assistantsrepo.GetAssistantRuntimeV2Params{
+		ProjectID:   projectID,
+		AssistantID: assistantID,
+	})
+	require.NoError(t, err)
 	require.Equal(t, runtimeStateActive, row.State)
-	require.Equal(t, uuid.Nil, row.AssistantThreadID, "warmup has no admitting thread")
 	require.JSONEq(t, string(metadata), string(row.BackendMetadataJson))
-	require.True(t, row.WarmUntil.Valid)
-	require.True(t, row.WarmUntil.Time.After(time.Now().UTC()), "warm window must extend past now")
 }
 
-func TestServiceCoreWarmAssistantRuntimeNoopWhenRuntimeExists(t *testing.T) {
+func TestServiceCoreEnsureWarmupThreadIsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_warmup_idem")
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	assistantID, projectID := seedAssistant(t, conn, "assistants-warmup-idem", 2)
+
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
+
+	first, err := core.EnsureWarmupThread(ctx, assistantID)
+	require.NoError(t, err)
+	require.True(t, first.ShouldSignal)
+
+	// A repeat (lost signal, double create) re-signals the same thread; the
+	// reserved row is untouched.
+	second, err := core.EnsureWarmupThread(ctx, assistantID)
+	require.NoError(t, err)
+	require.True(t, second.ShouldSignal)
+	require.Equal(t, first.ThreadID, second.ThreadID)
+
+	row, err := assistantsrepo.New(conn).GetAssistantRuntimeV2(ctx, assistantsrepo.GetAssistantRuntimeV2Params{
+		ProjectID:   projectID,
+		AssistantID: assistantID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, first.ThreadID, row.AssistantThreadID)
+}
+
+func TestServiceCoreEnsureWarmupThreadSkipsWhenTrafficOwnsRuntime(t *testing.T) {
 	t.Parallel()
 
 	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_warmup_noop")
@@ -179,79 +221,14 @@ func TestServiceCoreWarmAssistantRuntimeNoopWhenRuntimeExists(t *testing.T) {
 	assistantID, pending := seedAssistantWithPendingThreads(t, conn, "assistants-warmup-noop", 2, 1)
 	preActivateV2Runtime(t, conn, assistantID, pending[0])
 
-	// ensureErr proves Ensure is never reached when a live row already exists.
-	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, ensureErr: errors.New("must not be called")}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
 
-	result, err := core.WarmAssistantRuntime(ctx, assistantID)
+	result, err := core.EnsureWarmupThread(ctx, assistantID)
 	require.NoError(t, err)
-	require.False(t, result.Booted, "warmup must not claim a boot it didn't perform")
-
-	row, err := assistantsrepo.New(conn).GetAssistantForDispatch(ctx, assistantID)
-	require.NoError(t, err)
-	runtime, err := assistantsrepo.New(conn).GetAssistantRuntimeV2(ctx, assistantsrepo.GetAssistantRuntimeV2Params{
-		ProjectID:   row.ProjectID,
-		AssistantID: assistantID,
-	})
-	require.NoError(t, err)
-	require.Equal(t, runtimeStateActive, runtime.State, "the traffic-owned runtime row must be left alone")
+	require.False(t, result.ShouldSignal, "a runtime row owned by organic traffic must be left alone")
 }
 
-func TestServiceCoreWarmAssistantRuntimeResumesStrandedWarmupRow(t *testing.T) {
-	t.Parallel()
-
-	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_warmup_resume")
-	require.NoError(t, err)
-
-	ctx := t.Context()
-	assistantID, projectID := seedAssistant(t, conn, "assistants-warmup-resume", 2)
-
-	// A prior warmup attempt reserved the row (uuid.Nil thread sentinel) and
-	// died before marking it active or failed.
-	require.NoError(t, assistantsrepo.New(conn).ReserveAssistantRuntimeV2(ctx, assistantsrepo.ReserveAssistantRuntimeV2Params{
-		AssistantThreadID: uuid.Nil,
-		AssistantID:       assistantID,
-		ProjectID:         projectID,
-		Backend:           runtimeBackendFlyIO,
-		State:             runtimeStateStarting,
-	}))
-
-	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, ensureResult: RuntimeBackendEnsureResult{ColdStart: true, BackendMetadataJSON: []byte(`{"app_name":"gram-asst-resume"}`)}}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
-
-	result, err := core.WarmAssistantRuntime(ctx, assistantID)
-	require.NoError(t, err)
-	require.True(t, result.Booted)
-
-	row, err := assistantsrepo.New(conn).GetAssistantRuntimeV2(ctx, assistantsrepo.GetAssistantRuntimeV2Params{
-		ProjectID:   projectID,
-		AssistantID: assistantID,
-	})
-	require.NoError(t, err)
-	require.Equal(t, runtimeStateActive, row.State, "a retried warmup must drive the stranded starting row to active instead of no-oping")
-}
-
-func TestServiceCoreWarmAssistantRuntimeMarksFailedOnEnsureError(t *testing.T) {
-	t.Parallel()
-
-	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_warmup_fail")
-	require.NoError(t, err)
-
-	ctx := t.Context()
-	assistantID, projectID := seedAssistant(t, conn, "assistants-warmup-fail", 2)
-
-	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, ensureErr: errors.New("fly is down")}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
-
-	result, err := core.WarmAssistantRuntime(ctx, assistantID)
-	require.NoError(t, err, "ensure failure is swallowed — the first turn boots lazily")
-	require.False(t, result.Booted)
-
-	_, err = assistantsrepo.New(conn).GetAssistantRuntimeV2(ctx, assistantsrepo.GetAssistantRuntimeV2Params{
-		ProjectID:   projectID,
-		AssistantID: assistantID,
-	})
-	require.ErrorIs(t, err, pgx.ErrNoRows, "the failed row must be soft-deleted so a later admit can reserve afresh")
-}
-
-func TestServiceCoreWarmAssistantRuntimeSkipsInactiveAssistant(t *testing.T) {
+func TestServiceCoreEnsureWarmupThreadSkipsInactiveAssistant(t *testing.T) {
 	t.Parallel()
 
 	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_warmup_paused")
@@ -271,80 +248,17 @@ func TestServiceCoreWarmAssistantRuntimeSkipsInactiveAssistant(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, ensureErr: errors.New("must not be called")}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
 
-	result, err := core.WarmAssistantRuntime(ctx, assistantID)
+	result, err := core.EnsureWarmupThread(ctx, assistantID)
 	require.NoError(t, err)
-	require.False(t, result.Booted)
+	require.False(t, result.ShouldSignal)
 
 	_, err = assistantsrepo.New(conn).GetAssistantRuntimeV2(ctx, assistantsrepo.GetAssistantRuntimeV2Params{
 		ProjectID:   projectID,
 		AssistantID: assistantID,
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows, "paused assistants must not be warmed")
-}
-
-// seedWarmedRuntime boots a warmup-owned active v2 row via WarmAssistantRuntime
-// so expire tests start from the state the warmup workflow leaves behind.
-func seedWarmedRuntime(t *testing.T, conn *pgxpool.Pool, core *ServiceCore, assistantID uuid.UUID) {
-	t.Helper()
-	result, err := core.WarmAssistantRuntime(t.Context(), assistantID)
-	require.NoError(t, err)
-	require.True(t, result.Booted)
-}
-
-func TestServiceCoreExpireWarmupRuntimeStopsIdleRuntime(t *testing.T) {
-	t.Parallel()
-
-	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_warmup_expire")
-	require.NoError(t, err)
-
-	ctx := t.Context()
-	assistantID, projectID := seedAssistant(t, conn, "assistants-warmup-expire", 2)
-
-	stopCalls := &atomic.Int64{}
-	// IdleSeconds nil = runner reports no live threads, the VM is fully idle.
-	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, ensureResult: RuntimeBackendEnsureResult{ColdStart: true, BackendMetadataJSON: []byte(`{"app_name":"gram-asst-expire"}`)}, stopCalls: stopCalls}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
-	seedWarmedRuntime(t, conn, core, assistantID)
-
-	result, err := core.ExpireWarmupRuntime(ctx, projectID, assistantID, 300)
-	require.NoError(t, err)
-	require.True(t, result.Stopped)
-	require.Equal(t, int64(1), stopCalls.Load(), "expire must stop the backend VM")
-
-	_, err = assistantsrepo.New(conn).GetAssistantRuntimeV2(ctx, assistantsrepo.GetAssistantRuntimeV2Params{
-		ProjectID:   projectID,
-		AssistantID: assistantID,
-	})
-	require.ErrorIs(t, err, pgx.ErrNoRows, "the stopped row must be finalized")
-}
-
-func TestServiceCoreExpireWarmupRuntimeRevertsWhenTurnInFlight(t *testing.T) {
-	t.Parallel()
-
-	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_warmup_expire_busy")
-	require.NoError(t, err)
-
-	ctx := t.Context()
-	assistantID, projectID := seedAssistant(t, conn, "assistants-warmup-expire-busy", 2)
-
-	stopCalls := &atomic.Int64{}
-	busy := uint64(0)
-	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, ensureResult: RuntimeBackendEnsureResult{ColdStart: true, BackendMetadataJSON: []byte(`{"app_name":"gram-asst-expire-busy"}`)}, statusResult: RuntimeBackendStatus{Configured: true, IdleSeconds: &busy}, stopCalls: stopCalls}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
-	seedWarmedRuntime(t, conn, core, assistantID)
-
-	result, err := core.ExpireWarmupRuntime(ctx, projectID, assistantID, 300)
-	require.NoError(t, err)
-	require.False(t, result.Stopped, "a turn in flight must revert the expire")
-	require.Positive(t, result.RemainingSeconds)
-	require.Equal(t, int64(0), stopCalls.Load(), "a busy VM must not be stopped")
-
-	row, err := assistantsrepo.New(conn).GetAssistantRuntimeV2(ctx, assistantsrepo.GetAssistantRuntimeV2Params{
-		ProjectID:   projectID,
-		AssistantID: assistantID,
-	})
-	require.NoError(t, err)
-	require.Equal(t, runtimeStateActive, row.State, "the row must be reverted to active")
 }
 
 func seedAssistantWithPendingThreads(t *testing.T, conn *pgxpool.Pool, slug string, maxConcurrency int, pending int) (uuid.UUID, []uuid.UUID) {

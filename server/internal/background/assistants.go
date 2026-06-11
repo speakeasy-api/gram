@@ -29,10 +29,6 @@ type AssistantThreadWorkflowInput struct {
 	ProjectID string `json:"project_id"`
 }
 
-type AssistantRuntimeWarmupWorkflowInput struct {
-	AssistantID string `json:"assistant_id"`
-}
-
 // assistantCoordinatorMaxIterations bounds how many kicks a single workflow
 // run handles before ContinueAsNew. Temporal's per-workflow history limit is
 // ~51.2k events; each iteration adds roughly 6, so 500 leaves a wide margin
@@ -292,90 +288,12 @@ func AssistantThreadWorkflow(ctx workflow.Context, input AssistantThreadWorkflow
 	return workflow.NewContinueAsNewError(ctx, AssistantThreadWorkflow, input)
 }
 
-// AssistantRuntimeWarmupWorkflow eagerly boots a freshly created assistant's
-// runtime (Fly app + VM) so the first turn doesn't pay the cold-start cost.
-// The coordinator is signalled after warmup regardless of outcome: any
-// threads that arrived while the runtime row was `starting` were held back
-// by admit and need a kick now that the row is active (or failed and
-// reapable).
-//
-// When warmup booted the runtime, this workflow also owns the warm timer —
-// a runtime that never receives a turn has no thread workflow to expire it
-// and the machine config disables Fly autostop, so without this the VM
-// would run until the inactivity janitor. A single expire attempt is
-// enough: if it reports a turn slipped in, that turn's thread workflow
-// exists and runs its own warm timer from here on.
-func AssistantRuntimeWarmupWorkflow(ctx workflow.Context, input AssistantRuntimeWarmupWorkflowInput) error {
-	var a *Activities
-
-	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		// Cold boot covers app create, IP allocation, DNS propagation, image
-		// pull and the health probe — minutes on a bad day, so cap generously.
-		StartToCloseTimeout:    10 * time.Minute,
-		ScheduleToStartTimeout: 30 * time.Second,
-		// Heartbeat deadline so a worker crash mid-boot is detected in
-		// minutes, not the full StartToClose window.
-		HeartbeatTimeout: 2 * time.Minute,
-		RetryPolicy: &temporal.RetryPolicy{
-			MaximumAttempts:    3,
-			InitialInterval:    5 * time.Second,
-			BackoffCoefficient: 2,
-		},
-	})
-
-	signalCoordinator := func() error {
-		return workflow.ExecuteActivity(ctx, a.SignalAssistantCoordinator, activities.SignalAssistantCoordinatorInput{
-			AssistantID: input.AssistantID,
-		}).Get(ctx, nil)
-	}
-
-	var result activities.WarmAssistantRuntimeResult
-	warmErr := workflow.ExecuteActivity(ctx, a.WarmAssistantRuntime, activities.WarmAssistantRuntimeInput{
-		AssistantID: input.AssistantID,
-	}).Get(ctx, &result)
-
-	// A failed kick must not abort before the expiry below when a runtime
-	// was booted — nothing else would stop the VM. Hold the error and
-	// surface it at the end.
-	sigErr := signalCoordinator()
-	if warmErr != nil {
-		return warmErr
-	}
-	if !result.Booted {
-		return sigErr
-	}
-
-	if err := workflow.NewTimer(ctx, time.Duration(result.WarmTTLSeconds)*time.Second).Get(ctx, nil); err != nil {
-		return err
-	}
-	var expire activities.ExpireAssistantThreadRuntimeResult
-	if err := workflow.ExecuteActivity(ctx, a.ExpireWarmupAssistantRuntime, activities.ExpireWarmupAssistantRuntimeInput{
-		AssistantID:    input.AssistantID,
-		ProjectID:      result.ProjectID,
-		WarmTTLSeconds: result.WarmTTLSeconds,
-	}).Get(ctx, &expire); err != nil {
-		return err
-	}
-	// Kick the coordinator on both outcomes: a stop freed the assistant's
-	// runtime slot, and a revert (a turn slipped in — its thread workflow
-	// owns the lifecycle now) still left admit skipping any threads that
-	// were enqueued while the row sat in `expiring`.
-	if err := signalCoordinator(); err != nil {
-		return err
-	}
-	return sigErr
-}
-
 func assistantCoordinatorWorkflowID(assistantID uuid.UUID) string {
 	return "v1:assistant-coordinator:" + assistantID.String()
 }
 
 func assistantThreadWorkflowID(threadID uuid.UUID) string {
 	return "v1:assistant-thread:" + threadID.String()
-}
-
-func assistantRuntimeWarmupWorkflowID(assistantID uuid.UUID) string {
-	return "v1:assistant-runtime-warmup:" + assistantID.String()
 }
 
 type AssistantWorkflowSignaler struct {
@@ -399,27 +317,6 @@ func (s *AssistantWorkflowSignaler) SignalCoordinator(ctx context.Context, assis
 	)
 	if err != nil {
 		return fmt.Errorf("signal-with-start assistant coordinator workflow: %w", err)
-	}
-	return nil
-}
-
-func (s *AssistantWorkflowSignaler) StartRuntimeWarmup(ctx context.Context, assistantID uuid.UUID) error {
-	_, err := s.TemporalEnv.Client().ExecuteWorkflow(
-		ctx,
-		client.StartWorkflowOptions{
-			ID:        assistantRuntimeWarmupWorkflowID(assistantID),
-			TaskQueue: string(s.TemporalEnv.Queue()),
-			// Coalesce concurrent starts onto the running warmup; allow a
-			// fresh run after a prior one completed (e.g. managed assistant
-			// disabled and re-enabled).
-			WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-			WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
-		},
-		AssistantRuntimeWarmupWorkflow,
-		AssistantRuntimeWarmupWorkflowInput{AssistantID: assistantID.String()},
-	)
-	if err != nil {
-		return fmt.Errorf("start assistant runtime warmup workflow: %w", err)
 	}
 	return nil
 }

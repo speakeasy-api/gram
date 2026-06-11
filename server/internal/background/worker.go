@@ -315,8 +315,6 @@ func NewTemporalWorker(
 	// Assistant activities
 	temporalWorker.RegisterActivity(activities.AdmitAssistantThreads)
 	temporalWorker.RegisterActivity(activities.ProcessAssistantThread)
-	temporalWorker.RegisterActivity(activities.WarmAssistantRuntime)
-	temporalWorker.RegisterActivity(activities.ExpireWarmupAssistantRuntime)
 	temporalWorker.RegisterActivity(activities.ExpireAssistantThreadRuntime)
 	temporalWorker.RegisterActivity(activities.ReapStuckAssistantRuntimes)
 	temporalWorker.RegisterActivity(activities.ReapInactiveAssistantRuntimes)
@@ -372,7 +370,6 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(RiskExclusionReconcileWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantThreadWorkflow)
-	temporalWorker.RegisterWorkflow(AssistantRuntimeWarmupWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantReaperWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantRuntimeJanitorWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantMemoriesReaperWorkflow)

@@ -54,26 +54,6 @@ type ExpireAssistantThreadRuntimeResult struct {
 	RemainingSeconds int
 }
 
-type WarmAssistantRuntimeInput struct {
-	AssistantID string
-}
-
-// WarmAssistantRuntimeResult mirrors assistants.WarmAssistantRuntimeResult.
-// Booted=true means the workflow owns the warm timer and must expire the
-// runtime after WarmTTLSeconds — a warmup-booted runtime that never receives
-// a turn has no thread workflow to stop it.
-type WarmAssistantRuntimeResult struct {
-	Booted         bool
-	ProjectID      string
-	WarmTTLSeconds int
-}
-
-type ExpireWarmupAssistantRuntimeInput struct {
-	AssistantID    string
-	ProjectID      string
-	WarmTTLSeconds int
-}
-
 type SignalAssistantCoordinatorInput struct {
 	AssistantID string
 }
@@ -92,14 +72,6 @@ type ProcessAssistantThread struct {
 }
 
 type ExpireAssistantThreadRuntime struct {
-	core *assistants.ServiceCore
-}
-
-type WarmAssistantRuntime struct {
-	core *assistants.ServiceCore
-}
-
-type ExpireWarmupAssistantRuntime struct {
 	core *assistants.ServiceCore
 }
 
@@ -131,14 +103,6 @@ func NewProcessAssistantThread(core *assistants.ServiceCore) *ProcessAssistantTh
 
 func NewExpireAssistantThreadRuntime(core *assistants.ServiceCore) *ExpireAssistantThreadRuntime {
 	return &ExpireAssistantThreadRuntime{core: core}
-}
-
-func NewWarmAssistantRuntime(core *assistants.ServiceCore) *WarmAssistantRuntime {
-	return &WarmAssistantRuntime{core: core}
-}
-
-func NewExpireWarmupAssistantRuntime(core *assistants.ServiceCore) *ExpireWarmupAssistantRuntime {
-	return &ExpireWarmupAssistantRuntime{core: core}
 }
 
 func NewReapStuckAssistantRuntimes(core *assistants.ServiceCore) *ReapStuckAssistantRuntimes {
@@ -224,49 +188,6 @@ func (a *ProcessAssistantThread) Do(ctx context.Context, input ProcessAssistantT
 		out.WarmUntil = result.WarmUntil.UTC().Format(time.RFC3339Nano)
 	}
 	return out, nil
-}
-
-func (a *WarmAssistantRuntime) Do(ctx context.Context, input WarmAssistantRuntimeInput) (*WarmAssistantRuntimeResult, error) {
-	assistantID, err := uuid.Parse(input.AssistantID)
-	if err != nil {
-		return nil, fmt.Errorf("parse assistant id: %w", err)
-	}
-
-	stopHeartbeat := startActivityHeartbeat(ctx)
-	defer stopHeartbeat()
-
-	result, err := a.core.WarmAssistantRuntime(ctx, assistantID)
-	if err != nil {
-		return nil, fmt.Errorf("warm assistant runtime: %w", err)
-	}
-	out := &WarmAssistantRuntimeResult{
-		Booted:         result.Booted,
-		ProjectID:      "",
-		WarmTTLSeconds: result.WarmTTLSeconds,
-	}
-	if result.Booted {
-		out.ProjectID = result.ProjectID.String()
-	}
-	return out, nil
-}
-
-func (a *ExpireWarmupAssistantRuntime) Do(ctx context.Context, input ExpireWarmupAssistantRuntimeInput) (*ExpireAssistantThreadRuntimeResult, error) {
-	assistantID, err := uuid.Parse(input.AssistantID)
-	if err != nil {
-		return nil, fmt.Errorf("parse assistant id: %w", err)
-	}
-	projectID, err := uuid.Parse(input.ProjectID)
-	if err != nil {
-		return nil, fmt.Errorf("parse project id: %w", err)
-	}
-	result, err := a.core.ExpireWarmupRuntime(ctx, projectID, assistantID, input.WarmTTLSeconds)
-	if err != nil {
-		return nil, fmt.Errorf("expire warmup assistant runtime: %w", err)
-	}
-	return &ExpireAssistantThreadRuntimeResult{
-		Stopped:          result.Stopped,
-		RemainingSeconds: result.RemainingSeconds,
-	}, nil
 }
 
 func (a *ReapStuckAssistantRuntimes) Do(ctx context.Context) (*ReapStuckAssistantRuntimesResult, error) {
