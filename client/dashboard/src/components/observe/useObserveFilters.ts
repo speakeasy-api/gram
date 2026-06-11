@@ -21,6 +21,7 @@ import { useQuery } from "@tanstack/react-query";
 
 const SERVER_FILTER_PATH = "gram.tool_call.source";
 const USER_EMAIL_FILTER_PATH = "user.email";
+const HOOK_SOURCE_FILTER_PATH = "gram.hook.source";
 
 // Sentinel labels the hooks summary substitutes for empty values. They are
 // display-only ("local" for a missing server, "Unknown" for a missing email)
@@ -62,6 +63,7 @@ function buildActiveFilters(searchParams: URLSearchParams): FilterChip[] {
   return [
     parseFilterParam(searchParams.get("server"), SERVER_FILTER_PATH),
     parseFilterParam(searchParams.get("user"), USER_EMAIL_FILTER_PATH),
+    parseFilterParam(searchParams.get("source"), HOOK_SOURCE_FILTER_PATH),
   ].filter((filter): filter is FilterChip => filter !== null);
 }
 
@@ -212,6 +214,21 @@ function useObserveFiltersImpl() {
     return [...new Set([...known, ...selected])];
   }, [filterOptionsSummary, activeFilters]);
 
+  // The hooks summary breakdown carries hook_source ("claude-code", "cursor",
+  // "codex", ...) per (user, server, source, tool) row. Collapse it to the
+  // distinct set of agents seen in the window so the dropdown only offers
+  // sources that actually have data, mirroring serverOptions/userEmailOptions.
+  const hookSourceOptions = useMemo(() => {
+    const selected = activeFilters
+      .filter((f) => f.path === HOOK_SOURCE_FILTER_PATH)
+      .flatMap((f) => f.filters)
+      .filter(Boolean);
+    const known = (filterOptionsSummary?.breakdown ?? [])
+      .map((b) => b.hookSource)
+      .filter(Boolean);
+    return [...new Set([...known, ...selected])];
+  }, [filterOptionsSummary, activeFilters]);
+
   const handleUserEmailSelectionChange = useCallback(
     (values: string[]) => {
       setSearchParams(
@@ -239,6 +256,24 @@ function useObserveFiltersImpl() {
             next.set("server", values.join(","));
           } else {
             next.delete("server");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  const handleHookSourceSelectionChange = useCallback(
+    (values: string[]) => {
+      setSearchParams(
+        (urlPrev) => {
+          const next = new URLSearchParams(urlPrev);
+          if (values.length > 0) {
+            next.set("source", values.join(","));
+          } else {
+            next.delete("source");
           }
           return next;
         },
@@ -278,6 +313,8 @@ function useObserveFiltersImpl() {
             next.set("server", merged.filters.join(","));
           } else if (chip.path === USER_EMAIL_FILTER_PATH) {
             next.set("user", merged.filters.join(","));
+          } else if (chip.path === HOOK_SOURCE_FILTER_PATH) {
+            next.set("source", merged.filters.join(","));
           }
           return next;
         },
@@ -332,6 +369,8 @@ function useObserveFiltersImpl() {
     handleServerSelectionChange,
     userEmailOptions,
     handleUserEmailSelectionChange,
+    hookSourceOptions,
+    handleHookSourceSelectionChange,
     addFilter,
     handleHookTypesChange,
     setDateRangeParam,
