@@ -290,7 +290,7 @@ export function InsightsEmployeesContent(): JSX.Element {
     to: Date;
   } | null>(null);
   const [customRangeLabel, setCustomRangeLabel] = useState<string | null>(null);
-  const [filterDimension, setFilterDimension] =
+  const [rawFilterDimension, setFilterDimension] =
     useState<EmployeeFilterDimension>("all");
   const [selectedFilterValue, setSelectedFilterValue] = useState<string | null>(
     null,
@@ -301,6 +301,13 @@ export function InsightsEmployeesContent(): JSX.Element {
       ? "unattributed"
       : "employees";
   const isUnattributedView = view === "unattributed";
+  // Unknown users have no role, so the role dimension doesn't apply there.
+  // Derived (rather than reset in the view-change handler) so it also holds
+  // when the view changes through the URL, e.g. back/forward navigation.
+  const filterDimension: EmployeeFilterDimension =
+    isUnattributedView && rawFilterDimension === "role"
+      ? "all"
+      : rawFilterDimension;
   const handleViewChange = useCallback(
     (next: EmployeeView) => {
       setSearchParams((prev) => {
@@ -312,10 +319,6 @@ export function InsightsEmployeesContent(): JSX.Element {
         }
         return params;
       });
-      // Unknown users have no role, so the role dimension doesn't apply there.
-      if (next === "unattributed") {
-        setFilterDimension((prev) => (prev === "role" ? "all" : prev));
-      }
       // The selected user/role may not exist in the other view.
       setSelectedFilterValue(null);
     },
