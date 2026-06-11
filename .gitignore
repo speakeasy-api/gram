@@ -1,6 +1,7 @@
 *.tmp-*
 *.log
 mise.local.toml
+mise.local.lock
 mise.*.local.toml
 flags.local.csv
 *.tsbuildinfo

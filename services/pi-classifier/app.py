@@ -21,9 +21,17 @@ from optimum.onnxruntime import ORTModelForSequenceClassification
 from pydantic import BaseModel, Field, field_validator
 from transformers import AutoTokenizer
 
-MODEL_REPO = os.environ.get("MODEL_REPO", "protectai/deberta-v3-base-prompt-injection-v2")
-MODEL_REVISION = os.environ.get("MODEL_REVISION", "e6535ca4ce3ba852083e75ec585d7c8aeb4be4c5")
-HF_LOCAL_FILES_ONLY = os.environ.get("HF_LOCAL_FILES_ONLY", "").lower() in {"1", "true", "yes"}
+MODEL_REPO = os.environ.get(
+    "MODEL_REPO", "protectai/deberta-v3-base-prompt-injection-v2"
+)
+MODEL_REVISION = os.environ.get(
+    "MODEL_REVISION", "e6535ca4ce3ba852083e75ec585d7c8aeb4be4c5"
+)
+HF_LOCAL_FILES_ONLY = os.environ.get("HF_LOCAL_FILES_ONLY", "").lower() in {
+    "1",
+    "true",
+    "yes",
+}
 MAX_LENGTH = int(os.environ.get("MAX_LENGTH", "512"))
 MAX_BATCH = int(os.environ.get("MAX_BATCH", "64"))
 MAX_BODY_BYTES = int(os.environ.get("MAX_BODY_BYTES", str(2 * 1024 * 1024)))
@@ -71,22 +79,35 @@ async def lifespan(_app: FastAPI):
     id2label = {int(k): v for k, v in _State.model.config.id2label.items()}
     inj = next((i for i, lbl in id2label.items() if lbl.upper() == "INJECTION"), 1)
     _State.inj_idx = inj
-    log.info(f"model loaded in {time.perf_counter() - t0:.2f}s id2label={id2label} inj_idx={inj}")
+    log.info(
+        f"model loaded in {time.perf_counter() - t0:.2f}s id2label={id2label} inj_idx={inj}"
+    )
     yield
 
 
-app = FastAPI(title="gram-pi-classifier", version="1", description=API_DESCRIPTION, lifespan=lifespan)
+app = FastAPI(
+    title="gram-pi-classifier",
+    version="1",
+    description=API_DESCRIPTION,
+    lifespan=lifespan,
+)
 
 
 @app.middleware("http")
 async def _enforce_body_limit(request: Request, call_next):
     cl = request.headers.get("content-length")
     if cl is not None and cl.isdigit() and int(cl) > MAX_BODY_BYTES:
-        return JSONResponse({"detail": f"body too large (limit {MAX_BODY_BYTES} bytes)"}, status_code=413)
+        return JSONResponse(
+            {"detail": f"body too large (limit {MAX_BODY_BYTES} bytes)"},
+            status_code=413,
+        )
     if request.method == "POST" and cl is None:
         body = await request.body()
         if len(body) > MAX_BODY_BYTES:
-            return JSONResponse({"detail": f"body too large (limit {MAX_BODY_BYTES} bytes)"}, status_code=413)
+            return JSONResponse(
+                {"detail": f"body too large (limit {MAX_BODY_BYTES} bytes)"},
+                status_code=413,
+            )
 
         async def receive():
             return {"type": "http.request", "body": body, "more_body": False}

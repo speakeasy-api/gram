@@ -39,6 +39,7 @@ func newApp() *cli.App {
 		},
 		Commands: []*cli.Command{
 			newDemoCommand(),
+			newPresidioSubmitCommand(),
 			newGenCCCommand(),
 			newVersionCommand(),
 		},

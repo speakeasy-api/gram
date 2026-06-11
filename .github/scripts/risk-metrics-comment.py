@@ -32,7 +32,11 @@ def main() -> int:
         return 2
 
     pr = load_json(Path(sys.argv[1]))
-    baseline = load_json(Path(sys.argv[2])) if len(sys.argv) > 2 and Path(sys.argv[2]).is_file() else None
+    baseline = (
+        load_json(Path(sys.argv[2]))
+        if len(sys.argv) > 2 and Path(sys.argv[2]).is_file()
+        else None
+    )
     print(render(pr, baseline))
     return 0
 
@@ -55,7 +59,9 @@ def render(pr: dict[str, Any], baseline: dict[str, Any] | None) -> str:
         "",
     ]
 
-    corpus = f"Corpus: {summary['total']} cases ({malicious} malicious / {benign} benign)"
+    corpus = (
+        f"Corpus: {summary['total']} cases ({malicious} malicious / {benign} benign)"
+    )
     if baseline is not None:
         corpus_delta = summary["total"] - int(baseline["summary"]["total"])
         if corpus_delta:
@@ -65,7 +71,9 @@ def render(pr: dict[str, Any], baseline: dict[str, Any] | None) -> str:
     pr_sha = short_sha(str(pr.get("git_sha", "")))
     pr_ts = pr.get("timestamp", "-")
     if baseline is not None:
-        lines.append(f"Baseline: `{short_sha(str(baseline.get('git_sha', '')))}` (main) · This PR: `{pr_sha}` · {pr_ts}")
+        lines.append(
+            f"Baseline: `{short_sha(str(baseline.get('git_sha', '')))}` (main) · This PR: `{pr_sha}` · {pr_ts}"
+        )
     else:
         lines.append(f"This PR: `{pr_sha}` · {pr_ts}")
     lines.append("")
@@ -81,7 +89,11 @@ def render(pr: dict[str, Any], baseline: dict[str, Any] | None) -> str:
             lines.extend([f"L1 opt-in was not evaluated in this run: {reason}.", ""])
         elif l0 is not None and not l0.skipped:
             lines.extend(render_l1_delta(l0, l1))
-            lines.extend(render_source_delta("False-Positive Regressions By Source", l0, l1, "fp"))
+            lines.extend(
+                render_source_delta(
+                    "False-Positive Regressions By Source", l0, l1, "fp"
+                )
+            )
             lines.extend(render_source_delta("Recall Gains By Source", l0, l1, "tp"))
             lines.append(
                 f"Samples in artifact: {len(l1.new_false_positives)} new false positives, "
@@ -100,16 +112,21 @@ def render(pr: dict[str, Any], baseline: dict[str, Any] | None) -> str:
 
 def render_main_delta(pr: dict[str, Any], baseline: dict[str, Any] | None) -> list[str]:
     if baseline is None:
-        return ["_No main baseline artifact found yet; this comment shows the current run only._", ""]
+        return [
+            "_No main baseline artifact found yet; this comment shows the current run only._",
+            "",
+        ]
 
     pr_mode = primary_mode(pr["summary"])
     base_mode = primary_mode(baseline["summary"])
     deltas = {
         "tp": pr_mode.counts.get("tp", 0) - base_mode.counts.get("tp", 0),
         "fp": pr_mode.counts.get("fp", 0) - base_mode.counts.get("fp", 0),
-        "recall": pr_mode.overall.get("recall", 0.0) - base_mode.overall.get("recall", 0.0),
+        "recall": pr_mode.overall.get("recall", 0.0)
+        - base_mode.overall.get("recall", 0.0),
         "f1": pr_mode.overall.get("f1", 0.0) - base_mode.overall.get("f1", 0.0),
-        "fp_rate": pr_mode.overall.get("fp_rate", 0.0) - base_mode.overall.get("fp_rate", 0.0),
+        "fp_rate": pr_mode.overall.get("fp_rate", 0.0)
+        - base_mode.overall.get("fp_rate", 0.0),
     }
     if not any(deltas.values()):
         return ["Change vs main: none for the primary operational mode.", ""]
@@ -139,7 +156,9 @@ def render_modes(modes: list[Mode]) -> list[str]:
     ]
     for mode in modes:
         if mode.skipped:
-            lines.append(f"| {display_mode_name(mode.name)} | skipped | - | - | - | - | - | - | - | - |")
+            lines.append(
+                f"| {display_mode_name(mode.name)} | skipped | - | - | - | - | - | - | - | - |"
+            )
             continue
 
         lines.append(
@@ -246,7 +265,9 @@ def primary_mode(summary: dict[str, Any]) -> Mode:
     )
 
 
-def mode_by_name(modes: list[Mode], name: str, require_active: bool = False) -> Mode | None:
+def mode_by_name(
+    modes: list[Mode], name: str, require_active: bool = False
+) -> Mode | None:
     for mode in modes:
         if mode.name == name and (not require_active or not mode.skipped):
             return mode

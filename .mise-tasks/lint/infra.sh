@@ -11,3 +11,6 @@ against="${usage_against:?--against is required}"
 
 buf lint
 buf breaking --against "${against}"
+
+uv run --directory infra --extra dev pyrefly check --summarize-errors --min-severity warn
+uv run --directory infra --extra dev ty check

@@ -39,6 +39,10 @@ procs:
   streams:
     cmd: ["mise", "run", "start:streams"]
     stop: SIGTERM
+  presidio-scanner:
+    cmd: ["mise", "run", "start:presidio-scanner"]
+    stop:
+      send-keys: ["<C-c>"]
   dashboard:
     cmd: ["mise", "run", "start:dashboard"]
     stop:

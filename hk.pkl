@@ -14,6 +14,9 @@ local oxfmtIgnorePatterns: List<String> =
 local linters = new Mapping<String, Step> {
   ["pkleval"] = Builtins.pkl
   ["pklfmt"] = Builtins.pkl_format
+  ["ruff-format"] = (Builtins.ruff_format) {
+    exclude = List("**/vendor/**", "**/node_modules/**", "**/dist/**", "**/*_pb2.*")
+  }
   ["gomodtidy"] {
     glob = List("**/go.mod", "**/go.sum", "**/*.go")
     fix = "go mod tidy"
