@@ -4,7 +4,6 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { LogsTools } from "@/components/observe/LogsTools";
 import { ObserveTabNav } from "@/components/observe/ObserveTabNav";
-import RiskEvents from "@/pages/security/RiskEvents";
 
 export function LogsRoot(): JSX.Element {
   return (
@@ -35,14 +34,6 @@ export function LogsMCPPage(): JSX.Element {
   return (
     <RequireScope scope="project:read" level="page">
       <LogsMCPContent />
-    </RequireScope>
-  );
-}
-
-export function LogsRiskEventsPage(): JSX.Element {
-  return (
-    <RequireScope scope="org:admin" level="page">
-      <RiskEvents />
     </RequireScope>
   );
 }
