@@ -668,7 +668,11 @@ func (f *FlyRuntimeBackend) RecycleImage(ctx context.Context, runtime assistantR
 		return skipped, nil
 	case err != nil:
 		return skipped, fmt.Errorf("load assistant fly runtime machine for recycle: %w", err)
-	case machine == nil || !machine.IsActive():
+	case machine == nil || machine.State != fly.MachineStateStarted:
+		// Only running machines are recycled. A stopped machine is either
+		// mid-expiry (the warm timer raced this sweep and Stop already
+		// landed) or cold — starting it here would resurrect a runtime the
+		// row no longer tracks. Both pick the new image up through Ensure.
 		return skipped, nil
 	}
 

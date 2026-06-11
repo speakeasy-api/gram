@@ -2541,6 +2541,40 @@ func (q *Queries) TouchProcessingLease(ctx context.Context, arg TouchProcessingL
 	return err
 }
 
+const updateActiveAssistantRuntimeMetadata = `-- name: UpdateActiveAssistantRuntimeMetadata :execrows
+UPDATE assistant_runtimes
+SET
+  backend_metadata_json = $1,
+  updated_at = clock_timestamp()
+WHERE id = $2
+  AND project_id = $3
+  AND state = $4
+  AND deleted IS FALSE
+`
+
+type UpdateActiveAssistantRuntimeMetadataParams struct {
+	BackendMetadataJson []byte
+	RuntimeID           uuid.UUID
+	ProjectID           uuid.UUID
+	ActiveState         string
+}
+
+// Persists post-recycle backend metadata only while the row is still live.
+// Zero rows affected means the warm timer expired the runtime mid-recycle;
+// the caller must undo the machine restart instead of recording it.
+func (q *Queries) UpdateActiveAssistantRuntimeMetadata(ctx context.Context, arg UpdateActiveAssistantRuntimeMetadataParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateActiveAssistantRuntimeMetadata,
+		arg.BackendMetadataJson,
+		arg.RuntimeID,
+		arg.ProjectID,
+		arg.ActiveState,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const updateAssistant = `-- name: UpdateAssistant :one
 UPDATE assistants
 SET

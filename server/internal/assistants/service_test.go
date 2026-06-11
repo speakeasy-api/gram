@@ -1401,6 +1401,52 @@ func TestServiceCoreRecycleActiveRuntimeImagesSweepsOnlyActiveV2Rows(t *testing.
 	require.EqualValues(t, 1, recycleCalls.Load())
 }
 
+func TestServiceCoreRecycleActiveRuntimeImagesUndoesRecycleWhenRowExpiresMidSweep(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "recycle_runtime_images_raced")
+	require.NoError(t, err)
+
+	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
+	originalMetadata := `{"app_name":"gram-asst-raced","machine_id":"m-1"}`
+	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeStateActive, originalMetadata)
+
+	// The fake recycles "successfully" but expires the row first, simulating
+	// the warm timer winning the race while the machine update was in flight.
+	stopCalls := &atomic.Int64{}
+	backend := testRuntimeBackend{
+		backend:   runtimeBackendFlyIO,
+		stopCalls: stopCalls,
+		recycleFn: func(ctx context.Context, record assistantRuntimeRecord) (RuntimeBackendRecycleResult, error) {
+			require.NoError(t, assistantsrepo.New(conn).StopAssistantRuntime(ctx, assistantsrepo.StopAssistantRuntimeParams{
+				State:         runtimeStateStopped,
+				ProjectID:     record.ProjectID,
+				RuntimeID:     record.ID,
+				StartingState: runtimeStateStarting,
+				ActiveState:   runtimeStateActive,
+				ExpiringState: runtimeStateExpiring,
+			}))
+			return RuntimeBackendRecycleResult{
+				Recycled:            true,
+				BackendMetadataJSON: []byte(`{"app_name":"gram-asst-raced","machine_id":"m-1","last_boot_id":"boot-2"}`),
+			}, nil
+		},
+	}
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
+
+	result, err := core.RecycleActiveRuntimeImages(t.Context(), RecycleAssistantRuntimeImagesParams{OnRowProcessed: nil})
+	require.NoError(t, err)
+	require.Equal(t, 0, result.Recycled)
+	require.Equal(t, 1, result.Skipped)
+	require.Equal(t, 0, result.Errors)
+	// The restart was undone and the dead row's metadata left alone.
+	require.EqualValues(t, 1, stopCalls.Load())
+	runtime, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{ID: runtimeID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.JSONEq(t, originalMetadata, string(runtime.BackendMetadataJson))
+	require.Equal(t, runtimeStateStopped, runtime.State)
+}
+
 func TestServiceCoreRecycleActiveRuntimeImagesCountsBackendErrors(t *testing.T) {
 	t.Parallel()
 
@@ -1634,6 +1680,10 @@ type testRuntimeBackend struct {
 	recycleResult RuntimeBackendRecycleResult
 	recycleErr    error
 	recycleCalls  *atomic.Int64
+	// recycleFn, when set, replaces the canned recycleResult/recycleErr so a
+	// test can mutate DB state mid-sweep (e.g. expire the row) before the
+	// service persists the outcome.
+	recycleFn func(context.Context, assistantRuntimeRecord) (RuntimeBackendRecycleResult, error)
 }
 
 func (t testRuntimeBackend) Backend() string {
@@ -1659,9 +1709,12 @@ func (t testRuntimeBackend) ImageRef() string {
 	return t.imageRef
 }
 
-func (t testRuntimeBackend) RecycleImage(context.Context, assistantRuntimeRecord) (RuntimeBackendRecycleResult, error) {
+func (t testRuntimeBackend) RecycleImage(ctx context.Context, record assistantRuntimeRecord) (RuntimeBackendRecycleResult, error) {
 	if t.recycleCalls != nil {
 		t.recycleCalls.Add(1)
+	}
+	if t.recycleFn != nil {
+		return t.recycleFn(ctx, record)
 	}
 	if t.recycleErr != nil {
 		return RuntimeBackendRecycleResult{Recycled: false, BackendMetadataJSON: nil}, t.recycleErr

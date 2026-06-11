@@ -792,6 +792,19 @@ WHERE r.backend_metadata_json <> '{}'::jsonb
 ORDER BY r.updated_at ASC
 LIMIT @limit_count;
 
+-- name: UpdateActiveAssistantRuntimeMetadata :execrows
+-- Persists post-recycle backend metadata only while the row is still live.
+-- Zero rows affected means the warm timer expired the runtime mid-recycle;
+-- the caller must undo the machine restart instead of recording it.
+UPDATE assistant_runtimes
+SET
+  backend_metadata_json = @backend_metadata_json,
+  updated_at = clock_timestamp()
+WHERE id = @runtime_id
+  AND project_id = @project_id
+  AND state = @active_state
+  AND deleted IS FALSE;
+
 -- name: ListActiveAssistantRuntimesForImageRecycle :many
 -- Returns live v2 runtime rows that carry backend metadata so a deploy-time
 -- sweep can roll their machines onto the current runtime image. Only `active`

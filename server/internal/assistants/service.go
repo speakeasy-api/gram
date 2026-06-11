@@ -1118,7 +1118,7 @@ func (s *ServiceCore) RecycleActiveRuntimeImages(ctx context.Context, params Rec
 
 	result := RecycleAssistantRuntimeImagesResult{Recycled: 0, Skipped: 0, Errors: 0}
 	for _, row := range rows {
-		recycled, err := s.runtime.RecycleImage(ctx, assistantRuntimeRecord{
+		record := assistantRuntimeRecord{
 			ID:                  row.ID,
 			AssistantThreadID:   row.AssistantThreadID,
 			AssistantID:         row.AssistantID,
@@ -1127,7 +1127,8 @@ func (s *ServiceCore) RecycleActiveRuntimeImages(ctx context.Context, params Rec
 			BackendMetadataJSON: row.BackendMetadataJson,
 			State:               row.State,
 			WarmUntil:           row.WarmUntil,
-		})
+		}
+		recycled, err := s.runtime.RecycleImage(ctx, record)
 		switch {
 		case err != nil:
 			s.logger.WarnContext(ctx, "assistant runtime image recycle failed",
@@ -1137,21 +1138,38 @@ func (s *ServiceCore) RecycleActiveRuntimeImages(ctx context.Context, params Rec
 			)
 			result.Errors++
 		case recycled.Recycled:
-			// A persist failure only costs the next Ensure a cold-start
-			// health budget (LastBootID mismatch) — the machine itself is
-			// already on the new image, so still count the recycle.
-			if err := queries.UpdateAssistantRuntimeMetadata(ctx, assistantrepo.UpdateAssistantRuntimeMetadataParams{
+			affected, err := queries.UpdateActiveAssistantRuntimeMetadata(ctx, assistantrepo.UpdateActiveAssistantRuntimeMetadataParams{
 				BackendMetadataJson: recycled.BackendMetadataJSON,
 				RuntimeID:           row.ID,
 				ProjectID:           row.ProjectID,
-			}); err != nil {
+				ActiveState:         runtimeStateActive,
+			})
+			switch {
+			case err != nil:
+				// A persist failure only costs the next Ensure a cold-start
+				// health budget (LastBootID mismatch) — the machine itself
+				// is already on the new image, so still count the recycle.
 				s.logger.WarnContext(ctx, "persist recycled assistant runtime metadata failed",
 					attr.SlogAssistantID(row.AssistantID.String()),
 					attr.SlogProjectID(row.ProjectID.String()),
 					attr.SlogError(err),
 				)
+				result.Recycled++
+			case affected == 0:
+				// The warm timer expired the row mid-recycle and Stop already
+				// ran against the pre-recycle machine. Undo the restart so the
+				// sweep never leaves a machine running that no live row tracks.
+				if stopErr := s.runtime.Stop(ctx, record); stopErr != nil {
+					s.logger.WarnContext(ctx, "stop assistant runtime after raced image recycle failed",
+						attr.SlogAssistantID(row.AssistantID.String()),
+						attr.SlogProjectID(row.ProjectID.String()),
+						attr.SlogError(stopErr),
+					)
+				}
+				result.Skipped++
+			default:
+				result.Recycled++
 			}
-			result.Recycled++
 		default:
 			result.Skipped++
 		}
