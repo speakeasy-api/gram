@@ -1572,6 +1572,10 @@ func (s *ServiceCore) EnsureWarmupThread(ctx context.Context, assistantID uuid.U
 // still-starting row owned by that thread is touched — anything else means a
 // workflow or real traffic took over.
 func (s *ServiceCore) ReleaseWarmupRuntime(ctx context.Context, projectID, assistantID, warmupThreadID uuid.UUID) {
+	// The signal often fails precisely because ctx was canceled or timed
+	// out; detach so the cleanup's own DB writes can still land.
+	ctx = context.WithoutCancel(ctx)
+
 	row, err := assistantrepo.New(s.db).GetAssistantRuntimeV2(ctx, assistantrepo.GetAssistantRuntimeV2Params{
 		ProjectID:   projectID,
 		AssistantID: assistantID,
@@ -1579,7 +1583,18 @@ func (s *ServiceCore) ReleaseWarmupRuntime(ctx context.Context, projectID, assis
 	if err != nil || row.AssistantThreadID != warmupThreadID || row.State != runtimeStateStarting {
 		return
 	}
-	if err := s.stopRuntimeRecord(ctx, projectID, row.ID, runtimeStateFailed); err != nil {
+	// Re-check `starting` inside the UPDATE (every state slot pinned to it):
+	// if the signal was actually delivered and the workflow advanced the row
+	// between the read above and this write, no-op instead of tearing down a
+	// live runtime.
+	if err := assistantrepo.New(s.db).StopAssistantRuntime(ctx, assistantrepo.StopAssistantRuntimeParams{
+		State:         runtimeStateFailed,
+		ProjectID:     projectID,
+		RuntimeID:     row.ID,
+		StartingState: runtimeStateStarting,
+		ActiveState:   runtimeStateStarting,
+		ExpiringState: runtimeStateStarting,
+	}); err != nil {
 		s.logger.WarnContext(ctx, "release warmup runtime reservation failed",
 			attr.SlogAssistantID(assistantID.String()),
 			attr.SlogError(err),
