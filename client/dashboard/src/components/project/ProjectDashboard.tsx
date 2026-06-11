@@ -456,7 +456,7 @@ export function ProjectDashboard(): JSX.Element {
                           })
                         }
                       />
-                      <ViewAllLink to={routes.insights.employees.href()} />
+                      <ViewAllLink to={routes.employees.href()} />
                     </CardActions>
                   }
                 >

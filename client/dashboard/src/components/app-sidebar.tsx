@@ -106,6 +106,8 @@ export function AppSidebar({
   ].some((r) => r.active);
 
   const observeActive = [
+    routes.employees,
+    routes.costs,
     routes.insights,
     routes.agentSessions,
     routes.logs,
@@ -242,8 +244,16 @@ export function AppSidebar({
               <CollapsibleNavGroup
                 label="Observe"
                 Icon={(p) => <Icon {...p} name="eye" />}
-                defaultHref={routes.insights.href()}
+                defaultHref={routes.employees.href()}
               >
+                <ScopeGatedNavItem
+                  item={routes.employees}
+                  scope={scopeFor(routes.employees)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.costs}
+                  scope={scopeFor(routes.costs)}
+                />
                 <ScopeGatedNavItem
                   item={routes.insights}
                   scope={scopeFor(routes.insights)}
