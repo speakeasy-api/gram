@@ -14,6 +14,13 @@ const (
 	// finding. The policy that produced it carries the human-meaningful prompt;
 	// the rule_id just buckets the finding by detection mechanism.
 	RuleLLMJudge = "llm_judge"
+	// DefaultJudgeModel is the OpenRouter model used when a prompt_based policy
+	// does not pin its own model (JudgeConfig.Model == ""). The judge does a
+	// single, low-stakes binary classification against a short message, so a
+	// small, cheap, fast model is the right default — this avoids inheriting the
+	// (expensive) system-wide chat default for what is a high-volume,
+	// per-message billable call. Policies can override per-policy via model_config.
+	DefaultJudgeModel = "anthropic/claude-haiku-4.5"
 )
 
 // PromptJudge evaluates a single message against a natural-language guardrail

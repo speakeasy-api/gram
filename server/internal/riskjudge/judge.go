@@ -224,13 +224,21 @@ func (j *Judge) call(ctx context.Context, in ra.JudgeInput) (matched bool, confi
 
 	userMessage := fmt.Sprintf("Policy:\n%s\n\nMessage to evaluate:\n%s", in.Prompt, in.Text)
 
+	// Empty model selects the judge default (a cheap, fast model) rather than
+	// inheriting the system-wide chat default, which is expensive for what is a
+	// high-volume per-message binary classification.
+	model := in.Config.Model
+	if model == "" {
+		model = ra.DefaultJudgeModel
+	}
+
 	callCtx, cancel := context.WithTimeout(ctx, judgeTimeout)
 	defer cancel()
 
 	response, err := j.client.GetObjectCompletion(callCtx, openrouter.ObjectCompletionRequest{
 		OrgID:          in.OrgID,
 		ProjectID:      in.ProjectID,
-		Model:          in.Config.Model,
+		Model:          model,
 		SystemPrompt:   systemPrompt,
 		Prompt:         userMessage,
 		Temperature:    &temperature,
