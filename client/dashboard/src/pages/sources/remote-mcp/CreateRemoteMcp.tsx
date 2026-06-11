@@ -78,11 +78,18 @@ function CreateRemoteMcpForm() {
     }
     try {
       const trimmedName = name.trim();
-      const { mcpServer } = await createSource.mutateAsync({
+      const { authAutoConfig, mcpServer } = await createSource.mutateAsync({
         name: trimmedName === "" ? undefined : trimmedName,
         url: url.trim(),
       });
-      toast.success("Remote MCP server added");
+      if (authAutoConfig.status === "configured") {
+        toast.success("Remote MCP server added and authentication configured");
+      } else {
+        toast.success("Remote MCP server added");
+        if (authAutoConfig.warn) {
+          toast.warning(authAutoConfig.message);
+        }
+      }
       routes.mcp.x.overview.goTo(mcpServerRouteParam(mcpServer));
     } catch (error) {
       const message =
