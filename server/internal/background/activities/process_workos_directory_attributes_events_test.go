@@ -20,6 +20,10 @@ func directoryGroupEventData(workosOrgID, workosDirectoryGroupID, name string) [
 	return []byte(`{"id":"` + workosDirectoryGroupID + `","organization_id":"` + workosOrgID + `","name":"` + name + `","raw_attributes":{"department":"Engineering"},"created_at":"2026-05-12T10:00:00Z","updated_at":"2026-05-12T10:00:00Z"}`)
 }
 
+func directoryGroupEventDataWithAttributes(workosOrgID, workosDirectoryGroupID, name string) []byte {
+	return []byte(`{"id":"` + workosDirectoryGroupID + `","organization_id":"` + workosOrgID + `","name":"` + name + `","attributes":{"department":"Engineering"},"created_at":"2026-05-12T10:00:00Z","updated_at":"2026-05-12T10:00:00Z"}`)
+}
+
 func directoryGroupMembershipEventData(workosOrgID, workosDirectoryGroupID, workosDirectoryUserID, email string) []byte {
 	return []byte(`{"group":` + string(directoryGroupEventData(workosOrgID, workosDirectoryGroupID, "Platform")) + `,"user":` + string(directoryUserEventData(workosDirectoryUserID, email)) + `}`)
 }
@@ -77,7 +81,7 @@ func TestProcessWorkOSOrganizationEvents_UpsertsDirectoryGroupAndAdvancesOrganiz
 	workosClient := workos.NewStubClient()
 	workosClient.SetEventPages([][]events.Event{{
 		{ID: "event_other_group", Event: "dsync.group.updated", CreatedAt: time.Now(), Data: directoryGroupEventData(workosOrgID, "directory_group_other", "Other")},
-		{ID: "event_group", Event: "dsync.group.updated", CreatedAt: time.Now(), Data: directoryGroupEventData(workosOrgID, groupID, "Platform")},
+		{ID: "event_group", Event: "dsync.group.updated", CreatedAt: time.Now(), Data: directoryGroupEventDataWithAttributes(workosOrgID, groupID, "Platform")},
 	}})
 
 	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient)
@@ -95,8 +99,12 @@ func TestProcessWorkOSOrganizationEvents_UpsertsDirectoryGroupAndAdvancesOrganiz
 	organizationID, name, attributes, deleted := getDirectoryGroupRow(t, ctx, conn, groupID)
 	require.Equal(t, gramOrgID, organizationID)
 	require.Equal(t, "Platform", name)
-	require.JSONEq(t, string(directoryGroupEventData(workosOrgID, groupID, "Platform")), string(attributes))
+	require.JSONEq(t, `{"department":"Engineering"}`, string(attributes))
 	require.False(t, deleted)
+
+	// Group events without an "attributes" field store an empty object.
+	_, _, otherAttributes, _ := getDirectoryGroupRow(t, ctx, conn, "directory_group_other")
+	require.JSONEq(t, `{}`, string(otherAttributes))
 
 	cursor, err := workosrepo.New(conn).GetOrganizationSyncLastEventID(ctx, workosOrgID)
 	require.NoError(t, err)
@@ -145,15 +153,17 @@ func TestProcessWorkOSOrganizationEvents_OpensAndClosesDirectoryMembership(t *te
 	require.Equal(t, "event_membership_added", res.LastEventID)
 	require.Equal(t, 1, countCurrentMemberships(t, ctx, conn, groupID, directoryUserID))
 
+	// Membership events do not upsert the embedded user/group payloads;
+	// created/updated events are the source of entity state.
 	directoryUser, err := workosrepo.New(conn).GetDirectoryUserByWorkOSID(ctx, directoryUserID)
 	require.NoError(t, err)
 	require.Equal(t, gramOrgID, directoryUser.OrganizationID)
 	require.False(t, directoryUser.UserID.Valid)
 	require.Equal(t, email, directoryUser.Email.String)
-	require.JSONEq(t, string(directoryUserEventData(directoryUserID, email)), string(directoryUser.Attributes))
+	require.JSONEq(t, `{"department":"Engineering","team":"SDK"}`, string(directoryUser.Attributes))
 
 	_, _, attributes, deleted := getDirectoryGroupRow(t, ctx, conn, groupID)
-	require.JSONEq(t, string(directoryGroupEventData(workosOrgID, groupID, "Platform")), string(attributes))
+	require.JSONEq(t, `{"id":"directory_group_membership","source":"group-event"}`, string(attributes))
 	require.False(t, deleted)
 
 	workosClient.SetEventPages([][]events.Event{{

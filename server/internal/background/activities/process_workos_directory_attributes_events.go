@@ -141,6 +141,16 @@ func unmarshalDirectoryGroupMembershipPayload(raw json.RawMessage) (workosDirect
 	return payload, nil
 }
 
+// attributesOrEmptyObject guards inserts into NOT NULL jsonb columns: WorkOS
+// event payloads may omit attribute fields entirely (group events carry no
+// "attributes" key at all).
+func attributesOrEmptyObject(raw json.RawMessage) []byte {
+	if len(raw) == 0 || string(raw) == "null" {
+		return []byte("{}")
+	}
+	return raw
+}
+
 func upsertDirectoryGroup(ctx context.Context, dbtx database.DBTX, payload workosDirectoryGroupEventPayload) error {
 	org, err := organizationsrepo.New(dbtx).GetOrganizationByWorkosID(ctx, conv.ToPGText(payload.OrganizationID))
 	if err != nil {
@@ -151,7 +161,7 @@ func upsertDirectoryGroup(ctx context.Context, dbtx database.DBTX, payload worko
 		OrganizationID:         org.ID,
 		WorkosDirectoryGroupID: payload.ID,
 		Name:                   payload.Name,
-		Attributes:             payload.Attributes,
+		Attributes:             attributesOrEmptyObject(payload.Attributes),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "upsert directory group")
 	}
@@ -183,7 +193,7 @@ func upsertDirectoryUser(ctx context.Context, dbtx database.DBTX, payload workos
 		UserID:                userID,
 		WorkosDirectoryUserID: payload.ID,
 		Email:                 conv.ToPGText(email),
-		Attributes:            payload.CustomAttributes,
+		Attributes:            attributesOrEmptyObject(payload.CustomAttributes),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "upsert directory user")
 	}

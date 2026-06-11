@@ -145,7 +145,9 @@ func TestProcessWorkOSOrganizationEvents_StoresDirectoryUserAttributes(t *testin
 	require.NoError(t, err)
 	require.Equal(t, gramOrgID, row.OrganizationID)
 	require.Equal(t, email, row.Email.String)
-	require.JSONEq(t, string(directoryUserEventDataWithOrganization(workosDirectoryUserID, workosOrgID, email)), string(row.Attributes))
+	// Only the WorkOS custom_attributes payload is persisted, not the full
+	// raw event payload.
+	require.JSONEq(t, `{"department":"Engineering","team":"SDK"}`, string(row.Attributes))
 }
 
 func TestProcessWorkOSUserEvents_CreatesUserWithExistingExternalID(t *testing.T) {
