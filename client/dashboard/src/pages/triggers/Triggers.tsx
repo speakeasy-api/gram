@@ -28,7 +28,7 @@ import {
 } from "@gram/client/react-query";
 import { TriggerInstance } from "@gram/client/models/components/triggerinstance.js";
 import { TriggerDefinition } from "@gram/client/models/components/triggerdefinition.js";
-import { TargetKind } from "@gram/client/models/components/createtriggerinstanceform.js";
+import { CreateTriggerInstanceFormTargetKind as TargetKind } from "@gram/client/models/components/createtriggerinstanceform.js";
 import { useRoutes } from "@/routes";
 import {
   Button,

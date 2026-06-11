@@ -494,7 +494,7 @@ export function ProjectDashboard(): JSX.Element {
                           })
                         }
                       />
-                      <ViewAllLink to={routes.insights.tools.href()} />
+                      <ViewAllLink to={routes.insights.href()} />
                     </CardActions>
                   }
                 >
@@ -616,7 +616,7 @@ export function ProjectDashboard(): JSX.Element {
                               })
                             }
                           />
-                          <ViewAllLink to={routes.insights.tools.href()} />
+                          <ViewAllLink to={routes.insights.href()} />
                         </CardActions>
                       }
                     >
@@ -636,7 +636,7 @@ export function ProjectDashboard(): JSX.Element {
                       tooltip="Tools ranked by the number of MCP calls they served in the selected period."
                       action={
                         <CardActions>
-                          <ViewAllLink to={routes.insights.tools.href()} />
+                          <ViewAllLink to={routes.insights.href()} />
                         </CardActions>
                       }
                     >
@@ -654,7 +654,7 @@ export function ProjectDashboard(): JSX.Element {
                       tooltip="Tools with the highest share of failed MCP calls (HTTP 4xx/5xx) in the selected period. Only tools with at least one failure are shown."
                       action={
                         <CardActions>
-                          <ViewAllLink to={routes.insights.tools.href()} />
+                          <ViewAllLink to={routes.insights.href()} />
                         </CardActions>
                       }
                     >
