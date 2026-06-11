@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useRoutes } from "@/routes";
 import { StepContainer } from "../step-container";
 import {
   type PulseMCPServer,
@@ -42,6 +43,7 @@ import {
 import { InstallInstructionsButton } from "@/pages/plugins/InstallInstructionsDialog";
 import { ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG } from "@/lib/externalMcpUserSessions";
 import { cn } from "@/lib/utils";
+import { isAutoConfigurableServer } from "./auto-configurable-servers";
 
 /** Display name of the shared plugin bundle catalog servers are added to. */
 const DEFAULT_PLUGIN_NAME = "Default";
@@ -68,6 +70,7 @@ export function DistributeServersStep({
 }: DistributeServersStepProps): JSX.Element {
   const client = useSdkClient();
   const telemetry = useTelemetry();
+  const routes = useRoutes();
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
   const [showAll, setShowAll] = useState(false);
@@ -115,7 +118,17 @@ export function DistributeServersStep({
     () => data?.pages.flatMap((page) => page.servers as PulseMCPServer[]) ?? [],
     [data],
   );
-  const visibleServers = showAll ? servers : servers.slice(0, INITIAL_VISIBLE);
+  // Onboarding only surfaces servers Gram can fully auto-configure (no-auth or
+  // OAuth with dynamic client registration). Everything else would dead-end on
+  // "OAuth setup required" or a missing API key, so we steer the user to the
+  // full catalog for those (see note below the list).
+  const autoConfigurableServers = useMemo(
+    () => servers.filter((s) => isAutoConfigurableServer(s.registrySpecifier)),
+    [servers],
+  );
+  const visibleServers = showAll
+    ? autoConfigurableServers
+    : autoConfigurableServers.slice(0, INITIAL_VISIBLE);
 
   const toggle = (key: string) => {
     setSelected((prev) => {
@@ -131,12 +144,12 @@ export function DistributeServersStep({
 
   const selectedServerObjects = useMemo(
     () =>
-      servers.filter(
+      autoConfigurableServers.filter(
         (s) =>
           selected.has(serverKey(s)) &&
           !distributedSpecifiers.has(s.registrySpecifier),
       ),
-    [servers, selected, distributedSpecifiers],
+    [autoConfigurableServers, selected, distributedSpecifiers],
   );
 
   // --- Deploy workflow (driven headlessly, no dialog) -----------------------
@@ -344,11 +357,11 @@ export function DistributeServersStep({
             <div className="flex items-center justify-center py-12">
               <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
             </div>
-          ) : servers.length === 0 ? (
+          ) : autoConfigurableServers.length === 0 ? (
             <p className="text-muted-foreground mt-3 text-sm">
               {query
-                ? `No servers match "${query}".`
-                : "No catalog servers available."}
+                ? `No auto-configurable servers match "${query}".`
+                : "No auto-configurable servers available."}
             </p>
           ) : (
             <div className="mt-3 grid grid-cols-2 gap-3">
@@ -413,7 +426,7 @@ export function DistributeServersStep({
             </div>
           )}
 
-          {!showAll && servers.length > INITIAL_VISIBLE && (
+          {!showAll && autoConfigurableServers.length > INITIAL_VISIBLE && (
             <button
               type="button"
               onClick={() => setShowAll(true)}
@@ -435,6 +448,18 @@ export function DistributeServersStep({
                 "Load more servers"
               )}
             </button>
+          )}
+
+          {!isLoading && (
+            <p className="text-muted-foreground mt-4 text-xs leading-relaxed">
+              Only servers Gram can configure automatically are shown here. More
+              servers — including those that need manual OAuth or API key setup
+              — are available in the{" "}
+              <routes.catalog.Link className="underline underline-offset-2 hover:text-foreground">
+                catalog
+              </routes.catalog.Link>
+              .
+            </p>
           )}
         </div>
       </div>
