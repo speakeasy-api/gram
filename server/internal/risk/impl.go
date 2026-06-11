@@ -65,6 +65,12 @@ type RiskExclusionReconciler interface {
 	Reconcile(ctx context.Context, projectID, exclusionID uuid.UUID) error
 }
 
+// RiskPolicyResultsCleaner asynchronously deletes risk_results rows for a
+// soft-deleted policy. Best-effort: a failed trigger is logged, not fatal.
+type RiskPolicyResultsCleaner interface {
+	Clean(ctx context.Context, projectID, policyID uuid.UUID) error
+}
+
 type Service struct {
 	tracer           trace.Tracer
 	logger           *slog.Logger
@@ -74,6 +80,7 @@ type Service struct {
 	authz            *authz.Engine
 	signaler         RiskAnalysisSignaler
 	reconciler       RiskExclusionReconciler
+	resultsCleaner   RiskPolicyResultsCleaner
 	completionClient openrouter.CompletionClient
 	shadowMCPClient  *shadowmcp.Client
 	audit            *audit.Logger
@@ -112,6 +119,7 @@ func NewObserver(
 		authz:            nil,
 		signaler:         signaler,
 		reconciler:       nil,
+		resultsCleaner:   nil,
 		completionClient: nil,
 		shadowMCPClient:  nil,
 		audit:            auditLogger,
@@ -131,6 +139,7 @@ func NewService(
 	authzEngine *authz.Engine,
 	signaler RiskAnalysisSignaler,
 	reconciler RiskExclusionReconciler,
+	resultsCleaner RiskPolicyResultsCleaner,
 	completionClient openrouter.CompletionClient,
 	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
@@ -151,6 +160,7 @@ func NewService(
 		authz:            authzEngine,
 		signaler:         signaler,
 		reconciler:       reconciler,
+		resultsCleaner:   resultsCleaner,
 		completionClient: completionClient,
 		shadowMCPClient:  shadowMCPClient,
 		audit:            auditLogger,
@@ -681,15 +691,8 @@ func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskP
 		return oops.E(oops.CodeUnexpected, err, "delete risk policy bypass requests").Log(ctx, s.logger)
 	}
 
-	if err := q.DeleteRiskResultsByPolicy(ctx, repo.DeleteRiskResultsByPolicyParams{
-		RiskPolicyID: id,
-		ProjectID:    *authCtx.ProjectID,
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "delete risk results by policy").Log(ctx, s.logger)
-	}
-
 	if err := q.DeleteRiskExclusionsByPolicy(ctx, repo.DeleteRiskExclusionsByPolicyParams{
-		RiskPolicyID: id,
+		RiskPolicyID: uuid.NullUUID{UUID: id, Valid: true},
 		ProjectID:    *authCtx.ProjectID,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete risk exclusions by policy").Log(ctx, s.logger)
@@ -715,7 +718,22 @@ func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskP
 		s.shadowMCPClient.Invalidate(ctx, *authCtx.ProjectID)
 	}
 
+	s.cleanPolicyResults(ctx, *authCtx.ProjectID, id)
+
 	return nil
+}
+
+func (s *Service) cleanPolicyResults(ctx context.Context, projectID, policyID uuid.UUID) {
+	if s.resultsCleaner == nil {
+		return
+	}
+	if err := s.resultsCleaner.Clean(ctx, projectID, policyID); err != nil {
+		s.logger.ErrorContext(ctx, "trigger risk policy results cleanup",
+			attr.SlogError(err),
+			attr.SlogProjectID(projectID.String()),
+			attr.SlogRiskPolicyID(policyID.String()),
+		)
+	}
 }
 
 const riskDefaultPageSize = 50

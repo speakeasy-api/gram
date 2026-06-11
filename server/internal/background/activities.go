@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background/activities/outbox_relay"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_exclusion"
+	risk_policy "github.com/speakeasy-api/gram/server/internal/background/activities/risk_policy"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -78,6 +79,7 @@ type Activities struct {
 	analyzeBatch                    *risk_analysis.AnalyzeBatch
 	markMessagesAnalyzed            *risk_analysis.MarkMessagesAnalyzed
 	reconcileExclusion              *risk_exclusion.Reconcile
+	cleanRiskPolicyResults          *risk_policy.Cleanup
 	admitAssistantThreads           *activities.AdmitAssistantThreads
 	processAssistantThread          *activities.ProcessAssistantThread
 	expireAssistantThreadRuntime    *activities.ExpireAssistantThreadRuntime
@@ -172,6 +174,7 @@ func NewActivities(
 		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, piScanner, shadowMCPClient, telemetryrepo.New(chConn), riskjudge.New(logger, tracerProvider, meterProvider, chatClient), features),
 		markMessagesAnalyzed:            risk_analysis.NewMarkMessagesAnalyzed(logger, tracerProvider, db),
 		reconcileExclusion:              risk_exclusion.NewReconcile(logger, tracerProvider, db),
+		cleanRiskPolicyResults:          risk_policy.NewCleanup(logger, tracerProvider, db),
 		admitAssistantThreads:           activities.NewAdmitAssistantThreads(assistantsCore),
 		processAssistantThread:          activities.NewProcessAssistantThread(assistantsCore),
 		expireAssistantThreadRuntime:    activities.NewExpireAssistantThreadRuntime(assistantsCore),
@@ -372,6 +375,13 @@ func (a *Activities) MarkMessagesAnalyzed(ctx context.Context, input risk_analys
 func (a *Activities) ReconcileExclusion(ctx context.Context, input risk_exclusion.ReconcileArgs) error {
 	if err := a.reconcileExclusion.Do(ctx, input); err != nil {
 		return fmt.Errorf("reconcile exclusion: %w", err)
+	}
+	return nil
+}
+
+func (a *Activities) CleanRiskPolicyResults(ctx context.Context, input risk_policy.CleanArgs) error {
+	if err := a.cleanRiskPolicyResults.Do(ctx, input); err != nil {
+		return fmt.Errorf("clean risk policy results: %w", err)
 	}
 	return nil
 }

@@ -2,6 +2,7 @@ package risk_test
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"testing"
@@ -16,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -56,6 +58,22 @@ type signalerStub struct {
 
 func (s *signalerStub) Signal(_ context.Context, projectID uuid.UUID) error {
 	s.calls = append(s.calls, projectID)
+	return nil
+}
+
+// syncResultsCleaner implements risk.RiskPolicyResultsCleaner synchronously for
+// tests (no Temporal worker available).
+type syncResultsCleaner struct {
+	conn *pgxpool.Pool
+}
+
+func (c *syncResultsCleaner) Clean(ctx context.Context, projectID, policyID uuid.UUID) error {
+	if err := riskrepo.New(c.conn).DeleteRiskResultsByPolicy(ctx, riskrepo.DeleteRiskResultsByPolicyParams{
+		RiskPolicyID: policyID,
+		ProjectID:    projectID,
+	}); err != nil {
+		return fmt.Errorf("delete risk results by policy: %w", err)
+	}
 	return nil
 }
 
@@ -100,7 +118,7 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 	auditLogger := audit.NewLogger()
 	flags := &feature.InMemory{}
 
-	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, nil, shadowMCPClient, auditLogger, "test-jwt-secret", false, nil, nil, flags)
+	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, nil, shadowMCPClient, auditLogger, "test-jwt-secret", false, nil, nil, flags)
 
 	return ctx, &testInstance{
 		service:        svc,
