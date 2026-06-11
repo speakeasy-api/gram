@@ -61,6 +61,17 @@ linters:
       - path: cmd/|internal/dns/
         linters:
           - forbidigo
+      # riskjudgebench is a developer/benchmark CLI (not part of the server
+      # binary). Like test files, it favors terse partial structs and direct
+      # file IO over production-grade hardening, so exempt it from the same
+      # dev-tooling linters we exempt tests from.
+      - path: cmd/riskjudgebench/
+        linters:
+          - exhaustruct
+          - gosec
+          - wrapcheck
+          - predeclared
+          - sloglint
       - path: internal/dns/net_resolver\.go
         linters:
           - wrapcheck

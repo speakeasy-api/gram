@@ -385,6 +385,8 @@ function PolicyCenterContent() {
   const [formAction, setFormAction] = useState<PolicyAction>("flag");
   const [formAutoName, setFormAutoName] = useState(true);
   const [formUserMessage, setFormUserMessage] = useState("");
+  // Empty string => use the server's default judge model (see JUDGE_MODEL_OPTIONS).
+  const [formModel, setFormModel] = useState("");
 
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
 
@@ -463,6 +465,7 @@ function PolicyCenterContent() {
     setFormAction("flag");
     setFormAutoName(true);
     setFormUserMessage("");
+    setFormModel("");
     setSheetOpen(true);
   };
 
@@ -488,6 +491,7 @@ function PolicyCenterContent() {
       setFormAction((policy.action as PolicyAction) ?? "flag");
       setFormAutoName(policy.autoName ?? true);
       setFormUserMessage(policy.userMessage ?? "");
+      setFormModel(policy.modelConfig?.model ?? "");
       setSheetOpen(true);
       return;
     }
@@ -541,6 +545,9 @@ function PolicyCenterContent() {
               messageTypes: PROMPT_POLICY_MESSAGE_TYPES,
               action: formAction,
               autoName: formAutoName,
+              // Preserve any temperature/fail_open already on the policy; only
+              // the model is editable from the UI. Empty model => server default.
+              modelConfig: { ...editingPolicy.modelConfig, model: formModel },
               ...(formUserMessage.trim()
                 ? { userMessage: formUserMessage }
                 : {}),
@@ -558,6 +565,8 @@ function PolicyCenterContent() {
               messageTypes: PROMPT_POLICY_MESSAGE_TYPES,
               action: formAction,
               autoName: formAutoName,
+              // Omit when default so the policy follows the server default model.
+              ...(formModel ? { modelConfig: { model: formModel } } : {}),
               ...(formUserMessage.trim()
                 ? { userMessage: formUserMessage }
                 : {}),
@@ -1081,6 +1090,8 @@ function PolicyCenterContent() {
                     setFormAutoName={setFormAutoName}
                     formEnabled={formEnabled}
                     setFormEnabled={setFormEnabled}
+                    formModel={formModel}
+                    setFormModel={setFormModel}
                   />
                 )}
               </div>
@@ -1213,6 +1224,8 @@ function PromptPolicySheetBody({
   setFormAutoName,
   formEnabled,
   setFormEnabled,
+  formModel,
+  setFormModel,
 }: {
   isEditing: boolean;
   formName: string;
@@ -1225,6 +1238,8 @@ function PromptPolicySheetBody({
   setFormAutoName: (v: boolean) => void;
   formEnabled: boolean;
   setFormEnabled: (v: boolean) => void;
+  formModel: string;
+  setFormModel: (v: string) => void;
 }) {
   const [selectedExampleName, setSelectedExampleName] = useState(
     () => promptTemplateNameForInstruction(formPromptInstruction) ?? "",
@@ -1286,6 +1301,8 @@ function PromptPolicySheetBody({
 
       <ActionPicker formAction={formAction} setFormAction={setFormAction} />
 
+      <JudgeModelPicker formModel={formModel} setFormModel={setFormModel} />
+
       <div className="flex items-center justify-between">
         <div>
           <Label className="text-sm font-medium">Enabled</Label>
@@ -1295,6 +1312,97 @@ function PromptPolicySheetBody({
         </div>
         <Switch checked={formEnabled} onCheckedChange={setFormEnabled} />
       </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  JudgeModelPicker                                                          */
+/* -------------------------------------------------------------------------- */
+
+// JUDGE_MODEL_OPTIONS lists the models a prompt policy may run its LLM judge
+// on. The empty value follows the server default judge model (kept in sync with
+// riskjudge.defaultJudgeModel server-side; see server/cmd/riskjudgebench for the
+// benchmark behind these picks). Labels describe trade-offs rather than pinning
+// the default's id here, so the default can change server-side without a UI edit.
+const JUDGE_MODEL_OPTIONS: {
+  value: string;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: "",
+    label: "Default (recommended)",
+    description:
+      "Fast, low-cost, high-recall classifier. Best fit for most policies.",
+  },
+  {
+    value: "google/gemini-2.5-flash",
+    label: "Gemini 2.5 Flash",
+    description: "Lowest latency. Good for very high-volume policies.",
+  },
+  {
+    value: "anthropic/claude-sonnet-4.6",
+    label: "Claude Sonnet 4.6",
+    description: "Highest accuracy, at higher latency and cost.",
+  },
+  {
+    value: "anthropic/claude-haiku-4.5",
+    label: "Claude Haiku 4.5",
+    description: "Balanced Anthropic option.",
+  },
+];
+
+function JudgeModelPicker({
+  formModel,
+  setFormModel,
+}: {
+  formModel: string;
+  setFormModel: (v: string) => void;
+}) {
+  // A model that's persisted on the policy but not one of the curated options
+  // (e.g. set via the API) still needs to round-trip, so surface it as selected.
+  const knownValues = JUDGE_MODEL_OPTIONS.map((o) => o.value);
+  const options = knownValues.includes(formModel)
+    ? JUDGE_MODEL_OPTIONS
+    : [
+        ...JUDGE_MODEL_OPTIONS,
+        {
+          value: formModel,
+          label: formModel,
+          description: "Custom model configured via the API.",
+        },
+      ];
+
+  return (
+    <div className="space-y-2">
+      <Label className="text-sm font-medium">Judge Model</Label>
+      <p className="text-muted-foreground text-xs">
+        The model that evaluates each in-scope message against this policy.
+      </p>
+      <RadioGroup value={formModel} onValueChange={setFormModel}>
+        <div className="border-border divide-border divide-y rounded-lg border">
+          {options.map((opt) => (
+            <label
+              key={opt.value || "default"}
+              htmlFor={`judge-model-${opt.value || "default"}`}
+              className="hover:bg-muted/50 flex cursor-pointer items-start gap-3 p-3"
+            >
+              <RadioGroupItem
+                value={opt.value}
+                id={`judge-model-${opt.value || "default"}`}
+                className="mt-0.5"
+              />
+              <div className="flex-1">
+                <div className="text-sm font-medium">{opt.label}</div>
+                <div className="text-muted-foreground mt-1 text-xs">
+                  {opt.description}
+                </div>
+              </div>
+            </label>
+          ))}
+        </div>
+      </RadioGroup>
     </div>
   );
 }
