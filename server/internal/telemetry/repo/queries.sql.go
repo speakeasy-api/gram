@@ -1981,6 +1981,7 @@ func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsag
 	}, nil
 }
 
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) getToolUsageTotals(ctx context.Context, arg GetToolUsageSummaryParams) (ToolUsageTotalsRow, error) {
 	sb, err := toolUsageFilteredSelect(arg,
 		"count() AS event_count",
@@ -2007,7 +2008,15 @@ func (q *Queries) getToolUsageTotals(ctx context.Context, arg GetToolUsageSummar
 	defer rows.Close()
 
 	if !rows.Next() {
-		return ToolUsageTotalsRow{}, nil
+		return ToolUsageTotalsRow{
+			EventCount:    0,
+			SuccessCount:  0,
+			FailureCount:  0,
+			FailureRate:   0,
+			UniqueTools:   0,
+			UniqueUsers:   0,
+			UniqueTargets: 0,
+		}, nil
 	}
 
 	var totals ToolUsageTotalsRow
@@ -2021,6 +2030,7 @@ func (q *Queries) getToolUsageTotals(ctx context.Context, arg GetToolUsageSummar
 	return totals, nil
 }
 
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) getToolUsageTargets(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageTargetSummaryRow, error) {
 	sb, err := toolUsageFilteredSelect(arg,
 		"target_type",
@@ -2066,6 +2076,7 @@ func (q *Queries) getToolUsageTargets(ctx context.Context, arg GetToolUsageSumma
 	return result, nil
 }
 
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) getToolUsageUsers(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageUserSummaryRow, error) {
 	sb, err := toolUsageFilteredSelect(arg,
 		"user_key",
@@ -2110,6 +2121,7 @@ func (q *Queries) getToolUsageUsers(ctx context.Context, arg GetToolUsageSummary
 	return result, nil
 }
 
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) getToolUsageTargetTimeSeries(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageTargetTimeSeriesPointRow, error) {
 	bucketExpr := fmt.Sprintf("intDiv(event_time_ns, %d) * %d AS bucket_start_ns", arg.BucketSizeNs, arg.BucketSizeNs)
 	sb, err := toolUsageFilteredSelect(arg,
@@ -2154,6 +2166,7 @@ func (q *Queries) getToolUsageTargetTimeSeries(ctx context.Context, arg GetToolU
 	return result, nil
 }
 
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) getToolUsageUserTimeSeries(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageUserTimeSeriesPointRow, error) {
 	bucketExpr := fmt.Sprintf("intDiv(event_time_ns, %d) * %d AS bucket_start_ns", arg.BucketSizeNs, arg.BucketSizeNs)
 	sb, err := toolUsageFilteredSelect(arg,
@@ -2197,6 +2210,7 @@ func (q *Queries) getToolUsageUserTimeSeries(ctx context.Context, arg GetToolUsa
 	return result, nil
 }
 
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) getToolUsageUsersByTarget(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageUsersByTargetRow, error) {
 	sb, err := toolUsageFilteredSelect(arg,
 		"target_type",
@@ -2242,6 +2256,7 @@ func (q *Queries) getToolUsageUsersByTarget(ctx context.Context, arg GetToolUsag
 	return result, nil
 }
 
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) getToolUsageTargetToolBreakdown(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageTargetToolBreakdownRow, error) {
 	sb, err := toolUsageFilteredSelect(arg,
 		"target_type",
@@ -2287,6 +2302,7 @@ func (q *Queries) getToolUsageTargetToolBreakdown(ctx context.Context, arg GetTo
 	return result, nil
 }
 
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) getToolUsageHostedServerFilterOptions(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageHostedServerFilterOptionRow, error) {
 	sb, err := toolUsageBaseSelect(arg,
 		"target_id AS toolset_slug",
@@ -2325,6 +2341,7 @@ func (q *Queries) getToolUsageHostedServerFilterOptions(ctx context.Context, arg
 	return result, nil
 }
 
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) getToolUsageShadowServerFilterOptions(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageShadowServerFilterOptionRow, error) {
 	sb, err := toolUsageBaseSelect(arg,
 		"target_id AS server_name",
@@ -2363,6 +2380,7 @@ func (q *Queries) getToolUsageShadowServerFilterOptions(ctx context.Context, arg
 	return result, nil
 }
 
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) getToolUsageUserFilterOptions(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageUserFilterOptionRow, error) {
 	sb, err := toolUsageBaseSelect(arg,
 		"user_key",
