@@ -27,14 +27,15 @@ export function ObserveTabNav({
   const tabs: Tab[] = [
     { label: "Tools", href: `${baseSlug}/tools` },
     { label: "MCP Servers", href: `${baseSlug}/mcp` },
-    ...(base === "insights"
+    ...(base === "logs"
       ? ([
           {
-            label: "Employees",
-            href: `${baseSlug}/employees`,
-            stage: "preview",
+            label: "Risk Events",
+            href: `${baseSlug}/risk-events`,
+            stage: "beta",
+            scope: "org:admin",
           },
-          { label: "Costs", href: `${baseSlug}/costs`, stage: "preview" },
+          { label: "Agents", href: `${baseSlug}/agents` },
         ] satisfies Tab[])
       : []),
   ];

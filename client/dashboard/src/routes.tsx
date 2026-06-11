@@ -397,11 +397,6 @@ const ROUTE_STRUCTURE = {
     component: InsightsRoot,
     indexComponent: RedirectToInsightsTools,
     subPages: {
-      costs: {
-        title: "Costs",
-        url: "costs",
-        component: InsightsAgentsPage,
-      },
       tools: {
         title: "Tools",
         url: "tools",
@@ -412,20 +407,27 @@ const ROUTE_STRUCTURE = {
         url: "mcp",
         component: InsightsMCPPage,
       },
-      employees: {
-        title: "Employees",
-        url: "employees",
-        component: InsightsEmployeesLayout,
-        indexComponent: InsightsEmployeesPage,
-        subPages: {
-          detail: {
-            title: "Employee Detail",
-            url: ":userSlug",
-            component: InsightsEmployeeDetailPage,
-          },
-        },
+    },
+  },
+  employees: {
+    title: "Employees",
+    url: "employees",
+    icon: "users",
+    component: InsightsEmployeesLayout,
+    indexComponent: InsightsEmployeesPage,
+    subPages: {
+      detail: {
+        title: "Employee Detail",
+        url: ":userSlug",
+        component: InsightsEmployeeDetailPage,
       },
     },
+  },
+  costs: {
+    title: "Costs",
+    url: "costs",
+    icon: "credit-card",
+    component: InsightsAgentsPage,
   },
   hooks: {
     // redirect to insights/tools. TODO: remove this in a month

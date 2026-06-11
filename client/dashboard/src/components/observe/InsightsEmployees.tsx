@@ -271,7 +271,8 @@ const statusMeta: Record<
 
 export function InsightsEmployeesContent(): JSX.Element {
   const client = useGramContext();
-  const { orgSlug, projectSlug } = useSlugs();
+  const routes = useRoutes();
+  const { projectSlug } = useSlugs();
   const navigate = useNavigate();
   const { isExpanded: isInsightsOpen } = useInsightsState();
   const mcpConfig = useObservabilityMcpConfig({
@@ -413,7 +414,7 @@ export function InsightsEmployeesContent(): JSX.Element {
     (sum, item) => sum + item.tokenCount,
     0,
   );
-  const employeesBase = `/${orgSlug}/projects/${projectSlug}/insights/employees`;
+  const employeesBase = routes.employees.href();
   const openUser = (employee: Employee) => {
     void navigate(`${employeesBase}/${routeSegmentForEmployee(employee)}`);
   };
