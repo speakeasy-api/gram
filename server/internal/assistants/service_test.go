@@ -151,7 +151,11 @@ func TestServiceCoreWarmAssistantRuntimeBootsRuntime(t *testing.T) {
 	metadata := []byte(`{"app_name":"gram-asst-warm"}`)
 	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, ensureResult: RuntimeBackendEnsureResult{ColdStart: true, BackendMetadataJSON: metadata}}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
 
-	require.NoError(t, core.WarmAssistantRuntime(ctx, assistantID))
+	result, err := core.WarmAssistantRuntime(ctx, assistantID)
+	require.NoError(t, err)
+	require.True(t, result.Booted)
+	require.Equal(t, projectID, result.ProjectID)
+	require.Equal(t, 300, result.WarmTTLSeconds)
 
 	row, err := assistantsrepo.New(conn).GetAssistantRuntimeV2(ctx, assistantsrepo.GetAssistantRuntimeV2Params{
 		ProjectID:   projectID,
@@ -178,7 +182,9 @@ func TestServiceCoreWarmAssistantRuntimeNoopWhenRuntimeExists(t *testing.T) {
 	// ensureErr proves Ensure is never reached when a live row already exists.
 	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, ensureErr: errors.New("must not be called")}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
 
-	require.NoError(t, core.WarmAssistantRuntime(ctx, assistantID))
+	result, err := core.WarmAssistantRuntime(ctx, assistantID)
+	require.NoError(t, err)
+	require.False(t, result.Booted, "warmup must not claim a boot it didn't perform")
 
 	row, err := assistantsrepo.New(conn).GetAssistantForDispatch(ctx, assistantID)
 	require.NoError(t, err)
@@ -211,7 +217,9 @@ func TestServiceCoreWarmAssistantRuntimeResumesStrandedWarmupRow(t *testing.T) {
 
 	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, ensureResult: RuntimeBackendEnsureResult{ColdStart: true, BackendMetadataJSON: []byte(`{"app_name":"gram-asst-resume"}`)}}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
 
-	require.NoError(t, core.WarmAssistantRuntime(ctx, assistantID))
+	result, err := core.WarmAssistantRuntime(ctx, assistantID)
+	require.NoError(t, err)
+	require.True(t, result.Booted)
 
 	row, err := assistantsrepo.New(conn).GetAssistantRuntimeV2(ctx, assistantsrepo.GetAssistantRuntimeV2Params{
 		ProjectID:   projectID,
@@ -232,7 +240,9 @@ func TestServiceCoreWarmAssistantRuntimeMarksFailedOnEnsureError(t *testing.T) {
 
 	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, ensureErr: errors.New("fly is down")}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
 
-	require.NoError(t, core.WarmAssistantRuntime(ctx, assistantID), "ensure failure is swallowed — the first turn boots lazily")
+	result, err := core.WarmAssistantRuntime(ctx, assistantID)
+	require.NoError(t, err, "ensure failure is swallowed — the first turn boots lazily")
+	require.False(t, result.Booted)
 
 	_, err = assistantsrepo.New(conn).GetAssistantRuntimeV2(ctx, assistantsrepo.GetAssistantRuntimeV2Params{
 		ProjectID:   projectID,
@@ -263,13 +273,78 @@ func TestServiceCoreWarmAssistantRuntimeSkipsInactiveAssistant(t *testing.T) {
 
 	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, ensureErr: errors.New("must not be called")}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
 
-	require.NoError(t, core.WarmAssistantRuntime(ctx, assistantID))
+	result, err := core.WarmAssistantRuntime(ctx, assistantID)
+	require.NoError(t, err)
+	require.False(t, result.Booted)
 
 	_, err = assistantsrepo.New(conn).GetAssistantRuntimeV2(ctx, assistantsrepo.GetAssistantRuntimeV2Params{
 		ProjectID:   projectID,
 		AssistantID: assistantID,
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows, "paused assistants must not be warmed")
+}
+
+// seedWarmedRuntime boots a warmup-owned active v2 row via WarmAssistantRuntime
+// so expire tests start from the state the warmup workflow leaves behind.
+func seedWarmedRuntime(t *testing.T, conn *pgxpool.Pool, core *ServiceCore, assistantID uuid.UUID) {
+	t.Helper()
+	result, err := core.WarmAssistantRuntime(t.Context(), assistantID)
+	require.NoError(t, err)
+	require.True(t, result.Booted)
+}
+
+func TestServiceCoreExpireWarmupRuntimeStopsIdleRuntime(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_warmup_expire")
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	assistantID, projectID := seedAssistant(t, conn, "assistants-warmup-expire", 2)
+
+	stopCalls := &atomic.Int64{}
+	// IdleSeconds nil = runner reports no live threads, the VM is fully idle.
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, ensureResult: RuntimeBackendEnsureResult{ColdStart: true, BackendMetadataJSON: []byte(`{"app_name":"gram-asst-expire"}`)}, stopCalls: stopCalls}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
+	seedWarmedRuntime(t, conn, core, assistantID)
+
+	result, err := core.ExpireWarmupRuntime(ctx, projectID, assistantID, 300)
+	require.NoError(t, err)
+	require.True(t, result.Stopped)
+	require.Equal(t, int64(1), stopCalls.Load(), "expire must stop the backend VM")
+
+	_, err = assistantsrepo.New(conn).GetAssistantRuntimeV2(ctx, assistantsrepo.GetAssistantRuntimeV2Params{
+		ProjectID:   projectID,
+		AssistantID: assistantID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "the stopped row must be finalized")
+}
+
+func TestServiceCoreExpireWarmupRuntimeRevertsWhenTurnInFlight(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_warmup_expire_busy")
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	assistantID, projectID := seedAssistant(t, conn, "assistants-warmup-expire-busy", 2)
+
+	stopCalls := &atomic.Int64{}
+	busy := uint64(0)
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, ensureResult: RuntimeBackendEnsureResult{ColdStart: true, BackendMetadataJSON: []byte(`{"app_name":"gram-asst-expire-busy"}`)}, statusResult: RuntimeBackendStatus{Configured: true, IdleSeconds: &busy}, stopCalls: stopCalls}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
+	seedWarmedRuntime(t, conn, core, assistantID)
+
+	result, err := core.ExpireWarmupRuntime(ctx, projectID, assistantID, 300)
+	require.NoError(t, err)
+	require.False(t, result.Stopped, "a turn in flight must revert the expire")
+	require.Positive(t, result.RemainingSeconds)
+	require.Equal(t, int64(0), stopCalls.Load(), "a busy VM must not be stopped")
+
+	row, err := assistantsrepo.New(conn).GetAssistantRuntimeV2(ctx, assistantsrepo.GetAssistantRuntimeV2Params{
+		ProjectID:   projectID,
+		AssistantID: assistantID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateActive, row.State, "the row must be reverted to active")
 }
 
 func seedAssistantWithPendingThreads(t *testing.T, conn *pgxpool.Pool, slug string, maxConcurrency int, pending int) (uuid.UUID, []uuid.UUID) {

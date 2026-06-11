@@ -316,6 +316,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.AdmitAssistantThreads)
 	temporalWorker.RegisterActivity(activities.ProcessAssistantThread)
 	temporalWorker.RegisterActivity(activities.WarmAssistantRuntime)
+	temporalWorker.RegisterActivity(activities.ExpireWarmupAssistantRuntime)
 	temporalWorker.RegisterActivity(activities.ExpireAssistantThreadRuntime)
 	temporalWorker.RegisterActivity(activities.ReapStuckAssistantRuntimes)
 	temporalWorker.RegisterActivity(activities.ReapInactiveAssistantRuntimes)

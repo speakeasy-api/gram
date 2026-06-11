@@ -294,10 +294,17 @@ func AssistantThreadWorkflow(ctx workflow.Context, input AssistantThreadWorkflow
 
 // AssistantRuntimeWarmupWorkflow eagerly boots a freshly created assistant's
 // runtime (Fly app + VM) so the first turn doesn't pay the cold-start cost.
-// The coordinator is signalled afterwards regardless of warmup outcome: any
+// The coordinator is signalled after warmup regardless of outcome: any
 // threads that arrived while the runtime row was `starting` were held back
 // by admit and need a kick now that the row is active (or failed and
 // reapable).
+//
+// When warmup booted the runtime, this workflow also owns the warm timer —
+// a runtime that never receives a turn has no thread workflow to expire it
+// and the machine config disables Fly autostop, so without this the VM
+// would run until the inactivity janitor. A single expire attempt is
+// enough: if it reports a turn slipped in, that turn's thread workflow
+// exists and runs its own warm timer from here on.
 func AssistantRuntimeWarmupWorkflow(ctx workflow.Context, input AssistantRuntimeWarmupWorkflowInput) error {
 	var a *Activities
 
@@ -316,15 +323,47 @@ func AssistantRuntimeWarmupWorkflow(ctx workflow.Context, input AssistantRuntime
 		},
 	})
 
-	if err := workflow.ExecuteActivity(ctx, a.WarmAssistantRuntime, activities.WarmAssistantRuntimeInput{
-		AssistantID: input.AssistantID,
-	}).Get(ctx, nil); err != nil {
-		return err
+	signalCoordinator := func() error {
+		return workflow.ExecuteActivity(ctx, a.SignalAssistantCoordinator, activities.SignalAssistantCoordinatorInput{
+			AssistantID: input.AssistantID,
+		}).Get(ctx, nil)
 	}
 
-	return workflow.ExecuteActivity(ctx, a.SignalAssistantCoordinator, activities.SignalAssistantCoordinatorInput{
+	var result activities.WarmAssistantRuntimeResult
+	warmErr := workflow.ExecuteActivity(ctx, a.WarmAssistantRuntime, activities.WarmAssistantRuntimeInput{
 		AssistantID: input.AssistantID,
-	}).Get(ctx, nil)
+	}).Get(ctx, &result)
+
+	if err := signalCoordinator(); err != nil {
+		return err
+	}
+	if warmErr != nil {
+		return warmErr
+	}
+	if !result.Booted {
+		return nil
+	}
+
+	if err := workflow.NewTimer(ctx, time.Duration(result.WarmTTLSeconds)*time.Second).Get(ctx, nil); err != nil {
+		return err
+	}
+	var expire activities.ExpireAssistantThreadRuntimeResult
+	if err := workflow.ExecuteActivity(ctx, a.ExpireWarmupAssistantRuntime, activities.ExpireWarmupAssistantRuntimeInput{
+		AssistantID:    input.AssistantID,
+		ProjectID:      result.ProjectID,
+		WarmTTLSeconds: result.WarmTTLSeconds,
+	}).Get(ctx, &expire); err != nil {
+		return err
+	}
+	if !expire.Stopped {
+		// A turn slipped in past the warm timer; its thread workflow owns
+		// the runtime lifecycle now.
+		return nil
+	}
+
+	// The stop freed the assistant's runtime slot — re-admit anything that
+	// queued up while the row was expiring.
+	return signalCoordinator()
 }
 
 func assistantCoordinatorWorkflowID(assistantID uuid.UUID) string {

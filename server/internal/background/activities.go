@@ -81,6 +81,7 @@ type Activities struct {
 	admitAssistantThreads           *activities.AdmitAssistantThreads
 	processAssistantThread          *activities.ProcessAssistantThread
 	warmAssistantRuntime            *activities.WarmAssistantRuntime
+	expireWarmupAssistantRuntime    *activities.ExpireWarmupAssistantRuntime
 	expireAssistantThreadRuntime    *activities.ExpireAssistantThreadRuntime
 	reapStuckAssistantRuntimes      *activities.ReapStuckAssistantRuntimes
 	reapInactiveAssistantRuntimes   *activities.ReapInactiveAssistantRuntimes
@@ -176,6 +177,7 @@ func NewActivities(
 		admitAssistantThreads:           activities.NewAdmitAssistantThreads(assistantsCore),
 		processAssistantThread:          activities.NewProcessAssistantThread(assistantsCore),
 		warmAssistantRuntime:            activities.NewWarmAssistantRuntime(assistantsCore),
+		expireWarmupAssistantRuntime:    activities.NewExpireWarmupAssistantRuntime(assistantsCore),
 		expireAssistantThreadRuntime:    activities.NewExpireAssistantThreadRuntime(assistantsCore),
 		reapStuckAssistantRuntimes:      activities.NewReapStuckAssistantRuntimes(assistantsCore),
 		reapInactiveAssistantRuntimes:   activities.NewReapInactiveAssistantRuntimes(logger, assistantsCore),
@@ -390,8 +392,12 @@ func (a *Activities) ExpireAssistantThreadRuntime(ctx context.Context, input act
 	return a.expireAssistantThreadRuntime.Do(ctx, input)
 }
 
-func (a *Activities) WarmAssistantRuntime(ctx context.Context, input activities.WarmAssistantRuntimeInput) error {
+func (a *Activities) WarmAssistantRuntime(ctx context.Context, input activities.WarmAssistantRuntimeInput) (*activities.WarmAssistantRuntimeResult, error) {
 	return a.warmAssistantRuntime.Do(ctx, input)
+}
+
+func (a *Activities) ExpireWarmupAssistantRuntime(ctx context.Context, input activities.ExpireWarmupAssistantRuntimeInput) (*activities.ExpireAssistantThreadRuntimeResult, error) {
+	return a.expireWarmupAssistantRuntime.Do(ctx, input)
 }
 
 func (a *Activities) ReapStuckAssistantRuntimes(ctx context.Context) (*activities.ReapStuckAssistantRuntimesResult, error) {

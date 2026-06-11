@@ -130,6 +130,73 @@ func (q *Queries) BeginExpireAssistantRuntime(ctx context.Context, arg BeginExpi
 	return i, err
 }
 
+const beginExpireAssistantRuntimeV2ByAssistant = `-- name: BeginExpireAssistantRuntimeV2ByAssistant :one
+UPDATE assistant_runtimes
+SET
+  state = $1,
+  updated_at = clock_timestamp()
+WHERE id = (
+  SELECT r.id
+  FROM assistant_runtimes r
+  WHERE r.project_id = $2
+    AND r.assistant_id = $3
+    AND r.runtime_version = 2
+    AND r.state IN ($4, $1)
+    AND r.deleted IS FALSE
+    AND r.ended IS FALSE
+  LIMIT 1
+)
+  AND project_id = $2
+  AND state IN ($4, $1)
+  AND deleted IS FALSE
+  AND ended IS FALSE
+RETURNING id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until
+`
+
+type BeginExpireAssistantRuntimeV2ByAssistantParams struct {
+	ExpiringState string
+	ProjectID     uuid.UUID
+	AssistantID   uuid.UUID
+	ActiveState   string
+}
+
+type BeginExpireAssistantRuntimeV2ByAssistantRow struct {
+	ID                  uuid.UUID
+	AssistantThreadID   uuid.UUID
+	AssistantID         uuid.UUID
+	ProjectID           uuid.UUID
+	Backend             string
+	BackendMetadataJson []byte
+	State               string
+	WarmUntil           pgtype.Timestamptz
+}
+
+// Assistant-keyed sibling of BeginExpireAssistantRuntime for the warmup
+// workflow's warm timer: a warmup-booted v2 runtime has no admitting thread
+// to resolve the row through. Accepts both `active` and `expiring` for the
+// same idempotent-retry reasons; ErrNoRows means another actor already
+// finalized the row and callers must not then call Stop.
+func (q *Queries) BeginExpireAssistantRuntimeV2ByAssistant(ctx context.Context, arg BeginExpireAssistantRuntimeV2ByAssistantParams) (BeginExpireAssistantRuntimeV2ByAssistantRow, error) {
+	row := q.db.QueryRow(ctx, beginExpireAssistantRuntimeV2ByAssistant,
+		arg.ExpiringState,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.ActiveState,
+	)
+	var i BeginExpireAssistantRuntimeV2ByAssistantRow
+	err := row.Scan(
+		&i.ID,
+		&i.AssistantThreadID,
+		&i.AssistantID,
+		&i.ProjectID,
+		&i.Backend,
+		&i.BackendMetadataJson,
+		&i.State,
+		&i.WarmUntil,
+	)
+	return i, err
+}
+
 const callerOwnsDashboardChat = `-- name: CallerOwnsDashboardChat :one
 SELECT 1 AS ok
 FROM chats
