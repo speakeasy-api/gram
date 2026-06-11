@@ -2,6 +2,7 @@ import { Outlet, Link, Navigate, useParams } from "react-router";
 
 import { Page } from "@/components/page-layout";
 import { PageTabsTrigger, Tabs, TabsList } from "@/components/ui/tabs";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
 import { useListSkills, useProductFeatures } from "@gram/client/react-query";
 
@@ -12,6 +13,7 @@ export function SkillsIndexRedirect() {
 export function SkillsRoot() {
   const routes = useRoutes();
   const { skillSlug } = useParams();
+  const telemetry = useTelemetry();
   const { data: featuresData, isPending: featuresPending } = useProductFeatures(
     undefined,
     undefined,
@@ -23,13 +25,17 @@ export function SkillsRoot() {
     enabled: Boolean(skillSlug),
   });
 
-  // Wait for the feature flags to resolve before gating — redirecting while
-  // the query is in flight would bounce direct navigations to skills URLs.
-  if (featuresPending) {
+  // Double-gated during rollout: the gram-skills-management PostHog flag hides
+  // skills from all users by default; skills_capture is the org capability.
+  // isFeatureEnabled returns undefined until PostHog flags load — wait for
+  // both sources to resolve before gating, since redirecting while either is
+  // in flight would bounce direct navigations to skills URLs.
+  const flagEnabled = telemetry.isFeatureEnabled("gram-skills-management");
+  if (featuresPending || flagEnabled === undefined) {
     return null;
   }
 
-  if (!featuresData?.skillsCaptureEnabled) {
+  if (!flagEnabled || !featuresData?.skillsCaptureEnabled) {
     return <Navigate to=".." replace />;
   }
 
