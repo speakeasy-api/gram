@@ -802,6 +802,7 @@ SELECT COUNT(*)
 FROM assistant_thread_events
 WHERE project_id = @project_id
   AND assistant_id = @assistant_id
+  AND deleted IS FALSE
   AND status IN (@pending_status, @processing_status);
 
 -- name: UpdateActiveAssistantRuntimeMetadata :execrows

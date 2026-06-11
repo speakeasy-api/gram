@@ -351,6 +351,7 @@ SELECT COUNT(*)
 FROM assistant_thread_events
 WHERE project_id = $1
   AND assistant_id = $2
+  AND deleted IS FALSE
   AND status IN ($3, $4)
 `
 

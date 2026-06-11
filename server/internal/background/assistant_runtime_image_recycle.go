@@ -40,7 +40,7 @@ type AssistantRuntimeImageRecycleWorkflowResult struct {
 // AssistantRuntimeImageRecycleWorkflow sweeps every active v2 assistant
 // runtime once and rolls idle machines onto the currently configured runtime
 // image. Kicked at worker startup with a workflow ID keyed on the image
-// reference, so each deployed image triggers exactly one fleet sweep; busy
+// reference, so concurrent replica kicks collapse into one fleet sweep; busy
 // machines are skipped and picked up lazily by the per-admission recycle.
 func AssistantRuntimeImageRecycleWorkflow(ctx workflow.Context) (*AssistantRuntimeImageRecycleWorkflowResult, error) {
 	var a *Activities
@@ -80,15 +80,22 @@ func AssistantRuntimeImageRecycleWorkflow(ctx workflow.Context) (*AssistantRunti
 }
 
 // KickAssistantRuntimeImageRecycle starts one image recycle sweep keyed on
-// the given image reference. The reject-duplicate reuse policy makes the kick
-// idempotent across worker replicas and restarts of the same build — only a
-// deploy that changes the image ref produces a fresh sweep.
+// the given image reference. Concurrent kicks from sibling worker replicas
+// collapse into a single run; once that run completes, a later kick (worker
+// restart, rollback to a previously swept image) starts a fresh sweep.
 func KickAssistantRuntimeImageRecycle(ctx context.Context, temporalEnv *tenv.Environment, imageRef string) error {
 	wfID := assistantRuntimeImageRecycleWorkflowIDPrefix + imageRef
+	// ALLOW_DUPLICATE rather than REJECT_DUPLICATE: a rollback re-deploys an
+	// image ref whose sweep already completed, and it still needs a fresh
+	// sweep to roll the fleet back. Concurrent kicks from sibling replicas
+	// are still collapsed — starting a workflow whose ID is currently
+	// running returns WorkflowExecutionAlreadyStarted regardless of reuse
+	// policy. The residual cost is a redundant sweep after a worker restart
+	// on an unchanged image, which no-ops row by row.
 	_, err := temporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                    wfID,
 		TaskQueue:             string(temporalEnv.Queue()),
-		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		// Sized for the activity's full retry budget (2 attempts at the
 		// StartToClose ceiling) so the second attempt is never truncated.
 		WorkflowRunTimeout: 2*assistantRuntimeImageRecycleActivityTimeout + 15*time.Minute,
