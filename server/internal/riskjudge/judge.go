@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
@@ -284,9 +285,11 @@ func (j *Judge) call(ctx context.Context, in ra.JudgeInput) (matched bool, confi
 	}
 	// Clamp confidence and cap rationale length in code — the schema no longer
 	// enforces these (see the schema note above re: Anthropic route 400s).
+	// Truncate by rune, not byte, so a multi-byte character can't be split into
+	// invalid UTF-8 that later flows into stored finding descriptions.
 	rationale = verdict.Rationale
-	if len(rationale) > maxRationaleLen {
-		rationale = rationale[:maxRationaleLen]
+	if utf8.RuneCountInString(rationale) > maxRationaleLen {
+		rationale = string([]rune(rationale)[:maxRationaleLen])
 	}
 	return verdict.Matched, max(0, min(1, verdict.Confidence)), rationale, nil
 }

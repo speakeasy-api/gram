@@ -14,6 +14,10 @@ prod-equivalent conditions:
 - the identical `ObjectCompletionRequest` shape `judge.call()` builds (system
   prompt, strict JSON schema, temperature, `UsageSource`).
 
+One knob differs from prod by default: the per-call timeout is `30s` here vs the
+production `judgeTimeout` of `10s`, to avoid spurious timeouts when benchmarking
+slower models. Pass `-timeout 10s` for exact production timeout parity.
+
 The only stubs are org-scoped concerns that don't affect model quality/latency:
 a `Provisioner` that returns the dev key instead of a DB-backed per-org key, and
 nil capture/usage/title/telemetry strategies (all nil-guarded in the client).
