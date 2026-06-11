@@ -315,6 +315,10 @@ export function DistributeServersStep({
     selected.size > 0
       ? `Distribute ${selected.size} server${selected.size === 1 ? "" : "s"}`
       : "Distribute servers";
+  // Once at least one server has been distributed, the secondary action is no
+  // longer a skip — the user has done the step, so let them move on.
+  const skipLabel =
+    distributedSpecifiers.size > 0 ? "Continue" : "Skip for now";
 
   return (
     <StepContainer
@@ -327,7 +331,7 @@ export function DistributeServersStep({
       description="Choose some MCP Servers to distribute to your organization. Selected servers are deployed to your project, bundled into your Default plugin, and published to your marketplace so your team can install them."
       onContinue={handleDistribute}
       onSkip={onSkip}
-      skipLabel="Skip for now"
+      skipLabel={skipLabel}
       continueLabel={continueLabel}
       isLoading={drawerOpen && isAdding}
       canContinue={selected.size > 0}
