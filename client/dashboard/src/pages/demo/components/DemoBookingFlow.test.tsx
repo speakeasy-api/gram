@@ -19,13 +19,13 @@ vi.mock("@calcom/embed-react", () => ({
     config,
   }: {
     calLink: string;
-    config?: Record<string, unknown>;
+    config?: { name?: string; email?: string };
   }) => (
     <div
       data-testid="cal-embed"
       data-cal-link={calLink}
-      data-cal-name={String(config?.name ?? "")}
-      data-cal-email={String(config?.email ?? "")}
+      data-cal-name={config?.name ?? ""}
+      data-cal-email={config?.email ?? ""}
     />
   ),
 }));
