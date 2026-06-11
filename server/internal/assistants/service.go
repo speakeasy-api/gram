@@ -1567,6 +1567,26 @@ func (s *ServiceCore) EnsureWarmupThread(ctx context.Context, assistantID uuid.U
 	return WarmupThreadResult{ThreadID: threadID, ProjectID: assistant.ProjectID, ShouldSignal: true}, nil
 }
 
+// ReleaseWarmupRuntime best-effort clears a runtime row reserved for the
+// warmup thread whose workflow signal could not be delivered. Only a
+// still-starting row owned by that thread is touched — anything else means a
+// workflow or real traffic took over.
+func (s *ServiceCore) ReleaseWarmupRuntime(ctx context.Context, projectID, assistantID, warmupThreadID uuid.UUID) {
+	row, err := assistantrepo.New(s.db).GetAssistantRuntimeV2(ctx, assistantrepo.GetAssistantRuntimeV2Params{
+		ProjectID:   projectID,
+		AssistantID: assistantID,
+	})
+	if err != nil || row.AssistantThreadID != warmupThreadID || row.State != runtimeStateStarting {
+		return
+	}
+	if err := s.stopRuntimeRecord(ctx, projectID, row.ID, runtimeStateFailed); err != nil {
+		s.logger.WarnContext(ctx, "release warmup runtime reservation failed",
+			attr.SlogAssistantID(assistantID.String()),
+			attr.SlogError(err),
+		)
+	}
+}
+
 func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, threadID uuid.UUID) (ProcessThreadEventsResult, error) {
 	bootstrappedRuntime := false
 	thread, assistant, runtimeRecord, err := s.loadThreadContext(ctx, projectID, threadID)

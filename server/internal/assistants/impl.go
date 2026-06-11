@@ -354,6 +354,10 @@ func (s *Service) startRuntimeWarmup(ctx context.Context, record assistantRecord
 			attr.SlogAssistantID(record.ID.String()),
 			attr.SlogError(err),
 		)
+		// Nothing drives a reserved row whose signal was lost, and admit
+		// holds real turns back while it sits in `starting` — release it so
+		// the first turn boots lazily instead of waiting out the reaper.
+		s.core.ReleaseWarmupRuntime(ctx, record.ProjectID, record.ID, result.ThreadID)
 	}
 }
 
