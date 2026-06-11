@@ -3,15 +3,15 @@ id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
   docChecksum: 8af9e28c4f2e774d6eae764461462eb3
   docVersion: 0.0.1
-  speakeasyVersion: 1.763.1
-  generationVersion: 2.884.4
+  speakeasyVersion: 1.761.5
+  generationVersion: 2.879.13
   releaseVersion: 0.33.8
   configChecksum: 260d5c903dd89cbfc056754ec9ae9b70
 features:
   typescript:
     additionalDependencies: 0.1.0
     constsAndDefaults: 0.1.14
-    core: 3.26.50
+    core: 3.26.48
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.1
     downloadStreams: 0.1.1
@@ -39,7 +39,7 @@ trackedFiles:
   .npmignore:
     last_write_checksum: sha1:6572da81f2e7a978ec29c22c2210bf461c5897b2
   FUNCTIONS.md:
-    last_write_checksum: sha1:230e8ad7b3e6fb17ccfab10ade935273e8494afc
+    last_write_checksum: sha1:2f7faccec86bfe85d286f7c504d34a904ae1cdd1
   REACT_QUERY.md:
     last_write_checksum: sha1:172eab8aad58f267125273797d32d822995e89b3
   RUNTIMES.md:
@@ -3367,643 +3367,643 @@ trackedFiles:
   src/core.ts:
     last_write_checksum: sha1:a753021efd93bddd574dea18c6bded2cd8f55aad
   src/funcs/accessApproveShadowMCPApprovalRequest.ts:
-    last_write_checksum: sha1:52f5815c56de683b9d8f2bfc7bca7546469390f3
+    last_write_checksum: sha1:57fb472ef536187160bc8b4210a9fec539f7564a
   src/funcs/accessCreateRole.ts:
-    last_write_checksum: sha1:26661f59cf567b16055e28fb8c6a975abaa99627
+    last_write_checksum: sha1:58c02d9b8748fc48ca47749335143eb7fbe4fe4b
   src/funcs/accessCreateShadowMCPAccessRule.ts:
-    last_write_checksum: sha1:c89ecec3335cfbf25bd2dfb04c2a2caf4093c96d
+    last_write_checksum: sha1:ead20c8e7eb80f303fde557069a3a17ac2982fcc
   src/funcs/accessCreateShadowMCPApprovalRequest.ts:
-    last_write_checksum: sha1:d4b33429d8a8000b6bde39248af779c24e768fb9
+    last_write_checksum: sha1:566203bccab2864a59b0668a37a2dea80218c815
   src/funcs/accessDeleteRole.ts:
-    last_write_checksum: sha1:434234689712a6f348115042b1c478858e379ec3
+    last_write_checksum: sha1:84196b7b2a4426020b722642252b5a2f38a7043c
   src/funcs/accessDeleteShadowMCPAccessRule.ts:
-    last_write_checksum: sha1:6060138510da4570f5a6021793dc411233793e6f
+    last_write_checksum: sha1:21bfb5b8b347150960bd0f89761112e57c7bc86a
   src/funcs/accessDenyShadowMCPApprovalRequest.ts:
-    last_write_checksum: sha1:33113b159e294933d7e27a12e3a1fddff6a24506
+    last_write_checksum: sha1:22c5f2484649e04ab5e18ae2e991df85a883994c
   src/funcs/accessDisableRBAC.ts:
-    last_write_checksum: sha1:e9868d170e581e42e83977dedc403db3bdd1bb3b
+    last_write_checksum: sha1:5ecb338deb2eca880be247a39265790a4b0bcfaf
   src/funcs/accessEnableRBAC.ts:
-    last_write_checksum: sha1:0b9095a810fa89dc1cedb355d1136df45d0c263d
+    last_write_checksum: sha1:e74b192fc77d0d33d877b3b2cb6dd1c83cae3dcc
   src/funcs/accessGetRBACStatus.ts:
-    last_write_checksum: sha1:a74d163ac2893837dabbfa9a6040986100a9f768
+    last_write_checksum: sha1:716ce73c3761164903eb1d8ef0477cd7b7f94ad4
   src/funcs/accessGetRole.ts:
-    last_write_checksum: sha1:8e674df61bcecf7ed1e96d80c9e2258876c83785
+    last_write_checksum: sha1:ecf9b68b48155a4a2b4eea6ec57d3dcbbd1246e2
   src/funcs/accessListChallengeBuckets.ts:
-    last_write_checksum: sha1:774df4efe7e1335e6ce1bcbce8f259283847f55b
+    last_write_checksum: sha1:fd6371f3179a105276a76ead9b725cf9803db566
   src/funcs/accessListChallenges.ts:
-    last_write_checksum: sha1:6a4774f21a9bd39e91f2d2a8ffd9e40e9770ac3e
+    last_write_checksum: sha1:afc798e57fd9761f244541f89c9eb29e57bfd0b8
   src/funcs/accessListGrants.ts:
-    last_write_checksum: sha1:a9df798ca171e37fbe7215f63c6af41843618a54
+    last_write_checksum: sha1:b3502d74e2709bf0a741f04c234a76000f5cdef1
   src/funcs/accessListMembers.ts:
-    last_write_checksum: sha1:ee8adf99063d7db06232d5edfefe5e445c3508bd
+    last_write_checksum: sha1:e247ce4325e282b9be748ec6c889552028874a78
   src/funcs/accessListRoles.ts:
-    last_write_checksum: sha1:27954f5628063cabee7fce964889c427dc0e08dd
+    last_write_checksum: sha1:ac0964febe38573d8c0d7330f567fd58e4e29372
   src/funcs/accessListScopes.ts:
-    last_write_checksum: sha1:30aba3b7bb36fef801dc07811afa05ff192f9454
+    last_write_checksum: sha1:1ad64e3abc6903cae51f27d132504002ba9c94e9
   src/funcs/accessListShadowMCPAccessRules.ts:
-    last_write_checksum: sha1:a2c2b4d5cfc01b2a4677851a21baf1a455c0bc2d
+    last_write_checksum: sha1:59b59994636ee5addfc05d673bbe841f7efa77f3
   src/funcs/accessListShadowMCPApprovalRequests.ts:
-    last_write_checksum: sha1:af0529304452cb713a3cb5d76bf92dd217042563
+    last_write_checksum: sha1:a95bf9b24a89cfd43cb19e7220988ee2ed5f7bdb
   src/funcs/accessResolveChallenge.ts:
-    last_write_checksum: sha1:5e6bdb4aeb607c6f185e9c8e220698b3e47acbf0
+    last_write_checksum: sha1:f371bbe148c7c16e2735b2726bf5a75488623249
   src/funcs/accessUpdateMemberRoles.ts:
-    last_write_checksum: sha1:44b39336acb2de7b39741f735fbee1a716a52209
+    last_write_checksum: sha1:3e1390d03064f971f9eaa44f8403ea94eac297d6
   src/funcs/accessUpdateRole.ts:
-    last_write_checksum: sha1:965ef5c4d1f6ae1acad790495e2ac3550306f084
+    last_write_checksum: sha1:193098018d2aeb87f22b9fc4df35fa5465244b29
   src/funcs/accessUpdateShadowMCPAccessRule.ts:
-    last_write_checksum: sha1:13ed4bcd3338699aa0efd706254e87945c0a5f7b
+    last_write_checksum: sha1:0784a48e88a5db5f2840126aaa1471e2f962e4d3
   src/funcs/agentGetPlugins.ts:
-    last_write_checksum: sha1:14905498946963370c2c7c53b767bae3d26793aa
+    last_write_checksum: sha1:a11c40c6917c62fbf6570a25161ab2b216d8d5c8
   src/funcs/aiIntegrationsDeleteConfig.ts:
-    last_write_checksum: sha1:d60678fa08d889da022921c60e092bdef8bd0698
+    last_write_checksum: sha1:1ea838e6b36b309892cef9c5190d33b87af9304c
   src/funcs/aiIntegrationsGetConfig.ts:
-    last_write_checksum: sha1:4995c42f6f6fb89ec9b13548ed4eaa202a077ae2
+    last_write_checksum: sha1:0b6ddcfe7950f7daf39b1b952fa13b0218433763
   src/funcs/aiIntegrationsUpsertConfig.ts:
-    last_write_checksum: sha1:a199e053f818c8f03440bca4b21cfc1e572661d1
+    last_write_checksum: sha1:ca46195d1d7ab739ad3d5d8a4fbdcfbcd754b09d
   src/funcs/assetsCreateSignedChatAttachmentURL.ts:
-    last_write_checksum: sha1:47b6213dad86cf5b0dd206a6c405e1d93eda0132
+    last_write_checksum: sha1:3d035997a6286016bda1c8498bda8bf64f6071d8
   src/funcs/assetsFetchOpenAPIv3FromURL.ts:
-    last_write_checksum: sha1:118bb4a517a3a9fab11cf468679341c04d96bf68
+    last_write_checksum: sha1:3b747b3c74293ba66dc7d9ada52f13e59d2be0c5
   src/funcs/assetsListAssets.ts:
-    last_write_checksum: sha1:bc7838d68024a1355f0f35434107cc17b4dc5682
+    last_write_checksum: sha1:f11f4ae3fe0bfc1dd7261b4e9c53cbb6f47b7a20
   src/funcs/assetsServeChatAttachment.ts:
-    last_write_checksum: sha1:4cf12e03ccc25288b7b9ee3e92652418ef2d2dcd
+    last_write_checksum: sha1:e51253038635c2d6a6788fc6598581ba4eab80ca
   src/funcs/assetsServeChatAttachmentSigned.ts:
-    last_write_checksum: sha1:0b1b2832116d5a8ea636f21402de933e9c57e307
+    last_write_checksum: sha1:e5f621874e6d14c23205b5cefedc3c1822f4b26d
   src/funcs/assetsServeFunction.ts:
-    last_write_checksum: sha1:ddbefaec28065ee2ba517bee16900a88faeb0c1f
+    last_write_checksum: sha1:88d87a9ca5fb8b121bc62ed86702eae50c5d5a42
   src/funcs/assetsServeImage.ts:
-    last_write_checksum: sha1:64863424423b4922f081c44eaddecc907e554859
+    last_write_checksum: sha1:dfe5fe277b8d42cde67539bf930d8c4872ac52fd
   src/funcs/assetsServeOpenAPIv3.ts:
-    last_write_checksum: sha1:162de08104a8f4ca0457ce9519f119cbe31e7804
+    last_write_checksum: sha1:e4edc8f8db419fcdbfca8302faa294963cf14f0d
   src/funcs/assetsServeSkill.ts:
-    last_write_checksum: sha1:93c53b2e8b168bf59c396f5146271b17b6da8dca
+    last_write_checksum: sha1:81414ec6e4c2d1a27db467e9aff10fad973e10f5
   src/funcs/assetsUploadChatAttachment.ts:
-    last_write_checksum: sha1:a7f45db25389ae1ce0eda423c7f08e01efc070b2
+    last_write_checksum: sha1:d49fa195140c594c5902279cff3ae8d61f1c5508
   src/funcs/assetsUploadFunctions.ts:
-    last_write_checksum: sha1:2b11a15f7342cf79558b0a921e521d0c1f042aca
+    last_write_checksum: sha1:7dd718d8df98754ba34b65df987a19d28ed2ce05
   src/funcs/assetsUploadImage.ts:
-    last_write_checksum: sha1:cace407d56347e85296f1341bf8bbea0aef39743
+    last_write_checksum: sha1:a1d8cade069cf7046a260855e759eb0071083374
   src/funcs/assetsUploadOpenAPIv3.ts:
-    last_write_checksum: sha1:3dbf82d828eb4deb5e4f4d7f8918ec2b70ace8d1
+    last_write_checksum: sha1:7abef869f38cb3f02a1edf11d2cbc45151482df5
   src/funcs/assistantMemoriesDelete.ts:
-    last_write_checksum: sha1:d7b9bd71d50eb58f788706bb041f4b27ffe9d0e8
+    last_write_checksum: sha1:57c44a5bbb3a1460119fe25480c1eaadc89fbd15
   src/funcs/assistantMemoriesGet.ts:
-    last_write_checksum: sha1:da01bb189bf7f6df3d7a2f67cc5deef260cf11f1
+    last_write_checksum: sha1:51a8880838576b58bf997e5b4418870986d9f2c9
   src/funcs/assistantMemoriesList.ts:
-    last_write_checksum: sha1:1f289a2118258260bf0e2258a26a29e3eb3c2850
+    last_write_checksum: sha1:fcfe7fe884f885c31b6dd7bb20f6c662f0be32a4
   src/funcs/assistantsCreate.ts:
-    last_write_checksum: sha1:c4a324a235006c437909e1d7d38aeaec140c489e
+    last_write_checksum: sha1:aa0e4cd0c342ce5f156eaad6576831eb19dfa65f
   src/funcs/assistantsDelete.ts:
-    last_write_checksum: sha1:c879d424f70330dd3d8ea7943f9671518a893468
+    last_write_checksum: sha1:6a39f0daa2715fac7f7e23b5f580cdd87dc80750
   src/funcs/assistantsEnsureManaged.ts:
-    last_write_checksum: sha1:980d9c24695983f271e2e08a2504fedafd8d2b93
+    last_write_checksum: sha1:1973f7cac2983a99eeb981c7759d762c24c75668
   src/funcs/assistantsGet.ts:
-    last_write_checksum: sha1:794458573197fe7f52e1bf19a961544f84e4e48e
+    last_write_checksum: sha1:6ca81dcfb983d0954b2181566e707a8dfca52c0c
   src/funcs/assistantsList.ts:
-    last_write_checksum: sha1:0ac5b45c4f2a665a6e5bb76d755f295787e18fb5
+    last_write_checksum: sha1:0eef1ce8687ff64f5589fe7886de0357532ee2ac
   src/funcs/assistantsSendMessage.ts:
-    last_write_checksum: sha1:0890706df6e4f8a575f5242a2b678e4f9447dcb2
+    last_write_checksum: sha1:b93bd49f8327c335885718b1b721178615e8c30b
   src/funcs/assistantsUpdate.ts:
-    last_write_checksum: sha1:577e45478e63c4308f77bf17397aeca4f64560cf
+    last_write_checksum: sha1:8c6a96b7a83a911923bfd545c892310af8590711
   src/funcs/auditlogsList.ts:
-    last_write_checksum: sha1:1582c5741ad645147161733805eb8ab456281f32
+    last_write_checksum: sha1:ad12cc81ccc3691c9292797746e59753e3bc0182
   src/funcs/auditlogsListFacets.ts:
-    last_write_checksum: sha1:cb99ca272202721cf386565292c192cd3811f38e
+    last_write_checksum: sha1:5ede11f594962f94ea5723f19c9f1d6752daa3d5
   src/funcs/authCallback.ts:
-    last_write_checksum: sha1:10cb5d282644ab196057a84cc3ef896fbd8c1759
+    last_write_checksum: sha1:2f430e26e2173ce7a8cf74abfca3e17ae3d17d4c
   src/funcs/authInfo.ts:
-    last_write_checksum: sha1:bf29249a66162b1611d99993d8e618b947eb480c
+    last_write_checksum: sha1:99fc4b3b9ce8c888875af5c499505b87c8f3b690
   src/funcs/authLogin.ts:
-    last_write_checksum: sha1:ea8a1fbd664d95cc433cccd4ce09b6cabee98a1f
+    last_write_checksum: sha1:7c58b3a67a5881d23a8a4fdc86e8d0f1ad67a995
   src/funcs/authLogout.ts:
-    last_write_checksum: sha1:40416dfb2dbf4cd480ecb1f2e91543417dbbd5be
+    last_write_checksum: sha1:5accacdc65f22ca2a3dde522516aebdbe5eefb95
   src/funcs/authRegister.ts:
-    last_write_checksum: sha1:775e97ead5f05115e35980ba8c7f8ae6e7b2d475
+    last_write_checksum: sha1:e52a0754fca065a210e142ca2993972ef217304c
   src/funcs/authSwitchScopes.ts:
-    last_write_checksum: sha1:0328f255e7a80ab14abf099379f657cf6c32f5d8
+    last_write_checksum: sha1:9db6809a6f569dd8522805e0f19ecb6bd7f164a2
   src/funcs/chatCreditUsage.ts:
-    last_write_checksum: sha1:c16a34fe73c058ec5459a63e023b038c8902c937
+    last_write_checksum: sha1:e88ed6c9bd3e03d53194e1374f8f94a2e061e21e
   src/funcs/chatDelete.ts:
-    last_write_checksum: sha1:b4877a582d6114b67d3263fd349d14c64afd3763
+    last_write_checksum: sha1:1b27c84d09d7af61f6f19c01a04dc7f38724eb3c
   src/funcs/chatGenerateTitle.ts:
-    last_write_checksum: sha1:7b6ddd0db112efb5ef91e3e48a713ed42ab77a73
+    last_write_checksum: sha1:a5c2fb0ee636e1060daf3a106602d629c1d7c5c4
   src/funcs/chatList.ts:
-    last_write_checksum: sha1:90207c939e8ebd5ce382ecc8c909324d0ce6f969
+    last_write_checksum: sha1:29c8c33bb467bfa5f27b352c45de8c9a47701c1b
   src/funcs/chatLoad.ts:
-    last_write_checksum: sha1:a2a028e3dcaa32913eed9a284a572ae045efd885
+    last_write_checksum: sha1:eff31024312e77ccca80b1141a3503343eaab55b
   src/funcs/chatSessionsCreate.ts:
-    last_write_checksum: sha1:117d9fc1b855b55951f5220bcd4462c8dcabe58b
+    last_write_checksum: sha1:4e2167a8cac556a7c2eb500c0406a65d7620cdd6
   src/funcs/chatSessionsRevoke.ts:
-    last_write_checksum: sha1:665b3f85133d0bc94595662a94603542c2072210
+    last_write_checksum: sha1:08cbd77f85b3c094be332423b1c9d91070a7451c
   src/funcs/chatSubmitFeedback.ts:
-    last_write_checksum: sha1:15b300b9564416e9b42d9f1c550369a0fe08f611
+    last_write_checksum: sha1:2b5dfe65502d81e6f4a010683253ae854e29e024
   src/funcs/collectionsAttachServer.ts:
-    last_write_checksum: sha1:a38d117d56cad7fab8c1d1e45dcd8b1b0883717b
+    last_write_checksum: sha1:945bcb8a10b4451adbfbb4924de60f6ac719f5b5
   src/funcs/collectionsCreate.ts:
-    last_write_checksum: sha1:a4bf7c1b957493fc65ccec28cf2ebd7f19e3a052
+    last_write_checksum: sha1:cc0090403da91728863d6e57faf81a3c10ef681e
   src/funcs/collectionsDelete.ts:
-    last_write_checksum: sha1:fe748c3dc3452c2adad527ee6a78073355150f65
+    last_write_checksum: sha1:b307a5f3e90efd7193c54cfaa383adad27ea0e9d
   src/funcs/collectionsDetachServer.ts:
-    last_write_checksum: sha1:1dc832e3b7c89ff07b47d3eb4ec8d0ac08f3676f
+    last_write_checksum: sha1:6ac6da00d09c8d3f93026eb5c470f4f70baf85a7
   src/funcs/collectionsList.ts:
-    last_write_checksum: sha1:1ae506a4566e426c345942b2a90eed0da99a8e35
+    last_write_checksum: sha1:3a866c33b433bd50d0554ff61906bc8e8c4b8acc
   src/funcs/collectionsListServers.ts:
-    last_write_checksum: sha1:1a6876c92ec690ec3fbf289115dae5da81aacb5d
+    last_write_checksum: sha1:1b074dfad6acf1c93e287b6a388dd3b2c443f572
   src/funcs/collectionsUpdate.ts:
-    last_write_checksum: sha1:83639295b9c18237386ceafd578736c6fc747654
+    last_write_checksum: sha1:d09e6dc33ba4cc20f3fbdc742f99c84198790616
   src/funcs/deploymentsActive.ts:
-    last_write_checksum: sha1:d9405a72b5343aea07a24ffd0bbb55eec3befebe
+    last_write_checksum: sha1:87817165b1befe3e852f079da5478364615144e7
   src/funcs/deploymentsCreate.ts:
-    last_write_checksum: sha1:858b4041014402ee49d5da145a2c1b5e95bfe8cc
+    last_write_checksum: sha1:fed40a2c88bd208c81553683f23c6576952cf97a
   src/funcs/deploymentsEvolveDeployment.ts:
-    last_write_checksum: sha1:bd1538869c2bf69438f2926d95360cf5a8ae4dbc
+    last_write_checksum: sha1:bcee8ff9cb72ce1ed0a0ef94b4d5e818e83c415c
   src/funcs/deploymentsGetById.ts:
-    last_write_checksum: sha1:a706aa4c77ffb673213840c589f598d91753f5bc
+    last_write_checksum: sha1:1734e084b672abf31f3da7e3d4488a9488ff5c2a
   src/funcs/deploymentsLatest.ts:
-    last_write_checksum: sha1:b69dcc6c03968cdf4920d95fe6907ca595a8664a
+    last_write_checksum: sha1:d9c494d0824ca3331ccc9bf81adbf4a0db69ea68
   src/funcs/deploymentsList.ts:
-    last_write_checksum: sha1:25c9f0625bacb8f31cdd9df85d2140edc69c67bd
+    last_write_checksum: sha1:01f7148cce4da18c413328b2feea68deb3bd746a
   src/funcs/deploymentsLogs.ts:
-    last_write_checksum: sha1:e10a4603ad5c8be63b5b139457d447bd5758d4d9
+    last_write_checksum: sha1:efc71d0fd5b9e8a32954d43bc1fd1bd91ff8f73c
   src/funcs/deploymentsRedeployDeployment.ts:
-    last_write_checksum: sha1:7ed11f8f55bddc34cc42f274487cee3c4716b0ec
+    last_write_checksum: sha1:264dddad9bff1200d567be9aa5f24fca4ece72a5
   src/funcs/domainsDeleteDomain.ts:
-    last_write_checksum: sha1:223e52fc889564cd92ffd5ad1177516de978abba
+    last_write_checksum: sha1:32d761ad9342b574f03e2221d86c8030e55cf1df
   src/funcs/domainsGetDomain.ts:
-    last_write_checksum: sha1:92df5d992674288e6ea713768dc710afd6072563
+    last_write_checksum: sha1:e82bca882857fbd51f1e4c334da4d11f0db3c505
   src/funcs/domainsListMcpEndpoints.ts:
-    last_write_checksum: sha1:20f14370cb9bc3cc5c790fcee1385d642032dde5
+    last_write_checksum: sha1:075aab4773e69c0e084e006c97a5c4b97b0236c8
   src/funcs/domainsRegisterDomain.ts:
-    last_write_checksum: sha1:4f4f774ce8754cea638c149d682cc502f5e2b8f7
+    last_write_checksum: sha1:6cbd4ba2c70d2c5c8d306c56128be8bea9a46255
   src/funcs/domainsUpdateDomain.ts:
-    last_write_checksum: sha1:559a4c03e6c7289df4b580a781f0caed329c4958
+    last_write_checksum: sha1:4f6129acadc3507cadad1c25ff357a4ae4764b7e
   src/funcs/environmentsClone.ts:
-    last_write_checksum: sha1:3804f38928ff0ff6b9902936e6b7c125322e84bd
+    last_write_checksum: sha1:389cf5ce90292af05a559ed4c89f4bb5c39070c2
   src/funcs/environmentsCreate.ts:
-    last_write_checksum: sha1:56b2174976ddac37239fae946d4a525d9645db61
+    last_write_checksum: sha1:79c183fbd8082057da68e776e29839090257df56
   src/funcs/environmentsDeleteBySlug.ts:
-    last_write_checksum: sha1:e5bf2f10ddf745c79199fb9e1b6c9ae62980908d
+    last_write_checksum: sha1:d4c740c5fa4ea0eb6f1d489d163e49f2167eb178
   src/funcs/environmentsDeleteSourceLink.ts:
-    last_write_checksum: sha1:0480a8b323115f33db71299b8c0e4e626a346a4e
+    last_write_checksum: sha1:dcd28258d24f19b7aaab16ba662f8b0992ca7ed3
   src/funcs/environmentsDeleteToolsetLink.ts:
-    last_write_checksum: sha1:9fa4390b20b6873d5affe92bf3d001dae6087f19
+    last_write_checksum: sha1:e5f485d2a5468d7ac102d7cc364d5139c16c6b70
   src/funcs/environmentsGetBySource.ts:
-    last_write_checksum: sha1:8505b1491481e84648b2ef0c54c9fdebc1ecaeba
+    last_write_checksum: sha1:9d6d60af24c8b5c3db9e9ef23ff8b1267cd0f837
   src/funcs/environmentsGetByToolset.ts:
-    last_write_checksum: sha1:1a3f71b57ebd89f0955a7438c50d1b65840d88b2
+    last_write_checksum: sha1:51f9469788707e5945de28f8438cc92bd6358b9a
   src/funcs/environmentsList.ts:
-    last_write_checksum: sha1:b2873512530ea4b35f60efe8ceef287e45f1bcdb
+    last_write_checksum: sha1:33accdc3a515a43c92c2a62a86c1a81c209b47d4
   src/funcs/environmentsSetSourceLink.ts:
-    last_write_checksum: sha1:31b67ddcd34c1d98ee4e0af5e3581d1581433eee
+    last_write_checksum: sha1:348eecd92bd3f5ce56cede196684001033392aa0
   src/funcs/environmentsSetToolsetLink.ts:
-    last_write_checksum: sha1:f48202f5736831993221953ef95e1ee83a969341
+    last_write_checksum: sha1:4f81b4dea1911bb6faee631884f8e07bf758c410
   src/funcs/environmentsUpdateBySlug.ts:
-    last_write_checksum: sha1:884e74ff9e79909fa307cadfd5a11b57abe0dbe1
+    last_write_checksum: sha1:0acf5d03fd3749ae262e5f15fb13c251e1d6ad9b
   src/funcs/externalReceiveWorkOSWebhook.ts:
-    last_write_checksum: sha1:399f2184deb8c163c10b29cbf6f41831c360e11f
+    last_write_checksum: sha1:791b711d791eae9827cb0ff9eb024278458156e1
   src/funcs/featuresGet.ts:
-    last_write_checksum: sha1:a8fba40de68ffec232fc588122a36b1395502bf9
+    last_write_checksum: sha1:032131634ce2e674c86d4d9de97fee54678aed0d
   src/funcs/featuresSet.ts:
-    last_write_checksum: sha1:f20e6bb993d6c6a1213ce7109e4bb530f49d31ac
+    last_write_checksum: sha1:e7e9879ac653fabe88e32a86fdec4a034365ca33
   src/funcs/hooksHooksNumberClaude.ts:
-    last_write_checksum: sha1:eeab329d19335202fc1218bdbec81d58d80239e7
+    last_write_checksum: sha1:1cf1633aa781baac65c29b0520a88f126ee602ff
   src/funcs/hooksHooksNumberCodex.ts:
-    last_write_checksum: sha1:5d60c9135e84a2fe23f3c0423c88cba63b48192d
+    last_write_checksum: sha1:e3058a75a2f79ac71e553d93e458bf6223ff671d
   src/funcs/hooksHooksNumberCursor.ts:
-    last_write_checksum: sha1:848f07194cef45d9509cf42cea7ce51cc811d000
+    last_write_checksum: sha1:4a69502b7be3a87d37afb9603b6a28d526a6d5da
   src/funcs/hooksHooksNumberLogs.ts:
-    last_write_checksum: sha1:ccc017c78572d56992645a2be715a3a75c2949c5
+    last_write_checksum: sha1:f3332525a9f55f7594772f83f9c88117ca39e5cb
   src/funcs/hooksHooksNumberMetrics.ts:
-    last_write_checksum: sha1:5fac88688052d7bb18ff5c2a13aef7cc318fdf13
+    last_write_checksum: sha1:11701ac20572ed97f772baffcbb60de354184643
   src/funcs/hooksServerNamesDeleteServerNameOverride.ts:
-    last_write_checksum: sha1:d87c647d3e79921ddc0783ce5ebe79fc6df52faa
+    last_write_checksum: sha1:5dcbf745a32b65a40f209c3346b6bbc09129d5ce
   src/funcs/hooksServerNamesListServerNameOverrides.ts:
-    last_write_checksum: sha1:2295a17878aae69f3dd19fb11b70ba6b09a72138
+    last_write_checksum: sha1:ae7393a23b27e09bd709dd52d4189ea662fda738
   src/funcs/hooksServerNamesUpsertServerNameOverride.ts:
-    last_write_checksum: sha1:b8d044d853f97bf9b31262e9dc43d3ede592ae70
+    last_write_checksum: sha1:610647e4f47e4d1e87e202ed38bb60cc341d2933
   src/funcs/instancesGetBySlug.ts:
-    last_write_checksum: sha1:11de6d04e80395bf037daf85a932deafbaab418d
+    last_write_checksum: sha1:4a57eddae8c5cbe2d2add36978c6388e26784711
   src/funcs/integrationsIntegrationsNumberGet.ts:
-    last_write_checksum: sha1:77d1e013710b485dd6e823a528d39107ee0b8c81
+    last_write_checksum: sha1:0a0df889127fcdfa866a6cb8b095c3a2358d7d39
   src/funcs/integrationsList.ts:
-    last_write_checksum: sha1:044c68a1a749a50a7674e47932c0e9590a4cf974
+    last_write_checksum: sha1:f61ad45f773e36ecdafedca5cb75eee31cc0f3a5
   src/funcs/keysCreate.ts:
-    last_write_checksum: sha1:8af00b295266d75f1eaedba512aca36b832b9429
+    last_write_checksum: sha1:9cdc2c96069dc18636e0c1bac05c18d89f6ae81e
   src/funcs/keysList.ts:
-    last_write_checksum: sha1:cc52b1b4ae4c7a3052ca59bf55414e6f857c1706
+    last_write_checksum: sha1:ccc0e26e8ed0747fb6caf34dedeb5f786499df4f
   src/funcs/keysRevokeById.ts:
-    last_write_checksum: sha1:c5de36e52c74a2b10edf92c58673b000a43719b4
+    last_write_checksum: sha1:a9161632b1de5bf6c69c0ed135440a85da814220
   src/funcs/keysValidate.ts:
-    last_write_checksum: sha1:693a6fe800431d6b1e1dee84e8341635ab149c26
+    last_write_checksum: sha1:bb031ad236be6f2db26200a6a5d4808336858d82
   src/funcs/mcpEndpointsCheckSlugAvailability.ts:
-    last_write_checksum: sha1:2c50bb7cf2266849420962482898924f1b4bd613
+    last_write_checksum: sha1:fd47593433572317773298e53d78f2abde90776b
   src/funcs/mcpEndpointsCreate.ts:
-    last_write_checksum: sha1:04951540301fcb07fe852fb3b480cac38aa6fad5
+    last_write_checksum: sha1:b04b14f3fa1eb0df01808fe97058d8130be2984f
   src/funcs/mcpEndpointsDelete.ts:
-    last_write_checksum: sha1:b817cf32b25b09c45e2174ca85d9f68a2e549e58
+    last_write_checksum: sha1:e4a5252fbbe8e3ca8cf9b4729a01cf58e0008da3
   src/funcs/mcpEndpointsGet.ts:
-    last_write_checksum: sha1:bae3c00916e6f487c71a3a2e6d1c8bc07daee8b8
+    last_write_checksum: sha1:cd08d2232231a424efb178475a86bd8d5864c8ca
   src/funcs/mcpEndpointsList.ts:
-    last_write_checksum: sha1:d888bc29e208ba5db8db37e3cb36a65de17ff572
+    last_write_checksum: sha1:e1290ecb2cd7d3e7e7a82d34da2479e292b8112a
   src/funcs/mcpEndpointsUpdate.ts:
-    last_write_checksum: sha1:4c748444220568fd20639bd927fa4a87ccbad7f1
+    last_write_checksum: sha1:a7a3e8bdd1ba6144fb43555c67d357be5f890efd
   src/funcs/mcpMetadataExport.ts:
-    last_write_checksum: sha1:c08fc009d3a2785da699bebea452cba1db6885a3
+    last_write_checksum: sha1:b2126071d475235631f4d4e625b3112a26f5f64d
   src/funcs/mcpMetadataGet.ts:
-    last_write_checksum: sha1:cd6dc555be7264cd2cdf74b11dc51dd5bbb7c343
+    last_write_checksum: sha1:4f6d66d25dbdb91af63bfbb71edbb5f17081e356
   src/funcs/mcpMetadataSet.ts:
-    last_write_checksum: sha1:0f06c4a9b4471544f44cd529593ed7c24e405e72
+    last_write_checksum: sha1:fb0633a997ccbf07256c8984f6efdc0fe68529da
   src/funcs/mcpRegistriesClearCache.ts:
-    last_write_checksum: sha1:8e9a754f84fb52f5ae8f7a8a581fc3f644e2c0ea
+    last_write_checksum: sha1:3db75c2ac47eed5281dd928a560e04315a4de161
   src/funcs/mcpRegistriesGetServerDetails.ts:
-    last_write_checksum: sha1:4f7fa8f2da2665e11ccb67ba15dcc2df2696ae9e
+    last_write_checksum: sha1:5103f4f414ae370b2daed1ed52c887d69af26ed5
   src/funcs/mcpRegistriesListCatalog.ts:
-    last_write_checksum: sha1:d37473e3643c67df1dfae48c6af68c5a581d39f3
+    last_write_checksum: sha1:b47d466b710b059b05869118741a5a3bf4097b35
   src/funcs/mcpRegistriesListRegistries.ts:
-    last_write_checksum: sha1:d790c74da0accdbbed97545b5445a035a8ae06a6
+    last_write_checksum: sha1:bf5407c5bda22d4b0c2965e1e8e876276d2ef4ef
   src/funcs/mcpServersCreate.ts:
-    last_write_checksum: sha1:a61c60f1955b8e8dfae9f1ceaedb6c9f95726065
+    last_write_checksum: sha1:364050da5a62f32ad1164dcc0ab0232f210e3957
   src/funcs/mcpServersDelete.ts:
-    last_write_checksum: sha1:5e3696cd7693c2be96f3977556112d519751ce28
+    last_write_checksum: sha1:132c70172bb360c277db18b320f891a8efa4a18c
   src/funcs/mcpServersGet.ts:
-    last_write_checksum: sha1:4c3e31499b61a2a605a7183da9ea4c7dea44aaf5
+    last_write_checksum: sha1:f9cd0277509ec021a0dc4a32c1edbe56842253a5
   src/funcs/mcpServersList.ts:
-    last_write_checksum: sha1:8ed8e9de8053f7e7575ad79a8ffeee807583ad21
+    last_write_checksum: sha1:fb63dfc3f2d22cf77128555c9e3777b4421d0ada
   src/funcs/mcpServersListToolFilters.ts:
-    last_write_checksum: sha1:e5b483366aa98808e0d4e3796aadf40fc7316c6f
+    last_write_checksum: sha1:4abc4cb95c5d3a93e5c2489246dd2543eae5df26
   src/funcs/mcpServersUpdate.ts:
-    last_write_checksum: sha1:149532dd3b6e9ae6295b5d72d55eb34ab454a2ef
+    last_write_checksum: sha1:dabc64edc0ec1e51119fbb590f462d5e10c3162a
   src/funcs/organizationRemoteSessionIssuersCreate.ts:
-    last_write_checksum: sha1:2290bca28afb2d4bb704df8f353c413f81c76980
+    last_write_checksum: sha1:bf598cc3847ca146d9438e616caa66af330ce064
   src/funcs/organizationRemoteSessionIssuersDelete.ts:
-    last_write_checksum: sha1:9d3e2cd8d7f42acee843f08adba346339cac4c27
+    last_write_checksum: sha1:9252d494e841961940dba95a1a2ff21a083a51c1
   src/funcs/organizationRemoteSessionIssuersGet.ts:
-    last_write_checksum: sha1:c2381c2ef50c9389a55e5fb1514393bfbc854bc0
+    last_write_checksum: sha1:95944b29a4e6743765e294a861665d27ad6ae39b
   src/funcs/organizationRemoteSessionIssuersList.ts:
-    last_write_checksum: sha1:4591e59b27d92b7bbf2813911d24242e860404fc
+    last_write_checksum: sha1:f2b8cc676cc4ecbd45889792f6ad0f789ca15108
   src/funcs/organizationRemoteSessionIssuersUpdate.ts:
-    last_write_checksum: sha1:5bc89bdfee5f26731a9b5f9a10babb5f501a79e1
+    last_write_checksum: sha1:9cd97d5758631c783c7a10184f84dec4624938bc
   src/funcs/organizationsCreatePortalSession.ts:
-    last_write_checksum: sha1:5233c1df642a6ff11b3b7ea25a4c0e335861d6ee
+    last_write_checksum: sha1:67367ee8153b1e408726fef9e02695465ffbb564
   src/funcs/organizationsDisableWebhooks.ts:
-    last_write_checksum: sha1:c2d7fd796bde95c22e72a7128de5e88f54e6989c
+    last_write_checksum: sha1:e547f4803408ce6ce33bdb1b1888a4345c36b56c
   src/funcs/organizationsEnableWebhooks.ts:
-    last_write_checksum: sha1:bb7bbe0a17ee3d463640af7cc4cbcef3b22638a3
+    last_write_checksum: sha1:7f2651d52cb9292450a9b4c523e125ba854eee6d
   src/funcs/organizationsGenerateWorkOSAdminPortalLink.ts:
-    last_write_checksum: sha1:5f89421938b79bfcc808da0fbc26815968b7c7f3
+    last_write_checksum: sha1:256cde67e5978c4678da3c9d8bc8f8b97745a8f6
   src/funcs/organizationsGet.ts:
-    last_write_checksum: sha1:c54fdca9f3dd55c97f88419733dfbd93540e971f
+    last_write_checksum: sha1:425caca4be11163b202d6b893f8daa868c224c29
   src/funcs/organizationsGetOnboardingStatus.ts:
-    last_write_checksum: sha1:2012798eef7fec77fad1b0cac4cf18cbb1dbe02d
+    last_write_checksum: sha1:b03a9e63482ba37b63261073a79e94a0e76e34ed
   src/funcs/organizationsListInvites.ts:
-    last_write_checksum: sha1:6a2f70e810ecad9afce17e4ec6c9f32aecba9fb6
+    last_write_checksum: sha1:4e5011ee86420b528cee3a45f41ba556a32962fb
   src/funcs/organizationsListUsers.ts:
-    last_write_checksum: sha1:9167e1d40b414f1a4bd51d696d91493dc61a7791
+    last_write_checksum: sha1:bb9114a7b63696e58ef5ff8fc9d8eb248de08fec
   src/funcs/organizationsRemoveUser.ts:
-    last_write_checksum: sha1:721c264aaf7030805dbbaa75743afcaf641db8f9
+    last_write_checksum: sha1:a7d2ce703fda7b17afea02a972ea1349fdff5c93
   src/funcs/organizationsRevokeInvite.ts:
-    last_write_checksum: sha1:e0d9ebb426a7c7cdfea47193492f2cfb9b70ea00
+    last_write_checksum: sha1:4fea492b55ea1f99efd2e2ee15fdbb7089ba055c
   src/funcs/organizationsSendEnterpriseAdminOnboardingEmail.ts:
-    last_write_checksum: sha1:90bea6ac858d30ad96bd1707dce3b4b684bc489f
+    last_write_checksum: sha1:7c694e36a7050afa7323e8fcc3b73ace83196ea6
   src/funcs/organizationsSendInvite.ts:
-    last_write_checksum: sha1:47c0512694f2da28e31d72d434324d60e2642bec
+    last_write_checksum: sha1:54b2bfcf5c4f4387b03b5aacc863ee8ba3307596
   src/funcs/organizationsUpdateInviteRole.ts:
-    last_write_checksum: sha1:5b32027c3d14512df873bf380f4743a968852762
+    last_write_checksum: sha1:c92dc89c9f1732c20f71b8e4ad64be6a2071a563
   src/funcs/organizationsVerifyOnboardingHooksSetup.ts:
-    last_write_checksum: sha1:eff9ed4ccb148c552f60920b35a50dbdae933326
+    last_write_checksum: sha1:048f00c01f96bd6de151434f59e670e49fc620ed
   src/funcs/otelForwardingDeleteConfig.ts:
-    last_write_checksum: sha1:1f96ee814827f44397ad9fa753a8826d19167cd2
+    last_write_checksum: sha1:2694f8121bbaa811cb7e589a9bbe99bc8a38ce81
   src/funcs/otelForwardingGetConfig.ts:
-    last_write_checksum: sha1:b48bcf5e1f903b78f4fd1907e6c46a7cda98f8c5
+    last_write_checksum: sha1:bf3940fc41218fe94872cbc619ccaeafbc809935
   src/funcs/otelForwardingUpsertConfig.ts:
-    last_write_checksum: sha1:200338dc2e511d5e8881c425f61fb1bf26521d05
+    last_write_checksum: sha1:6b3343da024de56e004c7d8ad9d390115d9cec6d
   src/funcs/packagesCreate.ts:
-    last_write_checksum: sha1:89debf5aed15268f146e55ff50e5656d43840138
+    last_write_checksum: sha1:e5c93edada4390f85a419c6edcefdecdead1e808
   src/funcs/packagesList.ts:
-    last_write_checksum: sha1:3741a006e7271d898a2a578aa037c20ced579f8c
+    last_write_checksum: sha1:efafc541bc2d14b73768a8908837b925fd69654c
   src/funcs/packagesListVersions.ts:
-    last_write_checksum: sha1:0a7a43ad6618856c20a4b6dadf2463a5092d7f35
+    last_write_checksum: sha1:e39ba5c67fd0de932302eaddd36eebcadfce785e
   src/funcs/packagesPublish.ts:
-    last_write_checksum: sha1:f80a19e0e68e63a14c9b2f9de336358d80621046
+    last_write_checksum: sha1:90826d0bd9f382c227044e45dac8656f4e025964
   src/funcs/packagesUpdate.ts:
-    last_write_checksum: sha1:6c9b03b62c0f287a947182a9a6a77a2d3254f515
+    last_write_checksum: sha1:fca7f837d10d748b29d7256d91375676a5f76c48
   src/funcs/pluginsAddPluginServer.ts:
-    last_write_checksum: sha1:d641ffedfc6dbbe62f07f54d97d9f4f7de7b1036
+    last_write_checksum: sha1:74dc84b107f36e8c56b4f2faad2cfbcf12f8a2ab
   src/funcs/pluginsCreatePlugin.ts:
-    last_write_checksum: sha1:5bf4d024989560de1c7753e6e2653a1377743799
+    last_write_checksum: sha1:d2f679d50b01fa675534c4d5abb9c208ede77820
   src/funcs/pluginsDeletePlugin.ts:
-    last_write_checksum: sha1:8fff73683c02b556934656fed9b68a8e9ac97557
+    last_write_checksum: sha1:0fae47acd6c4ad0caba1d676be5e8fea03ea3386
   src/funcs/pluginsDownloadCodexInstallScript.ts:
-    last_write_checksum: sha1:5fcc029071b5db754d1354791531bef30062b9c5
+    last_write_checksum: sha1:db0c6c512c47dc9e3dc2ca7fbd1684d1e3629d2e
   src/funcs/pluginsDownloadObservabilityPlugin.ts:
-    last_write_checksum: sha1:ab367a99bc132ee14f08674248aebbda233ba7bd
+    last_write_checksum: sha1:a7c037029deec0a733d31633a335b9b77371da73
   src/funcs/pluginsDownloadPluginPackage.ts:
-    last_write_checksum: sha1:4f64971419427f16b788136d3748e8d86d44c842
+    last_write_checksum: sha1:2137a0829b969e414ea39e7f81f13e50f1148c35
   src/funcs/pluginsGetMarketplaceSettings.ts:
-    last_write_checksum: sha1:2588db20aa04baa433451aec5dafe15a762ff0c6
+    last_write_checksum: sha1:e32d427d98fa5a8e195bc922c4168387400feb7d
   src/funcs/pluginsGetPlugin.ts:
-    last_write_checksum: sha1:60114dee66de0c5e7ccbf9636f5bb2002359af2e
+    last_write_checksum: sha1:d87a722162678b54cd9078a33c16f0af86e1eb00
   src/funcs/pluginsGetPublishStatus.ts:
-    last_write_checksum: sha1:2e645fbdbe9616d8d8d693a10f8dfbb50ffbfd13
+    last_write_checksum: sha1:480ffebd7787befc33703b272ed4c2d2fbd79ba0
   src/funcs/pluginsListPlugins.ts:
-    last_write_checksum: sha1:bfa86f3f79311ba286b67c1662069bbe6a509bb0
+    last_write_checksum: sha1:0835bbf897adfb25f60e80c9284629854c4d46ca
   src/funcs/pluginsPublishPlugins.ts:
-    last_write_checksum: sha1:e3179bea2cfaba286ca6b82b6cdb2e837f106a48
+    last_write_checksum: sha1:60ccb364cec9c53488ba07a41251b0f86cc160e1
   src/funcs/pluginsRemovePluginServer.ts:
-    last_write_checksum: sha1:08867f59d4552712de257c8956a6933ba5c7262f
+    last_write_checksum: sha1:c484f5f824296ec7a63c6010f60559361dee0077
   src/funcs/pluginsSetPluginAssignments.ts:
-    last_write_checksum: sha1:4296eb769953aec081152084427ec3f27cf153f1
+    last_write_checksum: sha1:b904ab0dd4c3a440863367a84608529cabba9b17
   src/funcs/pluginsUpdateMarketplaceSettings.ts:
-    last_write_checksum: sha1:7c7c3d3270a06ec1475c9d463da0f2964324768a
+    last_write_checksum: sha1:8b3d8bf36c631a2ee0215a1004416b855c274011
   src/funcs/pluginsUpdatePlugin.ts:
-    last_write_checksum: sha1:1f41106e2a3a0f7cf959c4c2a77cd3badd580671
+    last_write_checksum: sha1:3e01a530b3a9f0f3b21303a70524873c5f9551c9
   src/funcs/pluginsUpdatePluginServer.ts:
-    last_write_checksum: sha1:05e4193de22eb46be0efb392d9493b33255bec04
+    last_write_checksum: sha1:ec4cbd534a492838f10fe9cf645049f8c3c00ccc
   src/funcs/projectsCreate.ts:
-    last_write_checksum: sha1:235d5d41714cd9833800e69723e8d91f399a0fda
+    last_write_checksum: sha1:0c4be3ea8c91da57e84684276a616b42857058d5
   src/funcs/projectsDeleteById.ts:
-    last_write_checksum: sha1:f4dba4e668c89100976558bad49f819da20c3942
+    last_write_checksum: sha1:48da83e0cb2df64029c948cb68d3ffff428bb6a2
   src/funcs/projectsList.ts:
-    last_write_checksum: sha1:b2c936046972d4388582413d7c582722effee5b6
+    last_write_checksum: sha1:f771e186abca712c52ef325002da62d596d2748c
   src/funcs/projectsListAllowedOrigins.ts:
-    last_write_checksum: sha1:af789f15f996f2d5f2915b9e2bd3c09b22ad6943
+    last_write_checksum: sha1:5e6be3096095a20c5681b9f6e780ed49ca81082d
   src/funcs/projectsRead.ts:
-    last_write_checksum: sha1:042abd59d4db6f6fb8ec6a2249c3c4f12c3cca4a
+    last_write_checksum: sha1:e0df7209c9c4d8fd252d2fbc180338fc015fed54
   src/funcs/projectsSetLogo.ts:
-    last_write_checksum: sha1:515516da50ac537138ade50fab262d6523b9c760
+    last_write_checksum: sha1:f58fc64fefd01e26f8b4535e4d8cb4f4c76b5ad0
   src/funcs/projectsSetOrganizationWhitelist.ts:
-    last_write_checksum: sha1:490e68152481cc7937e8010247db18364cefeaff
+    last_write_checksum: sha1:7a9d5f9f2929d57eede48dd29f3c74ed3a8ed92e
   src/funcs/projectsUpsertAllowedOrigin.ts:
-    last_write_checksum: sha1:894188f1d1662366a06f6ece316f4908a2971406
+    last_write_checksum: sha1:0ccb207b97f9fbfbc607032329a2496aa4b9404c
   src/funcs/remoteMcpCreateServer.ts:
-    last_write_checksum: sha1:0626e140b8cff9e644343ecb9e4db29abf1dd6ba
+    last_write_checksum: sha1:75d5fd80b80d147ba156382e48b005ede17d9784
   src/funcs/remoteMcpDeleteServer.ts:
-    last_write_checksum: sha1:a8deb618975122d5bc355f0b292d1ff282695367
+    last_write_checksum: sha1:b62b78321fc806e74f2c9ae0e21e5f30dc791a0a
   src/funcs/remoteMcpDiscoverProtectedResourceMetadata.ts:
-    last_write_checksum: sha1:e62c6fa3237c648df3d99f5b36cdca8717b49137
+    last_write_checksum: sha1:ab372a1eec6b56dfab535cdf8822299f1c89c4b5
   src/funcs/remoteMcpGetServer.ts:
-    last_write_checksum: sha1:d2a935c7a19e6b519c80bc028c41eacdf070230d
+    last_write_checksum: sha1:56f50f4b2fe46b6097d65a444155ac77bfc87176
   src/funcs/remoteMcpListServers.ts:
-    last_write_checksum: sha1:653c0c074c84a8b98128b97170bd56f7cc413918
+    last_write_checksum: sha1:aac77f007a5df41a17a552da9519cf09d2d2cf9a
   src/funcs/remoteMcpUpdateServer.ts:
-    last_write_checksum: sha1:fa6816a4bca8c8b53751ba8b7e0ce3111d8f0c99
+    last_write_checksum: sha1:f078bf874d38cfebf8e5614af75b94d3af6239ca
   src/funcs/remoteMcpVerifyURL.ts:
-    last_write_checksum: sha1:7a69cb7f073b964125089cbe3cb5e99d855684e5
+    last_write_checksum: sha1:9f0f774d3c687cdc2a068a156179cf6efea40cac
   src/funcs/remoteSessionClientsCloneClientFromOAuthProxyProvider.ts:
-    last_write_checksum: sha1:3cba86cd3eea8ecaf4d14372a95848dda89d5551
+    last_write_checksum: sha1:e5ada8454c71337288791c99c48aff6a7ed3d7b1
   src/funcs/remoteSessionClientsCreate.ts:
-    last_write_checksum: sha1:932315ffd3a2786ad957fb085d51607a22dd5586
+    last_write_checksum: sha1:253fda1fff25492886d0511eec82995f2bd545aa
   src/funcs/remoteSessionClientsDelete.ts:
-    last_write_checksum: sha1:1f02dbc6c881a8fca7c4fe1fd985074d00cf050f
+    last_write_checksum: sha1:df59390e1b2191d12008e88d74204eb3882d9402
   src/funcs/remoteSessionClientsGet.ts:
-    last_write_checksum: sha1:76a6e48fed620c91b741704471fda5e999556e37
+    last_write_checksum: sha1:923dc392f0aadf81aad614f60c77a1fb98585123
   src/funcs/remoteSessionClientsList.ts:
-    last_write_checksum: sha1:cf08c4fa727aeaaa499335d3b0ce5a60f4a85279
+    last_write_checksum: sha1:afcd72b03d5cbbaf94749cfabbb5fcd803e4ca6b
   src/funcs/remoteSessionClientsUpdate.ts:
-    last_write_checksum: sha1:05bec2499e3af69f6eea7089ce67cceab30f3e14
+    last_write_checksum: sha1:98b27164d915129d0e218ec61b3d2677a8b215c7
   src/funcs/remoteSessionIssuersCreate.ts:
-    last_write_checksum: sha1:ca5b980e163ddfe06078c22167286997d87868ce
+    last_write_checksum: sha1:14cad5b03b89517f6c87c7dfb29cab90203de3da
   src/funcs/remoteSessionIssuersDelete.ts:
-    last_write_checksum: sha1:20d4f432f1ca9880ac9c4d81bc00642970e71b6e
+    last_write_checksum: sha1:351e15d8cfadeea019a8fc3d3e6d21c5ac555a73
   src/funcs/remoteSessionIssuersDiscover.ts:
-    last_write_checksum: sha1:e660b6122d4cad7bc153b835cae042fc33f873eb
+    last_write_checksum: sha1:49ec7db7c3e26721d3ab2eab46c00730d2c59dee
   src/funcs/remoteSessionIssuersGet.ts:
-    last_write_checksum: sha1:969f47473f4042b4af7319687971930d3c0b07f7
+    last_write_checksum: sha1:2f036d370b3db8122c48c44db0600cc7edfb7928
   src/funcs/remoteSessionIssuersList.ts:
-    last_write_checksum: sha1:8086d3813473f419a204d503aecf46181efe40d1
+    last_write_checksum: sha1:71d85b54df8475fb39933f5b2d1de29392caffb7
   src/funcs/remoteSessionIssuersUpdate.ts:
-    last_write_checksum: sha1:f0fbdac43b54f9f76816aa1591be508550c60795
+    last_write_checksum: sha1:0fbc7c84895e72dae26a043678db6affe778b73a
   src/funcs/remoteSessionsList.ts:
-    last_write_checksum: sha1:3c31b6eb047ab0516bb1ba847515eceded9a7ab7
+    last_write_checksum: sha1:d7a438720ec6847b5b527a6ec58205b10a3665a7
   src/funcs/remoteSessionsRevoke.ts:
-    last_write_checksum: sha1:acdff13ca4dcfee38f23fa2998da7374585e13bc
+    last_write_checksum: sha1:5d47a4376038c5c10bbb48969f1a7216fb419ac1
   src/funcs/resourcesList.ts:
-    last_write_checksum: sha1:02c0dab96f424f5f7217c3affc7cf164b1dbbf73
+    last_write_checksum: sha1:d48b10df9ac7e7d3b9958550e24ee1ddb2eb7dc7
   src/funcs/riskCapabilitiesGet.ts:
-    last_write_checksum: sha1:a3160c50888cb6046048de4379d4009fb63bf68d
+    last_write_checksum: sha1:a87b56bd3f8a7a5b473ee6d7a0f128aae3d8b22d
   src/funcs/riskCategoriesList.ts:
-    last_write_checksum: sha1:d0acd98ee09ef8f47b83ed9c14a7371dc15ad557
+    last_write_checksum: sha1:264faa0baa71ef4bde67cb85c901a3cbfd725040
   src/funcs/riskCustomRulesCreate.ts:
-    last_write_checksum: sha1:ed06a263f84b91c53ba7f2572dcc8f3beda2d74f
+    last_write_checksum: sha1:2a1cfdaf4f7a6025292e2c2ccdda850dbca9cfee
   src/funcs/riskCustomRulesDelete.ts:
-    last_write_checksum: sha1:9441e799eb9888ad718820136866ff209074ea88
+    last_write_checksum: sha1:b5996a8d8d311a90e048f2429bfd716cb2cdb4a2
   src/funcs/riskCustomRulesGet.ts:
-    last_write_checksum: sha1:75fcc79d4717cbe0fe37c97007a8f3bc12997190
+    last_write_checksum: sha1:b53d7876164adf5ac116ae8da73f1a65ebab9f45
   src/funcs/riskCustomRulesList.ts:
-    last_write_checksum: sha1:73cf63f63237f6d09d6eca17dbfa45152a667f4d
+    last_write_checksum: sha1:564f2e1774bd960105a3a2553f820d07df07b23b
   src/funcs/riskCustomRulesSuggest.ts:
-    last_write_checksum: sha1:3a6cf4c1f576a5b01884727c2cf49a77dc903b58
+    last_write_checksum: sha1:2fb2f79eb6f6c452106eeb558951518cf32d4b59
   src/funcs/riskCustomRulesUpdate.ts:
-    last_write_checksum: sha1:0106ed9492a2b242128d5b3ae83ba7657a06707a
+    last_write_checksum: sha1:64fdad46266de792afd338bd3f8690cd66982ea6
   src/funcs/riskExclusionsCreate.ts:
-    last_write_checksum: sha1:5a57e84830319136a27429eb5b358efcafe3bcb8
+    last_write_checksum: sha1:cf5dad9b5c1de70878f36835fa86b8cddb7fc8f2
   src/funcs/riskExclusionsDelete.ts:
-    last_write_checksum: sha1:1184b0a767ce3711e8987eca3c57fd001de10cbb
+    last_write_checksum: sha1:25eda4d6a8cb8b8fa8768c0ce84fd23656f9176f
   src/funcs/riskExclusionsList.ts:
-    last_write_checksum: sha1:59db77ebbd43ba1535accafcb3fc331fdba479a3
+    last_write_checksum: sha1:9b131c1eedf5a863d3a047221afc326c99291dfa
   src/funcs/riskExclusionsUpdate.ts:
-    last_write_checksum: sha1:aea2b3f29edef7fe7b6359cf3c4ce04fbc39eff2
+    last_write_checksum: sha1:199088fed815d31f3044b20342d362e865820839
   src/funcs/riskOverviewGet.ts:
-    last_write_checksum: sha1:691d51db9d752dc4359b72ad240eb930b96bde3b
+    last_write_checksum: sha1:10dc0bdfc2d651c3b001ddb50ce4fe7c0a9a2307
   src/funcs/riskOverviewRules.ts:
-    last_write_checksum: sha1:872e30d64709d659f7e992f0413f8c7f3f27aef1
+    last_write_checksum: sha1:82c067707b4b746103da35ad0e8099186d7def06
   src/funcs/riskOverviewUserBreakdown.ts:
-    last_write_checksum: sha1:5aed50344b86f7e0d92c1b29e145c0ab7d095426
+    last_write_checksum: sha1:782c399244be30dde9b02e52d53a3f0f27cd230a
   src/funcs/riskPoliciesCreate.ts:
-    last_write_checksum: sha1:110883bc5a8553fd463a0c78326d5bea2641a9fc
+    last_write_checksum: sha1:d548436503ebb9b176d75d6726928685d2f7f122
   src/funcs/riskPoliciesDelete.ts:
-    last_write_checksum: sha1:910bb729714edd9671d50ba2564e80725b050800
+    last_write_checksum: sha1:63c1c2c3a84d3f7de36231b06932698e7ec4069a
   src/funcs/riskPoliciesGet.ts:
-    last_write_checksum: sha1:2cf78756b5d35e11547ae7fe04a027e1a94f851e
+    last_write_checksum: sha1:11391a23d3b3f20d4fe3fcb825f76e5ff64adf61
   src/funcs/riskPoliciesList.ts:
-    last_write_checksum: sha1:32a4ba010189b97dbe8853d44cee147d0b39414a
+    last_write_checksum: sha1:0b42a60298d30f93ebe12e5446b278d62679ac37
   src/funcs/riskPoliciesStatus.ts:
-    last_write_checksum: sha1:e5f13dc9c90bf986a52d0061ac9a2cae42336d19
+    last_write_checksum: sha1:cff2198821aa462a441354ca7bc5779bd8bd2e03
   src/funcs/riskPoliciesTrigger.ts:
-    last_write_checksum: sha1:65659dd877ec6dd3a9a1b2a92dca411a643b3d84
+    last_write_checksum: sha1:899e5f614e8968b44a6793a0603de89eb5449b19
   src/funcs/riskPoliciesUpdate.ts:
-    last_write_checksum: sha1:92f754497d1f435ba5fa19b48967e0d25bb9fe89
+    last_write_checksum: sha1:a837a34d87bcdc48af1ae9b78862c425fedf3bc2
   src/funcs/riskPolicyBypassRequestsApprove.ts:
-    last_write_checksum: sha1:93902b04be16bb6cf6e3e04d680c2f22382a2643
+    last_write_checksum: sha1:364f7c148cbbd1d9eb57ce2a9298d3044c61b64b
   src/funcs/riskPolicyBypassRequestsCreate.ts:
-    last_write_checksum: sha1:955d0985b8ebd7a8e9377ba78146b8f3aed1d059
+    last_write_checksum: sha1:52e497f82fe5040b125622b39ad7850350c7c297
   src/funcs/riskPolicyBypassRequestsDeny.ts:
-    last_write_checksum: sha1:94910c7bc3df58b816135a92dcab29d1197f070d
+    last_write_checksum: sha1:0ecfaf29e1617a4ce88f11f7cf8111fd00656467
   src/funcs/riskPolicyBypassRequestsList.ts:
-    last_write_checksum: sha1:fbd15ebba3349e01af89e1c6480b7be9aced27bd
+    last_write_checksum: sha1:3e23f3ce661bddefb79f8dd180a2413410bd9434
   src/funcs/riskPolicyBypassRequestsRevoke.ts:
-    last_write_checksum: sha1:79995084599d9f730b1d6d14322bfd9607ef05d4
+    last_write_checksum: sha1:82e6e318b928bda7c60edd40762017168f0d8ab2
   src/funcs/riskResultsByChat.ts:
-    last_write_checksum: sha1:8acc67d9c9f3540c672110e0d029cea679d8ecd0
+    last_write_checksum: sha1:f7d08096a2f620fa96470b83b8a47d483c202da7
   src/funcs/riskResultsList.ts:
-    last_write_checksum: sha1:5429d9e2310e3863b8ea309917fd3f865ec80e0a
+    last_write_checksum: sha1:b477cfa07813fc26aec280c8e7a3c48a37bbd404
   src/funcs/riskResultsListForAgent.ts:
-    last_write_checksum: sha1:8f23dca66a621cd29da3475e951feb9d01cbc573
+    last_write_checksum: sha1:0ed3fe424a04033bfc0028338fe5ee3fd2758e57
   src/funcs/riskRulesTest.ts:
-    last_write_checksum: sha1:eded4a162ad622032bc72d8f95449758510c8615
+    last_write_checksum: sha1:c4a76f9f4070433bc7f1331991a438ffe69c1641
   src/funcs/skillsApproveVersion.ts:
-    last_write_checksum: sha1:9613674fb03ef2350d7db24c750033fbaa5a92ee
+    last_write_checksum: sha1:755a0a1c283f66dc897c2cea63bb5b2dbc25f35c
   src/funcs/skillsArchive.ts:
-    last_write_checksum: sha1:cf24bf70640e83ff2629ff5a51f3dc97f1f89718
+    last_write_checksum: sha1:18b65b428265730ef50c83cae8aa50b7a8e44a17
   src/funcs/skillsCapture.ts:
-    last_write_checksum: sha1:1a5dd8a1b355c6837ce942afb67383673ea508ef
+    last_write_checksum: sha1:c4c94bd3816f66f3b15eba8a0166bcf926296b28
   src/funcs/skillsCaptureClaude.ts:
-    last_write_checksum: sha1:ed0837948d879bf0a6c1ef82828ca7a0b72915f2
+    last_write_checksum: sha1:4fd1f99ef5c0847ad4bc9d674cec04992bf23e1f
   src/funcs/skillsGetBySlug.ts:
-    last_write_checksum: sha1:51492589c5e189e208b7b8da6fe43e7a94e26525
+    last_write_checksum: sha1:c6683604db8d32ea19d9c7f35a2cd8935f399010
   src/funcs/skillsGetSettings.ts:
-    last_write_checksum: sha1:d79604ce9a649eb971c81173038ce875ba4f2304
+    last_write_checksum: sha1:607a2ccc6c6bf21bf1330e401e6479ff9cdb6ff8
   src/funcs/skillsList.ts:
-    last_write_checksum: sha1:90909f5d7b4041065d3f6306d82c2f7cb17c1e69
+    last_write_checksum: sha1:36a41465ad91c2a4ab1f4131850a908f3931c61d
   src/funcs/skillsListPending.ts:
-    last_write_checksum: sha1:a6747fe2e1b2809ab8e55fc1820e67812b01364a
+    last_write_checksum: sha1:41c350e203676cecfcb51ad13433e7608ac25c7c
   src/funcs/skillsListVersions.ts:
-    last_write_checksum: sha1:c92c047c2205d30b06285f3f6da90a0e966631d3
+    last_write_checksum: sha1:ebbdf8011bf0e23263ece982531c3e801ee0b691
   src/funcs/skillsRejectVersion.ts:
-    last_write_checksum: sha1:79d5200761a1e447cfdf683cf950a882fb07b035
+    last_write_checksum: sha1:5ce9f4ddd8f55edf3853e08d49dffa7c949d2bd9
   src/funcs/skillsSetSettings.ts:
-    last_write_checksum: sha1:9f8b8cebe295b6f3fcceafb6d4adb12b3dbd7e3f
+    last_write_checksum: sha1:fcc68358a97311ef658626083d065dfea6f6432b
   src/funcs/skillsSupersedeVersion.ts:
-    last_write_checksum: sha1:7a3ee28c63359b3816bafa6866445f6bc460b255
+    last_write_checksum: sha1:9b9a3f8847fc1d0c30fcfe348d9fe791f8e6dce6
   src/funcs/skillsUploadManual.ts:
-    last_write_checksum: sha1:bcd2f1327c64a2a78b3d177f258ceeb55493359d
+    last_write_checksum: sha1:aee1a5b1e5630c71a7efb93527b909d5b8502bbc
   src/funcs/telemetryCaptureEvent.ts:
-    last_write_checksum: sha1:a8cebadd7f31a51a1acad4f843675bcb8d827fc9
+    last_write_checksum: sha1:f57746fdf53849458bd4f265e8c7296bf03a18c8
   src/funcs/telemetryGetEmployeeDataFlowGraph.ts:
-    last_write_checksum: sha1:1953c81a2b9759e7436802cf1e78bbd2c2cefcbc
+    last_write_checksum: sha1:555686966e5a9edf9e1f20f5d71c7e0c3a100c62
   src/funcs/telemetryGetHooksSummary.ts:
-    last_write_checksum: sha1:f9c9223ed87e8d1130d2fd13de17c1a27e8a5b15
+    last_write_checksum: sha1:570c7637fbf4bb0f6b907687b5aae5a84155d9e9
   src/funcs/telemetryGetObservabilityOverview.ts:
-    last_write_checksum: sha1:11679001cfccfdb1afba2b1ee38e3835fc7d4376
+    last_write_checksum: sha1:72fe538e02f01fba8bdd5fa2edef7adea01aa498
   src/funcs/telemetryGetProjectMetricsSummary.ts:
-    last_write_checksum: sha1:6fa7fe5c14551d0838b769a1b71b77157da2ed21
+    last_write_checksum: sha1:4c112aeab1b62d17c5505e4753a64cb2588c1482
   src/funcs/telemetryGetProjectOverview.ts:
-    last_write_checksum: sha1:597da7f79ba780a266e1ec559f745cd18265c276
+    last_write_checksum: sha1:d2ef5f630ad40d96e299b633bd643d5d92e73019
   src/funcs/telemetryGetUserMetricsSummary.ts:
-    last_write_checksum: sha1:e945ddbd9d9650da567ce11ecd17473b9c2ae5be
+    last_write_checksum: sha1:e4d587aa388956bf02062457c727279b8892385d
   src/funcs/telemetryListAttributeKeys.ts:
-    last_write_checksum: sha1:b358d11792679027a6b7829e5911f6eeb53c2175
+    last_write_checksum: sha1:980e0df0c545f38916bd4831e8225af8ee602037
   src/funcs/telemetryListFilterOptions.ts:
-    last_write_checksum: sha1:7b6e4b854094302331b1b410eccbc622f2aa9e56
+    last_write_checksum: sha1:a1f32dd67b5b9e8c88888ac58b5e56995d8a4029
   src/funcs/telemetryListHooksTraces.ts:
-    last_write_checksum: sha1:1fadce08cc64d502fd1877d2093a299afae2d498
+    last_write_checksum: sha1:269dba5c4d43bc0c3b4adf77fb6c3ea98c4a7215
   src/funcs/telemetrySearchChats.ts:
-    last_write_checksum: sha1:aabf18819ad0d934bea18e0e93acdac4cd6329f5
+    last_write_checksum: sha1:d15118d57522ffe76d8232338077dcc53bc2a060
   src/funcs/telemetrySearchLogs.ts:
-    last_write_checksum: sha1:b75ffba0df86487c308f8bd4fe76de3a955b2a98
+    last_write_checksum: sha1:68a14598d03fb7ae57002c172c353cdd1b1b1d58
   src/funcs/telemetrySearchToolCalls.ts:
-    last_write_checksum: sha1:e98deca5d44419da9d8d30b3bd98c875cdfc27e5
+    last_write_checksum: sha1:b4c6fd929dd85db1cea50e12ffb03418f44ab553
   src/funcs/telemetrySearchUsers.ts:
-    last_write_checksum: sha1:a214ea41ff54328c995a77cfa97807f387009e15
+    last_write_checksum: sha1:f5e33eb3e9092237e0df0046a1dc4d39ec3d41a9
   src/funcs/templatesCreate.ts:
-    last_write_checksum: sha1:fabc9bed771ec40651c2620d45a7af91cf2694c4
+    last_write_checksum: sha1:db598b35b48d0205d3330b0f26e7c81908325ac5
   src/funcs/templatesDelete.ts:
-    last_write_checksum: sha1:b25925e07ca461f5f92fdb49a65542e450eed226
+    last_write_checksum: sha1:7aed59fcc4cfbfd9c13371bf6d4fbe5afadcdfcd
   src/funcs/templatesGet.ts:
-    last_write_checksum: sha1:9e4241db18fa90d1d7bf716401d1bd1483af7aa0
+    last_write_checksum: sha1:ba99460ee38bf4c6a39e1a15dd23dd6087e68aec
   src/funcs/templatesList.ts:
-    last_write_checksum: sha1:ea16e66dae7703b41d45e36e2abaf751105a4744
+    last_write_checksum: sha1:dd4f52c98f94080275c6eab6379fd6078df01b03
   src/funcs/templatesRender.ts:
-    last_write_checksum: sha1:27ad5fb5d0929284f135924f854498b0937dd7a7
+    last_write_checksum: sha1:91ff9fb166a054fe684da9d2e458797522dabd0f
   src/funcs/templatesRenderByID.ts:
-    last_write_checksum: sha1:0e9d1232a5bcc55dcff71ddb914b36a624e1b5ab
+    last_write_checksum: sha1:0336a1e8de4a619540bc4345cfd5bf86d8ad9e19
   src/funcs/templatesUpdate.ts:
-    last_write_checksum: sha1:8cc0ec43297938ec7c8dee621a9266f76d5f7dcc
+    last_write_checksum: sha1:fdae3b645767c1603cf7383b722a22b7df7f84a1
   src/funcs/toolsList.ts:
-    last_write_checksum: sha1:eb78fe9f8fa85478d77ec4dc4bad79a204d4360c
+    last_write_checksum: sha1:06b52e6b86f0197ed0b71b9c3863f1e321969187
   src/funcs/toolsetsAddExternalOAuthServer.ts:
-    last_write_checksum: sha1:89fb7a44eb3db1f4c5f58edd782700d976430e02
+    last_write_checksum: sha1:c35f82f57e24e41ad9d5e115255a0bf58f3683be
   src/funcs/toolsetsAddOAuthProxyServer.ts:
-    last_write_checksum: sha1:cc4d51434521d9b56f77313feeefbe827d01e56a
+    last_write_checksum: sha1:45873a5e49edcad6057200ae2bc1483218967a2b
   src/funcs/toolsetsCheckMCPSlugAvailability.ts:
-    last_write_checksum: sha1:2737cb5c14d88045ccb8edc5bba134477554a685
+    last_write_checksum: sha1:e8465e65bc58504664a89d91f608adfbccac4acd
   src/funcs/toolsetsCloneBySlug.ts:
-    last_write_checksum: sha1:8854d519f75f8ebb888f58e6dd71afe1dc365758
+    last_write_checksum: sha1:ed6ba15046a04efa4c6c52cb769b4967b9f7d00a
   src/funcs/toolsetsCreate.ts:
-    last_write_checksum: sha1:6ac9bc908539074aa045c2ac61b1ad217529dd59
+    last_write_checksum: sha1:31cd1263fc0740299d9e3dd9404d76635c234daf
   src/funcs/toolsetsDeleteBySlug.ts:
-    last_write_checksum: sha1:2c9d7f77333d8f59414025aaab5e06e456487ba0
+    last_write_checksum: sha1:48d2c9ed8334ca3839fdf331a0a7d6cb0d57bcc5
   src/funcs/toolsetsGetBySlug.ts:
-    last_write_checksum: sha1:c3bc4d520878af7a3fb32612279447e6b19a642a
+    last_write_checksum: sha1:23c5bf5ef4377233c2b60ae5b0535d3adc7264ab
   src/funcs/toolsetsList.ts:
-    last_write_checksum: sha1:b7f55dbff7b0d4e085b042835bcd00003231a154
+    last_write_checksum: sha1:a688b610cf5ab57aceda9fb8386cd70db4f1e9d7
   src/funcs/toolsetsListForOrg.ts:
-    last_write_checksum: sha1:4f6d0527861aafc833b422f38a90ca700a9e85ca
+    last_write_checksum: sha1:91dbdd308e82d4e7d2ece5a7a681e1b79831221a
   src/funcs/toolsetsListToolFilters.ts:
-    last_write_checksum: sha1:12d4ffe15a5b77bb0174599c567f9d0150888a35
+    last_write_checksum: sha1:838571fdbefad47f2d4fc2f935235fc0534b4c93
   src/funcs/toolsetsRemoveOAuthServer.ts:
-    last_write_checksum: sha1:efbdb380d798e3647ae85bfcea4e9ef587b42470
+    last_write_checksum: sha1:1b386f960230fa0ed2052a1cfd5a123cf47b115a
   src/funcs/toolsetsSetToolVariationsGroup.ts:
-    last_write_checksum: sha1:97d3aee2dbcf514953d68805e71cff2bd6a0af03
+    last_write_checksum: sha1:6226137e62121789657d9f8962663f749c19881e
   src/funcs/toolsetsSetUserSessionIssuer.ts:
-    last_write_checksum: sha1:5d13e5b037070f461a144f3f3c61ce09412504e0
+    last_write_checksum: sha1:0ba5d9dd088666ec74b9615212cc170368697bdd
   src/funcs/toolsetsUpdateBySlug.ts:
-    last_write_checksum: sha1:63e9b8410bf722259527f60ad7f99dd1bf447aeb
+    last_write_checksum: sha1:f5744e9ac43cdea5f946443aca2443e441a45437
   src/funcs/toolsetsUpdateOAuthProxyServer.ts:
-    last_write_checksum: sha1:758834c50680d78bdec6c7765ae4574bad6deabb
+    last_write_checksum: sha1:ab60a3336cf7955be8b8b252b2eb9f2112af98eb
   src/funcs/triggersCreate.ts:
-    last_write_checksum: sha1:d5acdde5bc49873f7310934fdc144cac2fa9087d
+    last_write_checksum: sha1:1b9fc54a8a259781abde5faefbfb09166e3eea11
   src/funcs/triggersDelete.ts:
-    last_write_checksum: sha1:b14e2d9a35ee3c2a130b7119232db626443ee1ed
+    last_write_checksum: sha1:6c7ab6b9fdb81e13c0d04a790f7a50a7a328c8cb
   src/funcs/triggersGet.ts:
-    last_write_checksum: sha1:d0a0ab12783920deb024fd48152378b9ff7886eb
+    last_write_checksum: sha1:4cb0d220c48ab16bb3cd1d365be14aeefc127476
   src/funcs/triggersList.ts:
-    last_write_checksum: sha1:35bb5a8f4a464a3c8409a48d873b7c10e0786ca1
+    last_write_checksum: sha1:8ae219e0b4037ea560bbba642b6c88d2429f46c6
   src/funcs/triggersListDefinitions.ts:
-    last_write_checksum: sha1:3025c60dea526b6ae535d2cab2e96cf1664d8d90
+    last_write_checksum: sha1:264dded2f1a0d571e40856b5825f543e2b83040a
   src/funcs/triggersPause.ts:
-    last_write_checksum: sha1:0844a74b78b376f7fb5804861eafe0436b24804a
+    last_write_checksum: sha1:3bd7b9f147a6a8286f0a717e40b439c4b07a9865
   src/funcs/triggersResume.ts:
-    last_write_checksum: sha1:19172651b421491d926509e7b54eb9a884ce36da
+    last_write_checksum: sha1:a141fc077700367a9ec37288f0ea6605984eb423
   src/funcs/triggersUpdate.ts:
-    last_write_checksum: sha1:430dcf4e471c382f86bdd3ea9217a3ea5331bcfb
+    last_write_checksum: sha1:045e8e81707d1d424cd3ffc525c7edd6ed620630
   src/funcs/usageCreateCheckout.ts:
-    last_write_checksum: sha1:48cf59edf8380116d1235f1cf8b39a8266e740d0
+    last_write_checksum: sha1:3b00c13f8620dc9089ba80c0113746a2a499c95b
   src/funcs/usageCreateCustomerSession.ts:
-    last_write_checksum: sha1:2ebfc51923f715531d22a40eaccc17c37ffc67a8
+    last_write_checksum: sha1:04b8e9945240f5422b530c943ae607bbe966ea9b
   src/funcs/usageCreateTopUpCheckout.ts:
-    last_write_checksum: sha1:ee477ead7f677282f33d36aa49072ef9f01ee581
+    last_write_checksum: sha1:cdc086722644dcb788ac7ecf208d3f8c99397661
   src/funcs/usageGetPeriodUsage.ts:
-    last_write_checksum: sha1:888a9fa89697b3257f3fd7a3a44e78570f94e971
+    last_write_checksum: sha1:5bcb0810593702d42658d2e35d1ff9ea7f1071c3
   src/funcs/usageGetUsageTiers.ts:
-    last_write_checksum: sha1:cbb155153db8a79a3f9b4c3ab806f94515d1c2de
+    last_write_checksum: sha1:5c47e125700aed9f35c64b3586568e87f59c0709
   src/funcs/userSessionClientsGet.ts:
-    last_write_checksum: sha1:61edca4ef54785c828d858a9c61e5bb758f1536c
+    last_write_checksum: sha1:acb54629efb2eae8c61057c589bd816c37be5b19
   src/funcs/userSessionClientsList.ts:
-    last_write_checksum: sha1:ff7550b46fa8259ca2466a97e3b0629b34cb9020
+    last_write_checksum: sha1:038f42d1176b88dda6c22a8e6607c8ced77e6798
   src/funcs/userSessionClientsRevoke.ts:
-    last_write_checksum: sha1:c32d3d63e6d9babd1a310f60724fcd00058a89f3
+    last_write_checksum: sha1:5f32fb401736cb53207717e8e05a9c48a971c941
   src/funcs/userSessionConsentsList.ts:
-    last_write_checksum: sha1:9da9c5623bb768962ef4d12d937157f9505ac146
+    last_write_checksum: sha1:06b9f276cf6a7bb61ae2d84d1dd71519399d1453
   src/funcs/userSessionConsentsRevoke.ts:
-    last_write_checksum: sha1:d65110982cdf855702d84a1660a1a7189e8d1cd5
+    last_write_checksum: sha1:e7b70a04c4ca4cbaaa86dd2a084175874e7bb867
   src/funcs/userSessionIssuersCreate.ts:
-    last_write_checksum: sha1:ea9cebc6267d5425f4f9f429fff851d3d9ec32f9
+    last_write_checksum: sha1:c3695a7a68d4e6a76c632da3f8ad18b724399a0c
   src/funcs/userSessionIssuersDelete.ts:
-    last_write_checksum: sha1:487066676b8789a01a6ef03d8ae5b6c5c3eeb9fb
+    last_write_checksum: sha1:bbe209b8dd93cfa6a588495196974a17c6fafe3b
   src/funcs/userSessionIssuersGet.ts:
-    last_write_checksum: sha1:643f584f6d002fb49da07b828cb3e93fb9fc8ae3
+    last_write_checksum: sha1:992e3b100bce55812a21b32415d4b9c29b9c9bfd
   src/funcs/userSessionIssuersList.ts:
-    last_write_checksum: sha1:8eb00fd7495be765ef9589615c171b3480b94e54
+    last_write_checksum: sha1:123226f0caa633433e0583300df7d4dbcc74f27d
   src/funcs/userSessionIssuersUpdate.ts:
-    last_write_checksum: sha1:fc4d62252c8d5b509e5d78e63e6a142b366573c1
+    last_write_checksum: sha1:3b223b6df19baa1ccaca50289db66d7b50183b50
   src/funcs/userSessionsList.ts:
-    last_write_checksum: sha1:6b4138d0193662eb11da8c2bdec2c6c75bb027f8
+    last_write_checksum: sha1:8fce87e9b0a064442addcdbc226813d0407070d2
   src/funcs/userSessionsMint.ts:
-    last_write_checksum: sha1:6d089a73a956b94179a682c1da851733d125e1c1
+    last_write_checksum: sha1:037099aa7c368395ae044158a21b95cc495ac800
   src/funcs/userSessionsRevoke.ts:
-    last_write_checksum: sha1:7d1f93abaa82101ed83384faaf0a872004faf8f8
+    last_write_checksum: sha1:251593d7a4218e12463d0159b544ee27007f707b
   src/funcs/variationsCreateGlobal.ts:
-    last_write_checksum: sha1:4ddcfd4fb0e817b6342e01d82311bb06098d2f7b
+    last_write_checksum: sha1:8d8ff288bcb92359f2b5348d7ead20b075a0fed7
   src/funcs/variationsDeleteGlobal.ts:
-    last_write_checksum: sha1:844ab4f3ca7077c72397eb0c800db294cadba8b3
+    last_write_checksum: sha1:d11b6f08435e54ba8752aecaa440cb1c832c5bf8
   src/funcs/variationsListGlobal.ts:
-    last_write_checksum: sha1:a854647222446ef1bceb6e2bc9318289464d76a8
+    last_write_checksum: sha1:d0d144cc0d812d8002ab951448bfaaccba288455
   src/funcs/variationsListGroups.ts:
-    last_write_checksum: sha1:055ec14f848e1c9a2b591905d042b449d146c071
+    last_write_checksum: sha1:d9830c9519ed05d55933425c813cd9abf9a2d5ad
   src/funcs/variationsUpsertGlobal.ts:
-    last_write_checksum: sha1:22b34601928805d3597d13da0cbe96bb2dec1656
+    last_write_checksum: sha1:e2adfcd8d0704e30b1ade3e33a4694856ff65af6
   src/hooks/hooks.ts:
     last_write_checksum: sha1:7dd975bbcc46a32dd394f86a4652b74ecc70d874
   src/hooks/index.ts:
@@ -4015,7 +4015,7 @@ trackedFiles:
   src/lib/base64.ts:
     last_write_checksum: sha1:8c94164f2f78e6041c853186fa01f659591f5913
   src/lib/config.ts:
-    last_write_checksum: sha1:431a9367f0ef74382982b8533c42ca624abcda9f
+    last_write_checksum: sha1:02ef2a18ed955f4399c24946174b96647e70127e
   src/lib/dlv.ts:
     last_write_checksum: sha1:1dd3e3fbb4550c4bf31f5ef997faff355d6f3250
   src/lib/encodings.ts:
@@ -4039,7 +4039,7 @@ trackedFiles:
   src/lib/schemas.ts:
     last_write_checksum: sha1:76a0aeecc3bf758e5a7592960c2722687cf55af1
   src/lib/sdks.ts:
-    last_write_checksum: sha1:7556325b8adb3c1e25d0f1d9d3b1832f5ee8d232
+    last_write_checksum: sha1:17b1af8ad91a6b87ba9c30c444971b469cf550a1
   src/lib/security.ts:
     last_write_checksum: sha1:1d7359985fe9fbb1fdcf7422b3d13103a9f119ed
   src/lib/url.ts:
