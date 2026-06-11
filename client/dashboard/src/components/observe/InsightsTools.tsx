@@ -1319,7 +1319,7 @@ function ServerUsageTimeSeries({
   );
   return (
     <ChartCard
-      title="Target Usage"
+      title="Activity by Source"
       chartId={chartId}
       expandedChart={expandedChart}
       onExpand={onExpand}
@@ -1830,7 +1830,7 @@ function HooksAnalytics({
         />
 
         <UsersPerServerChart
-          title="Users per Target"
+          title="Users by Source"
           breakdown={usersByTarget}
           serverNameMappings={serverNameMappings}
           handleFilter={makeFilterHandler({
@@ -1882,7 +1882,7 @@ function HooksAnalytics({
         />
 
         <ServerErrorRateChart
-          title="Errors per Target and Tool"
+          title="Failures by Source and Tool"
           breakdown={targetToolBreakdown}
           serverNameMappings={serverNameMappings}
           expandedChart={expandedChart}
