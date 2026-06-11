@@ -74,13 +74,12 @@ time/cost-savings ROI all hinge on the missing usage telemetry + efficacy scorin
 
 ## Branch-specific notes / leftover work
 
-1. **Postgres migration not regenerated.** Schema changes are in
-   `server/database/schema.sql` but the migration file must be produced with
-   `mise db:diff skills_registry` — blocked on `atlas login` (expired token; the
-   migration dir uses Pro features so logged-out atlas refuses). Run `! atlas login`
-   then `mise db:diff skills_registry`. Per repo rules the migration ships in its
-   own PR. The local dev DB had the skills DDL + 27 pending main migrations applied
-   manually via psql (revisions recorded), so local dev works meanwhile.
+1. **Postgres migration.** `server/migrations/20260611162802_skills_registry.sql`
+   was generated with `mise db:diff skills_registry` and applied locally via
+   `mise db:migrate`. Per repo rules the migration ships in its own PR — split it
+   off with `mise db:mig-pr` when opening PRs from this branch. (The local dev DB
+   also had 27 pending main migrations applied manually via psql with revisions
+   recorded, since the DB was ~3 weeks behind.)
 2. **Hooks work dropped** (per decision): `hooks/shared-producer`,
    `hooks/plugin-claude-skills`, `hooks/plugin-cursor-skills`, hooks skill-metadata
    ingestion, ClickHouse skill materialized columns, hook smoke tests. The PR #2181
