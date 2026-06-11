@@ -1123,7 +1123,8 @@ def redact_args(args):
             out.append(a)
     return out
 
-# URLs are their own credential channel: strip userinfo and redact
+# URLs are their own credential channel: strip userinfo and the fragment
+# (OAuth-style #access_token=... never identifies a server) and redact
 # secret-named query parameters while preserving scheme/host/path, which
 # the server needs for provenance checks.
 def redact_url(url):
@@ -1138,7 +1139,7 @@ def redact_url(url):
                 v = "[REDACTED]"
             pairs.append((k, v))
         query = urllib.parse.urlencode(pairs)
-        return urllib.parse.urlunsplit((parts.scheme, netloc, parts.path, query, parts.fragment))
+        return urllib.parse.urlunsplit((parts.scheme, netloc, parts.path, query, ""))
     except Exception:
         return url
 

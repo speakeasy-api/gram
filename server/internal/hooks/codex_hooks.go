@@ -324,6 +324,9 @@ func (s *Service) buildCodexTelemetryAttributes(ctx context.Context, payload *ge
 							attrs[attr.ToolNameKey] = rest
 						}
 					}
+					if v := resolvedMCPMatch(matched, parts[1]); v != "" {
+						attrs[attr.MCPMatchKey] = v
+					}
 					applyMCPInventoryAttrs(attrs, matched)
 				}
 			}
