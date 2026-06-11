@@ -1088,7 +1088,7 @@ if data.get("hook_event_name") == "SessionStart" and not data.get("user_email"):
 # identity (e.g. npx package names) but credential-shaped values are
 # redacted: values following a secret-named flag, inline flag=value pairs,
 # and well-known token prefixes.
-secret_flag = re.compile(r"(key|token|secret|password|passwd|auth|credential)", re.I)
+secret_flag = re.compile(r"(key|token|secret|password|passwd|auth|credential|header)", re.I)
 secret_value = re.compile(r"^(sk-|pk-|ghp_|gho_|github_pat_|xox[a-z]-|ya29\.|AKIA|eyJ)")
 
 def redact_args(args):
