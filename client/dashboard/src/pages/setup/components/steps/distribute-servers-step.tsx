@@ -173,14 +173,21 @@ export function DistributeServersStep({
    */
   const finishDistribution = async () => {
     try {
-      const specifiers = new Set(
-        serversToDeploy.map((s) => s.registrySpecifier),
+      // Only reachable in the complete phase (the driving effect guards this);
+      // the check also narrows the workflow union so toolsetStatuses is typed.
+      if (workflow.phase !== "complete") return;
+      // Match on the exact toolset slugs the workflow just created, not on
+      // registrySpecifier — the org may already hold older or forked toolsets
+      // for the same specifier, and those must not be swept into this run's
+      // bundle.
+      const deployedSlugs = new Set(
+        workflow.toolsetStatuses
+          .filter((s) => s.status === "completed" && s.toolsetSlug)
+          .map((s) => s.toolsetSlug as string),
       );
       const { data: fresh } = await refetchToolsets();
-      const toAdd = (fresh?.toolsets ?? []).filter(
-        (t) =>
-          t.origin?.registrySpecifier &&
-          specifiers.has(t.origin.registrySpecifier),
+      const toAdd = (fresh?.toolsets ?? []).filter((t) =>
+        deployedSlugs.has(t.slug),
       );
       if (toAdd.length === 0) {
         setDrawerError("No servers were deployed. Try again.");
@@ -311,9 +318,13 @@ export function DistributeServersStep({
   const marketplaceCommand = publishStatus?.marketplaceUrl
     ? `/plugin marketplace add ${publishStatus.marketplaceUrl}`
     : null;
+  // Gate the action on actually-deployable servers, not the raw selection:
+  // already-distributed picks are filtered out of selectedServerObjects, so
+  // counting selected.size could enable a Continue that deploys nothing.
+  const deployableCount = selectedServerObjects.length;
   const continueLabel =
-    selected.size > 0
-      ? `Distribute ${selected.size} server${selected.size === 1 ? "" : "s"}`
+    deployableCount > 0
+      ? `Distribute ${deployableCount} server${deployableCount === 1 ? "" : "s"}`
       : "Distribute servers";
   // Once at least one server has been distributed, the secondary action is no
   // longer a skip — the user has done the step, so let them move on.
@@ -334,7 +345,7 @@ export function DistributeServersStep({
       skipLabel={skipLabel}
       continueLabel={continueLabel}
       isLoading={drawerOpen && isAdding}
-      canContinue={selected.size > 0}
+      canContinue={deployableCount > 0}
       showBack
       onBack={onBack}
     >
@@ -351,6 +362,15 @@ export function DistributeServersStep({
               onChange={(value) => {
                 setQuery(value);
                 setShowAll(false);
+              }}
+              onKeyDown={(e) => {
+                // Escape clears the query first; only let it bubble to parent
+                // Escape handlers (e.g. closing the drawer) once empty.
+                if (e.key === "Escape" && query) {
+                  e.stopPropagation();
+                  setQuery("");
+                  setShowAll(false);
+                }
               }}
               placeholder="Search MCP servers"
               className="pl-9"
