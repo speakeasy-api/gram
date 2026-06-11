@@ -28,7 +28,7 @@ function getAuthErrorMessage(errorCode?: string | null): string {
   return authErrorMessages[errorCode] || unexpected;
 }
 
-const FEATURE_BADGES = ["Build", "Secure", "Observe", "Distribute"];
+const FEATURE_BADGES = ["Connect", "Secure", "Control", "Observe"];
 
 function FeatureBadges({ labels = FEATURE_BADGES }: { labels?: string[] }) {
   return (
