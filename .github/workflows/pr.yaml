@@ -877,7 +877,10 @@ jobs:
         run: mise run gen:infra
 
       - name: Test infra code
-        run: mise run test:infra
+        # Mise overrides the environment variable for the Pub/Sub emulator, so
+        # it must be passed explicitly here to avoid the tests skipping
+        # themselves or failing to connect.
+        run: mise run test:infra --pubsub-emulator-host "$PUBSUB_EMULATOR_HOST"
 
       - name: Check for dirty files
         run: mise run git:porcelain
