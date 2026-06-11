@@ -33,7 +33,7 @@ export function SkillUploadDialog({
   onUploaded,
 }: {
   onUploaded?: () => Promise<void> | void;
-}) {
+}): React.JSX.Element {
   const { data: skillsData, isPending: areSkillsPending } = useListSkills();
 
   const [open, setOpen] = useState(false);
@@ -231,7 +231,7 @@ export function SkillUploadDialog({
           >
             Cancel
           </Button>
-          <Button disabled={isPending} onClick={handleSubmit}>
+          <Button disabled={isPending} onClick={() => void handleSubmit()}>
             {isPreparing
               ? "Preparing…"
               : uploadMutation.isPending

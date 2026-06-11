@@ -18,7 +18,7 @@ import { FolderTree, Sparkles, UserRound } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
-export default function SkillsSettings() {
+export default function SkillsSettings(): React.JSX.Element {
   return (
     <div className="p-8">
       <div className="mx-auto max-w-4xl">
@@ -277,7 +277,7 @@ function getScopedSettings(
   };
 }
 
-function formatModeLabel(mode: SkillCaptureSettings["effectiveMode"]) {
+function formatModeLabel(mode: SkillCaptureSettings["effectiveMode"]): string {
   switch (mode) {
     case "project_and_user":
       return "Project + user";
@@ -285,7 +285,7 @@ function formatModeLabel(mode: SkillCaptureSettings["effectiveMode"]) {
       return "Project only";
     case "user_only":
       return "User only";
-    default:
+    case "disabled":
       return "Disabled";
   }
 }

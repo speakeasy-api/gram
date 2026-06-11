@@ -22,7 +22,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useRoutes } from "@/routes";
 import { useViewMode } from "@/components/ui/use-view-mode";
 
-export default function SkillsRegistry() {
+export default function SkillsRegistry(): React.JSX.Element {
   const [viewMode, setViewMode] = useViewMode();
   const queryClient = useQueryClient();
   const { data, isPending, error } = useListSkills();

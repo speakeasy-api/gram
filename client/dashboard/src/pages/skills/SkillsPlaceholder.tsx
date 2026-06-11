@@ -8,7 +8,7 @@ export function SkillsPlaceholder({
 }: {
   title: string;
   description: string;
-}) {
+}): React.JSX.Element {
   return (
     <div className="p-8">
       <div className="mx-auto max-w-4xl space-y-3">

@@ -24,7 +24,7 @@ import { useProject } from "@/contexts/Auth";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRoutes } from "@/routes";
 
-export default function SkillsReview() {
+export default function SkillsReview(): React.JSX.Element {
   return (
     <div className="p-8">
       <div className="mx-auto max-w-6xl">

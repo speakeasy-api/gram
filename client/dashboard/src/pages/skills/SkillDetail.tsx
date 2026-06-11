@@ -46,7 +46,7 @@ type SkillDetailContext = {
   projectId: string;
 };
 
-export function SkillDetailRoot() {
+export function SkillDetailRoot(): React.JSX.Element | null {
   const queryClient = useQueryClient();
   const routes = useRoutes();
   const project = useProject();
@@ -226,7 +226,7 @@ export function SkillDetailRoot() {
   );
 }
 
-export function SkillDefinitionPage() {
+export function SkillDefinitionPage(): React.JSX.Element | null {
   const { skill, activeVersion } = useSkillDetail();
 
   return (
@@ -293,7 +293,7 @@ export function SkillDefinitionPage() {
   );
 }
 
-export function SkillVersionsPage() {
+export function SkillVersionsPage(): React.JSX.Element | null {
   const { versions, activeVersion, projectId } = useSkillDetail();
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(
     null,
@@ -422,7 +422,7 @@ export function SkillVersionsPage() {
   );
 }
 
-export function SkillActivityPage() {
+export function SkillActivityPage(): React.JSX.Element | null {
   const client = useGramContext();
   const { projectSlug } = useSlugs();
   const { skill, activeVersion } = useSkillDetail();
@@ -531,7 +531,7 @@ export function SkillActivityPage() {
   );
 }
 
-export function SkillInstallPage() {
+export function SkillInstallPage(): React.JSX.Element | null {
   const { skill, activeVersion } = useSkillDetail();
 
   const installSnippet = [

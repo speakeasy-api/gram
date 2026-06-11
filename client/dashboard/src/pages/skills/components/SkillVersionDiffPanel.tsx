@@ -1,5 +1,5 @@
 import { FileDiffOptions, ThemeTypes } from "@pierre/diffs";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { HighlightProvider } from "@/components/diffs/provider";
 import { MultiFileDiff } from "@pierre/diffs/react";
@@ -77,7 +77,7 @@ export function SkillVersionDiffPanel({
   baseline,
   projectId,
   className,
-}: Props) {
+}: Props): React.JSX.Element {
   const { fetch: authFetch } = useFetcher();
   const { theme } = useMoonshineConfig();
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -127,7 +127,8 @@ export function SkillVersionDiffPanel({
     },
   });
 
-  const entries = query.data?.entries ?? [];
+  const queryEntries = query.data?.entries;
+  const entries = useMemo(() => queryEntries ?? [], [queryEntries]);
 
   useEffect(() => {
     if (entries.length === 0) {

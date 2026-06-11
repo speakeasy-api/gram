@@ -6,11 +6,11 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
 import { useListSkills, useProductFeatures } from "@gram/client/react-query";
 
-export function SkillsIndexRedirect() {
+export function SkillsIndexRedirect(): React.JSX.Element {
   return <Navigate to="registry" replace />;
 }
 
-export function SkillsRoot() {
+export function SkillsRoot(): React.JSX.Element | null {
   const routes = useRoutes();
   const { skillSlug } = useParams();
   const telemetry = useTelemetry();
