@@ -26,7 +26,6 @@ type workosDirectoryGroupEventPayload struct {
 	OrganizationID string          `json:"organization_id"`
 	Name           string          `json:"name"`
 	RawAttributes  json.RawMessage `json:"raw_attributes"`
-	Attributes     json.RawMessage `json:"attributes"`
 }
 
 type workosDirectoryUserEventPayload struct {
@@ -142,8 +141,7 @@ func unmarshalDirectoryGroupMembershipPayload(raw json.RawMessage) (workosDirect
 }
 
 // attributesOrEmptyObject guards inserts into NOT NULL jsonb columns: WorkOS
-// event payloads may omit attribute fields entirely (group events carry no
-// "attributes" key at all).
+// event payloads may omit attribute fields entirely.
 func attributesOrEmptyObject(raw json.RawMessage) []byte {
 	if len(raw) == 0 || string(raw) == "null" {
 		return []byte("{}")
@@ -161,7 +159,9 @@ func upsertDirectoryGroup(ctx context.Context, dbtx database.DBTX, payload worko
 		OrganizationID:         org.ID,
 		WorkosDirectoryGroupID: payload.ID,
 		Name:                   payload.Name,
-		Attributes:             attributesOrEmptyObject(payload.Attributes),
+		// Groups have no custom_attributes equivalent; raw_attributes is the
+		// only attribute payload WorkOS sends for directory groups.
+		Attributes: attributesOrEmptyObject(payload.RawAttributes),
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "upsert directory group")
 	}

@@ -20,8 +20,8 @@ func directoryGroupEventData(workosOrgID, workosDirectoryGroupID, name string) [
 	return []byte(`{"id":"` + workosDirectoryGroupID + `","organization_id":"` + workosOrgID + `","name":"` + name + `","raw_attributes":{"department":"Engineering"},"created_at":"2026-05-12T10:00:00Z","updated_at":"2026-05-12T10:00:00Z"}`)
 }
 
-func directoryGroupEventDataWithAttributes(workosOrgID, workosDirectoryGroupID, name string) []byte {
-	return []byte(`{"id":"` + workosDirectoryGroupID + `","organization_id":"` + workosOrgID + `","name":"` + name + `","attributes":{"department":"Engineering"},"created_at":"2026-05-12T10:00:00Z","updated_at":"2026-05-12T10:00:00Z"}`)
+func directoryGroupEventDataWithoutRawAttributes(workosOrgID, workosDirectoryGroupID, name string) []byte {
+	return []byte(`{"id":"` + workosDirectoryGroupID + `","organization_id":"` + workosOrgID + `","name":"` + name + `","created_at":"2026-05-12T10:00:00Z","updated_at":"2026-05-12T10:00:00Z"}`)
 }
 
 func directoryGroupMembershipEventData(workosOrgID, workosDirectoryGroupID, workosDirectoryUserID, email string) []byte {
@@ -80,8 +80,8 @@ func TestProcessWorkOSOrganizationEvents_UpsertsDirectoryGroupAndAdvancesOrganiz
 
 	workosClient := workos.NewStubClient()
 	workosClient.SetEventPages([][]events.Event{{
-		{ID: "event_other_group", Event: "dsync.group.updated", CreatedAt: time.Now(), Data: directoryGroupEventData(workosOrgID, "directory_group_other", "Other")},
-		{ID: "event_group", Event: "dsync.group.updated", CreatedAt: time.Now(), Data: directoryGroupEventDataWithAttributes(workosOrgID, groupID, "Platform")},
+		{ID: "event_other_group", Event: "dsync.group.updated", CreatedAt: time.Now(), Data: directoryGroupEventDataWithoutRawAttributes(workosOrgID, "directory_group_other", "Other")},
+		{ID: "event_group", Event: "dsync.group.updated", CreatedAt: time.Now(), Data: directoryGroupEventData(workosOrgID, groupID, "Platform")},
 	}})
 
 	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient)
@@ -102,7 +102,7 @@ func TestProcessWorkOSOrganizationEvents_UpsertsDirectoryGroupAndAdvancesOrganiz
 	require.JSONEq(t, `{"department":"Engineering"}`, string(attributes))
 	require.False(t, deleted)
 
-	// Group events without an "attributes" field store an empty object.
+	// Group events without raw_attributes store an empty object.
 	_, _, otherAttributes, _ := getDirectoryGroupRow(t, ctx, conn, "directory_group_other")
 	require.JSONEq(t, `{}`, string(otherAttributes))
 
