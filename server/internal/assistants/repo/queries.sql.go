@@ -813,6 +813,53 @@ func (q *Queries) GetAssistantRuntime(ctx context.Context, arg GetAssistantRunti
 	return i, err
 }
 
+const getAssistantRuntimeV2 = `-- name: GetAssistantRuntimeV2 :one
+SELECT id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until
+FROM assistant_runtimes
+WHERE project_id = $1
+  AND assistant_id = $2
+  AND runtime_version = 2
+  AND deleted IS FALSE
+  AND ended IS FALSE
+LIMIT 1
+`
+
+type GetAssistantRuntimeV2Params struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+}
+
+type GetAssistantRuntimeV2Row struct {
+	ID                  uuid.UUID
+	AssistantThreadID   uuid.UUID
+	AssistantID         uuid.UUID
+	ProjectID           uuid.UUID
+	Backend             string
+	BackendMetadataJson []byte
+	State               string
+	WarmUntil           pgtype.Timestamptz
+}
+
+// Full-row sibling of LookupActiveAssistantRuntimeV2 for callers that need
+// the backend metadata to drive Ensure without a thread to join through
+// (eager warmup at assistant creation). At most one row matches per the
+// v2 unique partial index.
+func (q *Queries) GetAssistantRuntimeV2(ctx context.Context, arg GetAssistantRuntimeV2Params) (GetAssistantRuntimeV2Row, error) {
+	row := q.db.QueryRow(ctx, getAssistantRuntimeV2, arg.ProjectID, arg.AssistantID)
+	var i GetAssistantRuntimeV2Row
+	err := row.Scan(
+		&i.ID,
+		&i.AssistantThreadID,
+		&i.AssistantID,
+		&i.ProjectID,
+		&i.Backend,
+		&i.BackendMetadataJson,
+		&i.State,
+		&i.WarmUntil,
+	)
+	return i, err
+}
+
 const getAssistantThreadIDByCorrelation = `-- name: GetAssistantThreadIDByCorrelation :one
 SELECT id
 FROM assistant_threads

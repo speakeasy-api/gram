@@ -104,3 +104,37 @@ func TestAssistantThreadWorkflowExitsOnWarmTimerWithoutExpire(t *testing.T) {
 	require.Equal(t, int32(0), expireCalls.Load(), "warm-timer exit must not call ExpireAssistantThreadRuntime")
 	require.Equal(t, int32(1), signalCalls.Load(), "ProcessedAnyEvent must kick the coordinator so held-back pending siblings get re-evaluated")
 }
+
+func TestAssistantRuntimeWarmupWorkflowSignalsCoordinatorAfterWarmup(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+
+	var warmed atomic.Bool
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, input activities.WarmAssistantRuntimeInput) error {
+			require.Equal(t, "11111111-1111-1111-1111-111111111111", input.AssistantID)
+			warmed.Store(true)
+			return nil
+		},
+		activity.RegisterOptions{Name: "WarmAssistantRuntime"},
+	)
+
+	var signalledAfterWarmup atomic.Bool
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ activities.SignalAssistantCoordinatorInput) error {
+			signalledAfterWarmup.Store(warmed.Load())
+			return nil
+		},
+		activity.RegisterOptions{Name: "SignalAssistantCoordinator"},
+	)
+
+	env.ExecuteWorkflow(AssistantRuntimeWarmupWorkflow, AssistantRuntimeWarmupWorkflowInput{
+		AssistantID: "11111111-1111-1111-1111-111111111111",
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+	require.True(t, signalledAfterWarmup.Load(), "the coordinator kick must follow warmup so threads held back by the starting row get admitted")
+}

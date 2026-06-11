@@ -80,6 +80,7 @@ type Activities struct {
 	reconcileExclusion              *risk_exclusion.Reconcile
 	admitAssistantThreads           *activities.AdmitAssistantThreads
 	processAssistantThread          *activities.ProcessAssistantThread
+	warmAssistantRuntime            *activities.WarmAssistantRuntime
 	expireAssistantThreadRuntime    *activities.ExpireAssistantThreadRuntime
 	reapStuckAssistantRuntimes      *activities.ReapStuckAssistantRuntimes
 	reapInactiveAssistantRuntimes   *activities.ReapInactiveAssistantRuntimes
@@ -174,6 +175,7 @@ func NewActivities(
 		reconcileExclusion:              risk_exclusion.NewReconcile(logger, tracerProvider, db),
 		admitAssistantThreads:           activities.NewAdmitAssistantThreads(assistantsCore),
 		processAssistantThread:          activities.NewProcessAssistantThread(assistantsCore),
+		warmAssistantRuntime:            activities.NewWarmAssistantRuntime(assistantsCore),
 		expireAssistantThreadRuntime:    activities.NewExpireAssistantThreadRuntime(assistantsCore),
 		reapStuckAssistantRuntimes:      activities.NewReapStuckAssistantRuntimes(assistantsCore),
 		reapInactiveAssistantRuntimes:   activities.NewReapInactiveAssistantRuntimes(logger, assistantsCore),
@@ -386,6 +388,10 @@ func (a *Activities) ProcessAssistantThread(ctx context.Context, input activitie
 
 func (a *Activities) ExpireAssistantThreadRuntime(ctx context.Context, input activities.ExpireAssistantThreadRuntimeInput) (*activities.ExpireAssistantThreadRuntimeResult, error) {
 	return a.expireAssistantThreadRuntime.Do(ctx, input)
+}
+
+func (a *Activities) WarmAssistantRuntime(ctx context.Context, input activities.WarmAssistantRuntimeInput) error {
+	return a.warmAssistantRuntime.Do(ctx, input)
 }
 
 func (a *Activities) ReapStuckAssistantRuntimes(ctx context.Context) (*activities.ReapStuckAssistantRuntimesResult, error) {

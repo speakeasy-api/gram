@@ -156,6 +156,7 @@ func (s *Service) CreateAssistant(ctx context.Context, payload *gen.CreateAssist
 	if err != nil {
 		return nil, mapAssistantStoreError(ctx, s.logger, err, "create assistant")
 	}
+	s.startRuntimeWarmup(ctx, record)
 	view, err := toHTTPAssistant(record)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build assistant view").Log(ctx, s.logger)
@@ -301,6 +302,7 @@ func (s *Service) EnsureManagedAssistant(ctx context.Context, _ *gen.EnsureManag
 		}
 		return nil, mapAssistantStoreError(ctx, s.logger, err, "ensure project assistant")
 	}
+	s.startRuntimeWarmup(ctx, record)
 	view, err := toHTTPAssistant(record)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build assistant view").Log(ctx, s.logger)
@@ -324,6 +326,21 @@ func (s *Service) Dispatch(ctx context.Context, task bgtriggers.Task) error {
 		return fmt.Errorf("signal assistant coordinator: %w", err)
 	}
 	return nil
+}
+
+// startRuntimeWarmup eagerly boots the assistant's runtime so the first turn
+// doesn't pay the Fly cold-start cost. Best-effort: a failure to start the
+// workflow never fails the request — the first turn boots lazily instead.
+func (s *Service) startRuntimeWarmup(ctx context.Context, record assistantRecord) {
+	if record.Status != StatusActive {
+		return
+	}
+	if err := s.signaler.StartRuntimeWarmup(ctx, record.ID); err != nil {
+		s.logger.WarnContext(ctx, "start assistant runtime warmup failed",
+			attr.SlogAssistantID(record.ID.String()),
+			attr.SlogError(err),
+		)
+	}
 }
 
 func mapAssistantStoreError(ctx context.Context, logger *slog.Logger, err error, message string) error {

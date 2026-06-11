@@ -54,6 +54,10 @@ type ExpireAssistantThreadRuntimeResult struct {
 	RemainingSeconds int
 }
 
+type WarmAssistantRuntimeInput struct {
+	AssistantID string
+}
+
 type SignalAssistantCoordinatorInput struct {
 	AssistantID string
 }
@@ -72,6 +76,10 @@ type ProcessAssistantThread struct {
 }
 
 type ExpireAssistantThreadRuntime struct {
+	core *assistants.ServiceCore
+}
+
+type WarmAssistantRuntime struct {
 	core *assistants.ServiceCore
 }
 
@@ -105,6 +113,10 @@ func NewExpireAssistantThreadRuntime(core *assistants.ServiceCore) *ExpireAssist
 	return &ExpireAssistantThreadRuntime{core: core}
 }
 
+func NewWarmAssistantRuntime(core *assistants.ServiceCore) *WarmAssistantRuntime {
+	return &WarmAssistantRuntime{core: core}
+}
+
 func NewReapStuckAssistantRuntimes(core *assistants.ServiceCore) *ReapStuckAssistantRuntimes {
 	return &ReapStuckAssistantRuntimes{core: core}
 }
@@ -136,6 +148,28 @@ func (a *AdmitAssistantThreads) Do(ctx context.Context, input AdmitAssistantThre
 	return result, nil
 }
 
+// startActivityHeartbeat ticks RecordHeartbeat until the returned stop
+// function runs, so a worker crash mid-activity is detected within
+// HeartbeatTimeout instead of the full StartToCloseTimeout.
+func startActivityHeartbeat(ctx context.Context) func() {
+	done := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				activity.RecordHeartbeat(ctx)
+			}
+		}
+	}()
+	return func() { close(done) }
+}
+
 func (a *ProcessAssistantThread) Do(ctx context.Context, input ProcessAssistantThreadInput) (*ProcessAssistantThreadResult, error) {
 	threadID, err := uuid.Parse(input.ThreadID)
 	if err != nil {
@@ -146,22 +180,8 @@ func (a *ProcessAssistantThread) Do(ctx context.Context, input ProcessAssistantT
 		return nil, fmt.Errorf("parse project id: %w", err)
 	}
 
-	// Heartbeat periodically so a worker crash is detected within HeartbeatTimeout
-	// instead of waiting the full 20-minute StartToCloseTimeout.
-	hbCtx, hbCancel := context.WithCancel(ctx)
-	defer hbCancel()
-	go func() {
-		ticker := time.NewTicker(30 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-hbCtx.Done():
-				return
-			case <-ticker.C:
-				activity.RecordHeartbeat(ctx)
-			}
-		}
-	}()
+	stopHeartbeat := startActivityHeartbeat(ctx)
+	defer stopHeartbeat()
 
 	result, err := a.core.ProcessThreadEventsByThreadID(ctx, projectID, threadID)
 	if err != nil {
@@ -180,6 +200,21 @@ func (a *ProcessAssistantThread) Do(ctx context.Context, input ProcessAssistantT
 		out.WarmUntil = result.WarmUntil.UTC().Format(time.RFC3339Nano)
 	}
 	return out, nil
+}
+
+func (a *WarmAssistantRuntime) Do(ctx context.Context, input WarmAssistantRuntimeInput) error {
+	assistantID, err := uuid.Parse(input.AssistantID)
+	if err != nil {
+		return fmt.Errorf("parse assistant id: %w", err)
+	}
+
+	stopHeartbeat := startActivityHeartbeat(ctx)
+	defer stopHeartbeat()
+
+	if err := a.core.WarmAssistantRuntime(ctx, assistantID); err != nil {
+		return fmt.Errorf("warm assistant runtime: %w", err)
+	}
+	return nil
 }
 
 func (a *ReapStuckAssistantRuntimes) Do(ctx context.Context) (*ReapStuckAssistantRuntimesResult, error) {

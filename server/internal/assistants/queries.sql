@@ -538,6 +538,20 @@ WHERE project_id = @project_id
   AND ended IS FALSE
 LIMIT 1;
 
+-- name: GetAssistantRuntimeV2 :one
+-- Full-row sibling of LookupActiveAssistantRuntimeV2 for callers that need
+-- the backend metadata to drive Ensure without a thread to join through
+-- (eager warmup at assistant creation). At most one row matches per the
+-- v2 unique partial index.
+SELECT id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until
+FROM assistant_runtimes
+WHERE project_id = @project_id
+  AND assistant_id = @assistant_id
+  AND runtime_version = 2
+  AND deleted IS FALSE
+  AND ended IS FALSE
+LIMIT 1;
+
 -- name: AcquireAssistantAdvisoryLock :exec
 -- pg_advisory_xact_lock auto-releases at commit. Hashed on the assistant
 -- id so concurrent workers admitting the same assistant serialise on VM

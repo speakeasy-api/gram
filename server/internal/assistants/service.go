@@ -1458,6 +1458,137 @@ func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assis
 	return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: admitted}, nil
 }
 
+// WarmAssistantRuntime eagerly boots the assistant's Fly app + VM so the
+// first turn doesn't pay the cold-start cost (app create, IP allocation, DNS
+// propagation, image pull, machine boot). Best-effort: every failure path
+// leaves a state the lazy boot in ProcessThreadEvents recovers from, so an
+// error is returned only when retrying the whole warmup can help.
+//
+// If no traffic arrives before warm_until, the stuck-runtime reaper retires
+// the row and Fly's autostop parks the idle machine. The backend metadata
+// kept on the row makes the next admit a warm start, which is the point of
+// paying the provisioning cost at creation time.
+func (s *ServiceCore) WarmAssistantRuntime(ctx context.Context, assistantID uuid.UUID) error {
+	dispatchRow, err := assistantrepo.New(s.db).GetAssistantForDispatch(ctx, assistantID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// Deleted between creation and the warmup workflow running.
+		return nil
+	case err != nil:
+		return fmt.Errorf("select assistant for warmup: %w", err)
+	}
+	// Skip getAssistantForDispatch's toolset hydration — warmup only needs
+	// the scalar fields.
+	assistant := assistantRecordFromDispatchRow(dispatchRow)
+	if assistant.Status != StatusActive {
+		return nil
+	}
+
+	reserved, err := s.reserveRuntimeForWarmup(ctx, assistant)
+	if err != nil || !reserved {
+		return err
+	}
+
+	row, err := assistantrepo.New(s.db).GetAssistantRuntimeV2(ctx, assistantrepo.GetAssistantRuntimeV2Params{
+		ProjectID:   assistant.ProjectID,
+		AssistantID: assistant.ID,
+	})
+	if err != nil {
+		return fmt.Errorf("load reserved assistant runtime for warmup: %w", err)
+	}
+	runtimeRecord := assistantRuntimeRecord{
+		ID:                  row.ID,
+		AssistantThreadID:   uuid.Nil,
+		AssistantID:         row.AssistantID,
+		ProjectID:           row.ProjectID,
+		Backend:             row.Backend,
+		BackendMetadataJSON: row.BackendMetadataJson,
+		State:               row.State,
+		WarmUntil:           row.WarmUntil,
+	}
+
+	ctx = withAssistantLogContext(ctx, assistantLogContext{
+		OrganizationID:    assistant.OrganizationID,
+		ProjectID:         assistant.ProjectID.String(),
+		AssistantID:       assistant.ID.String(),
+		AssistantName:     assistant.Name,
+		ThreadID:          "",
+		CorrelationID:     "",
+		RuntimeID:         runtimeRecord.ID.String(),
+		RuntimeBackend:    runtimeRecord.Backend,
+		EventID:           "",
+		TriggerEventID:    "",
+		TriggerInstanceID: "",
+		Attempt:           0,
+	})
+
+	ensureResult, err := s.runtime.Ensure(ctx, runtimeRecord)
+	if err != nil {
+		// Same contract as ProcessThreadEvents: mark the row failed so a
+		// later admit can reserve afresh, and swallow the error — the first
+		// real turn falls back to booting lazily.
+		s.logger.ErrorContext(ctx, "warm assistant runtime ensure failed",
+			attr.SlogAssistantID(assistant.ID.String()),
+			attr.SlogError(err),
+		)
+		_ = s.stopRuntimeRecord(ctx, assistant.ProjectID, runtimeRecord.ID, runtimeStateFailed)
+		return nil
+	}
+	if err := s.updateRuntimeEnsureResult(ctx, &runtimeRecord, ensureResult); err != nil {
+		return err
+	}
+	return s.setRuntimeActive(ctx, assistant.ProjectID, runtimeRecord.ID, time.Now().UTC().Add(time.Duration(assistant.WarmTTLSeconds)*time.Second))
+}
+
+// reserveRuntimeForWarmup inserts the v2 runtime row warmup will drive,
+// using the same advisory lock as admit so it never races a concurrent
+// thread admission into a second VM. Returns false when a live row already
+// exists — organic traffic got there first and owns the boot. The
+// transaction only covers the reservation: Ensure can run for minutes and
+// must not hold a pool connection.
+func (s *ServiceCore) reserveRuntimeForWarmup(ctx context.Context, assistant assistantRecord) (bool, error) {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return false, fmt.Errorf("begin assistant warmup tx: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	queries := assistantrepo.New(tx)
+	if err := queries.AcquireAssistantAdvisoryLock(ctx, assistant.ID.String()); err != nil {
+		return false, fmt.Errorf("acquire assistant advisory lock: %w", err)
+	}
+
+	_, err = queries.LookupActiveAssistantRuntimeV2(ctx, assistantrepo.LookupActiveAssistantRuntimeV2Params{
+		ProjectID:   assistant.ProjectID,
+		AssistantID: assistant.ID,
+	})
+	switch {
+	case err == nil:
+		return false, nil
+	case !errors.Is(err, pgx.ErrNoRows):
+		return false, fmt.Errorf("lookup v2 runtime for warmup: %w", err)
+	}
+
+	// uuid.Nil thread sentinel: there is no admitting thread, the runtime is
+	// being provisioned ahead of traffic.
+	if err := queries.ReserveAssistantRuntimeV2(ctx, assistantrepo.ReserveAssistantRuntimeV2Params{
+		AssistantThreadID: uuid.Nil,
+		AssistantID:       assistant.ID,
+		ProjectID:         assistant.ProjectID,
+		Backend:           s.runtime.Backend(),
+		State:             runtimeStateStarting,
+	}); err != nil {
+		return false, fmt.Errorf("reserve v2 assistant runtime for warmup: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return false, fmt.Errorf("commit assistant warmup tx: %w", err)
+	}
+	return true, nil
+}
+
 func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, threadID uuid.UUID) (ProcessThreadEventsResult, error) {
 	bootstrappedRuntime := false
 	thread, assistant, runtimeRecord, err := s.loadThreadContext(ctx, projectID, threadID)
