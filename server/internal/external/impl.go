@@ -17,7 +17,6 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/external/server"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background"
-	bgactivities "github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -85,7 +84,8 @@ type webhookEventData struct {
 }
 
 type webhookDirectoryEntity struct {
-	ID string `json:"id"`
+	ID             string `json:"id"`
+	OrganizationID string `json:"organization_id"`
 }
 
 type webhookEvent struct {
@@ -141,7 +141,15 @@ func (h *WebhookHandler) dispatch(ctx context.Context, logger *slog.Logger, even
 		string(workos.EventKindConnectionDeactivated),
 		string(workos.EventKindConnectionDeleted),
 		string(workos.EventKindDirectorySyncActivated),
-		string(workos.EventKindDirectorySyncDeleted):
+		string(workos.EventKindDirectorySyncDeleted),
+		string(workos.EventKindDirectorySyncUserCreated),
+		string(workos.EventKindDirectorySyncUserUpdated),
+		string(workos.EventKindDirectorySyncUserDeleted),
+		string(workos.EventKindDirectorySyncGroupCreated),
+		string(workos.EventKindDirectorySyncGroupUpdated),
+		string(workos.EventKindDirectorySyncGroupDeleted),
+		string(workos.EventKindDirectorySyncGroupUserAdded),
+		string(workos.EventKindDirectorySyncGroupUserRemoved):
 
 		orgID := parseOrganizationID(event)
 		if _, err := background.ExecuteProcessWorkOSOrganizationEventsWorkflowDebounced(ctx, h.temporalEnv, background.ProcessWorkOSEventsParams{
@@ -161,36 +169,11 @@ func (h *WebhookHandler) dispatch(ctx context.Context, logger *slog.Logger, even
 
 	case string(workos.EventKindUserCreated),
 		string(workos.EventKindUserUpdated),
-		string(workos.EventKindUserDeleted),
-		string(workos.EventKindDirectorySyncUserCreated),
-		string(workos.EventKindDirectorySyncUserUpdated),
-		string(workos.EventKindDirectorySyncUserDeleted):
+		string(workos.EventKindUserDeleted):
 		if _, err := background.ExecuteProcessWorkOSUserEventsWorkflowDebounced(ctx, h.temporalEnv, background.ProcessWorkOSUserEventsWorkflowParams{
 			WorkOSUserID: event.Data.ID,
 		}); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to enqueue WorkOS user sync").Log(ctx, logger)
-		}
-		return nil
-
-	case string(workos.EventKindDirectorySyncGroupCreated),
-		string(workos.EventKindDirectorySyncGroupUpdated),
-		string(workos.EventKindDirectorySyncGroupDeleted):
-		if _, err := background.ExecuteProcessWorkOSDirectoryAttributesEventsWorkflowDebounced(ctx, h.temporalEnv, background.ProcessWorkOSDirectoryAttributesEventsWorkflowParams{
-			EntityType:             bgactivities.WorkOSDirectoryAttributesEntityTypeGroup,
-			WorkOSDirectoryGroupID: event.Data.ID,
-		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to enqueue WorkOS directory group sync").Log(ctx, logger)
-		}
-		return nil
-
-	case string(workos.EventKindDirectorySyncGroupUserAdded),
-		string(workos.EventKindDirectorySyncGroupUserRemoved):
-		if _, err := background.ExecuteProcessWorkOSDirectoryAttributesEventsWorkflowDebounced(ctx, h.temporalEnv, background.ProcessWorkOSDirectoryAttributesEventsWorkflowParams{
-			EntityType:             bgactivities.WorkOSDirectoryAttributesEntityTypeGroupMembership,
-			WorkOSDirectoryGroupID: event.Data.Group.ID,
-			WorkOSDirectoryUserID:  event.Data.User.ID,
-		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to enqueue WorkOS directory group membership sync").Log(ctx, logger)
 		}
 		return nil
 
@@ -210,5 +193,11 @@ func parseOrganizationID(event webhookEvent) string {
 	if strings.HasPrefix(event.Event, "organization.") {
 		return event.Data.ID
 	}
-	return event.Data.OrganizationID
+	if event.Data.OrganizationID != "" {
+		return event.Data.OrganizationID
+	}
+	if event.Data.Group.OrganizationID != "" {
+		return event.Data.Group.OrganizationID
+	}
+	return event.Data.User.OrganizationID
 }

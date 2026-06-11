@@ -1621,15 +1621,6 @@ type UserSessionIssuer struct {
 	Deleted            bool
 }
 
-type WorkosDirectoryAttributesSync struct {
-	ID          uuid.UUID
-	EntityID    string
-	EntityType  string
-	LastEventID string
-	CreatedAt   pgtype.Timestamptz
-	UpdatedAt   pgtype.Timestamptz
-}
-
 type WorkosOrganizationSync struct {
 	ID                   uuid.UUID
 	WorkosOrganizationID string

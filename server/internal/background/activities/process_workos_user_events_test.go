@@ -116,7 +116,7 @@ func TestProcessWorkOSUserEvents_CreatesUser(t *testing.T) {
 	require.Equal(t, []workos.UserExternalIDUpdate{{WorkOSUserID: workosUserID, ExternalID: gramID}}, workosClient.UserExternalIDUpdates())
 }
 
-func TestProcessWorkOSUserEvents_StoresDirectoryUserAttributes(t *testing.T) {
+func TestProcessWorkOSOrganizationEvents_StoresDirectoryUserAttributes(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -136,8 +136,8 @@ func TestProcessWorkOSUserEvents_StoresDirectoryUserAttributes(t *testing.T) {
 		{ID: "event_directory_user_update", Event: "dsync.user.updated", CreatedAt: time.Now(), Data: directoryUserEventDataWithOrganization(workosDirectoryUserID, workosOrgID, email)},
 	}})
 
-	activity := activities.NewProcessWorkOSUserEvents(logger, conn, workosClient)
-	res, err := activity.Do(ctx, processWorkOSUserEventsParams(workosDirectoryUserID))
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient)
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_directory_user_update", res.LastEventID)
 
@@ -145,12 +145,7 @@ func TestProcessWorkOSUserEvents_StoresDirectoryUserAttributes(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, gramOrgID, row.OrganizationID)
 	require.Equal(t, email, row.Email.String)
-	require.JSONEq(t, `{
-		"department": "Engineering",
-		"team": "SDK"
-	}`, string(row.Attributes))
-	require.True(t, row.AttributesContentHash.Valid)
-	require.Contains(t, row.AttributesContentHash.String, "sha256:")
+	require.JSONEq(t, string(directoryUserEventDataWithOrganization(workosDirectoryUserID, workosOrgID, email)), string(row.Attributes))
 }
 
 func TestProcessWorkOSUserEvents_CreatesUserWithExistingExternalID(t *testing.T) {

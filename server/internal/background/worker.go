@@ -325,7 +325,6 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSOrganizationEvents)
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSGlobalRoleEvents)
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSUserEvents)
-	temporalWorker.RegisterActivity(activities.ProcessWorkOSDirectoryAttributesEvents)
 	// Outbox relay activities
 	temporalWorker.RegisterActivity(activities.FetchPendingOutboxEvents)
 	temporalWorker.RegisterActivity(activities.FilterNoopOutboxEvents)
@@ -372,8 +371,6 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(ProcessWorkOSGlobalRoleEventsWorkflowDebounced)
 	temporalWorker.RegisterWorkflow(ProcessWorkOSUserEventsWorkflow)
 	temporalWorker.RegisterWorkflow(ProcessWorkOSUserEventsWorkflowDebounced)
-	temporalWorker.RegisterWorkflow(ProcessWorkOSDirectoryAttributesEventsWorkflow)
-	temporalWorker.RegisterWorkflow(ProcessWorkOSDirectoryAttributesEventsWorkflowDebounced)
 	temporalWorker.RegisterWorkflow(BackfillWorkOSWorkflow)
 	// Assistants signup followups
 	temporalWorker.RegisterWorkflow(CancelAssistantsSubscriptionWorkflow)

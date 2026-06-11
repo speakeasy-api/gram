@@ -24,27 +24,12 @@ ON CONFLICT (workos_user_id) WHERE workos_user_id IS NOT NULL DO UPDATE SET
     updated_at = clock_timestamp()
 RETURNING id;
 
--- name: GetDirectoryAttributesSyncLastEventID :one
-SELECT last_event_id
-FROM workos_directory_attributes_syncs
-WHERE entity_type = @entity_type
-  AND entity_id = @entity_id;
-
--- name: SetDirectoryAttributesSyncLastEventID :one
-INSERT INTO workos_directory_attributes_syncs (entity_type, entity_id, last_event_id)
-VALUES (@entity_type, @entity_id, @last_event_id)
-ON CONFLICT (entity_type, entity_id) DO UPDATE SET
-    last_event_id = EXCLUDED.last_event_id,
-    updated_at = clock_timestamp()
-RETURNING id;
-
 -- name: UpsertDirectoryGroup :one
 INSERT INTO directory_groups (
   organization_id,
   workos_directory_group_id,
   name,
   attributes,
-  attributes_content_hash,
   deleted_at
 )
 VALUES (
@@ -52,20 +37,14 @@ VALUES (
   @workos_directory_group_id,
   @name,
   @attributes,
-  @attributes_content_hash,
   NULL
 )
 ON CONFLICT (workos_directory_group_id) DO UPDATE SET
   organization_id = EXCLUDED.organization_id,
   name = EXCLUDED.name,
   attributes = EXCLUDED.attributes,
-  attributes_content_hash = EXCLUDED.attributes_content_hash,
   deleted_at = NULL,
   updated_at = clock_timestamp()
-WHERE directory_groups.attributes_content_hash IS DISTINCT FROM EXCLUDED.attributes_content_hash
-  OR directory_groups.name IS DISTINCT FROM EXCLUDED.name
-  OR directory_groups.organization_id IS DISTINCT FROM EXCLUDED.organization_id
-  OR directory_groups.deleted_at IS NOT NULL
 RETURNING id;
 
 -- name: GetDirectoryGroupIDByWorkOSID :one
@@ -79,7 +58,7 @@ FROM directory_groups
 WHERE workos_directory_group_id = @workos_directory_group_id;
 
 -- name: GetDirectoryGroupByWorkOSID :one
-SELECT organization_id, name, attributes, attributes_content_hash,deleted
+SELECT organization_id, name, attributes, deleted
 FROM directory_groups
 WHERE workos_directory_group_id = @workos_directory_group_id;
 
@@ -97,7 +76,6 @@ INSERT INTO directory_users (
   workos_directory_user_id,
   email,
   attributes,
-  attributes_content_hash,
   deleted_at
 )
 VALUES (
@@ -106,7 +84,6 @@ VALUES (
   @workos_directory_user_id,
   @email,
   @attributes,
-  @attributes_content_hash,
   NULL
 )
 ON CONFLICT (workos_directory_user_id) DO UPDATE SET
@@ -114,7 +91,6 @@ ON CONFLICT (workos_directory_user_id) DO UPDATE SET
   user_id = COALESCE(EXCLUDED.user_id, directory_users.user_id),
   email = EXCLUDED.email,
   attributes = EXCLUDED.attributes,
-  attributes_content_hash = EXCLUDED.attributes_content_hash,
   deleted_at = NULL,
   updated_at = clock_timestamp()
 RETURNING id;
@@ -159,7 +135,7 @@ VALUES (
   @workos_directory_user_id,
   @workos_directory_group_id
 )
-ON CONFLICT (directory_user_id, directory_group_id) DO UPDATE SET
+ON CONFLICT (directory_user_id, directory_group_id) WHERE deleted IS FALSE DO UPDATE SET
   workos_directory_user_id = EXCLUDED.workos_directory_user_id,
   workos_directory_group_id = EXCLUDED.workos_directory_group_id,
   deleted_at = NULL,

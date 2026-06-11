@@ -124,37 +124,17 @@ func (q *Queries) DeleteDirectoryUserByWorkOSID(ctx context.Context, workosDirec
 	return result.RowsAffected(), nil
 }
 
-const getDirectoryAttributesSyncLastEventID = `-- name: GetDirectoryAttributesSyncLastEventID :one
-SELECT last_event_id
-FROM workos_directory_attributes_syncs
-WHERE entity_type = $1
-  AND entity_id = $2
-`
-
-type GetDirectoryAttributesSyncLastEventIDParams struct {
-	EntityType string
-	EntityID   string
-}
-
-func (q *Queries) GetDirectoryAttributesSyncLastEventID(ctx context.Context, arg GetDirectoryAttributesSyncLastEventIDParams) (string, error) {
-	row := q.db.QueryRow(ctx, getDirectoryAttributesSyncLastEventID, arg.EntityType, arg.EntityID)
-	var last_event_id string
-	err := row.Scan(&last_event_id)
-	return last_event_id, err
-}
-
 const getDirectoryGroupByWorkOSID = `-- name: GetDirectoryGroupByWorkOSID :one
-SELECT organization_id, name, attributes, attributes_content_hash,deleted
+SELECT organization_id, name, attributes, deleted
 FROM directory_groups
 WHERE workos_directory_group_id = $1
 `
 
 type GetDirectoryGroupByWorkOSIDRow struct {
-	OrganizationID        string
-	Name                  string
-	Attributes            []byte
-	AttributesContentHash pgtype.Text
-	Deleted               bool
+	OrganizationID string
+	Name           string
+	Attributes     []byte
+	Deleted        bool
 }
 
 func (q *Queries) GetDirectoryGroupByWorkOSID(ctx context.Context, workosDirectoryGroupID string) (GetDirectoryGroupByWorkOSIDRow, error) {
@@ -164,7 +144,6 @@ func (q *Queries) GetDirectoryGroupByWorkOSID(ctx context.Context, workosDirecto
 		&i.OrganizationID,
 		&i.Name,
 		&i.Attributes,
-		&i.AttributesContentHash,
 		&i.Deleted,
 	)
 	return i, err
@@ -202,7 +181,7 @@ func (q *Queries) GetDirectoryGroupIDByWorkOSID(ctx context.Context, workosDirec
 }
 
 const getDirectoryUserByWorkOSID = `-- name: GetDirectoryUserByWorkOSID :one
-SELECT id, organization_id, user_id, workos_directory_user_id, email, attributes, attributes_content_hash, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, user_id, workos_directory_user_id, email, attributes, created_at, updated_at, deleted_at, deleted
 FROM directory_users
 WHERE workos_directory_user_id = $1
   AND deleted_at IS NULL
@@ -218,7 +197,6 @@ func (q *Queries) GetDirectoryUserByWorkOSID(ctx context.Context, workosDirector
 		&i.WorkosDirectoryUserID,
 		&i.Email,
 		&i.Attributes,
-		&i.AttributesContentHash,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -302,7 +280,7 @@ VALUES (
   $3,
   $4
 )
-ON CONFLICT (directory_user_id, directory_group_id) DO UPDATE SET
+ON CONFLICT (directory_user_id, directory_group_id) WHERE deleted IS FALSE DO UPDATE SET
   workos_directory_user_id = EXCLUDED.workos_directory_user_id,
   workos_directory_group_id = EXCLUDED.workos_directory_group_id,
   deleted_at = NULL,
@@ -324,28 +302,6 @@ func (q *Queries) OpenDirectoryUserGroupMembership(ctx context.Context, arg Open
 		arg.WorkosDirectoryUserID,
 		arg.WorkosDirectoryGroupID,
 	)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
-}
-
-const setDirectoryAttributesSyncLastEventID = `-- name: SetDirectoryAttributesSyncLastEventID :one
-INSERT INTO workos_directory_attributes_syncs (entity_type, entity_id, last_event_id)
-VALUES ($1, $2, $3)
-ON CONFLICT (entity_type, entity_id) DO UPDATE SET
-    last_event_id = EXCLUDED.last_event_id,
-    updated_at = clock_timestamp()
-RETURNING id
-`
-
-type SetDirectoryAttributesSyncLastEventIDParams struct {
-	EntityType  string
-	EntityID    string
-	LastEventID string
-}
-
-func (q *Queries) SetDirectoryAttributesSyncLastEventID(ctx context.Context, arg SetDirectoryAttributesSyncLastEventIDParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, setDirectoryAttributesSyncLastEventID, arg.EntityType, arg.EntityID, arg.LastEventID)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
@@ -399,7 +355,6 @@ INSERT INTO directory_groups (
   workos_directory_group_id,
   name,
   attributes,
-  attributes_content_hash,
   deleted_at
 )
 VALUES (
@@ -407,20 +362,14 @@ VALUES (
   $2,
   $3,
   $4,
-  $5,
   NULL
 )
 ON CONFLICT (workos_directory_group_id) DO UPDATE SET
   organization_id = EXCLUDED.organization_id,
   name = EXCLUDED.name,
   attributes = EXCLUDED.attributes,
-  attributes_content_hash = EXCLUDED.attributes_content_hash,
   deleted_at = NULL,
   updated_at = clock_timestamp()
-WHERE directory_groups.attributes_content_hash IS DISTINCT FROM EXCLUDED.attributes_content_hash
-  OR directory_groups.name IS DISTINCT FROM EXCLUDED.name
-  OR directory_groups.organization_id IS DISTINCT FROM EXCLUDED.organization_id
-  OR directory_groups.deleted_at IS NOT NULL
 RETURNING id
 `
 
@@ -429,7 +378,6 @@ type UpsertDirectoryGroupParams struct {
 	WorkosDirectoryGroupID string
 	Name                   string
 	Attributes             []byte
-	AttributesContentHash  pgtype.Text
 }
 
 func (q *Queries) UpsertDirectoryGroup(ctx context.Context, arg UpsertDirectoryGroupParams) (uuid.UUID, error) {
@@ -438,7 +386,6 @@ func (q *Queries) UpsertDirectoryGroup(ctx context.Context, arg UpsertDirectoryG
 		arg.WorkosDirectoryGroupID,
 		arg.Name,
 		arg.Attributes,
-		arg.AttributesContentHash,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)
@@ -452,7 +399,6 @@ INSERT INTO directory_users (
   workos_directory_user_id,
   email,
   attributes,
-  attributes_content_hash,
   deleted_at
 )
 VALUES (
@@ -461,7 +407,6 @@ VALUES (
   $3,
   $4,
   $5,
-  $6,
   NULL
 )
 ON CONFLICT (workos_directory_user_id) DO UPDATE SET
@@ -469,7 +414,6 @@ ON CONFLICT (workos_directory_user_id) DO UPDATE SET
   user_id = COALESCE(EXCLUDED.user_id, directory_users.user_id),
   email = EXCLUDED.email,
   attributes = EXCLUDED.attributes,
-  attributes_content_hash = EXCLUDED.attributes_content_hash,
   deleted_at = NULL,
   updated_at = clock_timestamp()
 RETURNING id
@@ -481,7 +425,6 @@ type UpsertDirectoryUserParams struct {
 	WorkosDirectoryUserID string
 	Email                 pgtype.Text
 	Attributes            []byte
-	AttributesContentHash pgtype.Text
 }
 
 func (q *Queries) UpsertDirectoryUser(ctx context.Context, arg UpsertDirectoryUserParams) (uuid.UUID, error) {
@@ -491,7 +434,6 @@ func (q *Queries) UpsertDirectoryUser(ctx context.Context, arg UpsertDirectoryUs
 		arg.WorkosDirectoryUserID,
 		arg.Email,
 		arg.Attributes,
-		arg.AttributesContentHash,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)

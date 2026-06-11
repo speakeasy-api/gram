@@ -46,8 +46,8 @@ type ProcessWorkOSOrganizationEventsResult struct {
 }
 
 // ProcessWorkOSOrganizationEvents pages through WorkOS organization-scoped events
-// since the stored cursor, applying supported organization, role, and
-// membership events in a transaction before advancing the cursor.
+// since the stored cursor, applying supported organization, role, membership,
+// and Directory Sync events in a transaction before advancing the cursor.
 type ProcessWorkOSOrganizationEvents struct {
 	db           *pgxpool.Pool
 	logger       *slog.Logger
@@ -101,6 +101,14 @@ func (p *ProcessWorkOSOrganizationEvents) Do(ctx context.Context, params Process
 
 			string(workos.EventKindDirectorySyncActivated),
 			string(workos.EventKindDirectorySyncDeleted),
+			string(workos.EventKindDirectorySyncUserCreated),
+			string(workos.EventKindDirectorySyncUserUpdated),
+			string(workos.EventKindDirectorySyncUserDeleted),
+			string(workos.EventKindDirectorySyncGroupCreated),
+			string(workos.EventKindDirectorySyncGroupUpdated),
+			string(workos.EventKindDirectorySyncGroupDeleted),
+			string(workos.EventKindDirectorySyncGroupUserAdded),
+			string(workos.EventKindDirectorySyncGroupUserRemoved),
 		},
 		Limit:          workosOrgEventsPageSize,
 		After:          sinceEventID,
@@ -225,6 +233,11 @@ func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx data
 		return nil, handleDSyncChange(ctx, logger, dbtx, event, true)
 	case string(workos.EventKindDirectorySyncDeleted):
 		return nil, handleDSyncChange(ctx, logger, dbtx, event, false)
+	case string(workos.EventKindDirectorySyncUserCreated), string(workos.EventKindDirectorySyncUserUpdated), string(workos.EventKindDirectorySyncUserDeleted):
+		return nil, handleDirectoryUserEvent(ctx, logger, dbtx, event.ID, workos.EventKind(event.Event), event.Data)
+	case string(workos.EventKindDirectorySyncGroupCreated), string(workos.EventKindDirectorySyncGroupUpdated), string(workos.EventKindDirectorySyncGroupDeleted),
+		string(workos.EventKindDirectorySyncGroupUserAdded), string(workos.EventKindDirectorySyncGroupUserRemoved):
+		return nil, handleDirectoryAttributesEvent(ctx, logger, dbtx, workos.EventKind(event.Event), event.Data)
 	}
 
 	return nil, oops.Permanent(fmt.Errorf("unhandled workos organization event type: %s", event.Event))
@@ -308,7 +321,7 @@ func resolveOrgForWorkOSEvent(ctx context.Context, repo *orgrepo.Queries, payloa
 	case errors.Is(err, pgx.ErrNoRows):
 		// Resolve below by external_id or by a deterministic ID derived from
 		// the WorkOS org ID.
-	case err != nil:
+	default:
 		return resolvedWorkOSOrganization{}, fmt.Errorf("get organization for workos id %q: %w", payload.ID, err)
 	}
 
