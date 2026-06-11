@@ -169,13 +169,16 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, projectID uuid.UUID, t
 
 	// Resolve the prompt-policy flag once per scan (on the parent ctx, before
 	// fan-out) so prompt_based policies don't each repeat the slug lookup and
-	// so the lookup is never cancelled by a sibling match. Gated on the same
-	// conditions scanPromptPolicy enforces — a tool-request message and at
-	// least one enforcing prompt_based policy — so the lookup is skipped
-	// entirely for scans that can never run the judge.
+	// so the lookup is never cancelled by a sibling match. Gated on the exact
+	// conditions under which the fan-out would run the judge — a tool-request
+	// message and a prompt_based policy whose message_types apply to it — so
+	// the lookup is skipped entirely for scans that can never enforce one.
 	promptPoliciesOn := false
 	if messageType == message.ToolRequest &&
-		slices.ContainsFunc(policies, func(p repo.RiskPolicy) bool { return p.PolicyType == "prompt_based" }) {
+		slices.ContainsFunc(policies, func(p repo.RiskPolicy) bool {
+			return p.PolicyType == "prompt_based" &&
+				(len(p.MessageTypes) == 0 || slices.Contains(p.MessageTypes, messageType))
+		}) {
 		// All enforcing policies for a project belong to the same org.
 		promptPoliciesOn = s.promptPoliciesEnabled(ctx, policies[0].OrganizationID, projectID)
 	}
