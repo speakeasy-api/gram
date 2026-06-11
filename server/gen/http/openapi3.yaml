@@ -34432,6 +34432,18 @@ components:
                     enum:
                         - flag
                         - block
+                audience_principal_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: Principal URNs this policy applies to. For audience_type=everyone, the server stores user:all.
+                audience_type:
+                    type: string
+                    description: 'Policy audience type: everyone or targeted.'
+                    default: everyone
+                    enum:
+                        - everyone
+                        - targeted
                 auto_name:
                     type: boolean
                     description: Whether the policy name should be auto-generated.
@@ -41105,6 +41117,18 @@ components:
                     enum:
                         - flag
                         - block
+                audience_principal_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: Principal URNs the policy applies to. Contains user:all when audience_type is everyone.
+                audience_type:
+                    type: string
+                    description: 'Policy audience type: everyone or targeted.'
+                    default: everyone
+                    enum:
+                        - everyone
+                        - targeted
                 auto_name:
                     type: boolean
                     description: Whether the policy name is auto-generated. When true, the name is regenerated on each update.
@@ -41195,6 +41219,8 @@ components:
                 - sources
                 - enabled
                 - action
+                - audience_type
+                - audience_principal_urns
                 - auto_name
                 - version
                 - created_at
@@ -45072,6 +45098,17 @@ components:
                     enum:
                         - flag
                         - block
+                audience_principal_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: Principal URNs this policy applies to. Omit to preserve the current target principals.
+                audience_type:
+                    type: string
+                    description: 'Policy audience type: everyone or targeted. Omit to preserve the current audience type.'
+                    enum:
+                        - everyone
+                        - targeted
                 auto_name:
                     type: boolean
                     description: Whether the policy name should be auto-generated.

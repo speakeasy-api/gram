@@ -45,7 +45,7 @@ func (s *Service) scanClaudeForEnforcement(ctx context.Context, payload *gen.Cla
 		return nil
 	}
 
-	projectID, ok := s.resolveClaudeScanProjectID(ctx, *payload.SessionID)
+	scanContext, ok := s.resolveClaudeScanContext(ctx, *payload.SessionID)
 	if !ok {
 		return nil
 	}
@@ -55,7 +55,7 @@ func (s *Service) scanClaudeForEnforcement(ctx context.Context, payload *gen.Cla
 		return nil
 	}
 
-	result, err := s.riskScanner.ScanForEnforcement(ctx, projectID, text, messageType, toolName)
+	result, err := s.riskScanner.ScanForEnforcement(ctx, scanContext.organizationID, scanContext.projectID, scanContext.userID, text, messageType, toolName)
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for Claude hook",
 			attr.SlogError(err),
@@ -67,26 +67,46 @@ func (s *Service) scanClaudeForEnforcement(ctx context.Context, payload *gen.Cla
 	return result
 }
 
-// resolveClaudeScanProjectID resolves the project_id used to scope a Claude
+type claudeScanContext struct {
+	organizationID string
+	projectID      uuid.UUID
+	userID         string
+}
+
+// resolveClaudeScanContext resolves the org/project/user used to scope a Claude
 // hook risk scan. The plugin-auth context populated by Gram-Key + Gram-Project
 // wins when present. Session metadata cached by the OTEL Logs endpoint remains
-// the fallback for legacy hooks without plugin auth. Returns ok=false when
-// neither source yields a project_id.
-func (s *Service) resolveClaudeScanProjectID(ctx context.Context, sessionID string) (uuid.UUID, bool) {
+// the fallback for legacy hooks without plugin auth.
+func (s *Service) resolveClaudeScanContext(ctx context.Context, sessionID string) (claudeScanContext, bool) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if ok && authCtx != nil && authCtx.ProjectID != nil {
-		return *authCtx.ProjectID, true
+		return claudeScanContext{
+			organizationID: authCtx.ActiveOrganizationID,
+			projectID:      *authCtx.ProjectID,
+			userID:         authCtx.UserID,
+		}, true
 	}
 
 	metadata, err := s.getSessionMetadata(ctx, sessionID)
-	if err == nil {
-		pid, perr := uuid.Parse(metadata.ProjectID)
-		if perr == nil {
-			return pid, true
-		}
-		return uuid.Nil, false
+	if err != nil {
+		return claudeScanContext{organizationID: "", projectID: uuid.Nil, userID: ""}, false
 	}
-	return uuid.Nil, false
+
+	projectID, err := uuid.Parse(metadata.ProjectID)
+	if err != nil {
+		return claudeScanContext{organizationID: "", projectID: uuid.Nil, userID: ""}, false
+	}
+
+	userID := metadata.UserID
+	if userID == "" {
+		userID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
+	}
+
+	return claudeScanContext{
+		organizationID: metadata.GramOrgID,
+		projectID:      projectID,
+		userID:         userID,
+	}, true
 }
 
 // scanCursorForEnforcement runs the risk scanner for a Cursor hook payload.
@@ -119,7 +139,7 @@ func (s *Service) scanCursorForEnforcement(ctx context.Context, payload *gen.Cur
 		return nil
 	}
 
-	result, err := s.riskScanner.ScanForEnforcement(ctx, pid, text, messageType, toolName)
+	result, err := s.riskScanner.ScanForEnforcement(ctx, orgID, pid, userID, text, messageType, toolName)
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for Cursor hook",
 			attr.SlogError(err),
@@ -161,7 +181,8 @@ func (s *Service) scanCodexForEnforcement(ctx context.Context, payload *gen.Code
 		return nil
 	}
 
-	result, err := s.riskScanner.ScanForEnforcement(ctx, pid, text, messageType, toolName)
+	metadata := s.codexSessionMetadata(ctx, payload, orgID, projectID)
+	result, err := s.riskScanner.ScanForEnforcement(ctx, orgID, pid, metadata.UserID, text, messageType, toolName)
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for Codex hook",
 			attr.SlogError(err),

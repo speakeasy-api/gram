@@ -847,8 +847,10 @@ func seedCustomRulePolicySelection(t *testing.T, conn *pgxpool.Pool, td testData
 		PromptInjectionRules: policy.PromptInjectionRules,
 		DisabledRules:        policy.DisabledRules,
 		CustomRuleIds:        []string{ruleID},
+		MessageTypes:         policy.MessageTypes,
 		Enabled:              policy.Enabled,
 		Action:               "flag",
+		AudienceType:         policy.AudienceType,
 		AutoName:             policy.AutoName,
 		UserMessage:          policy.UserMessage,
 	})

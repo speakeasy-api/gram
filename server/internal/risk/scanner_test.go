@@ -13,12 +13,14 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // instrumentedPIIScanner records concurrency observed during AnalyzeBatch and
@@ -83,8 +85,9 @@ func insertPresidioBlockPolicy(t *testing.T, ti *testInstance, ctx context.Conte
 	t.Helper()
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	require.NotNil(t, authCtx.ProjectID)
+	policyID := uuid.New()
 	_, err := riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
-		ID:               uuid.New(),
+		ID:               policyID,
 		ProjectID:        *authCtx.ProjectID,
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		Name:             name,
@@ -92,17 +95,20 @@ func insertPresidioBlockPolicy(t *testing.T, ti *testInstance, ctx context.Conte
 		PresidioEntities: entities,
 		Enabled:          true,
 		Action:           "block",
+		AudienceType:     "everyone",
 		AutoName:         false,
 	})
 	require.NoError(t, err)
+	grantRiskPolicyToAllUsers(t, ti, ctx, authCtx.ActiveOrganizationID, policyID)
 }
 
 func insertPresidioBlockPolicyWithTypes(t *testing.T, ti *testInstance, ctx context.Context, name string, entities, messageTypes []string) {
 	t.Helper()
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	require.NotNil(t, authCtx.ProjectID)
+	policyID := uuid.New()
 	_, err := riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
-		ID:               uuid.New(),
+		ID:               policyID,
 		ProjectID:        *authCtx.ProjectID,
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		Name:             name,
@@ -111,9 +117,25 @@ func insertPresidioBlockPolicyWithTypes(t *testing.T, ti *testInstance, ctx cont
 		MessageTypes:     messageTypes,
 		Enabled:          true,
 		Action:           "block",
+		AudienceType:     "everyone",
 		AutoName:         false,
 	})
 	require.NoError(t, err)
+	grantRiskPolicyToAllUsers(t, ti, ctx, authCtx.ActiveOrganizationID, policyID)
+}
+
+func grantRiskPolicyToAllUsers(t *testing.T, ti *testInstance, ctx context.Context, organizationID string, policyID uuid.UUID) {
+	t.Helper()
+	require.NoError(t, authz.ReplaceGrantsForResource(ctx, ti.conn, authz.ResourceGrant{
+		Resource: authz.Resource{
+			OrganizationID: organizationID,
+			Scope:          authz.ScopeRiskPolicyEvaluate,
+			ResourceID:     policyID.String(),
+		},
+		Effect:     authz.PolicyEffectAllow,
+		Principals: []urn.Principal{authz.AllUsersPrincipal()},
+		Selector:   nil,
+	}))
 }
 
 // TestScanner_FanOutAcrossPoliciesIsConcurrent verifies that
@@ -144,7 +166,7 @@ func TestScanner_FanOutAcrossPoliciesIsConcurrent(t *testing.T) {
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	start := time.Now()
-	result, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", message.User, "")
+	result, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "irrelevant text", message.User, "")
 	elapsed := time.Since(start)
 
 	require.NoError(t, err)
@@ -190,7 +212,7 @@ func TestScanner_FirstMatchCancelsSiblings(t *testing.T) {
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	start := time.Now()
-	result, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", message.User, "")
+	result, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "irrelevant text", message.User, "")
 	elapsed := time.Since(start)
 
 	require.NoError(t, err)
@@ -224,8 +246,9 @@ func TestScanner_CustomDetectionRuleEnforcement(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	policyID := uuid.New()
 	_, err = riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
-		ID:                   uuid.New(),
+		ID:                   policyID,
 		ProjectID:            *authCtx.ProjectID,
 		OrganizationID:       authCtx.ActiveOrganizationID,
 		Name:                 "custom block",
@@ -234,12 +257,15 @@ func TestScanner_CustomDetectionRuleEnforcement(t *testing.T) {
 		PromptInjectionRules: nil,
 		DisabledRules:        nil,
 		CustomRuleIds:        []string{"custom.acme_token"},
+		MessageTypes:         nil,
 		Enabled:              true,
 		Action:               "block",
+		AudienceType:         "everyone",
 		AutoName:             false,
 		UserMessage:          pgtype.Text{},
 	})
 	require.NoError(t, err)
+	grantRiskPolicyToAllUsers(t, ti, ctx, authCtx.ActiveOrganizationID, policyID)
 
 	scanner, err := risk.NewScanner(
 		testenv.NewLogger(t),
@@ -252,7 +278,7 @@ func TestScanner_CustomDetectionRuleEnforcement(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	result, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "deploy ACME-ABC12345 now", message.User, "")
+	result, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "deploy ACME-ABC12345 now", message.User, "")
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, "custom block", result.PolicyName)
@@ -281,11 +307,11 @@ func TestScanner_RespectsMessageTypes(t *testing.T) {
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 
-	userResult, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", message.User, "")
+	userResult, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "irrelevant text", message.User, "")
 	require.NoError(t, err)
 	require.Nil(t, userResult)
 
-	toolResult, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", message.ToolRequest, "")
+	toolResult, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "irrelevant text", message.ToolRequest, "")
 	require.NoError(t, err)
 	require.NotNil(t, toolResult)
 	require.Equal(t, "tool only", toolResult.PolicyName)

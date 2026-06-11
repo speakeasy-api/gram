@@ -55,14 +55,17 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import type { ReactNode } from "react";
 import { useQueryState } from "nuqs";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   invalidateAllRiskListPolicies,
+  useMembers,
   useRiskCreatePolicyMutation,
   useRiskListPolicies,
   useRiskPoliciesDeleteMutation,
   useRiskPoliciesUpdateMutation,
+  useRoles,
 } from "@gram/client/react-query/index.js";
 import {
   useRiskPoliciesStatus,
@@ -122,6 +125,7 @@ const FLAG_ONLY_CATEGORIES: Set<RuleCategory> = new Set([
 ]);
 
 type PolicyKind = "risk" | "prompt";
+type PolicyAudienceType = "everyone" | "targeted";
 
 type PolicyRow = { kind: PolicyKind; policy: RiskPolicy };
 
@@ -283,6 +287,25 @@ function policyMessageTypesForDisplay(
   return [...policyMessageTypesForForm(messageTypes)];
 }
 
+function policyAudienceSummary(row: PolicyRow): string {
+  if (row.kind === "prompt") {
+    return "Everyone";
+  }
+  if (row.policy.audienceType !== "targeted") {
+    return "Everyone";
+  }
+
+  const count = row.policy.audiencePrincipalUrns.length;
+  if (count === 1) {
+    return "1 target";
+  }
+  return `${count} targets`;
+}
+
+function promptPolicyMessageTypes(): Set<PolicyMessageType> {
+  return new Set(PROMPT_POLICY_MESSAGE_TYPES);
+}
+
 function hasOnlyToolCallMessageTypes(types: Set<PolicyMessageType>): boolean {
   return (
     types.size === TOOL_CALL_MESSAGE_TYPES.size &&
@@ -391,6 +414,10 @@ function PolicyCenterContent() {
   );
   // Fail-open (true) is the server default: allow the message when the judge errors.
   const [formFailOpen, setFormFailOpen] = useState(true);
+  const [formAudienceType, setFormAudienceType] =
+    useState<PolicyAudienceType>("everyone");
+  const [selectedAudiencePrincipalUrns, setSelectedAudiencePrincipalUrns] =
+    useState<Set<string>>(new Set<string>());
 
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
 
@@ -461,6 +488,8 @@ function PolicyCenterContent() {
     setFormModel("");
     setFormTemperature(DEFAULT_JUDGE_TEMPERATURE);
     setFormFailOpen(true);
+    setFormAudienceType("everyone");
+    setSelectedAudiencePrincipalUrns(new Set<string>());
     setSheetOpen(true);
   };
 
@@ -491,6 +520,8 @@ function PolicyCenterContent() {
         policy.modelConfig?.temperature ?? DEFAULT_JUDGE_TEMPERATURE,
       );
       setFormFailOpen(policy.modelConfig?.failOpen ?? true);
+      setFormAudienceType("everyone");
+      setSelectedAudiencePrincipalUrns(new Set<string>());
       setSheetOpen(true);
       return;
     }
@@ -510,6 +541,13 @@ function PolicyCenterContent() {
     setFormAction((policy.action as PolicyAction) ?? "flag");
     setFormAutoName(policy.autoName ?? true);
     setFormUserMessage(policy.userMessage ?? "");
+    const audienceType = policy.audienceType ?? "everyone";
+    setFormAudienceType(audienceType);
+    setSelectedAudiencePrincipalUrns(
+      audienceType === "targeted"
+        ? new Set<string>(policy.audiencePrincipalUrns ?? [])
+        : new Set<string>(),
+    );
     setSheetOpen(true);
   }, []);
 
@@ -607,6 +645,8 @@ function PolicyCenterContent() {
       sources.includes("destructive_tool") && formAction === "block"
         ? "flag"
         : formAction;
+    const audiencePrincipalUrns =
+      formAudienceType === "targeted" ? [...selectedAudiencePrincipalUrns] : [];
     if (editingPolicy) {
       updateMutation.mutate({
         request: {
@@ -621,6 +661,8 @@ function PolicyCenterContent() {
             customRuleIds: [...selectedCustomRuleIds],
             messageTypes,
             action,
+            audienceType: formAudienceType,
+            audiencePrincipalUrns,
             autoName: formAutoName,
             userMessage: formUserMessage,
           },
@@ -639,6 +681,8 @@ function PolicyCenterContent() {
             customRuleIds: [...selectedCustomRuleIds],
             messageTypes,
             action,
+            audienceType: formAudienceType,
+            audiencePrincipalUrns,
             autoName: formAutoName,
             ...(formUserMessage.trim() ? { userMessage: formUserMessage } : {}),
           },
@@ -850,6 +894,18 @@ function PolicyCenterContent() {
       },
     },
     {
+      key: "audience",
+      header: "Audience",
+      width: "1fr",
+      render: (row) => (
+        <span
+          className={cn("text-muted-foreground text-sm", dimIfDisabled(row))}
+        >
+          {policyAudienceSummary(row)}
+        </span>
+      ),
+    },
+    {
       key: "enabled",
       header: "Enabled",
       width: "0.5fr",
@@ -1058,6 +1114,14 @@ function PolicyCenterContent() {
                     setFormAutoName={setFormAutoName}
                     formUserMessage={formUserMessage}
                     setFormUserMessage={setFormUserMessage}
+                    formAudienceType={formAudienceType}
+                    setFormAudienceType={setFormAudienceType}
+                    selectedAudiencePrincipalUrns={
+                      selectedAudiencePrincipalUrns
+                    }
+                    setSelectedAudiencePrincipalUrns={
+                      setSelectedAudiencePrincipalUrns
+                    }
                   />
                 ) : (
                   <PromptPolicySheetBody
@@ -1105,6 +1169,9 @@ function PolicyCenterContent() {
                       !formPromptInstruction.trim()) ||
                     (!formAutoName && !formName.trim()) ||
                     selectedMessageTypes.size === 0 ||
+                    (formPolicyKind === "risk" &&
+                      formAudienceType === "targeted" &&
+                      selectedAudiencePrincipalUrns.size === 0) ||
                     createMutation.isPending ||
                     updateMutation.isPending
                   }
@@ -1599,6 +1666,10 @@ function PolicySheetBody({
   setFormAutoName,
   formUserMessage,
   setFormUserMessage,
+  formAudienceType,
+  setFormAudienceType,
+  selectedAudiencePrincipalUrns,
+  setSelectedAudiencePrincipalUrns,
 }: {
   formName: string;
   setFormName: (v: string) => void;
@@ -1619,6 +1690,10 @@ function PolicySheetBody({
   setFormAutoName: (v: boolean) => void;
   formUserMessage: string;
   setFormUserMessage: (v: string) => void;
+  formAudienceType: PolicyAudienceType;
+  setFormAudienceType: (v: PolicyAudienceType) => void;
+  selectedAudiencePrincipalUrns: Set<string>;
+  setSelectedAudiencePrincipalUrns: (v: Set<string>) => void;
 }) {
   const [expandedCategory, setExpandedCategory] = useState<
     RuleCategory | "custom" | null
@@ -1875,6 +1950,13 @@ function PolicySheetBody({
         flagOnlySelected={flagOnlySelected}
       />
 
+      <PolicyAudiencePicker
+        formAudienceType={formAudienceType}
+        setFormAudienceType={setFormAudienceType}
+        selectedAudiencePrincipalUrns={selectedAudiencePrincipalUrns}
+        setSelectedAudiencePrincipalUrns={setSelectedAudiencePrincipalUrns}
+      />
+
       {/* Custom message — only relevant for block-action policies that
           surface a user-facing reason at deny time. Flag-action policies
           record findings silently, so no message is needed. */}
@@ -1905,6 +1987,203 @@ function PolicySheetBody({
         <Switch checked={formEnabled} onCheckedChange={setFormEnabled} />
       </div>
     </div>
+  );
+}
+
+function PolicyAudiencePicker({
+  formAudienceType,
+  setFormAudienceType,
+  selectedAudiencePrincipalUrns,
+  setSelectedAudiencePrincipalUrns,
+}: {
+  formAudienceType: PolicyAudienceType;
+  setFormAudienceType: (v: PolicyAudienceType) => void;
+  selectedAudiencePrincipalUrns: Set<string>;
+  setSelectedAudiencePrincipalUrns: (v: Set<string>) => void;
+}) {
+  const { data: rolesData } = useRoles();
+  const { data: membersData } = useMembers();
+  const roles = rolesData?.roles ?? [];
+  const members = membersData?.members ?? [];
+
+  const togglePrincipal = (principalUrn: string, checked: boolean) => {
+    const next = new Set(selectedAudiencePrincipalUrns);
+    if (checked) {
+      next.add(principalUrn);
+    } else {
+      next.delete(principalUrn);
+    }
+    setSelectedAudiencePrincipalUrns(next);
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-1">
+        <Label className="text-sm font-medium">Audience</Label>
+        <p className="text-muted-foreground text-xs">
+          Choose which users this policy evaluates.
+        </p>
+      </div>
+      <RadioGroup
+        value={formAudienceType}
+        onValueChange={(value) => {
+          const audienceType = value as PolicyAudienceType;
+          setFormAudienceType(audienceType);
+          if (audienceType === "everyone") {
+            setSelectedAudiencePrincipalUrns(new Set<string>());
+          }
+        }}
+      >
+        <div className="border-border divide-border divide-y rounded-lg border">
+          <PolicyAudienceTypeRow
+            id="policy-audience-everyone"
+            value="everyone"
+            title="Everyone"
+            description="Evaluate this policy for every user in the organization."
+          />
+          <PolicyAudienceTypeRow
+            id="policy-audience-targeted"
+            value="targeted"
+            title="Specific users or roles"
+            description="Evaluate this policy only for selected users and role members."
+          />
+        </div>
+      </RadioGroup>
+
+      {formAudienceType === "targeted" && (
+        <div className="border-border rounded-lg border">
+          <AudiencePrincipalSection title="Users">
+            {members.length === 0 ? (
+              <p className="text-muted-foreground px-4 py-3 text-sm">
+                No users available.
+              </p>
+            ) : (
+              members.map((member) => {
+                const principalUrn = `user:${member.id}`;
+                return (
+                  <AudiencePrincipalRow
+                    key={principalUrn}
+                    id={`audience-${principalUrn}`}
+                    checked={selectedAudiencePrincipalUrns.has(principalUrn)}
+                    title={member.name || member.email}
+                    subtitle={member.email}
+                    onCheckedChange={(checked) =>
+                      togglePrincipal(principalUrn, checked)
+                    }
+                  />
+                );
+              })
+            )}
+          </AudiencePrincipalSection>
+          <AudiencePrincipalSection title="Roles">
+            {roles.length === 0 ? (
+              <p className="text-muted-foreground px-4 py-3 text-sm">
+                No roles available.
+              </p>
+            ) : (
+              roles.map((role) => {
+                const principalUrn = `role:organization:${role.id}`;
+                return (
+                  <AudiencePrincipalRow
+                    key={principalUrn}
+                    id={`audience-${principalUrn}`}
+                    checked={selectedAudiencePrincipalUrns.has(principalUrn)}
+                    title={role.name}
+                    subtitle={`${role.memberCount} members`}
+                    onCheckedChange={(checked) =>
+                      togglePrincipal(principalUrn, checked)
+                    }
+                  />
+                );
+              })
+            )}
+          </AudiencePrincipalSection>
+          {selectedAudiencePrincipalUrns.size === 0 && (
+            <p className="text-muted-foreground border-border border-t px-4 py-3 text-xs">
+              Select at least one user or role to save a targeted policy.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PolicyAudienceTypeRow({
+  id,
+  value,
+  title,
+  description,
+}: {
+  id: string;
+  value: PolicyAudienceType;
+  title: string;
+  description: string;
+}) {
+  return (
+    <label
+      htmlFor={id}
+      className="hover:bg-muted/40 flex cursor-pointer gap-3 px-4 py-3"
+    >
+      <RadioGroupItem id={id} value={value} className="mt-0.5" />
+      <span className="min-w-0">
+        <span className="block text-sm font-medium">{title}</span>
+        <span className="text-muted-foreground block text-xs">
+          {description}
+        </span>
+      </span>
+    </label>
+  );
+}
+
+function AudiencePrincipalSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="border-border border-b last:border-b-0">
+      <div className="bg-muted/30 border-border border-b px-4 py-2 text-xs font-medium">
+        {title}
+      </div>
+      <div className="divide-border divide-y">{children}</div>
+    </div>
+  );
+}
+
+function AudiencePrincipalRow({
+  id,
+  checked,
+  title,
+  subtitle,
+  onCheckedChange,
+}: {
+  id: string;
+  checked: boolean;
+  title: string;
+  subtitle: string;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  return (
+    <label
+      htmlFor={id}
+      className="hover:bg-muted/40 flex cursor-pointer items-start gap-3 px-4 py-3"
+    >
+      <Checkbox
+        id={id}
+        checked={checked}
+        onCheckedChange={(value) => onCheckedChange(!!value)}
+        className="mt-0.5"
+      />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium">{title}</span>
+        <span className="text-muted-foreground block truncate text-xs">
+          {subtitle}
+        </span>
+      </span>
+    </label>
   );
 }
 

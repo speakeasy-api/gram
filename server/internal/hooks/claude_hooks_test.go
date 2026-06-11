@@ -21,11 +21,11 @@ import (
 // without standing up the real risk-policy stack.
 type stubBlockingShadowMCPScanner struct{}
 
-func (stubBlockingShadowMCPScanner) ScanForEnforcement(_ context.Context, _ uuid.UUID, _ string, _ string, _ string) (*risk.ScanResult, error) {
+func (stubBlockingShadowMCPScanner) ScanForEnforcement(_ context.Context, _ string, _ uuid.UUID, _ string, _ string, _ string, _ string) (*risk.ScanResult, error) {
 	return nil, nil
 }
 
-func (stubBlockingShadowMCPScanner) LookupShadowMCPBlockingPolicy(_ context.Context, _ uuid.UUID) (*risk.ShadowMCPPolicy, error) {
+func (stubBlockingShadowMCPScanner) LookupShadowMCPBlockingPolicy(_ context.Context, _ string, _ uuid.UUID, _ string) (*risk.ShadowMCPPolicy, error) {
 	return &risk.ShadowMCPPolicy{ID: "00000000-0000-0000-0000-000000000001", Name: "shadow-mcp-block"}, nil
 }
 
@@ -33,7 +33,7 @@ func (stubBlockingShadowMCPScanner) HasEnabledShadowMCPPolicy(_ context.Context,
 	return true, nil
 }
 
-func TestResolveClaudeScanProjectID_PrefersAuthContextOverCachedMetadata(t *testing.T) {
+func TestResolveClaudeScanContext_PrefersAuthContextOverCachedMetadata(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
@@ -48,9 +48,11 @@ func TestResolveClaudeScanProjectID_PrefersAuthContextOverCachedMetadata(t *test
 		ProjectID: cachedProjectID.String(),
 	}, 0))
 
-	got, ok := ti.service.resolveClaudeScanProjectID(ctx, sessionID)
+	got, ok := ti.service.resolveClaudeScanContext(ctx, sessionID)
 	require.True(t, ok)
-	assert.Equal(t, *authCtx.ProjectID, got)
+	assert.Equal(t, authCtx.ActiveOrganizationID, got.organizationID)
+	assert.Equal(t, *authCtx.ProjectID, got.projectID)
+	assert.Equal(t, authCtx.UserID, got.userID)
 }
 
 // When the request authenticated via Gram-Key + Gram-Project, handlePreToolUse

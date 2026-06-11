@@ -216,6 +216,11 @@ type CreateRiskPolicyPayload struct {
 	Enabled *bool
 	// Policy action: flag or block.
 	Action string
+	// Policy audience type: everyone or targeted.
+	AudienceType string
+	// Principal URNs this policy applies to. For audience_type=everyone, the
+	// server stores user:all.
+	AudiencePrincipalUrns []string
 	// Whether the policy name should be auto-generated.
 	AutoName *bool
 	// Optional message shown to end users when this policy blocks an action or
@@ -867,6 +872,12 @@ type UpdateRiskPolicyPayload struct {
 	Enabled *bool
 	// Policy action: flag or block.
 	Action *string
+	// Policy audience type: everyone or targeted. Omit to preserve the current
+	// audience type.
+	AudienceType *string
+	// Principal URNs this policy applies to. Omit to preserve the current target
+	// principals.
+	AudiencePrincipalUrns []string
 	// Whether the policy name should be auto-generated.
 	AutoName *bool
 	// Optional message shown to end users when this policy blocks an action or

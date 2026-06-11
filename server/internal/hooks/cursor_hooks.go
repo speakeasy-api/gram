@@ -87,7 +87,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 			result.UserMessage = &userReason
 			break
 		}
-		policy := s.lookupShadowMCPBlockingPolicy(ctx, projectID)
+		policy := s.lookupShadowMCPBlockingPolicy(ctx, orgID, projectID, authCtx.UserID)
 		if policy == nil {
 			result.Permission = new("allow")
 			break

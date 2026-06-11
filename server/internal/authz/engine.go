@@ -205,9 +205,7 @@ func (e *Engine) EvaluateLoadedGrants(ctx context.Context, grants []Grant, check
 			return e.mapError(ctx, err)
 		}
 
-		expanded := check.expand()
-
-		matchedGrant, matchedCheck, denied := evaluateGrants(grants, expanded)
+		matchedGrant, matchedCheck, denied := evaluateGrants(grants, check.expand())
 		if matchedGrant == nil {
 			reason := authzrepo.ReasonScopeUnsatisfied
 			switch {
@@ -535,9 +533,9 @@ func validateInput(c Check) error {
 		return InvalidCheck(c.Scope, c.ResourceID)
 	case WildcardResource:
 		return InvalidCheck(c.Scope, c.ResourceID)
-	default:
-		return nil
 	}
+
+	return nil
 }
 
 func (e *Engine) mapError(ctx context.Context, err error) error {

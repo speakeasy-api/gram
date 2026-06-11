@@ -67,14 +67,12 @@ func ShadowMCPServerPolicyBypassTarget(serverURL string, serverIdentity string, 
 type PolicyBypassEvaluator struct {
 	logger *slog.Logger
 	db     repo.DBTX
-	authz  *authz.Engine
 }
 
-func NewPolicyBypassEvaluator(logger *slog.Logger, db repo.DBTX, authzEngine *authz.Engine) *PolicyBypassEvaluator {
+func NewPolicyBypassEvaluator(logger *slog.Logger, db repo.DBTX) *PolicyBypassEvaluator {
 	return &PolicyBypassEvaluator{
 		logger: logger.With(attr.SlogComponent("risk")),
 		db:     db,
-		authz:  authzEngine,
 	}
 }
 
@@ -89,7 +87,7 @@ func (e *PolicyBypassEvaluator) CanBypass(ctx context.Context, input PolicyBypas
 	}
 
 	check := authz.RiskPolicyBypassCheck(input.PolicyID, policyBypassCheckDimensions(input.Target))
-	return e.authz.EvaluateLoadedGrants(ctx, grants, check) == nil
+	return authz.GrantsSatisfy(grants, check)
 }
 
 func (e *PolicyBypassEvaluator) loadGrants(ctx context.Context, input PolicyBypassEvaluation) ([]authz.Grant, bool) {

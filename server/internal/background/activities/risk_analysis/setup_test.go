@@ -85,6 +85,10 @@ func seedTestData(t *testing.T, conn *pgxpool.Pool, enabled bool) testData {
 		Name:           "test policy",
 		Sources:        []string{"gitleaks"},
 		Enabled:        enabled,
+		Action:         "flag",
+		AudienceType:   "everyone",
+		AutoName:       false,
+		UserMessage:    pgtype.Text{},
 	})
 	require.NoError(t, err)
 
