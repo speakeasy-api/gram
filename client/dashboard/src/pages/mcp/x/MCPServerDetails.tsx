@@ -48,11 +48,13 @@ import { MCPTeamAccessTab } from "../MCPTeamAccessTab";
 import {
   activeTabFromPath,
   initialTabFromHash,
+  isLegacyAuthenticationTabPath,
   type TabValue,
 } from "./MCPServerDetailsRouting";
-import { AuthenticationTab } from "./tabs/authentication/AuthenticationTab";
 import { OverviewTab } from "./tabs/OverviewTab";
-import { MCP_SERVER_URL_SECTION_ID, SettingsTab } from "./tabs/SettingsTab";
+import { MCP_AUTHENTICATION_SECTION_ID } from "./tabs/settings/sections/authentication/AuthenticationSection";
+import { MCP_SERVER_URL_SECTION_ID } from "./tabs/settings/sections/ServerUrlSection";
+import { SettingsTab } from "./tabs/settings/SettingsTab";
 
 function mcpServerTabHref(
   routes: ReturnType<typeof useRoutes>,
@@ -62,8 +64,6 @@ function mcpServerTabHref(
   switch (tab) {
     case "overview":
       return routes.mcp.x.overview.href(mcpServerSlug);
-    case "authentication":
-      return routes.mcp.x.authentication.href(mcpServerSlug);
     case "team-access":
       return routes.mcp.x.teamAccess.href(mcpServerSlug);
     case "settings":
@@ -82,6 +82,10 @@ export default function MCPServerDetails(): JSX.Element {
   const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
   const idOrSlug = mcpServerSlug ?? "";
   const activeTab = activeTabFromPath(location.pathname, idOrSlug);
+  const legacyAuthenticationPath = isLegacyAuthenticationTabPath(
+    location.pathname,
+    idOrSlug,
+  );
 
   const handleShowServerUrlSettings = () => {
     void navigate(
@@ -90,7 +94,9 @@ export default function MCPServerDetails(): JSX.Element {
   };
 
   const handleShowAuthentication = () => {
-    void navigate(mcpServerTabHref(routes, idOrSlug, "authentication"));
+    void navigate(
+      `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`,
+    );
   };
 
   const {
@@ -118,14 +124,24 @@ export default function MCPServerDetails(): JSX.Element {
   if (isError || (!isLoading && !mcpServer)) {
     return <Navigate to={routes.mcp.href()} replace />;
   }
-  if (!activeTab) {
+  if (legacyAuthenticationPath) {
     return (
       <Navigate
-        to={mcpServerTabHref(
-          routes,
-          idOrSlug,
-          initialTabFromHash(location.hash, isRbacEnabled),
-        )}
+        to={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`}
+        replace
+      />
+    );
+  }
+  if (!activeTab) {
+    const initialTab = initialTabFromHash(location.hash, isRbacEnabled);
+    const hash =
+      location.hash === `#${MCP_AUTHENTICATION_SECTION_ID}`
+        ? `#${MCP_AUTHENTICATION_SECTION_ID}`
+        : "";
+
+    return (
+      <Navigate
+        to={`${mcpServerTabHref(routes, idOrSlug, initialTab)}${hash}`}
         replace
       />
     );
@@ -159,13 +175,6 @@ export default function MCPServerDetails(): JSX.Element {
                     Overview
                   </Link>
                 </PageTabsTrigger>
-                <PageTabsTrigger value="authentication" asChild>
-                  <Link
-                    to={mcpServerTabHref(routes, idOrSlug, "authentication")}
-                  >
-                    Authentication
-                  </Link>
-                </PageTabsTrigger>
                 {isRbacEnabled && (
                   <PageTabsTrigger value="team-access" asChild>
                     <Link
@@ -196,15 +205,6 @@ export default function MCPServerDetails(): JSX.Element {
               onShowAuthentication={handleShowAuthentication}
             />
           </TabsContent>
-
-          {mcpServer && (
-            <TabsContent
-              value="authentication"
-              className="mt-0 w-full data-[state=inactive]:hidden"
-            >
-              <AuthenticationTab mcpServer={mcpServer} />
-            </TabsContent>
-          )}
 
           {isRbacEnabled && mcpServer && (
             <TabsContent
