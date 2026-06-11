@@ -309,6 +309,38 @@ func (q *Queries) GetPlugin(ctx context.Context, arg GetPluginParams) (Plugin, e
 	return i, err
 }
 
+const getProjectMarketplaceNameContext = `-- name: GetProjectMarketplaceNameContext :one
+SELECT
+  pr.slug AS project_slug,
+  (pr.id = (
+    SELECT p2.id
+    FROM projects p2
+    WHERE p2.organization_id = pr.organization_id
+      AND p2.deleted IS FALSE
+    ORDER BY p2.id ASC
+    LIMIT 1
+  )) AS is_default_project
+FROM projects pr
+WHERE pr.id = $1
+  AND pr.deleted IS FALSE
+`
+
+type GetProjectMarketplaceNameContextRow struct {
+	ProjectSlug      string
+	IsDefaultProject bool
+}
+
+// Returns a project's slug and whether it's its org's default project (oldest by
+// id ASC), the two inputs needed to resolve its marketplace name — read from the
+// project row rather than trusting auth-context fields that some auth flows
+// (e.g. project-scoped API keys) leave unset.
+func (q *Queries) GetProjectMarketplaceNameContext(ctx context.Context, projectID uuid.UUID) (GetProjectMarketplaceNameContextRow, error) {
+	row := q.db.QueryRow(ctx, getProjectMarketplaceNameContext, projectID)
+	var i GetProjectMarketplaceNameContextRow
+	err := row.Scan(&i.ProjectSlug, &i.IsDefaultProject)
+	return i, err
+}
+
 const listPluginAssignments = `-- name: ListPluginAssignments :many
 SELECT id, plugin_id, organization_id, principal_urn, created_at, updated_at
 FROM plugin_assignments

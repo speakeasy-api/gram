@@ -266,6 +266,25 @@ SELECT *
 FROM project_marketplace_settings
 WHERE project_id = @project_id;
 
+-- name: GetProjectMarketplaceNameContext :one
+-- Returns a project's slug and whether it's its org's default project (oldest by
+-- id ASC), the two inputs needed to resolve its marketplace name — read from the
+-- project row rather than trusting auth-context fields that some auth flows
+-- (e.g. project-scoped API keys) leave unset.
+SELECT
+  pr.slug AS project_slug,
+  (pr.id = (
+    SELECT p2.id
+    FROM projects p2
+    WHERE p2.organization_id = pr.organization_id
+      AND p2.deleted IS FALSE
+    ORDER BY p2.id ASC
+    LIMIT 1
+  )) AS is_default_project
+FROM projects pr
+WHERE pr.id = @project_id
+  AND pr.deleted IS FALSE;
+
 -- name: UpsertMarketplaceSettings :one
 -- Sets the marketplace name override for a project. Pass NULL to clear the
 -- override and fall back to the server-side default.
