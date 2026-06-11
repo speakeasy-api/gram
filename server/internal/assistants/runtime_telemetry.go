@@ -125,6 +125,8 @@ func (t *telemetryRuntimeBackend) RecycleImage(ctx context.Context, runtime assi
 	}
 	if result.Recycled {
 		t.emit(ctx, runtime, "runtime_recycle", "runtime recycled onto current image", "INFO", nil)
+	} else {
+		t.emit(ctx, runtime, "runtime_recycle", "runtime image recycle skipped", "INFO", nil)
 	}
 	return result, nil
 }

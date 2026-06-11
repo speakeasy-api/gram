@@ -89,7 +89,9 @@ func KickAssistantRuntimeImageRecycle(ctx context.Context, temporalEnv *tenv.Env
 		ID:                    wfID,
 		TaskQueue:             string(temporalEnv.Queue()),
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
-		WorkflowRunTimeout:    assistantRuntimeImageRecycleActivityTimeout + 15*time.Minute,
+		// Sized for the activity's full retry budget (2 attempts at the
+		// StartToClose ceiling) so the second attempt is never truncated.
+		WorkflowRunTimeout: 2*assistantRuntimeImageRecycleActivityTimeout + 15*time.Minute,
 	}, AssistantRuntimeImageRecycleWorkflow)
 	var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
 	if errors.As(err, &alreadyStarted) {
