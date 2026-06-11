@@ -33,6 +33,7 @@ import {
   Loader2,
   Mail,
   ShieldCheck,
+  Sparkles,
   Webhook,
 } from "lucide-react";
 import { useState } from "react";
@@ -351,6 +352,21 @@ function ProductFeaturesTab() {
         onToggle={handleToggle}
         error={
           pendingFeature === FeatureName.Webhooks
+            ? mutError?.message
+            : undefined
+        }
+      />
+
+      <FeatureToggle
+        label="Skills"
+        description="Unlocks the Skills registry for this organization: capture, review, and manage agent skills across projects. While disabled, the Skills pages are hidden."
+        icon={Sparkles}
+        featureName={FeatureName.SkillsCapture}
+        enabled={features.skillsCaptureEnabled}
+        isPending={isPending && pendingFeature === FeatureName.SkillsCapture}
+        onToggle={handleToggle}
+        error={
+          pendingFeature === FeatureName.SkillsCapture
             ? mutError?.message
             : undefined
         }

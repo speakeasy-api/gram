@@ -91,11 +91,9 @@ export function AppSidebar({
   const { data: featuresData } = useProductFeatures(undefined, undefined, {
     throwOnError: false,
   });
-  // Skills is double-gated during rollout: the PostHog flag hides it from all
-  // users by default; the skills_capture product feature is the org capability.
-  const isSkillsEnabled =
-    (telemetry.isFeatureEnabled("gram-skills-management") ?? false) &&
-    (featuresData?.skillsCaptureEnabled ?? false);
+  // Skills is hidden until an org admin enables the skills_capture product
+  // feature (Admin Settings), so it's invisible to orgs by default.
+  const isSkillsEnabled = featuresData?.skillsCaptureEnabled ?? false;
 
   const isAssistantsEnabled = telemetry.isFeatureEnabled("assistants") ?? false;
   // Default true: opt-out via PostHog org-group targeting on `gram-deployments-page`.
