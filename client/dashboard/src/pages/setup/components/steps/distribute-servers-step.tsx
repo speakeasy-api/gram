@@ -452,9 +452,10 @@ export function DistributeServersStep({
 
           {!isLoading && (
             <p className="text-muted-foreground mt-4 text-xs leading-relaxed">
-              Only servers Gram can configure automatically are shown here. More
-              servers — including those that need manual OAuth or API key setup
-              — are available in the{" "}
+              Only servers that support OAuth dynamic client registration (DCR)
+              are shown here — Gram can configure these automatically. More
+              servers, including those that need manual OAuth or API key setup,
+              are available in the{" "}
               <routes.catalog.Link className="underline underline-offset-2 hover:text-foreground">
                 catalog
               </routes.catalog.Link>
