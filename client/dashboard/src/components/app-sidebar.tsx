@@ -15,6 +15,8 @@ import {
 import { GramLogo } from "./gram-logo";
 import { CommandPaletteTrigger } from "./command-palette/CommandPaletteTrigger";
 import { WorkspaceSwitcher } from "./workspace-switcher";
+import { OnboardingResumeButton } from "./onboarding-resume-button";
+import { SidebarFooterAction } from "./sidebar-footer-action";
 import { SidebarUserMenu } from "./sidebar-user-menu";
 import { useSidebar } from "@/components/ui/sidebar-context";
 import { useSlugs } from "@/contexts/Sdk";
@@ -26,7 +28,7 @@ import { useProjectNavRoutes } from "@/hooks/useProjectNavRoutes";
 import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query";
 import { cn, Icon, Stack } from "@speakeasy-api/moonshine";
-import { MinusIcon, TestTube2Icon, Undo2 } from "lucide-react";
+import { MinusIcon, Settings, TestTube2Icon } from "lucide-react";
 import * as React from "react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
@@ -280,22 +282,17 @@ export function AppSidebar({
             </SidebarMenu>
           </NavGroupProvider>
         )}
-
-        <div className="mt-auto px-2 py-3 group-data-[collapsible=icon]:px-0">
-          <Link
-            to={`/${orgSlug}`}
-            title="Back to org"
-            className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 px-2 py-1 text-sm transition-colors group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0 hover:no-underline"
-          >
-            <Undo2 className="h-3.5 w-3.5" />
-            <span className="group-data-[collapsible=icon]:hidden">
-              Back to org
-            </span>
-          </Link>
-        </div>
       </SidebarContent>
       <SidebarFooter className="border-t">
         <FreeTierExceededNotification />
+        <div className="mb-2 flex flex-col gap-1.5">
+          <OnboardingResumeButton />
+          <SidebarFooterAction
+            to={`/${orgSlug}`}
+            icon={Settings}
+            label="Organization settings"
+          />
+        </div>
         <SidebarUserMenu />
       </SidebarFooter>
       <FeatureRequestModal

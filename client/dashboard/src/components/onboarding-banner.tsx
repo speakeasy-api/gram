@@ -1,54 +1,33 @@
 import { Button } from "@/components/ui/button";
 import { Type } from "@/components/ui/type";
-import { useSlugs } from "@/contexts/Sdk";
-import { useProductTier } from "@/hooks/useProductTier";
-import { useRBAC } from "@/hooks/useRBAC";
+import {
+  ONBOARDING_CTA_CONTENT_VT_CLASS,
+  ONBOARDING_CTA_VT_CLASS,
+  useOnboardingCta,
+} from "@/hooks/useOnboardingCta";
+import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import { ArrowRight, Wrench } from "lucide-react";
-import { useState } from "react";
-
-function storageKey(orgSlug: string) {
-  return `gram-onboarding-banner-dismissed:${orgSlug}`;
-}
-
-function getStoredDismissed(orgSlug: string): boolean {
-  try {
-    return localStorage.getItem(storageKey(orgSlug)) === "true";
-  } catch {
-    return false;
-  }
-}
-
-function storeDismissed(orgSlug: string) {
-  try {
-    localStorage.setItem(storageKey(orgSlug), "true");
-  } catch {
-    // localStorage unavailable
-  }
-}
 
 export function OnboardingBanner(): JSX.Element | null {
-  const { orgSlug } = useSlugs();
-  const { hasScope } = useRBAC();
-  const productTier = useProductTier();
   const orgRoutes = useOrgRoutes();
-  const [dismissed, setDismissed] = useState(() =>
-    orgSlug ? getStoredDismissed(orgSlug) : false,
-  );
+  const { eligible, dismissed, dismiss } = useOnboardingCta();
 
-  if (!orgSlug) return null;
-  if (productTier !== "enterprise") return null;
-  if (!hasScope("org:admin")) return null;
-  if (dismissed) return null;
-
-  const dismiss = () => {
-    storeDismissed(orgSlug);
-    setDismissed(true);
-  };
+  if (!eligible || dismissed) return null;
 
   return (
-    <div className="border-border/60 bg-muted/20 dark:bg-white/[0.03] w-full border-b">
-      <div className="mx-auto flex max-w-7xl items-center gap-4 px-8 py-5">
+    <div
+      className={cn(
+        "border-border/60 bg-muted/20 dark:bg-white/[0.03] w-full border-b",
+        ONBOARDING_CTA_VT_CLASS,
+      )}
+    >
+      <div
+        className={cn(
+          "mx-auto flex max-w-7xl items-center gap-4 px-8 py-5",
+          ONBOARDING_CTA_CONTENT_VT_CLASS,
+        )}
+      >
         <div className="bg-background border-border/60 flex size-10 shrink-0 items-center justify-center rounded-lg border shadow-sm">
           <Wrench className="text-foreground size-5" strokeWidth={1.75} />
         </div>
