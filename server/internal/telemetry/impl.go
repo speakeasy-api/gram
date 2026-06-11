@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	telem_srv "github.com/speakeasy-api/gram/server/gen/http/telemetry/server"
 	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
@@ -29,6 +30,7 @@ import (
 	orgsRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/telemetryerrs"
+	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -2230,10 +2232,191 @@ func (s *Service) GetToolUsageSummary(ctx context.Context, payload *telem_gen.Ge
 		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
 	}
 
-	if _, _, err := parseTimeRange(&payload.From, &payload.To); err != nil {
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
 		return nil, err
 	}
 
+	const fiveMinNs = int64(5 * 60 * 1e9)
+	const sixtyMinNs = int64(60 * 60 * 1e9)
+	bucketSizeNs := sixtyMinNs
+	if timeEnd-timeStart <= int64(24*60*60*1e9) {
+		bucketSizeNs = fiveMinNs
+	}
+
+	targetTypes := make([]string, 0, len(payload.TargetTypes))
+	for _, targetType := range payload.TargetTypes {
+		targetTypes = append(targetTypes, string(targetType))
+	}
+
+	userFilters := make([]repo.ToolUsageUserFilter, 0, len(payload.UserFilters))
+	for _, filter := range payload.UserFilters {
+		if filter == nil {
+			continue
+		}
+		userFilters = append(userFilters, repo.ToolUsageUserFilter{
+			Kind: string(filter.Kind),
+			Key:  filter.Key,
+		})
+	}
+
+	hostedMCPMatchers, err := s.toolUsageHostedMCPMatchers(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing hosted MCP servers")
+	}
+
+	summary, err := s.chRepo.GetToolUsageSummary(ctx, repo.GetToolUsageSummaryParams{
+		GramProjectID:      authCtx.ProjectID.String(),
+		TimeStart:          timeStart,
+		TimeEnd:            timeEnd,
+		BucketSizeNs:       bucketSizeNs,
+		HostedMCPMatchers:  hostedMCPMatchers,
+		TargetTypes:        targetTypes,
+		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		ShadowServerNames:  payload.ShadowServerNames,
+		UserFilters:        userFilters,
+		TargetLimit:        25,
+		UserLimit:          25,
+		UsersByTargetLimit: 100,
+		TargetToolRowLimit: 100,
+		TimeSeriesRowLimit: 10000,
+		UserSeriesRowLimit: 10000,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage summary data")
+	}
+
+	return toToolUsageSummaryResult(summary), nil
+}
+
+func (s *Service) toolUsageHostedMCPMatchers(ctx context.Context, projectID uuid.UUID) ([]repo.HostedMCPMatcher, error) {
+	toolsets, err := toolsetsRepo.New(s.db).ListToolsetsByProject(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("list project toolsets: %w", err)
+	}
+
+	matchers := make([]repo.HostedMCPMatcher, 0, len(toolsets))
+	for _, toolset := range toolsets {
+		if !toolset.McpEnabled || !toolset.McpSlug.Valid || toolset.McpSlug.String == "" {
+			continue
+		}
+		matchers = append(matchers, repo.HostedMCPMatcher{
+			ToolsetSlug: toolset.Slug,
+			McpSlug:     toolset.McpSlug.String,
+		})
+	}
+	return matchers, nil
+}
+
+func toToolUsageSummaryResult(summary *repo.ToolUsageSummary) *telem_gen.GetToolUsageSummaryResult {
+	if summary == nil {
+		return emptyToolUsageSummaryResult()
+	}
+
+	targets := make([]*telem_gen.ToolUsageTargetSummary, 0, len(summary.Targets))
+	for _, row := range summary.Targets {
+		targets = append(targets, &telem_gen.ToolUsageTargetSummary{
+			TargetType:   telem_gen.ToolUsageTargetType(row.TargetType),
+			TargetKind:   telem_gen.ToolUsageTargetKind(row.TargetKind),
+			TargetID:     row.TargetID,
+			TargetLabel:  row.TargetLabel,
+			EventCount:   uint64ToInt64(row.EventCount),
+			UniqueTools:  uint64ToInt64(row.UniqueTools),
+			SuccessCount: uint64ToInt64(row.SuccessCount),
+			FailureCount: uint64ToInt64(row.FailureCount),
+			FailureRate:  row.FailureRate,
+		})
+	}
+
+	users := make([]*telem_gen.ToolUsageUserSummary, 0, len(summary.Users))
+	for _, row := range summary.Users {
+		users = append(users, &telem_gen.ToolUsageUserSummary{
+			UserKey:      row.UserKey,
+			UserLabel:    row.UserLabel,
+			UserKind:     telem_gen.ToolUsageUserKind(row.UserKind),
+			EventCount:   uint64ToInt64(row.EventCount),
+			UniqueTools:  uint64ToInt64(row.UniqueTools),
+			SuccessCount: uint64ToInt64(row.SuccessCount),
+			FailureCount: uint64ToInt64(row.FailureCount),
+			FailureRate:  row.FailureRate,
+		})
+	}
+
+	targetTimeSeries := make([]*telem_gen.ToolUsageTargetTimeSeriesPoint, 0, len(summary.TargetTimeSeries))
+	for _, row := range summary.TargetTimeSeries {
+		targetTimeSeries = append(targetTimeSeries, &telem_gen.ToolUsageTargetTimeSeriesPoint{
+			BucketStartNs: strconv.FormatInt(row.BucketStartNs, 10),
+			TargetType:    telem_gen.ToolUsageTargetType(row.TargetType),
+			TargetKind:    telem_gen.ToolUsageTargetKind(row.TargetKind),
+			TargetID:      row.TargetID,
+			TargetLabel:   row.TargetLabel,
+			EventCount:    uint64ToInt64(row.EventCount),
+			FailureCount:  uint64ToInt64(row.FailureCount),
+		})
+	}
+
+	userTimeSeries := make([]*telem_gen.ToolUsageUserTimeSeriesPoint, 0, len(summary.UserTimeSeries))
+	for _, row := range summary.UserTimeSeries {
+		userTimeSeries = append(userTimeSeries, &telem_gen.ToolUsageUserTimeSeriesPoint{
+			BucketStartNs: strconv.FormatInt(row.BucketStartNs, 10),
+			UserKey:       row.UserKey,
+			UserLabel:     row.UserLabel,
+			UserKind:      telem_gen.ToolUsageUserKind(row.UserKind),
+			EventCount:    uint64ToInt64(row.EventCount),
+			FailureCount:  uint64ToInt64(row.FailureCount),
+		})
+	}
+
+	usersByTarget := make([]*telem_gen.ToolUsageUsersByTargetRow, 0, len(summary.UsersByTarget))
+	for _, row := range summary.UsersByTarget {
+		usersByTarget = append(usersByTarget, &telem_gen.ToolUsageUsersByTargetRow{
+			TargetType:   telem_gen.ToolUsageTargetType(row.TargetType),
+			TargetKind:   telem_gen.ToolUsageTargetKind(row.TargetKind),
+			TargetID:     row.TargetID,
+			TargetLabel:  row.TargetLabel,
+			UserKey:      row.UserKey,
+			UserLabel:    row.UserLabel,
+			UserKind:     telem_gen.ToolUsageUserKind(row.UserKind),
+			EventCount:   uint64ToInt64(row.EventCount),
+			FailureCount: uint64ToInt64(row.FailureCount),
+		})
+	}
+
+	targetToolBreakdown := make([]*telem_gen.ToolUsageTargetToolBreakdownRow, 0, len(summary.TargetToolBreakdown))
+	for _, row := range summary.TargetToolBreakdown {
+		targetToolBreakdown = append(targetToolBreakdown, &telem_gen.ToolUsageTargetToolBreakdownRow{
+			TargetType:   telem_gen.ToolUsageTargetType(row.TargetType),
+			TargetKind:   telem_gen.ToolUsageTargetKind(row.TargetKind),
+			TargetID:     row.TargetID,
+			TargetLabel:  row.TargetLabel,
+			ToolName:     row.ToolName,
+			EventCount:   uint64ToInt64(row.EventCount),
+			SuccessCount: uint64ToInt64(row.SuccessCount),
+			FailureCount: uint64ToInt64(row.FailureCount),
+			FailureRate:  row.FailureRate,
+		})
+	}
+
+	return &telem_gen.GetToolUsageSummaryResult{
+		Totals: &telem_gen.ToolUsageTotals{
+			EventCount:    uint64ToInt64(summary.Totals.EventCount),
+			SuccessCount:  uint64ToInt64(summary.Totals.SuccessCount),
+			FailureCount:  uint64ToInt64(summary.Totals.FailureCount),
+			FailureRate:   summary.Totals.FailureRate,
+			UniqueTools:   uint64ToInt64(summary.Totals.UniqueTools),
+			UniqueUsers:   uint64ToInt64(summary.Totals.UniqueUsers),
+			UniqueTargets: uint64ToInt64(summary.Totals.UniqueTargets),
+		},
+		Targets:             targets,
+		Users:               users,
+		TargetTimeSeries:    targetTimeSeries,
+		UserTimeSeries:      userTimeSeries,
+		UsersByTarget:       usersByTarget,
+		TargetToolBreakdown: targetToolBreakdown,
+	}
+}
+
+func emptyToolUsageSummaryResult() *telem_gen.GetToolUsageSummaryResult {
 	return &telem_gen.GetToolUsageSummaryResult{
 		Totals: &telem_gen.ToolUsageTotals{
 			EventCount:    0,
@@ -2250,7 +2433,7 @@ func (s *Service) GetToolUsageSummary(ctx context.Context, payload *telem_gen.Ge
 		UserTimeSeries:      []*telem_gen.ToolUsageUserTimeSeriesPoint{},
 		UsersByTarget:       []*telem_gen.ToolUsageUsersByTargetRow{},
 		TargetToolBreakdown: []*telem_gen.ToolUsageTargetToolBreakdownRow{},
-	}, nil
+	}
 }
 
 // ListHooksTraces retrieves hook trace summaries with pagination and filtering.
