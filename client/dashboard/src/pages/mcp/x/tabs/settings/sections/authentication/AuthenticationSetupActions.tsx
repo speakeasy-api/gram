@@ -4,10 +4,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@speakeasy-api/moonshine";
 import type { ProtectedResourceProbeStatus } from "./useProtectedResourceMetadata";
 
-export function EmptyAuthenticationState({
+export function AuthenticationSetupActions({
   probeStatus,
   hasDiscoveredAuthorizationServer,
   onUseDiscovered,
@@ -15,7 +15,7 @@ export function EmptyAuthenticationState({
 }: {
   probeStatus: ProtectedResourceProbeStatus;
   // True only when the RFC 9728 probe returned at least one
-  // authorization_servers entry — without one there's nothing to seed
+  // authorization_servers entry; without one there's nothing to seed
   // discovery with even if the probe succeeded.
   hasDiscoveredAuthorizationServer: boolean;
   onUseDiscovered: () => void;
@@ -31,13 +31,13 @@ export function EmptyAuthenticationState({
       disabled={!discoverAvailable || probing}
       onClick={onUseDiscovered}
     >
-      <Button.Text>Start With Discovered Configuration</Button.Text>
+      <Button.Text>Use Discovered</Button.Text>
     </Button>
   );
 
   return (
     <RequireScope scope="mcp:write" level="component">
-      <Stack direction="horizontal" gap={2}>
+      <div className="flex flex-wrap gap-2">
         {discoverAvailable ? (
           discoverButton
         ) : (
@@ -63,15 +63,15 @@ export function EmptyAuthenticationState({
             </TooltipTrigger>
             <TooltipContent>
               {probing
-                ? "Probing the remote URL for OAuth protected resource metadata…"
+                ? "Probing the remote URL for OAuth protected resource metadata..."
                 : "OAuth protected resource metadata unavailable"}
             </TooltipContent>
           </Tooltip>
         )}
         <Button variant="secondary" onClick={onStartManual}>
-          <Button.Text>Start Manual Configuration</Button.Text>
+          <Button.Text>Configure Manually</Button.Text>
         </Button>
-      </Stack>
+      </div>
     </RequireScope>
   );
 }

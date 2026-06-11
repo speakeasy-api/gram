@@ -348,6 +348,9 @@ const ROUTE_STRUCTURE = {
             title: "MCP Server Overview",
             url: "overview",
           },
+          // Legacy route. MCPServerDetails redirects this to
+          // settings#authentication now that authentication lives under
+          // Settings.
           authentication: {
             title: "MCP Server Authentication",
             url: "authentication",
