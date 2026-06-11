@@ -62,7 +62,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 		policy := s.lookupShadowMCPBlockingPolicy(ctx, orgID, projectID, metadata.UserID)
 		if policy != nil {
 			toolName := conv.PtrValOr(payload.ToolName, "")
-			evidence := codexShadowMCPEvidence(payload)
+		evidence := codexShadowMCPEvidence(payload)
 			if detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, metadata.UserID, policy.ID, payload.ToolInput, toolName, evidence); denied {
 				logger.InfoContext(ctx, "denying codex tool call: failed gram toolset validation",
 					attr.SlogEvent("codex_hook_denied"),
@@ -118,13 +118,18 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 }
 
 func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload, metadata *SessionMetadata, blockReason string) {
-	if payload.HookEventName == "SessionStart" && metadata.SessionID != "" && metadata.UserEmail != "" {
-		if err := s.cache.Set(ctx, sessionCacheKey(metadata.SessionID), *metadata, 24*time.Hour); err != nil {
-			s.logger.WarnContext(ctx, "failed to cache Codex session metadata",
-				attr.SlogError(err),
-				attr.SlogGenAIConversationID(metadata.SessionID),
-			)
+	if payload.HookEventName == "SessionStart" {
+		s.captureCodexMCPListSnapshot(ctx, payload)
+		if metadata.SessionID != "" && metadata.UserEmail != "" {
+			if err := s.cache.Set(ctx, sessionCacheKey(metadata.SessionID), *metadata, 24*time.Hour); err != nil {
+				s.logger.WarnContext(ctx, "failed to cache Codex session metadata",
+					attr.SlogError(err),
+					attr.SlogGenAIConversationID(metadata.SessionID),
+				)
+			}
 		}
+	} else {
+		s.refreshMCPListTTL(ctx, metadata.SessionID)
 	}
 
 	s.writeCodexHookToClickHouse(ctx, payload, metadata, blockReason)
@@ -146,6 +151,31 @@ func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload
 		if err := s.writeCodexAssistantResponseToPG(ctx, payload, metadata); err != nil {
 			s.logger.ErrorContext(ctx, "failed to persist Codex assistant response", attr.SlogError(err))
 		}
+	}
+}
+
+// captureCodexMCPListSnapshot parses the MCP inventory shipped by the Codex
+// SessionStart hook script (additional_data.mcp_inventory_codex, the parsed
+// output of `codex mcp list --json`) and caches it under
+// sessionMCPListCacheKey, sharing the snapshot shape and cache key with the
+// Claude flows so downstream matching and telemetry enrichment work
+// unchanged.
+func (s *Service) captureCodexMCPListSnapshot(ctx context.Context, payload *gen.CodexPayload) {
+	if payload.SessionID == nil || *payload.SessionID == "" || payload.AdditionalData == nil {
+		return
+	}
+	raw := payload.AdditionalData["mcp_inventory_codex"]
+	if raw == nil {
+		return
+	}
+
+	entries := ParseCodexMCPList(raw)
+	if err := s.cache.Set(ctx, sessionMCPListCacheKey(*payload.SessionID), entries, sessionMCPListTTL); err != nil {
+		s.logger.WarnContext(ctx, "failed to cache Codex MCP list snapshot",
+			attr.SlogEvent("codex_hook_mcp_list_cache_set_failed"),
+			attr.SlogError(err),
+			attr.SlogGenAIConversationID(*payload.SessionID),
+		)
 	}
 }
 
@@ -267,6 +297,11 @@ func (s *Service) buildCodexTelemetryAttributes(ctx context.Context, payload *ge
 	if server, fn, ok := mcpname.AttributeTool(toolName); ok {
 		attrs[attr.ToolCallSourceKey] = server
 		attrs[attr.ToolNameKey] = fn
+		if metadata.SessionID != "" {
+			if entries, err := s.getCachedMCPList(ctx, metadata.SessionID); err == nil {
+				applyMCPInventoryAttrs(attrs, matchCachedMCPEntry(entries, server))
+			}
+		}
 	}
 
 	return attrs

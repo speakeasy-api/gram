@@ -66,12 +66,29 @@ func (s *Service) canBypassPolicy(
 	return target, true
 }
 
-func codexShadowMCPEvidence(payload *gen.CodexPayload) shadowmcp.AccessEvidence {
-	return shadowmcp.AccessEvidence{
+// codexShadowMCPEvidence builds the access evidence for a Codex shadow-MCP
+// tool call. The tool-name prefix gives the server identity; when the
+// SessionStart inventory snapshot resolves that prefix to a configured
+// server, its URL is attached so bypass grants and access requests can be
+// scoped to the server URL rather than just the name.
+func (s *Service) codexShadowMCPEvidence(ctx context.Context, payload *gen.CodexPayload) shadowmcp.AccessEvidence {
+	evidence := shadowmcp.AccessEvidence{
 		FullURL:        "",
 		URLHost:        "",
 		ServerIdentity: mcpServerIdentityFromToolName(conv.PtrValOr(payload.ToolName, "")),
 	}
+	sessionID := conv.PtrValOr(payload.SessionID, "")
+	if evidence.ServerIdentity == "" || sessionID == "" {
+		return evidence
+	}
+	entries, err := s.getCachedMCPList(ctx, sessionID)
+	if err != nil {
+		return evidence
+	}
+	if matched := matchCachedMCPEntry(entries, evidence.ServerIdentity); matched != nil && matched.URL != "" {
+		evidence.FullURL = matched.URL
+	}
+	return evidence
 }
 
 func cursorShadowMCPEvidence(payload *gen.CursorPayload) shadowmcp.AccessEvidence {

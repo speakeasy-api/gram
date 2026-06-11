@@ -149,6 +149,8 @@ type CodexPayload struct {
 	SessionID *string
 	// Email of the authenticated Codex user, if available
 	UserEmail *string
+	// Additional hook-specific data
+	AdditionalData map[string]any
 	// Path to the conversation transcript file
 	TranscriptPath *string
 	// The working directory when the event fired

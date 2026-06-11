@@ -1162,6 +1162,27 @@ func runCodexInstallScript(t *testing.T, script []byte, existingConfig string) (
 	return home, callLog
 }
 
+// SessionStart enriches the payload with the user's configured MCP server
+// inventory (shadow MCP visibility). The collection must be gated on a real
+// JSON field check of hook_event_name so the blocking PreToolUse path never
+// pays for a codex CLI invocation.
+func TestGenerateCodexObservabilityPluginScriptShipsMCPInventoryOnSessionStart(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := GeneratePluginPackages(nil, cfg)
+	require.NoError(t, err)
+
+	script := string(files[CodexObservabilitySlug(cfg)+"/hooks/hook.sh"])
+	require.Contains(t, script, `["codex", "mcp", "list", "--json"]`, "hook.sh must collect the MCP inventory")
+	require.Contains(t, script, "mcp_inventory_codex", "hook.sh must ship the inventory under additional_data.mcp_inventory_codex")
+	require.Contains(t, script, `data.get("hook_event_name") == "SessionStart" and shutil.which("codex")`, "inventory collection must be gated on the parsed event name")
+	require.Contains(t, script, "timeout=15", "codex invocation must be wall-time capped")
+}
+
 // An upgraded install already carries [hooks.state] entries whose trusted_hash
 // was computed against the previous hook command. When the command changes
 // (e.g. SessionStart moving from hook.sh to hook_async.sh) the installer must

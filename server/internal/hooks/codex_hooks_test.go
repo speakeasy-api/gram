@@ -57,6 +57,111 @@ func TestBuildCodexTelemetryAttributes_UsesPayloadUserEmail(t *testing.T) {
 	require.Equal(t, email, attrs[attr.UserEmailKey])
 }
 
+func TestCodex_SessionStart_CapturesMCPInventory(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	sessionID := "codex-session-with-inventory"
+	_, err := ti.service.Codex(ctx, &gen.CodexPayload{
+		HookEventName: "SessionStart",
+		SessionID:     &sessionID,
+		AdditionalData: map[string]any{
+			"mcp_inventory_codex": []any{
+				map[string]any{
+					"name":    "int-linear",
+					"enabled": true,
+					"transport": map[string]any{
+						"type": "streamable_http",
+						"url":  "https://chat.example.com/mcp/int-linear",
+					},
+					"auth_status": "o_auth",
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	entries, err := ti.service.getCachedMCPList(ctx, sessionID)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	require.Equal(t, "int-linear", entries[0].Name)
+	require.Equal(t, "https://chat.example.com/mcp/int-linear", entries[0].URL)
+}
+
+func TestBuildCodexTelemetryAttributes_EnrichesMCPToolFromInventory(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	sessionID := "codex-session-telemetry-inventory"
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{{
+		RawLine:       "",
+		Source:        "local",
+		PluginName:    "",
+		Name:          "int-linear",
+		URL:           "https://chat.example.com/mcp/int-linear",
+		Command:       "",
+		Transport:     "HTTP",
+		Status:        "unknown",
+		StatusRaw:     "o_auth",
+		ConnectorUUID: "",
+	}}, sessionMCPListTTL))
+
+	toolName := "mcp__int-linear__get_issue"
+	attrs := ti.service.buildCodexTelemetryAttributes(ctx, &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		ToolName:      &toolName,
+	}, &SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "Codex",
+		UserEmail:   "",
+		UserID:      "",
+		ClaudeOrgID: "",
+		GramOrgID:   "org-id",
+		ProjectID:   "project-id",
+	})
+	require.Equal(t, "https://chat.example.com/mcp/int-linear", attrs[attr.MCPServerURLKey])
+	require.Equal(t, "int-linear", attrs[attr.ToolCallSourceKey])
+	require.Equal(t, "get_issue", attrs[attr.ToolNameKey])
+}
+
+func TestCodexShadowMCPEvidence_ResolvesURLFromInventory(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	sessionID := "codex-session-evidence-inventory"
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), []MCPServerEntry{{
+		RawLine:       "",
+		Source:        "local",
+		PluginName:    "",
+		Name:          "int-linear",
+		URL:           "https://chat.example.com/mcp/int-linear",
+		Command:       "",
+		Transport:     "HTTP",
+		Status:        "unknown",
+		StatusRaw:     "o_auth",
+		ConnectorUUID: "",
+	}}, sessionMCPListTTL))
+
+	toolName := "mcp__int-linear__get_issue"
+	evidence := ti.service.codexShadowMCPEvidence(ctx, &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		ToolName:      &toolName,
+	})
+	require.Equal(t, "int-linear", evidence.ServerIdentity)
+	require.Equal(t, "https://chat.example.com/mcp/int-linear", evidence.FullURL)
+
+	unknownTool := "mcp__unknown__do_thing"
+	evidence = ti.service.codexShadowMCPEvidence(ctx, &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		ToolName:      &unknownTool,
+	})
+	require.Equal(t, "unknown", evidence.ServerIdentity)
+	require.Empty(t, evidence.FullURL)
+}
+
 func TestCodexSessionMetadata_CachesSessionStartEmail(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)

@@ -1045,6 +1045,8 @@ if command -v python3 >/dev/null 2>&1; then
 import base64
 import json
 import os
+import shutil
+import subprocess
 import sys
 
 payload = sys.stdin.read()
@@ -1071,6 +1073,28 @@ if data.get("hook_event_name") == "SessionStart" and not data.get("user_email"):
 
     if email:
         data["user_email"] = email
+
+# SessionStart only: collect the configured MCP server inventory so Gram can
+# apply shadow-MCP policy and visibility to servers it is not proxying. The
+# gate is a real JSON field check, so the blocking PreToolUse path never pays
+# for a codex invocation; SessionStart itself is routed through hook_async.sh
+# so the latency is invisible to Codex. The timeout caps wall time in case
+# the codex CLI misbehaves.
+if data.get("hook_event_name") == "SessionStart" and shutil.which("codex"):
+    try:
+        out = subprocess.run(
+            ["codex", "mcp", "list", "--json"],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            timeout=15,
+        ).stdout
+        inventory = json.loads(out)
+    except Exception:
+        inventory = None
+    if isinstance(inventory, list):
+        additional = data.get("additional_data") or {}
+        additional["mcp_inventory_codex"] = inventory
+        data["additional_data"] = additional
 
 print(json.dumps(data, separators=(",", ":")), end="")
 ' 2>/dev/null) || true
