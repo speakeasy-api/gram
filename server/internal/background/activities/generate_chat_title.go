@@ -43,8 +43,6 @@ type GenerateChatTitleArgs struct {
 }
 
 const (
-	// defaultChatTitle is the shared placeholder seeded at chat creation. It
-	// aliases chat.DefaultChatTitle so the seed site and this guard can't drift.
 	defaultChatTitle       = chat.DefaultChatTitle
 	DefaultClaudeChatTitle = "Claude Code Session"
 	DefaultCoworkChatTitle = "Cowork Session"
@@ -167,7 +165,7 @@ func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, projectID 
 		"Return ONLY the title text, no quotes or explanation. " +
 		"IMPORTANT: The title must directly relate to the content of the messages. " +
 		"Do NOT expand, interpret, or replace abbreviations or acronyms — use the user's exact terminology. " +
-		"If the conversation is a greeting, vague, or lacks a clear topic, return exactly: New Chat"
+		"If the conversation is a greeting, vague, or lacks a clear topic, return exactly: " + defaultChatTitle
 
 	response, err := g.chatClient.GetCompletion(titleCtx, openrouter.CompletionRequest{
 		OrgID:     orgID,

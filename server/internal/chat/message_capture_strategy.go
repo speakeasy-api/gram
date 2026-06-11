@@ -17,13 +17,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
-// DefaultChatTitle is the placeholder a chat is seeded with before the async
-// title generator produces a real one. It MUST stay one of the sentinels
-// recognized by that generator's isDefaultChatTitle guard
-// (background/activities/generate_chat_title.go) — any other value is treated as
-// a deliberately-chosen title and never overwritten. Callers creating a chat
-// should seed this constant rather than a literal so the seed and the guard
-// can't drift apart.
+// DefaultChatTitle is the placeholder a chat is seeded with until the async
+// title generator produces a real one. It must be a sentinel recognized by
+// isDefaultChatTitle (background/activities/generate_chat_title.go), or the
+// chat is treated as deliberately titled and never retitled.
 const DefaultChatTitle = "New Chat"
 
 // ChatMessageCaptureStrategy captures completion messages to the database.
