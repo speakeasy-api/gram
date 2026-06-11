@@ -24,6 +24,22 @@ type RiskCustomDetectionRule struct {
 	Deleted        bool
 }
 
+type RiskExclusion struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	RiskPolicyID   uuid.NullUUID
+	MatchType      string
+	MatchValue     string
+	RuleIDFilter   pgtype.Text
+	SourceFilter   pgtype.Text
+	Enabled        bool
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type RiskPolicy struct {
 	ID                   uuid.UUID
 	ProjectID            uuid.UUID

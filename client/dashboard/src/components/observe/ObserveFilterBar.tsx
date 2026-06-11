@@ -20,6 +20,9 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import type { useServerNameMappings } from "@/hooks/useServerNameMappings";
+import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
+
+const HOOK_SOURCE_FILTER_PATH = "gram.hook.source";
 
 export interface FilterChip {
   display: string;
@@ -38,6 +41,8 @@ export function ObserveFilterBar({
   onServerSelectionChange,
   userEmailOptions,
   onUserEmailSelectionChange,
+  sourceOptions,
+  onSourceSelectionChange,
   roleOptions,
   selectedRoleIds,
   onRoleSelectionChange,
@@ -58,6 +63,8 @@ export function ObserveFilterBar({
   onServerSelectionChange: (values: string[]) => void;
   userEmailOptions: string[];
   onUserEmailSelectionChange: (values: string[]) => void;
+  sourceOptions: string[];
+  onSourceSelectionChange: (values: string[]) => void;
   roleOptions: Array<{ id: string; name: string }>;
   selectedRoleIds: string[];
   onRoleSelectionChange: (values: string[]) => void;
@@ -92,6 +99,15 @@ export function ObserveFilterBar({
     [activeFilters],
   );
 
+  const selectedSources = useMemo(
+    () =>
+      activeFilters
+        .filter((f) => f.path === HOOK_SOURCE_FILTER_PATH)
+        .flatMap((f) => f.filters)
+        .filter(Boolean),
+    [activeFilters],
+  );
+
   const serverOptionsWithDisplayNames = useMemo(() => {
     const rawToDisplay = serverNameMappings?.rawToDisplay;
     return serverOptions.map((rawName) => ({
@@ -99,6 +115,22 @@ export function ObserveFilterBar({
       value: rawName,
     }));
   }, [serverOptions, serverNameMappings?.rawToDisplay]);
+
+  // The raw hook_source value (e.g. "claude-code") is shown verbatim — matching
+  // the table row — and paired with its brand icon. HookSourceIcon needs a
+  // `source` prop, so bind it per option to satisfy MultiSelect's
+  // `icon: ComponentType<{ className }>` contract.
+  const sourceOptionsWithIcons = useMemo(
+    () =>
+      sourceOptions.map((source) => ({
+        label: source,
+        value: source,
+        icon: ({ className }: { className?: string }) => (
+          <HookSourceIcon source={source} className={className} />
+        ),
+      })),
+    [sourceOptions],
+  );
 
   return (
     <div
@@ -127,6 +159,15 @@ export function ObserveFilterBar({
         defaultValue={selectedRoleIds}
         onValueChange={onRoleSelectionChange}
         placeholder="Filter by role"
+        className="min-w-[160px] flex-1"
+        hideSelectAll
+        singleLine
+      />
+      <MultiSelect
+        options={sourceOptionsWithIcons}
+        defaultValue={selectedSources}
+        onValueChange={onSourceSelectionChange}
+        placeholder="Filter by source"
         className="min-w-[160px] flex-1"
         hideSelectAll
         singleLine

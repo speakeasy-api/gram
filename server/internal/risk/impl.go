@@ -58,6 +58,13 @@ type RiskAnalysisSignaler interface {
 	Signal(ctx context.Context, projectID uuid.UUID) error
 }
 
+// RiskExclusionReconciler triggers the retroactive reconcile sweep for an
+// exclusion (flag/unflag matching findings in risk_results). Best-effort: a
+// failed trigger is logged, not fatal — the reconcile itself is idempotent.
+type RiskExclusionReconciler interface {
+	Reconcile(ctx context.Context, projectID, exclusionID uuid.UUID) error
+}
+
 type Service struct {
 	tracer           trace.Tracer
 	logger           *slog.Logger
@@ -66,6 +73,7 @@ type Service struct {
 	auth             *auth.Auth
 	authz            *authz.Engine
 	signaler         RiskAnalysisSignaler
+	reconciler       RiskExclusionReconciler
 	completionClient openrouter.CompletionClient
 	shadowMCPClient  *shadowmcp.Client
 	audit            *audit.Logger
@@ -103,6 +111,7 @@ func NewObserver(
 		auth:             nil,
 		authz:            nil,
 		signaler:         signaler,
+		reconciler:       nil,
 		completionClient: nil,
 		shadowMCPClient:  nil,
 		audit:            auditLogger,
@@ -121,6 +130,7 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	signaler RiskAnalysisSignaler,
+	reconciler RiskExclusionReconciler,
 	completionClient openrouter.CompletionClient,
 	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
@@ -140,6 +150,7 @@ func NewService(
 		auth:             auth.New(logger, db, sessions, authzEngine),
 		authz:            authzEngine,
 		signaler:         signaler,
+		reconciler:       reconciler,
 		completionClient: completionClient,
 		shadowMCPClient:  shadowMCPClient,
 		audit:            auditLogger,
@@ -240,7 +251,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	var prompt pgtype.Text
 	var modelConfig []byte
 	if policyType == "prompt_based" {
-		if !s.promptPoliciesEnabled(ctx, authCtx.ActiveOrganizationID) {
+		if !s.promptPoliciesEnabled(ctx, authCtx) {
 			return nil, oops.E(oops.CodeForbidden, nil, "prompt-based policies are not enabled for this organization")
 		}
 		if payloadHasCreatePromptPolicyDetectionConfig(payload) {
@@ -446,7 +457,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	}
 
 	// policy_type is immutable; gate edits to prompt_based policies behind the flag.
-	if current.PolicyType == "prompt_based" && !s.promptPoliciesEnabled(ctx, authCtx.ActiveOrganizationID) {
+	if current.PolicyType == "prompt_based" && !s.promptPoliciesEnabled(ctx, authCtx) {
 		return nil, oops.E(oops.CodeForbidden, nil, "prompt-based policies are not enabled for this organization")
 	}
 	if current.PolicyType == "standard" && (payload.Prompt != nil || payload.ModelConfig != nil) {
@@ -2509,17 +2520,19 @@ func promptPolicyNameFromBase(base string, existing []string) string {
 }
 
 // promptPoliciesEnabled reports whether the prompt-based policy MVP is enabled
-// for the org. Mirrors the classifier flag pattern: a nil provider or a failed
-// lookup degrades to disabled.
-func (s *Service) promptPoliciesEnabled(ctx context.Context, orgID string) bool {
+// for the org. The flag is targeted by PostHog group (org/project slug) the
+// same way the dashboard evaluates it, so we forward the groups built from the
+// auth context. A nil provider or a failed lookup degrades to disabled.
+func (s *Service) promptPoliciesEnabled(ctx context.Context, authCtx *contextvalues.AuthContext) bool {
 	if s.flags == nil {
 		return false
 	}
-	on, err := s.flags.IsFlagEnabled(ctx, feature.FlagPromptPolicies, orgID)
+	groups := feature.OrgProjectGroups(authCtx.OrganizationSlug, conv.PtrValOr(authCtx.ProjectSlug, ""))
+	on, err := s.flags.IsFlagEnabled(ctx, feature.FlagPromptPolicies, authCtx.ActiveOrganizationID, groups)
 	if err != nil {
 		s.logger.WarnContext(ctx, "prompt-policies flag check failed; treating as disabled",
 			attr.SlogError(err),
-			attr.SlogOrganizationID(orgID),
+			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
 		)
 		return false
 	}

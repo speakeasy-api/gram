@@ -41,6 +41,7 @@ var (
 	RemoteSessionV1        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_session_event_v1", "Emitted when changes to remote sessions are made")
 	RemoteSessionIssuerV1  = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_session_issuer_event_v1", "Emitted when changes to remote session issuers are made")
 	RiskPolicyV1           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.risk_policy_event_v1", "Emitted when changes to risk policies are made")
+	RiskExclusionV1        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.risk_exclusion_event_v1", "Emitted when changes to risk exclusions are made")
 	AccessRuleV1           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.access_rule_event_v1", "Emitted when changes to access rules are made")
 	AccessRequestV1        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.access_request_event_v1", "Emitted when changes to access requests are made")
 	ShadowMCPAccessRuleV1  = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.shadow_mcp_access_rule_event_v1", "Deprecated: use audit_log.access_rule_event_v1.")

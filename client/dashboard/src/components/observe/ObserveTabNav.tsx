@@ -38,16 +38,6 @@ export function ObserveTabNav({
           { label: "Agents", href: `${baseSlug}/agents` },
         ] satisfies Tab[])
       : []),
-    ...(base === "insights"
-      ? ([
-          {
-            label: "Employees",
-            href: `${baseSlug}/employees`,
-            stage: "preview",
-          },
-          { label: "Costs", href: `${baseSlug}/costs`, stage: "preview" },
-        ] satisfies Tab[])
-      : []),
   ];
 
   return (

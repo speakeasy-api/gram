@@ -32,6 +32,7 @@ var All = []outbox.EventRegistration{
 	RemoteSessionClientV1,
 	RemoteSessionIssuerV1,
 	RemoteSessionV1,
+	RiskExclusionV1,
 	RiskFindingCreated,
 	RiskFindingCreatedV1,
 	RiskPolicyV1,

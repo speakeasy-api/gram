@@ -21404,6 +21404,112 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: RiskCategories
+    /rpc/risk.createExclusions:
+        post:
+            description: Create a risk exclusion. Omit risk_policy_id to create a global exclusion that applies to every policy in the project.
+            operationId: createRiskExclusion
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateRiskExclusionRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RiskExclusion'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: createRiskExclusion risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.exclusions
+            x-speakeasy-name-override: create
+            x-speakeasy-react-hook:
+                name: RiskCreateExclusion
+                type: mutation
     /rpc/risk.createPolicyBypassRequest:
         post:
             description: Create or refresh a risk policy bypass request from a signed request URL token.
@@ -22122,6 +22228,111 @@ paths:
             x-speakeasy-react-hook:
                 name: RiskUpdateCustomDetectionRule
                 type: mutation
+    /rpc/risk.deleteExclusions:
+        delete:
+            description: Delete a risk exclusion. Previously suppressed findings are restored.
+            operationId: deleteRiskExclusion
+            parameters:
+                - allowEmptyValue: true
+                  description: The exclusion ID.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The exclusion ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: deleteRiskExclusion risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.exclusions
+            x-speakeasy-name-override: delete
+            x-speakeasy-react-hook:
+                name: RiskDeleteExclusion
+                type: mutation
     /rpc/risk.denyPolicyBypassRequest:
         post:
             description: Deny a risk policy bypass request, updating workflow state.
@@ -22228,6 +22439,114 @@ paths:
             x-speakeasy-react-hook:
                 name: RiskDenyPolicyBypassRequest
                 type: mutation
+    /rpc/risk.listExclusions:
+        get:
+            description: List risk exclusions for the current project. Optionally filter to a single policy.
+            operationId: listRiskExclusions
+            parameters:
+                - allowEmptyValue: true
+                  description: Filter to exclusions bound to this policy. Omit to return all exclusions (global plus every policy).
+                  in: query
+                  name: risk_policy_id
+                  schema:
+                    description: Filter to exclusions bound to this policy. Omit to return all exclusions (global plus every policy).
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListRiskExclusionsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listRiskExclusions risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.exclusions
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: RiskListExclusions
+                type: query
     /rpc/risk.listPolicyBypassRequests:
         get:
             description: List current risk policy bypass request workflow records.
@@ -24108,6 +24427,112 @@ paths:
             x-speakeasy-name-override: test
             x-speakeasy-react-hook:
                 name: RiskTestDetectionRule
+                type: mutation
+    /rpc/risk.updateExclusions:
+        put:
+            description: Update a risk exclusion.
+            operationId: updateRiskExclusion
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateRiskExclusionRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RiskExclusion'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: updateRiskExclusion risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.exclusions
+            x-speakeasy-name-override: update
+            x-speakeasy-react-hook:
+                name: RiskUpdateExclusion
                 type: mutation
     /rpc/telemetry.captureEvent:
         post:
@@ -33739,6 +34164,40 @@ components:
                 - client_token
                 - expires_after
                 - status
+        CreateRiskExclusionRequestBody:
+            type: object
+            properties:
+                enabled:
+                    type: boolean
+                    description: Whether the exclusion is active.
+                    default: true
+                match_type:
+                    type: string
+                    description: How match_value is interpreted.
+                    enum:
+                        - exact
+                        - regex
+                        - rule_id
+                        - source
+                        - entity_type
+                match_value:
+                    type: string
+                    description: The value matched against findings, interpreted per match_type.
+                risk_policy_id:
+                    type: string
+                    description: Bind the exclusion to a single policy. Omit for a global (project-wide) exclusion.
+                    format: uuid
+                rule_id_filter:
+                    type: string
+                    description: 'Optional: only apply within this rule_id. Empty means any.'
+                    default: ""
+                source_filter:
+                    type: string
+                    description: 'Optional: only apply within this source. Empty means any.'
+                    default: ""
+            required:
+                - match_type
+                - match_value
         CreateRiskPolicyRequestBody:
             type: object
             properties:
@@ -37116,6 +37575,16 @@ components:
                     description: List of collections
             required:
                 - collections
+        ListRiskExclusionsResult:
+            type: object
+            properties:
+                exclusions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskExclusion'
+                    description: The list of risk exclusions.
+            required:
+                - exclusions
         ListRiskPoliciesResult:
             type: object
             properties:
@@ -40088,6 +40557,60 @@ components:
                 - description
                 - regex
                 - severity
+                - created_at
+                - updated_at
+        RiskExclusion:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the exclusion was created.
+                    format: date-time
+                enabled:
+                    type: boolean
+                    description: Whether the exclusion is active.
+                id:
+                    type: string
+                    description: The exclusion ID.
+                    format: uuid
+                match_type:
+                    type: string
+                    description: 'How match_value is interpreted: exact (finding text), regex (RE2 pattern over finding text), rule_id, source, or entity_type (presidio entity, matched as rule_id ''pii.<entity>'').'
+                    enum:
+                        - exact
+                        - regex
+                        - rule_id
+                        - source
+                        - entity_type
+                match_value:
+                    type: string
+                    description: The value matched against findings, interpreted per match_type.
+                project_id:
+                    type: string
+                    description: The project ID.
+                    format: uuid
+                risk_policy_id:
+                    type: string
+                    description: 'The policy this exclusion is bound to. Null/omitted means global: the exclusion applies to every policy in the project.'
+                    format: uuid
+                rule_id_filter:
+                    type: string
+                    description: 'Optional narrowing: an exact/regex/source exclusion only applies to findings with this rule_id. Empty means any.'
+                source_filter:
+                    type: string
+                    description: 'Optional narrowing: an exact/regex/rule_id exclusion only applies to findings from this source. Empty means any.'
+                updated_at:
+                    type: string
+                    description: When the exclusion was last updated.
+                    format: date-time
+            required:
+                - id
+                - project_id
+                - match_type
+                - match_value
+                - rule_id_filter
+                - source_filter
+                - enabled
                 - created_at
                 - updated_at
         RiskIDRequestBody:
@@ -43729,6 +44252,44 @@ components:
                         - private
             required:
                 - collection_id
+        UpdateRiskExclusionRequestBody:
+            type: object
+            properties:
+                enabled:
+                    type: boolean
+                    description: Whether the exclusion is active. Omit to leave unchanged.
+                id:
+                    type: string
+                    description: The exclusion ID.
+                    format: uuid
+                match_type:
+                    type: string
+                    description: How match_value is interpreted.
+                    enum:
+                        - exact
+                        - regex
+                        - rule_id
+                        - source
+                        - entity_type
+                match_value:
+                    type: string
+                    description: The value matched against findings, interpreted per match_type.
+                risk_policy_id:
+                    type: string
+                    description: Bind the exclusion to a single policy. Omit for a global (project-wide) exclusion.
+                    format: uuid
+                rule_id_filter:
+                    type: string
+                    description: 'Optional: only apply within this rule_id. Empty means any.'
+                    default: ""
+                source_filter:
+                    type: string
+                    description: 'Optional: only apply within this source. Empty means any.'
+                    default: ""
+            required:
+                - id
+                - match_type
+                - match_value
         UpdateRiskPolicyRequestBody:
             type: object
             properties:

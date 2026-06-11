@@ -324,17 +324,19 @@ COMMENT 'Per-chat daily token usage and stored-session evidence, retained beyond
 CREATE MATERIALIZED VIEW IF NOT EXISTS chat_token_summaries_mv TO chat_token_summaries AS
 SELECT
     gram_project_id,
-    toString(attributes.gen_ai.conversation.id) AS chat_id,
-    toStartOfDay(fromUnixTimestamp64Nano(time_unix_nano)) AS time_bucket,
+    chat_id,
+    -- Force UTC so the daily billing bucket boundary never shifts with the
+    -- server timezone (fromUnixTimestamp64Nano defaults to the server tz).
+    toStartOfDay(fromUnixTimestamp64Nano(time_unix_nano, 'UTC')) AS time_bucket,
     sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS total_tokens,
     toUInt64(countIf(
         startsWith(gram_urn, 'tools:')
-        OR toString(attributes.gram.tool.urn) != ''
-        OR toString(attributes.gram.event.source) != ''
+        OR urn != ''
+        OR event_source != ''
         OR toString(attributes.gen_ai.usage.total_tokens) = ''
     )) AS stored_event_count
 FROM telemetry_logs
-WHERE toString(attributes.gen_ai.conversation.id) != ''
+WHERE chat_id != ''
 GROUP BY gram_project_id, chat_id, time_bucket;
 
 CREATE TABLE IF NOT EXISTS attribute_keys (

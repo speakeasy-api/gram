@@ -3,7 +3,6 @@ import React, { useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import {
   RedirectToInsightsTools,
-  RedirectToLogAgents,
   RedirectToLogTools,
 } from "./components/observe/ObserveRedirects";
 import { ReleaseStage } from "./components/release-stage-badge";
@@ -398,11 +397,6 @@ const ROUTE_STRUCTURE = {
     component: InsightsRoot,
     indexComponent: RedirectToInsightsTools,
     subPages: {
-      costs: {
-        title: "Costs",
-        url: "costs",
-        component: InsightsAgentsPage,
-      },
       tools: {
         title: "Tools",
         url: "tools",
@@ -413,20 +407,27 @@ const ROUTE_STRUCTURE = {
         url: "mcp",
         component: InsightsMCPPage,
       },
-      employees: {
-        title: "Employees",
-        url: "employees",
-        component: InsightsEmployeesLayout,
-        indexComponent: InsightsEmployeesPage,
-        subPages: {
-          detail: {
-            title: "Employee Detail",
-            url: ":userSlug",
-            component: InsightsEmployeeDetailPage,
-          },
-        },
+    },
+  },
+  employees: {
+    title: "Employees",
+    url: "employees",
+    icon: "users",
+    component: InsightsEmployeesLayout,
+    indexComponent: InsightsEmployeesPage,
+    subPages: {
+      detail: {
+        title: "Employee Detail",
+        url: ":userSlug",
+        component: InsightsEmployeeDetailPage,
       },
     },
+  },
+  costs: {
+    title: "Costs",
+    url: "costs",
+    icon: "credit-card",
+    component: InsightsAgentsPage,
   },
   hooks: {
     // redirect to insights/tools. TODO: remove this in a month
@@ -451,23 +452,13 @@ const ROUTE_STRUCTURE = {
         url: "mcp",
         component: LogsMCPPage,
       },
-      riskEvents: {
-        title: "Risk Events",
-        url: "risk-events",
-        component: LogsRiskEventsPage,
-      },
-      agents: {
-        title: "Agent Sessions",
-        url: "agents",
-        component: ChatSessions,
-      },
     },
   },
-  chatSessions: {
-    // redirect to logs/agents. TODO: remove this in a month
+  agentSessions: {
     title: "Agent Sessions",
     url: "agent-sessions",
-    component: RedirectToLogAgents,
+    icon: "message-square",
+    component: ChatSessions,
   },
   riskOverview: {
     title: "Risk Overview",
@@ -520,6 +511,12 @@ const ROUTE_STRUCTURE = {
     url: "risk-policies",
     icon: "shield-check",
     component: PolicyCenter,
+  },
+  riskEvents: {
+    title: "Risk Events",
+    url: "risk-events",
+    icon: "flag",
+    component: LogsRiskEventsPage,
   },
   sdks: {
     title: "SDKs",

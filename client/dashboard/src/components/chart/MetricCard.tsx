@@ -8,6 +8,8 @@ type AccentColor = "red" | "orange" | "yellow" | "green" | "blue" | "purple";
 export type MetricCardProps = {
   title: string;
   value: number;
+  /** Renders in place of the formatted value (e.g. "-" when not applicable). */
+  displayValue?: string;
   previousValue?: number;
   format?: "compact" | "number" | "currency" | "percent" | "ms" | "seconds";
   icon?: IconName;
@@ -23,6 +25,7 @@ export function MetricCard(props: MetricCardProps): JSX.Element {
   const {
     title,
     value,
+    displayValue,
     previousValue = 0,
     format = "compact",
     icon,
@@ -92,7 +95,7 @@ export function MetricCard(props: MetricCardProps): JSX.Element {
       </div>
       <div className="flex items-end justify-between">
         <span className={`text-3xl font-semibold tracking-tight ${valueColor}`}>
-          {formatValue(value)}
+          {displayValue ?? formatValue(value)}
         </span>
         {previousValue > 0 && delta !== 0 && (
           <div className="flex flex-col items-end gap-0.5">

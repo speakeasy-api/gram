@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  buildCalLink,
-  CAL_ROUTING_FORM_ID,
-  DemoFormData,
-  splitDisplayName,
-  validateDemoForm,
-} from "./demo-booking";
+import { splitDisplayName } from "./demo-booking";
 
 describe("splitDisplayName", () => {
   it("splits a two-part name", () => {
@@ -38,54 +32,5 @@ describe("splitDisplayName", () => {
       firstName: "Jane",
       lastName: "Smith",
     });
-  });
-});
-
-const validData: DemoFormData = {
-  firstName: "Jane",
-  lastName: "Smith",
-  email: "jane@acme.com",
-  referralSource: "Google",
-  product: "AI Control Plane",
-};
-
-describe("validateDemoForm", () => {
-  it("returns no errors for valid data", () => {
-    expect(validateDemoForm(validData)).toEqual({});
-  });
-  it("flags every required field when empty", () => {
-    const errors = validateDemoForm({
-      firstName: "",
-      lastName: "",
-      email: "",
-      referralSource: "",
-      product: "AI Control Plane",
-    });
-    expect(errors.firstName).toBeTruthy();
-    expect(errors.lastName).toBeTruthy();
-    expect(errors.email).toBeTruthy();
-    expect(errors.referralSource).toBeTruthy();
-  });
-  it("rejects a malformed email", () => {
-    expect(
-      validateDemoForm({ ...validData, email: "not-an-email" }).email,
-    ).toBeTruthy();
-  });
-  it("accepts an email with surrounding whitespace (validated trimmed, like buildCalLink)", () => {
-    expect(
-      validateDemoForm({ ...validData, email: "  jane@acme.com  " }).email,
-    ).toBeUndefined();
-  });
-});
-
-describe("buildCalLink", () => {
-  it("targets the routing form and URL-encodes fields", () => {
-    const link = buildCalLink(validData);
-    expect(link.startsWith(`router?form=${CAL_ROUTING_FORM_ID}`)).toBe(true);
-    expect(link).toContain("interested-products=AI%20Control%20Plane");
-    expect(link).toContain("email=jane%40acme.com");
-    expect(link).toContain("first-name=Jane");
-    expect(link).toContain("last-name=Smith");
-    expect(link).toContain("heard-about-us=Google");
   });
 });

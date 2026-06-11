@@ -117,6 +117,22 @@ type Client struct {
 	// the deleteCustomDetectionRule endpoint.
 	DeleteCustomDetectionRuleDoer goahttp.Doer
 
+	// ListRiskExclusions Doer is the HTTP client used to make requests to the
+	// listRiskExclusions endpoint.
+	ListRiskExclusionsDoer goahttp.Doer
+
+	// CreateRiskExclusion Doer is the HTTP client used to make requests to the
+	// createRiskExclusion endpoint.
+	CreateRiskExclusionDoer goahttp.Doer
+
+	// UpdateRiskExclusion Doer is the HTTP client used to make requests to the
+	// updateRiskExclusion endpoint.
+	UpdateRiskExclusionDoer goahttp.Doer
+
+	// DeleteRiskExclusion Doer is the HTTP client used to make requests to the
+	// deleteRiskExclusion endpoint.
+	DeleteRiskExclusionDoer goahttp.Doer
+
 	// SuggestCustomDetectionRule Doer is the HTTP client used to make requests to
 	// the suggestCustomDetectionRule endpoint.
 	SuggestCustomDetectionRuleDoer goahttp.Doer
@@ -170,6 +186,10 @@ func NewClient(
 		GetCustomDetectionRuleDoer:         doer,
 		UpdateCustomDetectionRuleDoer:      doer,
 		DeleteCustomDetectionRuleDoer:      doer,
+		ListRiskExclusionsDoer:             doer,
+		CreateRiskExclusionDoer:            doer,
+		UpdateRiskExclusionDoer:            doer,
+		DeleteRiskExclusionDoer:            doer,
 		SuggestCustomDetectionRuleDoer:     doer,
 		TestDetectionRuleDoer:              doer,
 		RestoreResponseBody:                restoreBody,
@@ -775,6 +795,102 @@ func (c *Client) DeleteCustomDetectionRule() goa.Endpoint {
 		resp, err := c.DeleteCustomDetectionRuleDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "deleteCustomDetectionRule", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListRiskExclusions returns an endpoint that makes HTTP requests to the risk
+// service listRiskExclusions server.
+func (c *Client) ListRiskExclusions() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListRiskExclusionsRequest(c.encoder)
+		decodeResponse = DecodeListRiskExclusionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListRiskExclusionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListRiskExclusionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "listRiskExclusions", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateRiskExclusion returns an endpoint that makes HTTP requests to the risk
+// service createRiskExclusion server.
+func (c *Client) CreateRiskExclusion() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateRiskExclusionRequest(c.encoder)
+		decodeResponse = DecodeCreateRiskExclusionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateRiskExclusionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateRiskExclusionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "createRiskExclusion", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateRiskExclusion returns an endpoint that makes HTTP requests to the risk
+// service updateRiskExclusion server.
+func (c *Client) UpdateRiskExclusion() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateRiskExclusionRequest(c.encoder)
+		decodeResponse = DecodeUpdateRiskExclusionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateRiskExclusionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateRiskExclusionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "updateRiskExclusion", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DeleteRiskExclusion returns an endpoint that makes HTTP requests to the risk
+// service deleteRiskExclusion server.
+func (c *Client) DeleteRiskExclusion() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDeleteRiskExclusionRequest(c.encoder)
+		decodeResponse = DecodeDeleteRiskExclusionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDeleteRiskExclusionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DeleteRiskExclusionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "deleteRiskExclusion", err)
 		}
 		return decodeResponse(resp)
 	}

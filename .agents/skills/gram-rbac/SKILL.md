@@ -139,6 +139,8 @@ The dashboard pages under `client/dashboard/src/pages/access/` render membership
 
 **Scope vocabulary import.** `useRBAC` and `RequireScope` both consume the `Scope` union from `client/dashboard/src/pages/access/types.ts` (covered under "Server-client contract"). Keeping that file in lockstep with the server is what makes the client gates work.
 
+**Dashboard grant reference.** [docs/rbac.md](../../../docs/rbac.md) contains the "Dashboard Grant Reference" table that maps dashboard pages and actions to the grants required to use them. Whenever adding a new scope, changing a system-role grant default, adding a new dashboard RBAC gate, or changing the grant required by a dashboard feature, update that table in the same change. The table is the first place to answer questions like "what grant is required to create a project?"
+
 ### Non-generated files
 
 | File                                                                                                     | Purpose                                                                                         |
@@ -173,8 +175,9 @@ Use this when the resource type is already represented (e.g. adding a new verb o
 6. Update the three enums in `server/design/access/design.go` that have to stay in lockstep.
 7. Add the new slug to the `Scope` union in `client/dashboard/src/pages/access/types.ts`.
 8. Bump `expectedFullAccessScopes` in `server/internal/access/listusergrants_test.go` and the `require.Len(t, result.Scopes, N)` assertion in `server/internal/access/listscopes_test.go`.
-9. Run `mise run gen:goa-server`, then `mise run gen:sdk`.
-10. Run `mise run lint:server` and `mise run test:server`.
+9. Update the "Dashboard Grant Reference" table in [docs/rbac.md](../../../docs/rbac.md) if the new scope affects any dashboard route, action, or user-facing grant question.
+10. Run `mise run gen:goa-server`, then `mise run gen:sdk`.
+11. Run `mise run lint:server` and `mise run test:server`.
 
 ### How to add a new resource type
 
@@ -190,8 +193,9 @@ Use this when adjusting what `admin` or `member` gets out of the box. Prefer add
 
 1. Edit `SystemRoleGrants` in `server/internal/authz/grants.go`.
 2. Update `expectedFullAccessScopes` in `server/internal/access/listusergrants_test.go` if the admin set changed.
-3. Consider whether existing orgs' grant tables need a migration to reflect the new defaults; new orgs pick up defaults automatically via `SeedSystemRoleGrants` when RBAC is enabled.
-4. Run `mise run lint:server` and `mise run test:server`.
+3. Update the "Dashboard Grant Reference" table in [docs/rbac.md](../../../docs/rbac.md) if the default grant change affects what a built-in role can do in the dashboard.
+4. Consider whether existing orgs' grant tables need a migration to reflect the new defaults; new orgs pick up defaults automatically via `SeedSystemRoleGrants` when RBAC is enabled.
+5. Run `mise run lint:server` and `mise run test:server`.
 
 ### How to narrow an MCP check by tool or disposition
 
@@ -240,6 +244,8 @@ Dashboard code should never hand-roll scope checks — use the shared primitives
    ```
 
 5. **The `Scope` string you pass must match the server.** Import from `client/dashboard/src/pages/access/types.ts` (re-exported via `useRBAC` for convenience). If TypeScript complains about an unknown scope, you're missing the union update from the server scope add (see "How to add a new scope to an existing resource type").
+
+6. **Update the dashboard grant reference.** Any new or changed dashboard gate must update the "Dashboard Grant Reference" table in [docs/rbac.md](../../../docs/rbac.md), including page-level access, component/action-level access, resource selector target, and any notable server-side check that differs from the visible UI gate.
 
 ### How to inspect the caller's grants
 
