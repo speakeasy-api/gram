@@ -1,18 +1,10 @@
 import { cn } from "@/lib/utils";
 import { Link, useLocation } from "react-router";
 import { useSlugs } from "@/contexts/Sdk";
-import { RequireScope } from "@/components/require-scope";
-import type { Scope } from "@/hooks/useRBAC";
-import {
-  ReleaseStage,
-  ReleaseStageBadge,
-} from "@/components/release-stage-badge";
 
 type Tab = {
   label: string;
   href: string;
-  stage?: ReleaseStage;
-  scope?: Scope | Scope[];
 };
 
 export function ObserveTabNav({
@@ -27,17 +19,6 @@ export function ObserveTabNav({
   const tabs: Tab[] = [
     { label: "Tools", href: `${baseSlug}/tools` },
     { label: "MCP Servers", href: `${baseSlug}/mcp` },
-    ...(base === "logs"
-      ? ([
-          {
-            label: "Risk Events",
-            href: `${baseSlug}/risk-events`,
-            stage: "beta",
-            scope: "org:admin",
-          },
-          { label: "Agents", href: `${baseSlug}/agents` },
-        ] satisfies Tab[])
-      : []),
   ];
 
   return (
@@ -46,7 +27,7 @@ export function ObserveTabNav({
         const isActive =
           location.pathname === tab.href ||
           location.pathname.startsWith(tab.href + "/");
-        const link = (
+        return (
           <Link
             key={tab.href}
             to={tab.href}
@@ -60,19 +41,8 @@ export function ObserveTabNav({
             )}
           >
             {tab.label}
-            {tab.stage && <ReleaseStageBadge stage={tab.stage} noTooltip />}
           </Link>
         );
-
-        if (tab.scope) {
-          return (
-            <RequireScope key={tab.href} scope={tab.scope} level="section">
-              {link}
-            </RequireScope>
-          );
-        }
-
-        return link;
       })}
     </div>
   );
