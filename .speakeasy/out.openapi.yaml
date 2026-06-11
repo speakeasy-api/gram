@@ -2441,12 +2441,12 @@ paths:
       operationId: getAIIntegrationConfig
       parameters:
         - allowEmptyValue: true
-          description: AI provider identifier. Initially only cursor is supported.
+          description: AI provider identifier. Supported values include cursor and anthropic_compliance.
           in: query
           name: provider
           required: true
           schema:
-            description: AI provider identifier. Initially only cursor is supported.
+            description: AI provider identifier. Supported values include cursor and anthropic_compliance.
             type: string
         - allowEmptyValue: true
           description: API Key header
@@ -31183,6 +31183,9 @@ components:
         enabled:
           type: boolean
           description: Whether the provider integration is active.
+        external_organization_id:
+          type: string
+          description: Provider organization identifier. Required for anthropic_compliance; omitted for providers that do not need one.
         has_api_key:
           type: boolean
           description: Whether an API key is currently stored. The key itself is never returned.
@@ -31219,7 +31222,7 @@ components:
           description: Project used as the telemetry write target. Omitted when no config is set.
         provider:
           type: string
-          description: AI provider identifier. Initially only cursor is supported.
+          description: AI provider identifier. Supported values include cursor and anthropic_compliance.
         updated_at:
           type: string
           description: ISO 8601 timestamp of the most recent change. Omitted when no config is set.
@@ -33408,6 +33411,13 @@ components:
         jwks_uri:
           type: string
           description: Upstream JWKS URI.
+        logo_asset_id:
+          type: string
+          description: Optional logo asset id.
+          format: uuid
+        name:
+          type: string
+          description: Optional display name. Stored NULL when empty; clients fall back to the issuer URL/slug.
         oidc:
           type: boolean
           description: When true, may unlock OIDC-aware behaviour. Default false.
@@ -33592,14 +33602,26 @@ components:
           items:
             type: string
           description: Message types this policy applies to. When empty or omitted, the policy scans all supported types.
+        model_config:
+          $ref: '#/components/schemas/RiskPolicyModelConfig'
         name:
           type: string
           description: The policy name. If omitted, a name will be auto-generated.
+        policy_type:
+          type: string
+          description: 'Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge). Defaults to standard.'
+          default: standard
+          enum:
+            - standard
+            - prompt_based
         presidio_entities:
           type: array
           items:
             type: string
           description: Presidio entity types to detect.
+        prompt:
+          type: string
+          description: 'For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Required when policy_type is prompt_based.'
         prompt_injection_rules:
           type: array
           items:
@@ -34109,7 +34131,7 @@ components:
       properties:
         provider:
           type: string
-          description: AI provider identifier. Initially only cursor is supported.
+          description: AI provider identifier. Supported values include cursor and anthropic_compliance.
       required:
         - provider
     DeleteGlobalToolVariationForm:
@@ -39543,6 +39565,13 @@ components:
         jwks_uri:
           type: string
           description: Upstream JWKS URI; null when not advertised.
+        logo_asset_id:
+          type: string
+          description: Optional logo asset id; null when unset.
+          format: uuid
+        name:
+          type: string
+          description: Optional display name; null when unset.
         oidc:
           type: boolean
           description: When true, may unlock OIDC-aware behaviour.
@@ -40112,6 +40141,8 @@ components:
           items:
             type: string
           description: 'Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message.'
+        model_config:
+          $ref: '#/components/schemas/RiskPolicyModelConfig'
         name:
           type: string
           description: The policy name.
@@ -40119,6 +40150,13 @@ components:
           type: integer
           description: Number of messages not yet analyzed at the current policy version.
           format: int64
+        policy_type:
+          type: string
+          description: 'Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge).'
+          default: standard
+          enum:
+            - standard
+            - prompt_based
         presidio_entities:
           type: array
           items:
@@ -40128,6 +40166,9 @@ components:
           type: string
           description: The project ID.
           format: uuid
+        prompt:
+          type: string
+          description: 'For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Null for standard policies.'
         prompt_injection_rules:
           type: array
           items:
@@ -40157,6 +40198,7 @@ components:
         - id
         - project_id
         - name
+        - policy_type
         - sources
         - enabled
         - action
@@ -40251,6 +40293,19 @@ components:
         - granted_principal_urns
         - created_at
         - updated_at
+    RiskPolicyModelConfig:
+      type: object
+      properties:
+        fail_open:
+          type: boolean
+          description: 'When the judge errors or times out: true allows the message (fail-open), false blocks it (fail-closed). Defaults to fail-open.'
+        model:
+          type: string
+          description: OpenRouter model id the judge should use. Empty selects the default judge model.
+        temperature:
+          type: number
+          description: Sampling temperature for the judge. Defaults to a low value for deterministic verdicts.
+          format: double
     RiskPolicyStatus:
       type: object
       properties:
@@ -43416,6 +43471,13 @@ components:
         jwks_uri:
           type: string
           description: Upstream JWKS URI.
+        logo_asset_id:
+          type: string
+          description: Set the logo asset id.
+          format: uuid
+        name:
+          type: string
+          description: Set or clear the display name. An empty string clears it to NULL.
         oidc:
           type: boolean
         passthrough:
@@ -43540,6 +43602,8 @@ components:
           items:
             type: string
           description: Message types this policy applies to. Omit to preserve the current selection; send an empty array to apply to all types.
+        model_config:
+          $ref: '#/components/schemas/RiskPolicyModelConfig'
         name:
           type: string
           description: The policy name.
@@ -43548,6 +43612,9 @@ components:
           items:
             type: string
           description: Presidio entity types to detect.
+        prompt:
+          type: string
+          description: 'For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Omit to preserve the current value.'
         prompt_injection_rules:
           type: array
           items:
@@ -43955,9 +44022,12 @@ components:
         enabled:
           type: boolean
           description: Whether the integration should be active.
+        external_organization_id:
+          type: string
+          description: Provider organization identifier. Required for anthropic_compliance.
         provider:
           type: string
-          description: AI provider identifier. Initially only cursor is supported.
+          description: AI provider identifier. Supported values include cursor and anthropic_compliance.
       required:
         - provider
         - api_key

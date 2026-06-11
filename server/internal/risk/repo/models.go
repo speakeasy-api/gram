@@ -46,6 +46,7 @@ type RiskPolicy struct {
 	OrganizationID       string
 	Enabled              bool
 	Name                 string
+	PolicyType           string
 	Sources              []string
 	PresidioEntities     []string
 	PromptInjectionRules []string
@@ -56,6 +57,8 @@ type RiskPolicy struct {
 	AudienceType         string
 	AutoName             bool
 	UserMessage          pgtype.Text
+	Prompt               pgtype.Text
+	ModelConfig          []byte
 	Version              int64
 	CreatedAt            pgtype.Timestamptz
 	UpdatedAt            pgtype.Timestamptz

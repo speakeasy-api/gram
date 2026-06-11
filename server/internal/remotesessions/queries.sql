@@ -10,6 +10,8 @@ INSERT INTO remote_session_issuers (
     organization_id,
     slug,
     issuer,
+    name,
+    logo_asset_id,
     authorization_endpoint,
     token_endpoint,
     registration_endpoint,
@@ -26,6 +28,8 @@ VALUES (
     @organization_id,
     @slug,
     @issuer,
+    @name,
+    @logo_asset_id,
     @authorization_endpoint,
     @token_endpoint,
     @registration_endpoint,
@@ -78,6 +82,11 @@ UPDATE remote_session_issuers
 SET
     slug = COALESCE(sqlc.narg('slug'), slug),
     issuer = COALESCE(sqlc.narg('issuer'), issuer),
+    name = CASE
+        WHEN sqlc.narg('name')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('name'), name)
+    END,
+    logo_asset_id = COALESCE(sqlc.narg('logo_asset_id'), logo_asset_id),
     authorization_endpoint = CASE
         WHEN sqlc.narg('authorization_endpoint')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('authorization_endpoint'), authorization_endpoint)
@@ -139,6 +148,11 @@ UPDATE remote_session_issuers
 SET
     slug = COALESCE(sqlc.narg('slug'), slug),
     issuer = COALESCE(sqlc.narg('issuer'), issuer),
+    name = CASE
+        WHEN sqlc.narg('name')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('name'), name)
+    END,
+    logo_asset_id = COALESCE(sqlc.narg('logo_asset_id'), logo_asset_id),
     authorization_endpoint = CASE
         WHEN sqlc.narg('authorization_endpoint')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('authorization_endpoint'), authorization_endpoint)

@@ -5,6 +5,11 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
+import {
+  RiskPolicyModelConfig,
+  RiskPolicyModelConfig$Outbound,
+  RiskPolicyModelConfig$outboundSchema,
+} from "./riskpolicymodelconfig.js";
 
 /**
  * Policy action: flag or block.
@@ -17,6 +22,18 @@ export const Action = {
  * Policy action: flag or block.
  */
 export type Action = ClosedEnum<typeof Action>;
+
+/**
+ * Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge). Defaults to standard.
+ */
+export const PolicyType = {
+  Standard: "standard",
+  PromptBased: "prompt_based",
+} as const;
+/**
+ * Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge). Defaults to standard.
+ */
+export type PolicyType = ClosedEnum<typeof PolicyType>;
 
 export type CreateRiskPolicyRequestBody = {
   /**
@@ -43,14 +60,23 @@ export type CreateRiskPolicyRequestBody = {
    * Message types this policy applies to. When empty or omitted, the policy scans all supported types.
    */
   messageTypes?: Array<string> | undefined;
+  modelConfig?: RiskPolicyModelConfig | undefined;
   /**
    * The policy name. If omitted, a name will be auto-generated.
    */
   name?: string | undefined;
   /**
+   * Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge). Defaults to standard.
+   */
+  policyType?: PolicyType | undefined;
+  /**
    * Presidio entity types to detect.
    */
   presidioEntities?: Array<string> | undefined;
+  /**
+   * For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Required when policy_type is prompt_based.
+   */
+  prompt?: string | undefined;
   /**
    * Prompt-injection detection rule ids to enable in addition to the heuristic baseline (e.g. 'deberta-v3-classifier').
    */
@@ -71,6 +97,10 @@ export const Action$outboundSchema: z.ZodMiniEnum<typeof Action> = z.enum(
 );
 
 /** @internal */
+export const PolicyType$outboundSchema: z.ZodMiniEnum<typeof PolicyType> = z
+  .enum(PolicyType);
+
+/** @internal */
 export type CreateRiskPolicyRequestBody$Outbound = {
   action: string;
   auto_name?: boolean | undefined;
@@ -78,8 +108,11 @@ export type CreateRiskPolicyRequestBody$Outbound = {
   disabled_rules?: Array<string> | undefined;
   enabled?: boolean | undefined;
   message_types?: Array<string> | undefined;
+  model_config?: RiskPolicyModelConfig$Outbound | undefined;
   name?: string | undefined;
+  policy_type: string;
   presidio_entities?: Array<string> | undefined;
+  prompt?: string | undefined;
   prompt_injection_rules?: Array<string> | undefined;
   sources?: Array<string> | undefined;
   user_message?: string | undefined;
@@ -97,8 +130,11 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     disabledRules: z.optional(z.array(z.string())),
     enabled: z.optional(z.boolean()),
     messageTypes: z.optional(z.array(z.string())),
+    modelConfig: z.optional(RiskPolicyModelConfig$outboundSchema),
     name: z.optional(z.string()),
+    policyType: z._default(PolicyType$outboundSchema, "standard"),
     presidioEntities: z.optional(z.array(z.string())),
+    prompt: z.optional(z.string()),
     promptInjectionRules: z.optional(z.array(z.string())),
     sources: z.optional(z.array(z.string())),
     userMessage: z.optional(z.string()),
@@ -109,6 +145,8 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
       customRuleIds: "custom_rule_ids",
       disabledRules: "disabled_rules",
       messageTypes: "message_types",
+      modelConfig: "model_config",
+      policyType: "policy_type",
       presidioEntities: "presidio_entities",
       promptInjectionRules: "prompt_injection_rules",
       userMessage: "user_message",

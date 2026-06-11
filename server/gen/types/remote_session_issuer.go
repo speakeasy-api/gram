@@ -20,6 +20,10 @@ type RemoteSessionIssuer struct {
 	Slug string
 	// Issuer URL; matches the iss claim.
 	Issuer string
+	// Optional display name; null when unset.
+	Name *string
+	// Optional logo asset id; null when unset.
+	LogoAssetID *string
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string
 	// Upstream token endpoint.

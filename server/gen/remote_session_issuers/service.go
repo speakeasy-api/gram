@@ -67,6 +67,11 @@ type CreateRemoteSessionIssuerPayload struct {
 	Slug string
 	// Issuer URL; matches the iss claim.
 	Issuer string
+	// Optional display name. Stored NULL when empty; clients fall back to the
+	// issuer URL/slug.
+	Name *string
+	// Optional logo asset id.
+	LogoAssetID *string
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string
 	// Upstream token endpoint.
@@ -154,6 +159,10 @@ type UpdateRemoteSessionIssuerPayload struct {
 	Slug *string
 	// Issuer URL; matches the iss claim.
 	Issuer *string
+	// Set or clear the display name. An empty string clears it to NULL.
+	Name *string
+	// Set the logo asset id.
+	LogoAssetID *string
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string
 	// Upstream token endpoint.

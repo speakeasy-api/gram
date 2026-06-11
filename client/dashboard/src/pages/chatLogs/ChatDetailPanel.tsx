@@ -15,6 +15,7 @@ import {
   type ExclusionSheetState,
   GLOBAL_SCOPE,
 } from "@/pages/security/exclusion-sheet";
+import { getRuleTitleFallback } from "@/pages/security/risk-utils";
 import type {
   ChatMessage,
   TelemetryLogRecord,
@@ -92,6 +93,15 @@ function getTraceId(chatId: string): string {
 }
 
 const PANEL_TELEMETRY_LOG_LIMIT = 100;
+
+function getRiskBadgeLabel(result: RiskResult): string {
+  if (result.ruleId === "llm_judge") return getRuleTitleFallback(result.ruleId);
+  return ruleIdCategoryLabel(result.ruleId) || result.source.toUpperCase();
+}
+
+function shouldShowRiskRuleId(result: RiskResult): boolean {
+  return Boolean(result.ruleId) && result.ruleId !== "llm_judge";
+}
 
 export function ChatDetailSheet({
   chatId,
@@ -1038,17 +1048,19 @@ function RiskBadgePopover({ results }: { results: RiskResult[] }) {
   // distinct (source, ruleId, match) so the popover lists each unique
   // finding once with an occurrence count instead of an N-row scroll of
   // identical rows.
-  const grouped = new Map<string, { result: RiskResult; count: number }>();
-  for (const r of results) {
-    const key = `${r.source}\u0000${r.ruleId ?? ""}\u0000${r.match ?? ""}`;
-    const hit = grouped.get(key);
-    if (hit) {
-      hit.count++;
-    } else {
-      grouped.set(key, { result: r, count: 1 });
+  const unique = useMemo(() => {
+    const grouped = new Map<string, { result: RiskResult; count: number }>();
+    for (const r of results) {
+      const key = `${r.source}\u0000${r.ruleId ?? ""}\u0000${r.match ?? ""}`;
+      const hit = grouped.get(key);
+      if (hit) {
+        hit.count++;
+      } else {
+        grouped.set(key, { result: r, count: 1 });
+      }
     }
-  }
-  const unique = [...grouped.values()];
+    return [...grouped.values()];
+  }, [results]);
 
   return (
     <Popover>
@@ -1076,9 +1088,9 @@ function RiskBadgePopover({ results }: { results: RiskResult[] }) {
               <div key={r.id} className="py-2 first:pt-0 last:pb-0">
                 <div className="flex items-center gap-2">
                   <Badge variant="destructive" className="shrink-0 text-[10px]">
-                    {ruleIdCategoryLabel(r.ruleId) || r.source.toUpperCase()}
+                    {getRiskBadgeLabel(r)}
                   </Badge>
-                  {r.ruleId && (
+                  {shouldShowRiskRuleId(r) && (
                     <span className="text-muted-foreground truncate font-mono text-xs">
                       {r.ruleId}
                     </span>

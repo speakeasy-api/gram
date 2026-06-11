@@ -1,5 +1,26 @@
 # dashboard
 
+## 0.70.1
+
+### Patch Changes
+
+- ba8bdd4: Direct assistant MCP authentication prompts to the assistant's owner instead
+  of whoever happened to trigger the assistant. Slack onboarding now records the
+  owner's Slack identity in the assistant's instructions, runtime guidance
+  delivers OAuth links to the owner (ephemeral or DM) and tells anyone else that
+  the owner has to complete the connection, and prompts shown when the owner is
+  unknown now say explicitly that authentication is for the owner — so an
+  unexpected auth message is no longer mistaken for a failed setup.
+- 2a7fbec: Fix a request storm of `GET /rpc/auth.info` 401s introduced by the command
+  palette's Recently Visited feature. The user-id lookup issued an unconditional
+  `auth.info` request from the always-mounted palette (including on the
+  unauthenticated login page). The session lookup is now gated on the palette's
+  open state, and the page-visit recorder reuses the session already fetched by
+  the auth provider instead of issuing its own request.
+- f18938f: Fix dark mode visibility in the enterprise onboarding flow. The onboarding stepper and the instrument-agents step now use theme-aware colors so text and controls remain legible in dark mode.
+- 15bb129: Add a Configure policies step to onboarding. Teams can enable the Shadow MCP guardrail and per-category detection policies (secrets, PII, prompt injection) directly during setup, with state persisted via the risk policy API.
+- cc9d8ee: Add optional `name` (display name) and `logo_asset_id` to remote session issuers across both the project-scoped (`remoteSessionIssuers`) and organization-scoped (`organizationRemoteSessionIssuers`) services. On create, `name` is trimmed and stored as NULL when empty; on update it follows the same three-state semantics as the nullable endpoint fields (omitted keeps, empty string clears). `logo_asset_id` is set-only for now (no clear path, no upload UI yet). The dashboard renders the display name as the primary label with the issuer URL as the secondary line, exposes an optional Display name input on the attach and modify sheets, and renders a logo when one is present. On the attach sheet the Display name auto-derives from the Issuer URL hostname until the operator edits it, matching the existing Slug behavior.
+
 ## 0.70.0
 
 ### Minor Changes

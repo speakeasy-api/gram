@@ -73,6 +73,7 @@ const RISK_CATEGORY_CHART_COLORS = [
   { category: "pii", color: "#f87171" },
   { category: "government_ids", color: "#a78bfa" },
   { category: "healthcare", color: "#facc15" },
+  { category: "prompt_policy", color: "#38bdf8" },
   { category: "prompt_injection", color: "#22d3ee" },
   { category: "off_policy", color: "#f472b6" },
   { category: "shadow_mcp", color: "#a3e635" },

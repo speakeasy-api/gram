@@ -32,6 +32,62 @@ VALUES (
 ON CONFLICT (id) DO UPDATE SET id = EXCLUDED.id
 RETURNING id;
 
+-- name: UpsertExternalChat :one
+INSERT INTO chats (
+    id
+  , project_id
+  , organization_id
+  , user_id
+  , external_user_id
+  , external_chat_id
+  , title
+  , created_at
+  , updated_at
+)
+VALUES (
+    @id
+  , @project_id
+  , @organization_id
+  , @user_id
+  , @external_user_id
+  , @external_chat_id
+  , @title
+  , @created_at
+  , @updated_at
+)
+ON CONFLICT (organization_id, external_chat_id) WHERE external_chat_id IS NOT NULL
+DO UPDATE SET
+    project_id = EXCLUDED.project_id
+  , user_id = COALESCE(EXCLUDED.user_id, chats.user_id)
+  , external_user_id = COALESCE(EXCLUDED.external_user_id, chats.external_user_id)
+  , title = COALESCE(EXCLUDED.title, chats.title)
+  , updated_at = GREATEST(chats.updated_at, EXCLUDED.updated_at)
+RETURNING id;
+
+-- name: LinkAIIntegrationConfigChat :one
+-- Links a chat to the AI integration config that imported it and returns the
+-- chat's persisted message pagination cursor so imports resume where the last
+-- successful page ended.
+INSERT INTO ai_integration_config_chats (
+    ai_integration_config_id
+  , chat_id
+)
+VALUES (
+    @ai_integration_config_id
+  , @chat_id
+)
+ON CONFLICT (chat_id)
+DO UPDATE SET
+    ai_integration_config_id = EXCLUDED.ai_integration_config_id
+  , updated_at = clock_timestamp()
+RETURNING last_cursor_id;
+
+-- name: UpdateAIIntegrationConfigChatCursor :exec
+UPDATE ai_integration_config_chats
+SET last_cursor_id = @last_cursor_id
+  , updated_at = clock_timestamp()
+WHERE chat_id = @chat_id;
+
 -- name: CreateChatMessage :copyfrom
 INSERT INTO chat_messages (
     chat_id
@@ -83,6 +139,64 @@ VALUES (
   , @content_hash
   , @generation
 );
+
+-- name: CreateExternalChatMessage :execrows
+INSERT INTO chat_messages (
+    chat_id
+  , role
+  , project_id
+  , content
+  , content_raw
+  , content_asset_url
+  , storage_error
+  , model
+  , message_id
+  , tool_call_id
+  , user_id
+  , external_user_id
+  , external_message_id
+  , finish_reason
+  , tool_calls
+  , prompt_tokens
+  , completion_tokens
+  , total_tokens
+  , origin
+  , user_agent
+  , ip_address
+  , source
+  , content_hash
+  , generation
+  , created_at
+)
+VALUES (
+    @chat_id
+  , @role
+  , @project_id::uuid
+  , @content
+  , @content_raw
+  , @content_asset_url
+  , @storage_error
+  , @model
+  , @message_id
+  , @tool_call_id
+  , @user_id
+  , @external_user_id
+  , @external_message_id
+  , @finish_reason
+  , @tool_calls
+  , @prompt_tokens
+  , @completion_tokens
+  , @total_tokens
+  , @origin
+  , @user_agent
+  , @ip_address
+  , @source
+  , @content_hash
+  , @generation
+  , @created_at
+)
+ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
+DO NOTHING;
 
 -- name: CountChats :one
 WITH candidate_chats AS (

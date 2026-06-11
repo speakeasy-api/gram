@@ -7535,6 +7535,54 @@ func DecodeTestDetectionRuleResponse(decoder func(*http.Response) goahttp.Decode
 	}
 }
 
+// marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigRequestBody builds a
+// value of type *RiskPolicyModelConfigRequestBody from a value of type
+// *types.RiskPolicyModelConfig.
+func marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigRequestBody(v *types.RiskPolicyModelConfig) *RiskPolicyModelConfigRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &RiskPolicyModelConfigRequestBody{
+		Model:       v.Model,
+		Temperature: v.Temperature,
+		FailOpen:    v.FailOpen,
+	}
+
+	return res
+}
+
+// marshalRiskPolicyModelConfigRequestBodyToTypesRiskPolicyModelConfig builds a
+// value of type *types.RiskPolicyModelConfig from a value of type
+// *RiskPolicyModelConfigRequestBody.
+func marshalRiskPolicyModelConfigRequestBodyToTypesRiskPolicyModelConfig(v *RiskPolicyModelConfigRequestBody) *types.RiskPolicyModelConfig {
+	if v == nil {
+		return nil
+	}
+	res := &types.RiskPolicyModelConfig{
+		Model:       v.Model,
+		Temperature: v.Temperature,
+		FailOpen:    v.FailOpen,
+	}
+
+	return res
+}
+
+// unmarshalRiskPolicyModelConfigResponseBodyToTypesRiskPolicyModelConfig
+// builds a value of type *types.RiskPolicyModelConfig from a value of type
+// *RiskPolicyModelConfigResponseBody.
+func unmarshalRiskPolicyModelConfigResponseBodyToTypesRiskPolicyModelConfig(v *RiskPolicyModelConfigResponseBody) *types.RiskPolicyModelConfig {
+	if v == nil {
+		return nil
+	}
+	res := &types.RiskPolicyModelConfig{
+		Model:       v.Model,
+		Temperature: v.Temperature,
+		FailOpen:    v.FailOpen,
+	}
+
+	return res
+}
+
 // unmarshalRiskPolicyResponseBodyToTypesRiskPolicy builds a value of type
 // *types.RiskPolicy from a value of type *RiskPolicyResponseBody.
 func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody) *types.RiskPolicy {
@@ -7542,10 +7590,12 @@ func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody)
 		ID:              *v.ID,
 		ProjectID:       *v.ProjectID,
 		Name:            *v.Name,
+		PolicyType:      *v.PolicyType,
 		Enabled:         *v.Enabled,
 		Action:          *v.Action,
 		AutoName:        *v.AutoName,
 		UserMessage:     v.UserMessage,
+		Prompt:          v.Prompt,
 		Version:         *v.Version,
 		CreatedAt:       *v.CreatedAt,
 		UpdatedAt:       *v.UpdatedAt,
@@ -7585,6 +7635,9 @@ func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody)
 		for i, val := range v.MessageTypes {
 			res.MessageTypes[i] = val
 		}
+	}
+	if v.ModelConfig != nil {
+		res.ModelConfig = unmarshalRiskPolicyModelConfigResponseBodyToTypesRiskPolicyModelConfig(v.ModelConfig)
 	}
 
 	return res

@@ -114,6 +114,11 @@ const DEFAULTS: Record<RuleCategory, CategoryConfig> = {
     action: "flag",
     messageTypes: new Set(["tool_request", "tool_response"]),
   },
+  prompt_policy: {
+    enabled: false,
+    action: "flag",
+    messageTypes: new Set(["tool_request"]),
+  },
   shadow_mcp: {
     enabled: false,
     action: "block",

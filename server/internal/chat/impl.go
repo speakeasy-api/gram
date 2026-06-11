@@ -975,7 +975,7 @@ func (s *Service) GenerateTitle(ctx context.Context, payload *gen.GenerateTitleP
 
 	// Return current title from DB. Title generation happens asynchronously via
 	// Temporal after first completion; title will be available on next list()/fetch().
-	title := "New Chat"
+	title := DefaultChatTitle
 	if chat.Title.Valid && chat.Title.String != "" {
 		title = chat.Title.String
 	}

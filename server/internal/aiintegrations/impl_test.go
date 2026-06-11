@@ -30,14 +30,6 @@ func (f *fakeConfigPoller) Poll(_ context.Context, organizationSlug string, conf
 	return f.returnErr
 }
 
-func TestShouldResetUsagePollWatermark(t *testing.T) {
-	t.Parallel()
-
-	require.True(t, shouldResetUsagePollWatermark(false, true), "new configs should be due on the next polling tick")
-	require.True(t, shouldResetUsagePollWatermark(true, true), "newly supplied API keys should be due on the next polling tick")
-	require.False(t, shouldResetUsagePollWatermark(true, false), "settings-only updates should keep the existing watermark")
-}
-
 func TestStartUsagePollDelegatesToStarter(t *testing.T) {
 	t.Parallel()
 

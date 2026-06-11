@@ -1164,7 +1164,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 		ProjectID:      assistant.ProjectID,
 		OrganizationID: assistant.OrganizationID,
 		UserID:         conv.ToPGTextEmpty(dashboardChatUserID(sourceKind, normalizedPayloadJSON)),
-		Title:          conv.ToPGText(assistant.Name),
+		Title:          conv.ToPGText(chat.DefaultChatTitle),
 	}); err != nil {
 		return EnqueueResult{}, fmt.Errorf("upsert assistant chat: %w", err)
 	}

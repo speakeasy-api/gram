@@ -15,6 +15,9 @@ type RiskPolicy struct {
 	ProjectID string
 	// The policy name.
 	Name string
+	// Policy type: standard (regex/presidio/custom detection) or prompt_based
+	// (LLM-judge).
+	PolicyType string
 	// Detection sources enabled for this policy.
 	Sources []string
 	// Presidio entity types to scan for. When empty, scans all entities.
@@ -43,6 +46,12 @@ type RiskPolicy struct {
 	// Optional message shown to the end user when this policy blocks an action or
 	// surfaces a flagged finding. When unset, a default message is rendered.
 	UserMessage *string
+	// For prompt_based policies: the guardrail prompt the LLM judge evaluates each
+	// in-scope message against. Null for standard policies.
+	Prompt *string
+	// For prompt_based policies: per-policy LLM-judge model configuration. Null
+	// for standard policies.
+	ModelConfig *RiskPolicyModelConfig
 	// Policy version, incremented on each update.
 	Version int64
 	// When the policy was created.

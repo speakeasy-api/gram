@@ -1,5 +1,41 @@
 # server
 
+## 0.68.0
+
+### Minor Changes
+
+- c409a84: Assistant runtimes can now export agent traces (turns, tool calls) over OTLP
+  to any OpenTelemetry-compatible backend such as Sentry, Datadog, or Honeycomb.
+  Export is enabled by configuring an OTLP endpoint for assistant runtimes, with
+  gRPC and HTTP transports supported; traces are tagged with the assistant and
+  project they belong to.
+- bedfe84: Add backend risk policy bypass request workflow support for the risk-owned request URL flow, backed by current-state request records and principal grants.
+- 1dda609: Add prompt-based (LLM-judge) risk policies. Risk policies gain a `policy_type` discriminator (`standard` | `prompt_based`) plus `prompt` and `model_config` fields. A new `llm_judge` evaluation is wired into the realtime enforcement scanner (scoped to tool-call messages) and the batch analyzer, with findings flowing into `risk_results`. The feature is gated behind the `gram-prompt-policies` flag.
+- cc9d8ee: Add optional `name` (display name) and `logo_asset_id` to remote session issuers across both the project-scoped (`remoteSessionIssuers`) and organization-scoped (`organizationRemoteSessionIssuers`) services. On create, `name` is trimmed and stored as NULL when empty; on update it follows the same three-state semantics as the nullable endpoint fields (omitted keeps, empty string clears). `logo_asset_id` is set-only for now (no clear path, no upload UI yet). The dashboard renders the display name as the primary label with the issuer URL as the secondary line, exposes an optional Display name input on the attach and modify sheets, and renders a logo when one is present. On the attach sheet the Display name auto-derives from the Issuer URL hostname until the operator edits it, matching the existing Slug behavior.
+
+### Patch Changes
+
+- 06b1f0d: Add generic access webhook event names for audit logs. Shadow MCP approval requests now emit `audit_log.access_request_event_v1`, and access rules emit `audit_log.access_rule_event_v1`; the previous Shadow MCP-specific event names remain in the webhook catalog with deprecated descriptions for compatibility.
+- ba8bdd4: Direct assistant MCP authentication prompts to the assistant's owner instead
+  of whoever happened to trigger the assistant. Slack onboarding now records the
+  owner's Slack identity in the assistant's instructions, runtime guidance
+  delivers OAuth links to the owner (ephemeral or DM) and tells anyone else that
+  the owner has to complete the connection, and prompts shown when the owner is
+  unknown now say explicitly that authentication is for the owner — so an
+  unexpected auth message is no longer mistaken for a failed setup.
+- 9d59f83: Assistants now connect to all of their MCP servers in parallel when a thread
+  starts, so startup time no longer grows with the number of servers and one
+  slow or unreachable server cannot stall the rest. Connection attempts are
+  bounded by connect and handshake timeouts, so a hung server fails fast instead
+  of blocking the assistant.
+- 9a78d97: Default the device-agent command list in the generated observability plugin
+  `identity.sh` to `speakeasyd`, the binary the daemon actually ships as. The
+  previous default (`device-agent,speakeasy-device-agent`) never resolved on a
+  standard install, so identity enrichment was skipped and hook events reached
+  Gram anonymously (no `user_email`). The fix applies to the Claude Code, Cursor,
+  and Codex plugin templates. Installs that still use a differently-named binary
+  can override via `GRAM_DEVICE_AGENT_COMMANDS`.
+
 ## 0.67.0
 
 ### Minor Changes

@@ -13,6 +13,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -105,7 +106,7 @@ func (s *UsagePollService) SyncCursorUsage(ctx context.Context, cfg Config, endT
 		for event := range rawEvents {
 			logParams = append(logParams, s.buildCursorUsageEvent(cfg, event))
 
-			email := strings.ToLower(strings.TrimSpace(event.UserEmail))
+			email := conv.NormalizeEmail(event.UserEmail)
 			if email == "" {
 				continue
 			}
@@ -133,7 +134,7 @@ func (s *UsagePollService) SyncCursorUsage(ctx context.Context, cfg Config, endT
 		}
 
 		for _, user := range users {
-			userIDsByEmail[strings.ToLower(strings.TrimSpace(user.Email))] = user.ID
+			userIDsByEmail[conv.NormalizeEmail(user.Email)] = user.ID
 		}
 
 		for _, logParam := range logParams {
@@ -156,7 +157,7 @@ func (s *UsagePollService) SyncCursorUsage(ctx context.Context, cfg Config, endT
 }
 
 func (s *UsagePollService) buildCursorUsageEvent(cfg Config, event cursorapi.UsageEvent) telemetry.LogParams {
-	userEmail := strings.ToLower(strings.TrimSpace(event.UserEmail))
+	userEmail := conv.NormalizeEmail(event.UserEmail)
 
 	return telemetry.LogParams{
 		Timestamp: event.Timestamp,
@@ -226,7 +227,7 @@ func calculateCursorRateLimitSleep(retryAfter time.Duration) time.Duration {
 func generateCursorUsageEventHash(event cursorapi.UsageEvent) string {
 	fields := []string{
 		strconv.FormatInt(event.Timestamp.UTC().UnixMilli(), 10),
-		strings.ToLower(strings.TrimSpace(event.UserEmail)),
+		conv.NormalizeEmail(event.UserEmail),
 		event.Model,
 		event.Kind,
 		strconv.FormatFloat(event.ChargedCents, 'f', -1, 64),

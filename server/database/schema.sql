@@ -936,7 +936,9 @@ CREATE TABLE IF NOT EXISTS remote_sessions (
   remote_session_client_id uuid NOT NULL,
 
   access_token_encrypted TEXT NOT NULL,
-  access_expires_at timestamptz NOT NULL,
+  -- NULL when the upstream omitted expires_in: the token has no known expiry
+  -- (e.g. Slack non-rotating tokens). Readers treat NULL as non-expiring.
+  access_expires_at timestamptz,
   refresh_token_encrypted TEXT,
   refresh_expires_at timestamptz,
   scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
@@ -2894,6 +2896,11 @@ CREATE TABLE IF NOT EXISTS risk_policies (
 
   enabled BOOLEAN NOT NULL DEFAULT TRUE,
   name TEXT NOT NULL,
+  -- Discriminates a standard detection policy (regex/presidio/custom sources)
+  -- from a prompt-based LLM-judge policy ('prompt_based'). prompt_based
+  -- policies ignore the source/entity/rule columns and instead evaluate
+  -- `prompt` against the message via an LLM judge.
+  policy_type TEXT NOT NULL DEFAULT 'standard',
   sources TEXT[] NOT NULL,
   presidio_entities TEXT[],
   prompt_injection_rules TEXT[],
@@ -2908,6 +2915,13 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   audience_type TEXT NOT NULL DEFAULT 'everyone',
   auto_name BOOLEAN NOT NULL DEFAULT TRUE,
   user_message TEXT,
+  -- For policy_type = 'prompt_based': the prompt-based guardrail the LLM judge
+  -- evaluates each in-scope message against. NULL for standard policies.
+  prompt TEXT,
+  -- For policy_type = 'prompt_based': per-policy judge model configuration
+  -- (model id, temperature, fail-mode, etc.) as a JSON object. NULL for
+  -- standard policies.
+  model_config JSONB,
   version BIGINT NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -2917,6 +2931,7 @@ CREATE TABLE IF NOT EXISTS risk_policies (
 
   CONSTRAINT risk_policies_pkey PRIMARY KEY (id),
   CONSTRAINT risk_policies_audience_type_check CHECK (audience_type IN ('everyone', 'targeted')),
+  CONSTRAINT risk_policies_policy_type_check CHECK (policy_type IN ('standard', 'prompt_based')),
   CONSTRAINT risk_policies_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
   CONSTRAINT risk_policies_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE
 );
