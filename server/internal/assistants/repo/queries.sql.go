@@ -2248,6 +2248,8 @@ SET
 WHERE id = $3
   AND project_id = $4
   AND state = $5
+  AND deleted IS FALSE
+  AND ended IS FALSE
 `
 
 type RevertExpireAssistantRuntimeToActiveParams struct {
@@ -2278,6 +2280,8 @@ SET
   updated_at = clock_timestamp()
 WHERE id = $3
   AND project_id = $4
+  AND deleted IS FALSE
+  AND ended IS FALSE
 `
 
 type SetAssistantRuntimeActiveParams struct {
