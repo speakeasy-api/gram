@@ -21,7 +21,18 @@ type RuntimeBackend interface {
 	// the runtime VM (not the host-facing --server-url, which may be
 	// loopback during local development).
 	ServerURL() *url.URL
+	// ImageRef returns the runtime image reference the backend launches
+	// machines with, in the "<repo>:<tag>" form. Stable for the lifetime
+	// of the process — the tag is stamped at build time.
+	ImageRef() string
 	Ensure(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendEnsureResult, error)
+	// RecycleImage rolls the runtime's existing machine onto the configured
+	// runtime image when it is running a stale one, without launching
+	// anything new: missing apps/machines are skipped, not created. Gated on
+	// the runner's idle clock so an in-flight turn is never interrupted — a
+	// busy machine is skipped and the next admission's Ensure picks the
+	// upgrade up lazily.
+	RecycleImage(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendRecycleResult, error)
 	// RunTurn delivers a turn for `threadID` to the runner backing
 	// `runtime`. The call lands on /threads/{threadID}/turn so the
 	// runner can dispatch to the right per-thread tokio task.
@@ -38,6 +49,16 @@ type RuntimeBackend interface {
 
 type RuntimeBackendEnsureResult struct {
 	ColdStart           bool
+	BackendMetadataJSON []byte
+}
+
+// RuntimeBackendRecycleResult reports one RecycleImage attempt. Recycled is
+// false for every skip (image already current, machine busy or gone) — those
+// are expected outcomes, not errors. BackendMetadataJSON is set only when a
+// recycle happened and carries the post-recycle machine identity for
+// persistence.
+type RuntimeBackendRecycleResult struct {
+	Recycled            bool
 	BackendMetadataJSON []byte
 }
 

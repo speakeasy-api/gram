@@ -780,6 +780,191 @@ func TestFlyRuntimeBackendEnsureRecyclesStaleImageOnStoppedMachine(t *testing.T)
 	require.True(t, result.ColdStart)
 }
 
+func TestFlyRuntimeBackendRecycleImageUpgradesStaleIdleMachine(t *testing.T) {
+	t.Parallel()
+
+	server := newTestAssistantRuntimeServerWithState(t, runnerStateResponse{
+		AssistantID:   uuid.NewString(),
+		UptimeSeconds: 600,
+		Threads: []runnerThreadState{
+			{ThreadID: uuid.NewString(), ChatID: uuid.NewString(), IdleSeconds: 10},
+		},
+	})
+	backend, _, flapsClient := newTestFlyRuntimeBackend(t, server)
+
+	assistantID := uuid.New()
+	flapsClient.machine = &fly.Machine{
+		ID:         "machine-1",
+		State:      fly.MachineStateStarted,
+		Region:     "iad",
+		InstanceID: "boot-1",
+		ImageRef: fly.MachineImageRef{
+			Registry:   "registry.fly.io",
+			Repository: "assistant-runtime",
+			Tag:        "v0",
+		},
+		Config: &fly.MachineConfig{
+			Metadata: map[string]string{flyMachineMetadataAssistantID: assistantID.String()},
+		},
+	}
+	flapsClient.updateMachine = &fly.Machine{
+		ID:         "machine-1",
+		State:      fly.MachineStateStarted,
+		Region:     "iad",
+		InstanceID: "boot-2",
+		ImageRef: fly.MachineImageRef{
+			Registry:   "registry.fly.io",
+			Repository: "assistant-runtime",
+			Tag:        "dev",
+		},
+		Config: &fly.MachineConfig{
+			Metadata: map[string]string{flyMachineMetadataAssistantID: assistantID.String()},
+		},
+	}
+
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName:    "gram-asst-test",
+		AppID:      "app-1",
+		AppURL:     server.URL,
+		MachineID:  "machine-1",
+		Region:     "iad",
+		LastBootID: "boot-1",
+	})
+	require.NoError(t, err)
+
+	result, err := backend.RecycleImage(t.Context(), assistantRuntimeRecord{
+		AssistantThreadID:   uuid.Nil,
+		AssistantID:         assistantID,
+		ProjectID:           uuid.New(),
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	})
+	require.NoError(t, err)
+	require.True(t, result.Recycled)
+	require.Equal(t, 1, flapsClient.updateCalls)
+	require.GreaterOrEqual(t, flapsClient.startCalls, 1)
+
+	var metadata flyRuntimeMetadata
+	require.NoError(t, json.Unmarshal(result.BackendMetadataJSON, &metadata))
+	require.Equal(t, "machine-1", metadata.MachineID)
+	require.Equal(t, "boot-2", metadata.LastBootID)
+	require.Equal(t, "gram-asst-test", metadata.AppName)
+}
+
+func TestFlyRuntimeBackendRecycleImageSkipsCurrentImage(t *testing.T) {
+	t.Parallel()
+
+	server := newTestAssistantRuntimeServer(t)
+	backend, _, flapsClient := newTestFlyRuntimeBackend(t, server)
+
+	assistantID := uuid.New()
+	flapsClient.machine = &fly.Machine{
+		ID:         "machine-1",
+		State:      fly.MachineStateStarted,
+		Region:     "iad",
+		InstanceID: "boot-1",
+		ImageRef: fly.MachineImageRef{
+			Registry:   "registry.fly.io",
+			Repository: "assistant-runtime",
+			Tag:        "dev",
+		},
+		Config: &fly.MachineConfig{
+			Metadata: map[string]string{flyMachineMetadataAssistantID: assistantID.String()},
+		},
+	}
+
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName:    "gram-asst-test",
+		AppID:      "app-1",
+		AppURL:     server.URL,
+		MachineID:  "machine-1",
+		Region:     "iad",
+		LastBootID: "boot-1",
+	})
+	require.NoError(t, err)
+
+	result, err := backend.RecycleImage(t.Context(), assistantRuntimeRecord{
+		AssistantThreadID:   uuid.Nil,
+		AssistantID:         assistantID,
+		ProjectID:           uuid.New(),
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	})
+	require.NoError(t, err)
+	require.False(t, result.Recycled)
+	require.Nil(t, result.BackendMetadataJSON)
+	require.Equal(t, 0, flapsClient.updateCalls)
+}
+
+func TestFlyRuntimeBackendRecycleImageSkipsWhileTurnInFlight(t *testing.T) {
+	t.Parallel()
+
+	server := newTestAssistantRuntimeServerWithState(t, runnerStateResponse{
+		AssistantID:   uuid.NewString(),
+		UptimeSeconds: 600,
+		Threads: []runnerThreadState{
+			{ThreadID: uuid.NewString(), ChatID: uuid.NewString(), IdleSeconds: 0},
+		},
+	})
+	backend, _, flapsClient := newTestFlyRuntimeBackend(t, server)
+
+	assistantID := uuid.New()
+	flapsClient.machine = &fly.Machine{
+		ID:         "machine-1",
+		State:      fly.MachineStateStarted,
+		Region:     "iad",
+		InstanceID: "boot-1",
+		ImageRef: fly.MachineImageRef{
+			Registry:   "registry.fly.io",
+			Repository: "assistant-runtime",
+			Tag:        "v0",
+		},
+		Config: &fly.MachineConfig{
+			Metadata: map[string]string{flyMachineMetadataAssistantID: assistantID.String()},
+		},
+	}
+
+	rawMetadata, err := json.Marshal(flyRuntimeMetadata{
+		AppName:    "gram-asst-test",
+		AppID:      "app-1",
+		AppURL:     server.URL,
+		MachineID:  "machine-1",
+		Region:     "iad",
+		LastBootID: "boot-1",
+	})
+	require.NoError(t, err)
+
+	result, err := backend.RecycleImage(t.Context(), assistantRuntimeRecord{
+		AssistantThreadID:   uuid.Nil,
+		AssistantID:         assistantID,
+		ProjectID:           uuid.New(),
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: rawMetadata,
+	})
+	require.NoError(t, err)
+	require.False(t, result.Recycled)
+	require.Equal(t, 0, flapsClient.updateCalls)
+}
+
+func TestFlyRuntimeBackendRecycleImageSkipsMissingMetadata(t *testing.T) {
+	t.Parallel()
+
+	server := newTestAssistantRuntimeServer(t)
+	backend, _, flapsClient := newTestFlyRuntimeBackend(t, server)
+
+	result, err := backend.RecycleImage(t.Context(), assistantRuntimeRecord{
+		AssistantThreadID:   uuid.Nil,
+		AssistantID:         uuid.New(),
+		ProjectID:           uuid.New(),
+		Backend:             runtimeBackendFlyIO,
+		BackendMetadataJSON: []byte(`{}`),
+	})
+	require.NoError(t, err)
+	require.False(t, result.Recycled)
+	require.Equal(t, 0, flapsClient.updateCalls)
+	require.Equal(t, 0, flapsClient.startCalls)
+}
+
 func TestFlyRuntimeBackendRunTurnHitsThreadScopedRoute(t *testing.T) {
 	t.Parallel()
 

@@ -318,6 +318,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ExpireAssistantThreadRuntime)
 	temporalWorker.RegisterActivity(activities.ReapStuckAssistantRuntimes)
 	temporalWorker.RegisterActivity(activities.ReapInactiveAssistantRuntimes)
+	temporalWorker.RegisterActivity(activities.RecycleAssistantRuntimeImages)
 	temporalWorker.RegisterActivity(activities.ReapSoftDeletedAssistantMemories)
 	temporalWorker.RegisterActivity(activities.SignalAssistantCoordinator)
 	temporalWorker.RegisterActivity(activities.SignalAssistantThread)
@@ -372,6 +373,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(AssistantThreadWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantReaperWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantRuntimeJanitorWorkflow)
+	temporalWorker.RegisterWorkflow(AssistantRuntimeImageRecycleWorkflow)
 	temporalWorker.RegisterWorkflow(AssistantMemoriesReaperWorkflow)
 	// WorkOS sync workflows
 	temporalWorker.RegisterWorkflow(ProcessWorkOSOrganizationEventsWorkflow)
@@ -428,6 +430,18 @@ func NewTemporalWorker(
 
 	if err := AddAssistantMemoriesReaperSchedule(context.Background(), env); err != nil {
 		logger.ErrorContext(context.Background(), "failed to add assistant memories reaper schedule", attr.SlogError(err))
+	}
+
+	// One image recycle sweep per deployed runtime image: a new worker build
+	// carries a new image ref, so kicking on startup is the deploy signal.
+	// Best-effort — a failed kick just leaves runtimes to the lazy
+	// per-admission recycle.
+	if opts.AssistantsCore != nil {
+		if imageRef := opts.AssistantsCore.RuntimeImageRef(); imageRef != "" {
+			if err := KickAssistantRuntimeImageRecycle(context.Background(), env, imageRef); err != nil {
+				logger.ErrorContext(context.Background(), "failed to kick assistant runtime image recycle", attr.SlogError(err))
+			}
+		}
 	}
 
 	if err := AddOutboxGCSchedule(context.Background(), env); err != nil {

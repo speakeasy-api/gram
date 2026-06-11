@@ -1085,6 +1085,62 @@ func (q *Queries) InsertAssistantThreadEvent(ctx context.Context, arg InsertAssi
 	return id, err
 }
 
+const listActiveAssistantRuntimesForImageRecycle = `-- name: ListActiveAssistantRuntimesForImageRecycle :many
+SELECT id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until
+FROM assistant_runtimes
+WHERE state = $1
+  AND runtime_version = 2
+  AND deleted IS FALSE
+  AND ended IS FALSE
+  AND backend_metadata_json <> '{}'::jsonb
+ORDER BY updated_at ASC
+`
+
+type ListActiveAssistantRuntimesForImageRecycleRow struct {
+	ID                  uuid.UUID
+	AssistantThreadID   uuid.UUID
+	AssistantID         uuid.UUID
+	ProjectID           uuid.UUID
+	Backend             string
+	BackendMetadataJson []byte
+	State               string
+	WarmUntil           pgtype.Timestamptz
+}
+
+// Returns live v2 runtime rows that carry backend metadata so a deploy-time
+// sweep can roll their machines onto the current runtime image. Only `active`
+// rows qualify: `starting` rows are mid-boot and already pull the current
+// image, while expiring/stopped rows are torn down or recycled lazily on the
+// next admission.
+func (q *Queries) ListActiveAssistantRuntimesForImageRecycle(ctx context.Context, activeState string) ([]ListActiveAssistantRuntimesForImageRecycleRow, error) {
+	rows, err := q.db.Query(ctx, listActiveAssistantRuntimesForImageRecycle, activeState)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActiveAssistantRuntimesForImageRecycleRow
+	for rows.Next() {
+		var i ListActiveAssistantRuntimesForImageRecycleRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AssistantThreadID,
+			&i.AssistantID,
+			&i.ProjectID,
+			&i.Backend,
+			&i.BackendMetadataJson,
+			&i.State,
+			&i.WarmUntil,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAssistantPendingThreads = `-- name: ListAssistantPendingThreads :many
 SELECT t.id, t.project_id
 FROM assistant_threads t

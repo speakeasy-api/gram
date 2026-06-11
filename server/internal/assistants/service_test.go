@@ -1302,6 +1302,131 @@ func TestServiceCoreReapAssistantRuntimesSkipsRowsWithoutMetadata(t *testing.T) 
 	require.EqualValues(t, 0, reapCalls.Load())
 }
 
+// insertActiveV2RuntimeRow seeds an active v2 runtime row carrying backend
+// metadata, mirroring what a completed admit leaves behind, and returns the
+// row id.
+func insertActiveV2RuntimeRow(
+	t *testing.T,
+	conn *pgxpool.Pool,
+	projectID, assistantID, threadID uuid.UUID,
+	state string,
+	metadata string,
+) uuid.UUID {
+	t.Helper()
+
+	require.NoError(t, assistantsrepo.New(conn).ReserveAssistantRuntimeV2(t.Context(), assistantsrepo.ReserveAssistantRuntimeV2Params{
+		AssistantThreadID: threadID,
+		AssistantID:       assistantID,
+		ProjectID:         projectID,
+		Backend:           runtimeBackendFlyIO,
+		State:             state,
+	}))
+	row, err := assistantsrepo.New(conn).GetAssistantRuntimeV2(t.Context(), assistantsrepo.GetAssistantRuntimeV2Params{
+		ProjectID:   projectID,
+		AssistantID: assistantID,
+	})
+	require.NoError(t, err)
+	require.NoError(t, assistantsrepo.New(conn).UpdateAssistantRuntimeMetadata(t.Context(), assistantsrepo.UpdateAssistantRuntimeMetadataParams{
+		BackendMetadataJson: []byte(metadata),
+		RuntimeID:           row.ID,
+		ProjectID:           projectID,
+	}))
+	return row.ID
+}
+
+func TestServiceCoreRecycleActiveRuntimeImagesRecyclesAndPersists(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "recycle_runtime_images")
+	require.NoError(t, err)
+
+	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
+	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeStateActive, `{"app_name":"gram-asst-stale","machine_id":"m-1"}`)
+
+	recycledMetadata := `{"app_name":"gram-asst-stale","machine_id":"m-1","last_boot_id":"boot-2"}`
+	recycleCalls := &atomic.Int64{}
+	backend := testRuntimeBackend{
+		backend:      runtimeBackendFlyIO,
+		recycleCalls: recycleCalls,
+		recycleResult: RuntimeBackendRecycleResult{
+			Recycled:            true,
+			BackendMetadataJSON: []byte(recycledMetadata),
+		},
+	}
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
+
+	result, err := core.RecycleActiveRuntimeImages(t.Context(), RecycleAssistantRuntimeImagesParams{OnRowProcessed: nil})
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Recycled)
+	require.Equal(t, 0, result.Skipped)
+	require.Equal(t, 0, result.Errors)
+	require.EqualValues(t, 1, recycleCalls.Load())
+
+	runtime, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{ID: runtimeID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.JSONEq(t, recycledMetadata, string(runtime.BackendMetadataJson))
+}
+
+func TestServiceCoreRecycleActiveRuntimeImagesSweepsOnlyActiveV2Rows(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "recycle_runtime_images_filter")
+	require.NoError(t, err)
+
+	// Candidate: active v2 row with metadata. The fake reports no recycle
+	// (image already current), so it must count as skipped.
+	activeProj, activeAssistant, activeThread := insertReapableProject(t, conn, "recycle-active")
+	insertActiveV2RuntimeRow(t, conn, activeProj, activeAssistant, activeThread, runtimeStateActive, `{"app_name":"gram-asst-current","machine_id":"m-1"}`)
+
+	// Non-candidates: a starting v2 row (mid-boot, already on the new
+	// image) and a v1 row (per-thread runtimes recycle on admission).
+	startingProj, startingAssistant, startingThread := insertReapableProject(t, conn, "recycle-starting")
+	insertActiveV2RuntimeRow(t, conn, startingProj, startingAssistant, startingThread, runtimeStateStarting, `{"app_name":"gram-asst-booting","machine_id":"m-2"}`)
+	v1Proj, v1Assistant, v1Thread := insertReapableProject(t, conn, "recycle-v1")
+	insertReapableRuntimeRow(t, conn, v1Proj, v1Assistant, v1Thread, runtimeStateActive, "gram-asst-v1", time.Now().UTC())
+
+	recycleCalls := &atomic.Int64{}
+	backend := testRuntimeBackend{
+		backend:       runtimeBackendFlyIO,
+		recycleCalls:  recycleCalls,
+		recycleResult: RuntimeBackendRecycleResult{Recycled: false, BackendMetadataJSON: nil},
+	}
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
+
+	result, err := core.RecycleActiveRuntimeImages(t.Context(), RecycleAssistantRuntimeImagesParams{OnRowProcessed: nil})
+	require.NoError(t, err)
+	require.Equal(t, 0, result.Recycled)
+	require.Equal(t, 1, result.Skipped)
+	require.Equal(t, 0, result.Errors)
+	require.EqualValues(t, 1, recycleCalls.Load())
+}
+
+func TestServiceCoreRecycleActiveRuntimeImagesCountsBackendErrors(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "recycle_runtime_images_errors")
+	require.NoError(t, err)
+
+	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
+	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeStateActive, `{"app_name":"gram-asst-flaky","machine_id":"m-1"}`)
+
+	backend := testRuntimeBackend{
+		backend:    runtimeBackendFlyIO,
+		recycleErr: errors.New("fly api 503"),
+	}
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
+
+	result, err := core.RecycleActiveRuntimeImages(t.Context(), RecycleAssistantRuntimeImagesParams{OnRowProcessed: nil})
+	require.NoError(t, err)
+	require.Equal(t, 0, result.Recycled)
+	require.Equal(t, 1, result.Errors)
+
+	// Metadata is untouched on failure.
+	runtime, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{ID: runtimeID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"app_name":"gram-asst-flaky","machine_id":"m-1"}`, string(runtime.BackendMetadataJson))
+}
+
 func TestServiceCoreReapInactiveAssistantRuntimesCollectsOnlyInactive(t *testing.T) {
 	t.Parallel()
 
@@ -1495,16 +1620,20 @@ func TestServiceCoreReapInactiveAssistantRuntimesSkipsLiveRowsCollectsFinalized(
 }
 
 type testRuntimeBackend struct {
-	backend      string
-	ensureResult RuntimeBackendEnsureResult
-	ensureErr    error
-	runTurnErr   error
-	statusResult RuntimeBackendStatus
-	statusErr    error
-	stopErr      error
-	stopCalls    *atomic.Int64
-	reapCalls    *atomic.Int64
-	reapErr      error
+	backend       string
+	ensureResult  RuntimeBackendEnsureResult
+	ensureErr     error
+	runTurnErr    error
+	statusResult  RuntimeBackendStatus
+	statusErr     error
+	stopErr       error
+	stopCalls     *atomic.Int64
+	reapCalls     *atomic.Int64
+	reapErr       error
+	imageRef      string
+	recycleResult RuntimeBackendRecycleResult
+	recycleErr    error
+	recycleCalls  *atomic.Int64
 }
 
 func (t testRuntimeBackend) Backend() string {
@@ -1524,6 +1653,20 @@ func (t testRuntimeBackend) Ensure(context.Context, assistantRuntimeRecord) (Run
 		return RuntimeBackendEnsureResult{}, t.ensureErr
 	}
 	return t.ensureResult, nil
+}
+
+func (t testRuntimeBackend) ImageRef() string {
+	return t.imageRef
+}
+
+func (t testRuntimeBackend) RecycleImage(context.Context, assistantRuntimeRecord) (RuntimeBackendRecycleResult, error) {
+	if t.recycleCalls != nil {
+		t.recycleCalls.Add(1)
+	}
+	if t.recycleErr != nil {
+		return RuntimeBackendRecycleResult{Recycled: false, BackendMetadataJSON: nil}, t.recycleErr
+	}
+	return t.recycleResult, nil
 }
 
 func (t testRuntimeBackend) RunTurn(context.Context, assistantRuntimeRecord, uuid.UUID, string, string, string) error {

@@ -1088,6 +1088,87 @@ func (s *ServiceCore) ReapInactiveAssistantRuntimes(ctx context.Context, params 
 	return result, nil
 }
 
+// RecycleAssistantRuntimeImagesResult summarises one deploy-time image sweep
+// at the runtime-row level. Skipped covers every expected non-recycle: image
+// already current, machine busy with a turn, or backend resource gone.
+type RecycleAssistantRuntimeImagesResult struct {
+	Recycled int
+	Skipped  int
+	Errors   int
+}
+
+// RecycleAssistantRuntimeImagesParams configures one image recycle sweep.
+type RecycleAssistantRuntimeImagesParams struct {
+	// OnRowProcessed, if set, fires once per row after the recycle attempt
+	// (success, skip or failure).
+	OnRowProcessed func()
+}
+
+// RecycleActiveRuntimeImages best-effort rolls every active v2 runtime onto
+// the currently configured runtime image, so deploys absorb the image-pull +
+// reboot cost while runtimes are idle instead of the next turn paying it.
+// Busy or failed rows are not chased — the per-admission recycle in Ensure
+// catches them lazily.
+func (s *ServiceCore) RecycleActiveRuntimeImages(ctx context.Context, params RecycleAssistantRuntimeImagesParams) (RecycleAssistantRuntimeImagesResult, error) {
+	queries := assistantrepo.New(s.db)
+	rows, err := queries.ListActiveAssistantRuntimesForImageRecycle(ctx, runtimeStateActive)
+	if err != nil {
+		return RecycleAssistantRuntimeImagesResult{}, fmt.Errorf("list active assistant runtimes for image recycle: %w", err)
+	}
+
+	result := RecycleAssistantRuntimeImagesResult{Recycled: 0, Skipped: 0, Errors: 0}
+	for _, row := range rows {
+		recycled, err := s.runtime.RecycleImage(ctx, assistantRuntimeRecord{
+			ID:                  row.ID,
+			AssistantThreadID:   row.AssistantThreadID,
+			AssistantID:         row.AssistantID,
+			ProjectID:           row.ProjectID,
+			Backend:             row.Backend,
+			BackendMetadataJSON: row.BackendMetadataJson,
+			State:               row.State,
+			WarmUntil:           row.WarmUntil,
+		})
+		switch {
+		case err != nil:
+			s.logger.WarnContext(ctx, "assistant runtime image recycle failed",
+				attr.SlogAssistantID(row.AssistantID.String()),
+				attr.SlogProjectID(row.ProjectID.String()),
+				attr.SlogError(err),
+			)
+			result.Errors++
+		case recycled.Recycled:
+			// A persist failure only costs the next Ensure a cold-start
+			// health budget (LastBootID mismatch) — the machine itself is
+			// already on the new image, so still count the recycle.
+			if err := queries.UpdateAssistantRuntimeMetadata(ctx, assistantrepo.UpdateAssistantRuntimeMetadataParams{
+				BackendMetadataJson: recycled.BackendMetadataJSON,
+				RuntimeID:           row.ID,
+				ProjectID:           row.ProjectID,
+			}); err != nil {
+				s.logger.WarnContext(ctx, "persist recycled assistant runtime metadata failed",
+					attr.SlogAssistantID(row.AssistantID.String()),
+					attr.SlogProjectID(row.ProjectID.String()),
+					attr.SlogError(err),
+				)
+			}
+			result.Recycled++
+		default:
+			result.Skipped++
+		}
+		if params.OnRowProcessed != nil {
+			params.OnRowProcessed()
+		}
+	}
+	return result, nil
+}
+
+// RuntimeImageRef returns the runtime image reference the configured backend
+// launches machines with. The deploy-time recycle workflow is keyed on it so
+// each image version triggers exactly one sweep.
+func (s *ServiceCore) RuntimeImageRef() string {
+	return s.runtime.ImageRef()
+}
+
 // reapRuntimeRow tears down the backend resource for one row and records the
 // outcome in DB. Returns true on success (including idempotent no-op when
 // the resource was already gone). Errors are logged here so callers can

@@ -792,6 +792,21 @@ WHERE r.backend_metadata_json <> '{}'::jsonb
 ORDER BY r.updated_at ASC
 LIMIT @limit_count;
 
+-- name: ListActiveAssistantRuntimesForImageRecycle :many
+-- Returns live v2 runtime rows that carry backend metadata so a deploy-time
+-- sweep can roll their machines onto the current runtime image. Only `active`
+-- rows qualify: `starting` rows are mid-boot and already pull the current
+-- image, while expiring/stopped rows are torn down or recycled lazily on the
+-- next admission.
+SELECT id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until
+FROM assistant_runtimes
+WHERE state = @active_state
+  AND runtime_version = 2
+  AND deleted IS FALSE
+  AND ended IS FALSE
+  AND backend_metadata_json <> '{}'::jsonb
+ORDER BY updated_at ASC;
+
 -- name: MarkAssistantRuntimeReaped :exec
 -- Records that the backend resource (e.g. Fly app) for this runtime has
 -- been torn down. Clearing backend_metadata_json removes it from the reap
