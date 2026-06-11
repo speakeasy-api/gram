@@ -200,6 +200,48 @@ func TestAssistantRuntimeWarmupWorkflowHandsOffExpiryWhenTurnArrived(t *testing.
 	require.Equal(t, int32(2), signalCalls.Load(), "a revert must still kick the coordinator for threads enqueued during the expiring window")
 }
 
+func TestAssistantRuntimeWarmupWorkflowExpiresEvenWhenCoordinatorSignalFails(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ activities.WarmAssistantRuntimeInput) (*activities.WarmAssistantRuntimeResult, error) {
+			return &activities.WarmAssistantRuntimeResult{
+				Booted:         true,
+				ProjectID:      "33333333-3333-3333-3333-333333333333",
+				WarmTTLSeconds: 60,
+			}, nil
+		},
+		activity.RegisterOptions{Name: "WarmAssistantRuntime"},
+	)
+
+	var expireCalls atomic.Int32
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ activities.ExpireWarmupAssistantRuntimeInput) (*activities.ExpireAssistantThreadRuntimeResult, error) {
+			expireCalls.Add(1)
+			return &activities.ExpireAssistantThreadRuntimeResult{Stopped: true, RemainingSeconds: 0}, nil
+		},
+		activity.RegisterOptions{Name: "ExpireWarmupAssistantRuntime"},
+	)
+
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ activities.SignalAssistantCoordinatorInput) error {
+			return errors.New("temporal client outage")
+		},
+		activity.RegisterOptions{Name: "SignalAssistantCoordinator"},
+	)
+
+	env.ExecuteWorkflow(AssistantRuntimeWarmupWorkflow, AssistantRuntimeWarmupWorkflowInput{
+		AssistantID: "11111111-1111-1111-1111-111111111111",
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.Error(t, env.GetWorkflowError())
+	require.Equal(t, int32(1), expireCalls.Load(), "a failed coordinator kick must not leave the booted VM without an expiry")
+}
+
 func TestAssistantRuntimeWarmupWorkflowSignalsCoordinatorOnWarmupFailure(t *testing.T) {
 	t.Parallel()
 

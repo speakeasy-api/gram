@@ -334,14 +334,15 @@ func AssistantRuntimeWarmupWorkflow(ctx workflow.Context, input AssistantRuntime
 		AssistantID: input.AssistantID,
 	}).Get(ctx, &result)
 
-	if err := signalCoordinator(); err != nil {
-		return err
-	}
+	// A failed kick must not abort before the expiry below when a runtime
+	// was booted — nothing else would stop the VM. Hold the error and
+	// surface it at the end.
+	sigErr := signalCoordinator()
 	if warmErr != nil {
 		return warmErr
 	}
 	if !result.Booted {
-		return nil
+		return sigErr
 	}
 
 	if err := workflow.NewTimer(ctx, time.Duration(result.WarmTTLSeconds)*time.Second).Get(ctx, nil); err != nil {
@@ -359,7 +360,10 @@ func AssistantRuntimeWarmupWorkflow(ctx workflow.Context, input AssistantRuntime
 	// runtime slot, and a revert (a turn slipped in — its thread workflow
 	// owns the lifecycle now) still left admit skipping any threads that
 	// were enqueued while the row sat in `expiring`.
-	return signalCoordinator()
+	if err := signalCoordinator(); err != nil {
+		return err
+	}
+	return sigErr
 }
 
 func assistantCoordinatorWorkflowID(assistantID uuid.UUID) string {
