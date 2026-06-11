@@ -1,4 +1,4 @@
-import { Eye, EyeOff } from "lucide-react";
+import { Ellipsis, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -9,6 +9,12 @@ import {
 } from "@/components/ui/accordion";
 import { CodeBlock } from "@/components/ui/code-block";
 import { ruleIdCategoryLabel } from "@/pages/security/rule-ids";
+import { serializeExclusionExpression } from "@/pages/security/exclusion-expression";
+import {
+  ExclusionSheet,
+  type ExclusionSheetState,
+  GLOBAL_SCOPE,
+} from "@/pages/security/exclusion-sheet";
 import { getRuleTitleFallback } from "@/pages/security/risk-utils";
 import type {
   ChatMessage,
@@ -21,7 +27,15 @@ import { useRevealAll } from "@/pages/security/reveal-all-context";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Badge, Icon, Stack } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Dialog } from "@/components/ui/dialog";
 import {
   Sheet,
@@ -34,7 +48,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Button } from "@speakeasy-api/moonshine";
+import {
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@speakeasy-api/moonshine";
 import type { RiskResult } from "@gram/client/models/components";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { MessageContent } from "@gram-ai/elements";
@@ -346,6 +366,13 @@ function MessageItem({
             onRevealContent={() => setContentRevealed(true)}
             parsedToolCalls={parsedToolCalls}
           />
+          {hasRisk && riskResults && (
+            <RiskFindingActions
+              results={riskResults}
+              canHide={hasSensitiveContent && contentRevealed}
+              onHide={() => setContentRevealed(false)}
+            />
+          )}
         </div>
       )}
     </div>
@@ -919,6 +946,103 @@ function MaskedMatchInline({ value }: { value: string }) {
   );
 }
 
+// Provides the "Create exclusion" action to risk findings deep in the trace.
+// Null when the viewer lacks org:admin, which hides the action.
+const CreateExclusionContext = createContext<
+  ((result: RiskResult) => void) | null
+>(null);
+
+// Pre-fill an exclusion expression from a finding: prefer the literal match,
+// fall back to the rule_id, then the source.
+function findingToExclusionState(result: RiskResult): ExclusionSheetState {
+  let expression: string;
+  if (result.match) {
+    expression = serializeExclusionExpression({
+      matchType: "exact",
+      matchValue: result.match,
+    });
+  } else if (result.ruleId) {
+    expression = serializeExclusionExpression({
+      matchType: "rule_id",
+      matchValue: result.ruleId,
+    });
+  } else {
+    expression = serializeExclusionExpression({
+      matchType: "source",
+      matchValue: result.source,
+    });
+  }
+  return {
+    mode: "create",
+    initialExpression: expression,
+    initialScope: result.policyId ?? GLOBAL_SCOPE,
+  };
+}
+
+// Action bar shown under an expanded risk entry. Each unique finding gets a
+// ⋮ menu: "Create exclusion" (pre-fills from the finding) and, when sensitive
+// content was revealed, "Hide again".
+function RiskFindingActions({
+  results,
+  canHide,
+  onHide,
+}: {
+  results: RiskResult[];
+  canHide: boolean;
+  onHide: () => void;
+}) {
+  const openCreateExclusion = useContext(CreateExclusionContext);
+  if (!openCreateExclusion && !canHide) return null;
+
+  const seen = new Set<string>();
+  const unique: RiskResult[] = [];
+  for (const r of results) {
+    const key = `${r.source}|${r.ruleId ?? ""}|${r.match ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(r);
+  }
+
+  return (
+    <div className="mt-2 space-y-1">
+      {unique.map((r) => (
+        <div
+          key={r.id}
+          className="bg-muted/30 flex items-center justify-between gap-2 rounded-md border px-3 py-1.5"
+        >
+          <span className="text-muted-foreground truncate font-mono text-xs">
+            {[r.ruleId, r.source].filter(Boolean).join(" · ")}
+          </span>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="tertiary" size="sm">
+                <Button.Icon>
+                  <Ellipsis className="h-4 w-4" />
+                </Button.Icon>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {openCreateExclusion && (
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onSelect={() => openCreateExclusion(r)}
+                >
+                  Create exclusion
+                </DropdownMenuItem>
+              )}
+              {canHide && (
+                <DropdownMenuItem className="cursor-pointer" onSelect={onHide}>
+                  Hide again
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function RiskBadgePopover({ results }: { results: RiskResult[] }) {
   // Long messages can repeat the same secret/email many times. Collapse to
   // distinct (source, ruleId, match) so the popover lists each unique
@@ -1027,6 +1151,8 @@ function ChatDetailPanel({
     FilterableTraceEntryType[]
   >([...DEFAULT_ENABLED_ENTRY_TYPES]);
   const [riskOnly, setRiskOnly] = useState(initialRiskOnly);
+  const [exclusionState, setExclusionState] =
+    useState<ExclusionSheetState | null>(null);
   const {
     chat,
     messages: chatMessages,
@@ -1346,12 +1472,26 @@ function ChatDetailPanel({
           />
 
           {/* Chat Messages */}
-          <ChatMessagesList
-            messages={chatMessages}
-            riskResultsByMessage={riskResultsByMessage}
-            collapseNonRisk={collapseNonRisk}
-            enabledEntryTypes={enabledEntryTypes}
-            riskOnly={riskOnly}
+          <CreateExclusionContext.Provider
+            value={
+              canManageChat
+                ? (result) => setExclusionState(findingToExclusionState(result))
+                : null
+            }
+          >
+            <ChatMessagesList
+              messages={chatMessages}
+              riskResultsByMessage={riskResultsByMessage}
+              collapseNonRisk={collapseNonRisk}
+              enabledEntryTypes={enabledEntryTypes}
+              riskOnly={riskOnly}
+            />
+          </CreateExclusionContext.Provider>
+          <ExclusionSheet
+            state={exclusionState}
+            onOpenChange={(open) => {
+              if (!open) setExclusionState(null);
+            }}
           />
         </TabsContent>
 

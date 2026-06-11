@@ -112,6 +112,41 @@ var RiskCustomDetectionRule = Type("RiskCustomDetectionRule", func() {
 	Required("id", "rule_id", "title", "description", "regex", "severity", "created_at", "updated_at")
 })
 
+// RiskExclusionMatchTypeEnum constrains the match_type field to the supported
+// strategies. Kept here so payloads and the result type stay in sync.
+func RiskExclusionMatchTypeEnum() {
+	Enum("exact", "regex", "rule_id", "source", "entity_type")
+}
+
+var RiskExclusion = Type("RiskExclusion", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("id", String, "The exclusion ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("project_id", String, "The project ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("risk_policy_id", String, "The policy this exclusion is bound to. Null/omitted means global: the exclusion applies to every policy in the project.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("match_type", String, "How match_value is interpreted: exact (finding text), regex (RE2 pattern over finding text), rule_id, source, or entity_type (presidio entity, matched as rule_id 'pii.<entity>').", func() {
+		RiskExclusionMatchTypeEnum()
+	})
+	Attribute("match_value", String, "The value matched against findings, interpreted per match_type.")
+	Attribute("rule_id_filter", String, "Optional narrowing: an exact/regex/source exclusion only applies to findings with this rule_id. Empty means any.")
+	Attribute("source_filter", String, "Optional narrowing: an exact/regex/rule_id exclusion only applies to findings from this source. Empty means any.")
+	Attribute("enabled", Boolean, "Whether the exclusion is active.")
+	Attribute("created_at", String, "When the exclusion was created.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, "When the exclusion was last updated.", func() {
+		Format(FormatDateTime)
+	})
+
+	Required("id", "project_id", "match_type", "match_value", "rule_id_filter", "source_filter", "enabled", "created_at", "updated_at")
+})
+
 var RiskResult = Type("RiskResult", func() {
 	Meta("struct:pkg:path", "types")
 

@@ -1084,7 +1084,24 @@ func newStartCommand() *cli.Command {
 				logger,
 			)
 			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
-			riskService := risk.NewService(logger, tracerProvider, db, sessionManager, authzEngine, riskSignaler, completionsClient, shadowMCPClient, auditLogger, c.String(usersessions.JWTSigningKeyFlag), c.String("pi-classifier-url") != "", hookPIIScanner, hookPIScanner, featureFlags)
+			riskReconciler := &background.TemporalRiskExclusionReconciler{TemporalEnv: temporalEnv, Logger: logger}
+			riskService := risk.NewService(
+				logger,
+				tracerProvider,
+				db,
+				sessionManager,
+				authzEngine,
+				riskSignaler,
+				riskReconciler,
+				completionsClient,
+				shadowMCPClient,
+				auditLogger,
+				c.String(usersessions.JWTSigningKeyFlag),
+				c.String("pi-classifier-url") != "",
+				hookPIIScanner,
+				hookPIScanner,
+				featureFlags,
+			)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
 

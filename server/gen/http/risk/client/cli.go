@@ -1390,6 +1390,224 @@ func BuildDeleteCustomDetectionRulePayload(riskDeleteCustomDetectionRuleBody str
 	return v, nil
 }
 
+// BuildListRiskExclusionsPayload builds the payload for the risk
+// listRiskExclusions endpoint from CLI flags.
+func BuildListRiskExclusionsPayload(riskListRiskExclusionsRiskPolicyID string, riskListRiskExclusionsApikeyToken string, riskListRiskExclusionsSessionToken string, riskListRiskExclusionsProjectSlugInput string) (*risk.ListRiskExclusionsPayload, error) {
+	var err error
+	var riskPolicyID *string
+	{
+		if riskListRiskExclusionsRiskPolicyID != "" {
+			riskPolicyID = &riskListRiskExclusionsRiskPolicyID
+			err = goa.MergeErrors(err, goa.ValidateFormat("risk_policy_id", *riskPolicyID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskListRiskExclusionsApikeyToken != "" {
+			apikeyToken = &riskListRiskExclusionsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskListRiskExclusionsSessionToken != "" {
+			sessionToken = &riskListRiskExclusionsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskListRiskExclusionsProjectSlugInput != "" {
+			projectSlugInput = &riskListRiskExclusionsProjectSlugInput
+		}
+	}
+	v := &risk.ListRiskExclusionsPayload{}
+	v.RiskPolicyID = riskPolicyID
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildCreateRiskExclusionPayload builds the payload for the risk
+// createRiskExclusion endpoint from CLI flags.
+func BuildCreateRiskExclusionPayload(riskCreateRiskExclusionBody string, riskCreateRiskExclusionApikeyToken string, riskCreateRiskExclusionSessionToken string, riskCreateRiskExclusionProjectSlugInput string) (*risk.CreateRiskExclusionPayload, error) {
+	var err error
+	var body CreateRiskExclusionRequestBody
+	{
+		err = json.Unmarshal([]byte(riskCreateRiskExclusionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"enabled\": false,\n      \"match_type\": \"regex\",\n      \"match_value\": \"abc123\",\n      \"risk_policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"rule_id_filter\": \"abc123\",\n      \"source_filter\": \"abc123\"\n   }'")
+		}
+		if body.RiskPolicyID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.risk_policy_id", *body.RiskPolicyID, goa.FormatUUID))
+		}
+		if !(body.MatchType == "exact" || body.MatchType == "regex" || body.MatchType == "rule_id" || body.MatchType == "source" || body.MatchType == "entity_type") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_type", body.MatchType, []any{"exact", "regex", "rule_id", "source", "entity_type"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskCreateRiskExclusionApikeyToken != "" {
+			apikeyToken = &riskCreateRiskExclusionApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskCreateRiskExclusionSessionToken != "" {
+			sessionToken = &riskCreateRiskExclusionSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskCreateRiskExclusionProjectSlugInput != "" {
+			projectSlugInput = &riskCreateRiskExclusionProjectSlugInput
+		}
+	}
+	v := &risk.CreateRiskExclusionPayload{
+		RiskPolicyID: body.RiskPolicyID,
+		MatchType:    body.MatchType,
+		MatchValue:   body.MatchValue,
+		RuleIDFilter: body.RuleIDFilter,
+		SourceFilter: body.SourceFilter,
+		Enabled:      body.Enabled,
+	}
+	{
+		var zero string
+		if v.RuleIDFilter == zero {
+			v.RuleIDFilter = ""
+		}
+	}
+	{
+		var zero string
+		if v.SourceFilter == zero {
+			v.SourceFilter = ""
+		}
+	}
+	{
+		var zero bool
+		if v.Enabled == zero {
+			v.Enabled = true
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildUpdateRiskExclusionPayload builds the payload for the risk
+// updateRiskExclusion endpoint from CLI flags.
+func BuildUpdateRiskExclusionPayload(riskUpdateRiskExclusionBody string, riskUpdateRiskExclusionApikeyToken string, riskUpdateRiskExclusionSessionToken string, riskUpdateRiskExclusionProjectSlugInput string) (*risk.UpdateRiskExclusionPayload, error) {
+	var err error
+	var body UpdateRiskExclusionRequestBody
+	{
+		err = json.Unmarshal([]byte(riskUpdateRiskExclusionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"match_type\": \"regex\",\n      \"match_value\": \"abc123\",\n      \"risk_policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"rule_id_filter\": \"abc123\",\n      \"source_filter\": \"abc123\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.RiskPolicyID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.risk_policy_id", *body.RiskPolicyID, goa.FormatUUID))
+		}
+		if !(body.MatchType == "exact" || body.MatchType == "regex" || body.MatchType == "rule_id" || body.MatchType == "source" || body.MatchType == "entity_type") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_type", body.MatchType, []any{"exact", "regex", "rule_id", "source", "entity_type"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskUpdateRiskExclusionApikeyToken != "" {
+			apikeyToken = &riskUpdateRiskExclusionApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskUpdateRiskExclusionSessionToken != "" {
+			sessionToken = &riskUpdateRiskExclusionSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskUpdateRiskExclusionProjectSlugInput != "" {
+			projectSlugInput = &riskUpdateRiskExclusionProjectSlugInput
+		}
+	}
+	v := &risk.UpdateRiskExclusionPayload{
+		ID:           body.ID,
+		RiskPolicyID: body.RiskPolicyID,
+		MatchType:    body.MatchType,
+		MatchValue:   body.MatchValue,
+		RuleIDFilter: body.RuleIDFilter,
+		SourceFilter: body.SourceFilter,
+		Enabled:      body.Enabled,
+	}
+	{
+		var zero string
+		if v.RuleIDFilter == zero {
+			v.RuleIDFilter = ""
+		}
+	}
+	{
+		var zero string
+		if v.SourceFilter == zero {
+			v.SourceFilter = ""
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildDeleteRiskExclusionPayload builds the payload for the risk
+// deleteRiskExclusion endpoint from CLI flags.
+func BuildDeleteRiskExclusionPayload(riskDeleteRiskExclusionID string, riskDeleteRiskExclusionApikeyToken string, riskDeleteRiskExclusionSessionToken string, riskDeleteRiskExclusionProjectSlugInput string) (*risk.DeleteRiskExclusionPayload, error) {
+	var err error
+	var id string
+	{
+		id = riskDeleteRiskExclusionID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskDeleteRiskExclusionApikeyToken != "" {
+			apikeyToken = &riskDeleteRiskExclusionApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskDeleteRiskExclusionSessionToken != "" {
+			sessionToken = &riskDeleteRiskExclusionSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskDeleteRiskExclusionProjectSlugInput != "" {
+			projectSlugInput = &riskDeleteRiskExclusionProjectSlugInput
+		}
+	}
+	v := &risk.DeleteRiskExclusionPayload{}
+	v.ID = id
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildSuggestCustomDetectionRulePayload builds the payload for the risk
 // suggestCustomDetectionRule endpoint from CLI flags.
 func BuildSuggestCustomDetectionRulePayload(riskSuggestCustomDetectionRuleBody string, riskSuggestCustomDetectionRuleApikeyToken string, riskSuggestCustomDetectionRuleSessionToken string, riskSuggestCustomDetectionRuleProjectSlugInput string) (*risk.SuggestCustomDetectionRulePayload, error) {

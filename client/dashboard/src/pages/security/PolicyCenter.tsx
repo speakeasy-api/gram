@@ -23,6 +23,13 @@ import {
 } from "@/components/ui/sheet";
 import { Type } from "@/components/ui/type";
 import {
+  PageTabsTrigger,
+  Tabs,
+  TabsContent,
+  TabsList,
+} from "@/components/ui/tabs";
+import { ExclusionsTab, type ExclusionSheetState } from "./ExclusionsTab";
+import {
   Badge,
   Button,
   type Column,
@@ -381,6 +388,12 @@ function PolicyCenterContent() {
 
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
 
+  const [activeTab, setActiveTab] = useState<"policies" | "exclusions">(
+    "policies",
+  );
+  const [exclusionSheet, setExclusionSheet] =
+    useState<ExclusionSheetState | null>(null);
+
   // Deep-link support: `?policy=<id>` opens that policy's edit sheet. The
   // command palette uses this since policies have no per-item route. Declared
   // here (above the mutations) so save handlers can clear it on programmatic
@@ -629,32 +642,61 @@ function PolicyCenterContent() {
     });
   };
 
-  if (!isLoading && policyRows.length === 0 && !sheetOpen) {
-    return (
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs />
-        </Page.Header>
-        <Page.Body>
-          <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
-            <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-              <Shield className="text-muted-foreground h-6 w-6" />
-            </div>
-            <Type variant="subheading" className="mb-1">
-              No Policies
-            </Type>
-            <Type small muted className="mb-4 max-w-md text-center">
-              Policies scan agent sessions for secrets, sensitive data, and
-              prompt-defined risks.
-            </Type>
-            <Button onClick={() => handleCreate()}>
-              <Button.Text>Create Policy</Button.Text>
-            </Button>
-          </div>
-        </Page.Body>
-      </Page>
-    );
-  }
+  // Empty state for the Policies tab only. It must NOT short-circuit the whole
+  // page, otherwise the Exclusions tab (and global exclusions) would be
+  // unreachable for projects that have no policies yet.
+  const policiesEmptyState = (
+    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
+      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+        <Shield className="text-muted-foreground h-6 w-6" />
+      </div>
+      <Type variant="subheading" className="mb-1">
+        No Risk Policies
+      </Type>
+      <Type small muted className="mb-4 max-w-md text-center">
+        Risk policies scan your chat messages for secrets and sensitive data.
+        Create your first policy to get started.
+      </Type>
+      <Button
+        onClick={() => {
+          const {
+            sources,
+            presidioEntities,
+            promptInjectionRules,
+            disabledRules: payloadDisabled,
+          } = categoriesToPayload(
+            new Set<RuleCategory>(["secrets", "pii"]),
+            new Set(),
+          );
+          createMutation.mutate({
+            request: {
+              createRiskPolicyRequestBody: {
+                autoName: true,
+                enabled: true,
+                sources,
+                presidioEntities,
+                promptInjectionRules,
+                disabledRules: payloadDisabled,
+                customRuleIds: [],
+              },
+            },
+          });
+        }}
+        disabled={createMutation.isPending}
+      >
+        <Button.Text>
+          {createMutation.isPending ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Creating...
+            </>
+          ) : (
+            "Get Started"
+          )}
+        </Button.Text>
+      </Button>
+    </div>
+  );
 
   const enabledPolicies = policyRows.filter((r) => r.policy.enabled);
   const insightsContext = [
@@ -878,6 +920,14 @@ function PolicyCenterContent() {
     },
   ];
 
+  const headerAction =
+    activeTab === "policies"
+      ? { label: "New Policy", onClick: () => handleCreate() }
+      : {
+          label: "Create Exclusion",
+          onClick: () => setExclusionSheet({ mode: "create" }),
+        };
+
   const isChoosingPolicyKind =
     !editingPolicy && nlEnabled && createStep === "type";
   let sheetTitle = "New Policy";
@@ -899,7 +949,7 @@ function PolicyCenterContent() {
     }
   }
 
-  let sectionBody = (
+  let policiesBody = (
     <Table
       columns={policyColumns}
       data={policyRows}
@@ -908,20 +958,22 @@ function PolicyCenterContent() {
     />
   );
   if (isLoading) {
-    sectionBody = (
+    policiesBody = (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
       </div>
     );
+  } else if (policyRows.length === 0) {
+    policiesBody = policiesEmptyState;
   }
 
   const cta = isLoading ? null : (
     <Page.Section.CTA>
-      <Button onClick={() => handleCreate()}>
+      <Button onClick={headerAction.onClick}>
         <Button.LeftIcon>
           <Plus className="mr-2 h-4 w-4" />
         </Button.LeftIcon>
-        <Button.Text>New Policy</Button.Text>
+        <Button.Text>{headerAction.label}</Button.Text>
       </Button>
     </Page.Section.CTA>
   );
@@ -945,7 +997,33 @@ function PolicyCenterContent() {
             prompt-defined risks in agent session interactions.
           </Page.Section.Description>
           {cta}
-          <Page.Section.Body>{sectionBody}</Page.Section.Body>
+          <Page.Section.Body>
+            <Tabs
+              value={activeTab}
+              onValueChange={(value) =>
+                setActiveTab(value as "policies" | "exclusions")
+              }
+            >
+              <div className="border-b">
+                <TabsList className="h-auto justify-start gap-4 rounded-none bg-transparent p-0 text-sm">
+                  <PageTabsTrigger value="policies">Policies</PageTabsTrigger>
+                  <PageTabsTrigger value="exclusions">
+                    Exclusions
+                  </PageTabsTrigger>
+                </TabsList>
+              </div>
+              <TabsContent value="policies" className="mt-6">
+                {policiesBody}
+              </TabsContent>
+              <TabsContent value="exclusions" className="mt-6">
+                <ExclusionsTab
+                  policies={data?.policies ?? []}
+                  sheet={exclusionSheet}
+                  onSheetChange={setExclusionSheet}
+                />
+              </TabsContent>
+            </Tabs>
+          </Page.Section.Body>
         </Page.Section>
 
         {/* Edit/Create Sheet */}
