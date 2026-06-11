@@ -12,7 +12,6 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import {
   BrowserRouter,
-  Navigate,
   Route,
   Routes,
   useLocation,
@@ -279,11 +278,6 @@ const RouteProvider = () => {
             {routesWithSubroutes(outsideStructureRoutes)}
           </Route>
           <Route path=":orgSlug/projects/:projectSlug" element={<AppLayout />}>
-            {/* Redirect legacy /chat-sessions bookmarks to the new /agent-sessions URL */}
-            <Route
-              path="chat-sessions"
-              element={<Navigate to="../agent-sessions" replace />}
-            />
             {routesWithSubroutes(authenticatedRoutes)}
           </Route>
           {/* Org routes that render without OrgLayout (full-screen standalone pages) */}

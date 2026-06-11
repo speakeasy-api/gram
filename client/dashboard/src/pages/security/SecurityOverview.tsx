@@ -543,7 +543,7 @@ function RiskActivitySection({ children }: { children: ReactNode }) {
 
   const agentsParams = new URLSearchParams(carriedRangeParams);
   agentsParams.set("has_risk", "true");
-  const agentsHref = `${routes.logs.agents.href()}?${agentsParams.toString()}`;
+  const agentsHref = `${routes.agentSessions.href()}?${agentsParams.toString()}`;
 
   const riskEventsHref = carriedRangeParams.toString()
     ? `${routes.riskEvents.href()}?${carriedRangeParams.toString()}`

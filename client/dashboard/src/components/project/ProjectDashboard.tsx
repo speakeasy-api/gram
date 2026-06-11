@@ -552,7 +552,7 @@ export function ProjectDashboard(): JSX.Element {
                                   !isProjectEmpty &&
                                     overview?.summary.totalChats === 0
                                   ? routes.insights.href()
-                                  : routes.logs.agents.href()
+                                  : routes.agentSessions.href()
                             }
                           />
                         </CardActions>

@@ -59,6 +59,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       { route: routes.plugins, scope: readWrite },
       { route: routes.environments, scope: readWrite },
       { route: routes.insights, scope: read },
+      { route: routes.agentSessions, scope: read },
       { route: routes.logs, scope: read },
       { route: routes.riskOverview, scope: read },
       { route: routes.policyCenter, scope: readWrite },
