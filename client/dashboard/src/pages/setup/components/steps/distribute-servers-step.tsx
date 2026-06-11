@@ -8,6 +8,7 @@ import {
   Server as ServerIcon,
 } from "lucide-react";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { StepContainer } from "../step-container";
 import {
   type PulseMCPServer,
@@ -39,6 +40,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { InstallInstructionsButton } from "@/pages/plugins/InstallInstructionsDialog";
+import { ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG } from "@/lib/externalMcpUserSessions";
 import { cn } from "@/lib/utils";
 
 /** Display name of the shared plugin bundle catalog servers are added to. */
@@ -65,6 +67,7 @@ export function DistributeServersStep({
   onBack,
 }: DistributeServersStepProps): JSX.Element {
   const client = useSdkClient();
+  const telemetry = useTelemetry();
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
   const [showAll, setShowAll] = useState(false);
@@ -139,7 +142,15 @@ export function DistributeServersStep({
   // --- Deploy workflow (driven headlessly, no dialog) -----------------------
   // Raw catalog servers are fed in un-enriched, so each partitions as a
   // single-remote server and the backend resolves all remotes at deploy time.
-  const workflow = useExternalMcpReleaseWorkflow({ servers: serversToDeploy });
+  // Mirror the catalog AddServerDialog: gate Speakeasy OAuth user-session
+  // onboarding behind the same flag so distributed servers that require OAuth
+  // are auto-configured instead of surfacing "OAuth setup required" later.
+  const workflow = useExternalMcpReleaseWorkflow({
+    servers: serversToDeploy,
+    onboardExternalMcpToUserSessions:
+      telemetry.isFeatureEnabled(ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG) ??
+      false,
+  });
   const startedRef = useRef(false);
   const finishedRef = useRef(false);
 
