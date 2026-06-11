@@ -55,6 +55,7 @@ import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import { MentionedToolsBadges } from "@/components/assistant-ui/mentioned-tools-badges";
 import { MessageFeedback } from "@/components/assistant-ui/message-feedback";
 import { Reasoning, ReasoningGroup } from "@/components/assistant-ui/reasoning";
+import { ThinkingIndicator } from "@/components/assistant-ui/thinking-indicator";
 import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
 import { ToolMentionAutocomplete } from "@/components/assistant-ui/tool-mention-autocomplete";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
@@ -1098,21 +1099,6 @@ const MessageError: FC = () => {
   );
 };
 
-/**
- * Shows the pulsing dot indicator when the message is still running but the
- * last rendered part is a tool call (not text). Without this, there's no
- * visual feedback that the model is still working after a tool call.
- */
-const ToolCallStreamingIndicator: FC = () => {
-  const show = useAssistantState(({ message }) => {
-    if (message.status?.type !== "running") return false;
-    const lastPart = message.parts[message.parts.length - 1];
-    return lastPart?.type === "tool-call";
-  });
-  if (!show) return null;
-  return <div className="aui-md mt-2" data-status="running" />;
-};
-
 const AssistantMessage: FC = () => {
   const { config } = useElements();
   const toolsConfig = config.tools ?? {};
@@ -1142,7 +1128,7 @@ const AssistantMessage: FC = () => {
       >
         <div className="aui-assistant-message-content mx-2 leading-7 wrap-break-word text-foreground">
           <MessagePrimitive.Parts components={partsComponents} />
-          <ToolCallStreamingIndicator />
+          <ThinkingIndicator />
           <MessageError />
         </div>
 
