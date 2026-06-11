@@ -257,7 +257,7 @@ function SecurityOverviewContent() {
   }, [overview?.topCategories, routes.riskOverview, location.search]);
 
   const topRules = useMemo<BarDatum[]>(() => {
-    const riskEventsHref = routes.logs.riskEvents.href();
+    const riskEventsHref = routes.riskEvents.href();
     return (overview?.topRules ?? []).map((r) => {
       const label = r.ruleId ? getRuleTitleFallback(r.ruleId) : "(no rule_id)";
       const ruleParams = new URLSearchParams();
@@ -275,7 +275,7 @@ function SecurityOverviewContent() {
         href,
       };
     });
-  }, [overview?.topRules, routes.logs.riskEvents, location.search]);
+  }, [overview?.topRules, routes.riskEvents, location.search]);
 
   const topUsers = useMemo<BarDatum[]>(() => {
     const userDetailRoute = (
@@ -546,8 +546,8 @@ function RiskActivitySection({ children }: { children: ReactNode }) {
   const agentsHref = `${routes.logs.agents.href()}?${agentsParams.toString()}`;
 
   const riskEventsHref = carriedRangeParams.toString()
-    ? `${routes.logs.riskEvents.href()}?${carriedRangeParams.toString()}`
-    : routes.logs.riskEvents.href();
+    ? `${routes.riskEvents.href()}?${carriedRangeParams.toString()}`
+    : routes.riskEvents.href();
 
   return (
     <Page.Section>

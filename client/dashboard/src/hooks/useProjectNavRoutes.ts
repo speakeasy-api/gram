@@ -62,6 +62,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       { route: routes.logs, scope: read },
       { route: routes.riskOverview, scope: read },
       { route: routes.policyCenter, scope: readWrite },
+      { route: routes.riskEvents, scope: ["org:admin"] },
       { route: routes.approvalRequests, scope: readWrite },
       { route: routes.detectionRules, scope: readWrite },
       { route: routes.settings, scope: ["project:write"] },
