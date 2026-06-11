@@ -75,36 +75,33 @@ func handleDirectoryUserEvent(ctx context.Context, logger *slog.Logger, dbtx dat
 	}
 }
 
-func handleDirectoryAttributesEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, eventKind workos.EventKind, raw json.RawMessage) error {
+func handleDirectoryGroupEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, eventKind workos.EventKind, raw json.RawMessage) error {
+	payload, err := unmarshalDirectoryGroupPayload(raw)
+	if err != nil {
+		return err
+	}
+
 	switch eventKind {
 	case workos.EventKindDirectorySyncGroupCreated, workos.EventKindDirectorySyncGroupUpdated:
-		payload, err := unmarshalDirectoryGroupPayload(raw)
-		if err != nil {
-			return err
-		}
 		return upsertDirectoryGroup(ctx, dbtx, payload)
-
 	case workos.EventKindDirectorySyncGroupDeleted:
-		payload, err := unmarshalDirectoryGroupPayload(raw)
-		if err != nil {
-			return err
-		}
 		return deleteDirectoryGroup(ctx, logger, dbtx, payload)
+	default:
+		return nil
+	}
+}
 
+func handleDirectoryGroupMembershipEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, eventKind workos.EventKind, raw json.RawMessage) error {
+	payload, err := unmarshalDirectoryGroupMembershipPayload(raw)
+	if err != nil {
+		return err
+	}
+
+	switch eventKind {
 	case workos.EventKindDirectorySyncGroupUserAdded:
-		payload, err := unmarshalDirectoryGroupMembershipPayload(raw)
-		if err != nil {
-			return err
-		}
 		return openDirectoryGroupMembership(ctx, logger, dbtx, payload)
-
 	case workos.EventKindDirectorySyncGroupUserRemoved:
-		payload, err := unmarshalDirectoryGroupMembershipPayload(raw)
-		if err != nil {
-			return err
-		}
 		return closeDirectoryGroupMembership(ctx, logger, dbtx, payload)
-
 	default:
 		return nil
 	}
@@ -196,7 +193,7 @@ func deleteDirectoryGroup(ctx context.Context, logger *slog.Logger, dbtx databas
 	groupID, err := workosrepo.New(dbtx).GetDirectoryGroupIDByWorkOSID(ctx, payload.ID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		logger.WarnContext(ctx, "skipping directory group deletion for unknown group",
-			attr.SlogWorkOSDirectoryAttributesEntityID(payload.ID),
+			attr.SlogWorkOSDirectoryGroupID(payload.ID),
 		)
 		return nil
 	}
@@ -219,7 +216,7 @@ func openDirectoryGroupMembership(ctx context.Context, logger *slog.Logger, dbtx
 	userID, err := workosrepo.New(dbtx).GetDirectoryUserIDByWorkOSID(ctx, payload.User.ID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		logger.WarnContext(ctx, "skipping directory group membership for unknown user",
-			attr.SlogWorkOSDirectoryAttributesEntityID(payload.User.ID),
+			attr.SlogWorkOSUserID(payload.User.ID),
 		)
 		return nil
 	}
@@ -230,7 +227,7 @@ func openDirectoryGroupMembership(ctx context.Context, logger *slog.Logger, dbtx
 	groupID, err := workosrepo.New(dbtx).GetDirectoryGroupIDByWorkOSID(ctx, payload.Group.ID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		logger.WarnContext(ctx, "skipping directory group membership for unknown group",
-			attr.SlogWorkOSDirectoryAttributesEntityID(payload.Group.ID),
+			attr.SlogWorkOSDirectoryGroupID(payload.Group.ID),
 		)
 		return nil
 	}
@@ -255,8 +252,8 @@ func closeDirectoryGroupMembership(ctx context.Context, logger *slog.Logger, dbt
 		WorkosDirectoryGroupID: payload.Group.ID,
 	}); err != nil {
 		logger.WarnContext(ctx, "skipping directory group membership for unknown user or group",
-			attr.SlogWorkOSDirectoryAttributesEntityID(payload.User.ID),
-			attr.SlogWorkOSDirectoryAttributesEntityID(payload.Group.ID),
+			attr.SlogWorkOSDirectoryUserID(payload.User.ID),
+			attr.SlogWorkOSDirectoryGroupID(payload.Group.ID),
 		)
 		return nil
 	}

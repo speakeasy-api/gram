@@ -75,7 +75,7 @@ func AttachWebhookHandler(mux goahttp.Muxer, h *WebhookHandler) {
 
 // webhookEventData is the relevant subset of the `data` field on a WorkOS
 // webhook payload. ID and OrganizationID are populated differently per event
-// type; see workOSOrganizationIDFromWebhook for the mapping.
+// type; see parseOrganizationID for the mapping.
 type webhookEventData struct {
 	ID             string                 `json:"id"`
 	OrganizationID string                 `json:"organization_id"`

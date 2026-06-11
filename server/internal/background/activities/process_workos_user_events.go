@@ -355,7 +355,7 @@ func linkExistingUserToWorkOS(ctx context.Context, userQueries *usersrepo.Querie
 }
 
 func linkDirectoryUsersToUser(ctx context.Context, dbtx database.DBTX, userID, email string) error {
-	email = strings.ToLower(strings.TrimSpace(email))
+	email = conv.NormalizeEmail(email)
 	if email == "" {
 		return nil
 	}
