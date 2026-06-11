@@ -563,7 +563,10 @@ export function DistributeServersStep({
                 {marketplaceCommand && (
                   <div className="space-y-2">
                     <p className="text-foreground text-sm font-medium">
-                      Add the marketplace in Claude Code
+                      Install for yourself in Claude Code
+                    </p>
+                    <p className="text-muted-foreground text-xs">
+                      Registers the marketplace for your own account.
                     </p>
                     <div className="bg-muted/50 flex items-center justify-between gap-2 rounded-md border p-3">
                       <code className="text-foreground truncate text-xs">
@@ -574,9 +577,15 @@ export function DistributeServersStep({
                   </div>
                 )}
                 {publishStatus?.repoOwner && publishStatus?.repoName && (
-                  <div>
-                    <p className="text-muted-foreground mb-2 text-sm">
-                      For Cursor, Codex and other platforms:
+                  <div className="space-y-2">
+                    <p className="text-foreground text-sm font-medium">
+                      Roll out to your whole organization
+                    </p>
+                    <p className="text-muted-foreground text-xs leading-relaxed">
+                      Push the marketplace to every developer through Claude
+                      Code Managed Settings — no per-user install command
+                      required. The full guide also covers Claude Cowork,
+                      Cursor, and Codex.
                     </p>
                     <InstallInstructionsButton
                       repoOwner={publishStatus.repoOwner}
