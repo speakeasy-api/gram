@@ -1,6 +1,6 @@
 ---
 "server": minor
-"@gram/client": minor
+"dashboard": patch
 ---
 
-Add unified tool usage summary and filter option endpoints for target-aware MCP and tool analytics.
+Added unified Tools insights for hosted MCP servers, shadow MCP servers, local tools, and skills.
