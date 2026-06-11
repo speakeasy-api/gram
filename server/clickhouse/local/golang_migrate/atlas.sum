@@ -1,4 +1,4 @@
-h1:F5L5XN9IR7BiJ5QzKyI+V70Rlhx54kvHjQmZtkBIWY0=
+h1:ioeFYeyFNfRp2zQPBQIkJVr/4TI2yrZZK9mQLJUDUQk=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -36,3 +36,4 @@ h1:F5L5XN9IR7BiJ5QzKyI+V70Rlhx54kvHjQmZtkBIWY0=
 20260430104153_add-authz-challenges-table.up.sql h1:xzosYIiO3fRbLIoIjkhqXnH0zxbhhusvO7HZ80u1w1M=
 20260508132129_add-remote-mcp-server-id-materialized-col.up.sql h1:ONn0mdquOH8+96lVqIInQ881GJ2lTMN+ldJ+LJ9O9KU=
 20260610201301_add-chat-token-summaries.up.sql h1:7Goi3IxTVdft+TIIMIdc/awuEoVKeG0ie2NBgK9dMm0=
+20260611154646_add-chat-token-summaries.up.sql h1:g40ksG5W0RpJb1r9a/5vOZklwQbmHW7TruDCKHys8pA=
