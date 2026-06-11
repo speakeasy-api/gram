@@ -1430,6 +1430,38 @@ func TestServiceCoreRecycleActiveRuntimeImagesSkipsAssistantsWithInFlightEvents(
 	require.EqualValues(t, 0, recycleCalls.Load())
 }
 
+func TestServiceCoreRecycleActiveRuntimeImagesIgnoresDeletedAssistants(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "recycle_runtime_images_deleted_assistant")
+	require.NoError(t, err)
+
+	// An active row orphaned by a failed best-effort reap on assistant
+	// delete belongs to the janitor; recycling it would bump updated_at and
+	// postpone the inactivity-based collection.
+	projectID, assistantID, threadID := insertReapableProject(t, conn, "recycle-deleted-assistant")
+	insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeStateActive, `{"app_name":"gram-asst-orphan","machine_id":"m-1"}`)
+	require.NoError(t, assistantsrepo.New(conn).DeleteAssistant(t.Context(), assistantsrepo.DeleteAssistantParams{
+		AssistantID: assistantID,
+		ProjectID:   projectID,
+	}))
+
+	recycleCalls := &atomic.Int64{}
+	backend := testRuntimeBackend{
+		backend:       runtimeBackendFlyIO,
+		recycleCalls:  recycleCalls,
+		recycleResult: RuntimeBackendRecycleResult{Recycled: true, BackendMetadataJSON: []byte(`{}`)},
+	}
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
+
+	result, err := core.RecycleActiveRuntimeImages(t.Context(), RecycleAssistantRuntimeImagesParams{OnRowProcessed: nil})
+	require.NoError(t, err)
+	require.Equal(t, 0, result.Recycled)
+	require.Equal(t, 0, result.Skipped)
+	require.Equal(t, 0, result.Errors)
+	require.EqualValues(t, 0, recycleCalls.Load())
+}
+
 func TestServiceCoreRecycleActiveRuntimeImagesUndoesRecycleWhenRowExpiresMidSweep(t *testing.T) {
 	t.Parallel()
 

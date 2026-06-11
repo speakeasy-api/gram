@@ -823,15 +823,24 @@ WHERE id = @runtime_id
 -- sweep can roll their machines onto the current runtime image. Only `active`
 -- rows qualify: `starting` rows are mid-boot and already pull the current
 -- image, while expiring/stopped rows are torn down or recycled lazily on the
--- next admission.
-SELECT id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until
-FROM assistant_runtimes
-WHERE state = @active_state
-  AND runtime_version = 2
-  AND deleted IS FALSE
-  AND ended IS FALSE
-  AND backend_metadata_json <> '{}'::jsonb
-ORDER BY updated_at ASC;
+-- next admission. Rows orphaned by a deleted assistant are excluded: they
+-- belong to the deleted-assistant janitor, and recycling them would bump
+-- updated_at and postpone the inactivity-based reap.
+SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
+FROM assistant_runtimes r
+WHERE r.state = @active_state
+  AND r.runtime_version = 2
+  AND r.deleted IS FALSE
+  AND r.ended IS FALSE
+  AND r.backend_metadata_json <> '{}'::jsonb
+  AND NOT EXISTS (
+    SELECT 1
+    FROM assistants a
+    WHERE a.id = r.assistant_id
+      AND a.project_id = r.project_id
+      AND a.deleted IS TRUE
+  )
+ORDER BY r.updated_at ASC;
 
 -- name: MarkAssistantRuntimeReaped :exec
 -- Records that the backend resource (e.g. Fly app) for this runtime has
