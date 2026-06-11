@@ -1177,9 +1177,10 @@ func TestGenerateCodexObservabilityPluginScriptShipsMCPInventoryOnSessionStart(t
 	require.NoError(t, err)
 
 	script := string(files[CodexObservabilitySlug(cfg)+"/hooks/hook.sh"])
-	require.Contains(t, script, `["codex", "mcp", "list", "--json"]`, "hook.sh must collect the MCP inventory")
+	require.Contains(t, script, `[codex_bin, "mcp", "list", "--json"]`, "hook.sh must collect the MCP inventory")
 	require.Contains(t, script, "mcp_inventory_codex", "hook.sh must ship the inventory under additional_data.mcp_inventory_codex")
-	require.Contains(t, script, `data.get("hook_event_name") == "SessionStart" and shutil.which("codex")`, "inventory collection must be gated on the parsed event name")
+	require.Contains(t, script, `find_codex() if data.get("hook_event_name") == "SessionStart" else None`, "inventory collection must be gated on the parsed event name")
+	require.Contains(t, script, `/Applications/Codex.app/Contents/Resources/codex`, "binary resolution must cover desktop-app-only installs where codex is not on PATH")
 	require.Contains(t, script, "timeout=15", "codex invocation must be wall-time capped")
 	require.Contains(t, script, `additional["mcp_inventory_codex"] = slim`, "hook.sh must ship the sanitized projection — raw transport objects carry env vars and HTTP headers with credentials")
 	require.Contains(t, script, `redact_args(transport.get("args"))`, "stdio launch args must pass through credential redaction before upload")

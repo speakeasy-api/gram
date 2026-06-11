@@ -1117,10 +1117,34 @@ def redact_args(args):
             out.append(a)
     return out
 
-if data.get("hook_event_name") == "SessionStart" and shutil.which("codex"):
+# PATH lookup alone misses real installs: hooks fired by the Codex desktop
+# app inherit the minimal GUI environment, and desktop-only users never have
+# codex on PATH at all — the app references its bundled binary by absolute
+# path. Probe the managed-install and app-bundle locations directly; paths
+# absent on this platform simply fail the probe. NB: this comment is inside
+# a bash single-quoted heredoc — apostrophes here break the script.
+def find_codex():
+    found = shutil.which("codex")
+    if found:
+        return found
+    home = os.path.expanduser("~")
+    codex_home = os.environ.get("CODEX_HOME") or os.path.join(home, ".codex")
+    candidates = [
+        os.path.join(codex_home, "packages", "standalone", "current", "bin", "codex"),
+        os.path.join(home, ".local", "bin", "codex"),
+        "/usr/local/bin/codex",
+        "/Applications/Codex.app/Contents/Resources/codex",
+    ]
+    for candidate in candidates:
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    return None
+
+codex_bin = find_codex() if data.get("hook_event_name") == "SessionStart" else None
+if codex_bin:
     try:
         out = subprocess.run(
-            ["codex", "mcp", "list", "--json"],
+            [codex_bin, "mcp", "list", "--json"],
             stdin=subprocess.DEVNULL,
             capture_output=True,
             timeout=15,
