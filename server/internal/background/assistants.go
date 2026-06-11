@@ -355,14 +355,10 @@ func AssistantRuntimeWarmupWorkflow(ctx workflow.Context, input AssistantRuntime
 	}).Get(ctx, &expire); err != nil {
 		return err
 	}
-	if !expire.Stopped {
-		// A turn slipped in past the warm timer; its thread workflow owns
-		// the runtime lifecycle now.
-		return nil
-	}
-
-	// The stop freed the assistant's runtime slot — re-admit anything that
-	// queued up while the row was expiring.
+	// Kick the coordinator on both outcomes: a stop freed the assistant's
+	// runtime slot, and a revert (a turn slipped in — its thread workflow
+	// owns the lifecycle now) still left admit skipping any threads that
+	// were enqueued while the row sat in `expiring`.
 	return signalCoordinator()
 }
 

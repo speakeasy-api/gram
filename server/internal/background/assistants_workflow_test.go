@@ -181,8 +181,10 @@ func TestAssistantRuntimeWarmupWorkflowHandsOffExpiryWhenTurnArrived(t *testing.
 		activity.RegisterOptions{Name: "ExpireWarmupAssistantRuntime"},
 	)
 
+	var signalCalls atomic.Int32
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, _ activities.SignalAssistantCoordinatorInput) error {
+			signalCalls.Add(1)
 			return nil
 		},
 		activity.RegisterOptions{Name: "SignalAssistantCoordinator"},
@@ -195,6 +197,7 @@ func TestAssistantRuntimeWarmupWorkflowHandsOffExpiryWhenTurnArrived(t *testing.
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
 	require.Equal(t, int32(1), expireCalls.Load(), "a revert means a turn arrived and its thread workflow owns expiry — no re-arm")
+	require.Equal(t, int32(2), signalCalls.Load(), "a revert must still kick the coordinator for threads enqueued during the expiring window")
 }
 
 func TestAssistantRuntimeWarmupWorkflowSignalsCoordinatorOnWarmupFailure(t *testing.T) {
