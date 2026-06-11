@@ -23,6 +23,7 @@ type Client struct {
 	FetchOpenAPIv3FromURLEndpoint         goa.Endpoint
 	ServeOpenAPIv3Endpoint                goa.Endpoint
 	ServeFunctionEndpoint                 goa.Endpoint
+	ServeSkillEndpoint                    goa.Endpoint
 	ListAssetsEndpoint                    goa.Endpoint
 	UploadChatAttachmentEndpoint          goa.Endpoint
 	ServeChatAttachmentEndpoint           goa.Endpoint
@@ -31,7 +32,7 @@ type Client struct {
 }
 
 // NewClient initializes a "assets" service client given the endpoints.
-func NewClient(serveImage, uploadImage, uploadFunctions, uploadOpenAPIv3, fetchOpenAPIv3FromURL, serveOpenAPIv3, serveFunction, listAssets, uploadChatAttachment, serveChatAttachment, createSignedChatAttachmentURL, serveChatAttachmentSigned goa.Endpoint) *Client {
+func NewClient(serveImage, uploadImage, uploadFunctions, uploadOpenAPIv3, fetchOpenAPIv3FromURL, serveOpenAPIv3, serveFunction, serveSkill, listAssets, uploadChatAttachment, serveChatAttachment, createSignedChatAttachmentURL, serveChatAttachmentSigned goa.Endpoint) *Client {
 	return &Client{
 		ServeImageEndpoint:                    serveImage,
 		UploadImageEndpoint:                   uploadImage,
@@ -40,6 +41,7 @@ func NewClient(serveImage, uploadImage, uploadFunctions, uploadOpenAPIv3, fetchO
 		FetchOpenAPIv3FromURLEndpoint:         fetchOpenAPIv3FromURL,
 		ServeOpenAPIv3Endpoint:                serveOpenAPIv3,
 		ServeFunctionEndpoint:                 serveFunction,
+		ServeSkillEndpoint:                    serveSkill,
 		ListAssetsEndpoint:                    listAssets,
 		UploadChatAttachmentEndpoint:          uploadChatAttachment,
 		ServeChatAttachmentEndpoint:           serveChatAttachment,
@@ -203,6 +205,29 @@ func (c *Client) ServeFunction(ctx context.Context, p *ServeFunctionForm) (res *
 		return
 	}
 	o := ires.(*ServeFunctionResponseData)
+	return o.Result, o.Body, nil
+}
+
+// ServeSkill calls the "serveSkill" endpoint of the "assets" service.
+// ServeSkill may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ServeSkill(ctx context.Context, p *ServeSkillForm) (res *ServeSkillResult, resp io.ReadCloser, err error) {
+	var ires any
+	ires, err = c.ServeSkillEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	o := ires.(*ServeSkillResponseData)
 	return o.Result, o.Body, nil
 }
 

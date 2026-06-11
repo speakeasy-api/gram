@@ -14,6 +14,7 @@ const (
 	FeatureToolIOLogs            Feature = "tool_io_logs"
 	FeatureRBAC                  Feature = "rbac"
 	FeatureSessionCapture        Feature = "session_capture"
+	FeatureSkillsCapture         Feature = "skills_capture"
 	FeatureAuthzChallengeLogging Feature = "authz_challenge_logging"
 	FeatureWebhooks              Feature = "webhooks"
 	FeatureSSO                   Feature = "sso"

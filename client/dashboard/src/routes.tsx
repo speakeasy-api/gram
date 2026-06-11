@@ -18,7 +18,7 @@ import CatalogDetail, {
   CatalogDetailRoot,
 } from "./pages/catalog/CatalogDetail";
 import ChatSessions from "./pages/chatLogs/ChatLogs";
-import CLIs from "./pages/CLIs";
+
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import DeviceAgent from "./pages/device-agent/DeviceAgent";
@@ -88,6 +88,18 @@ import RiskOverviewUsersIndex from "./pages/security/RiskOverviewUsersIndex";
 import PolicyCenter from "./pages/security/PolicyCenter";
 import DetectionRules from "./pages/security/DetectionRules";
 import Team from "./pages/team/Team";
+import SkillsRegistry from "./pages/skills/SkillsRegistry";
+import { SkillDetailRoot } from "./pages/skills/SkillDetail";
+import {
+  SkillActivityPage,
+  SkillDefinitionPage,
+  SkillInstallPage,
+  SkillVersionsPage,
+} from "./pages/skills/SkillDetail";
+import { SkillsRegistryRoot } from "./pages/skills/SkillsRegistryRoot";
+import SkillsReview from "./pages/skills/SkillsReview";
+import SkillsSettings from "./pages/skills/SkillsSettings";
+import { SkillsIndexRedirect, SkillsRoot } from "./pages/skills/Skills";
 import SourceDetails from "./pages/sources/SourceDetails";
 import {
   AddFromCatalogGate,
@@ -315,12 +327,62 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
-  clis: {
+  skills: {
     title: "Skills",
-    url: "clis",
-    icon: "terminal",
-    component: CLIs,
+    url: "skills",
+    icon: "sparkles",
+    component: SkillsRoot,
+    indexComponent: SkillsIndexRedirect,
+    subPages: {
+      registry: {
+        title: "Registry",
+        url: "registry",
+        component: SkillsRegistryRoot,
+        indexComponent: SkillsRegistry,
+        subPages: {
+          skill: {
+            title: "Skill",
+            url: ":skillSlug",
+            component: SkillDetailRoot,
+            indexComponent: SkillDefinitionPage,
+            subPages: {
+              definition: {
+                title: "Definition",
+                url: "definition",
+                component: SkillDefinitionPage,
+              },
+              versions: {
+                title: "Versions",
+                url: "versions",
+                component: SkillVersionsPage,
+              },
+              activity: {
+                title: "Activity",
+                url: "activity",
+                component: SkillActivityPage,
+              },
+              install: {
+                title: "Install",
+                url: "install",
+                component: SkillInstallPage,
+              },
+            },
+          },
+        },
+      },
+      review: {
+        title: "Review",
+        url: "review",
+        component: SkillsReview,
+      },
+      settings: {
+        title: "Settings",
+        url: "settings",
+        component: SkillsSettings,
+      },
+    },
   },
+
   mcp: {
     title: "MCP",
     url: "mcp",

@@ -300,6 +300,38 @@ func (q *Queries) GetProjectAssetBySHA256(ctx context.Context, arg GetProjectAss
 	return i, err
 }
 
+const getSkillAssetURL = `-- name: GetSkillAssetURL :one
+SELECT url, content_type, content_length, updated_at
+FROM assets
+WHERE
+  id = $1 AND kind = 'skill'
+  AND project_id = $2
+`
+
+type GetSkillAssetURLParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type GetSkillAssetURLRow struct {
+	Url           string
+	ContentType   string
+	ContentLength int64
+	UpdatedAt     pgtype.Timestamptz
+}
+
+func (q *Queries) GetSkillAssetURL(ctx context.Context, arg GetSkillAssetURLParams) (GetSkillAssetURLRow, error) {
+	row := q.db.QueryRow(ctx, getSkillAssetURL, arg.ID, arg.ProjectID)
+	var i GetSkillAssetURLRow
+	err := row.Scan(
+		&i.Url,
+		&i.ContentType,
+		&i.ContentLength,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listAssets = `-- name: ListAssets :many
 SELECT id, project_id, name, url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted FROM assets WHERE project_id = $1
 `

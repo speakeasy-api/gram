@@ -191,6 +191,36 @@ var _ = Service("assets", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "serveFunction"}`)
 	})
 
+	Method("serveSkill", func() {
+		Description("Serve a skill asset from Gram.")
+
+		Payload(ServeSkillForm)
+		Result(ServeSkillResult)
+
+		Security(security.ByKey)
+		Security(security.Session)
+
+		HTTP(func() {
+			GET("/rpc/assets.serveSkill")
+			Param("id")
+			Param("project_id")
+
+			Response(StatusOK, func() {
+				Header("content_type:Content-Type")
+				Header("content_length:Content-Length")
+				Header("last_modified:Last-Modified")
+			})
+
+			security.ByKeyHeader()
+			security.SessionHeader()
+			SkipResponseBodyEncodeDecode()
+		})
+
+		Meta("openapi:operationId", "serveSkill")
+		Meta("openapi:extension:x-speakeasy-name-override", "serveSkill")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "serveSkill"}`)
+	})
+
 	Method("listAssets", func() {
 		Description("List all assets for a project.")
 
@@ -413,7 +443,7 @@ var ServeOpenAPIv3Form = Type("ServeOpenAPIv3Form", func() {
 	security.SessionPayload()
 
 	Attribute("id", String, "The ID of the asset to serve")
-	Attribute("project_id", String, "The procect ID that the asset belongs to")
+	Attribute("project_id", String, "The project ID that the asset belongs to")
 })
 
 var ServeOpenAPIv3Result = Type("ServeOpenAPIv3Result", func() {
@@ -431,10 +461,28 @@ var ServeFunctionForm = Type("ServeFunctionForm", func() {
 	security.SessionPayload()
 
 	Attribute("id", String, "The ID of the asset to serve")
-	Attribute("project_id", String, "The procect ID that the asset belongs to")
+	Attribute("project_id", String, "The project ID that the asset belongs to")
 })
 
 var ServeFunctionResult = Type("ServeFunctionResult", func() {
+	Required("content_type", "content_length", "last_modified")
+
+	Attribute("content_type", String)
+	Attribute("content_length", Int64)
+	Attribute("last_modified", String)
+})
+
+var ServeSkillForm = Type("ServeSkillForm", func() {
+	Required("id", "project_id")
+
+	security.ByKeyPayload()
+	security.SessionPayload()
+
+	Attribute("id", String, "The ID of the asset to serve")
+	Attribute("project_id", String, "The project ID that the asset belongs to")
+})
+
+var ServeSkillResult = Type("ServeSkillResult", func() {
 	Required("content_type", "content_length", "last_modified")
 
 	Attribute("content_type", String)
@@ -447,7 +495,7 @@ var Asset = Type("Asset", func() {
 
 	Attribute("id", String, "The ID of the asset")
 	Attribute("kind", String, func() {
-		Enum("openapiv3", "image", "functions", "chat_attachment", "unknown")
+		Enum("openapiv3", "image", "functions", "skill", "chat_attachment", "unknown")
 	})
 	Attribute("sha256", String, "The SHA256 hash of the asset")
 	Attribute("content_type", String, "The content type of the asset")

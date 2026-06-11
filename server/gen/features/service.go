@@ -59,6 +59,8 @@ type GetProductFeaturesResult struct {
 	ToolIoLogsEnabled bool
 	// Whether Claude Code session capture is enabled
 	SessionCaptureEnabled bool
+	// Whether skills capture and registry features are enabled
+	SkillsCaptureEnabled bool
 	// Whether authz challenge logging to ClickHouse is enabled
 	AuthzChallengeLoggingEnabled bool
 	// Whether webhooks are enabled
