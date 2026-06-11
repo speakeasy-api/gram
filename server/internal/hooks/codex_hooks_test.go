@@ -104,9 +104,10 @@ func TestBuildCodexTelemetryAttributes_EnrichesMCPToolFromInventory(t *testing.T
 		Status:        "unknown",
 		StatusRaw:     "o_auth",
 		ConnectorUUID: "",
+		ToolPrefix:    "int_linear",
 	}}, sessionMCPListTTL))
 
-	toolName := "mcp__int-linear__get_issue"
+	toolName := "mcp__int_linear__get_issue"
 	attrs := ti.service.buildCodexTelemetryAttributes(ctx, &gen.CodexPayload{
 		HookEventName: "PreToolUse",
 		SessionID:     &sessionID,
@@ -141,6 +142,7 @@ func TestCodexShadowMCPEvidence_ResolvesURLFromInventory(t *testing.T) {
 		Status:        "unknown",
 		StatusRaw:     "o_auth",
 		ConnectorUUID: "",
+		ToolPrefix:    "int_linear",
 	}, {
 		RawLine:       "",
 		Source:        "local",
@@ -152,19 +154,20 @@ func TestCodexShadowMCPEvidence_ResolvesURLFromInventory(t *testing.T) {
 		Status:        "unknown",
 		StatusRaw:     "",
 		ConnectorUUID: "",
+		ToolPrefix:    "local_tool",
 	}}, sessionMCPListTTL))
 
-	toolName := "mcp__int-linear__get_issue"
+	toolName := "mcp__int_linear__get_issue"
 	evidence, matched := ti.service.codexShadowMCPEvidence(ctx, &gen.CodexPayload{
 		HookEventName: "PreToolUse",
 		SessionID:     &sessionID,
 		ToolName:      &toolName,
 	})
-	require.Equal(t, "int-linear", evidence.ServerIdentity)
+	require.Equal(t, "int_linear", evidence.ServerIdentity)
 	require.Equal(t, "https://chat.example.com/mcp/int-linear", evidence.FullURL)
 	require.NotNil(t, matched)
 
-	stdioTool := "mcp__local-tool__run"
+	stdioTool := "mcp__local_tool__run"
 	evidence, matched = ti.service.codexShadowMCPEvidence(ctx, &gen.CodexPayload{
 		HookEventName: "PreToolUse",
 		SessionID:     &sessionID,
@@ -200,6 +203,7 @@ func TestCodexInventoryProvenanceDetail(t *testing.T) {
 		Status:        "unknown",
 		StatusRaw:     "",
 		ConnectorUUID: "",
+		ToolPrefix:    "",
 	}
 	detail := ti.service.codexInventoryProvenanceDetail(ctx, external, "evil", "org-id")
 	require.Contains(t, detail, "not Gram-hosted")
@@ -216,6 +220,7 @@ func TestCodexInventoryProvenanceDetail(t *testing.T) {
 		Status:        "unknown",
 		StatusRaw:     "",
 		ConnectorUUID: "",
+		ToolPrefix:    "local_tool",
 	}
 	detail = ti.service.codexInventoryProvenanceDetail(ctx, stdio, "local-tool", "org-id")
 	require.Contains(t, detail, "local stdio server")
@@ -231,6 +236,7 @@ func TestCodexInventoryProvenanceDetail(t *testing.T) {
 		Status:        "unknown",
 		StatusRaw:     "",
 		ConnectorUUID: "",
+		ToolPrefix:    "",
 	}
 	require.Empty(t, ti.service.codexInventoryProvenanceDetail(ctx, gramHosted, "gram", "org-id"))
 

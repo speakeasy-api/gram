@@ -66,6 +66,7 @@ func TestParseCodexMCPList(t *testing.T) {
 	require.Equal(t, "local", got[0].Source)
 	require.Equal(t, "unknown", got[0].Status)
 	require.Equal(t, "o_auth", got[0].StatusRaw)
+	require.Equal(t, "int_linear", got[0].ToolPrefix, "ToolPrefix must use Codex's sanitizer: non-[A-Za-z0-9_] becomes underscore")
 
 	require.Equal(t, "node_repl", got[1].Name)
 	require.Empty(t, got[1].URL)
@@ -80,9 +81,12 @@ func TestParseCodexMCPList_EntryMatchesCodexToolNamePrefix(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(codexMCPListJSON), &raw))
 	entries := ParseCodexMCPList(raw)
 
-	// Codex emits tool names as mcp__<config name>__<tool>; the cached entry
-	// must round-trip through matchCachedMCPEntry on that prefix.
-	matched := matchCachedMCPEntry(entries, "int-linear")
+	// Codex emits tool names as mcp__<sanitized config name>__<tool>, where
+	// every character outside [A-Za-z0-9_] becomes "_" (codex-rs
+	// sanitize_responses_api_tool_name) — "int-linear" arrives as
+	// "int_linear". The cached entry must round-trip through
+	// matchCachedMCPEntry on that sanitized prefix.
+	matched := matchCachedMCPEntry(entries, "int_linear")
 	require.NotNil(t, matched)
 	require.Equal(t, "https://chat.example.com/mcp/int-linear", matched.URL)
 }

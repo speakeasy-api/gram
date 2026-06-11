@@ -49,6 +49,7 @@ func ParseCoworkMCPInventory(raw any) []MCPServerEntry {
 			Status:        "unknown",
 			StatusRaw:     "",
 			ConnectorUUID: uuid,
+			ToolPrefix:    "",
 		})
 	}
 	return entries

@@ -93,9 +93,14 @@ func sanitizeMCPName(name string) string {
 // matchCachedMCPEntry returns the cached entry whose derived server prefix
 // equals serverPrefix, or nil if none match. For Cowork-shipped entries the
 // prefix Claude derives is the connector UUID rather than a sanitized name,
-// so we also accept a ConnectorUUID match on the cached entry.
+// so we also accept a ConnectorUUID match on the cached entry. Codex entries
+// carry a pre-computed ToolPrefix because Codex's sanitizer differs from
+// Claude's (every non-alphanumeric/underscore character becomes "_").
 func matchCachedMCPEntry(entries []MCPServerEntry, serverPrefix string) *MCPServerEntry {
 	for i := range entries {
+		if entries[i].ToolPrefix != "" && entries[i].ToolPrefix == serverPrefix {
+			return &entries[i]
+		}
 		if entries[i].ConnectorUUID != "" && entries[i].ConnectorUUID == serverPrefix {
 			return &entries[i]
 		}

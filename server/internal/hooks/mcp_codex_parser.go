@@ -16,9 +16,10 @@ import (
 // Disabled servers are skipped — they cannot produce tool calls, and the
 // cached snapshot represents the active configuration.
 //
-// Codex derives `mcp__<server>__<tool>` prefixes from the config name
-// verbatim, which matchCachedMCPEntry reproduces via the "local" source
-// branch of mcpServerPrefix.
+// Codex derives `mcp__<server>__<tool>` prefixes from the config name via
+// its own sanitizer, which differs from Claude's — every character outside
+// [A-Za-z0-9_] becomes "_" (so "int-linear" appears as "int_linear"). Each
+// entry carries that pre-computed prefix in ToolPrefix for matching.
 func ParseCodexMCPList(raw any) []MCPServerEntry {
 	items, ok := raw.([]any)
 	if !ok {
@@ -77,7 +78,30 @@ func ParseCodexMCPList(raw any) []MCPServerEntry {
 			Status:        "unknown",
 			StatusRaw:     authStatus,
 			ConnectorUUID: "",
+			ToolPrefix:    codexSanitizeToolName(name),
 		})
 	}
 	return entries
+}
+
+// codexSanitizeToolName mirrors codex-rs sanitize_responses_api_tool_name
+// (codex-rs/codex-mcp/src/mcp/mod.rs): every character outside [A-Za-z0-9_]
+// becomes "_", and empty input becomes "_". Codex additionally appends a
+// hash suffix when two sanitized namespaces collide — such entries simply
+// fail to match here, which downstream consumers treat as no inventory
+// objection.
+func codexSanitizeToolName(name string) string {
+	var b strings.Builder
+	b.Grow(len(name))
+	for _, r := range name {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('_')
+		}
+	}
+	if b.Len() == 0 {
+		return "_"
+	}
+	return b.String()
 }
