@@ -2291,9 +2291,6 @@ type SetAssistantRuntimeActiveParams struct {
 	ProjectID   uuid.UUID
 }
 
-// Guarded against finalized rows: the reaper can soft-delete a runtime row
-// between a turn loading it and reaching this write, and re-stamping state
-// on a tombstone would make it look live again.
 func (q *Queries) SetAssistantRuntimeActive(ctx context.Context, arg SetAssistantRuntimeActiveParams) error {
 	_, err := q.db.Exec(ctx, setAssistantRuntimeActive,
 		arg.ActiveState,

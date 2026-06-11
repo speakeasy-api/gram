@@ -703,9 +703,6 @@ WHERE id = @event_id
   AND project_id = @project_id;
 
 -- name: SetAssistantRuntimeActive :exec
--- Guarded against finalized rows: the reaper can soft-delete a runtime row
--- between a turn loading it and reaching this write, and re-stamping state
--- on a tombstone would make it look live again.
 UPDATE assistant_runtimes
 SET
   state = @active_state,
