@@ -272,10 +272,25 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 	}
 
 	disabled := ra.NewDisabledRuleSet(policy.DisabledRules)
+
+	// Suppress findings matched by an exclusion (the policy's own plus any
+	// global ones) so a false positive never blocks in real time.
+	exclusionRows, err := s.repo.ListEnabledExclusionsForPolicy(ctx, repo.ListEnabledExclusionsForPolicyParams{
+		ProjectID:    policy.ProjectID,
+		RiskPolicyID: uuid.NullUUID{UUID: policy.ID, Valid: true},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list exclusions: %w", err)
+	}
+	exclusions := ra.NewExclusionSet(exclusionRows)
+	filter := func(findings []ra.Finding) []ra.Finding {
+		return exclusions.FilterFindings(disabled.FilterFindings(findings))
+	}
+
 	for _, source := range policy.Sources {
 		switch source {
 		case "gitleaks":
-			findings := disabled.FilterFindings(s.scanGitleaks(text))
+			findings := filter(s.scanGitleaks(text))
 			if len(findings) > 0 {
 				return &ScanResult{
 					Action:      policy.Action,
@@ -297,7 +312,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 				return nil, fmt.Errorf("presidio scan: %w", err)
 			}
 			if len(batchResults) > 0 {
-				filtered := disabled.FilterFindings(batchResults[0])
+				filtered := filter(batchResults[0])
 				if len(filtered) > 0 {
 					f := filtered[0]
 					return &ScanResult{
@@ -317,7 +332,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 			if err != nil {
 				return nil, fmt.Errorf("prompt injection scan: %w", err)
 			}
-			findings = disabled.FilterFindings(findings)
+			findings = filter(findings)
 			if len(findings) > 0 {
 				return &ScanResult{
 					Action:      policy.Action,
@@ -337,7 +352,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 		if err != nil {
 			return nil, err
 		}
-		findings = disabled.FilterFindings(findings)
+		findings = filter(findings)
 		if len(findings) > 0 {
 			return &ScanResult{
 				Action:      policy.Action,

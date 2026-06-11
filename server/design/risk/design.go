@@ -841,6 +841,150 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskDeleteCustomDetectionRule", "type": "mutation"}`)
 	})
 
+	Method("listRiskExclusions", func() {
+		Description("List risk exclusions for the current project. Optionally filter to a single policy.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("risk_policy_id", String, "Filter to exclusions bound to this policy. Omit to return all exclusions (global plus every policy).", func() {
+				Format(FormatUUID)
+			})
+		})
+
+		Result(ListRiskExclusionsResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.listExclusions")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("risk_policy_id")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listRiskExclusions")
+		Meta("openapi:extension:x-speakeasy-group", "risk.exclusions")
+		Meta("openapi:extension:x-speakeasy-name-override", "list")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListExclusions", "type": "query"}`)
+	})
+
+	Method("createRiskExclusion", func() {
+		Description("Create a risk exclusion. Omit risk_policy_id to create a global exclusion that applies to every policy in the project.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("risk_policy_id", String, "Bind the exclusion to a single policy. Omit for a global (project-wide) exclusion.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("match_type", String, "How match_value is interpreted.", func() {
+				shared.RiskExclusionMatchTypeEnum()
+			})
+			Attribute("match_value", String, "The value matched against findings, interpreted per match_type.")
+			Attribute("rule_id_filter", String, "Optional: only apply within this rule_id. Empty means any.", func() {
+				Default("")
+			})
+			Attribute("source_filter", String, "Optional: only apply within this source. Empty means any.", func() {
+				Default("")
+			})
+			Attribute("enabled", Boolean, "Whether the exclusion is active.", func() {
+				Default(true)
+			})
+			Required("match_type", "match_value")
+		})
+
+		Result(shared.RiskExclusion)
+
+		HTTP(func() {
+			POST("/rpc/risk.createExclusions")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createRiskExclusion")
+		Meta("openapi:extension:x-speakeasy-group", "risk.exclusions")
+		Meta("openapi:extension:x-speakeasy-name-override", "create")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCreateExclusion", "type": "mutation"}`)
+	})
+
+	Method("updateRiskExclusion", func() {
+		Description("Update a risk exclusion.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The exclusion ID.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("risk_policy_id", String, "Bind the exclusion to a single policy. Omit for a global (project-wide) exclusion.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("match_type", String, "How match_value is interpreted.", func() {
+				shared.RiskExclusionMatchTypeEnum()
+			})
+			Attribute("match_value", String, "The value matched against findings, interpreted per match_type.")
+			Attribute("rule_id_filter", String, "Optional: only apply within this rule_id. Empty means any.", func() {
+				Default("")
+			})
+			Attribute("source_filter", String, "Optional: only apply within this source. Empty means any.", func() {
+				Default("")
+			})
+			// No default: an omitted `enabled` must leave the exclusion's
+			// current state untouched rather than silently re-enabling it.
+			Attribute("enabled", Boolean, "Whether the exclusion is active. Omit to leave unchanged.")
+			Required("id", "match_type", "match_value")
+		})
+
+		Result(shared.RiskExclusion)
+
+		HTTP(func() {
+			PUT("/rpc/risk.updateExclusions")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateRiskExclusion")
+		Meta("openapi:extension:x-speakeasy-group", "risk.exclusions")
+		Meta("openapi:extension:x-speakeasy-name-override", "update")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskUpdateExclusion", "type": "mutation"}`)
+	})
+
+	Method("deleteRiskExclusion", func() {
+		Description("Delete a risk exclusion. Previously suppressed findings are restored.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The exclusion ID.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+		})
+
+		HTTP(func() {
+			DELETE("/rpc/risk.deleteExclusions")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("id")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "deleteRiskExclusion")
+		Meta("openapi:extension:x-speakeasy-group", "risk.exclusions")
+		Meta("openapi:extension:x-speakeasy-name-override", "delete")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskDeleteExclusion", "type": "mutation"}`)
+	})
+
 	Method("suggestCustomDetectionRule", func() {
 		Description("Suggest a custom detection rule (rule_id, title, description, regex, severity) from a natural-language prompt. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create form.")
 
@@ -941,6 +1085,11 @@ var TestDetectionRuleResult = Type("TestDetectionRuleResult", func() {
 var ListRiskPoliciesResult = Type("ListRiskPoliciesResult", func() {
 	Attribute("policies", ArrayOf(shared.RiskPolicy), "The list of risk policies.")
 	Required("policies")
+})
+
+var ListRiskExclusionsResult = Type("ListRiskExclusionsResult", func() {
+	Attribute("exclusions", ArrayOf(shared.RiskExclusion), "The list of risk exclusions.")
+	Required("exclusions")
 })
 
 var ListCustomDetectionRulesResult = Type("ListCustomDetectionRulesResult", func() {

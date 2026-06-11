@@ -58,6 +58,13 @@ type RiskAnalysisSignaler interface {
 	Signal(ctx context.Context, projectID uuid.UUID) error
 }
 
+// RiskExclusionReconciler triggers the retroactive reconcile sweep for an
+// exclusion (flag/unflag matching findings in risk_results). Best-effort: a
+// failed trigger is logged, not fatal — the reconcile itself is idempotent.
+type RiskExclusionReconciler interface {
+	Reconcile(ctx context.Context, projectID, exclusionID uuid.UUID) error
+}
+
 type Service struct {
 	tracer           trace.Tracer
 	logger           *slog.Logger
@@ -66,6 +73,7 @@ type Service struct {
 	auth             *auth.Auth
 	authz            *authz.Engine
 	signaler         RiskAnalysisSignaler
+	reconciler       RiskExclusionReconciler
 	completionClient openrouter.CompletionClient
 	shadowMCPClient  *shadowmcp.Client
 	audit            *audit.Logger
@@ -103,6 +111,7 @@ func NewObserver(
 		auth:             nil,
 		authz:            nil,
 		signaler:         signaler,
+		reconciler:       nil,
 		completionClient: nil,
 		shadowMCPClient:  nil,
 		audit:            auditLogger,
@@ -121,6 +130,7 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	signaler RiskAnalysisSignaler,
+	reconciler RiskExclusionReconciler,
 	completionClient openrouter.CompletionClient,
 	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
@@ -140,6 +150,7 @@ func NewService(
 		auth:             auth.New(logger, db, sessions, authzEngine),
 		authz:            authzEngine,
 		signaler:         signaler,
+		reconciler:       reconciler,
 		completionClient: completionClient,
 		shadowMCPClient:  shadowMCPClient,
 		audit:            auditLogger,
