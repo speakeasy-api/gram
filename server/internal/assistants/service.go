@@ -1546,10 +1546,17 @@ func (s *ServiceCore) WarmAssistantRuntime(ctx context.Context, assistantID uuid
 		_ = s.stopRuntimeRecord(ctx, assistant.ProjectID, runtimeRecord.ID, runtimeStateFailed)
 		return WarmAssistantRuntimeResult{Booted: false, ProjectID: uuid.Nil, WarmTTLSeconds: 0}, nil
 	}
+	// Activation failures after a successful Ensure must stop the machine
+	// before erroring: the error path leaves no expiry driver, and a running
+	// VM behind a `starting` row would only be soft-deleted by the reaper.
+	// The Temporal retry resumes the row and re-runs Ensure, which restarts
+	// the stopped machine cheaply.
 	if err := s.updateRuntimeEnsureResult(ctx, &runtimeRecord, ensureResult); err != nil {
+		s.stopWarmupMachine(ctx, runtimeRecord)
 		return WarmAssistantRuntimeResult{Booted: false, ProjectID: uuid.Nil, WarmTTLSeconds: 0}, err
 	}
 	if err := s.setRuntimeActive(ctx, assistant.ProjectID, runtimeRecord.ID, time.Now().UTC().Add(time.Duration(assistant.WarmTTLSeconds)*time.Second)); err != nil {
+		s.stopWarmupMachine(ctx, runtimeRecord)
 		return WarmAssistantRuntimeResult{Booted: false, ProjectID: uuid.Nil, WarmTTLSeconds: 0}, err
 	}
 	return WarmAssistantRuntimeResult{
@@ -1557,6 +1564,20 @@ func (s *ServiceCore) WarmAssistantRuntime(ctx context.Context, assistantID uuid
 		ProjectID:      assistant.ProjectID,
 		WarmTTLSeconds: assistant.WarmTTLSeconds,
 	}, nil
+}
+
+// stopWarmupMachine best-effort stops a machine warmup booted but could not
+// activate, and marks the row failed. Both writes may themselves fail (the
+// activation failure is usually a DB outage) — that's fine, the retried
+// activity resumes the starting row and converges.
+func (s *ServiceCore) stopWarmupMachine(ctx context.Context, record assistantRuntimeRecord) {
+	if err := s.runtime.Stop(ctx, record); err != nil {
+		s.logger.WarnContext(ctx, "stop assistant runtime after failed warmup activation",
+			attr.SlogAssistantRuntimeID(record.ID.String()),
+			attr.SlogError(err),
+		)
+	}
+	_ = s.stopRuntimeRecord(ctx, record.ProjectID, record.ID, runtimeStateFailed)
 }
 
 // reserveRuntimeForWarmup inserts the v2 runtime row warmup will drive,
