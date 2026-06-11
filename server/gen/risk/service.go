@@ -57,16 +57,6 @@ type Service interface {
 	// Get the analysis status of a risk policy including progress and workflow
 	// state.
 	GetRiskPolicyStatus(context.Context, *GetRiskPolicyStatusPayload) (res *types.RiskPolicyStatus, err error)
-	// List shadow-MCP approvals (URL- or command-keyed) for a policy. Temporary
-	// Redis-backed storage; will move to a dedicated table once the feature
-	// graduates.
-	ListShadowMCPApprovals(context.Context, *ListShadowMCPApprovalsPayload) (res *ListShadowMCPApprovalsResult, err error)
-	// Approve a shadow-MCP server so the named policy stops blocking calls to it.
-	// `match` is the same opaque server identifier surfaced in `RiskResult.match`
-	// — typically a server URL, stdio command, or `mcp__<server>__` prefix.
-	ApproveShadowMCP(context.Context, *ApproveShadowMCPPayload) (res *types.ShadowMCPApproval, err error)
-	// Remove a previously-approved shadow-MCP server for a policy.
-	RevokeShadowMCPApproval(context.Context, *RevokeShadowMCPApprovalPayload) (err error)
 	// Create or refresh a risk policy bypass request from a signed request URL
 	// token.
 	CreateRiskPolicyBypassRequest(context.Context, *CreateRiskPolicyBypassRequestPayload) (res *RiskPolicyBypassRequest, err error)
@@ -92,6 +82,16 @@ type Service interface {
 	UpdateCustomDetectionRule(context.Context, *UpdateCustomDetectionRulePayload) (res *types.RiskCustomDetectionRule, err error)
 	// Delete a custom detection rule.
 	DeleteCustomDetectionRule(context.Context, *DeleteCustomDetectionRulePayload) (err error)
+	// List risk exclusions for the current project. Optionally filter to a single
+	// policy.
+	ListRiskExclusions(context.Context, *ListRiskExclusionsPayload) (res *ListRiskExclusionsResult, err error)
+	// Create a risk exclusion. Omit risk_policy_id to create a global exclusion
+	// that applies to every policy in the project.
+	CreateRiskExclusion(context.Context, *CreateRiskExclusionPayload) (res *types.RiskExclusion, err error)
+	// Update a risk exclusion.
+	UpdateRiskExclusion(context.Context, *UpdateRiskExclusionPayload) (res *types.RiskExclusion, err error)
+	// Delete a risk exclusion. Previously suppressed findings are restored.
+	DeleteRiskExclusion(context.Context, *DeleteRiskExclusionPayload) (err error)
 	// Suggest a custom detection rule (rule_id, title, description, regex,
 	// severity) from a natural-language prompt. Calls the configured LLM with a
 	// JSON-schema constrained response so the dashboard can prefill the create
@@ -124,7 +124,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [30]string{"createRiskPolicy", "listRiskPolicies", "getRiskCapabilities", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "listShadowMCPApprovals", "approveShadowMCP", "revokeShadowMCPApproval", "createRiskPolicyBypassRequest", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "suggestCustomDetectionRule", "testDetectionRule"}
+var MethodNames = [31]string{"createRiskPolicy", "listRiskPolicies", "getRiskCapabilities", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "testDetectionRule"}
 
 // ApproveRiskPolicyBypassRequestPayload is the payload type of the risk
 // service approveRiskPolicyBypassRequest method.
@@ -134,20 +134,9 @@ type ApproveRiskPolicyBypassRequestPayload struct {
 	ProjectSlugInput *string
 	// The bypass request ID.
 	ID string
-}
-
-// ApproveShadowMCPPayload is the payload type of the risk service
-// approveShadowMCP method.
-type ApproveShadowMCPPayload struct {
-	ApikeyToken      *string
-	SessionToken     *string
-	ProjectSlugInput *string
-	// The risk policy ID.
-	PolicyID string
-	// The MCP server identifier to approve.
-	Match string
-	// Display name of the MCP server (optional, for UI).
-	ServerName *string
+	// Principal URNs to grant bypass access to. Defaults to the requester when
+	// omitted.
+	GrantedPrincipalUrns []string
 }
 
 // CreateCustomDetectionRulePayload is the payload type of the risk service
@@ -168,6 +157,27 @@ type CreateCustomDetectionRulePayload struct {
 	Severity string
 }
 
+// CreateRiskExclusionPayload is the payload type of the risk service
+// createRiskExclusion method.
+type CreateRiskExclusionPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Bind the exclusion to a single policy. Omit for a global (project-wide)
+	// exclusion.
+	RiskPolicyID *string
+	// How match_value is interpreted.
+	MatchType string
+	// The value matched against findings, interpreted per match_type.
+	MatchValue string
+	// Optional: only apply within this rule_id. Empty means any.
+	RuleIDFilter string
+	// Optional: only apply within this source. Empty means any.
+	SourceFilter string
+	// Whether the exclusion is active.
+	Enabled bool
+}
+
 // CreateRiskPolicyBypassRequestPayload is the payload type of the risk service
 // createRiskPolicyBypassRequest method.
 type CreateRiskPolicyBypassRequestPayload struct {
@@ -184,6 +194,9 @@ type CreateRiskPolicyPayload struct {
 	ProjectSlugInput *string
 	// The policy name. If omitted, a name will be auto-generated.
 	Name *string
+	// Policy type: standard (regex/presidio/custom detection) or prompt_based
+	// (LLM-judge). Defaults to standard.
+	PolicyType string
 	// Detection sources to enable.
 	Sources []string
 	// Presidio entity types to detect.
@@ -208,6 +221,11 @@ type CreateRiskPolicyPayload struct {
 	// Optional message shown to end users when this policy blocks an action or
 	// surfaces a flagged finding.
 	UserMessage *string
+	// For prompt_based policies: the guardrail prompt the LLM judge evaluates each
+	// in-scope message against. Required when policy_type is prompt_based.
+	Prompt *string
+	// For prompt_based policies: per-policy LLM-judge model configuration.
+	ModelConfig *types.RiskPolicyModelConfig
 }
 
 // DeleteCustomDetectionRulePayload is the payload type of the risk service
@@ -217,6 +235,16 @@ type DeleteCustomDetectionRulePayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
 	// The custom detection rule ID.
+	ID string
+}
+
+// DeleteRiskExclusionPayload is the payload type of the risk service
+// deleteRiskExclusion method.
+type DeleteRiskExclusionPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The exclusion ID.
 	ID string
 }
 
@@ -342,6 +370,24 @@ type ListRiskCategoriesPayload struct {
 	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
+}
+
+// ListRiskExclusionsPayload is the payload type of the risk service
+// listRiskExclusions method.
+type ListRiskExclusionsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Filter to exclusions bound to this policy. Omit to return all exclusions
+	// (global plus every policy).
+	RiskPolicyID *string
+}
+
+// ListRiskExclusionsResult is the result type of the risk service
+// listRiskExclusions method.
+type ListRiskExclusionsResult struct {
+	// The list of risk exclusions.
+	Exclusions []*types.RiskExclusion
 }
 
 // ListRiskPoliciesPayload is the payload type of the risk service
@@ -485,23 +531,6 @@ type ListRiskResultsResult struct {
 	NextCursor *string
 }
 
-// ListShadowMCPApprovalsPayload is the payload type of the risk service
-// listShadowMCPApprovals method.
-type ListShadowMCPApprovalsPayload struct {
-	ApikeyToken      *string
-	SessionToken     *string
-	ProjectSlugInput *string
-	// The risk policy ID.
-	PolicyID string
-}
-
-// ListShadowMCPApprovalsResult is the result type of the risk service
-// listShadowMCPApprovals method.
-type ListShadowMCPApprovalsResult struct {
-	// The approved shadow-MCP servers for the policy (URL- or command-keyed).
-	Approvals []*types.ShadowMCPApproval
-}
-
 // RevokeRiskPolicyBypassRequestPayload is the payload type of the risk service
 // revokeRiskPolicyBypassRequest method.
 type RevokeRiskPolicyBypassRequestPayload struct {
@@ -510,18 +539,6 @@ type RevokeRiskPolicyBypassRequestPayload struct {
 	ProjectSlugInput *string
 	// The bypass request ID.
 	ID string
-}
-
-// RevokeShadowMCPApprovalPayload is the payload type of the risk service
-// revokeShadowMCPApproval method.
-type RevokeShadowMCPApprovalPayload struct {
-	ApikeyToken      *string
-	SessionToken     *string
-	ProjectSlugInput *string
-	// The risk policy ID.
-	PolicyID string
-	// The MCP server identifier to revoke — exactly the value used to approve.
-	Match string
 }
 
 // RiskCapabilitiesResult is the result type of the risk service
@@ -797,6 +814,29 @@ type UpdateCustomDetectionRulePayload struct {
 	Severity string
 }
 
+// UpdateRiskExclusionPayload is the payload type of the risk service
+// updateRiskExclusion method.
+type UpdateRiskExclusionPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The exclusion ID.
+	ID string
+	// Bind the exclusion to a single policy. Omit for a global (project-wide)
+	// exclusion.
+	RiskPolicyID *string
+	// How match_value is interpreted.
+	MatchType string
+	// The value matched against findings, interpreted per match_type.
+	MatchValue string
+	// Optional: only apply within this rule_id. Empty means any.
+	RuleIDFilter string
+	// Optional: only apply within this source. Empty means any.
+	SourceFilter string
+	// Whether the exclusion is active. Omit to leave unchanged.
+	Enabled *bool
+}
+
 // UpdateRiskPolicyPayload is the payload type of the risk service
 // updateRiskPolicy method.
 type UpdateRiskPolicyPayload struct {
@@ -832,6 +872,12 @@ type UpdateRiskPolicyPayload struct {
 	// Optional message shown to end users when this policy blocks an action or
 	// surfaces a flagged finding. Send an empty string to clear.
 	UserMessage *string
+	// For prompt_based policies: the guardrail prompt the LLM judge evaluates each
+	// in-scope message against. Omit to preserve the current value.
+	Prompt *string
+	// For prompt_based policies: per-policy LLM-judge model configuration. Omit to
+	// preserve the current value.
+	ModelConfig *types.RiskPolicyModelConfig
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

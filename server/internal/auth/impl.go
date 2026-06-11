@@ -360,7 +360,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	if err := s.sessions.StoreSession(ctx, session); err != nil {
 		return redirectWithError(authErrInit, err)
 	}
-	if inviteeEmail := strings.ToLower(strings.TrimSpace(userInfo.Email)); inviteeEmail != "" {
+	if inviteeEmail := conv.NormalizeEmail(userInfo.Email); inviteeEmail != "" {
 		if err := s.acceptPendingInvitationForMember(ctx, activeOrgID, inviteeEmail, userID, idpUser.Sub); err != nil {
 			s.logger.WarnContext(ctx, "failed to accept pending invite after login",
 				attr.SlogError(err),

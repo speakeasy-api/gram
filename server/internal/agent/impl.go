@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -82,7 +83,7 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	email := strings.TrimSpace(strings.ToLower(payload.Email))
+	email := conv.NormalizeEmail(payload.Email)
 	emailPrincipal, err := urn.ParsePrincipal(string(urn.PrincipalTypeEmail) + ":" + email)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid email")

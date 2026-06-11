@@ -22,6 +22,7 @@ import {
   DEFAULT_USER_SESSION_DURATION_HOURS,
 } from "@/lib/externalMcpUserSessions";
 import { proxyRegisterUpstreamClient } from "@/lib/proxyRegisterUpstreamClient";
+import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
 import type {
   McpServer,
   RemoteSessionIssuer,
@@ -88,6 +89,13 @@ export function AttachRemoteIdentityProviderSheet({
     initialIssuerUrl || !hasSelectable ? "new" : "select",
   );
   const [selectedIssuerId, setSelectedIssuerId] = useState<string>("");
+
+  // Optional display name. Auto-derived from the Issuer URL hostname (like Slug
+  // below) until the operator edits it, after which nameDirty locks it to their
+  // value. Empty submits as undefined so the backend stores NULL and consumers
+  // fall back to the issuer URL.
+  const [name, setName] = useState("");
+  const [nameDirty, setNameDirty] = useState(false);
 
   const [slug, setSlug] = useState("");
   // When the operator hasn't manually edited Slug, we keep it in lockstep
@@ -171,6 +179,7 @@ export function AttachRemoteIdentityProviderSheet({
           createRemoteSessionIssuerForm: {
             slug: slug.trim(),
             issuer: issuerUrl.trim(),
+            name: name.trim() || undefined,
             authorizationEndpoint: authorizationEndpoint.trim() || undefined,
             tokenEndpoint: tokenEndpoint.trim() || undefined,
             registrationEndpoint: registrationEndpoint.trim() || undefined,
@@ -334,6 +343,8 @@ export function AttachRemoteIdentityProviderSheet({
         buildUserSessionResourceSlug(mcpServer.slug ?? "mcp"),
     );
     setSlugDirty(false);
+    setName(deriveRemoteSessionIssuerNameFromUrl(initialIssuerUrl ?? "") ?? "");
+    setNameDirty(false);
     setIssuerUrl(initialIssuerUrl ?? "");
     resetEndpointState();
     clearDiscoverError();
@@ -447,6 +458,13 @@ export function AttachRemoteIdentityProviderSheet({
                     const derived = deriveSlugFromUrl(value);
                     if (derived) setSlug(derived);
                   }
+                  // Same auto-derive-until-edited behavior for the Display name,
+                  // seeded from the URL hostname.
+                  if (!nameDirty) {
+                    const derivedName =
+                      deriveRemoteSessionIssuerNameFromUrl(value);
+                    if (derivedName) setName(derivedName);
+                  }
                   // When the URL diverges from a settled discovery, every
                   // downstream field (endpoints, credentials, scope/audience,
                   // DCR-vs-manual decision) was tied to that prior URL and is
@@ -479,6 +497,25 @@ export function AttachRemoteIdentityProviderSheet({
                 <Type muted small>
                   Project-unique identifier for this identity provider.
                   Auto-derived from the Issuer URL until you edit it.
+                </Type>
+              </Stack>
+
+              <Stack gap={2}>
+                <Label className="text-muted-foreground text-xs">
+                  Display name (optional)
+                </Label>
+                <Input
+                  value={name}
+                  onChange={(value) => {
+                    setName(value);
+                    setNameDirty(true);
+                  }}
+                  placeholder="My Identity Provider"
+                />
+                <Type muted small>
+                  Friendly label shown in the dashboard. Auto-derived from the
+                  Issuer URL until you edit it; falls back to the Issuer URL
+                  when left blank.
                 </Type>
               </Stack>
 
@@ -609,7 +646,7 @@ function SelectExistingFields({
         <SelectContent>
           {selectableIssuers.map((issuer) => (
             <SelectItem key={issuer.id} value={issuer.id}>
-              {issuer.slug} — {issuer.issuer}
+              {issuer.name?.trim() || issuer.slug} — {issuer.issuer}
             </SelectItem>
           ))}
         </SelectContent>

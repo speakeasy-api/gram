@@ -61,7 +61,7 @@ func callSearchChannels(ctx context.Context, client *apiClient, env toolconfig.T
 	setOptionalInt(request, "limit", input.Limit)
 	setOptionalBool(request, "exclude_archived", input.ExcludeArchived)
 
-	body, err := client.call(ctx, "conversations.list", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "conversations.list", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

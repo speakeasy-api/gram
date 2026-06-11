@@ -1164,7 +1164,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 		ProjectID:      assistant.ProjectID,
 		OrganizationID: assistant.OrganizationID,
 		UserID:         conv.ToPGTextEmpty(dashboardChatUserID(sourceKind, normalizedPayloadJSON)),
-		Title:          conv.ToPGText(assistant.Name),
+		Title:          conv.ToPGText(chat.DefaultChatTitle),
 	}); err != nil {
 		return EnqueueResult{}, fmt.Errorf("upsert assistant chat: %w", err)
 	}
@@ -1933,11 +1933,11 @@ const assistantRuntimeTokenTTL = 60 * time.Minute
 // live in each adapter's OutputChannelGuidance.
 const mcpAuthAddendum = `## MCP authentication
 
-OAuth + MCP auth are owner-only: only owner can sign in and complete flow. AuthURL must never be visible to non-owner. Don't pre-emptively call tools or surface auth URLs for toolsets not yet needed — only call tools required for current task. Auth events appear only as consequence of a needed tool call.
+OAuth + MCP auth are owner-only: only owner can sign in and complete flow. Owner = the person who set this assistant up — NOT simply whoever triggered the current turn. When your instructions record the owner's identity (an "Owner" entry, e.g. a Slack handle + user ID), treat the requester as owner only if they match it. AuthURL must never be visible to non-owner. Don't pre-emptively call tools or surface auth URLs for toolsets not yet needed — only call tools required for current task. Auth events appear only as consequence of a needed tool call.
 
 Two MCP auth events may appear in thread, each as <message-context> block with EventType and field lines.
 
-- EventType "assistant_mcp_auth_required" carries AuthURL. Surface AuthURL to owner verbatim (don't shorten/summarize/rewrite). Reference MCP server by MCPSlug, not MCPServerID. Never expose AuthURL to non-owners or in any channel readable by non-owners; if the current surface can't reach the owner privately, don't surface the URL — tell the requester (without URL) that owner must complete auth, then stop. The per-surface output preferences below describe how to deliver the URL on this surface.
+- EventType "assistant_mcp_auth_required" carries AuthURL. Surface AuthURL to owner verbatim (don't shorten/summarize/rewrite). Reference MCP server by MCPSlug, not MCPServerID. Never expose AuthURL to non-owners or in any channel readable by non-owners. If no owner identity is recorded on this surface, deliver the URL privately to the requester but say explicitly that it should be completed by the assistant's owner, so an unexpected prompt isn't mistaken for a failure. If owner identity is recorded and the requester is not the owner, don't surface the URL to them — tell them (without URL) that only the owner can complete auth, naming the owner, and still deliver the AuthURL to the owner privately when this surface can reach them (per the output preferences below). If owner identity is recorded but no private route to the owner exists, stop without posting the URL. The per-surface output preferences below describe how to deliver the URL on this surface.
 
 - EventType "assistant_mcp_auth" reports result. Status "success" + still need server → call mcp_force_reconnect with server_id = MCPServerID, then continue task. Status "failed" → inform the user the auth attempt failed, include ErrorDescription if present.`
 

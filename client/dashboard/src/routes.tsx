@@ -3,7 +3,6 @@ import React, { useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import {
   RedirectToInsightsTools,
-  RedirectToLogAgents,
   RedirectToLogTools,
 } from "./components/observe/ObserveRedirects";
 import { ReleaseStage } from "./components/release-stage-badge";
@@ -75,9 +74,7 @@ import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
 import SDK from "./pages/sdk/SDK";
 import Access from "./pages/access/Access";
 import Settings from "./pages/settings/Settings";
-import SlackAppsIndex, { SlackAppsRoot } from "./pages/slackapp/SlackApp";
 import TriggersIndex, { TriggersRoot } from "./pages/triggers/Triggers";
-import SlackAppDetailPage from "./pages/slackapp/SlackAppDetail";
 import SecurityOverview, {
   RiskOverviewRoot,
 } from "./pages/security/SecurityOverview";
@@ -317,20 +314,6 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
-  slackApps: {
-    title: "Slack Apps",
-    url: "slack",
-    icon: "bot",
-    component: SlackAppsRoot,
-    indexComponent: SlackAppsIndex,
-    subPages: {
-      detail: {
-        title: "Slack App",
-        url: ":slackAppId",
-        component: SlackAppDetailPage,
-      },
-    },
-  },
   clis: {
     title: "Skills",
     url: "clis",
@@ -359,6 +342,24 @@ const ROUTE_STRUCTURE = {
         title: "MCP Server Details",
         url: "x/:mcpServerSlug",
         component: MCPServerDetails,
+        subPages: {
+          overview: {
+            title: "MCP Server Overview",
+            url: "overview",
+          },
+          authentication: {
+            title: "MCP Server Authentication",
+            url: "authentication",
+          },
+          teamAccess: {
+            title: "MCP Server Team Access",
+            url: "team-access",
+          },
+          settings: {
+            title: "MCP Server Settings",
+            url: "settings",
+          },
+        },
       },
       details: {
         title: "MCP Details",
@@ -449,23 +450,13 @@ const ROUTE_STRUCTURE = {
         url: "mcp",
         component: LogsMCPPage,
       },
-      riskEvents: {
-        title: "Risk Events",
-        url: "risk-events",
-        component: LogsRiskEventsPage,
-      },
-      agents: {
-        title: "Agent Sessions",
-        url: "agents",
-        component: ChatSessions,
-      },
     },
   },
-  chatSessions: {
-    // redirect to logs/agents. TODO: remove this in a month
+  agentSessions: {
     title: "Agent Sessions",
     url: "agent-sessions",
-    component: RedirectToLogAgents,
+    icon: "message-square",
+    component: ChatSessions,
   },
   riskOverview: {
     title: "Risk Overview",
@@ -518,6 +509,12 @@ const ROUTE_STRUCTURE = {
     url: "risk-policies",
     icon: "shield-check",
     component: PolicyCenter,
+  },
+  riskEvents: {
+    title: "Risk Events",
+    url: "risk-events",
+    icon: "flag",
+    component: LogsRiskEventsPage,
   },
   sdks: {
     title: "SDKs",

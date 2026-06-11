@@ -82,6 +82,8 @@ export function LogsTools(): JSX.Element {
     handleServerSelectionChange,
     userEmailOptions,
     handleUserEmailSelectionChange,
+    hookSourceOptions,
+    handleHookSourceSelectionChange,
     addFilter,
     handleHookTypesChange,
     dateRange,
@@ -221,6 +223,8 @@ export function LogsTools(): JSX.Element {
             onServerSelectionChange={handleServerSelectionChange}
             userEmailOptions={userEmailOptions}
             onUserEmailSelectionChange={handleUserEmailSelectionChange}
+            sourceOptions={hookSourceOptions}
+            onSourceSelectionChange={handleHookSourceSelectionChange}
             activeFilters={activeFilters}
             addFilter={addFilter}
             selectedHookTypes={selectedHookTypes}
@@ -261,6 +265,8 @@ function HooksInnerContent({
   onServerSelectionChange,
   userEmailOptions,
   onUserEmailSelectionChange,
+  sourceOptions,
+  onSourceSelectionChange,
   activeFilters,
   selectedHookTypes,
   onHookTypesChange,
@@ -294,6 +300,8 @@ function HooksInnerContent({
   onServerSelectionChange: (values: string[]) => void;
   userEmailOptions: string[];
   onUserEmailSelectionChange: (values: string[]) => void;
+  sourceOptions: string[];
+  onSourceSelectionChange: (values: string[]) => void;
   activeFilters: FilterChip[];
   addFilter: (chip: FilterChip) => void;
   selectedHookTypes: TypesToInclude[];
@@ -349,6 +357,8 @@ function HooksInnerContent({
             onServerSelectionChange={onServerSelectionChange}
             userEmailOptions={userEmailOptions}
             onUserEmailSelectionChange={onUserEmailSelectionChange}
+            sourceOptions={sourceOptions}
+            onSourceSelectionChange={onSourceSelectionChange}
             activeFilters={activeFilters}
             selectedTypes={selectedHookTypes}
             onTypesChange={onHookTypesChange}

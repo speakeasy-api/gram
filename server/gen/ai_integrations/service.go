@@ -54,10 +54,14 @@ type AIIntegrationConfig struct {
 	ID *string
 	// Organization the config belongs to.
 	OrganizationID string
-	// AI provider identifier. Initially only cursor is supported.
+	// AI provider identifier. Supported values include cursor and
+	// anthropic_compliance.
 	Provider string
 	// Project used as the telemetry write target. Omitted when no config is set.
 	ProjectID *string
+	// Provider organization identifier. Required for anthropic_compliance; omitted
+	// for providers that do not need one.
+	ExternalOrganizationID *string
 	// Whether the provider integration is active.
 	Enabled bool
 	// Whether an API key is currently stored. The key itself is never returned.
@@ -89,7 +93,8 @@ type AIIntegrationConfig struct {
 type DeleteConfigPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
-	// AI provider identifier. Initially only cursor is supported.
+	// AI provider identifier. Supported values include cursor and
+	// anthropic_compliance.
 	Provider string
 }
 
@@ -98,7 +103,8 @@ type DeleteConfigPayload struct {
 type GetConfigPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
-	// AI provider identifier. Initially only cursor is supported.
+	// AI provider identifier. Supported values include cursor and
+	// anthropic_compliance.
 	Provider string
 }
 
@@ -107,10 +113,13 @@ type GetConfigPayload struct {
 type UpsertConfigPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
-	// AI provider identifier. Initially only cursor is supported.
+	// AI provider identifier. Supported values include cursor and
+	// anthropic_compliance.
 	Provider string
 	// Provider API key. Stored encrypted at rest; never returned on reads.
 	APIKey string
+	// Provider organization identifier. Required for anthropic_compliance.
+	ExternalOrganizationID *string
 	// Whether the integration should be active.
 	Enabled bool
 }

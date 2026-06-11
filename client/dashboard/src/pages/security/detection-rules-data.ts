@@ -30,6 +30,7 @@ const CATEGORY_DEFAULT_SEVERITY: Record<RuleCategory, SeverityLevel> = {
   pii: "medium",
   government_ids: "medium",
   healthcare: "medium",
+  prompt_policy: "medium",
   prompt_injection: "medium",
   off_policy: "medium",
   shadow_mcp: "medium",
@@ -51,6 +52,8 @@ const CATEGORY_RULE_DESCRIPTION: Record<RuleCategory, string> = {
     "Pattern + checksum detector for government-issued identifiers, validated against the issuer's format and check-digit rules.",
   healthcare:
     "Pattern detector for healthcare identifiers and clinical references in free-form text.",
+  prompt_policy:
+    "Natural-language guardrail evaluated by the policy judge against agent activity.",
   prompt_injection:
     "Hybrid detector that combines classifier scoring with regex and keyword heuristics to flag attempts to override the agent's instructions.",
   off_policy:
@@ -81,6 +84,10 @@ const SYNTHETIC_CATEGORY_RULES: Partial<
   prompt_injection: {
     id: "prompt_injection.default",
     title: "Prompt Injection",
+  },
+  prompt_policy: {
+    id: "llm_judge",
+    title: "LLM Judge",
   },
   shadow_mcp: {
     id: "shadow_mcp.default",

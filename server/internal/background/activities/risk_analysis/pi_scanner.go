@@ -57,7 +57,7 @@ func (s *PromptInjectionScanner) classifierEnabled(ctx context.Context, orgID st
 	if s.flags == nil {
 		return false
 	}
-	on, err := s.flags.IsFlagEnabled(ctx, feature.FlagPromptInjectionUseClassifier, orgID)
+	on, err := s.flags.IsFlagEnabled(ctx, feature.FlagPromptInjectionUseClassifier, orgID, nil)
 	if err != nil {
 		s.logger.WarnContext(ctx, "prompt-injection classifier flag check failed; skipping L1",
 			attr.SlogError(err),

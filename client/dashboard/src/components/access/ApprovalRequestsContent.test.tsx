@@ -1,6 +1,6 @@
 import {
-  fireEvent,
   cleanup,
+  fireEvent,
   render,
   screen,
   waitFor,
@@ -10,16 +10,19 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AccessMember } from "@gram/client/models/components/accessmember.js";
+import type { Role } from "@gram/client/models/components/role.js";
+import type { RiskPolicyBypassRequest } from "@gram/client/models/components/riskpolicybypassrequest.js";
 
 const mocks = vi.hoisted(() => ({
   useRBAC: vi.fn(),
+  usePolicyBypassRequests: vi.fn(),
   useRoles: vi.fn(),
-  useApprovalRequests: vi.fn(),
-  useAccessRules: vi.fn(),
-  useRiskListPolicies: vi.fn(),
-  useSdkClient: vi.fn(),
+  useMembers: vi.fn(),
   mutation: vi.fn(),
   invalidate: vi.fn(),
+  useQueryState: vi.fn(),
+  setReviewParam: vi.fn(),
 }));
 
 vi.mock("@/hooks/useRBAC", () => ({
@@ -48,47 +51,33 @@ vi.mock("@/components/require-scope", () => ({
   },
 }));
 
-vi.mock("@/contexts/Sdk", () => ({
-  useSdkClient: mocks.useSdkClient,
+vi.mock("@gram/client/react-query/riskListPolicyBypassRequests.js", () => ({
+  invalidateAllRiskListPolicyBypassRequests: mocks.invalidate,
+  useRiskListPolicyBypassRequests: mocks.usePolicyBypassRequests,
+}));
+
+vi.mock("@gram/client/react-query/riskApprovePolicyBypassRequest.js", () => ({
+  useRiskApprovePolicyBypassRequestMutation: mocks.mutation,
+}));
+
+vi.mock("@gram/client/react-query/riskDenyPolicyBypassRequest.js", () => ({
+  useRiskDenyPolicyBypassRequestMutation: mocks.mutation,
+}));
+
+vi.mock("@gram/client/react-query/riskRevokePolicyBypassRequest.js", () => ({
+  useRiskRevokePolicyBypassRequestMutation: mocks.mutation,
 }));
 
 vi.mock("@gram/client/react-query/roles.js", () => ({
-  invalidateAllRoles: mocks.invalidate,
   useRoles: mocks.useRoles,
 }));
 
-vi.mock("@gram/client/react-query/shadowMCPApprovalRequests.js", () => ({
-  invalidateAllShadowMCPApprovalRequests: mocks.invalidate,
-  useShadowMCPApprovalRequests: mocks.useApprovalRequests,
+vi.mock("@gram/client/react-query/members.js", () => ({
+  useMembers: mocks.useMembers,
 }));
 
-vi.mock("@gram/client/react-query/shadowMCPAccessRules.js", () => ({
-  invalidateAllShadowMCPAccessRules: mocks.invalidate,
-  useShadowMCPAccessRules: mocks.useAccessRules,
-}));
-
-vi.mock("@gram/client/react-query/riskListPolicies.js", () => ({
-  useRiskListPolicies: mocks.useRiskListPolicies,
-}));
-
-vi.mock("@gram/client/react-query/approveShadowMCPApprovalRequest.js", () => ({
-  useApproveShadowMCPApprovalRequestMutation: mocks.mutation,
-}));
-
-vi.mock("@gram/client/react-query/denyShadowMCPApprovalRequest.js", () => ({
-  useDenyShadowMCPApprovalRequestMutation: mocks.mutation,
-}));
-
-vi.mock("@gram/client/react-query/createShadowMCPAccessRule.js", () => ({
-  useCreateShadowMCPAccessRuleMutation: mocks.mutation,
-}));
-
-vi.mock("@gram/client/react-query/updateShadowMCPAccessRule.js", () => ({
-  useUpdateShadowMCPAccessRuleMutation: mocks.mutation,
-}));
-
-vi.mock("@gram/client/react-query/deleteShadowMCPAccessRule.js", () => ({
-  useDeleteShadowMCPAccessRuleMutation: mocks.mutation,
+vi.mock("nuqs", () => ({
+  useQueryState: mocks.useQueryState,
 }));
 
 vi.mock("@speakeasy-api/moonshine", () => ({
@@ -116,38 +105,8 @@ vi.mock("@speakeasy-api/moonshine", () => ({
       LeftIcon: ({ children }: { children: ReactNode }) => (
         <span>{children}</span>
       ),
-      RightIcon: ({ children }: { children: ReactNode }) => (
-        <span>{children}</span>
-      ),
       Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
     },
-  ),
-  Icon: ({ name }: { name: string }) => <span aria-hidden>{name}</span>,
-  Tooltip: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  TooltipContent: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  ),
-  TooltipTrigger: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  ),
-  TooltipPortal: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  ),
-  DropdownMenu: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  ),
-  DropdownMenuContent: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  ),
-  DropdownMenuItem: ({
-    children,
-    onSelect,
-  }: {
-    children: ReactNode;
-    onSelect?: () => void;
-  }) => <button onClick={onSelect}>{children}</button>,
-  DropdownMenuTrigger: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
   ),
   Dialog: Object.assign(
     ({
@@ -162,7 +121,6 @@ vi.mock("@speakeasy-api/moonshine", () => ({
       Content: ({ children }: { children: ReactNode }) => <div>{children}</div>,
       Header: ({ children }: { children: ReactNode }) => <div>{children}</div>,
       Title: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
-      Description: ({ children }: { children: ReactNode }) => <p>{children}</p>,
       Footer: ({ children }: { children: ReactNode }) => <div>{children}</div>,
     },
   ),
@@ -170,16 +128,14 @@ vi.mock("@speakeasy-api/moonshine", () => ({
     columns,
     data,
     rowKey,
-    noResultsMessage,
   }: {
     columns: Array<{
       header: ReactNode;
       key: string;
-      render?: (row: Record<string, unknown>) => ReactNode;
+      render?: (row: RiskPolicyBypassRequest) => ReactNode;
     }>;
-    data: Array<Record<string, unknown>>;
-    rowKey: (row: Record<string, unknown>) => string;
-    noResultsMessage?: ReactNode;
+    data: RiskPolicyBypassRequest[];
+    rowKey: (row: RiskPolicyBypassRequest) => string;
   }) => (
     <table>
       <thead>
@@ -190,77 +146,16 @@ vi.mock("@speakeasy-api/moonshine", () => ({
         </tr>
       </thead>
       <tbody>
-        {data.length === 0 && noResultsMessage ? (
-          <tr>
-            <td colSpan={columns.length}>{noResultsMessage}</td>
+        {data.map((row) => (
+          <tr key={rowKey(row)}>
+            {columns.map((column) => (
+              <td key={column.key}>{column.render?.(row)}</td>
+            ))}
           </tr>
-        ) : (
-          data.map((row) => (
-            <tr key={rowKey(row)}>
-              {columns.map((column) => (
-                <td key={column.key}>{column.render?.(row)}</td>
-              ))}
-            </tr>
-          ))
-        )}
+        ))}
       </tbody>
     </table>
   ),
-}));
-
-vi.mock("@/components/ui/select", async () => {
-  const React = await vi.importActual<typeof import("react")>("react");
-  const SelectContext = React.createContext<
-    ((value: string) => void) | undefined
-  >(undefined);
-
-  return {
-    Select: ({
-      children,
-      onValueChange,
-    }: {
-      children: ReactNode;
-      onValueChange?: (value: string) => void;
-    }) => (
-      <SelectContext.Provider value={onValueChange}>
-        <div>{children}</div>
-      </SelectContext.Provider>
-    ),
-    SelectContent: ({ children }: { children: ReactNode }) => (
-      <div>{children}</div>
-    ),
-    SelectItem: ({
-      children,
-      value,
-    }: {
-      children: ReactNode;
-      value: string;
-    }) => {
-      const onValueChange = React.useContext(SelectContext);
-      return <button onClick={() => onValueChange?.(value)}>{children}</button>;
-    },
-    SelectTrigger: ({ children }: { children: ReactNode }) => (
-      <button>{children}</button>
-    ),
-    SelectValue: () => <span />,
-  };
-});
-
-vi.mock("@/components/ui/sheet", () => ({
-  Sheet: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  SheetContent: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  ),
-  SheetDescription: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  ),
-  SheetFooter: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  SheetHeader: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  SheetTitle: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-}));
-
-vi.mock("@/components/ui/checkbox", () => ({
-  Checkbox: () => <input type="checkbox" />,
 }));
 
 vi.mock("@/components/ui/radio-group", async () => {
@@ -300,33 +195,184 @@ vi.mock("@/components/ui/radio-group", async () => {
   };
 });
 
-vi.mock("@/components/moon/input", () => ({
-  Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => (
-    <input {...props} />
-  ),
-}));
+vi.mock("@/components/ui/select", async () => {
+  const React = await vi.importActual<typeof import("react")>("react");
+  const SelectContext = React.createContext<
+    | {
+        onValueChange?: (value: string) => void;
+      }
+    | undefined
+  >(undefined);
 
-vi.mock("@/components/moon/textarea", () => ({
-  Textarea: (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => (
-    <textarea {...props} />
+  return {
+    Select: ({
+      children,
+      onValueChange,
+    }: {
+      children: ReactNode;
+      value?: string;
+      onValueChange?: (value: string) => void;
+      disabled?: boolean;
+    }) => (
+      <SelectContext.Provider value={{ onValueChange }}>
+        <div>{children}</div>
+      </SelectContext.Provider>
+    ),
+    SelectContent: ({ children }: { children: ReactNode }) => (
+      <div>{children}</div>
+    ),
+    SelectItem: ({
+      children,
+      value,
+    }: {
+      children: ReactNode;
+      value: string;
+    }) => {
+      const context = React.useContext(SelectContext);
+      return (
+        <button type="button" onClick={() => context?.onValueChange?.(value)}>
+          {children}
+        </button>
+      );
+    },
+    SelectTrigger: ({ children }: { children: ReactNode }) => (
+      <div>{children}</div>
+    ),
+    SelectValue: ({ placeholder }: { placeholder?: string }) => (
+      <span>{placeholder}</span>
+    ),
+  };
+});
+
+vi.mock("@/components/ui/sheet", () => ({
+  Sheet: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  SheetContent: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
   ),
+  SheetDescription: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  ),
+  SheetFooter: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  SheetHeader: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  SheetTitle: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
 import { ApprovalRequestsContent } from "./ApprovalRequestsContent";
 
-function renderContent(projectId = "project-1") {
+function policyBypassRequest({
+  id,
+  label,
+  serverURL,
+  requesterEmail = "requester@example.com",
+  status = "requested",
+  grantedPrincipalUrns = [],
+}: {
+  id: string;
+  label: string;
+  serverURL: string;
+  requesterEmail?: string;
+  status?: RiskPolicyBypassRequest["status"];
+  grantedPrincipalUrns?: string[];
+}): RiskPolicyBypassRequest {
+  return {
+    id,
+    createdAt: new Date("2026-01-01"),
+    updatedAt: new Date("2026-01-02"),
+    grantedPrincipalUrns,
+    policyId: "policy-1",
+    requesterEmail,
+    requesterUserId: "user-1",
+    status,
+    targetDimensions: { server_url: serverURL },
+    targetKey: serverURL,
+    targetKind: "shadow_mcp_server",
+    targetLabel: label,
+  };
+}
+
+function accessMember({
+  id,
+  email,
+  name = email,
+  roleIds = [],
+}: {
+  id: string;
+  email: string;
+  name?: string;
+  roleIds?: string[];
+}): AccessMember {
+  return {
+    email,
+    id,
+    joinedAt: new Date("2026-01-01"),
+    name,
+    roleIds,
+  };
+}
+
+function accessRole({
+  id,
+  name,
+  isSystem = false,
+}: {
+  id: string;
+  name: string;
+  isSystem?: boolean;
+}): Role {
+  return {
+    createdAt: new Date("2026-01-01"),
+    description: "",
+    grants: [],
+    id,
+    isSystem,
+    memberCount: 0,
+    name,
+    slug: name.toLowerCase(),
+    updatedAt: new Date("2026-01-01"),
+  };
+}
+
+function mockPolicyBypassLists({
+  requested = [],
+  approved = [],
+}: {
+  requested?: RiskPolicyBypassRequest[];
+  approved?: RiskPolicyBypassRequest[];
+} = {}) {
+  mocks.usePolicyBypassRequests.mockImplementation(
+    ({ status }: { status?: RiskPolicyBypassRequest["status"] }) => ({
+      data: {
+        requests: status === "approved" ? approved : requested,
+      },
+      isLoading: false,
+      error: null,
+    }),
+  );
+}
+
+function mockAdminRBAC() {
+  mocks.useRBAC.mockReturnValue({
+    hasScope: (scope: string) => scope === "org:admin",
+    hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
+    hasAllScopes: () => true,
+    isLoading: false,
+  });
+}
+
+function renderContent(
+  projectSlug = "project-1",
+  path = "/speakeasy/projects/project-1/approval-requests",
+) {
   const queryClient = new QueryClient();
 
   return render(
-    <MemoryRouter
-      initialEntries={["/speakeasy/projects/project-1/approval-requests"]}
-    >
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route
           path="/:orgSlug/projects/:projectSlug/approval-requests"
           element={
             <QueryClientProvider client={queryClient}>
-              <ApprovalRequestsContent projectId={projectId} />
+              <ApprovalRequestsContent projectSlug={projectSlug} />
             </QueryClientProvider>
           }
         />
@@ -336,185 +382,66 @@ function renderContent(projectId = "project-1") {
 }
 
 beforeEach(() => {
-  mocks.useRBAC.mockReset();
-  mocks.useSdkClient.mockReturnValue({
-    access: {
-      listShadowMCPApprovalRequests: vi.fn().mockResolvedValue({
-        requests: [],
-      }),
-      listShadowMCPAccessRules: vi.fn().mockResolvedValue({
-        rules: [],
-      }),
-    },
-  });
-  mocks.useRoles.mockReturnValue({ data: { roles: [] } });
-  mocks.useApprovalRequests.mockReturnValue({
-    data: { requests: [] },
-    isLoading: false,
-    error: null,
-  });
-  mocks.useAccessRules.mockReturnValue({
-    data: { rules: [] },
-    isLoading: false,
-    error: null,
-  });
-  mocks.useRiskListPolicies.mockReturnValue({
-    data: {
-      policies: [
-        {
-          id: "policy-1",
-          enabled: true,
-          action: "block",
-          sources: ["shadow_mcp"],
-        },
-      ],
-    },
-    isLoading: false,
-    error: null,
-  });
+  for (const mock of Object.values(mocks)) {
+    mock.mockReset();
+  }
+
+  mockPolicyBypassLists();
   mocks.mutation.mockReturnValue({
     isPending: false,
     mutateAsync: vi.fn(),
   });
+  mocks.useQueryState.mockReturnValue([null, mocks.setReviewParam]);
+  mocks.useRoles.mockReturnValue({
+    data: {
+      roles: [
+        accessRole({ id: "role-admin", name: "Admin", isSystem: true }),
+        accessRole({ id: "role-reviewers", name: "Reviewers" }),
+      ],
+    },
+  });
+  mocks.useMembers.mockReturnValue({
+    data: {
+      members: [
+        accessMember({
+          id: "user-1",
+          email: "requester@example.com",
+          name: "Requester",
+          roleIds: ["role-reviewers"],
+        }),
+        accessMember({
+          id: "user-2",
+          email: "reviewer@example.com",
+          name: "Reviewer",
+        }),
+      ],
+    },
+  });
 });
 
 afterEach(() => {
-  vi.unstubAllGlobals();
   cleanup();
 });
 
 describe("ApprovalRequestsContent", () => {
-  it("renders first-run empty states for approval requests and access rules", async () => {
-    mocks.useRBAC.mockReturnValue({
-      hasScope: (scope: string) => scope === "org:admin",
-      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
-      hasAllScopes: () => true,
-      isLoading: false,
-    });
+  it("renders empty states for approval requests and approved access", async () => {
+    mockAdminRBAC();
 
     renderContent();
 
     await waitFor(() => {
       expect(screen.getByText("No approval requests")).toBeTruthy();
+      expect(screen.getByText("No access rules")).toBeTruthy();
     });
     expect(
       screen.getByText(
         "Requests will appear here when users ask for access after a policy block.",
       ),
     ).toBeTruthy();
-    expect(screen.getByText("No access rules")).toBeTruthy();
     expect(
-      screen.getByText(
-        "Create a rule manually or approve a request to allow or deny matching resources.",
-      ),
-    ).toBeTruthy();
-    expect(screen.getAllByRole("button", { name: "Add Rule" })).toHaveLength(1);
-    expect(screen.queryByText("Requested")).toBeNull();
-    expect(screen.queryByText("Approved")).toBeNull();
-    expect(screen.queryByText("All")).toBeNull();
-    expect(screen.queryByText("Approval History")).toBeNull();
-  });
-
-  it("shows a manage policies empty state when no blocking Shadow MCP policy is enabled", async () => {
-    mocks.useRBAC.mockReturnValue({
-      hasScope: (scope: string) => scope === "org:admin",
-      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
-      hasAllScopes: () => true,
-      isLoading: false,
-    });
-    mocks.useRiskListPolicies.mockReturnValue({
-      data: {
-        policies: [
-          {
-            id: "policy-1",
-            enabled: true,
-            action: "flag",
-            sources: ["shadow_mcp"],
-          },
-          {
-            id: "policy-2",
-            enabled: false,
-            action: "block",
-            sources: ["shadow_mcp"],
-          },
-        ],
-      },
-      isLoading: false,
-      error: null,
-    });
-
-    renderContent();
-
-    await waitFor(() => {
-      expect(screen.getByText("No access rules")).toBeTruthy();
-    });
-    expect(
-      screen.getByText(
-        "Create a blocking risk policy for Shadow MCP servers before adding access rules.",
-      ),
+      screen.getByText("Approved policy bypass requests will appear here."),
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Add Rule" })).toBeNull();
-    const managePoliciesLink = screen.getByRole("link", {
-      name: "Manage Policies",
-    });
-    expect(managePoliciesLink.getAttribute("href")).toBe(
-      "/speakeasy/projects/project-1/risk-policies",
-    );
-  });
-
-  it("shows the add rule empty state when a blocking Shadow MCP policy is enabled", async () => {
-    mocks.useRBAC.mockReturnValue({
-      hasScope: (scope: string) => scope === "org:admin",
-      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
-      hasAllScopes: () => true,
-      isLoading: false,
-    });
-
-    renderContent();
-
-    await waitFor(() => {
-      expect(screen.getByText("No access rules")).toBeTruthy();
-    });
-    expect(
-      screen.getByText(
-        "Create a rule manually or approve a request to allow or deny matching resources.",
-      ),
-    ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Add Rule" })).toHaveProperty(
-      "disabled",
-      false,
-    );
-    expect(screen.queryByRole("link", { name: "Manage Policies" })).toBeNull();
-  });
-
-  it("shows the add rule empty state when policies fail to load", async () => {
-    mocks.useRBAC.mockReturnValue({
-      hasScope: (scope: string) => scope === "org:admin",
-      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
-      hasAllScopes: () => true,
-      isLoading: false,
-    });
-    mocks.useRiskListPolicies.mockReturnValue({
-      data: undefined,
-      isLoading: false,
-      error: new Error("Policy load failed"),
-    });
-
-    renderContent();
-
-    await waitFor(() => {
-      expect(screen.getByText("No access rules")).toBeTruthy();
-    });
-    expect(
-      screen.getByText(
-        "Create a rule manually or approve a request to allow or deny matching resources.",
-      ),
-    ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Add Rule" })).toHaveProperty(
-      "disabled",
-      false,
-    );
-    expect(screen.queryByRole("link", { name: "Manage Policies" })).toBeNull();
   });
 
   it("does not load or render approval requests for non-admin org readers", () => {
@@ -527,97 +454,57 @@ describe("ApprovalRequestsContent", () => {
 
     renderContent();
 
-    expect(
-      mocks.useSdkClient().access.listShadowMCPApprovalRequests,
-    ).not.toHaveBeenCalled();
+    expect(mocks.usePolicyBypassRequests).toHaveBeenCalledWith(
+      { status: "requested", gramProject: "project-1" },
+      undefined,
+      expect.objectContaining({ enabled: false }),
+    );
+    expect(mocks.usePolicyBypassRequests).toHaveBeenCalledWith(
+      { status: "approved", gramProject: "project-1" },
+      undefined,
+      expect.objectContaining({ enabled: false }),
+    );
     expect(
       screen.queryByRole("heading", { name: "Approval Requests" }),
     ).toBeNull();
     expect(screen.getByRole("heading", { name: "Access Rules" })).toBeTruthy();
   });
 
-  it("does not load project-scoped data without a project id", () => {
-    const listShadowMCPApprovalRequests = vi.fn().mockResolvedValue({
-      requests: [],
-    });
-    const listShadowMCPAccessRules = vi.fn().mockResolvedValue({
-      rules: [],
-    });
-    mocks.useSdkClient.mockReturnValue({
-      access: {
-        listShadowMCPApprovalRequests,
-        listShadowMCPAccessRules,
-      },
-    });
-    mocks.useRBAC.mockReturnValue({
-      hasScope: (scope: string) => scope === "org:admin",
-      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
-      hasAllScopes: () => true,
-      isLoading: false,
-    });
+  it("does not load policy access data without a project id", () => {
+    mockAdminRBAC();
 
     renderContent("");
 
-    expect(listShadowMCPApprovalRequests).not.toHaveBeenCalled();
-    expect(listShadowMCPAccessRules).not.toHaveBeenCalled();
+    expect(mocks.usePolicyBypassRequests).toHaveBeenCalledWith(
+      { status: "requested", gramProject: "" },
+      undefined,
+      expect.objectContaining({ enabled: false }),
+    );
+    expect(mocks.usePolicyBypassRequests).toHaveBeenCalledWith(
+      { status: "approved", gramProject: "" },
+      undefined,
+      expect.objectContaining({ enabled: false }),
+    );
   });
 
-  it("loads additional approval request pages with the next cursor", async () => {
-    const listShadowMCPApprovalRequests = vi
-      .fn()
-      .mockImplementation(
-        ({ cursor, status }: { cursor?: string; status?: string }) => {
-          if (status !== "requested") {
-            return Promise.resolve({ requests: [] });
-          }
-
-          if (cursor === "next-requests") {
-            return Promise.resolve({
-              requests: [
-                {
-                  id: "request-2",
-                  observedName: "Second request",
-                  resourceType: "shadow_mcp",
-                  requesterEmail: "second@example.com",
-                  status: "requested",
-                  blockedCount: 1,
-                  lastBlockedAt: new Date("2026-01-02"),
-                },
-              ],
-            });
-          }
-
-          return Promise.resolve({
-            nextCursor: "next-requests",
-            requests: [
-              {
-                id: "request-1",
-                observedName: "First request",
-                resourceType: "shadow_mcp",
-                requesterEmail: "first@example.com",
-                status: "requested",
-                blockedCount: 1,
-                lastBlockedAt: new Date("2026-01-01"),
-              },
-            ],
-          });
-        },
-      );
-    const listShadowMCPAccessRules = vi.fn().mockResolvedValue({
-      rules: [],
+  it("renders requested policy bypass requests from the policy access workflow", async () => {
+    mockPolicyBypassLists({
+      requested: [
+        policyBypassRequest({
+          id: "request-1",
+          label: "First request",
+          serverURL: "https://first.example.com/mcp",
+          requesterEmail: "first@example.com",
+        }),
+        policyBypassRequest({
+          id: "request-2",
+          label: "Second request",
+          serverURL: "https://second.example.com/mcp",
+          requesterEmail: "second@example.com",
+        }),
+      ],
     });
-    mocks.useSdkClient.mockReturnValue({
-      access: {
-        listShadowMCPApprovalRequests,
-        listShadowMCPAccessRules,
-      },
-    });
-    mocks.useRBAC.mockReturnValue({
-      hasScope: (scope: string) => scope === "org:admin",
-      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
-      hasAllScopes: () => true,
-      isLoading: false,
-    });
+    mockAdminRBAC();
 
     renderContent();
 
@@ -628,77 +515,58 @@ describe("ApprovalRequestsContent", () => {
       .getByRole("heading", { name: "Approval Requests" })
       .closest("section");
     if (!requestsSection) throw new Error("Requests section not found");
+
     expect(
       within(requestsSection).getByRole("columnheader", { name: "Type" }),
     ).toBeTruthy();
-    expect(within(requestsSection).getByText("Shadow MCP")).toBeTruthy();
-    fireEvent.click(
-      within(requestsSection).getByRole("button", { name: "Load more" }),
+    expect(within(requestsSection).getAllByText("Shadow MCP")).toHaveLength(2);
+    expect(within(requestsSection).getByText("Second request")).toBeTruthy();
+    expect(mocks.usePolicyBypassRequests).toHaveBeenCalledWith(
+      { status: "requested", gramProject: "project-1" },
+      undefined,
+      expect.objectContaining({ enabled: true }),
     );
-    await waitFor(() => {
-      expect(screen.getAllByText("Second request").length).toBeGreaterThan(0);
-    });
-
-    await waitFor(() => {
-      expect(listShadowMCPApprovalRequests).toHaveBeenCalledWith({
-        limit: 100,
-        projectId: "project-1",
-        status: "requested",
-        cursor: "next-requests",
-      });
-    });
-    expect(
-      listShadowMCPApprovalRequests.mock.calls.map(
-        ([request]) => request.status,
-      ),
-    ).not.toContain("approved");
-    expect(
-      listShadowMCPApprovalRequests.mock.calls.map(
-        ([request]) => request.status,
-      ),
-    ).not.toContain("denied");
   });
 
-  it("allows denying without a deny rule after clearing the rule name", async () => {
-    const denyRequest = vi.fn().mockResolvedValue({});
-    const listShadowMCPApprovalRequests = vi
-      .fn()
-      .mockImplementation(({ status }: { status?: string }) => {
-        if (status !== "requested") {
-          return Promise.resolve({ requests: [] });
-        }
+  it("opens a requested policy bypass request from the review query param", async () => {
+    mockPolicyBypassLists({
+      requested: [
+        policyBypassRequest({
+          id: "request-linked",
+          label: "Linked request",
+          serverURL: "https://linked.example.com/mcp",
+        }),
+      ],
+    });
+    mocks.useQueryState.mockReturnValue([
+      "request-linked",
+      mocks.setReviewParam,
+    ]);
+    mockAdminRBAC();
 
-        return Promise.resolve({
-          requests: [
-            {
-              id: "request-deny",
-              observedName: "Denied without rule",
-              observedFullUrl: "https://blocked.example.com/mcp",
-              resourceType: "shadow_mcp",
-              requesterEmail: "requester@example.com",
-              projectId: "project-1",
-              status: "requested",
-              blockedCount: 1,
-              lastBlockedAt: new Date("2026-01-01"),
-            },
-          ],
-        });
-      });
-    const listShadowMCPAccessRules = vi.fn().mockResolvedValue({
-      rules: [],
+    renderContent(
+      "project-1",
+      "/speakeasy/projects/project-1/approval-requests?review=request-linked",
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Review request")).toBeTruthy();
     });
-    mocks.useSdkClient.mockReturnValue({
-      access: {
-        listShadowMCPApprovalRequests,
-        listShadowMCPAccessRules,
-      },
+    expect(screen.getAllByText("Linked request").length).toBeGreaterThan(0);
+  });
+
+  it("denies requests through the policy access workflow", async () => {
+    const denyRequest = vi.fn().mockResolvedValue({});
+    mockPolicyBypassLists({
+      requested: [
+        policyBypassRequest({
+          id: "request-deny",
+          label: "Denied request",
+          serverURL: "https://blocked.example.com/mcp",
+        }),
+      ],
     });
-    mocks.useRBAC.mockReturnValue({
-      hasScope: (scope: string) => scope === "org:admin",
-      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
-      hasAllScopes: () => true,
-      isLoading: false,
-    });
+    mockAdminRBAC();
     mocks.mutation.mockReturnValue({
       isPending: false,
       mutateAsync: denyRequest,
@@ -707,73 +575,34 @@ describe("ApprovalRequestsContent", () => {
     renderContent();
 
     await waitFor(() => {
-      expect(screen.getByText("Denied without rule")).toBeTruthy();
+      expect(screen.getByText("Denied request")).toBeTruthy();
     });
     fireEvent.click(screen.getByRole("button", { name: "Review" }));
-    expect(screen.queryByText("Project")).toBeNull();
     fireEvent.click(screen.getAllByRole("radio")[1]!);
-    fireEvent.change(screen.getAllByLabelText("Rule name")[0]!, {
-      target: { value: "" },
-    });
-
-    const submitButton = screen.getByRole("button", { name: "Deny request" });
-    expect(submitButton).toHaveProperty("disabled", false);
-    fireEvent.click(submitButton);
+    fireEvent.click(screen.getByRole("button", { name: "Deny request" }));
 
     await waitFor(() => {
       expect(denyRequest).toHaveBeenCalledWith({
         request: {
-          denyShadowMCPApprovalRequestForm: expect.objectContaining({
-            id: "request-deny",
-            createDenyRule: false,
-            projectIds: ["project-1"],
-            displayName: "",
-          }),
+          gramProject: "project-1",
+          riskIDRequestBody: { id: "request-deny" },
         },
       });
     });
   });
 
-  it("approves requests with the active project id", async () => {
+  it("approves requests through the policy access workflow", async () => {
     const approveRequest = vi.fn().mockResolvedValue({});
-    const listShadowMCPApprovalRequests = vi
-      .fn()
-      .mockImplementation(({ status }: { status?: string }) => {
-        if (status !== "requested") {
-          return Promise.resolve({ requests: [] });
-        }
-
-        return Promise.resolve({
-          requests: [
-            {
-              id: "request-approve",
-              observedName: "Approve project request",
-              observedFullUrl: "https://allowed.example.com/mcp",
-              resourceType: "shadow_mcp",
-              requesterEmail: "requester@example.com",
-              projectId: "project-1",
-              status: "requested",
-              blockedCount: 1,
-              lastBlockedAt: new Date("2026-01-01"),
-            },
-          ],
-        });
-      });
-    const listShadowMCPAccessRules = vi.fn().mockResolvedValue({
-      rules: [],
+    mockPolicyBypassLists({
+      requested: [
+        policyBypassRequest({
+          id: "request-approve",
+          label: "Approve request",
+          serverURL: "https://allowed.example.com/mcp",
+        }),
+      ],
     });
-    mocks.useSdkClient.mockReturnValue({
-      access: {
-        listShadowMCPApprovalRequests,
-        listShadowMCPAccessRules,
-      },
-    });
-    mocks.useRBAC.mockReturnValue({
-      hasScope: (scope: string) => scope === "org:admin",
-      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
-      hasAllScopes: () => true,
-      isLoading: false,
-    });
+    mockAdminRBAC();
     mocks.mutation.mockReturnValue({
       isPending: false,
       mutateAsync: approveRequest,
@@ -782,377 +611,265 @@ describe("ApprovalRequestsContent", () => {
     renderContent();
 
     await waitFor(() => {
-      expect(screen.getByText("Approve project request")).toBeTruthy();
+      expect(screen.getByText("Approve request")).toBeTruthy();
     });
     fireEvent.click(screen.getByRole("button", { name: "Review" }));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Approve and create rule" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Approve request" }));
 
     await waitFor(() => {
       expect(approveRequest).toHaveBeenCalledWith({
         request: {
-          approveShadowMCPApprovalRequestForm: expect.objectContaining({
+          gramProject: "project-1",
+          riskPolicyBypassApprovalRequestBody: {
             id: "request-approve",
-            accessScope: "project",
-            projectIds: ["project-1"],
-            matchBreadth: "full_url",
-            matchValue: "https://allowed.example.com/mcp",
-          }),
+            grantedPrincipalUrns: ["user:user-1"],
+          },
         },
       });
     });
   });
 
-  it("creates manual rules with the active project id", async () => {
-    const createRule = vi.fn().mockResolvedValue({});
-    const listShadowMCPApprovalRequests = vi.fn().mockResolvedValue({
-      requests: [],
-    });
-    const listShadowMCPAccessRules = vi.fn().mockResolvedValue({
-      rules: [
-        {
-          id: "rule-existing",
-          displayName: "Existing rule",
-          resourceType: "shadow_mcp",
-          disposition: "allowed",
-          accessScope: "project",
-          projectId: "project-1",
-          matchBreadth: "url_host",
-          matchValue: "existing.example.com",
-          updatedAt: new Date("2026-01-01"),
-        },
+  it("approves requests for every organization user", async () => {
+    const approveRequest = vi.fn().mockResolvedValue({});
+    mockPolicyBypassLists({
+      requested: [
+        policyBypassRequest({
+          id: "request-everyone",
+          label: "Everyone request",
+          serverURL: "https://everyone.example.com/mcp",
+        }),
       ],
     });
-    mocks.useSdkClient.mockReturnValue({
-      access: {
-        listShadowMCPApprovalRequests,
-        listShadowMCPAccessRules,
-      },
-    });
-    mocks.useRBAC.mockReturnValue({
-      hasScope: (scope: string) => scope === "org:admin",
-      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
-      hasAllScopes: () => true,
-      isLoading: false,
-    });
+    mockAdminRBAC();
     mocks.mutation.mockReturnValue({
       isPending: false,
-      mutateAsync: createRule,
+      mutateAsync: approveRequest,
     });
 
     renderContent();
 
     await waitFor(() => {
-      expect(screen.getByText("Existing rule")).toBeTruthy();
+      expect(screen.getByText("Everyone request")).toBeTruthy();
     });
-    fireEvent.click(screen.getByRole("button", { name: "Add Rule" }));
-    expect(screen.queryByText("Select project")).toBeNull();
-    fireEvent.change(screen.getByLabelText("Rule name"), {
-      target: { value: "New project rule" },
-    });
-    fireEvent.change(screen.getByLabelText("Match value"), {
-      target: { value: "https://new.example.com/mcp" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Add rule" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    fireEvent.click(screen.getAllByRole("radio")[2]!);
+    fireEvent.click(screen.getByRole("button", { name: "Approve request" }));
 
     await waitFor(() => {
-      expect(createRule).toHaveBeenCalledWith({
+      expect(approveRequest).toHaveBeenCalledWith({
         request: {
-          createShadowMCPAccessRuleForm: expect.objectContaining({
-            displayName: "New project rule",
-            accessScope: "project",
-            projectIds: ["project-1"],
-            matchBreadth: "full_url",
-            matchValue: "https://new.example.com/mcp",
-          }),
+          gramProject: "project-1",
+          riskPolicyBypassApprovalRequestBody: {
+            id: "request-everyone",
+            grantedPrincipalUrns: ["user:all"],
+          },
         },
       });
     });
   });
 
-  it("loads additional access rule pages with the next cursor", async () => {
-    const listShadowMCPApprovalRequests = vi.fn().mockResolvedValue({
-      requests: [],
-    });
-    const listShadowMCPAccessRules = vi
-      .fn()
-      .mockImplementation(({ cursor }: { cursor?: string }) => {
-        if (cursor === "next-rules") {
-          return Promise.resolve({
-            rules: [
-              {
-                id: "rule-2",
-                displayName: "Second rule",
-                resourceType: "shadow_mcp",
-                disposition: "allowed",
-                matchBreadth: "url_host",
-                matchValue: "second.example.com",
-                updatedAt: new Date("2026-01-02"),
-              },
-            ],
-          });
-        }
-
-        return Promise.resolve({
-          nextCursor: "next-rules",
-          rules: [
-            {
-              id: "rule-1",
-              displayName: "First rule",
-              resourceType: "shadow_mcp",
-              disposition: "allowed",
-              matchBreadth: "url_host",
-              matchValue: "first.example.com",
-              updatedAt: new Date("2026-01-01"),
-            },
-          ],
-        });
-      });
-    mocks.useSdkClient.mockReturnValue({
-      access: {
-        listShadowMCPApprovalRequests,
-        listShadowMCPAccessRules,
-      },
-    });
-    mocks.useRBAC.mockReturnValue({
-      hasScope: (scope: string) => scope === "org:admin",
-      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
-      hasAllScopes: () => true,
-      isLoading: false,
-    });
-
-    renderContent();
-
-    await waitFor(() => {
-      expect(screen.getAllByText("First rule").length).toBeGreaterThan(0);
-    });
-    expect(screen.getByRole("columnheader", { name: "Type" })).toBeTruthy();
-    expect(screen.getByText("Shadow MCP")).toBeTruthy();
-    const accessRuleHeadings = screen.getAllByRole("heading", {
-      name: "Access Rules",
-    });
-    const accessRulesSection =
-      accessRuleHeadings[accessRuleHeadings.length - 1]?.closest("section");
-    if (!accessRulesSection) throw new Error("Access Rules section not found");
-    fireEvent.click(
-      within(accessRulesSection).getByRole("button", { name: "Load more" }),
-    );
-    await waitFor(() => {
-      expect(screen.getAllByText("Second rule").length).toBeGreaterThan(0);
-    });
-
-    await waitFor(() => {
-      expect(listShadowMCPAccessRules).toHaveBeenCalledWith({
-        limit: 100,
-        accessScope: "project",
-        projectId: "project-1",
-        disposition: undefined,
-        cursor: "next-rules",
-      });
-    });
-  });
-
-  it("renders project-scoped blocked access rules", async () => {
-    const listShadowMCPApprovalRequests = vi.fn().mockResolvedValue({
-      requests: [],
-    });
-    const listShadowMCPAccessRules = vi
-      .fn()
-      .mockImplementation(
-        ({
-          accessScope,
-          projectId,
-        }: {
-          accessScope?: string;
-          projectId?: string;
-        }) => {
-          if (accessScope !== "project" || projectId !== "project-1") {
-            return Promise.resolve({ rules: [] });
-          }
-
-          return Promise.resolve({
-            rules: [
-              {
-                id: "rule-blocked-project",
-                displayName: "Blocked project rule",
-                resourceType: "shadow_mcp",
-                disposition: "denied",
-                accessScope: "project",
-                projectId: "project-1",
-                matchBreadth: "url_host",
-                matchValue: "blocked.example.com",
-                updatedAt: new Date("2026-01-01"),
-              },
-            ],
-          });
-        },
-      );
-    mocks.useSdkClient.mockReturnValue({
-      access: {
-        listShadowMCPApprovalRequests,
-        listShadowMCPAccessRules,
-      },
-    });
-    mocks.useRBAC.mockReturnValue({
-      hasScope: (scope: string) => scope === "org:admin",
-      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
-      hasAllScopes: () => true,
-      isLoading: false,
-    });
-
-    renderContent();
-
-    await waitFor(() => {
-      expect(screen.getByText("Blocked project rule")).toBeTruthy();
-    });
-    const blockedRuleRow = screen
-      .getByText("Blocked project rule")
-      .closest("tr");
-    if (!blockedRuleRow) throw new Error("Blocked rule row not found");
-    expect(within(blockedRuleRow).getByText("Denied")).toBeTruthy();
-    expect(within(blockedRuleRow).getByText("Project")).toBeTruthy();
-    expect(listShadowMCPAccessRules).toHaveBeenCalledWith({
-      limit: 100,
-      accessScope: "project",
-      projectId: "project-1",
-      disposition: undefined,
-      cursor: undefined,
-    });
-  });
-
-  it("confirms access rule deletion with a design system dialog", async () => {
-    const deleteRule = vi.fn().mockResolvedValue({});
-    const browserConfirm = vi.fn().mockReturnValue(true);
-    vi.stubGlobal("confirm", browserConfirm);
-    const listShadowMCPApprovalRequests = vi.fn().mockResolvedValue({
-      requests: [],
-    });
-    const listShadowMCPAccessRules = vi.fn().mockResolvedValue({
-      rules: [
-        {
-          id: "rule-delete",
-          displayName: "Delete me",
-          resourceType: "shadow_mcp",
-          disposition: "allowed",
-          accessScope: "project",
-          projectId: "project-1",
-          matchBreadth: "url_host",
-          matchValue: "delete.example.com",
-          updatedAt: new Date("2026-01-01"),
-        },
+  it("approves requests for a selected role", async () => {
+    const approveRequest = vi.fn().mockResolvedValue({});
+    mockPolicyBypassLists({
+      requested: [
+        policyBypassRequest({
+          id: "request-role",
+          label: "Role request",
+          serverURL: "https://role.example.com/mcp",
+        }),
       ],
     });
-    mocks.useSdkClient.mockReturnValue({
-      access: {
-        listShadowMCPApprovalRequests,
-        listShadowMCPAccessRules,
-      },
-    });
-    mocks.useRBAC.mockReturnValue({
-      hasScope: (scope: string) => scope === "org:admin",
-      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
-      hasAllScopes: () => true,
-      isLoading: false,
-    });
+    mockAdminRBAC();
     mocks.mutation.mockReturnValue({
       isPending: false,
-      mutateAsync: deleteRule,
+      mutateAsync: approveRequest,
     });
 
     renderContent();
 
     await waitFor(() => {
-      expect(screen.getByText("Delete me")).toBeTruthy();
+      expect(screen.getByText("Role request")).toBeTruthy();
     });
-    const deleteRuleRow = screen.getByText("Delete me").closest("tr");
-    if (!deleteRuleRow) throw new Error("Rule row not found");
-    fireEvent.click(
-      within(deleteRuleRow).getByRole("button", { name: "Delete" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    fireEvent.click(screen.getAllByRole("radio")[3]!);
+    expect(screen.getByText("Current")).toBeTruthy();
+    const reviewersOption = screen.getByText("Reviewers").closest("button");
+    if (!reviewersOption) throw new Error("Reviewers option not found");
+    fireEvent.click(reviewersOption);
+    fireEvent.click(screen.getByRole("button", { name: "Approve request" }));
+
+    await waitFor(() => {
+      expect(approveRequest).toHaveBeenCalledWith({
+        request: {
+          gramProject: "project-1",
+          riskPolicyBypassApprovalRequestBody: {
+            id: "request-role",
+            grantedPrincipalUrns: ["role:organization:role-reviewers"],
+          },
+        },
+      });
+    });
+  });
+
+  it("renders approved policy bypass requests as access rules", async () => {
+    mockPolicyBypassLists({
+      approved: [
+        policyBypassRequest({
+          id: "request-approved",
+          label: "Datadog MCP",
+          serverURL: "https://datadog.example.com/mcp",
+          status: "approved",
+          grantedPrincipalUrns: [
+            "user:all",
+            "role:organization:role-reviewers",
+          ],
+        }),
+      ],
+    });
+    mockAdminRBAC();
+
+    renderContent();
+
+    await waitFor(() => {
+      expect(screen.getByText("Datadog MCP")).toBeTruthy();
+    });
+    const accessRulesSection = screen
+      .getByRole("heading", { name: "Access Rules" })
+      .closest("section");
+    if (!accessRulesSection) throw new Error("Access Rules section not found");
+
+    expect(within(accessRulesSection).getByText("Approved")).toBeTruthy();
+    expect(
+      within(accessRulesSection).getByRole("columnheader", {
+        name: "Applies to",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(accessRulesSection).getByText("Everyone, Reviewers"),
+    ).toBeTruthy();
+    expect(within(accessRulesSection).getByText("Shadow MCP")).toBeTruthy();
+  });
+
+  it("edits the principals for approved policy bypass access", async () => {
+    const approveRequest = vi.fn().mockResolvedValue({});
+    mockPolicyBypassLists({
+      approved: [
+        policyBypassRequest({
+          id: "request-edit",
+          label: "Editable access",
+          serverURL: "https://edit.example.com/mcp",
+          status: "approved",
+          grantedPrincipalUrns: ["user:all"],
+        }),
+      ],
+    });
+    mockAdminRBAC();
+    mocks.mutation.mockReturnValue({
+      isPending: false,
+      mutateAsync: approveRequest,
+    });
+
+    renderContent();
+
+    await waitFor(() => {
+      expect(screen.getByText("Editable access")).toBeTruthy();
+    });
+    const row = screen.getByText("Editable access").closest("tr");
+    if (!row) throw new Error("Approved request row not found");
+    fireEvent.click(within(row).getByRole("button", { name: "Edit" }));
+
+    expect(screen.getByText("Edit access")).toBeTruthy();
+    fireEvent.click(screen.getAllByRole("radio")[1]!);
+    const reviewersOption = screen.getByText("Reviewers").closest("button");
+    if (!reviewersOption) throw new Error("Reviewers option not found");
+    fireEvent.click(reviewersOption);
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => {
+      expect(approveRequest).toHaveBeenCalledWith({
+        request: {
+          gramProject: "project-1",
+          riskPolicyBypassApprovalRequestBody: {
+            id: "request-edit",
+            grantedPrincipalUrns: ["role:organization:role-reviewers"],
+          },
+        },
+      });
+    });
+  });
+
+  it("revokes approved policy bypass access with a design system dialog", async () => {
+    const revokeRequest = vi.fn().mockResolvedValue({});
+    mockPolicyBypassLists({
+      approved: [
+        policyBypassRequest({
+          id: "request-revoke",
+          label: "Revoke me",
+          serverURL: "https://revoke.example.com/mcp",
+          status: "approved",
+        }),
+      ],
+    });
+    mockAdminRBAC();
+    mocks.mutation.mockReturnValue({
+      isPending: false,
+      mutateAsync: revokeRequest,
+    });
+
+    renderContent();
+
+    await waitFor(() => {
+      expect(screen.getByText("Revoke me")).toBeTruthy();
+    });
+    const row = screen.getByText("Revoke me").closest("tr");
+    if (!row) throw new Error("Approved request row not found");
+    fireEvent.click(within(row).getByRole("button", { name: "Revoke" }));
 
     await waitFor(() => {
       expect(screen.getByRole("dialog")).toBeTruthy();
     });
-    expect(
-      screen.getByRole("heading", { name: "Delete access rule" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Revoke access" })).toBeTruthy();
     const dialog = screen.getByRole("dialog");
-    const ruleName = within(dialog).getByText("Delete me");
-    expect(ruleName.tagName).toBe("CODE");
-    expect(ruleName.className).toContain("font-mono");
-    const header = screen.getByRole("heading", {
-      name: "Delete access rule",
-    }).parentElement;
-    expect(header?.contains(ruleName)).toBe(false);
-    expect(
-      within(dialog).getByText(/This action cannot be undone\./),
-    ).toBeTruthy();
-    expect(browserConfirm).not.toHaveBeenCalled();
-    expect(deleteRule).not.toHaveBeenCalled();
+    const requestName = within(dialog).getByText("Revoke me");
+    expect(requestName.tagName).toBe("CODE");
+    expect(requestName.className).toContain("font-mono");
+    expect(revokeRequest).not.toHaveBeenCalled();
 
-    fireEvent.click(
-      within(dialog).getByRole("button", {
-        name: "Delete",
-      }),
-    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Revoke" }));
 
     await waitFor(() => {
-      expect(deleteRule).toHaveBeenCalledWith({
-        request: { id: "rule-delete" },
+      expect(revokeRequest).toHaveBeenCalledWith({
+        request: {
+          gramProject: "project-1",
+          riskIDRequestBody: { id: "request-revoke" },
+        },
       });
     });
   });
 
-  it("resets pending rule deletion when the project changes", async () => {
-    const listShadowMCPApprovalRequests = vi.fn().mockResolvedValue({
-      requests: [],
-    });
-    const listShadowMCPAccessRules = vi
-      .fn()
-      .mockImplementation(({ projectId }: { projectId: string }) => {
-        const rule =
-          projectId === "project-1"
-            ? {
-                id: "rule-project-1",
-                displayName: "Project one rule",
-                resourceType: "shadow_mcp",
-                disposition: "allowed",
-                accessScope: "project",
-                projectId: "project-1",
-                matchBreadth: "url_host",
-                matchValue: "one.example.com",
-                updatedAt: new Date("2026-01-01"),
-              }
-            : {
-                id: "rule-project-2",
-                displayName: "Project two rule",
-                resourceType: "shadow_mcp",
-                disposition: "allowed",
-                accessScope: "project",
-                projectId: "project-2",
-                matchBreadth: "url_host",
-                matchValue: "two.example.com",
-                updatedAt: new Date("2026-01-01"),
-              };
-
-        return Promise.resolve({ rules: [rule] });
-      });
-    mocks.useSdkClient.mockReturnValue({
-      access: {
-        listShadowMCPApprovalRequests,
-        listShadowMCPAccessRules,
-      },
-    });
-    mocks.useRBAC.mockReturnValue({
-      hasScope: (scope: string) => scope === "org:admin",
-      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
-      hasAllScopes: () => true,
-      isLoading: false,
-    });
-
+  it("resets pending access revocation when the project changes", async () => {
+    mockAdminRBAC();
+    mocks.usePolicyBypassRequests.mockImplementation(
+      ({ status }: { status?: RiskPolicyBypassRequest["status"] }) => ({
+        data: {
+          requests:
+            status === "approved"
+              ? [
+                  policyBypassRequest({
+                    id: "request-project",
+                    label: "Project access",
+                    serverURL: "https://project.example.com/mcp",
+                    status: "approved",
+                  }),
+                ]
+              : [],
+        },
+        isLoading: false,
+        error: null,
+      }),
+    );
     const queryClient = new QueryClient();
-    const renderWithProject = (projectId: string) => (
+    const renderWithProject = (projectSlug: string) => (
       <MemoryRouter
         initialEntries={["/speakeasy/projects/project-1/approval-requests"]}
       >
@@ -1161,7 +878,7 @@ describe("ApprovalRequestsContent", () => {
             path="/:orgSlug/projects/:projectSlug/approval-requests"
             element={
               <QueryClientProvider client={queryClient}>
-                <ApprovalRequestsContent projectId={projectId} />
+                <ApprovalRequestsContent projectSlug={projectSlug} />
               </QueryClientProvider>
             }
           />
@@ -1172,13 +889,11 @@ describe("ApprovalRequestsContent", () => {
     const view = render(renderWithProject("project-1"));
 
     await waitFor(() => {
-      expect(screen.getByText("Project one rule")).toBeTruthy();
+      expect(screen.getByText("Project access")).toBeTruthy();
     });
-    const deleteRuleRow = screen.getByText("Project one rule").closest("tr");
-    if (!deleteRuleRow) throw new Error("Rule row not found");
-    fireEvent.click(
-      within(deleteRuleRow).getByRole("button", { name: "Delete" }),
-    );
+    const row = screen.getByText("Project access").closest("tr");
+    if (!row) throw new Error("Approved request row not found");
+    fireEvent.click(within(row).getByRole("button", { name: "Revoke" }));
 
     await waitFor(() => {
       expect(screen.getByRole("dialog")).toBeTruthy();
@@ -1188,71 +903,6 @@ describe("ApprovalRequestsContent", () => {
 
     await waitFor(() => {
       expect(screen.queryByRole("dialog")).toBeNull();
-    });
-  });
-
-  it("renders a filtered empty state when a rule filter has no matches", async () => {
-    const listShadowMCPApprovalRequests = vi.fn().mockResolvedValue({
-      requests: [],
-    });
-    const listShadowMCPAccessRules = vi
-      .fn()
-      .mockImplementation(
-        ({ disposition }: { disposition?: "allowed" | "denied" }) => {
-          if (disposition === "denied") {
-            return Promise.resolve({ rules: [] });
-          }
-
-          return Promise.resolve({
-            rules: [
-              {
-                id: "rule-1",
-                displayName: "Allowed rule",
-                resourceType: "shadow_mcp",
-                disposition: "allowed",
-                matchBreadth: "url_host",
-                matchValue: "allowed.example.com",
-                updatedAt: new Date("2026-01-01"),
-              },
-            ],
-          });
-        },
-      );
-    mocks.useSdkClient.mockReturnValue({
-      access: {
-        listShadowMCPApprovalRequests,
-        listShadowMCPAccessRules,
-      },
-    });
-    mocks.useRBAC.mockReturnValue({
-      hasScope: (scope: string) => scope === "org:admin",
-      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
-      hasAllScopes: () => true,
-      isLoading: false,
-    });
-
-    renderContent();
-
-    await waitFor(() => {
-      expect(screen.getByText("Allowed rule")).toBeTruthy();
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Denied" }));
-
-    await waitFor(() => {
-      expect(screen.getByText("No matching rules")).toBeTruthy();
-    });
-    expect(screen.queryByText("No access rules")).toBeNull();
-    expect(screen.getByRole("columnheader", { name: "Match" })).toBeTruthy();
-    expect(screen.getByRole("columnheader", { name: "Status" })).toBeTruthy();
-    expect(screen.getByRole("columnheader", { name: "Scope" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "All rules" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Add Rule" })).toBeTruthy();
-    expect(listShadowMCPAccessRules).toHaveBeenCalledWith({
-      limit: 100,
-      accessScope: "project",
-      projectId: "project-1",
-      disposition: "denied",
-      cursor: undefined,
     });
   });
 });

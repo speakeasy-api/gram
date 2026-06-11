@@ -24,6 +24,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/outbox"
@@ -65,9 +66,11 @@ type AnalyzeBatch struct {
 	piScanner       *PromptInjectionScanner
 	shadowMCPClient *shadowmcp.Client
 	mcpMatchLookup  MCPMatchLookup
+	judge           PromptJudge
+	flags           feature.Provider
 }
 
-func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, piiScanner PIIScanner, piScanner *PromptInjectionScanner, shadowMCPClient *shadowmcp.Client, mcpMatchLookup MCPMatchLookup) *AnalyzeBatch {
+func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, piiScanner PIIScanner, piScanner *PromptInjectionScanner, shadowMCPClient *shadowmcp.Client, mcpMatchLookup MCPMatchLookup, judge PromptJudge, flags feature.Provider) *AnalyzeBatch {
 	if piiScanner == nil {
 		piiScanner = &StubPIIScanner{}
 	}
@@ -84,6 +87,8 @@ func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, m
 		piScanner:       piScanner,
 		shadowMCPClient: shadowMCPClient,
 		mcpMatchLookup:  mcpMatchLookup,
+		judge:           judge,
+		flags:           flags,
 	}
 }
 
@@ -177,9 +182,33 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		return nil, err
 	}
 
-	findings, err := a.scan(ctx, args, messages, customRules)
+	// Load the going-forward exclusion set (the policy's own exclusions plus any
+	// global ones). It is applied inside scan BEFORE the overlap-dedup pass so
+	// excluding one finding cannot erase an overlapping finding that should
+	// still flag the region. The retroactive reconcile sweep flags
+	// already-stored findings using the same criteria.
+	exclusions, err := repo.New(a.db).ListEnabledExclusionsForPolicy(ctx, repo.ListEnabledExclusionsForPolicyParams{
+		ProjectID:    args.ProjectID,
+		RiskPolicyID: uuid.NullUUID{UUID: args.RiskPolicyID, Valid: true},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list exclusions: %w", err)
+	}
+
+	findings, err := a.scan(ctx, args, messages, customRules, NewExclusionSet(exclusions))
 	if err != nil {
 		return nil, err
+	}
+
+	// prompt_based policies are evaluated by the LLM judge rather than the
+	// source-based scanners above. scanPromptJudge hard-scopes to tool-call
+	// messages for M0 (matching realtime enforcement), on top of the policy's
+	// message_types filter already applied by filterMessagesByMessageTypes.
+	if policy.PolicyType == "prompt_based" {
+		judgeFindings := a.scanPromptJudge(ctx, args, policy, messages)
+		for i := range findings {
+			findings[i] = append(findings[i], judgeFindings[i]...)
+		}
 	}
 
 	// Drop findings whose canonical rule_id has been unchecked by the policy
@@ -264,7 +293,7 @@ func messageRowMessageType(msg repo.GetMessageContentBatchRow) (message.Type, bo
 // destructive_tool, cli_destructive) run serially after the parallel scans
 // — shadow_mcp/destructive_tool make per-message DB calls; cli_destructive
 // is purely in-memory regex but kept in the same lane for consistency.
-func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages []repo.GetMessageContentBatchRow, customRules []CompiledCustomDetectionRule) ([][]Finding, error) {
+func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages []repo.GetMessageContentBatchRow, customRules []CompiledCustomDetectionRule, exclusions ExclusionSet) ([][]Finding, error) {
 	ctx, scanSpan := a.tracer.Start(ctx, "risk.scanMessages")
 	defer scanSpan.End()
 	activity.RecordHeartbeat(ctx, 0)
@@ -388,9 +417,111 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 		// when both scanners match the same text region. Tool-call findings are
 		// non-overlapping with content scanners, so they pass through dedup.
 		combined := slices.Concat(gitleaksFindings[i], presidioFindings[i], shadowMCPFindings[i], destructiveToolFindings[i], cliDestructiveFindings[i], promptInjectionFindings[i], customFindings[i])
+		// Drop excluded findings before dedup so an excluded finding does not win
+		// the overlap and then vanish, leaving an overlapping (non-excluded)
+		// finding suppressed and the region unflagged.
+		if !exclusions.Empty() {
+			combined = exclusions.FilterFindings(combined)
+		}
 		merged[i] = dedup(combined)
 	}
 	return merged, nil
+}
+
+// judgeConcurrency bounds the number of in-flight judge calls per batch. Judge
+// calls are LLM/network-bound (unlike the cheap in-memory/DB tool-call scanners,
+// which run serially because they are not the bottleneck), so a bounded pool
+// turns a ~batchSize×latency serial pass into roughly batchSize/judgeConcurrency
+// waves while staying well within OpenRouter rate/cost limits.
+const judgeConcurrency = 8
+
+// scanPromptJudge evaluates messages against a prompt_based policy's guardrail
+// prompt via the LLM judge, returning per-message findings aligned to messages.
+// Returns all-empty results when the judge is unavailable or the policy has no
+// prompt.
+//
+// M0: like the realtime enforcement path, batch judging is hard-scoped to
+// tool-call messages regardless of the policy's message_types, so the judge is
+// never run on user/assistant/tool-response content yet. In-scope messages are
+// evaluated concurrently with a bounded worker pool.
+func (a *AnalyzeBatch) scanPromptJudge(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []repo.GetMessageContentBatchRow) [][]Finding {
+	out := make([][]Finding, len(messages))
+	cfg := ParseJudgeConfig(policy.ModelConfig)
+	if !a.promptPoliciesEnabled(ctx, args.OrganizationID, args.ProjectID) {
+		return out
+	}
+
+	var indices []int
+	for i, msg := range messages {
+		if mt, ok := messageRowMessageType(msg); ok && mt == message.ToolRequest {
+			indices = append(indices, i)
+		}
+	}
+	if len(indices) == 0 {
+		return out
+	}
+
+	if a.judge == nil || !policy.Prompt.Valid || strings.TrimSpace(policy.Prompt.String) == "" {
+		if !cfg.FailOpen {
+			finding := JudgeFinding(JudgeVerdict{Confidence: 0, Rationale: "Policy judge was unavailable; flagged by fail-closed policy."})
+			for _, idx := range indices {
+				out[idx] = []Finding{finding}
+			}
+		}
+		return out
+	}
+
+	// Distinct out[idx] writes per goroutine, so no shared-slice mutation.
+	// Heartbeat from the main goroutine between waves keeps the activity alive.
+	for start := 0; start < len(indices); start += judgeConcurrency {
+		end := min(start+judgeConcurrency, len(indices))
+		var wg sync.WaitGroup
+		for _, idx := range indices[start:end] {
+			wg.Add(1)
+			go func(idx int) {
+				defer wg.Done()
+				verdict := a.judge.Evaluate(ctx, JudgeInput{
+					OrgID:     args.OrganizationID,
+					ProjectID: args.ProjectID.String(),
+					Prompt:    policy.Prompt.String,
+					Text:      promptJudgeText(messages[idx]),
+					Config:    cfg,
+				})
+				if verdict != nil {
+					out[idx] = []Finding{JudgeFinding(*verdict)}
+				}
+			}(idx)
+		}
+		wg.Wait()
+		activity.RecordHeartbeat(ctx, "llm_judge", end)
+	}
+	return out
+}
+
+func (a *AnalyzeBatch) promptPoliciesEnabled(ctx context.Context, orgID string, projectID uuid.UUID) bool {
+	if a.flags == nil {
+		return false
+	}
+	// Resolve the org/project slugs so the flag evaluates against the same
+	// PostHog groups the dashboard uses. A failed lookup degrades to disabled.
+	groups, err := repo.New(a.db).GetProjectFlagGroups(ctx, projectID)
+	if err != nil {
+		a.logger.WarnContext(ctx, "resolve prompt policy flag groups failed", attr.SlogError(err), attr.SlogOrganizationID(orgID), attr.SlogProjectID(projectID.String()))
+		return false
+	}
+	on, err := a.flags.IsFlagEnabled(ctx, feature.FlagPromptPolicies, orgID, feature.OrgProjectGroups(groups.OrganizationSlug, groups.ProjectSlug))
+	if err != nil {
+		a.logger.WarnContext(ctx, "prompt policy flag check failed", attr.SlogError(err), attr.SlogOrganizationID(orgID))
+		return false
+	}
+	return on
+}
+
+func promptJudgeText(msg repo.GetMessageContentBatchRow) string {
+	if len(msg.ToolCalls) > 0 {
+		return string(msg.ToolCalls)
+	}
+	return msg.Content
 }
 
 func (a *AnalyzeBatch) customRulesForPolicy(ctx context.Context, projectID uuid.UUID, ruleIDs []string) ([]CompiledCustomDetectionRule, error) {

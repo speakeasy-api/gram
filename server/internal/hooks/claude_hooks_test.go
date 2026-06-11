@@ -3,6 +3,7 @@ package hooks
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -10,6 +11,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
+	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 )
@@ -24,11 +26,31 @@ func (stubBlockingShadowMCPScanner) ScanForEnforcement(_ context.Context, _ uuid
 }
 
 func (stubBlockingShadowMCPScanner) LookupShadowMCPBlockingPolicy(_ context.Context, _ uuid.UUID) (*risk.ShadowMCPPolicy, error) {
-	return &risk.ShadowMCPPolicy{ID: "stub-policy-id", Name: "shadow-mcp-block"}, nil
+	return &risk.ShadowMCPPolicy{ID: "00000000-0000-0000-0000-000000000001", Name: "shadow-mcp-block"}, nil
 }
 
 func (stubBlockingShadowMCPScanner) HasEnabledShadowMCPPolicy(_ context.Context, _ uuid.UUID) (bool, error) {
 	return true, nil
+}
+
+func TestResolveClaudeScanProjectID_PrefersAuthContextOverCachedMetadata(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := uuid.NewString()
+	cachedProjectID := uuid.New()
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+		SessionID: sessionID,
+		ProjectID: cachedProjectID.String(),
+	}, 0))
+
+	got, ok := ti.service.resolveClaudeScanProjectID(ctx, sessionID)
+	require.True(t, ok)
+	assert.Equal(t, *authCtx.ProjectID, got)
 }
 
 // When the request authenticated via Gram-Key + Gram-Project, handlePreToolUse
@@ -180,9 +202,7 @@ func TestClaude_PreToolUse_DeniesLocalStdioServer(t *testing.T) {
 	assert.Equal(t, "deny", *output.PermissionDecision)
 }
 
-// Server identity rules are ignored for Shadow MCP access enforcement; local
-// stdio servers without URL evidence should still be governed by policy.
-func TestClaude_PreToolUse_DoesNotAllowLocalStdioServerByIdentityRule(t *testing.T) {
+func TestClaude_PreToolUse_DeniesLocalStdioServerWithLegacyIdentityRule(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
@@ -319,6 +339,111 @@ func TestMergeClaudeAuthContextMetadata_PreservesAuthUserIDWhenCacheIsEmpty(t *t
 	assert.Equal(t, "claude-code", metadata.ServiceName)
 	assert.Equal(t, "local-hook-testing@example.com", metadata.UserEmail)
 	assert.Equal(t, "claude_org", metadata.ClaudeOrgID)
+}
+
+func TestClaude_RecordHook_PersistsAuthContextProjectOverCachedMetadata(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+	prompt := "hello from auth context project"
+	cachedProjectID := uuid.NewString()
+
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "claude-code",
+		UserEmail:   localFallbackEmail,
+		UserID:      "",
+		ClaudeOrgID: authCtx.ActiveOrganizationID,
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   cachedProjectID,
+	}, time.Hour))
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "UserPromptSubmit",
+		SessionID:     &sessionID,
+		Prompt:        &prompt,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	var msgs []chatRepo.ChatMessage
+	require.Eventually(t, func() bool {
+		var err error
+		msgs, err = chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+			ChatID:    chatID,
+			ProjectID: *authCtx.ProjectID,
+		})
+		return err == nil && len(msgs) == 1
+	}, 2*time.Second, 25*time.Millisecond)
+
+	require.True(t, msgs[0].ProjectID.Valid)
+	assert.Equal(t, *authCtx.ProjectID, msgs[0].ProjectID.UUID)
+	assert.Equal(t, prompt, msgs[0].Content)
+}
+
+func TestClaude_RecordHook_BuffersAuthContextCacheMissWithoutPayloadEmail(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	sessionID := uuid.NewString()
+	prompt := "hello before otel metadata"
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "UserPromptSubmit",
+		SessionID:     &sessionID,
+		Prompt:        &prompt,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	var buffered []gen.ClaudePayload
+	require.NoError(t, ti.service.cache.ListRange(ctx, hookPendingCacheKey(sessionID), 0, -1, &buffered))
+	require.Len(t, buffered, 1)
+	assert.Equal(t, "UserPromptSubmit", buffered[0].HookEventName)
+}
+
+func TestClaude_RecordHook_UsesAuthContextUserIDOnCacheMissWithPayloadEmail(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+	prompt := "hello with payload email"
+	payloadEmail := "unknown-user@example.com"
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "UserPromptSubmit",
+		SessionID:     &sessionID,
+		Prompt:        &prompt,
+		UserEmail:     &payloadEmail,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	var msgs []chatRepo.ChatMessage
+	require.Eventually(t, func() bool {
+		var err error
+		msgs, err = chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+			ChatID:    chatID,
+			ProjectID: *authCtx.ProjectID,
+		})
+		return err == nil && len(msgs) == 1
+	}, 2*time.Second, 25*time.Millisecond)
+
+	assert.Equal(t, authCtx.UserID, msgs[0].UserID.String)
+	assert.Equal(t, payloadEmail, msgs[0].ExternalUserID.String)
 }
 
 // When plugin auth headers are present but the API key is invalid/expired,

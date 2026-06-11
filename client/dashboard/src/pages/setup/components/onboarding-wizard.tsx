@@ -9,8 +9,10 @@ import {
   ConnectIdpStep,
   DirectorySyncStep,
   CreateMarketplaceStep,
+  DistributeServersStep,
   InstrumentAgentsStep,
   ConfirmTrafficStep,
+  ConfigurePoliciesStep,
 } from "./steps";
 
 const STEPS: Step[] = [
@@ -30,6 +32,11 @@ const STEPS: Step[] = [
     description: "For distributing servers to your users",
   },
   {
+    id: "distribute-servers",
+    title: "Distribute MCP servers",
+    description: "Choose some MCP Servers to distribute to your organization",
+  },
+  {
     id: "instrument-agents",
     title: "Instrument agents",
     description: "Connect AI coding assistants",
@@ -38,6 +45,11 @@ const STEPS: Step[] = [
     id: "confirm-traffic",
     title: "Confirm traffic",
     description: "Verify connectivity and compliance",
+  },
+  {
+    id: "configure-policies",
+    title: "Configure policies",
+    description: "Pick the categories to flag in agent traffic",
   },
 ];
 
@@ -53,9 +65,10 @@ export function SetupWizard(): JSX.Element | null {
 
   // Server-side onboarding signals used to resume at the right step on reload.
   // `onboardingStatus` covers SSO + DSYNC; `publishStatus` covers the
-  // marketplace step. Steps after marketplace (instrument-agents,
-  // confirm-traffic) have no server signal — once marketplace is published we
-  // land on instrument-agents and let the user click forward.
+  // marketplace step. Steps after marketplace (distribute-servers,
+  // instrument-agents, confirm-traffic) have no server signal — once
+  // marketplace is published we land on distribute-servers and let the user
+  // click forward.
   const { data: onboardingStatus, isLoading: isOnboardingStatusLoading } =
     useOnboardingStatus();
   const { data: publishStatus, isLoading: isPublishStatusLoading } =
@@ -67,7 +80,7 @@ export function SetupWizard(): JSX.Element | null {
     if (statusLoading) return; // wait so we don't flash step 0 then jump
     let resumeStep = 0;
     if (publishStatus?.connected) {
-      resumeStep = 3; // marketplace done → instrument-agents
+      resumeStep = 3; // marketplace done → distribute-servers
     } else if (onboardingStatus?.dsyncConfigured) {
       resumeStep = 2; // dsync done → create-marketplace
     } else if (onboardingStatus?.ssoConfigured) {
@@ -170,14 +183,29 @@ export function SetupWizard(): JSX.Element | null {
         );
       case 3:
         return (
-          <InstrumentAgentsStep
+          <DistributeServersStep
             onComplete={completeCurrentStep}
+            onSkip={completeCurrentStep}
             onBack={goBack}
           />
         );
       case 4:
         return (
+          <InstrumentAgentsStep
+            onComplete={completeCurrentStep}
+            onBack={goBack}
+          />
+        );
+      case 5:
+        return (
           <ConfirmTrafficStep
+            onComplete={completeCurrentStep}
+            onBack={goBack}
+          />
+        );
+      case 6:
+        return (
+          <ConfigurePoliciesStep
             onComplete={completeCurrentStep}
             onBack={goBack}
           />
@@ -202,7 +230,7 @@ export function SetupWizard(): JSX.Element | null {
             />
           </div>
 
-          <div className="max-w-xl flex-1">{renderStep()}</div>
+          <div className="min-w-0 flex-1">{renderStep()}</div>
         </div>
       </main>
 

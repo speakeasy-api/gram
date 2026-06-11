@@ -44,6 +44,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/speakeasy-api/gram/infra/gen"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/admin"
 	"github.com/speakeasy-api/gram/server/internal/assets"
@@ -67,6 +69,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	sv "github.com/speakeasy-api/gram/server/internal/thirdparty/svix"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tracking"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -756,6 +759,7 @@ func newTriggersApp(
 	telemetryLogger *telemetry.Logger,
 	auditLogger *audit.Logger,
 	serverURL *url.URL,
+	slackClient *slack_client.SlackClient,
 ) *bgtriggers.App {
 	envEntries := environments.NewEnvironmentEntries(logger, db, enc, nil)
 	return bgtriggers.NewApp(
@@ -785,6 +789,7 @@ func newTriggersApp(
 		}),
 		auditLogger,
 		serverURL,
+		slackClient,
 		bgtriggers.NewNoopDispatcher(logger),
 	)
 }
@@ -879,11 +884,18 @@ func newSvixClient(c *cli.Context, logger *slog.Logger, guardianPolicy *guardian
 	return svixClient, shutdownFunc, nil
 }
 
-func newPubSubClient(ctx context.Context, c *cli.Context, logger *slog.Logger) (*pubsub.Client, func(ctx context.Context) error, error) {
+type pubSubBroker interface {
+	gcp.PublisherBroker
+	gcp.SubscriberBroker
+}
+
+func newPubSubClient(ctx context.Context, c *cli.Context, logger *slog.Logger) (*pubsub.Client, pubSubBroker, func(ctx context.Context) error, error) {
+	var emulated bool
 	var projectID string
 	opts := []option.ClientOption{option.WithLogger(logger)}
 	switch {
 	case c.String("pubsub-emulator-host") != "":
+		emulated = true
 		// The emulator speaks plaintext gRPC, so we must use insecure transport
 		// credentials. The pubsub library only injects these automatically when
 		// the PUBSUB_EMULATOR_HOST env var is set; supplying the host via the CLI
@@ -900,8 +912,15 @@ func newPubSubClient(ctx context.Context, c *cli.Context, logger *slog.Logger) (
 
 	client, err := pubsub.NewClient(ctx, projectID, opts...)
 	if err != nil {
-		return nil, func(context.Context) error { return nil }, fmt.Errorf("failed to create pubsub client: %w", err)
+		return nil, nil, func(context.Context) error { return nil }, fmt.Errorf("failed to create pubsub client: %w", err)
 	}
 
-	return client, func(context.Context) error { return client.Close() }, nil
+	var broker pubSubBroker
+	if emulated {
+		broker = gcp.NewEmulatedPubSub(logger, projectID, client, gen.Descriptors)
+	} else {
+		broker = gcp.NewPubSubBroker(logger, client, gen.Descriptors)
+	}
+
+	return client, broker, func(context.Context) error { return client.Close() }, nil
 }

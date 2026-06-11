@@ -88,7 +88,6 @@ func TestAIUsagePollerCoordinatorWorkflowListsCandidatesAndStartsChildren(t *tes
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, input activities.GetAIIntegrationsCandidatesInput) ([]aiintegrations.UsagePollCandidate, error) {
 			listCalls++
-			require.Equal(t, aiintegrations.ProviderCursor, input.Provider)
 			require.False(t, input.PollDueBefore.Before(start))
 			require.Equal(t, int32(aiUsagePollerCoordinatorChildConcurrency), input.Limit)
 
@@ -113,7 +112,7 @@ func TestAIUsagePollerCoordinatorWorkflowListsCandidatesAndStartsChildren(t *tes
 			synced = append(synced, configID)
 			return nil
 		},
-		activity.RegisterOptions{Name: "PollAIUsage"},
+		activity.RegisterOptions{Name: "PollAIData"},
 	)
 
 	env.ExecuteWorkflow(AIUsagePollerCoordinatorWorkflow)
@@ -156,7 +155,6 @@ func TestAIUsagePollerCoordinatorWorkflowContinuesAfterChildFailure(t *testing.T
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, input activities.GetAIIntegrationsCandidatesInput) ([]aiintegrations.UsagePollCandidate, error) {
 			listCalls++
-			require.Equal(t, aiintegrations.ProviderCursor, input.Provider)
 			require.False(t, input.PollDueBefore.Before(start))
 			require.Equal(t, int32(aiUsagePollerCoordinatorChildConcurrency), input.Limit)
 
@@ -186,7 +184,7 @@ func TestAIUsagePollerCoordinatorWorkflowContinuesAfterChildFailure(t *testing.T
 			synced = append(synced, configID)
 			return nil
 		},
-		activity.RegisterOptions{Name: "PollAIUsage"},
+		activity.RegisterOptions{Name: "PollAIData"},
 	)
 
 	env.ExecuteWorkflow(AIUsagePollerCoordinatorWorkflow)

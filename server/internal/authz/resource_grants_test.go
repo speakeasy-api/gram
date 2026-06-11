@@ -19,6 +19,7 @@ func testResource(organizationID string, scope Scope, resourceID string) Resourc
 func testResourceGrant(organizationID string, principals []urn.Principal, scope Scope, resourceID string, selector Selector) ResourceGrant {
 	return ResourceGrant{
 		Resource:   testResource(organizationID, scope, resourceID),
+		Effect:     PolicyEffectAllow,
 		Principals: principals,
 		Selector:   selector,
 	}
@@ -300,6 +301,135 @@ func TestPatchPrincipalGrantsAddsAndRemovesExactGrants(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, grants, 1)
 	require.Equal(t, otherPrincipal.String(), grants[0].PrincipalUrn)
+}
+
+func TestReplaceGrantAudienceReplacesAllUsersWithNarrowGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newTestDB(t)
+	organizationID := "org_patch_principal_grants_all_to_user"
+	policyID := "policy_123"
+	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, "user_123")
+	selector := NewSelector(ScopeRiskPolicyEvaluate, policyID)
+
+	seedOrganization(t, ctx, conn, organizationID)
+	require.NoError(t, ReplaceGrantAudience(ctx, conn, ResourceGrant{
+		Resource:   testResource(organizationID, ScopeRiskPolicyEvaluate, policyID),
+		Effect:     PolicyEffectAllow,
+		Selector:   selector,
+		Principals: []urn.Principal{AllUsersPrincipal()},
+	}))
+	require.NoError(t, ReplaceGrantAudience(ctx, conn, ResourceGrant{
+		Resource:   testResource(organizationID, ScopeRiskPolicyEvaluate, policyID),
+		Effect:     PolicyEffectAllow,
+		Selector:   selector,
+		Principals: []urn.Principal{userPrincipal},
+	}))
+
+	grants, err := ListGrantsForResource(ctx, conn, testResource(organizationID, ScopeRiskPolicyEvaluate, policyID))
+	require.NoError(t, err)
+	require.Len(t, grants, 1)
+	require.Equal(t, userPrincipal.String(), grants[0].PrincipalUrn)
+}
+
+func TestReplaceGrantAudienceReplacesNarrowGrantWithAllUsers(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newTestDB(t)
+	organizationID := "org_patch_principal_grants_user_to_all"
+	policyID := "policy_123"
+	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, "user_123")
+	selector := NewSelector(ScopeRiskPolicyEvaluate, policyID)
+
+	seedOrganization(t, ctx, conn, organizationID)
+	require.NoError(t, ReplaceGrantAudience(ctx, conn, ResourceGrant{
+		Resource:   testResource(organizationID, ScopeRiskPolicyEvaluate, policyID),
+		Effect:     PolicyEffectAllow,
+		Selector:   selector,
+		Principals: []urn.Principal{userPrincipal},
+	}))
+	require.NoError(t, ReplaceGrantAudience(ctx, conn, ResourceGrant{
+		Resource:   testResource(organizationID, ScopeRiskPolicyEvaluate, policyID),
+		Effect:     PolicyEffectAllow,
+		Selector:   selector,
+		Principals: []urn.Principal{AllUsersPrincipal()},
+	}))
+
+	grants, err := ListGrantsForResource(ctx, conn, testResource(organizationID, ScopeRiskPolicyEvaluate, policyID))
+	require.NoError(t, err)
+	require.Len(t, grants, 1)
+	require.Equal(t, AllUsersPrincipal().String(), grants[0].PrincipalUrn)
+}
+
+func TestReplaceGrantAudiencePreservesUnrelatedSelectorAndResource(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newTestDB(t)
+	organizationID := "org_patch_principal_grants_preserve"
+	policyID := "policy_123"
+	otherPolicyID := "policy_456"
+	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, "user_123")
+	selector := NewSelector(ScopeRiskPolicyEvaluate, policyID)
+	otherSelector := NewSelector(ScopeRiskPolicyEvaluate, otherPolicyID)
+	serverSelector := Selector{
+		"resource_kind": ResourceKindRiskPolicy,
+		"resource_id":   policyID,
+		"server_url":    "https://api.example.com",
+	}
+
+	seedOrganization(t, ctx, conn, organizationID)
+	require.NoError(t, ReplaceGrantAudience(ctx, conn, ResourceGrant{
+		Resource:   testResource(organizationID, ScopeRiskPolicyEvaluate, policyID),
+		Effect:     PolicyEffectAllow,
+		Selector:   selector,
+		Principals: []urn.Principal{AllUsersPrincipal()},
+	}))
+	require.NoError(t, ReplaceGrantAudience(ctx, conn, ResourceGrant{
+		Resource:   testResource(organizationID, ScopeRiskPolicyEvaluate, otherPolicyID),
+		Effect:     PolicyEffectAllow,
+		Selector:   otherSelector,
+		Principals: []urn.Principal{AllUsersPrincipal()},
+	}))
+	require.NoError(t, ReplaceGrantAudience(ctx, conn, ResourceGrant{
+		Resource:   testResource(organizationID, ScopeRiskPolicyEvaluate, policyID),
+		Effect:     PolicyEffectAllow,
+		Selector:   serverSelector,
+		Principals: []urn.Principal{AllUsersPrincipal()},
+	}))
+	require.NoError(t, ReplaceGrantAudience(ctx, conn, ResourceGrant{
+		Resource:   testResource(organizationID, ScopeRiskPolicyEvaluate, policyID),
+		Effect:     PolicyEffectAllow,
+		Selector:   selector,
+		Principals: []urn.Principal{userPrincipal},
+	}))
+
+	grants, err := ListGrantsForResource(ctx, conn, testResource(organizationID, ScopeRiskPolicyEvaluate, policyID))
+	require.NoError(t, err)
+	require.Len(t, grants, 2)
+	require.ElementsMatch(t, []string{userPrincipal.String(), AllUsersPrincipal().String()}, []string{grants[0].PrincipalUrn, grants[1].PrincipalUrn})
+
+	otherGrants, err := ListGrantsForResource(ctx, conn, testResource(organizationID, ScopeRiskPolicyEvaluate, otherPolicyID))
+	require.NoError(t, err)
+	require.Len(t, otherGrants, 1)
+	require.Equal(t, AllUsersPrincipal().String(), otherGrants[0].PrincipalUrn)
+}
+
+func TestReplaceGrantAudienceRejectsAllUsersWithNarrowPrincipals(t *testing.T) {
+	t.Parallel()
+
+	err := ReplaceGrantAudience(t.Context(), nil, ResourceGrant{
+		Resource: testResource("org_replace_audience_invalid", ScopeRiskPolicyEvaluate, "policy_123"),
+		Effect:   PolicyEffectAllow,
+		Selector: NewSelector(ScopeRiskPolicyEvaluate, "policy_123"),
+		Principals: []urn.Principal{
+			AllUsersPrincipal(),
+			urn.NewPrincipal(urn.PrincipalTypeUser, "user_123"),
+		},
+	})
+	require.ErrorContains(t, err, "user:all cannot be combined")
 }
 
 func TestGrantAndRevokeResourcePrincipalGrantRequirePrincipals(t *testing.T) {

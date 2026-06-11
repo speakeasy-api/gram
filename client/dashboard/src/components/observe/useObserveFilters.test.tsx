@@ -5,6 +5,8 @@ import { MemoryRouter, useNavigate } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { AccessMember, Role } from "@gram/client/models/components";
 import { Operator } from "@gram/client/models/components";
+import { useMembers } from "@gram/client/react-query/members.js";
+import { useRoles } from "@gram/client/react-query/roles.js";
 import { DEFAULT_HOOK_TYPES } from "./observeFilterConstants";
 import { useObserveFilters } from "./useObserveFilters";
 
@@ -14,9 +16,15 @@ vi.mock("@gram/client/react-query/members.js", () => ({
 vi.mock("@gram/client/react-query/roles.js", () => ({
   useRoles: vi.fn(),
 }));
-
-import { useMembers } from "@gram/client/react-query/members.js";
-import { useRoles } from "@gram/client/react-query/roles.js";
+vi.mock("@gram/client/react-query", () => ({
+  useGramContext: () => ({}),
+}));
+vi.mock("@gram/client/funcs/telemetryGetHooksSummary", () => ({
+  telemetryGetHooksSummary: vi.fn().mockResolvedValue({
+    ok: true,
+    value: { servers: [], users: [] },
+  }),
+}));
 
 function useObserveFiltersWithNavigation() {
   const filters = useObserveFilters();
@@ -255,5 +263,43 @@ describe("useObserveFilters", () => {
     });
     act(() => result.current.filters.handleRoleSelectionChange([]));
     expect(result.current.filters.selectedRoleIds).toEqual([]);
+  });
+
+  it("parses source URL param into a gram.hook.source chip and logFilters", () => {
+    const { result } = renderHook(() => useObserveFilters(), {
+      wrapper: makeWrapper("/?source=claude-code,codex"),
+    });
+    expect(result.current.activeFilters).toEqual([
+      {
+        display: "claude-code, codex",
+        filters: ["claude-code", "codex"],
+        path: "gram.hook.source",
+      },
+    ]);
+    expect(result.current.logFilters).toEqual([
+      {
+        path: "gram.hook.source",
+        operator: Operator.In,
+        values: ["claude-code", "codex"],
+      },
+    ]);
+  });
+
+  it("handleHookSourceSelectionChange sets and clears the source URL param", () => {
+    const { result } = renderHook(() => useObserveFiltersWithNavigation(), {
+      wrapper: makeWrapper("/"),
+    });
+    act(() =>
+      result.current.filters.handleHookSourceSelectionChange(["cursor"]),
+    );
+    expect(result.current.filters.activeFilters).toEqual([
+      {
+        display: "cursor",
+        filters: ["cursor"],
+        path: "gram.hook.source",
+      },
+    ]);
+    act(() => result.current.filters.handleHookSourceSelectionChange([]));
+    expect(result.current.filters.activeFilters).toEqual([]);
   });
 });

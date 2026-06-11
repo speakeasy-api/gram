@@ -2441,12 +2441,12 @@ paths:
       operationId: getAIIntegrationConfig
       parameters:
         - allowEmptyValue: true
-          description: AI provider identifier. Initially only cursor is supported.
+          description: AI provider identifier. Supported values include cursor and anthropic_compliance.
           in: query
           name: provider
           required: true
           schema:
-            description: AI provider identifier. Initially only cursor is supported.
+            description: AI provider identifier. Supported values include cursor and anthropic_compliance.
             type: string
         - allowEmptyValue: true
           description: API Key header
@@ -6046,19 +6046,19 @@ paths:
               - "false"
             type: string
         - allowEmptyValue: true
-          description: Filter chats created after this timestamp (ISO 8601)
+          description: Filter chats last active after this timestamp (ISO 8601)
           in: query
           name: from
           schema:
-            description: Filter chats created after this timestamp (ISO 8601)
+            description: Filter chats last active after this timestamp (ISO 8601)
             format: date-time
             type: string
         - allowEmptyValue: true
-          description: Filter chats created before this timestamp (ISO 8601)
+          description: Filter chats last active before this timestamp (ISO 8601)
           in: query
           name: to
           schema:
-            description: Filter chats created before this timestamp (ISO 8601)
+            description: Filter chats last active before this timestamp (ISO 8601)
             format: date-time
             type: string
         - allowEmptyValue: true
@@ -6087,10 +6087,10 @@ paths:
           in: query
           name: sort_by
           schema:
-            default: created_at
+            default: last_message_timestamp
             description: Field to sort by
             enum:
-              - created_at
+              - last_message_timestamp
               - num_messages
             type: string
         - allowEmptyValue: true
@@ -6621,7 +6621,7 @@ paths:
       x-speakeasy-name-override: revoke
   /rpc/collections.attachServer:
     post:
-      description: Attach a server (toolset) to a collection
+      description: Attach a server to a collection. Provide exactly one of toolset_id or mcp_server_id.
       operationId: attachServerToCollection
       parameters:
         - allowEmptyValue: true
@@ -6902,7 +6902,7 @@ paths:
       x-speakeasy-name-override: delete
   /rpc/collections.detachServer:
     post:
-      description: Detach a server (toolset) from a collection
+      description: Detach a server from a collection. Provide exactly one of toolset_id or mcp_server_id.
       operationId: detachServerFromCollection
       parameters:
         - allowEmptyValue: true
@@ -20543,333 +20543,6 @@ paths:
       x-speakeasy-name-override: list
       x-speakeasy-react-hook:
         name: ListResources
-  /rpc/risk.approvals.create:
-    post:
-      description: Approve a shadow-MCP server so the named policy stops blocking calls to it. `match` is the same opaque server identifier surfaced in `RiskResult.match` — typically a server URL, stdio command, or `mcp__<server>__` prefix.
-      operationId: approveShadowMCP
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ApproveShadowMCPRequestBody'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ShadowMCPApproval'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: approveShadowMCP risk
-      tags:
-        - risk
-      x-speakeasy-group: risk.approvals
-      x-speakeasy-name-override: create
-      x-speakeasy-react-hook:
-        name: RiskApproveShadowMCP
-        type: mutation
-  /rpc/risk.approvals.delete:
-    delete:
-      description: Remove a previously-approved shadow-MCP server for a policy.
-      operationId: revokeShadowMCPApproval
-      parameters:
-        - allowEmptyValue: true
-          description: The risk policy ID.
-          in: query
-          name: policy_id
-          required: true
-          schema:
-            description: The risk policy ID.
-            format: uuid
-            type: string
-        - allowEmptyValue: true
-          description: The MCP server identifier to revoke — exactly the value used to approve.
-          in: query
-          name: match
-          required: true
-          schema:
-            description: The MCP server identifier to revoke — exactly the value used to approve.
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      responses:
-        "200":
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: revokeShadowMCPApproval risk
-      tags:
-        - risk
-      x-speakeasy-group: risk.approvals
-      x-speakeasy-name-override: delete
-  /rpc/risk.approvals.list:
-    get:
-      description: List shadow-MCP approvals (URL- or command-keyed) for a policy. Temporary Redis-backed storage; will move to a dedicated table once the feature graduates.
-      operationId: listShadowMCPApprovals
-      parameters:
-        - allowEmptyValue: true
-          description: The risk policy ID.
-          in: query
-          name: policy_id
-          required: true
-          schema:
-            description: The risk policy ID.
-            format: uuid
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ListShadowMCPApprovalsResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: listShadowMCPApprovals risk
-      tags:
-        - risk
-      x-speakeasy-group: risk.approvals
-      x-speakeasy-name-override: list
-      x-speakeasy-react-hook:
-        name: RiskListShadowMCPApprovals
   /rpc/risk.approvePolicyBypassRequest:
     post:
       description: Approve a risk policy bypass request for the requested policy target.
@@ -20900,7 +20573,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RiskIDRequestBody'
+              $ref: '#/components/schemas/RiskPolicyBypassApprovalRequestBody'
         required: true
       responses:
         "200":
@@ -21177,6 +20850,113 @@ paths:
       x-speakeasy-name-override: list
       x-speakeasy-react-hook:
         name: RiskCategories
+  /rpc/risk.createExclusions:
+    post:
+      description: Create a risk exclusion. Omit risk_policy_id to create a global exclusion that applies to every policy in the project.
+      operationId: createRiskExclusion
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRiskExclusionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskExclusion'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: createRiskExclusion risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.exclusions
+      x-speakeasy-name-override: create
+      x-speakeasy-react-hook:
+        name: RiskCreateExclusion
+        type: mutation
   /rpc/risk.createPolicyBypassRequest:
     post:
       description: Create or refresh a risk policy bypass request from a signed request URL token.
@@ -21902,6 +21682,112 @@ paths:
       x-speakeasy-react-hook:
         name: RiskUpdateCustomDetectionRule
         type: mutation
+  /rpc/risk.deleteExclusions:
+    delete:
+      description: Delete a risk exclusion. Previously suppressed findings are restored.
+      operationId: deleteRiskExclusion
+      parameters:
+        - allowEmptyValue: true
+          description: The exclusion ID.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The exclusion ID.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: deleteRiskExclusion risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.exclusions
+      x-speakeasy-name-override: delete
+      x-speakeasy-react-hook:
+        name: RiskDeleteExclusion
+        type: mutation
   /rpc/risk.denyPolicyBypassRequest:
     post:
       description: Deny a risk policy bypass request, updating workflow state.
@@ -22009,6 +21895,115 @@ paths:
       x-speakeasy-react-hook:
         name: RiskDenyPolicyBypassRequest
         type: mutation
+  /rpc/risk.listExclusions:
+    get:
+      description: List risk exclusions for the current project. Optionally filter to a single policy.
+      operationId: listRiskExclusions
+      parameters:
+        - allowEmptyValue: true
+          description: Filter to exclusions bound to this policy. Omit to return all exclusions (global plus every policy).
+          in: query
+          name: risk_policy_id
+          schema:
+            description: Filter to exclusions bound to this policy. Omit to return all exclusions (global plus every policy).
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListRiskExclusionsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listRiskExclusions risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.exclusions
+      x-speakeasy-name-override: list
+      x-speakeasy-react-hook:
+        name: RiskListExclusions
+        type: query
   /rpc/risk.listPolicyBypassRequests:
     get:
       description: List current risk policy bypass request workflow records.
@@ -23906,487 +23901,18 @@ paths:
       x-speakeasy-react-hook:
         name: RiskTestDetectionRule
         type: mutation
-  /rpc/slack-apps.configure:
-    post:
-      description: Store Slack credentials (client ID, client secret, signing secret) for an app.
-      operationId: configureSlackApp
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ConfigureSlackAppRequestBody'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SlackAppResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: configureSlackApp slack
-      tags:
-        - slack
-      x-speakeasy-name-override: configureSlackApp
-      x-speakeasy-react-hook:
-        name: configureSlackApp
-  /rpc/slack-apps.create:
-    post:
-      description: Create a new Slack app and generate its manifest.
-      operationId: createSlackApp
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateSlackAppRequestBody'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CreateSlackAppResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: createSlackApp slack
-      tags:
-        - slack
-      x-speakeasy-name-override: createSlackApp
-      x-speakeasy-react-hook:
-        name: createSlackApp
-  /rpc/slack-apps.delete:
-    delete:
-      description: Soft-delete a Slack app.
-      operationId: deleteSlackApp
-      parameters:
-        - allowEmptyValue: true
-          description: The Slack app ID
-          in: query
-          name: id
-          required: true
-          schema:
-            description: The Slack app ID
-            format: uuid
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      responses:
-        "204":
-          description: No Content response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: deleteSlackApp slack
-      tags:
-        - slack
-      x-speakeasy-name-override: deleteSlackApp
-      x-speakeasy-react-hook:
-        name: deleteSlackApp
-  /rpc/slack-apps.get:
-    get:
-      description: Get details of a specific Slack app.
-      operationId: getSlackApp
-      parameters:
-        - allowEmptyValue: true
-          description: The Slack app ID
-          in: query
-          name: id
-          required: true
-          schema:
-            description: The Slack app ID
-            format: uuid
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SlackAppResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: getSlackApp slack
-      tags:
-        - slack
-      x-speakeasy-name-override: getSlackApp
-      x-speakeasy-react-hook:
-        name: getSlackApp
-  /rpc/slack-apps.list:
-    get:
-      description: List Slack apps for a project.
-      operationId: listSlackApps
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ListSlackAppsResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: listSlackApps slack
-      tags:
-        - slack
-      x-speakeasy-name-override: listSlackApps
-      x-speakeasy-react-hook:
-        name: listSlackApps
-  /rpc/slack-apps.update:
+  /rpc/risk.updateExclusions:
     put:
-      description: Update a Slack app's settings.
-      operationId: updateSlackApp
+      description: Update a risk exclusion.
+      operationId: updateRiskExclusion
       parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
         - allowEmptyValue: true
           description: Session header
           in: header
@@ -24405,14 +23931,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateSlackAppRequestBody'
+              $ref: '#/components/schemas/UpdateRiskExclusionRequestBody'
         required: true
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SlackAppResult'
+                $ref: '#/components/schemas/RiskExclusion'
           description: OK response.
         "400":
           content:
@@ -24469,15 +23995,19 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
         - project_slug_header_Gram-Project: []
           session_header_Gram-Session: []
         - {}
-      summary: updateSlackApp slack
+      summary: updateRiskExclusion risk
       tags:
-        - slack
-      x-speakeasy-name-override: updateSlackApp
+        - risk
+      x-speakeasy-group: risk.exclusions
+      x-speakeasy-name-override: update
       x-speakeasy-react-hook:
-        name: updateSlackApp
+        name: RiskUpdateExclusion
+        type: mutation
   /rpc/telemetry.captureEvent:
     post:
       description: Capture a telemetry event and forward it to PostHog
@@ -31653,6 +31183,9 @@ components:
         enabled:
           type: boolean
           description: Whether the provider integration is active.
+        external_organization_id:
+          type: string
+          description: Provider organization identifier. Required for anthropic_compliance; omitted for providers that do not need one.
         has_api_key:
           type: boolean
           description: Whether an API key is currently stored. The key itself is never returned.
@@ -31689,7 +31222,7 @@ components:
           description: Project used as the telemetry write target. Omitted when no config is set.
         provider:
           type: string
-          description: AI provider identifier. Initially only cursor is supported.
+          description: AI provider identifier. Supported values include cursor and anthropic_compliance.
         updated_at:
           type: string
           description: ISO 8601 timestamp of the most recent change. Omitted when no config is set.
@@ -32241,22 +31774,6 @@ components:
         - match_breadth
         - match_value
         - display_name
-    ApproveShadowMCPRequestBody:
-      type: object
-      properties:
-        match:
-          type: string
-          description: The MCP server identifier to approve.
-        policy_id:
-          type: string
-          description: The risk policy ID.
-          format: uuid
-        server_name:
-          type: string
-          description: Display name of the MCP server (optional, for UI).
-      required:
-        - policy_id
-        - match
     Asset:
       type: object
       properties:
@@ -32430,13 +31947,16 @@ components:
           type: string
           description: ID of the collection
           format: uuid
+        mcp_server_id:
+          type: string
+          description: ID of the MCP server to attach (provide exactly one of toolset_id or mcp_server_id)
+          format: uuid
         toolset_id:
           type: string
-          description: ID of the toolset to attach
+          description: ID of the toolset to attach (provide exactly one of toolset_id or mcp_server_id)
           format: uuid
       required:
         - collection_id
-        - toolset_id
     AuditLog:
       type: object
       properties:
@@ -33405,27 +32925,6 @@ components:
           type: string
           description: Reason for the decision, shown to the user
       description: Result for Codex hook events
-    ConfigureSlackAppRequestBody:
-      type: object
-      properties:
-        id:
-          type: string
-          description: The Slack app ID
-          format: uuid
-        slack_client_id:
-          type: string
-          description: Slack app Client ID
-        slack_client_secret:
-          type: string
-          description: Slack app Client Secret
-        slack_signing_secret:
-          type: string
-          description: Slack app Signing Secret
-      required:
-        - id
-        - slack_client_id
-        - slack_client_secret
-        - slack_signing_secret
     CreateAssistantForm:
       type: object
       properties:
@@ -33912,6 +33411,13 @@ components:
         jwks_uri:
           type: string
           description: Upstream JWKS URI.
+        logo_asset_id:
+          type: string
+          description: Optional logo asset id.
+          format: uuid
+        name:
+          type: string
+          description: Optional display name. Stored NULL when empty; clients fall back to the issuer URL/slug.
         oidc:
           type: boolean
           description: When true, may unlock OIDC-aware behaviour. Default false.
@@ -33976,6 +33482,11 @@ components:
           description: Registry namespace (e.g., 'com.speakeasy.acme.my-tools')
           minLength: 1
           maxLength: 200
+        mcp_server_ids:
+          type: array
+          items:
+            type: string
+          description: MCP server IDs to attach to the collection
         name:
           type: string
           description: Display name for the collection
@@ -34026,6 +33537,40 @@ components:
         - client_token
         - expires_after
         - status
+    CreateRiskExclusionRequestBody:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Whether the exclusion is active.
+          default: true
+        match_type:
+          type: string
+          description: How match_value is interpreted.
+          enum:
+            - exact
+            - regex
+            - rule_id
+            - source
+            - entity_type
+        match_value:
+          type: string
+          description: The value matched against findings, interpreted per match_type.
+        risk_policy_id:
+          type: string
+          description: Bind the exclusion to a single policy. Omit for a global (project-wide) exclusion.
+          format: uuid
+        rule_id_filter:
+          type: string
+          description: 'Optional: only apply within this rule_id. Empty means any.'
+          default: ""
+        source_filter:
+          type: string
+          description: 'Optional: only apply within this source. Empty means any.'
+          default: ""
+      required:
+        - match_type
+        - match_value
     CreateRiskPolicyRequestBody:
       type: object
       properties:
@@ -34057,14 +33602,26 @@ components:
           items:
             type: string
           description: Message types this policy applies to. When empty or omitted, the policy scans all supported types.
+        model_config:
+          $ref: '#/components/schemas/RiskPolicyModelConfig'
         name:
           type: string
           description: The policy name. If omitted, a name will be auto-generated.
+        policy_type:
+          type: string
+          description: 'Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge). Defaults to standard.'
+          default: standard
+          enum:
+            - standard
+            - prompt_based
         presidio_entities:
           type: array
           items:
             type: string
           description: Presidio entity types to detect.
+        prompt:
+          type: string
+          description: 'For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Required when policy_type is prompt_based.'
         prompt_injection_rules:
           type: array
           items:
@@ -34238,36 +33795,6 @@ components:
       required:
         - url
         - expires_at
-    CreateSlackAppRequestBody:
-      type: object
-      properties:
-        icon_asset_id:
-          type: string
-          description: Asset ID for the app icon
-          format: uuid
-        name:
-          type: string
-          description: Display name for the Slack app
-          minLength: 1
-          maxLength: 36
-        system_prompt:
-          type: string
-          description: System prompt for the Slack app
-        toolset_ids:
-          type: array
-          items:
-            type: string
-          description: Toolset IDs to attach to this app
-      required:
-        - name
-        - toolset_ids
-    CreateSlackAppResult:
-      type: object
-      properties:
-        app:
-          $ref: '#/components/schemas/SlackAppResult'
-      required:
-        - app
     CreateToolsetForm:
       type: object
       properties:
@@ -34604,7 +34131,7 @@ components:
       properties:
         provider:
           type: string
-          description: AI provider identifier. Initially only cursor is supported.
+          description: AI provider identifier. Supported values include cursor and anthropic_compliance.
       required:
         - provider
     DeleteGlobalToolVariationForm:
@@ -35060,14 +34587,10 @@ components:
         value:
           type: string
           description: Redacted values of the environment variable
-        value_hash:
-          type: string
-          description: Hash of the value to identify matching values across environments without exposing the actual value
       description: A single environment entry
       required:
         - name
         - value
-        - value_hash
         - created_at
         - updated_at
     EnvironmentEntryInput:
@@ -35286,6 +34809,10 @@ components:
           type: string
           description: URL to the server's icon
           format: uri
+        mcp_server_id:
+          type: string
+          description: ID of the attached MCP server when this server is listed from a Collection (mcp_server-backed attachment)
+          format: uuid
         meta:
           description: Opaque metadata from the registry
         organization_mcp_collection_registry_id:
@@ -35315,7 +34842,7 @@ components:
           description: Tools available on the server
         toolset_id:
           type: string
-          description: ID of the attached toolset when this server is listed from a Collection
+          description: ID of the attached toolset when this server is listed from a Collection (toolset-backed attachment)
           format: uuid
         version:
           type: string
@@ -37422,6 +36949,16 @@ components:
           description: List of collections
       required:
         - collections
+    ListRiskExclusionsResult:
+      type: object
+      properties:
+        exclusions:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskExclusion'
+          description: The list of risk exclusions.
+      required:
+        - exclusions
     ListRiskPoliciesResult:
       type: object
       properties:
@@ -37604,26 +37141,6 @@ components:
             $ref: '#/components/schemas/ShadowMCPApprovalRequest'
       required:
         - requests
-    ListShadowMCPApprovalsResult:
-      type: object
-      properties:
-        approvals:
-          type: array
-          items:
-            $ref: '#/components/schemas/ShadowMCPApproval'
-          description: The approved shadow-MCP servers for the policy (URL- or command-keyed).
-      required:
-        - approvals
-    ListSlackAppsResult:
-      type: object
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/SlackAppResult'
-          description: List of Slack apps
-      required:
-        - items
     ListToolFiltersResult:
       type: object
       properties:
@@ -40048,6 +39565,13 @@ components:
         jwks_uri:
           type: string
           description: Upstream JWKS URI; null when not advertised.
+        logo_asset_id:
+          type: string
+          description: Optional logo asset id; null when unset.
+          format: uuid
+        name:
+          type: string
+          description: Optional display name; null when unset.
         oidc:
           type: boolean
           description: When true, may unlock OIDC-aware behaviour.
@@ -40409,6 +39933,60 @@ components:
         - severity
         - created_at
         - updated_at
+    RiskExclusion:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: When the exclusion was created.
+          format: date-time
+        enabled:
+          type: boolean
+          description: Whether the exclusion is active.
+        id:
+          type: string
+          description: The exclusion ID.
+          format: uuid
+        match_type:
+          type: string
+          description: 'How match_value is interpreted: exact (finding text), regex (RE2 pattern over finding text), rule_id, source, or entity_type (presidio entity, matched as rule_id ''pii.<entity>'').'
+          enum:
+            - exact
+            - regex
+            - rule_id
+            - source
+            - entity_type
+        match_value:
+          type: string
+          description: The value matched against findings, interpreted per match_type.
+        project_id:
+          type: string
+          description: The project ID.
+          format: uuid
+        risk_policy_id:
+          type: string
+          description: 'The policy this exclusion is bound to. Null/omitted means global: the exclusion applies to every policy in the project.'
+          format: uuid
+        rule_id_filter:
+          type: string
+          description: 'Optional narrowing: an exact/regex/source exclusion only applies to findings with this rule_id. Empty means any.'
+        source_filter:
+          type: string
+          description: 'Optional narrowing: an exact/regex/rule_id exclusion only applies to findings from this source. Empty means any.'
+        updated_at:
+          type: string
+          description: When the exclusion was last updated.
+          format: date-time
+      required:
+        - id
+        - project_id
+        - match_type
+        - match_value
+        - rule_id_filter
+        - source_filter
+        - enabled
+        - created_at
+        - updated_at
     RiskIDRequestBody:
       type: object
       properties:
@@ -40563,6 +40141,8 @@ components:
           items:
             type: string
           description: 'Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message.'
+        model_config:
+          $ref: '#/components/schemas/RiskPolicyModelConfig'
         name:
           type: string
           description: The policy name.
@@ -40570,6 +40150,13 @@ components:
           type: integer
           description: Number of messages not yet analyzed at the current policy version.
           format: int64
+        policy_type:
+          type: string
+          description: 'Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge).'
+          default: standard
+          enum:
+            - standard
+            - prompt_based
         presidio_entities:
           type: array
           items:
@@ -40579,6 +40166,9 @@ components:
           type: string
           description: The project ID.
           format: uuid
+        prompt:
+          type: string
+          description: 'For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Null for standard policies.'
         prompt_injection_rules:
           type: array
           items:
@@ -40608,6 +40198,7 @@ components:
         - id
         - project_id
         - name
+        - policy_type
         - sources
         - enabled
         - action
@@ -40617,6 +40208,20 @@ components:
         - updated_at
         - pending_messages
         - total_messages
+    RiskPolicyBypassApprovalRequestBody:
+      type: object
+      properties:
+        granted_principal_urns:
+          type: array
+          items:
+            type: string
+          description: Principal URNs to grant bypass access to. Use user:all for every user in the organization.
+        id:
+          type: string
+          description: The bypass request ID.
+          format: uuid
+      required:
+        - id
     RiskPolicyBypassRequest:
       type: object
       properties:
@@ -40688,6 +40293,19 @@ components:
         - granted_principal_urns
         - created_at
         - updated_at
+    RiskPolicyModelConfig:
+      type: object
+      properties:
+        fail_open:
+          type: boolean
+          description: 'When the judge errors or times out: true allows the message (fail-open), false blocks it (fail-closed). Defaults to fail-open.'
+        model:
+          type: string
+          description: OpenRouter model id the judge should use. Empty selects the default judge model.
+        temperature:
+          type: number
+          description: Sampling temperature for the judge. Defaults to a low value for deterministic verdicts.
+          format: double
     RiskPolicyStatus:
       type: object
       properties:
@@ -42083,30 +41701,6 @@ components:
         - match_breadth
         - match_value
         - display_name
-    ShadowMCPApproval:
-      type: object
-      properties:
-        approved_at:
-          type: string
-          description: When the approval was recorded.
-          format: date-time
-        approved_by:
-          type: string
-          description: User that recorded the approval.
-        match:
-          type: string
-          description: The MCP server identifier this approval covers — typically a server URL, stdio command, or `mcp__<server>__` prefix (the same value surfaced in `RiskResult.match`).
-        policy_id:
-          type: string
-          description: The risk policy ID this approval is scoped to.
-          format: uuid
-        server_name:
-          type: string
-          description: Display name of the MCP server, when known.
-      required:
-        - policy_id
-        - match
-        - approved_at
     ShadowMCPApprovalDecisionResult:
       type: object
       properties:
@@ -42256,58 +41850,6 @@ components:
         - bucket_start_ns
         - skill_name
         - event_count
-    SlackAppResult:
-      type: object
-      properties:
-        created_at:
-          type: string
-          format: date-time
-        icon_asset_id:
-          type: string
-          description: Asset ID for the app icon
-        id:
-          type: string
-          description: The Slack app ID
-          format: uuid
-        name:
-          type: string
-          description: Display name of the Slack app
-        redirect_url:
-          type: string
-          description: OAuth callback URL for this app
-        request_url:
-          type: string
-          description: Event subscription URL for this app
-        slack_client_id:
-          type: string
-          description: The Slack app Client ID
-        slack_team_id:
-          type: string
-          description: The connected Slack workspace ID
-        slack_team_name:
-          type: string
-          description: The connected Slack workspace name
-        status:
-          type: string
-          description: 'Current status: unconfigured, active'
-        system_prompt:
-          type: string
-          description: System prompt for the Slack app
-        toolset_ids:
-          type: array
-          items:
-            type: string
-          description: Attached toolset IDs
-        updated_at:
-          type: string
-          format: date-time
-      required:
-        - id
-        - name
-        - status
-        - toolset_ids
-        - created_at
-        - updated_at
     SourceEnvironmentLink:
       type: object
       properties:
@@ -43929,6 +43471,13 @@ components:
         jwks_uri:
           type: string
           description: Upstream JWKS URI.
+        logo_asset_id:
+          type: string
+          description: Set the logo asset id.
+          format: uuid
+        name:
+          type: string
+          description: Set or clear the display name. An empty string clears it to NULL.
         oidc:
           type: boolean
         passthrough:
@@ -43981,6 +43530,44 @@ components:
             - private
       required:
         - collection_id
+    UpdateRiskExclusionRequestBody:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Whether the exclusion is active. Omit to leave unchanged.
+        id:
+          type: string
+          description: The exclusion ID.
+          format: uuid
+        match_type:
+          type: string
+          description: How match_value is interpreted.
+          enum:
+            - exact
+            - regex
+            - rule_id
+            - source
+            - entity_type
+        match_value:
+          type: string
+          description: The value matched against findings, interpreted per match_type.
+        risk_policy_id:
+          type: string
+          description: Bind the exclusion to a single policy. Omit for a global (project-wide) exclusion.
+          format: uuid
+        rule_id_filter:
+          type: string
+          description: 'Optional: only apply within this rule_id. Empty means any.'
+          default: ""
+        source_filter:
+          type: string
+          description: 'Optional: only apply within this source. Empty means any.'
+          default: ""
+      required:
+        - id
+        - match_type
+        - match_value
     UpdateRiskPolicyRequestBody:
       type: object
       properties:
@@ -44015,6 +43602,8 @@ components:
           items:
             type: string
           description: Message types this policy applies to. Omit to preserve the current selection; send an empty array to apply to all types.
+        model_config:
+          $ref: '#/components/schemas/RiskPolicyModelConfig'
         name:
           type: string
           description: The policy name.
@@ -44023,6 +43612,9 @@ components:
           items:
             type: string
           description: Presidio entity types to detect.
+        prompt:
+          type: string
+          description: 'For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Omit to preserve the current value.'
         prompt_injection_rules:
           type: array
           items:
@@ -44157,27 +43749,6 @@ components:
         - match_value
         - display_name
         - access_scope
-    UpdateSlackAppRequestBody:
-      type: object
-      properties:
-        icon_asset_id:
-          type: string
-          description: Asset ID for the app icon
-          format: uuid
-        id:
-          type: string
-          description: The Slack app ID
-          format: uuid
-        name:
-          type: string
-          description: New display name for the Slack app
-          minLength: 1
-          maxLength: 36
-        system_prompt:
-          type: string
-          description: System prompt for the Slack app
-      required:
-        - id
     UpdateToolsetForm:
       type: object
       properties:
@@ -44451,9 +44022,12 @@ components:
         enabled:
           type: boolean
           description: Whether the integration should be active.
+        external_organization_id:
+          type: string
+          description: Provider organization identifier. Required for anthropic_compliance.
         provider:
           type: string
-          description: AI provider identifier. Initially only cursor is supported.
+          description: AI provider identifier. Supported values include cursor and anthropic_compliance.
       required:
         - provider
         - api_key
@@ -45065,8 +44639,6 @@ tags:
     description: Dashboard API for interacting with resources.
   - name: risk
     description: Manage risk analysis policies and view scan results.
-  - name: slack
-    description: Auth and interactions for the Gram Slack App.
   - name: telemetry
     description: Fetch telemetry data for tools in Gram.
   - name: templates

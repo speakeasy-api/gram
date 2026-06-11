@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"log/slog"
 	"net/url"
 
@@ -39,7 +40,7 @@ type Service struct {
 	logger             *slog.Logger
 	db                 *pgxpool.Pool
 	telemetryLogger    *telemetry.Logger
-	auth               *auth.Auth
+	auth               authorizer
 	authz              *authz.Engine
 	cache              cache.Cache
 	temporalEnv        *tenv.Environment
@@ -47,10 +48,15 @@ type Service struct {
 	productFeatures    ProductFeaturesClient
 	chatTitleGenerator ChatTitleGenerator
 	riskScanner        risk.RiskScanner
+	policyBypass       *risk.PolicyBypassEvaluator
 	shadowMCPClient    *shadowmcp.Client
 	writer             *chat.ChatMessageWriter
 	siteURL            *url.URL
 	jwtSecret          string
+}
+
+type authorizer interface {
+	Authorize(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error)
 }
 
 // SessionMetadata contains validated session information from the Logs endpoint
@@ -98,6 +104,7 @@ func NewService(
 	pfClient ProductFeaturesClient,
 	chatTitleGenerator ChatTitleGenerator,
 	riskScanner risk.RiskScanner,
+	policyBypass *risk.PolicyBypassEvaluator,
 	shadowMCPClient *shadowmcp.Client,
 	writer *chat.ChatMessageWriter,
 	siteURL *url.URL,
@@ -116,6 +123,7 @@ func NewService(
 		productFeatures:    pfClient,
 		chatTitleGenerator: chatTitleGenerator,
 		riskScanner:        riskScanner,
+		policyBypass:       policyBypass,
 		shadowMCPClient:    shadowMCPClient,
 		writer:             writer,
 		siteURL:            siteURL,
@@ -124,7 +132,11 @@ func NewService(
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.auth.Authorize(ctx, key, schema)
+	ctx, err := s.auth.Authorize(ctx, key, schema)
+	if err != nil {
+		return ctx, fmt.Errorf("authorize hooks api key: %w", err)
+	}
+	return ctx, nil
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {

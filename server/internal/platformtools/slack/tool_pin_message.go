@@ -60,7 +60,7 @@ func callPinMessage(ctx context.Context, client *apiClient, env toolconfig.ToolC
 		"timestamp": timestamp,
 	}
 
-	body, err := client.call(ctx, "pins.add", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "pins.add", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

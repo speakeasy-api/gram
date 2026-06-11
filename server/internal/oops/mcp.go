@@ -41,7 +41,7 @@ func MCPErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.R
 		var shareableErr *ShareableError
 		switch {
 		case errors.As(err, &shareableErr):
-			code = shareableErr.HTTPStatus()
+			code = shareableErr.HTTPStatus(r.Context())
 			payload.Code = shareableErr.Code.MCPCode()
 			payload.Message = shareableErr.Error()
 		default:

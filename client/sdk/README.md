@@ -446,12 +446,6 @@ run();
 
 * [list](docs/sdks/resources/README.md#list) - listResources resources
 
-### [Risk.Approvals](docs/sdks/approvals/README.md)
-
-* [create](docs/sdks/approvals/README.md#create) - approveShadowMCP risk
-* [delete](docs/sdks/approvals/README.md#delete) - revokeShadowMCPApproval risk
-* [list](docs/sdks/approvals/README.md#list) - listShadowMCPApprovals risk
-
 ### [Risk.Capabilities](docs/sdks/capabilities/README.md)
 
 * [get](docs/sdks/capabilities/README.md#get) - getRiskCapabilities risk
@@ -468,6 +462,13 @@ run();
 * [list](docs/sdks/customrules/README.md#list) - listCustomDetectionRules risk
 * [suggest](docs/sdks/customrules/README.md#suggest) - suggestCustomDetectionRule risk
 * [update](docs/sdks/customrules/README.md#update) - updateCustomDetectionRule risk
+
+### [Risk.Exclusions](docs/sdks/exclusions/README.md)
+
+* [create](docs/sdks/exclusions/README.md#create) - createRiskExclusion risk
+* [delete](docs/sdks/exclusions/README.md#delete) - deleteRiskExclusion risk
+* [list](docs/sdks/exclusions/README.md#list) - listRiskExclusions risk
+* [update](docs/sdks/exclusions/README.md#update) - updateRiskExclusion risk
 
 ### [Risk.Overview](docs/sdks/overview/README.md)
 
@@ -502,15 +503,6 @@ run();
 ### [Risk.Rules](docs/sdks/rules/README.md)
 
 * [test](docs/sdks/rules/README.md#test) - testDetectionRule risk
-
-### [Slack](docs/sdks/slack/README.md)
-
-* [configureSlackApp](docs/sdks/slack/README.md#configureslackapp) - configureSlackApp slack
-* [createSlackApp](docs/sdks/slack/README.md#createslackapp) - createSlackApp slack
-* [deleteSlackApp](docs/sdks/slack/README.md#deleteslackapp) - deleteSlackApp slack
-* [getSlackApp](docs/sdks/slack/README.md#getslackapp) - getSlackApp slack
-* [listSlackApps](docs/sdks/slack/README.md#listslackapps) - listSlackApps slack
-* [updateSlackApp](docs/sdks/slack/README.md#updateslackapp) - updateSlackApp slack
 
 ### [Telemetry](docs/sdks/telemetry/README.md)
 
@@ -837,9 +829,6 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`remoteSessionsList`](docs/sdks/remotesessions/README.md#list) - listRemoteSessions remoteSessions
 - [`remoteSessionsRevoke`](docs/sdks/remotesessions/README.md#revoke) - revokeRemoteSession remoteSessions
 - [`resourcesList`](docs/sdks/resources/README.md#list) - listResources resources
-- [`riskApprovalsCreate`](docs/sdks/approvals/README.md#create) - approveShadowMCP risk
-- [`riskApprovalsDelete`](docs/sdks/approvals/README.md#delete) - revokeShadowMCPApproval risk
-- [`riskApprovalsList`](docs/sdks/approvals/README.md#list) - listShadowMCPApprovals risk
 - [`riskCapabilitiesGet`](docs/sdks/capabilities/README.md#get) - getRiskCapabilities risk
 - [`riskCategoriesList`](docs/sdks/categories/README.md#list) - listRiskCategories risk
 - [`riskCustomRulesCreate`](docs/sdks/customrules/README.md#create) - createCustomDetectionRule risk
@@ -848,6 +837,10 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskCustomRulesList`](docs/sdks/customrules/README.md#list) - listCustomDetectionRules risk
 - [`riskCustomRulesSuggest`](docs/sdks/customrules/README.md#suggest) - suggestCustomDetectionRule risk
 - [`riskCustomRulesUpdate`](docs/sdks/customrules/README.md#update) - updateCustomDetectionRule risk
+- [`riskExclusionsCreate`](docs/sdks/exclusions/README.md#create) - createRiskExclusion risk
+- [`riskExclusionsDelete`](docs/sdks/exclusions/README.md#delete) - deleteRiskExclusion risk
+- [`riskExclusionsList`](docs/sdks/exclusions/README.md#list) - listRiskExclusions risk
+- [`riskExclusionsUpdate`](docs/sdks/exclusions/README.md#update) - updateRiskExclusion risk
 - [`riskOverviewGet`](docs/sdks/overview/README.md#get) - getRiskOverview risk
 - [`riskOverviewRules`](docs/sdks/overview/README.md#rules) - getRiskRuleBreakdown risk
 - [`riskOverviewUserBreakdown`](docs/sdks/overview/README.md#userbreakdown) - getRiskUserBreakdown risk
@@ -867,12 +860,6 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskResultsList`](docs/sdks/results/README.md#list) - listRiskResults risk
 - [`riskResultsListForAgent`](docs/sdks/results/README.md#listforagent) - listRiskResultsForAgent risk
 - [`riskRulesTest`](docs/sdks/rules/README.md#test) - testDetectionRule risk
-- [`slackConfigureSlackApp`](docs/sdks/slack/README.md#configureslackapp) - configureSlackApp slack
-- [`slackCreateSlackApp`](docs/sdks/slack/README.md#createslackapp) - createSlackApp slack
-- [`slackDeleteSlackApp`](docs/sdks/slack/README.md#deleteslackapp) - deleteSlackApp slack
-- [`slackGetSlackApp`](docs/sdks/slack/README.md#getslackapp) - getSlackApp slack
-- [`slackListSlackApps`](docs/sdks/slack/README.md#listslackapps) - listSlackApps slack
-- [`slackUpdateSlackApp`](docs/sdks/slack/README.md#updateslackapp) - updateSlackApp slack
 - [`telemetryCaptureEvent`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
 - [`telemetryGetEmployeeDataFlowGraph`](docs/sdks/telemetry/README.md#getemployeedataflowgraph) - getEmployeeDataFlowGraph telemetry
 - [`telemetryGetHooksSummary`](docs/sdks/telemetry/README.md#gethookssummary) - getHooksSummary telemetry
@@ -1000,7 +987,6 @@ To learn about this feature and how to get started, check
 - [`useCollectionsDetachServerMutation`](docs/sdks/collections/README.md#detachserver) - detachServer collections
 - [`useCollectionsListServers`](docs/sdks/collections/README.md#listservers) - listServers collections
 - [`useCollectionsUpdateMutation`](docs/sdks/collections/README.md#update) - update collections
-- [`useConfigureSlackAppMutation`](docs/sdks/slack/README.md#configureslackapp) - configureSlackApp slack
 - [`useCreateAPIKeyMutation`](docs/sdks/keys/README.md#create) - createKey keys
 - [`useCreateCheckoutMutation`](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
 - [`useCreateCustomerSessionMutation`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
@@ -1021,7 +1007,6 @@ To learn about this feature and how to get started, check
 - [`useCreateShadowMCPAccessRuleMutation`](docs/sdks/access/README.md#createshadowmcpaccessrule) - createShadowMCPAccessRule access
 - [`useCreateShadowMCPApprovalRequestMutation`](docs/sdks/access/README.md#createshadowmcpapprovalrequest) - createShadowMCPApprovalRequest access
 - [`useCreateSignedChatAttachmentURLMutation`](docs/sdks/assets/README.md#createsignedchatattachmenturl) - createSignedChatAttachmentURL assets
-- [`useCreateSlackAppMutation`](docs/sdks/slack/README.md#createslackapp) - createSlackApp slack
 - [`useCreateTemplateMutation`](docs/sdks/templates/README.md#create) - createTemplate templates
 - [`useCreateToolsetMutation`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
 - [`useCreateTopUpCheckoutMutation`](docs/sdks/usage/README.md#createtopupcheckout) - createTopUpCheckout usage
@@ -1043,7 +1028,6 @@ To learn about this feature and how to get started, check
 - [`useDeleteRemoteSessionIssuerMutation`](docs/sdks/remotesessionissuers/README.md#delete) - deleteRemoteSessionIssuer remoteSessionIssuers
 - [`useDeleteRoleMutation`](docs/sdks/access/README.md#deleterole) - deleteRole access
 - [`useDeleteShadowMCPAccessRuleMutation`](docs/sdks/access/README.md#deleteshadowmcpaccessrule) - deleteShadowMCPAccessRule access
-- [`useDeleteSlackAppMutation`](docs/sdks/slack/README.md#deleteslackapp) - deleteSlackApp slack
 - [`useDeleteSourceEnvironmentLinkMutation`](docs/sdks/environments/README.md#deletesourcelink) - deleteSourceEnvironmentLink environments
 - [`useDeleteTemplateMutation`](docs/sdks/templates/README.md#delete) - deleteTemplate templates
 - [`useDeleteToolsetEnvironmentLinkMutation`](docs/sdks/environments/README.md#deletetoolsetlink) - deleteToolsetEnvironmentLink environments
@@ -1078,7 +1062,6 @@ To learn about this feature and how to get started, check
 - [`useGetProjectMetricsSummary`](docs/sdks/telemetry/README.md#getprojectmetricssummary) - getProjectMetricsSummary telemetry
 - [`useGetProjectOverview`](docs/sdks/telemetry/README.md#getprojectoverview) - getProjectOverview telemetry
 - [`useGetRemoteMcpServer`](docs/sdks/remotemcp/README.md#getserver) - getServer remoteMcp
-- [`useGetSlackApp`](docs/sdks/slack/README.md#getslackapp) - getSlackApp slack
 - [`useGetSourceEnvironment`](docs/sdks/environments/README.md#getbysource) - getSourceEnvironment environments
 - [`useGetToolsetEnvironment`](docs/sdks/environments/README.md#getbytoolset) - getToolsetEnvironment environments
 - [`useGetUsageTiers`](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
@@ -1117,7 +1100,6 @@ To learn about this feature and how to get started, check
 - [`useListProjects`](docs/sdks/projects/README.md#list) - listProjects projects
 - [`useListResources`](docs/sdks/resources/README.md#list) - listResources resources
 - [`useListScopes`](docs/sdks/access/README.md#listscopes) - listScopes access
-- [`useListSlackApps`](docs/sdks/slack/README.md#listslackapps) - listSlackApps slack
 - [`useListTools`](docs/sdks/tools/README.md#list) - listTools tools
 - [`useListToolsets`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 - [`useListToolsetsForOrg`](docs/sdks/toolsets/README.md#listfororg) - listToolsetsForOrg toolsets
@@ -1173,24 +1155,24 @@ To learn about this feature and how to get started, check
 - [`useRevokeUserSessionClientMutation`](docs/sdks/usersessionclients/README.md#revoke) - revokeUserSessionClient userSessionClients
 - [`useRevokeUserSessionConsentMutation`](docs/sdks/usersessionconsents/README.md#revoke) - revokeUserSessionConsent userSessionConsents
 - [`useRevokeUserSessionMutation`](docs/sdks/usersessions/README.md#revoke) - revokeUserSession userSessions
-- [`useRiskApprovalsDeleteMutation`](docs/sdks/approvals/README.md#delete) - revokeShadowMCPApproval risk
 - [`useRiskApprovePolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#approve) - approveRiskPolicyBypassRequest risk
-- [`useRiskApproveShadowMCPMutation`](docs/sdks/approvals/README.md#create) - approveShadowMCP risk
 - [`useRiskCapabilities`](docs/sdks/capabilities/README.md#get) - getRiskCapabilities risk
 - [`useRiskCategories`](docs/sdks/categories/README.md#list) - listRiskCategories risk
 - [`useRiskCreateCustomDetectionRuleMutation`](docs/sdks/customrules/README.md#create) - createCustomDetectionRule risk
+- [`useRiskCreateExclusionMutation`](docs/sdks/exclusions/README.md#create) - createRiskExclusion risk
 - [`useRiskCreatePolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#create) - createRiskPolicyBypassRequest risk
 - [`useRiskCreatePolicyMutation`](docs/sdks/policies/README.md#create) - createRiskPolicy risk
 - [`useRiskDeleteCustomDetectionRuleMutation`](docs/sdks/customrules/README.md#delete) - deleteCustomDetectionRule risk
+- [`useRiskDeleteExclusionMutation`](docs/sdks/exclusions/README.md#delete) - deleteRiskExclusion risk
 - [`useRiskDenyPolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#deny) - denyRiskPolicyBypassRequest risk
 - [`useRiskGetCustomDetectionRule`](docs/sdks/customrules/README.md#get) - getCustomDetectionRule risk
 - [`useRiskListCustomDetectionRules`](docs/sdks/customrules/README.md#list) - listCustomDetectionRules risk
+- [`useRiskListExclusions`](docs/sdks/exclusions/README.md#list) - listRiskExclusions risk
 - [`useRiskListPolicies`](docs/sdks/policies/README.md#list) - listRiskPolicies risk
 - [`useRiskListPolicyBypassRequests`](docs/sdks/policybypassrequests/README.md#list) - listRiskPolicyBypassRequests risk
 - [`useRiskListResults`](docs/sdks/results/README.md#list) - listRiskResults risk
 - [`useRiskListResultsByChat`](docs/sdks/results/README.md#bychat) - listRiskResultsByChat risk
 - [`useRiskListResultsForAgent`](docs/sdks/results/README.md#listforagent) - listRiskResultsForAgent risk
-- [`useRiskListShadowMCPApprovals`](docs/sdks/approvals/README.md#list) - listShadowMCPApprovals risk
 - [`useRiskOverview`](docs/sdks/overview/README.md#get) - getRiskOverview risk
 - [`useRiskPoliciesDeleteMutation`](docs/sdks/policies/README.md#delete) - deleteRiskPolicy risk
 - [`useRiskPoliciesGet`](docs/sdks/policies/README.md#get) - getRiskPolicy risk
@@ -1202,6 +1184,7 @@ To learn about this feature and how to get started, check
 - [`useRiskSuggestCustomRuleMutation`](docs/sdks/customrules/README.md#suggest) - suggestCustomDetectionRule risk
 - [`useRiskTestDetectionRuleMutation`](docs/sdks/rules/README.md#test) - testDetectionRule risk
 - [`useRiskUpdateCustomDetectionRuleMutation`](docs/sdks/customrules/README.md#update) - updateCustomDetectionRule risk
+- [`useRiskUpdateExclusionMutation`](docs/sdks/exclusions/README.md#update) - updateRiskExclusion risk
 - [`useRiskUserBreakdown`](docs/sdks/overview/README.md#userbreakdown) - getRiskUserBreakdown risk
 - [`useRole`](docs/sdks/access/README.md#getrole) - getRole access
 - [`useRoles`](docs/sdks/access/README.md#listroles) - listRoles access
@@ -1252,7 +1235,6 @@ To learn about this feature and how to get started, check
 - [`useUpdateRemoteSessionIssuerMutation`](docs/sdks/remotesessionissuers/README.md#update) - updateRemoteSessionIssuer remoteSessionIssuers
 - [`useUpdateRoleMutation`](docs/sdks/access/README.md#updaterole) - updateRole access
 - [`useUpdateShadowMCPAccessRuleMutation`](docs/sdks/access/README.md#updateshadowmcpaccessrule) - updateShadowMCPAccessRule access
-- [`useUpdateSlackAppMutation`](docs/sdks/slack/README.md#updateslackapp) - updateSlackApp slack
 - [`useUpdateTemplateMutation`](docs/sdks/templates/README.md#update) - updateTemplate templates
 - [`useUpdateToolsetMutation`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 - [`useUpdateTriggerMutation`](docs/sdks/triggers/README.md#update) - updateTriggerInstance triggers

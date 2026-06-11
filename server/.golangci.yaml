@@ -368,6 +368,8 @@ linters:
         - "(*github.com/speakeasy-api/gram/server/internal/openapi.ToolExtractor).Do("
         - "(*github.com/speakeasy-api/gram/server/internal/functions.ToolExtractor).Do("
         - "github.com/speakeasy-api/gram/server/internal/mv.ToolVariationsGroupName("
+        - "(*github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api.Client).Call("
+        - "(*github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api.Client).CallWithToken("
 
       ignore-sig-regexps:
         - "\\(\\*github\\.com\\/speakeasy-api\\/gram\\/server\\/internal\\/background\\/activities\\..+\\)\\.Do\\("

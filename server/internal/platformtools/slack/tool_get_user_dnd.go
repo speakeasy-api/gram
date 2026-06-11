@@ -48,7 +48,7 @@ func callGetUserDnd(ctx context.Context, client *apiClient, env toolconfig.ToolC
 	request := map[string]any{}
 	setOptionalString(request, "user", input.UserID)
 
-	body, err := client.call(ctx, "dnd.info", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "dnd.info", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

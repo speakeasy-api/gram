@@ -720,7 +720,7 @@ function buildAssistantTools(deps: ToolDeps) {
   const set_tasks = defineFrontendTool<SetTasksArgs, ToolResult>(
     {
       description:
-        "Replace the assistant's # Tasks section — what it actually does on each run: how it interprets incoming events, which tools it tends to use, what its output looks like, when to stay silent. This is the role/goal-specific guidance derived from the user's stated goal. Do not include personality (use set_personality) or behavior (managed automatically). Pass the body WITHOUT a leading '# Tasks' heading. Do not use any H1 (`# Foo`) inside the body — use H2 (`##`) or lower for sub-structure.",
+        "Replace the assistant's # Tasks section — what it actually does on each run: how it interprets incoming events, which tools it tends to use, what its output looks like, when to stay silent. This is the role/goal-specific guidance derived from the user's stated goal. Do not include personality (use set_personality) or behavior (managed automatically). If the current Tasks body contains an '## Owner' subsection, include it unchanged in the replacement. Pass the body WITHOUT a leading '# Tasks' heading. Do not use any H1 (`# Foo`) inside the body — use H2 (`##`) or lower for sub-structure.",
       parameters: z.object({
         tasks: z
           .string()

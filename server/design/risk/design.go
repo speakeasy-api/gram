@@ -22,6 +22,10 @@ var _ = Service("risk", func() {
 			security.SessionPayload()
 			security.ProjectPayload()
 			Attribute("name", String, "The policy name. If omitted, a name will be auto-generated.")
+			Attribute("policy_type", String, "Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge). Defaults to standard.", func() {
+				shared.RiskPolicyTypeEnum()
+				Default("standard")
+			})
 			Attribute("sources", ArrayOf(String), "Detection sources to enable.")
 			Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to detect.")
 			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline (e.g. 'deberta-v3-classifier').")
@@ -35,6 +39,8 @@ var _ = Service("risk", func() {
 			})
 			Attribute("auto_name", Boolean, "Whether the policy name should be auto-generated.")
 			Attribute("user_message", String, "Optional message shown to end users when this policy blocks an action or surfaces a flagged finding.")
+			Attribute("prompt", String, "For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Required when policy_type is prompt_based.")
+			Attribute("model_config", shared.RiskPolicyModelConfig, "For prompt_based policies: per-policy LLM-judge model configuration.")
 		})
 
 		Result(shared.RiskPolicy)
@@ -155,6 +161,8 @@ var _ = Service("risk", func() {
 			})
 			Attribute("auto_name", Boolean, "Whether the policy name should be auto-generated.")
 			Attribute("user_message", String, "Optional message shown to end users when this policy blocks an action or surfaces a flagged finding. Send an empty string to clear.")
+			Attribute("prompt", String, "For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Omit to preserve the current value.")
+			Attribute("model_config", shared.RiskPolicyModelConfig, "For prompt_based policies: per-policy LLM-judge model configuration. Omit to preserve the current value.")
 			Required("id", "name")
 		})
 
@@ -503,96 +511,6 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "status")
 	})
 
-	Method("listShadowMCPApprovals", func() {
-		Description("List shadow-MCP approvals (URL- or command-keyed) for a policy. Temporary Redis-backed storage; will move to a dedicated table once the feature graduates.")
-
-		Payload(func() {
-			security.ByKeyPayload()
-			security.SessionPayload()
-			security.ProjectPayload()
-			Attribute("policy_id", String, "The risk policy ID.", func() {
-				Format(FormatUUID)
-			})
-			Required("policy_id")
-		})
-
-		Result(ListShadowMCPApprovalsResult)
-
-		HTTP(func() {
-			GET("/rpc/risk.approvals.list")
-			security.ByKeyHeader()
-			security.SessionHeader()
-			security.ProjectHeader()
-			Param("policy_id")
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "listShadowMCPApprovals")
-		Meta("openapi:extension:x-speakeasy-group", "risk.approvals")
-		Meta("openapi:extension:x-speakeasy-name-override", "list")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListShadowMCPApprovals"}`)
-	})
-
-	Method("approveShadowMCP", func() {
-		Description("Approve a shadow-MCP server so the named policy stops blocking calls to it. `match` is the same opaque server identifier surfaced in `RiskResult.match` — typically a server URL, stdio command, or `mcp__<server>__` prefix.")
-
-		Payload(func() {
-			security.ByKeyPayload()
-			security.SessionPayload()
-			security.ProjectPayload()
-			Attribute("policy_id", String, "The risk policy ID.", func() {
-				Format(FormatUUID)
-			})
-			Attribute("match", String, "The MCP server identifier to approve.")
-			Attribute("server_name", String, "Display name of the MCP server (optional, for UI).")
-			Required("policy_id", "match")
-		})
-
-		Result(shared.ShadowMCPApproval)
-
-		HTTP(func() {
-			POST("/rpc/risk.approvals.create")
-			security.ByKeyHeader()
-			security.SessionHeader()
-			security.ProjectHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "approveShadowMCP")
-		Meta("openapi:extension:x-speakeasy-group", "risk.approvals")
-		Meta("openapi:extension:x-speakeasy-name-override", "create")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskApproveShadowMCP", "type": "mutation"}`)
-	})
-
-	Method("revokeShadowMCPApproval", func() {
-		Description("Remove a previously-approved shadow-MCP server for a policy.")
-
-		Payload(func() {
-			security.ByKeyPayload()
-			security.SessionPayload()
-			security.ProjectPayload()
-			Attribute("policy_id", String, "The risk policy ID.", func() {
-				Format(FormatUUID)
-			})
-			Attribute("match", String, "The MCP server identifier to revoke — exactly the value used to approve.")
-			Required("policy_id", "match")
-		})
-
-		HTTP(func() {
-			DELETE("/rpc/risk.approvals.delete")
-			security.ByKeyHeader()
-			security.SessionHeader()
-			security.ProjectHeader()
-			Param("policy_id")
-			Param("match")
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "revokeShadowMCPApproval")
-		Meta("openapi:extension:x-speakeasy-group", "risk.approvals")
-		Meta("openapi:extension:x-speakeasy-name-override", "delete")
-	})
-
 	Method("createRiskPolicyBypassRequest", func() {
 		Description("Create or refresh a risk policy bypass request from a signed request URL token.")
 		Security(security.Session)
@@ -660,6 +578,7 @@ var _ = Service("risk", func() {
 			Attribute("id", String, "The bypass request ID.", func() {
 				Format(FormatUUID)
 			})
+			Attribute("granted_principal_urns", ArrayOf(String), "Principal URNs to grant bypass access to. Defaults to the requester when omitted.")
 			Required("id")
 		})
 
@@ -670,7 +589,7 @@ var _ = Service("risk", func() {
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
-			Body(RiskIDRequestBody)
+			Body(RiskPolicyBypassApprovalRequestBody)
 			Response(StatusOK)
 		})
 
@@ -922,6 +841,150 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskDeleteCustomDetectionRule", "type": "mutation"}`)
 	})
 
+	Method("listRiskExclusions", func() {
+		Description("List risk exclusions for the current project. Optionally filter to a single policy.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("risk_policy_id", String, "Filter to exclusions bound to this policy. Omit to return all exclusions (global plus every policy).", func() {
+				Format(FormatUUID)
+			})
+		})
+
+		Result(ListRiskExclusionsResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.listExclusions")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("risk_policy_id")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listRiskExclusions")
+		Meta("openapi:extension:x-speakeasy-group", "risk.exclusions")
+		Meta("openapi:extension:x-speakeasy-name-override", "list")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListExclusions", "type": "query"}`)
+	})
+
+	Method("createRiskExclusion", func() {
+		Description("Create a risk exclusion. Omit risk_policy_id to create a global exclusion that applies to every policy in the project.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("risk_policy_id", String, "Bind the exclusion to a single policy. Omit for a global (project-wide) exclusion.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("match_type", String, "How match_value is interpreted.", func() {
+				shared.RiskExclusionMatchTypeEnum()
+			})
+			Attribute("match_value", String, "The value matched against findings, interpreted per match_type.")
+			Attribute("rule_id_filter", String, "Optional: only apply within this rule_id. Empty means any.", func() {
+				Default("")
+			})
+			Attribute("source_filter", String, "Optional: only apply within this source. Empty means any.", func() {
+				Default("")
+			})
+			Attribute("enabled", Boolean, "Whether the exclusion is active.", func() {
+				Default(true)
+			})
+			Required("match_type", "match_value")
+		})
+
+		Result(shared.RiskExclusion)
+
+		HTTP(func() {
+			POST("/rpc/risk.createExclusions")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createRiskExclusion")
+		Meta("openapi:extension:x-speakeasy-group", "risk.exclusions")
+		Meta("openapi:extension:x-speakeasy-name-override", "create")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCreateExclusion", "type": "mutation"}`)
+	})
+
+	Method("updateRiskExclusion", func() {
+		Description("Update a risk exclusion.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The exclusion ID.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("risk_policy_id", String, "Bind the exclusion to a single policy. Omit for a global (project-wide) exclusion.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("match_type", String, "How match_value is interpreted.", func() {
+				shared.RiskExclusionMatchTypeEnum()
+			})
+			Attribute("match_value", String, "The value matched against findings, interpreted per match_type.")
+			Attribute("rule_id_filter", String, "Optional: only apply within this rule_id. Empty means any.", func() {
+				Default("")
+			})
+			Attribute("source_filter", String, "Optional: only apply within this source. Empty means any.", func() {
+				Default("")
+			})
+			// No default: an omitted `enabled` must leave the exclusion's
+			// current state untouched rather than silently re-enabling it.
+			Attribute("enabled", Boolean, "Whether the exclusion is active. Omit to leave unchanged.")
+			Required("id", "match_type", "match_value")
+		})
+
+		Result(shared.RiskExclusion)
+
+		HTTP(func() {
+			PUT("/rpc/risk.updateExclusions")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "updateRiskExclusion")
+		Meta("openapi:extension:x-speakeasy-group", "risk.exclusions")
+		Meta("openapi:extension:x-speakeasy-name-override", "update")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskUpdateExclusion", "type": "mutation"}`)
+	})
+
+	Method("deleteRiskExclusion", func() {
+		Description("Delete a risk exclusion. Previously suppressed findings are restored.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The exclusion ID.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+		})
+
+		HTTP(func() {
+			DELETE("/rpc/risk.deleteExclusions")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("id")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "deleteRiskExclusion")
+		Meta("openapi:extension:x-speakeasy-group", "risk.exclusions")
+		Meta("openapi:extension:x-speakeasy-name-override", "delete")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskDeleteExclusion", "type": "mutation"}`)
+	})
+
 	Method("suggestCustomDetectionRule", func() {
 		Description("Suggest a custom detection rule (rule_id, title, description, regex, severity) from a natural-language prompt. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create form.")
 
@@ -1022,6 +1085,11 @@ var TestDetectionRuleResult = Type("TestDetectionRuleResult", func() {
 var ListRiskPoliciesResult = Type("ListRiskPoliciesResult", func() {
 	Attribute("policies", ArrayOf(shared.RiskPolicy), "The list of risk policies.")
 	Required("policies")
+})
+
+var ListRiskExclusionsResult = Type("ListRiskExclusionsResult", func() {
+	Attribute("exclusions", ArrayOf(shared.RiskExclusion), "The list of risk exclusions.")
+	Required("exclusions")
 })
 
 var ListCustomDetectionRulesResult = Type("ListCustomDetectionRulesResult", func() {
@@ -1149,11 +1217,6 @@ var RiskOverviewTimeSeriesFinding = Type("RiskOverviewTimeSeriesFinding", func()
 	Required("bucket_start", "category", "findings")
 })
 
-var ListShadowMCPApprovalsResult = Type("ListShadowMCPApprovalsResult", func() {
-	Attribute("approvals", ArrayOf(shared.ShadowMCPApproval), "The approved shadow-MCP servers for the policy (URL- or command-keyed).")
-	Required("approvals")
-})
-
 var RiskPolicyBypassRequest = Type("RiskPolicyBypassRequest", func() {
 	Attribute("id", String, "The bypass request ID.", func() {
 		Format(FormatUUID)
@@ -1191,6 +1254,16 @@ var RiskIDRequestBody = Type("RiskIDRequestBody", func() {
 	Attribute("id", String, "The resource ID.", func() {
 		Format(FormatUUID)
 	})
+	Required("id")
+})
+
+var RiskPolicyBypassApprovalRequestBody = Type("RiskPolicyBypassApprovalRequestBody", func() {
+	Meta("openapi:typename", "RiskPolicyBypassApprovalRequestBody")
+
+	Attribute("id", String, "The bypass request ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("granted_principal_urns", ArrayOf(String), "Principal URNs to grant bypass access to. Use user:all for every user in the organization.")
 	Required("id")
 })
 

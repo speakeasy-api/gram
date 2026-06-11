@@ -10,6 +10,8 @@ INSERT INTO remote_session_issuers (
     organization_id,
     slug,
     issuer,
+    name,
+    logo_asset_id,
     authorization_endpoint,
     token_endpoint,
     registration_endpoint,
@@ -26,6 +28,8 @@ VALUES (
     @organization_id,
     @slug,
     @issuer,
+    @name,
+    @logo_asset_id,
     @authorization_endpoint,
     @token_endpoint,
     @registration_endpoint,
@@ -78,6 +82,11 @@ UPDATE remote_session_issuers
 SET
     slug = COALESCE(sqlc.narg('slug'), slug),
     issuer = COALESCE(sqlc.narg('issuer'), issuer),
+    name = CASE
+        WHEN sqlc.narg('name')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('name'), name)
+    END,
+    logo_asset_id = COALESCE(sqlc.narg('logo_asset_id'), logo_asset_id),
     authorization_endpoint = CASE
         WHEN sqlc.narg('authorization_endpoint')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('authorization_endpoint'), authorization_endpoint)
@@ -139,6 +148,11 @@ UPDATE remote_session_issuers
 SET
     slug = COALESCE(sqlc.narg('slug'), slug),
     issuer = COALESCE(sqlc.narg('issuer'), issuer),
+    name = CASE
+        WHEN sqlc.narg('name')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('name'), name)
+    END,
+    logo_asset_id = COALESCE(sqlc.narg('logo_asset_id'), logo_asset_id),
     authorization_endpoint = CASE
         WHEN sqlc.narg('authorization_endpoint')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('authorization_endpoint'), authorization_endpoint)
@@ -456,15 +470,32 @@ WHERE subject_urn = @subject_urn
   AND remote_session_client_id = @remote_session_client_id
   AND deleted IS FALSE;
 
--- name: ListConnectedClientIDsForSubject :many
--- Bulk lookup for the consent renderer: returns the set of
--- remote_session_client_ids that have an active remote_sessions row for
--- the given subject under a single user_session_issuer. Folds the N
--- per-card IsConnected lookups into one round-trip. The partial unique
--- index on (subject_urn, remote_session_client_id) WHERE deleted IS
--- FALSE means at most one row per (subject, client), so the result set
--- doubles as a membership set without DISTINCT.
-SELECT remote_session_client_id
+-- name: ListRemoteSessionStatusesForSubject :many
+-- Bulk lookup for the consent renderer: returns each non-deleted
+-- remote_session for the given subject under a single user_session_issuer,
+-- tagged with whether it is still usable. Folds the N per-card lookups into
+-- one round-trip. The partial unique index on (subject_urn,
+-- remote_session_client_id) WHERE deleted IS FALSE means at most one row per
+-- (subject, client), so the result doubles as a per-client map without
+-- DISTINCT. A soft-deleted row is absent here entirely (truly disconnected).
+--
+-- The 'active' predicate mirrors validateAndRefresh in tokenservice.go: a
+-- session is usable only when its access token is unexpired, or it carries a
+-- refresh token that is not itself known-expired to renew with. A
+-- refresh_expires_at of NULL means no known expiry (non-expiring refresh
+-- token), so it still counts as usable. A present-but-unusable row is
+-- 'expired' rather than dropped, so the consent UI can distinguish "reconnect
+-- this expired link" from "never connected" — and so the runtime gate (which
+-- rejects the same row as ErrNoValidToken) stops disagreeing with a green
+-- "Connected" badge.
+SELECT
+  remote_session_client_id,
+  (CASE
+    WHEN access_expires_at > now()
+      OR (refresh_token_encrypted IS NOT NULL
+          AND (refresh_expires_at IS NULL OR refresh_expires_at > now())) THEN 'active'
+    ELSE 'expired'
+  END)::text AS status
 FROM remote_sessions
 WHERE subject_urn = @subject_urn
   AND user_session_issuer_id = @user_session_issuer_id

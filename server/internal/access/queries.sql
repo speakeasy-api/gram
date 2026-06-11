@@ -60,6 +60,15 @@ WHERE organization_id = @organization_id
   AND COALESCE(effect, 'allow') = COALESCE(sqlc.arg(effect)::text, 'allow')
   AND selectors = @selectors;
 
+-- name: DeletePrincipalGrantsByTarget :execrows
+-- Removes every principal row for one exact grant target. Used by audience
+-- replacement writes where the caller supplies the full desired principal set.
+DELETE FROM principal_grants
+WHERE organization_id = @organization_id
+  AND scope = @scope
+  AND COALESCE(effect, 'allow') = COALESCE(sqlc.arg(effect)::text, 'allow')
+  AND selectors = @selectors;
+
 -- name: DeletePrincipalGrantsByResource :execrows
 -- Removes grant rows for a single resource selector.
 DELETE FROM principal_grants

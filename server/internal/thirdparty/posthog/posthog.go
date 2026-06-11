@@ -71,17 +71,28 @@ func New(ctx context.Context, logger *slog.Logger, posthogAPIKey string, posthog
 	}
 }
 
-func (p *Posthog) IsFlagEnabled(ctx context.Context, flag feature.Flag, distinctID string) (bool, error) {
+func (p *Posthog) IsFlagEnabled(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) (bool, error) {
 	// If posthog is disabled, we return true so we don't block the user from using the product
 	if p.disabled {
 		p.logger.InfoContext(ctx, "posthog is disabled, returning false")
 		return false, nil
 	}
 
+	// Forward group memberships so group-targeted flag releases evaluate the
+	// same way they do for the dashboard (posthog-js registers these groups).
+	var phGroups posthog.Groups
+	if len(groups) > 0 {
+		phGroups = posthog.NewGroups()
+		for groupType, groupKey := range groups {
+			phGroups.Set(groupType, groupKey)
+		}
+	}
+
 	flagState, err := p.client.IsFeatureEnabled(
 		posthog.FeatureFlagPayload{
 			Key:        string(flag),
 			DistinctId: distinctID,
+			Groups:     phGroups,
 		})
 	if err != nil {
 		return false, fmt.Errorf("failed to check feature flag: %w", err)

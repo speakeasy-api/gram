@@ -13,4 +13,9 @@ const (
 	// the policy schema; the resulting finding rule_id is always
 	// `prompt_injection` regardless of engine.
 	FlagPromptInjectionUseClassifier Flag = "prompt-injection-use-classifier"
+	// FlagPromptPolicies gates the natural-language / LLM-judge ("prompt
+	// based") risk policy MVP. While set, only opted-in organizations can
+	// create or update nl-type risk policies and have them enforced. The
+	// dashboard gates the matching UI behind the same key.
+	FlagPromptPolicies Flag = "gram-prompt-policies"
 )

@@ -34,7 +34,7 @@ export function OnboardingStepper({
             {/* Vertical line connector - runs through all steps except last */}
             {!isLast && (
               <div
-                className="absolute top-[28px] left-[13px] h-[calc(100%-28px)] w-px bg-[#e0e0e0]"
+                className="absolute top-[28px] left-[13px] h-[calc(100%-28px)] w-px bg-border"
                 aria-hidden="true"
               />
             )}
@@ -43,14 +43,14 @@ export function OnboardingStepper({
             <div className="relative z-10 flex-shrink-0">
               {isCurrent ? (
                 /* Active step: dark filled rounded rectangle */
-                <div className="flex h-[28px] w-[28px] items-center justify-center rounded-[8px] bg-[#1a1a1a] text-sm font-semibold text-white">
+                <div className="flex h-[28px] w-[28px] items-center justify-center rounded-[8px] bg-foreground text-sm font-semibold text-background">
                   {index + 1}
                 </div>
               ) : isCompleted ? (
                 /* Completed step: dark circle with checkmark */
                 <button
                   onClick={() => onStepClick?.(index)}
-                  className="flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded-full bg-[#1a1a1a] text-white transition-all duration-200 ease-out hover:scale-[1.2] hover:bg-[#333]"
+                  className="flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded-full bg-foreground text-background transition-all duration-200 ease-out hover:scale-[1.2] hover:bg-foreground/80"
                 >
                   <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
                 </button>
@@ -58,10 +58,10 @@ export function OnboardingStepper({
                 /* Upcoming step: light outlined circle with white fill to cover track */
                 <div
                   className={cn(
-                    "flex h-[28px] w-[28px] items-center justify-center rounded-full border bg-[#f7f7f5] text-sm font-normal",
+                    "flex h-[28px] w-[28px] items-center justify-center rounded-full border bg-background text-sm font-normal",
                     isLocked
-                      ? "border-[#e5e5e5] text-[#d4d4d4]"
-                      : "border-[#d9d9d9] text-[#b5b5b5]",
+                      ? "border-border text-muted-foreground/40"
+                      : "border-border text-muted-foreground",
                   )}
                 >
                   {index + 1}
@@ -74,9 +74,9 @@ export function OnboardingStepper({
               <h3
                 className={cn(
                   "text-sm leading-tight font-semibold",
-                  isCurrent && "text-[#0f0f0f]",
-                  isCompleted && "text-[#0f0f0f]",
-                  isUpcoming && "text-[#a3a3a3]",
+                  isCurrent && "text-foreground",
+                  isCompleted && "text-foreground",
+                  isUpcoming && "text-muted-foreground",
                 )}
               >
                 {step.title}
@@ -84,9 +84,9 @@ export function OnboardingStepper({
               <p
                 className={cn(
                   "mt-0.5 text-sm leading-snug",
-                  isCurrent && "text-[#737373]",
-                  isCompleted && "text-[#737373]",
-                  isUpcoming && "text-[#c4c4c4]",
+                  isCurrent && "text-muted-foreground",
+                  isCompleted && "text-muted-foreground",
+                  isUpcoming && "text-muted-foreground/60",
                 )}
               >
                 {step.description}

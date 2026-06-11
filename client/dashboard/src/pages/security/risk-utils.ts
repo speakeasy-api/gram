@@ -8,6 +8,7 @@ const SOURCE_TO_CATEGORY: ReadonlyMap<string, RuleCategory> = new Map<
   ["destructive_tool", "destructive_tool"],
   ["shadow_mcp", "shadow_mcp"],
   ["prompt_injection", "prompt_injection"],
+  ["llm_judge", "prompt_policy"],
   ["cli_destructive", "cli_destructive"],
   // Scanner-source fallbacks: when a rule_id doesn't carry its category
   // prefix (e.g. gitleaks' bare "generic-api-key"), classify by source so

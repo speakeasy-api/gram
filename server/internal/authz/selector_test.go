@@ -315,7 +315,8 @@ func TestValidateSelector_riskPolicyAllowsServerURL(t *testing.T) {
 
 	withServerURL := Selector{"resource_kind": ResourceKindRiskPolicy, "resource_id": "policy_123", "server_url": "https://api.example.com"}
 	require.NoError(t, ValidateSelector(ScopeRiskPolicyBypass, withServerURL))
-
+	withServerIdentity := Selector{"resource_kind": ResourceKindRiskPolicy, "resource_id": "policy_123", "server_identity": "github"}
+	require.NoError(t, ValidateSelector(ScopeRiskPolicyBypass, withServerIdentity))
 	withHostOnlyServerURL := Selector{"resource_kind": ResourceKindRiskPolicy, "resource_id": "policy_123", "server_url": "api.example.com"}
 	require.ErrorContains(t, ValidateSelector(ScopeRiskPolicyBypass, withHostOnlyServerURL), "must include URI scheme and host")
 
@@ -326,16 +327,25 @@ func TestValidateSelector_riskPolicyAllowsServerURL(t *testing.T) {
 func TestRiskPolicyBypassCheck_injectsServerURL(t *testing.T) {
 	t.Parallel()
 
-	check := RiskPolicyBypassCheck("policy_123", RiskPolicyBypassDimensions{ServerURL: "https://api.example.com"})
+	check := RiskPolicyBypassCheck("policy_123", RiskPolicyBypassDimensions{ServerURL: "https://api.example.com", ServerIdentity: ""})
 	require.Equal(t, ScopeRiskPolicyBypass, check.Scope)
 	require.Equal(t, "policy_123", check.ResourceID)
 	require.Equal(t, "https://api.example.com", check.Dimensions[SelectorKeyServerURL])
 }
 
+func TestRiskPolicyBypassCheck_injectsServerIdentity(t *testing.T) {
+	t.Parallel()
+
+	check := RiskPolicyBypassCheck("policy_123", RiskPolicyBypassDimensions{ServerURL: "", ServerIdentity: "github"})
+	require.Equal(t, ScopeRiskPolicyBypass, check.Scope)
+	require.Equal(t, "policy_123", check.ResourceID)
+	require.Equal(t, "github", check.Dimensions[SelectorKeyServerIdentity])
+}
+
 func TestRiskPolicyBypassCheck_emptyServerURLOmitsDimension(t *testing.T) {
 	t.Parallel()
 
-	check := RiskPolicyBypassCheck("policy_123", RiskPolicyBypassDimensions{ServerURL: ""})
+	check := RiskPolicyBypassCheck("policy_123", RiskPolicyBypassDimensions{ServerURL: "", ServerIdentity: ""})
 	require.Nil(t, check.Dimensions)
 }
 

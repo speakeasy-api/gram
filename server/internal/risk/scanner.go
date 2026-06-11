@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -112,6 +114,8 @@ type Scanner struct {
 	detector   *detect.Detector           // pre-created, reused across scans
 	piiScanner ra.PIIScanner              // nil if Presidio is unavailable
 	piScanner  *ra.PromptInjectionScanner // never nil; stub-classifier when L1 disabled
+	judge      ra.PromptJudge             // nil-safe; guarded at the call site
+	flags      feature.Provider           // nil disables prompt_based enforcement
 	metrics    *scannerMetrics
 }
 
@@ -122,7 +126,7 @@ type Scanner struct {
 // real-time hook path; returns an error if the detector cannot be built
 // (init relies on viper global state and should never realistically fail,
 // but propagating the error keeps startup honest).
-func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner, piScanner *ra.PromptInjectionScanner, meterProvider metric.MeterProvider) (*Scanner, error) {
+func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner, piScanner *ra.PromptInjectionScanner, judge ra.PromptJudge, flags feature.Provider, meterProvider metric.MeterProvider) (*Scanner, error) {
 	det, err := ra.SharedDetector()
 	if err != nil {
 		return nil, fmt.Errorf("create gitleaks detector: %w", err)
@@ -139,6 +143,8 @@ func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner,
 		detector:   det,
 		piiScanner: piiScanner,
 		piScanner:  piScanner,
+		judge:      judge,
+		flags:      flags,
 		metrics:    newScannerMetrics(meterProvider, logger),
 	}, nil
 }
@@ -161,6 +167,22 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, projectID uuid.UUID, t
 		return nil, nil
 	}
 
+	// Resolve the prompt-policy flag once per scan (on the parent ctx, before
+	// fan-out) so prompt_based policies don't each repeat the slug lookup and
+	// so the lookup is never cancelled by a sibling match. Gated on the exact
+	// conditions under which the fan-out would run the judge — a tool-request
+	// message and a prompt_based policy whose message_types apply to it — so
+	// the lookup is skipped entirely for scans that can never enforce one.
+	promptPoliciesOn := false
+	if messageType == message.ToolRequest &&
+		slices.ContainsFunc(policies, func(p repo.RiskPolicy) bool {
+			return p.PolicyType == "prompt_based" &&
+				(len(p.MessageTypes) == 0 || slices.Contains(p.MessageTypes, messageType))
+		}) {
+		// All enforcing policies for a project belong to the same org.
+		promptPoliciesOn = s.promptPoliciesEnabled(ctx, policies[0].OrganizationID, projectID)
+	}
+
 	// Fan out across policies. The first goroutine that finds a match returns
 	// errMatchFound, which causes errgroup to cancel its context — sibling
 	// goroutines stop their in-flight Presidio HTTP calls early instead of
@@ -177,7 +199,7 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, projectID uuid.UUID, t
 		}
 
 		g.Go(func() error {
-			result, scanErr := s.scanPolicy(gctx, p, text, messageType)
+			result, scanErr := s.scanPolicy(gctx, p, text, messageType, promptPoliciesOn)
 			if scanErr != nil {
 				if errors.Is(scanErr, context.Canceled) {
 					return nil
@@ -260,12 +282,31 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 // text per call — its internal worker pool only fans out when n > 1, so
 // per-policy parallelism over sources buys roughly nothing. The
 // across-policies fan-out in ScanForEnforcement is the real win.
-func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type) (*ScanResult, error) {
+func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type, promptPoliciesOn bool) (*ScanResult, error) {
+	if policy.PolicyType == "prompt_based" {
+		return s.scanPromptPolicy(ctx, policy, text, messageType, promptPoliciesOn), nil
+	}
+
 	disabled := ra.NewDisabledRuleSet(policy.DisabledRules)
+
+	// Suppress findings matched by an exclusion (the policy's own plus any
+	// global ones) so a false positive never blocks in real time.
+	exclusionRows, err := s.repo.ListEnabledExclusionsForPolicy(ctx, repo.ListEnabledExclusionsForPolicyParams{
+		ProjectID:    policy.ProjectID,
+		RiskPolicyID: uuid.NullUUID{UUID: policy.ID, Valid: true},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list exclusions: %w", err)
+	}
+	exclusions := ra.NewExclusionSet(exclusionRows)
+	filter := func(findings []ra.Finding) []ra.Finding {
+		return exclusions.FilterFindings(disabled.FilterFindings(findings))
+	}
+
 	for _, source := range policy.Sources {
 		switch source {
 		case "gitleaks":
-			findings := disabled.FilterFindings(s.scanGitleaks(text))
+			findings := filter(s.scanGitleaks(text))
 			if len(findings) > 0 {
 				return &ScanResult{
 					Action:      policy.Action,
@@ -287,7 +328,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 				return nil, fmt.Errorf("presidio scan: %w", err)
 			}
 			if len(batchResults) > 0 {
-				filtered := disabled.FilterFindings(batchResults[0])
+				filtered := filter(batchResults[0])
 				if len(filtered) > 0 {
 					f := filtered[0]
 					return &ScanResult{
@@ -307,7 +348,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 			if err != nil {
 				return nil, fmt.Errorf("prompt injection scan: %w", err)
 			}
-			findings = disabled.FilterFindings(findings)
+			findings = filter(findings)
 			if len(findings) > 0 {
 				return &ScanResult{
 					Action:      policy.Action,
@@ -327,7 +368,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 		if err != nil {
 			return nil, err
 		}
-		findings = disabled.FilterFindings(findings)
+		findings = filter(findings)
 		if len(findings) > 0 {
 			return &ScanResult{
 				Action:      policy.Action,
@@ -342,6 +383,82 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 		}
 	}
 	return nil, nil
+}
+
+// scanPromptPolicy evaluates text against a prompt_based policy's guardrail
+// prompt via the LLM judge. For the M0 MVP, realtime judge enforcement is
+// hard-scoped to tool-call messages regardless of the policy's message_types,
+// so a misconfigured policy can never judge other message types inline. Returns
+// nil when the judge does not match (including fail-open on judge error).
+func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type, promptPoliciesOn bool) *ScanResult {
+	if messageType != message.ToolRequest {
+		return nil
+	}
+	cfg := ra.ParseJudgeConfig(policy.ModelConfig)
+	if !promptPoliciesOn {
+		return nil
+	}
+	if s.judge == nil || !policy.Prompt.Valid || strings.TrimSpace(policy.Prompt.String) == "" {
+		return promptPolicyUnavailableResult(policy, messageType, cfg)
+	}
+
+	verdict := s.judge.Evaluate(ctx, ra.JudgeInput{
+		OrgID:     policy.OrganizationID,
+		ProjectID: policy.ProjectID.String(),
+		Prompt:    policy.Prompt.String,
+		Text:      text,
+		Config:    cfg,
+	})
+	if verdict == nil {
+		return nil
+	}
+
+	finding := ra.JudgeFinding(*verdict)
+	return &ScanResult{
+		Action:      policy.Action,
+		PolicyID:    policy.ID.String(),
+		PolicyName:  policy.Name,
+		Source:      ra.SourceLLMJudge,
+		MessageType: messageType,
+		RuleID:      finding.RuleID,
+		Description: finding.Description,
+		UserMessage: conv.FromPGText[string](policy.UserMessage),
+	}
+}
+
+func (s *Scanner) promptPoliciesEnabled(ctx context.Context, orgID string, projectID uuid.UUID) bool {
+	if s.flags == nil {
+		return false
+	}
+	// Resolve the org/project slugs so the flag evaluates against the same
+	// PostHog groups the dashboard uses. A failed lookup degrades to disabled.
+	groups, err := s.repo.GetProjectFlagGroups(ctx, projectID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve prompt policy flag groups failed", attr.SlogError(err), attr.SlogOrganizationID(orgID), attr.SlogProjectID(projectID.String()))
+		return false
+	}
+	on, err := s.flags.IsFlagEnabled(ctx, feature.FlagPromptPolicies, orgID, feature.OrgProjectGroups(groups.OrganizationSlug, groups.ProjectSlug))
+	if err != nil {
+		s.logger.WarnContext(ctx, "prompt policy flag check failed", attr.SlogError(err), attr.SlogOrganizationID(orgID))
+		return false
+	}
+	return on
+}
+
+func promptPolicyUnavailableResult(policy repo.RiskPolicy, messageType message.Type, cfg ra.JudgeConfig) *ScanResult {
+	if cfg.FailOpen {
+		return nil
+	}
+	return &ScanResult{
+		Action:      policy.Action,
+		PolicyID:    policy.ID.String(),
+		PolicyName:  policy.Name,
+		Source:      ra.SourceLLMJudge,
+		MessageType: messageType,
+		RuleID:      ra.RuleLLMJudge,
+		Description: "Policy judge was unavailable; flagged by fail-closed policy.",
+		UserMessage: conv.FromPGText[string](policy.UserMessage),
+	}
 }
 
 func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, text string) ([]ra.Finding, error) {

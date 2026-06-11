@@ -24,12 +24,29 @@ type RiskCustomDetectionRule struct {
 	Deleted        bool
 }
 
+type RiskExclusion struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	RiskPolicyID   uuid.NullUUID
+	MatchType      string
+	MatchValue     string
+	RuleIDFilter   pgtype.Text
+	SourceFilter   pgtype.Text
+	Enabled        bool
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type RiskPolicy struct {
 	ID                   uuid.UUID
 	ProjectID            uuid.UUID
 	OrganizationID       string
 	Enabled              bool
 	Name                 string
+	PolicyType           string
 	Sources              []string
 	PresidioEntities     []string
 	PromptInjectionRules []string
@@ -40,6 +57,8 @@ type RiskPolicy struct {
 	AudienceType         string
 	AutoName             bool
 	UserMessage          pgtype.Text
+	Prompt               pgtype.Text
+	ModelConfig          []byte
 	Version              int64
 	CreatedAt            pgtype.Timestamptz
 	UpdatedAt            pgtype.Timestamptz

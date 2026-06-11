@@ -200,7 +200,7 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 		return nil, err
 	}
 
-	normalizedEmail := strings.ToLower(strings.TrimSpace(payload.Email))
+	normalizedEmail := conv.NormalizeEmail(payload.Email)
 	span := trace.SpanFromContext(ctx)
 	span.SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
@@ -1406,7 +1406,7 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	))
 
 	// Verify the authenticated email matches the invite.
-	inviteeEmail := strings.ToLower(strings.TrimSpace(idpUser.Email))
+	inviteeEmail := conv.NormalizeEmail(idpUser.Email)
 	if invite.Email != inviteeEmail {
 		s.logger.WarnContext(ctx, fmt.Sprintf("invite callback: email mismatch (invite=%s, authenticated=%s)", invite.Email, inviteeEmail))
 		span.AddEvent("invite.callback.email_mismatch", trace.WithAttributes(

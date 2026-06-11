@@ -31,7 +31,7 @@ export function MCPServerCard({
 
   return (
     <Link
-      to={routes.mcp.x.href(mcpServerRouteParam(server))}
+      to={routes.mcp.x.overview.href(mcpServerRouteParam(server))}
       className="focus-visible:ring-ring block rounded-xl no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
     >
       <DotCard icon={<Network className="text-muted-foreground h-8 w-8" />}>

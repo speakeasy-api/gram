@@ -129,6 +129,9 @@ func (e *Engine) PrepareContext(ctx context.Context) (context.Context, error) {
 
 	principals, err := ResolveUserPrincipals(ctx, e.db, authCtx.ActiveOrganizationID, authCtx.UserID)
 	if err != nil {
+		if errors.Is(err, ErrPrincipalInvalid) {
+			return ctx, oops.E(oops.CodeUnauthorized, err, "invalid user principal")
+		}
 		if errors.Is(err, ErrPrincipalNotFound) {
 			return GrantsToContext(ctx, nil), nil
 		}
@@ -174,10 +177,17 @@ func (e *Engine) Require(ctx context.Context, checks ...Check) error {
 		return e.mapError(ctx, ErrMissingGrants)
 	}
 
-	return e.requireWithGrants(ctx, grants, checks...)
+	return e.EvaluateLoadedGrants(ctx, grants, checks...)
 }
 
-func (e *Engine) requireWithGrants(ctx context.Context, grants []Grant, checks ...Check) error {
+// EvaluateLoadedGrants evaluates explicit grants against checks without
+// consulting ShouldEnforce or reading grants from context. Request handlers
+// should use Require so normal request enforcement semantics apply.
+func (e *Engine) EvaluateLoadedGrants(ctx context.Context, grants []Grant, checks ...Check) error {
+	if len(checks) == 0 {
+		return e.mapError(ctx, ErrNoChecks)
+	}
+
 	matches := make([]grantMatch, 0, len(checks))
 	for _, check := range checks {
 		if err := validateInput(check); err != nil {

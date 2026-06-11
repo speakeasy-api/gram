@@ -1677,6 +1677,7 @@ func unmarshalExternalMCPServerResponseBodyToTypesExternalMCPServer(v *ExternalM
 		Version:                             *v.Version,
 		Description:                         *v.Description,
 		ToolsetID:                           v.ToolsetID,
+		McpServerID:                         v.McpServerID,
 		RegistryID:                          v.RegistryID,
 		OrganizationMcpCollectionRegistryID: v.OrganizationMcpCollectionRegistryID,
 		Title:                               v.Title,

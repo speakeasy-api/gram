@@ -63,7 +63,7 @@ function RiskOverviewRulesIndexContent() {
   const total = rules.reduce((acc, r) => acc + Number(r.findings), 0);
   const max = rules[0]?.findings ?? 0;
 
-  const riskEventsHref = routes.logs.riskEvents.href();
+  const riskEventsHref = routes.riskEvents.href();
 
   const controls = (
     <TimeRangePicker

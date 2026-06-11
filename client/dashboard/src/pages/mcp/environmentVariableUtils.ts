@@ -3,11 +3,10 @@ export type EnvVarState = "user-provided" | "system" | "omitted";
 export interface EnvironmentVariable {
   id: string;
   key: string;
-  // Track multiple values per variable - each value can be in different environments
-  valueGroups: Array<{
-    valueHash: string;
+  // The (redacted) value this variable holds in each environment that defines it.
+  environmentValues: Array<{
+    environmentSlug: string;
     value: string; // Redacted value for display
-    environments: string[]; // Environment slugs that have this value
   }>;
   state: EnvVarState;
   isRequired: boolean; // True for advertised vars from toolset, false for custom user-added
@@ -23,8 +22,8 @@ export const environmentHasValue = (
 ): boolean => {
   if (envVar.state === "user-provided" || envVar.state === "omitted")
     return true;
-  return envVar.valueGroups.some((group) =>
-    group.environments.includes(environmentSlug),
+  return envVar.environmentValues.some(
+    (v) => v.environmentSlug === environmentSlug,
   );
 };
 
@@ -33,10 +32,10 @@ export const getValueForEnvironment = (
   envVar: EnvironmentVariable,
   environmentSlug: string,
 ): string => {
-  const group = envVar.valueGroups.find((g) =>
-    g.environments.includes(environmentSlug),
+  const entry = envVar.environmentValues.find(
+    (v) => v.environmentSlug === environmentSlug,
   );
-  return group?.value || "";
+  return entry?.value || "";
 };
 
 // Check if a variable has a header display name override
@@ -70,7 +69,7 @@ export const getHeaderDisplayName = (
   return entry?.headerDisplayName || "";
 };
 
-// Get editing value for a variable (either from editing state or from valueGroups)
+// Get editing value for a variable (either from editing state or from environmentValues)
 export const getEditingValue = (
   envVar: EnvironmentVariable,
   editingState: Map<string, { value: string; headerDisplayName?: string }>,

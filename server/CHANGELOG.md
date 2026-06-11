@@ -1,5 +1,57 @@
 # server
 
+## 0.68.0
+
+### Minor Changes
+
+- c409a84: Assistant runtimes can now export agent traces (turns, tool calls) over OTLP
+  to any OpenTelemetry-compatible backend such as Sentry, Datadog, or Honeycomb.
+  Export is enabled by configuring an OTLP endpoint for assistant runtimes, with
+  gRPC and HTTP transports supported; traces are tagged with the assistant and
+  project they belong to.
+- bedfe84: Add backend risk policy bypass request workflow support for the risk-owned request URL flow, backed by current-state request records and principal grants.
+- 1dda609: Add prompt-based (LLM-judge) risk policies. Risk policies gain a `policy_type` discriminator (`standard` | `prompt_based`) plus `prompt` and `model_config` fields. A new `llm_judge` evaluation is wired into the realtime enforcement scanner (scoped to tool-call messages) and the batch analyzer, with findings flowing into `risk_results`. The feature is gated behind the `gram-prompt-policies` flag.
+- cc9d8ee: Add optional `name` (display name) and `logo_asset_id` to remote session issuers across both the project-scoped (`remoteSessionIssuers`) and organization-scoped (`organizationRemoteSessionIssuers`) services. On create, `name` is trimmed and stored as NULL when empty; on update it follows the same three-state semantics as the nullable endpoint fields (omitted keeps, empty string clears). `logo_asset_id` is set-only for now (no clear path, no upload UI yet). The dashboard renders the display name as the primary label with the issuer URL as the secondary line, exposes an optional Display name input on the attach and modify sheets, and renders a logo when one is present. On the attach sheet the Display name auto-derives from the Issuer URL hostname until the operator edits it, matching the existing Slug behavior.
+
+### Patch Changes
+
+- 06b1f0d: Add generic access webhook event names for audit logs. Shadow MCP approval requests now emit `audit_log.access_request_event_v1`, and access rules emit `audit_log.access_rule_event_v1`; the previous Shadow MCP-specific event names remain in the webhook catalog with deprecated descriptions for compatibility.
+- ba8bdd4: Direct assistant MCP authentication prompts to the assistant's owner instead
+  of whoever happened to trigger the assistant. Slack onboarding now records the
+  owner's Slack identity in the assistant's instructions, runtime guidance
+  delivers OAuth links to the owner (ephemeral or DM) and tells anyone else that
+  the owner has to complete the connection, and prompts shown when the owner is
+  unknown now say explicitly that authentication is for the owner — so an
+  unexpected auth message is no longer mistaken for a failed setup.
+- 9d59f83: Assistants now connect to all of their MCP servers in parallel when a thread
+  starts, so startup time no longer grows with the number of servers and one
+  slow or unreachable server cannot stall the rest. Connection attempts are
+  bounded by connect and handshake timeouts, so a hung server fails fast instead
+  of blocking the assistant.
+- 9a78d97: Default the device-agent command list in the generated observability plugin
+  `identity.sh` to `speakeasyd`, the binary the daemon actually ships as. The
+  previous default (`device-agent,speakeasy-device-agent`) never resolved on a
+  standard install, so identity enrichment was skipped and hook events reached
+  Gram anonymously (no `user_email`). The fix applies to the Claude Code, Cursor,
+  and Codex plugin templates. Installs that still use a differently-named binary
+  can override via `GRAM_DEVICE_AGENT_COMMANDS`.
+
+## 0.67.0
+
+### Minor Changes
+
+- 489f7fe: Support publishing Remote MCP-backed `mcp_servers` to collections alongside toolset-backed servers. `collections.attachServer` / `collections.detachServer` accept either `toolset_id` or `mcp_server_id` (exactly one), `collections.create` accepts `mcp_server_ids` in addition to `toolset_ids`, `collections.listServers` returns both backends merged by publish time, and `ExternalMCPServer` exposes `mcp_server_id`. In the dashboard, the Publishing section, the create-collection form, and the collection detail edit-servers picker all offer Remote MCP-backed servers, and the Remote MCP server settings page gains a Publishing section.
+- ee1c922: Remove the `value_hash` field from environment entries. It was documented as a way to identify matching values across environments, but every code path computed it from the already-redacted display value (`val[:3] + "*****"`), so it collided for any two values sharing a 3-character prefix and never reliably identified matching values. The only dashboard consumer grouped by it, and because colliding values also render identical redacted strings, the grouping was never observable. Replaced the dashboard's value-hash grouping with direct per-environment value tracking and dropped the field from the API surface.
+
+### Patch Changes
+
+- de92585: Order and filter agent sessions by their latest persisted chat message instead of original session creation time, and show that activity time in the dashboard sessions list.
+- c6eb5e8: Stop logging client cancellations (`context.Canceled`) as 500 server faults. When an HTTP client disconnects mid-request, `oops` now detects the cancellation at the error boundary, logs it at info level (no error log, no errored span, no exception event), and maps it to HTTP 499 instead of a 500 fault. Detection requires both a `context.Canceled` cause and a canceled request context, so server-initiated cancellations (e.g. graceful shutdown) and application-initiated cancellations (e.g. an `errgroup` or an explicitly cancelled derived context, whose parent request context is still live), along with `context.DeadlineExceeded` and all other errors, keep full error severity.
+- ca3dd21: Export OTel metrics as delta temporality for Datadog. The exporter previously defaulted to cumulative temporality, which forced the per-node Datadog Agent to do a stateful cumulative-to-delta conversion that corrupted counter values in our horizontally scaled deployment. Counters now emit delta at the SDK (UpDownCounters stay cumulative), making each pod self-contained and the Agent a pass-through.
+- cfd120a: Removed the deprecated standalone Slack app feature. The dedicated Slack app pages, their backend endpoints, and the associated event-handling workflow have been retired. Slack continues to work through assistants and triggers, which is the supported path.
+- 5ba126c: Slack-triggered assistants now show a native "is thinking…" loading indicator on the thread the moment a message comes in, so there's immediate feedback during the wait instead of silence. The assistant can update the status as it works, and it clears on its own as soon as the reply lands.
+- c3a7c13: Disable "Give Access" button while challenge resolution is pending.
+
 ## 0.66.0
 
 ### Minor Changes

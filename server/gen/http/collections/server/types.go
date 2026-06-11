@@ -30,6 +30,8 @@ type CreateRequestBody struct {
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
 	// Toolset IDs to attach to the collection
 	ToolsetIds []string `form:"toolset_ids,omitempty" json:"toolset_ids,omitempty" xml:"toolset_ids,omitempty"`
+	// MCP server IDs to attach to the collection
+	McpServerIds []string `form:"mcp_server_ids,omitempty" json:"mcp_server_ids,omitempty" xml:"mcp_server_ids,omitempty"`
 }
 
 // UpdateRequestBody is the type of the "collections" service "update" endpoint
@@ -50,8 +52,12 @@ type UpdateRequestBody struct {
 type AttachServerRequestBody struct {
 	// ID of the collection
 	CollectionID *string `form:"collection_id,omitempty" json:"collection_id,omitempty" xml:"collection_id,omitempty"`
-	// ID of the toolset to attach
+	// ID of the toolset to attach (provide exactly one of toolset_id or
+	// mcp_server_id)
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// ID of the MCP server to attach (provide exactly one of toolset_id or
+	// mcp_server_id)
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 }
 
 // DetachServerRequestBody is the type of the "collections" service
@@ -59,8 +65,12 @@ type AttachServerRequestBody struct {
 type DetachServerRequestBody struct {
 	// ID of the collection
 	CollectionID *string `form:"collection_id,omitempty" json:"collection_id,omitempty" xml:"collection_id,omitempty"`
-	// ID of the toolset to detach
+	// ID of the toolset to detach (provide exactly one of toolset_id or
+	// mcp_server_id)
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// ID of the MCP server to detach (provide exactly one of toolset_id or
+	// mcp_server_id)
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 }
 
 // CreateResponseBody is the type of the "collections" service "create"
@@ -1428,7 +1438,11 @@ type ExternalMCPServerResponseBody struct {
 	// Description of what the server does
 	Description string `form:"description" json:"description" xml:"description"`
 	// ID of the attached toolset when this server is listed from a Collection
+	// (toolset-backed attachment)
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// ID of the attached MCP server when this server is listed from a Collection
+	// (mcp_server-backed attachment)
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// ID of the external MCP registry this server came from
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
 	// ID of the internal collection registry this server came from
@@ -2581,6 +2595,12 @@ func NewCreatePayload(body *CreateRequestBody, sessionToken *string, apikeyToken
 			v.ToolsetIds[i] = val
 		}
 	}
+	if body.McpServerIds != nil {
+		v.McpServerIds = make([]string, len(body.McpServerIds))
+		for i, val := range body.McpServerIds {
+			v.McpServerIds[i] = val
+		}
+	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 
@@ -2625,7 +2645,8 @@ func NewDeletePayload(collectionID string, sessionToken *string, apikeyToken *st
 func NewAttachServerPayload(body *AttachServerRequestBody, sessionToken *string, apikeyToken *string) *collections.AttachServerPayload {
 	v := &collections.AttachServerPayload{
 		CollectionID: *body.CollectionID,
-		ToolsetID:    *body.ToolsetID,
+		ToolsetID:    body.ToolsetID,
+		McpServerID:  body.McpServerID,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -2638,7 +2659,8 @@ func NewAttachServerPayload(body *AttachServerRequestBody, sessionToken *string,
 func NewDetachServerPayload(body *DetachServerRequestBody, sessionToken *string, apikeyToken *string) *collections.DetachServerPayload {
 	v := &collections.DetachServerPayload{
 		CollectionID: *body.CollectionID,
-		ToolsetID:    *body.ToolsetID,
+		ToolsetID:    body.ToolsetID,
+		McpServerID:  body.McpServerID,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -2748,14 +2770,14 @@ func ValidateAttachServerRequestBody(body *AttachServerRequestBody) (err error) 
 	if body.CollectionID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("collection_id", "body"))
 	}
-	if body.ToolsetID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_id", "body"))
-	}
 	if body.CollectionID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.collection_id", *body.CollectionID, goa.FormatUUID))
 	}
 	if body.ToolsetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
 	}
 	return
 }
@@ -2766,14 +2788,14 @@ func ValidateDetachServerRequestBody(body *DetachServerRequestBody) (err error) 
 	if body.CollectionID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("collection_id", "body"))
 	}
-	if body.ToolsetID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_id", "body"))
-	}
 	if body.CollectionID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.collection_id", *body.CollectionID, goa.FormatUUID))
 	}
 	if body.ToolsetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
 	}
 	return
 }

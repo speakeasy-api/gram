@@ -162,11 +162,21 @@ func validatePolicyBypassRequestClaims(claims *policyBypassRequestClaims) error 
 	return validatePolicyBypassEvidence(claims.ObservedFullURL, claims.ObservedURLHost, claims.ObservedServerIdentity)
 }
 
-func validatePolicyBypassEvidence(fullURL, _, _ *string) error {
-	if strings.TrimSpace(conv.PtrValOr(fullURL, "")) == "" {
-		return fmt.Errorf("observed_full_url is required")
+func validatePolicyBypassEvidence(fullURL, urlHost, serverIdentity *string) error {
+	if rawURL := strings.TrimSpace(conv.PtrValOr(fullURL, "")); rawURL != "" {
+		parsed, err := url.Parse(rawURL)
+		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+			return fmt.Errorf("invalid observed_full_url: must include URI scheme and host")
+		}
+		return nil
 	}
-	return nil
+	if strings.TrimSpace(conv.PtrValOr(urlHost, "")) != "" {
+		return nil
+	}
+	if strings.TrimSpace(conv.PtrValOr(serverIdentity, "")) != "" {
+		return nil
+	}
+	return fmt.Errorf("policy bypass request evidence is required")
 }
 
 func encryptPolicyBypassRequestToken(jwtSecret string, plaintext []byte) (string, error) {

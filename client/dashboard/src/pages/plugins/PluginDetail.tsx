@@ -500,7 +500,7 @@ function PluginServerCard({
     // Remote MCP servers live on the mcp_servers-backed details page (x/);
     // toolset-backed servers use the toolset details page.
     if (isRemote) {
-      if (mcpServer) routes.mcp.x.goTo(mcpServerRouteParam(mcpServer));
+      if (mcpServer) routes.mcp.x.overview.goTo(mcpServerRouteParam(mcpServer));
     } else if (toolset) {
       routes.mcp.details.goTo(toolset.slug);
     }

@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"regexp"
 	"slices"
 	"strings"
@@ -29,7 +28,6 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/risk/server"
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -40,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -59,6 +58,13 @@ type RiskAnalysisSignaler interface {
 	Signal(ctx context.Context, projectID uuid.UUID) error
 }
 
+// RiskExclusionReconciler triggers the retroactive reconcile sweep for an
+// exclusion (flag/unflag matching findings in risk_results). Best-effort: a
+// failed trigger is logged, not fatal — the reconcile itself is idempotent.
+type RiskExclusionReconciler interface {
+	Reconcile(ctx context.Context, projectID, exclusionID uuid.UUID) error
+}
+
 type Service struct {
 	tracer           trace.Tracer
 	logger           *slog.Logger
@@ -67,12 +73,15 @@ type Service struct {
 	auth             *auth.Auth
 	authz            *authz.Engine
 	signaler         RiskAnalysisSignaler
+	reconciler       RiskExclusionReconciler
 	completionClient openrouter.CompletionClient
 	shadowMCPClient  *shadowmcp.Client
-	accessStore      accesscontrol.Store
 	audit            *audit.Logger
 	jwtSecret        string
 	piClassifier     bool
+	// flags gates the nl/LLM-judge policy MVP (FlagPromptPolicies). Optional:
+	// when nil the feature is treated as disabled.
+	flags feature.Provider
 	// Scanners reused by the rule-playground endpoint (testDetectionRule)
 	// so the dashboard sees the exact same matcher output the worker
 	// produces during chat-message analysis. Optional: when nil the
@@ -102,14 +111,15 @@ func NewObserver(
 		auth:             nil,
 		authz:            nil,
 		signaler:         signaler,
+		reconciler:       nil,
 		completionClient: nil,
 		shadowMCPClient:  nil,
-		accessStore:      nil,
 		audit:            auditLogger,
 		jwtSecret:        "",
 		piClassifier:     false,
 		piiScanner:       nil,
 		piScanner:        nil,
+		flags:            nil,
 	}
 }
 
@@ -120,14 +130,15 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	signaler RiskAnalysisSignaler,
+	reconciler RiskExclusionReconciler,
 	completionClient openrouter.CompletionClient,
 	shadowMCPClient *shadowmcp.Client,
-	accessStore accesscontrol.Store,
 	auditLogger *audit.Logger,
 	jwtSecret string,
 	piClassifier bool,
 	piiScanner ra.PIIScanner,
 	piScanner *ra.PromptInjectionScanner,
+	flags feature.Provider,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
@@ -139,14 +150,15 @@ func NewService(
 		auth:             auth.New(logger, db, sessions, authzEngine),
 		authz:            authzEngine,
 		signaler:         signaler,
+		reconciler:       reconciler,
 		completionClient: completionClient,
 		shadowMCPClient:  shadowMCPClient,
-		accessStore:      accessStore,
 		audit:            auditLogger,
 		jwtSecret:        jwtSecret,
 		piClassifier:     piClassifier,
 		piiScanner:       piiScanner,
 		piScanner:        piScanner,
+		flags:            flags,
 	}
 }
 
@@ -225,15 +237,49 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		return nil, err
 	}
 
+	policyType := payload.PolicyType
+	if policyType == "" {
+		policyType = "standard"
+	}
+	if err := validatePolicyType(policyType); err != nil {
+		return nil, err
+	}
+
+	// prompt_based (LLM-judge) policies carry a prompt + optional model config
+	// instead of detection sources, and are gated behind FlagPromptPolicies
+	// during the MVP.
+	var prompt pgtype.Text
+	var modelConfig []byte
+	if policyType == "prompt_based" {
+		if !s.promptPoliciesEnabled(ctx, authCtx) {
+			return nil, oops.E(oops.CodeForbidden, nil, "prompt-based policies are not enabled for this organization")
+		}
+		if payloadHasCreatePromptPolicyDetectionConfig(payload) {
+			return nil, oops.E(oops.CodeInvalid, nil, "prompt-based policies do not support detection source configuration")
+		}
+		p, mc, err := validatePromptPolicyFields(payload.Prompt, payload.ModelConfig)
+		if err != nil {
+			return nil, err
+		}
+		prompt = pgtype.Text{String: p, Valid: true}
+		modelConfig = mc
+	}
+
 	sources := payload.Sources
-	if sources == nil {
-		sources = []string{"gitleaks"}
-	}
-	if err := validateSources(sources); err != nil {
-		return nil, err
-	}
-	if err := validateSourceAction(sources, action); err != nil {
-		return nil, err
+	if policyType == "prompt_based" {
+		// prompt_based policies evaluate the prompt via the LLM judge, not
+		// detection sources. Persist an empty (non-null) source set.
+		sources = []string{}
+	} else {
+		if sources == nil {
+			sources = []string{"gitleaks"}
+		}
+		if err := validateSources(sources); err != nil {
+			return nil, err
+		}
+		if err := validateSourceAction(sources, action); err != nil {
+			return nil, err
+		}
 	}
 	if err := validateCustomRuleIDs(payload.CustomRuleIds); err != nil {
 		return nil, err
@@ -257,7 +303,11 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		for _, p := range existingPolicies {
 			existingNames = append(existingNames, p.Name)
 		}
-		name = s.generatePolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), sources, payload.PresidioEntities, action, existingNames)
+		if policyType == "prompt_based" {
+			name = s.generatePromptPolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), prompt.String, existingNames)
+		} else {
+			name = s.generatePolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), sources, payload.PresidioEntities, action, existingNames)
+		}
 	}
 
 	if err := validatePolicyName(name); err != nil {
@@ -280,16 +330,19 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		ProjectID:            *authCtx.ProjectID,
 		OrganizationID:       authCtx.ActiveOrganizationID,
 		Name:                 name,
+		PolicyType:           policyType,
 		Sources:              sources,
-		PresidioEntities:     payload.PresidioEntities,
-		PromptInjectionRules: payload.PromptInjectionRules,
-		DisabledRules:        payload.DisabledRules,
-		CustomRuleIds:        payload.CustomRuleIds,
+		PresidioEntities:     createPolicyDetectionField(policyType, payload.PresidioEntities),
+		PromptInjectionRules: createPolicyDetectionField(policyType, payload.PromptInjectionRules),
+		DisabledRules:        createPolicyDetectionField(policyType, payload.DisabledRules),
+		CustomRuleIds:        createPolicyDetectionField(policyType, payload.CustomRuleIds),
 		MessageTypes:         payload.MessageTypes,
 		Enabled:              enabled,
 		Action:               action,
 		AutoName:             autoName,
 		UserMessage:          conv.PtrToPGTextEmpty(payload.UserMessage),
+		Prompt:               prompt,
+		ModelConfig:          modelConfig,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create risk policy").Log(ctx, s.logger)
@@ -403,6 +456,17 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").Log(ctx, s.logger)
 	}
 
+	// policy_type is immutable; gate edits to prompt_based policies behind the flag.
+	if current.PolicyType == "prompt_based" && !s.promptPoliciesEnabled(ctx, authCtx) {
+		return nil, oops.E(oops.CodeForbidden, nil, "prompt-based policies are not enabled for this organization")
+	}
+	if current.PolicyType == "standard" && (payload.Prompt != nil || payload.ModelConfig != nil) {
+		return nil, oops.E(oops.CodeInvalid, nil, "prompt and model_config are only supported for prompt-based policies")
+	}
+	if current.PolicyType == "prompt_based" && payloadHasPromptPolicyDetectionConfig(payload) {
+		return nil, oops.E(oops.CodeInvalid, nil, "prompt-based policies do not support detection source configuration")
+	}
+
 	sources := current.Sources
 	if payload.Sources != nil {
 		sources = payload.Sources
@@ -470,6 +534,29 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		userMessage = conv.PtrToPGTextEmpty(payload.UserMessage)
 	}
 
+	// prompt + model_config apply to prompt_based policies. Omitted fields
+	// preserve the current values; a provided prompt must be non-empty for a
+	// prompt_based policy.
+	prompt := current.Prompt
+	if payload.Prompt != nil {
+		p := strings.TrimSpace(*payload.Prompt)
+		if current.PolicyType == "prompt_based" && p == "" {
+			return nil, oops.E(oops.CodeInvalid, nil, "prompt must not be empty for prompt-based policies")
+		}
+		if len([]rune(p)) > maxPromptPolicyPromptLength {
+			return nil, oops.E(oops.CodeInvalid, nil, "prompt must be at most %d characters", maxPromptPolicyPromptLength)
+		}
+		prompt = pgtype.Text{String: p, Valid: p != ""}
+	}
+	modelConfig := current.ModelConfig
+	if payload.ModelConfig != nil {
+		mc, err := marshalModelConfig(payload.ModelConfig)
+		if err != nil {
+			return nil, err
+		}
+		modelConfig = mc
+	}
+
 	// Regenerate the name only when the caller explicitly opts in on this
 	// update via auto_name=true. Toggling unrelated fields (e.g. enabled)
 	// should not silently rename the policy.
@@ -482,7 +569,11 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 				existingNames = append(existingNames, p.Name)
 			}
 		}
-		name = s.generatePolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), sources, presidioEntities, action, existingNames)
+		if current.PolicyType == "prompt_based" {
+			name = s.generatePromptPolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), prompt.String, existingNames)
+		} else {
+			name = s.generatePolicyName(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), sources, presidioEntities, action, existingNames)
+		}
 	}
 
 	if err := validatePolicyName(name); err != nil {
@@ -511,6 +602,8 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		Action:               action,
 		AutoName:             autoName,
 		UserMessage:          userMessage,
+		Prompt:               prompt,
+		ModelConfig:          modelConfig,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update risk policy").Log(ctx, s.logger)
@@ -573,13 +666,19 @@ func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskP
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	// Soft-delete only — list queries already filter out results for deleted
-	// policies via the risk_policies join, so orphaned rows are harmless.
-	if err := repo.New(dbtx).DeleteRiskPolicy(ctx, repo.DeleteRiskPolicyParams{
+	q := repo.New(dbtx)
+	if err := q.DeleteRiskPolicy(ctx, repo.DeleteRiskPolicyParams{
 		ID:        id,
 		ProjectID: *authCtx.ProjectID,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete risk policy").Log(ctx, s.logger)
+	}
+
+	if err := q.DeleteRiskPolicyBypassRequestsByPolicy(ctx, repo.DeleteRiskPolicyBypassRequestsByPolicyParams{
+		RiskPolicyID: id,
+		ProjectID:    *authCtx.ProjectID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete risk policy bypass requests").Log(ctx, s.logger)
 	}
 
 	if err := s.audit.LogRiskPolicyDelete(ctx, dbtx, audit.LogRiskPolicyDeleteEvent{
@@ -2005,6 +2104,7 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		ID:                   row.ID.String(),
 		ProjectID:            row.ProjectID.String(),
 		Name:                 row.Name,
+		PolicyType:           row.PolicyType,
 		Sources:              row.Sources,
 		PresidioEntities:     row.PresidioEntities,
 		PromptInjectionRules: row.PromptInjectionRules,
@@ -2015,6 +2115,8 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		Action:               row.Action,
 		AutoName:             row.AutoName,
 		UserMessage:          conv.FromPGText[string](row.UserMessage),
+		Prompt:               conv.FromPGText[string](row.Prompt),
+		ModelConfig:          unmarshalModelConfig(row.ModelConfig),
 		Version:              row.Version,
 		CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
@@ -2032,6 +2134,7 @@ func policyRowSnapshot(row repo.RiskPolicy) *types.RiskPolicy {
 		ID:                   row.ID.String(),
 		ProjectID:            row.ProjectID.String(),
 		Name:                 row.Name,
+		PolicyType:           row.PolicyType,
 		Sources:              row.Sources,
 		PresidioEntities:     row.PresidioEntities,
 		PromptInjectionRules: row.PromptInjectionRules,
@@ -2042,6 +2145,8 @@ func policyRowSnapshot(row repo.RiskPolicy) *types.RiskPolicy {
 		Action:               row.Action,
 		AutoName:             row.AutoName,
 		UserMessage:          conv.FromPGText[string](row.UserMessage),
+		Prompt:               conv.FromPGText[string](row.Prompt),
+		ModelConfig:          unmarshalModelConfig(row.ModelConfig),
 		Version:              row.Version,
 		CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
@@ -2177,6 +2282,64 @@ func (s *Service) fallbackPolicyName(sources []string, action string) string {
 	return strings.Join(parts, " & ") + " " + actionLabel
 }
 
+func (s *Service) generatePromptPolicyName(ctx context.Context, orgID, projectID, prompt string, existingNames []string) string {
+	fallback := fallbackPromptPolicyName(prompt, existingNames)
+	if s.completionClient == nil {
+		return fallback
+	}
+
+	namePrompt := fmt.Sprintf(
+		"Generate a short, human-friendly name (2-5 words) for a prompt-based security policy.\n"+
+			"- Guardrail prompt: %q\n"+
+			"- Existing policy names to avoid: %v\n\n"+
+			"Return ONLY the name, no quotes or explanation. Make it descriptive and distinct from existing names. "+
+			"Name what the policy is trying to catch or prevent.",
+		prompt, existingNames,
+	)
+
+	// Tight timeout: this runs synchronously in the API request path. If
+	// OpenRouter is slow we fall back to a deterministic prompt-derived name.
+	nameCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	response, err := s.completionClient.GetCompletion(nameCtx, openrouter.CompletionRequest{
+		OrgID:     orgID,
+		ProjectID: projectID,
+		ChatID:    uuid.Nil,
+		Messages: []or.ChatMessages{
+			openrouter.CreateMessageUser(namePrompt),
+		},
+		Tools:                     nil,
+		Temperature:               nil,
+		Model:                     "",
+		Stream:                    false,
+		UsageSource:               billing.ModelUsageSourceGram,
+		UserID:                    "",
+		ExternalUserID:            "",
+		UserEmail:                 "",
+		HTTPMetadata:              nil,
+		APIKeyID:                  "",
+		JSONSchema:                nil,
+		Reasoning:                 &openrouter.Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil},
+		CacheControl:              nil,
+		NormalizeOutboundMessages: false,
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to generate prompt policy name via OpenRouter", attr.SlogError(err))
+		return fallback
+	}
+	if response == nil || response.Message == nil {
+		return fallback
+	}
+
+	name := strings.TrimSpace(openrouter.GetText(*response.Message))
+	if name == "" {
+		return fallback
+	}
+
+	return promptPolicyNameFromBase(name, existingNames)
+}
+
 func validateAction(action string) error {
 	switch action {
 	case "flag", "block":
@@ -2219,6 +2382,163 @@ func validatePolicyName(name string) error {
 	return nil
 }
 
+// validatePolicyType ensures policy_type is one of the supported discriminators.
+func validatePolicyType(policyType string) error {
+	switch policyType {
+	case "standard", "prompt_based":
+		return nil
+	default:
+		return oops.E(oops.CodeInvalid, nil, "policy_type must be one of: standard, prompt_based")
+	}
+}
+
+func payloadHasPromptPolicyDetectionConfig(payload *gen.UpdateRiskPolicyPayload) bool {
+	return len(payload.Sources) > 0 ||
+		len(payload.PresidioEntities) > 0 ||
+		len(payload.PromptInjectionRules) > 0 ||
+		len(payload.DisabledRules) > 0 ||
+		len(payload.CustomRuleIds) > 0
+}
+
+func payloadHasCreatePromptPolicyDetectionConfig(payload *gen.CreateRiskPolicyPayload) bool {
+	return len(payload.Sources) > 0 ||
+		len(payload.PresidioEntities) > 0 ||
+		len(payload.PromptInjectionRules) > 0 ||
+		len(payload.DisabledRules) > 0 ||
+		len(payload.CustomRuleIds) > 0
+}
+
+func createPolicyDetectionField(policyType string, values []string) []string {
+	if policyType == "prompt_based" {
+		return nil
+	}
+	return values
+}
+
+// maxPromptPolicyPromptLength bounds the guardrail prompt a prompt_based policy
+// can carry. The judge prompt is operator-authored and short; the cap keeps
+// per-message judge calls bounded.
+const maxPromptPolicyPromptLength = 8000
+
+// validatePromptPolicyFields validates the prompt + model config supplied for a
+// prompt_based policy and returns the normalized prompt plus the JSON-encoded
+// model config (nil when none was supplied).
+func validatePromptPolicyFields(promptPtr *string, mc *types.RiskPolicyModelConfig) (string, []byte, error) {
+	prompt := strings.TrimSpace(conv.PtrValOr(promptPtr, ""))
+	if prompt == "" {
+		return "", nil, oops.E(oops.CodeInvalid, nil, "prompt is required for prompt-based policies")
+	}
+	if len([]rune(prompt)) > maxPromptPolicyPromptLength {
+		return "", nil, oops.E(oops.CodeInvalid, nil, "prompt must be at most %d characters", maxPromptPolicyPromptLength)
+	}
+	encoded, err := marshalModelConfig(mc)
+	if err != nil {
+		return "", nil, err
+	}
+	return prompt, encoded, nil
+}
+
+// promptModelConfig is the JSONB storage shape for a prompt_based policy's
+// model_config column. Stored with stable snake_case keys independent of the
+// generated API type.
+type promptModelConfig struct {
+	Model       *string  `json:"model,omitempty"`
+	Temperature *float64 `json:"temperature,omitempty"`
+	FailOpen    *bool    `json:"fail_open,omitempty"`
+}
+
+// marshalModelConfig encodes an API model config into the JSONB column value.
+// Returns nil (SQL NULL) when no config was supplied.
+func marshalModelConfig(mc *types.RiskPolicyModelConfig) ([]byte, error) {
+	if mc == nil {
+		return nil, nil
+	}
+	var model *string
+	if mc.Model != nil {
+		trimmed := strings.TrimSpace(*mc.Model)
+		if trimmed != "" {
+			model = &trimmed
+		}
+	}
+	raw, err := json.Marshal(promptModelConfig{
+		Model:       model,
+		Temperature: mc.Temperature,
+		FailOpen:    mc.FailOpen,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid model_config")
+	}
+	return raw, nil
+}
+
+// unmarshalModelConfig decodes the JSONB column value into the API model config.
+// Returns nil for NULL/empty or unparseable values so a malformed row never
+// breaks policy reads.
+func unmarshalModelConfig(raw []byte) *types.RiskPolicyModelConfig {
+	if len(raw) == 0 {
+		return nil
+	}
+	var mc promptModelConfig
+	if err := json.Unmarshal(raw, &mc); err != nil {
+		return nil
+	}
+	return &types.RiskPolicyModelConfig{
+		Model:       mc.Model,
+		Temperature: mc.Temperature,
+		FailOpen:    mc.FailOpen,
+	}
+}
+
+// fallbackPromptPolicyName derives a stable display name from the guardrail
+// prompt when the LLM namer is unavailable.
+func fallbackPromptPolicyName(prompt string, existing []string) string {
+	return promptPolicyNameFromBase(prompt, existing)
+}
+
+func promptPolicyNameFromBase(base string, existing []string) string {
+	base = strings.TrimSpace(strings.Join(strings.Fields(base), " "))
+	if len([]rune(base)) > 60 {
+		base = string([]rune(base)[:60])
+	}
+	if base == "" {
+		base = "Prompt Policy"
+	}
+
+	taken := make(map[string]struct{}, len(existing))
+	for _, n := range existing {
+		taken[n] = struct{}{}
+	}
+	if _, ok := taken[base]; !ok {
+		return base
+	}
+	for i := 2; ; i++ {
+		candidate := fmt.Sprintf("%s %d", base, i)
+		if _, ok := taken[candidate]; !ok {
+			return candidate
+		}
+	}
+}
+
+// promptPoliciesEnabled reports whether the prompt-based policy MVP is enabled
+// for the org. The flag is targeted by PostHog group (org/project slug) the
+// same way the dashboard evaluates it, so we forward the groups built from the
+// auth context. A nil provider or a failed lookup degrades to disabled.
+func (s *Service) promptPoliciesEnabled(ctx context.Context, authCtx *contextvalues.AuthContext) bool {
+	if s.flags == nil {
+		return false
+	}
+	groups := feature.OrgProjectGroups(authCtx.OrganizationSlug, conv.PtrValOr(authCtx.ProjectSlug, ""))
+	on, err := s.flags.IsFlagEnabled(ctx, feature.FlagPromptPolicies, authCtx.ActiveOrganizationID, groups)
+	if err != nil {
+		s.logger.WarnContext(ctx, "prompt-policies flag check failed; treating as disabled",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		)
+		return false
+	}
+	return on
+}
+
 func foundRowToResult(
 	id, policyID uuid.UUID, policyVersion int64, chatMessageID uuid.UUID, chatID *string, chatTitle, chatUserID pgtype.Text,
 	source string, ruleID, description, match pgtype.Text,
@@ -2243,183 +2563,4 @@ func foundRowToResult(
 		Tags:          tags,
 		CreatedAt:     createdAt.Time.Format(time.RFC3339),
 	}
-}
-
-// ensureApprovalPolicy validates the policy ID for an approval endpoint and
-// confirms the policy belongs to the active project. Returns the parsed
-// UUID on success.
-func (s *Service) ensureApprovalPolicy(ctx context.Context, authCtx *contextvalues.AuthContext, rawPolicyID string) (uuid.UUID, error) {
-	policyID, err := uuid.Parse(rawPolicyID)
-	if err != nil {
-		return uuid.Nil, oops.E(oops.CodeInvalid, err, "invalid policy id")
-	}
-	if _, err := s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
-		ID:        policyID,
-		ProjectID: *authCtx.ProjectID,
-	}); err != nil {
-		return uuid.Nil, oops.E(oops.CodeNotFound, err, "risk policy not found").Log(ctx, s.logger)
-	}
-	return policyID, nil
-}
-
-func shadowMCPApprovalMatch(raw string) (string, string, error) {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return "", "", oops.E(oops.CodeInvalid, nil, "approval match is empty")
-	}
-	if u, err := url.Parse(trimmed); err == nil && u.Scheme != "" && u.Host != "" {
-		return accesscontrol.MatchKindFullURL, accesscontrol.CanonicalizeMatchValue(accesscontrol.MatchKindFullURL, trimmed), nil
-	}
-	serverIdentity := strings.Join(strings.Fields(trimmed), " ")
-	return accesscontrol.MatchKindServerIdentity, accesscontrol.CanonicalizeMatchValue(accesscontrol.MatchKindServerIdentity, serverIdentity), nil
-}
-
-func (s *Service) ListShadowMCPApprovals(ctx context.Context, payload *gen.ListShadowMCPApprovalsPayload) (*gen.ListShadowMCPApprovalsResult, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
-	policyID, err := s.ensureApprovalPolicy(ctx, authCtx, payload.PolicyID)
-	if err != nil {
-		return nil, err
-	}
-
-	result, err := s.accessStore.ListRules(ctx, accesscontrol.RuleFilters{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      authCtx.ProjectID.String(),
-		AccessScope:    accesscontrol.AccessScopeProject,
-		ResourceType:   accesscontrol.ResourceTypeShadowMCP,
-		Disposition:    accesscontrol.DispositionAllowed,
-		Limit:          1000,
-		Cursor:         "",
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list shadow-mcp approvals").Log(ctx, s.logger)
-	}
-
-	out := make([]*types.ShadowMCPApproval, 0, len(result.Rules))
-	for _, rule := range result.Rules {
-		if rule.ObservedSummary.RiskPolicyID == nil || *rule.ObservedSummary.RiskPolicyID != policyID.String() {
-			continue
-		}
-		out = append(out, shadowMCPAccessRuleToApproval(policyID, rule))
-	}
-	return &gen.ListShadowMCPApprovalsResult{Approvals: out}, nil
-}
-
-func (s *Service) ApproveShadowMCP(ctx context.Context, payload *gen.ApproveShadowMCPPayload) (*types.ShadowMCPApproval, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
-	policyID, err := s.ensureApprovalPolicy(ctx, authCtx, payload.PolicyID)
-	if err != nil {
-		return nil, err
-	}
-
-	matchKind, matchValue, err := shadowMCPApprovalMatch(payload.Match)
-	if err != nil {
-		return nil, err
-	}
-	now := time.Now().UTC()
-	riskPolicyID := policyID.String()
-	serverName := strings.TrimSpace(conv.PtrValOr(payload.ServerName, ""))
-	rule, err := s.accessStore.CreateRule(ctx, accesscontrol.AccessRule{
-		ID:             "",
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      authCtx.ProjectID.String(),
-		AccessScope:    accesscontrol.AccessScopeProject,
-		ResourceType:   accesscontrol.ResourceTypeShadowMCP,
-		Disposition:    accesscontrol.DispositionAllowed,
-		MatchKind:      matchKind,
-		MatchValue:     matchValue,
-		DisplayName:    cmp.Or(serverName, matchValue),
-		ObservedSummary: accesscontrol.ObservedSummary{
-			Name:           stringPtrIfNonEmpty(serverName),
-			FullURL:        stringPtrIf(matchKind == accesscontrol.MatchKindFullURL, matchValue),
-			URLHost:        nil,
-			ServerIdentity: stringPtrIf(matchKind == accesscontrol.MatchKindServerIdentity, matchValue),
-			ToolName:       nil,
-			ToolCall:       nil,
-			BlockReason:    nil,
-			RiskPolicyID:   &riskPolicyID,
-			RiskResultID:   nil,
-		},
-		SourceRequestID: "",
-		CreatedBy:       authCtx.UserID,
-		UpdatedBy:       authCtx.UserID,
-		Reason:          "",
-		CreatedAt:       now,
-		UpdatedAt:       now,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "store shadow-mcp approval").Log(ctx, s.logger)
-	}
-	return shadowMCPAccessRuleToApproval(policyID, rule), nil
-}
-
-func (s *Service) RevokeShadowMCPApproval(ctx context.Context, payload *gen.RevokeShadowMCPApprovalPayload) error {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return err
-	}
-
-	policyID, err := s.ensureApprovalPolicy(ctx, authCtx, payload.PolicyID)
-	if err != nil {
-		return err
-	}
-
-	matchKind, matchValue, err := shadowMCPApprovalMatch(payload.Match)
-	if err != nil {
-		return err
-	}
-	rule, err := s.accessStore.GetRuleByMatch(ctx, authCtx.ActiveOrganizationID, accesscontrol.ResourceTypeShadowMCP, accesscontrol.AccessScopeProject, authCtx.ProjectID.String(), matchKind, matchValue)
-	if err != nil {
-		if errors.Is(err, accesscontrol.ErrNotFound) {
-			return nil
-		}
-		return oops.E(oops.CodeUnexpected, err, "get shadow-mcp approval").Log(ctx, s.logger)
-	}
-	if rule.ObservedSummary.RiskPolicyID != nil && *rule.ObservedSummary.RiskPolicyID != policyID.String() {
-		return nil
-	}
-	if _, err := s.accessStore.DeleteRule(ctx, authCtx.ActiveOrganizationID, accesscontrol.ResourceTypeShadowMCP, rule.ID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "remove shadow-mcp approval").Log(ctx, s.logger)
-	}
-	return nil
-}
-
-func shadowMCPAccessRuleToApproval(policyID uuid.UUID, rule accesscontrol.AccessRule) *types.ShadowMCPApproval {
-	return &types.ShadowMCPApproval{
-		PolicyID:   policyID.String(),
-		Match:      rule.MatchValue,
-		ServerName: rule.ObservedSummary.Name,
-		ApprovedBy: stringPtrIfNonEmpty(rule.CreatedBy),
-		ApprovedAt: rule.CreatedAt.UTC().Format(time.RFC3339),
-	}
-}
-
-func stringPtrIf(ok bool, value string) *string {
-	if !ok || value == "" {
-		return nil
-	}
-	return &value
-}
-
-func stringPtrIfNonEmpty(value string) *string {
-	if value == "" {
-		return nil
-	}
-	return &value
 }

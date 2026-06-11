@@ -852,6 +852,9 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   oidc BOOLEAN NOT NULL DEFAULT FALSE,
   passthrough BOOLEAN NOT NULL DEFAULT FALSE,
 
+  name TEXT CHECK (name IS NULL OR name <> ''),
+  logo_asset_id uuid,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -859,7 +862,8 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
 
   CONSTRAINT remote_session_issuers_pkey PRIMARY KEY (id),
   CONSTRAINT remote_session_issuers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT remote_session_issuers_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+  CONSTRAINT remote_session_issuers_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT remote_session_issuers_logo_asset_id_fkey FOREIGN KEY (logo_asset_id) REFERENCES assets (id) ON DELETE SET NULL
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS remote_session_issuers_project_slug_key
@@ -932,7 +936,9 @@ CREATE TABLE IF NOT EXISTS remote_sessions (
   remote_session_client_id uuid NOT NULL,
 
   access_token_encrypted TEXT NOT NULL,
-  access_expires_at timestamptz NOT NULL,
+  -- NULL when the upstream omitted expires_in: the token has no known expiry
+  -- (e.g. Slack non-rotating tokens). Readers treat NULL as non-expiring.
+  access_expires_at timestamptz,
   refresh_token_encrypted TEXT,
   refresh_expires_at timestamptz,
   scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
@@ -1125,6 +1131,7 @@ CREATE TABLE IF NOT EXISTS chats (
   organization_id TEXT NOT NULL,
   user_id TEXT,
   external_user_id TEXT,
+  external_chat_id TEXT,
   title TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -1135,6 +1142,10 @@ CREATE TABLE IF NOT EXISTS chats (
   CONSTRAINT chats_pkey PRIMARY KEY (id),
   CONSTRAINT chats_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS chats_org_external_chat_id_key
+ON chats (organization_id, external_chat_id)
+WHERE external_chat_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS assistants (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -1365,6 +1376,7 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 
   user_id TEXT,
   external_user_id TEXT,
+  external_message_id TEXT,
   origin TEXT,
   user_agent TEXT,
   ip_address TEXT,
@@ -1404,6 +1416,10 @@ CREATE INDEX IF NOT EXISTS chat_messages_chat_id_generation_seq_idx ON chat_mess
 CREATE INDEX IF NOT EXISTS chat_messages_project_id_id_idx
 ON chat_messages (project_id, id)
 WHERE project_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS chat_messages_chat_id_external_message_id_key
+ON chat_messages (chat_id, external_message_id)
+WHERE external_message_id IS NOT NULL;
 
 -- Partial index over unanalyzed messages only. Shrinks toward zero at steady
 -- state, making FetchUnanalyzedMessageIDs an index-only scan on a tiny set.
@@ -2348,6 +2364,7 @@ CREATE TABLE IF NOT EXISTS ai_integration_configs (
   organization_id TEXT NOT NULL,
   provider TEXT NOT NULL,
   project_id uuid NOT NULL,
+  external_organization_id TEXT,
   api_key_encrypted TEXT NOT NULL,
   enabled boolean NOT NULL DEFAULT true,
   id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
@@ -2360,6 +2377,22 @@ CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_configs_org_provider_key
   ON ai_integration_configs (organization_id, provider)
   WHERE deleted IS FALSE;
 
+CREATE TABLE IF NOT EXISTS ai_integration_config_chats (
+  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+  ai_integration_config_id uuid NOT NULL,
+  chat_id uuid NOT NULL,
+  last_cursor_id TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT ai_integration_config_chats_config_chat_key UNIQUE (ai_integration_config_id, chat_id),
+  CONSTRAINT ai_integration_config_chats_config_id_fkey FOREIGN KEY (ai_integration_config_id) REFERENCES ai_integration_configs (id) ON DELETE CASCADE,
+  CONSTRAINT ai_integration_config_chats_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ai_integration_config_chats_chat_id_key
+  ON ai_integration_config_chats (chat_id);
+
 -- AI integration syncs: provider-specific query cursors, scheduler state,
 -- and failure metadata.
 CREATE TABLE IF NOT EXISTS ai_integration_syncs (
@@ -2367,6 +2400,7 @@ CREATE TABLE IF NOT EXISTS ai_integration_syncs (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   ai_integration_config_id uuid NOT NULL,
   poll_watermark_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  last_cursor_id TEXT,
   next_poll_after timestamptz NOT NULL DEFAULT clock_timestamp(),
   last_poll_error TEXT,
   last_poll_failed_at timestamptz,
@@ -2862,6 +2896,11 @@ CREATE TABLE IF NOT EXISTS risk_policies (
 
   enabled BOOLEAN NOT NULL DEFAULT TRUE,
   name TEXT NOT NULL,
+  -- Discriminates a standard detection policy (regex/presidio/custom sources)
+  -- from a prompt-based LLM-judge policy ('prompt_based'). prompt_based
+  -- policies ignore the source/entity/rule columns and instead evaluate
+  -- `prompt` against the message via an LLM judge.
+  policy_type TEXT NOT NULL DEFAULT 'standard',
   sources TEXT[] NOT NULL,
   presidio_entities TEXT[],
   prompt_injection_rules TEXT[],
@@ -2876,6 +2915,13 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   audience_type TEXT NOT NULL DEFAULT 'everyone',
   auto_name BOOLEAN NOT NULL DEFAULT TRUE,
   user_message TEXT,
+  -- For policy_type = 'prompt_based': the prompt-based guardrail the LLM judge
+  -- evaluates each in-scope message against. NULL for standard policies.
+  prompt TEXT,
+  -- For policy_type = 'prompt_based': per-policy judge model configuration
+  -- (model id, temperature, fail-mode, etc.) as a JSON object. NULL for
+  -- standard policies.
+  model_config JSONB,
   version BIGINT NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -2885,6 +2931,7 @@ CREATE TABLE IF NOT EXISTS risk_policies (
 
   CONSTRAINT risk_policies_pkey PRIMARY KEY (id),
   CONSTRAINT risk_policies_audience_type_check CHECK (audience_type IN ('everyone', 'targeted')),
+  CONSTRAINT risk_policies_policy_type_check CHECK (policy_type IN ('standard', 'prompt_based')),
   CONSTRAINT risk_policies_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
   CONSTRAINT risk_policies_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE
 );

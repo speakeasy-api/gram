@@ -50,7 +50,7 @@ func callGetUserProfileFields(ctx context.Context, client *apiClient, env toolco
 	setOptionalString(request, "user", input.UserID)
 	setOptionalBool(request, "include_labels", input.IncludeLabels)
 
-	body, err := client.call(ctx, "users.profile.get", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "users.profile.get", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

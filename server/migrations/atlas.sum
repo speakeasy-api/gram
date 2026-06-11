@@ -1,4 +1,4 @@
-h1:iy+JUfIklQ2U68XmbzBqRhNYteVk1rJfP0MWH4mDNM0=
+h1:InI3x4/pzNjY+43h+EffX5yzXFLDe2LNIbMMngyyMq0=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -211,3 +211,7 @@ h1:iy+JUfIklQ2U68XmbzBqRhNYteVk1rJfP0MWH4mDNM0=
 20260605174513_risk-results-drop-verbatim-match-index-column.sql h1:Ans/oK8EWrCsPWdbfL9v/66RrUgIMYdlwEDEx9hwscc=
 20260605200300_plugin_servers_mcp_server_id.sql h1:3NUyToGuksyCGuOgltiB60ob8++hRSAKYDdrUHesOzg=
 20260609101753_add_directory_attributes.sql h1:7AYW4VSIpTe3zZ5jUYEZil/TXBAU6gGT+P8VJB0bc8U=
+20260609184933_compliance-api-chat-messages.sql h1:Lmdvxf3k5Zoh8S/CBheqgC3DDuncZUNFuY0Ou6TBacE=
+20260610154004_add-remote-session-issuer-name-logo.sql h1:7DrxQzMDBGz/Ev6VWf/x92A4yxzM/lq4c8tXcS9M6HE=
+20260610205050_prompt-based-policies-extend-risk-policies.sql h1:KaqQWR4qItyOjW8jQPkFtYAni3ki3hOuQZ5fg5ZGDGY=
+20260610225502_remotesession-access-expires-nullable.sql h1:NMY/XoTX/Aj/oaFCpqX1GuPrp48oz3TsGHIn/hBSJzY=

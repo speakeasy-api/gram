@@ -4,7 +4,6 @@ import { Page } from "@/components/page-layout";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DashboardCard } from "@/components/ui/dashboard-card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import {
@@ -23,7 +22,7 @@ import { unwrapAsync } from "@gram/client/types/fp";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useCallback, useEffect, useMemo, type ReactNode } from "react";
-import { Badge, Button, Card, Icon } from "@speakeasy-api/moonshine";
+import { Button, Card, Icon } from "@speakeasy-api/moonshine";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { Wand2 } from "lucide-react";
 import {
@@ -36,11 +35,9 @@ import {
   useDateRangeFilter,
 } from "@/components/observe/useDateRangeFilter";
 import { ActivityTimelineCard } from "./ActivityTimelineCard";
-import { ProjectOnboardingBanner } from "./ProjectOnboarding";
 
 export function ProjectDashboard(): JSX.Element {
   const { projectSlug } = useSlugs();
-  const project = useProject();
   const routes = useRoutes();
   const orgRoutes = useOrgRoutes();
 
@@ -350,11 +347,6 @@ export function ProjectDashboard(): JSX.Element {
   return (
     <Page.Section>
       <Page.Section.Title>Project Overview</Page.Section.Title>
-      <Page.Section.Description>
-        <Badge variant="neutral">
-          <Badge.Text>{project.name}</Badge.Text>
-        </Badge>
-      </Page.Section.Description>
       <Page.Section.CTA>
         {logsEnabled && (
           <TimeRangePicker
@@ -370,10 +362,6 @@ export function ProjectDashboard(): JSX.Element {
 
       <Page.Section.Body>
         <div className="space-y-8">
-          {(isProjectEmpty || showDisabledBanner) && (
-            <ProjectOnboardingBanner />
-          )}
-
           {showDisabledBanner && (
             <LoggingDisabledBanner settingsHref={orgRoutes.logs.href()} />
           )}
@@ -564,7 +552,7 @@ export function ProjectDashboard(): JSX.Element {
                                   !isProjectEmpty &&
                                     overview?.summary.totalChats === 0
                                   ? routes.insights.href()
-                                  : routes.logs.agents.href()
+                                  : routes.agentSessions.href()
                             }
                           />
                         </CardActions>

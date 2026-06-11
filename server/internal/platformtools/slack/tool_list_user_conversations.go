@@ -61,7 +61,7 @@ func callListUserConversations(ctx context.Context, client *apiClient, env toolc
 		request["types"] = strings.Join(input.ChannelTypes, ",")
 	}
 
-	body, err := client.call(ctx, "users.conversations", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "users.conversations", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

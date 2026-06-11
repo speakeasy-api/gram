@@ -25,9 +25,11 @@ type Service interface {
 	Update(context.Context, *UpdatePayload) (res *types.MCPCollection, err error)
 	// Delete an MCP collection
 	Delete(context.Context, *DeletePayload) (err error)
-	// Attach a server (toolset) to a collection
+	// Attach a server to a collection. Provide exactly one of toolset_id or
+	// mcp_server_id.
 	AttachServer(context.Context, *AttachServerPayload) (res *types.MCPCollection, err error)
-	// Detach a server (toolset) from a collection
+	// Detach a server from a collection. Provide exactly one of toolset_id or
+	// mcp_server_id.
 	DetachServer(context.Context, *DetachServerPayload) (err error)
 	// List published MCP servers from a collection
 	ListServers(context.Context, *ListServersPayload) (res *ListServersResult, err error)
@@ -60,8 +62,12 @@ var MethodNames = [7]string{"create", "list", "update", "delete", "attachServer"
 type AttachServerPayload struct {
 	// ID of the collection
 	CollectionID string
-	// ID of the toolset to attach
-	ToolsetID    string
+	// ID of the toolset to attach (provide exactly one of toolset_id or
+	// mcp_server_id)
+	ToolsetID *string
+	// ID of the MCP server to attach (provide exactly one of toolset_id or
+	// mcp_server_id)
+	McpServerID  *string
 	SessionToken *string
 	ApikeyToken  *string
 }
@@ -79,7 +85,9 @@ type CreatePayload struct {
 	// Visibility of the collection
 	Visibility string
 	// Toolset IDs to attach to the collection
-	ToolsetIds   []string
+	ToolsetIds []string
+	// MCP server IDs to attach to the collection
+	McpServerIds []string
 	SessionToken *string
 	ApikeyToken  *string
 }
@@ -97,8 +105,12 @@ type DeletePayload struct {
 type DetachServerPayload struct {
 	// ID of the collection
 	CollectionID string
-	// ID of the toolset to detach
-	ToolsetID    string
+	// ID of the toolset to detach (provide exactly one of toolset_id or
+	// mcp_server_id)
+	ToolsetID *string
+	// ID of the MCP server to detach (provide exactly one of toolset_id or
+	// mcp_server_id)
+	McpServerID  *string
 	SessionToken *string
 	ApikeyToken  *string
 }

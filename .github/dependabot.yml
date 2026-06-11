@@ -44,12 +44,11 @@ updates:
         patterns:
           - "github.com/aws/aws-sdk-go-v2/*"
   - package-ecosystem: "npm"
-    directories:
-      - "/client/*"
-      - "/elements"
-      - "/elements/examples/*"
+    directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     groups:
       ai-sdk:
         patterns:

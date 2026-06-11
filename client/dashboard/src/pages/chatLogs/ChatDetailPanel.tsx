@@ -1,4 +1,4 @@
-import { Eye, EyeOff } from "lucide-react";
+import { Ellipsis, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -9,6 +9,13 @@ import {
 } from "@/components/ui/accordion";
 import { CodeBlock } from "@/components/ui/code-block";
 import { ruleIdCategoryLabel } from "@/pages/security/rule-ids";
+import { serializeExclusionExpression } from "@/pages/security/exclusion-expression";
+import {
+  ExclusionSheet,
+  type ExclusionSheetState,
+  GLOBAL_SCOPE,
+} from "@/pages/security/exclusion-sheet";
+import { getRuleTitleFallback } from "@/pages/security/risk-utils";
 import type {
   ChatMessage,
   TelemetryLogRecord,
@@ -20,7 +27,15 @@ import { useRevealAll } from "@/pages/security/reveal-all-context";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Badge, Icon, Stack } from "@speakeasy-api/moonshine";
 import { format } from "date-fns";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Dialog } from "@/components/ui/dialog";
 import {
   Sheet,
@@ -33,7 +48,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Button } from "@speakeasy-api/moonshine";
+import {
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@speakeasy-api/moonshine";
 import type { RiskResult } from "@gram/client/models/components";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { MessageContent } from "@gram-ai/elements";
@@ -72,6 +93,15 @@ function getTraceId(chatId: string): string {
 }
 
 const PANEL_TELEMETRY_LOG_LIMIT = 100;
+
+function getRiskBadgeLabel(result: RiskResult): string {
+  if (result.ruleId === "llm_judge") return getRuleTitleFallback(result.ruleId);
+  return ruleIdCategoryLabel(result.ruleId) || result.source.toUpperCase();
+}
+
+function shouldShowRiskRuleId(result: RiskResult): boolean {
+  return Boolean(result.ruleId) && result.ruleId !== "llm_judge";
+}
 
 export function ChatDetailSheet({
   chatId,
@@ -336,6 +366,13 @@ function MessageItem({
             onRevealContent={() => setContentRevealed(true)}
             parsedToolCalls={parsedToolCalls}
           />
+          {hasRisk && riskResults && (
+            <RiskFindingActions
+              results={riskResults}
+              canHide={hasSensitiveContent && contentRevealed}
+              onHide={() => setContentRevealed(false)}
+            />
+          )}
         </div>
       )}
     </div>
@@ -909,22 +946,121 @@ function MaskedMatchInline({ value }: { value: string }) {
   );
 }
 
+// Provides the "Create exclusion" action to risk findings deep in the trace.
+// Null when the viewer lacks org:admin, which hides the action.
+const CreateExclusionContext = createContext<
+  ((result: RiskResult) => void) | null
+>(null);
+
+// Pre-fill an exclusion expression from a finding: prefer the literal match,
+// fall back to the rule_id, then the source.
+function findingToExclusionState(result: RiskResult): ExclusionSheetState {
+  let expression: string;
+  if (result.match) {
+    expression = serializeExclusionExpression({
+      matchType: "exact",
+      matchValue: result.match,
+    });
+  } else if (result.ruleId) {
+    expression = serializeExclusionExpression({
+      matchType: "rule_id",
+      matchValue: result.ruleId,
+    });
+  } else {
+    expression = serializeExclusionExpression({
+      matchType: "source",
+      matchValue: result.source,
+    });
+  }
+  return {
+    mode: "create",
+    initialExpression: expression,
+    initialScope: result.policyId ?? GLOBAL_SCOPE,
+  };
+}
+
+// Action bar shown under an expanded risk entry. Each unique finding gets a
+// ⋮ menu: "Create exclusion" (pre-fills from the finding) and, when sensitive
+// content was revealed, "Hide again".
+function RiskFindingActions({
+  results,
+  canHide,
+  onHide,
+}: {
+  results: RiskResult[];
+  canHide: boolean;
+  onHide: () => void;
+}) {
+  const openCreateExclusion = useContext(CreateExclusionContext);
+  if (!openCreateExclusion && !canHide) return null;
+
+  const seen = new Set<string>();
+  const unique: RiskResult[] = [];
+  for (const r of results) {
+    const key = `${r.source}|${r.ruleId ?? ""}|${r.match ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(r);
+  }
+
+  return (
+    <div className="mt-2 space-y-1">
+      {unique.map((r) => (
+        <div
+          key={r.id}
+          className="bg-muted/30 flex items-center justify-between gap-2 rounded-md border px-3 py-1.5"
+        >
+          <span className="text-muted-foreground truncate font-mono text-xs">
+            {[r.ruleId, r.source].filter(Boolean).join(" · ")}
+          </span>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="tertiary" size="sm">
+                <Button.Icon>
+                  <Ellipsis className="h-4 w-4" />
+                </Button.Icon>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {openCreateExclusion && (
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onSelect={() => openCreateExclusion(r)}
+                >
+                  Create exclusion
+                </DropdownMenuItem>
+              )}
+              {canHide && (
+                <DropdownMenuItem className="cursor-pointer" onSelect={onHide}>
+                  Hide again
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function RiskBadgePopover({ results }: { results: RiskResult[] }) {
   // Long messages can repeat the same secret/email many times. Collapse to
   // distinct (source, ruleId, match) so the popover lists each unique
   // finding once with an occurrence count instead of an N-row scroll of
   // identical rows.
-  const grouped = new Map<string, { result: RiskResult; count: number }>();
-  for (const r of results) {
-    const key = `${r.source}\u0000${r.ruleId ?? ""}\u0000${r.match ?? ""}`;
-    const hit = grouped.get(key);
-    if (hit) {
-      hit.count++;
-    } else {
-      grouped.set(key, { result: r, count: 1 });
+  const unique = useMemo(() => {
+    const grouped = new Map<string, { result: RiskResult; count: number }>();
+    for (const r of results) {
+      const key = `${r.source}\u0000${r.ruleId ?? ""}\u0000${r.match ?? ""}`;
+      const hit = grouped.get(key);
+      if (hit) {
+        hit.count++;
+      } else {
+        grouped.set(key, { result: r, count: 1 });
+      }
     }
-  }
-  const unique = [...grouped.values()];
+    return [...grouped.values()];
+  }, [results]);
 
   return (
     <Popover>
@@ -952,9 +1088,9 @@ function RiskBadgePopover({ results }: { results: RiskResult[] }) {
               <div key={r.id} className="py-2 first:pt-0 last:pb-0">
                 <div className="flex items-center gap-2">
                   <Badge variant="destructive" className="shrink-0 text-[10px]">
-                    {ruleIdCategoryLabel(r.ruleId) || r.source.toUpperCase()}
+                    {getRiskBadgeLabel(r)}
                   </Badge>
-                  {r.ruleId && (
+                  {shouldShowRiskRuleId(r) && (
                     <span className="text-muted-foreground truncate font-mono text-xs">
                       {r.ruleId}
                     </span>
@@ -1006,7 +1142,7 @@ function ChatDetailPanel({
   const isSuperAdmin = useIsAdmin();
   const { hasScope } = useRBAC();
   // Export + delete should be available to anyone with org:admin (the scope
-  // that already gates /risk-overview and /logs/risk-events). Falling back to
+  // that already gates /risk-overview and /risk-events). Falling back to
   // the platform super-admin flag locked out customer org admins who can
   // already see the data in this panel.
   const canManageChat = isSuperAdmin || hasScope("org:admin");
@@ -1015,6 +1151,8 @@ function ChatDetailPanel({
     FilterableTraceEntryType[]
   >([...DEFAULT_ENABLED_ENTRY_TYPES]);
   const [riskOnly, setRiskOnly] = useState(initialRiskOnly);
+  const [exclusionState, setExclusionState] =
+    useState<ExclusionSheetState | null>(null);
   const {
     chat,
     messages: chatMessages,
@@ -1334,12 +1472,26 @@ function ChatDetailPanel({
           />
 
           {/* Chat Messages */}
-          <ChatMessagesList
-            messages={chatMessages}
-            riskResultsByMessage={riskResultsByMessage}
-            collapseNonRisk={collapseNonRisk}
-            enabledEntryTypes={enabledEntryTypes}
-            riskOnly={riskOnly}
+          <CreateExclusionContext.Provider
+            value={
+              canManageChat
+                ? (result) => setExclusionState(findingToExclusionState(result))
+                : null
+            }
+          >
+            <ChatMessagesList
+              messages={chatMessages}
+              riskResultsByMessage={riskResultsByMessage}
+              collapseNonRisk={collapseNonRisk}
+              enabledEntryTypes={enabledEntryTypes}
+              riskOnly={riskOnly}
+            />
+          </CreateExclusionContext.Provider>
+          <ExclusionSheet
+            state={exclusionState}
+            onOpenChange={(open) => {
+              if (!open) setExclusionState(null);
+            }}
           />
         </TabsContent>
 

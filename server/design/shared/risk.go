@@ -28,6 +28,25 @@ func RiskPolicyActionEnum() {
 	Enum("flag", "block")
 }
 
+// RiskPolicyTypeEnum applies the allowed-values constraint to a policy_type
+// attribute. "standard" is the regex/presidio/custom detection policy;
+// "prompt_based" is an LLM-judge policy that evaluates `prompt`
+// against in-scope messages. Use it inside an Attribute("policy_type", ...).
+func RiskPolicyTypeEnum() {
+	Enum("standard", "prompt_based")
+}
+
+// RiskPolicyModelConfig is the per-policy LLM-judge model configuration for
+// `prompt_based` policies. All fields are optional; unset fields fall back to
+// judge defaults (default model, low temperature, fail-open on judge error).
+var RiskPolicyModelConfig = Type("RiskPolicyModelConfig", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("model", String, "OpenRouter model id the judge should use. Empty selects the default judge model.")
+	Attribute("temperature", Float64, "Sampling temperature for the judge. Defaults to a low value for deterministic verdicts.")
+	Attribute("fail_open", Boolean, "When the judge errors or times out: true allows the message (fail-open), false blocks it (fail-closed). Defaults to fail-open.")
+})
+
 var RiskPolicy = Type("RiskPolicy", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -38,6 +57,10 @@ var RiskPolicy = Type("RiskPolicy", func() {
 		Format(FormatUUID)
 	})
 	Attribute("name", String, "The policy name.")
+	Attribute("policy_type", String, "Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge).", func() {
+		RiskPolicyTypeEnum()
+		Default("standard")
+	})
 	Attribute("sources", ArrayOf(String), "Detection sources enabled for this policy.")
 	Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to scan for. When empty, scans all entities.")
 	Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids enabled in addition to the heuristic baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.")
@@ -51,6 +74,8 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	})
 	Attribute("auto_name", Boolean, "Whether the policy name is auto-generated. When true, the name is regenerated on each update.")
 	Attribute("user_message", String, "Optional message shown to the end user when this policy blocks an action or surfaces a flagged finding. When unset, a default message is rendered.")
+	Attribute("prompt", String, "For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Null for standard policies.")
+	Attribute("model_config", RiskPolicyModelConfig, "For prompt_based policies: per-policy LLM-judge model configuration. Null for standard policies.")
 	Attribute("version", Int64, "Policy version, incremented on each update.")
 	Attribute("created_at", String, "When the policy was created.", func() {
 		Format(FormatDateTime)
@@ -61,7 +86,7 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("pending_messages", Int64, "Number of messages not yet analyzed at the current policy version.")
 	Attribute("total_messages", Int64, "Total number of messages in the project.")
 
-	Required("id", "project_id", "name", "sources", "enabled", "action", "auto_name", "version", "created_at", "updated_at", "pending_messages", "total_messages")
+	Required("id", "project_id", "name", "policy_type", "sources", "enabled", "action", "auto_name", "version", "created_at", "updated_at", "pending_messages", "total_messages")
 })
 
 var RiskCustomDetectionRule = Type("RiskCustomDetectionRule", func() {
@@ -85,6 +110,41 @@ var RiskCustomDetectionRule = Type("RiskCustomDetectionRule", func() {
 	})
 
 	Required("id", "rule_id", "title", "description", "regex", "severity", "created_at", "updated_at")
+})
+
+// RiskExclusionMatchTypeEnum constrains the match_type field to the supported
+// strategies. Kept here so payloads and the result type stay in sync.
+func RiskExclusionMatchTypeEnum() {
+	Enum("exact", "regex", "rule_id", "source", "entity_type")
+}
+
+var RiskExclusion = Type("RiskExclusion", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("id", String, "The exclusion ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("project_id", String, "The project ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("risk_policy_id", String, "The policy this exclusion is bound to. Null/omitted means global: the exclusion applies to every policy in the project.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("match_type", String, "How match_value is interpreted: exact (finding text), regex (RE2 pattern over finding text), rule_id, source, or entity_type (presidio entity, matched as rule_id 'pii.<entity>').", func() {
+		RiskExclusionMatchTypeEnum()
+	})
+	Attribute("match_value", String, "The value matched against findings, interpreted per match_type.")
+	Attribute("rule_id_filter", String, "Optional narrowing: an exact/regex/source exclusion only applies to findings with this rule_id. Empty means any.")
+	Attribute("source_filter", String, "Optional narrowing: an exact/regex/rule_id exclusion only applies to findings from this source. Empty means any.")
+	Attribute("enabled", Boolean, "Whether the exclusion is active.")
+	Attribute("created_at", String, "When the exclusion was created.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, "When the exclusion was last updated.", func() {
+		Format(FormatDateTime)
+	})
+
+	Required("id", "project_id", "match_type", "match_value", "rule_id_filter", "source_filter", "enabled", "created_at", "updated_at")
 })
 
 var RiskResult = Type("RiskResult", func() {
@@ -175,22 +235,6 @@ var RiskChatSummary = Type("RiskChatSummary", func() {
 	})
 
 	Required("chat_id", "findings_count", "latest_detected")
-})
-
-var ShadowMCPApproval = Type("ShadowMCPApproval", func() {
-	Meta("struct:pkg:path", "types")
-
-	Attribute("policy_id", String, "The risk policy ID this approval is scoped to.", func() {
-		Format(FormatUUID)
-	})
-	Attribute("match", String, "The MCP server identifier this approval covers — typically a server URL, stdio command, or `mcp__<server>__` prefix (the same value surfaced in `RiskResult.match`).")
-	Attribute("server_name", String, "Display name of the MCP server, when known.")
-	Attribute("approved_by", String, "User that recorded the approval.")
-	Attribute("approved_at", String, "When the approval was recorded.", func() {
-		Format(FormatDateTime)
-	})
-
-	Required("policy_id", "match", "approved_at")
 })
 
 var RiskPolicyStatus = Type("RiskPolicyStatus", func() {

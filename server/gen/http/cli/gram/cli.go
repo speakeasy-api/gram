@@ -53,7 +53,6 @@ import (
 	remotesessionsc "github.com/speakeasy-api/gram/server/gen/http/remote_sessions/client"
 	resourcesc "github.com/speakeasy-api/gram/server/gen/http/resources/client"
 	riskc "github.com/speakeasy-api/gram/server/gen/http/risk/client"
-	slackc "github.com/speakeasy-api/gram/server/gen/http/slack/client"
 	telemetryc "github.com/speakeasy-api/gram/server/gen/http/telemetry/client"
 	templatesc "github.com/speakeasy-api/gram/server/gen/http/templates/client"
 	toolsc "github.com/speakeasy-api/gram/server/gen/http/tools/client"
@@ -113,8 +112,7 @@ func UsageCommands() []string {
 		"organization-remote-session-issuers (create-organization-remote-session-issuer|update-organization-remote-session-issuer|list-organization-remote-session-issuers|get-organization-remote-session-issuer|delete-organization-remote-session-issuer)",
 		"remote-sessions (list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
-		"risk (create-risk-policy|list-risk-policies|get-risk-capabilities|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|list-risk-results-by-chat|get-risk-overview|list-risk-categories|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|list-shadow-mcp-approvals|approve-shadow-mcp|revoke-shadow-mcp-approval|create-risk-policy-bypass-request|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|suggest-custom-detection-rule|test-detection-rule)",
-		"slack (create-slack-app|list-slack-apps|get-slack-app|configure-slack-app|update-slack-app|delete-slack-app)",
+		"risk (create-risk-policy|list-risk-policies|get-risk-capabilities|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|list-risk-results-by-chat|get-risk-overview|list-risk-categories|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|create-risk-policy-bypass-request|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|test-detection-rule)",
 		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-project-overview|list-filter-options|list-attribute-keys|get-hooks-summary|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"tools list-tools",
@@ -529,7 +527,7 @@ func ParseEndpoint(
 		chatListChatsToFlag                = chatListChatsFlags.String("to", "", "")
 		chatListChatsLimitFlag             = chatListChatsFlags.String("limit", "50", "")
 		chatListChatsOffsetFlag            = chatListChatsFlags.String("offset", "", "")
-		chatListChatsSortByFlag            = chatListChatsFlags.String("sort-by", "created_at", "")
+		chatListChatsSortByFlag            = chatListChatsFlags.String("sort-by", "last_message_timestamp", "")
 		chatListChatsSortOrderFlag         = chatListChatsFlags.String("sort-order", "desc", "")
 		chatListChatsSessionTokenFlag      = chatListChatsFlags.String("session-token", "", "")
 		chatListChatsProjectSlugInputFlag  = chatListChatsFlags.String("project-slug-input", "", "")
@@ -1480,25 +1478,6 @@ func ParseEndpoint(
 		riskGetRiskPolicyStatusSessionTokenFlag     = riskGetRiskPolicyStatusFlags.String("session-token", "", "")
 		riskGetRiskPolicyStatusProjectSlugInputFlag = riskGetRiskPolicyStatusFlags.String("project-slug-input", "", "")
 
-		riskListShadowMCPApprovalsFlags                = flag.NewFlagSet("list-shadow-mcp-approvals", flag.ExitOnError)
-		riskListShadowMCPApprovalsPolicyIDFlag         = riskListShadowMCPApprovalsFlags.String("policy-id", "REQUIRED", "")
-		riskListShadowMCPApprovalsApikeyTokenFlag      = riskListShadowMCPApprovalsFlags.String("apikey-token", "", "")
-		riskListShadowMCPApprovalsSessionTokenFlag     = riskListShadowMCPApprovalsFlags.String("session-token", "", "")
-		riskListShadowMCPApprovalsProjectSlugInputFlag = riskListShadowMCPApprovalsFlags.String("project-slug-input", "", "")
-
-		riskApproveShadowMCPFlags                = flag.NewFlagSet("approve-shadow-mcp", flag.ExitOnError)
-		riskApproveShadowMCPBodyFlag             = riskApproveShadowMCPFlags.String("body", "REQUIRED", "")
-		riskApproveShadowMCPApikeyTokenFlag      = riskApproveShadowMCPFlags.String("apikey-token", "", "")
-		riskApproveShadowMCPSessionTokenFlag     = riskApproveShadowMCPFlags.String("session-token", "", "")
-		riskApproveShadowMCPProjectSlugInputFlag = riskApproveShadowMCPFlags.String("project-slug-input", "", "")
-
-		riskRevokeShadowMCPApprovalFlags                = flag.NewFlagSet("revoke-shadow-mcp-approval", flag.ExitOnError)
-		riskRevokeShadowMCPApprovalPolicyIDFlag         = riskRevokeShadowMCPApprovalFlags.String("policy-id", "REQUIRED", "")
-		riskRevokeShadowMCPApprovalMatchFlag            = riskRevokeShadowMCPApprovalFlags.String("match", "REQUIRED", "")
-		riskRevokeShadowMCPApprovalApikeyTokenFlag      = riskRevokeShadowMCPApprovalFlags.String("apikey-token", "", "")
-		riskRevokeShadowMCPApprovalSessionTokenFlag     = riskRevokeShadowMCPApprovalFlags.String("session-token", "", "")
-		riskRevokeShadowMCPApprovalProjectSlugInputFlag = riskRevokeShadowMCPApprovalFlags.String("project-slug-input", "", "")
-
 		riskCreateRiskPolicyBypassRequestFlags            = flag.NewFlagSet("create-risk-policy-bypass-request", flag.ExitOnError)
 		riskCreateRiskPolicyBypassRequestBodyFlag         = riskCreateRiskPolicyBypassRequestFlags.String("body", "REQUIRED", "")
 		riskCreateRiskPolicyBypassRequestSessionTokenFlag = riskCreateRiskPolicyBypassRequestFlags.String("session-token", "", "")
@@ -1563,6 +1542,30 @@ func ParseEndpoint(
 		riskDeleteCustomDetectionRuleSessionTokenFlag     = riskDeleteCustomDetectionRuleFlags.String("session-token", "", "")
 		riskDeleteCustomDetectionRuleProjectSlugInputFlag = riskDeleteCustomDetectionRuleFlags.String("project-slug-input", "", "")
 
+		riskListRiskExclusionsFlags                = flag.NewFlagSet("list-risk-exclusions", flag.ExitOnError)
+		riskListRiskExclusionsRiskPolicyIDFlag     = riskListRiskExclusionsFlags.String("risk-policy-id", "", "")
+		riskListRiskExclusionsApikeyTokenFlag      = riskListRiskExclusionsFlags.String("apikey-token", "", "")
+		riskListRiskExclusionsSessionTokenFlag     = riskListRiskExclusionsFlags.String("session-token", "", "")
+		riskListRiskExclusionsProjectSlugInputFlag = riskListRiskExclusionsFlags.String("project-slug-input", "", "")
+
+		riskCreateRiskExclusionFlags                = flag.NewFlagSet("create-risk-exclusion", flag.ExitOnError)
+		riskCreateRiskExclusionBodyFlag             = riskCreateRiskExclusionFlags.String("body", "REQUIRED", "")
+		riskCreateRiskExclusionApikeyTokenFlag      = riskCreateRiskExclusionFlags.String("apikey-token", "", "")
+		riskCreateRiskExclusionSessionTokenFlag     = riskCreateRiskExclusionFlags.String("session-token", "", "")
+		riskCreateRiskExclusionProjectSlugInputFlag = riskCreateRiskExclusionFlags.String("project-slug-input", "", "")
+
+		riskUpdateRiskExclusionFlags                = flag.NewFlagSet("update-risk-exclusion", flag.ExitOnError)
+		riskUpdateRiskExclusionBodyFlag             = riskUpdateRiskExclusionFlags.String("body", "REQUIRED", "")
+		riskUpdateRiskExclusionApikeyTokenFlag      = riskUpdateRiskExclusionFlags.String("apikey-token", "", "")
+		riskUpdateRiskExclusionSessionTokenFlag     = riskUpdateRiskExclusionFlags.String("session-token", "", "")
+		riskUpdateRiskExclusionProjectSlugInputFlag = riskUpdateRiskExclusionFlags.String("project-slug-input", "", "")
+
+		riskDeleteRiskExclusionFlags                = flag.NewFlagSet("delete-risk-exclusion", flag.ExitOnError)
+		riskDeleteRiskExclusionIDFlag               = riskDeleteRiskExclusionFlags.String("id", "REQUIRED", "")
+		riskDeleteRiskExclusionApikeyTokenFlag      = riskDeleteRiskExclusionFlags.String("apikey-token", "", "")
+		riskDeleteRiskExclusionSessionTokenFlag     = riskDeleteRiskExclusionFlags.String("session-token", "", "")
+		riskDeleteRiskExclusionProjectSlugInputFlag = riskDeleteRiskExclusionFlags.String("project-slug-input", "", "")
+
 		riskSuggestCustomDetectionRuleFlags                = flag.NewFlagSet("suggest-custom-detection-rule", flag.ExitOnError)
 		riskSuggestCustomDetectionRuleBodyFlag             = riskSuggestCustomDetectionRuleFlags.String("body", "REQUIRED", "")
 		riskSuggestCustomDetectionRuleApikeyTokenFlag      = riskSuggestCustomDetectionRuleFlags.String("apikey-token", "", "")
@@ -1574,37 +1577,6 @@ func ParseEndpoint(
 		riskTestDetectionRuleApikeyTokenFlag      = riskTestDetectionRuleFlags.String("apikey-token", "", "")
 		riskTestDetectionRuleSessionTokenFlag     = riskTestDetectionRuleFlags.String("session-token", "", "")
 		riskTestDetectionRuleProjectSlugInputFlag = riskTestDetectionRuleFlags.String("project-slug-input", "", "")
-
-		slackFlags = flag.NewFlagSet("slack", flag.ContinueOnError)
-
-		slackCreateSlackAppFlags                = flag.NewFlagSet("create-slack-app", flag.ExitOnError)
-		slackCreateSlackAppBodyFlag             = slackCreateSlackAppFlags.String("body", "REQUIRED", "")
-		slackCreateSlackAppSessionTokenFlag     = slackCreateSlackAppFlags.String("session-token", "", "")
-		slackCreateSlackAppProjectSlugInputFlag = slackCreateSlackAppFlags.String("project-slug-input", "", "")
-
-		slackListSlackAppsFlags                = flag.NewFlagSet("list-slack-apps", flag.ExitOnError)
-		slackListSlackAppsSessionTokenFlag     = slackListSlackAppsFlags.String("session-token", "", "")
-		slackListSlackAppsProjectSlugInputFlag = slackListSlackAppsFlags.String("project-slug-input", "", "")
-
-		slackGetSlackAppFlags                = flag.NewFlagSet("get-slack-app", flag.ExitOnError)
-		slackGetSlackAppIDFlag               = slackGetSlackAppFlags.String("id", "REQUIRED", "")
-		slackGetSlackAppSessionTokenFlag     = slackGetSlackAppFlags.String("session-token", "", "")
-		slackGetSlackAppProjectSlugInputFlag = slackGetSlackAppFlags.String("project-slug-input", "", "")
-
-		slackConfigureSlackAppFlags                = flag.NewFlagSet("configure-slack-app", flag.ExitOnError)
-		slackConfigureSlackAppBodyFlag             = slackConfigureSlackAppFlags.String("body", "REQUIRED", "")
-		slackConfigureSlackAppSessionTokenFlag     = slackConfigureSlackAppFlags.String("session-token", "", "")
-		slackConfigureSlackAppProjectSlugInputFlag = slackConfigureSlackAppFlags.String("project-slug-input", "", "")
-
-		slackUpdateSlackAppFlags                = flag.NewFlagSet("update-slack-app", flag.ExitOnError)
-		slackUpdateSlackAppBodyFlag             = slackUpdateSlackAppFlags.String("body", "REQUIRED", "")
-		slackUpdateSlackAppSessionTokenFlag     = slackUpdateSlackAppFlags.String("session-token", "", "")
-		slackUpdateSlackAppProjectSlugInputFlag = slackUpdateSlackAppFlags.String("project-slug-input", "", "")
-
-		slackDeleteSlackAppFlags                = flag.NewFlagSet("delete-slack-app", flag.ExitOnError)
-		slackDeleteSlackAppIDFlag               = slackDeleteSlackAppFlags.String("id", "REQUIRED", "")
-		slackDeleteSlackAppSessionTokenFlag     = slackDeleteSlackAppFlags.String("session-token", "", "")
-		slackDeleteSlackAppProjectSlugInputFlag = slackDeleteSlackAppFlags.String("project-slug-input", "", "")
 
 		telemetryFlags = flag.NewFlagSet("telemetry", flag.ContinueOnError)
 
@@ -2336,9 +2308,6 @@ func ParseEndpoint(
 	riskGetRiskUserBreakdownFlags.Usage = riskGetRiskUserBreakdownUsage
 	riskGetRiskRuleBreakdownFlags.Usage = riskGetRiskRuleBreakdownUsage
 	riskGetRiskPolicyStatusFlags.Usage = riskGetRiskPolicyStatusUsage
-	riskListShadowMCPApprovalsFlags.Usage = riskListShadowMCPApprovalsUsage
-	riskApproveShadowMCPFlags.Usage = riskApproveShadowMCPUsage
-	riskRevokeShadowMCPApprovalFlags.Usage = riskRevokeShadowMCPApprovalUsage
 	riskCreateRiskPolicyBypassRequestFlags.Usage = riskCreateRiskPolicyBypassRequestUsage
 	riskListRiskPolicyBypassRequestsFlags.Usage = riskListRiskPolicyBypassRequestsUsage
 	riskApproveRiskPolicyBypassRequestFlags.Usage = riskApproveRiskPolicyBypassRequestUsage
@@ -2350,16 +2319,12 @@ func ParseEndpoint(
 	riskGetCustomDetectionRuleFlags.Usage = riskGetCustomDetectionRuleUsage
 	riskUpdateCustomDetectionRuleFlags.Usage = riskUpdateCustomDetectionRuleUsage
 	riskDeleteCustomDetectionRuleFlags.Usage = riskDeleteCustomDetectionRuleUsage
+	riskListRiskExclusionsFlags.Usage = riskListRiskExclusionsUsage
+	riskCreateRiskExclusionFlags.Usage = riskCreateRiskExclusionUsage
+	riskUpdateRiskExclusionFlags.Usage = riskUpdateRiskExclusionUsage
+	riskDeleteRiskExclusionFlags.Usage = riskDeleteRiskExclusionUsage
 	riskSuggestCustomDetectionRuleFlags.Usage = riskSuggestCustomDetectionRuleUsage
 	riskTestDetectionRuleFlags.Usage = riskTestDetectionRuleUsage
-
-	slackFlags.Usage = slackUsage
-	slackCreateSlackAppFlags.Usage = slackCreateSlackAppUsage
-	slackListSlackAppsFlags.Usage = slackListSlackAppsUsage
-	slackGetSlackAppFlags.Usage = slackGetSlackAppUsage
-	slackConfigureSlackAppFlags.Usage = slackConfigureSlackAppUsage
-	slackUpdateSlackAppFlags.Usage = slackUpdateSlackAppUsage
-	slackDeleteSlackAppFlags.Usage = slackDeleteSlackAppUsage
 
 	telemetryFlags.Usage = telemetryUsage
 	telemetrySearchLogsFlags.Usage = telemetrySearchLogsUsage
@@ -2546,8 +2511,6 @@ func ParseEndpoint(
 			svcf = resourcesFlags
 		case "risk":
 			svcf = riskFlags
-		case "slack":
-			svcf = slackFlags
 		case "telemetry":
 			svcf = telemetryFlags
 		case "templates":
@@ -3436,15 +3399,6 @@ func ParseEndpoint(
 			case "get-risk-policy-status":
 				epf = riskGetRiskPolicyStatusFlags
 
-			case "list-shadow-mcp-approvals":
-				epf = riskListShadowMCPApprovalsFlags
-
-			case "approve-shadow-mcp":
-				epf = riskApproveShadowMCPFlags
-
-			case "revoke-shadow-mcp-approval":
-				epf = riskRevokeShadowMCPApprovalFlags
-
 			case "create-risk-policy-bypass-request":
 				epf = riskCreateRiskPolicyBypassRequestFlags
 
@@ -3478,33 +3432,23 @@ func ParseEndpoint(
 			case "delete-custom-detection-rule":
 				epf = riskDeleteCustomDetectionRuleFlags
 
+			case "list-risk-exclusions":
+				epf = riskListRiskExclusionsFlags
+
+			case "create-risk-exclusion":
+				epf = riskCreateRiskExclusionFlags
+
+			case "update-risk-exclusion":
+				epf = riskUpdateRiskExclusionFlags
+
+			case "delete-risk-exclusion":
+				epf = riskDeleteRiskExclusionFlags
+
 			case "suggest-custom-detection-rule":
 				epf = riskSuggestCustomDetectionRuleFlags
 
 			case "test-detection-rule":
 				epf = riskTestDetectionRuleFlags
-
-			}
-
-		case "slack":
-			switch epn {
-			case "create-slack-app":
-				epf = slackCreateSlackAppFlags
-
-			case "list-slack-apps":
-				epf = slackListSlackAppsFlags
-
-			case "get-slack-app":
-				epf = slackGetSlackAppFlags
-
-			case "configure-slack-app":
-				epf = slackConfigureSlackAppFlags
-
-			case "update-slack-app":
-				epf = slackUpdateSlackAppFlags
-
-			case "delete-slack-app":
-				epf = slackDeleteSlackAppFlags
 
 			}
 
@@ -4642,15 +4586,6 @@ func ParseEndpoint(
 			case "get-risk-policy-status":
 				endpoint = c.GetRiskPolicyStatus()
 				data, err = riskc.BuildGetRiskPolicyStatusPayload(*riskGetRiskPolicyStatusIDFlag, *riskGetRiskPolicyStatusApikeyTokenFlag, *riskGetRiskPolicyStatusSessionTokenFlag, *riskGetRiskPolicyStatusProjectSlugInputFlag)
-			case "list-shadow-mcp-approvals":
-				endpoint = c.ListShadowMCPApprovals()
-				data, err = riskc.BuildListShadowMCPApprovalsPayload(*riskListShadowMCPApprovalsPolicyIDFlag, *riskListShadowMCPApprovalsApikeyTokenFlag, *riskListShadowMCPApprovalsSessionTokenFlag, *riskListShadowMCPApprovalsProjectSlugInputFlag)
-			case "approve-shadow-mcp":
-				endpoint = c.ApproveShadowMCP()
-				data, err = riskc.BuildApproveShadowMCPPayload(*riskApproveShadowMCPBodyFlag, *riskApproveShadowMCPApikeyTokenFlag, *riskApproveShadowMCPSessionTokenFlag, *riskApproveShadowMCPProjectSlugInputFlag)
-			case "revoke-shadow-mcp-approval":
-				endpoint = c.RevokeShadowMCPApproval()
-				data, err = riskc.BuildRevokeShadowMCPApprovalPayload(*riskRevokeShadowMCPApprovalPolicyIDFlag, *riskRevokeShadowMCPApprovalMatchFlag, *riskRevokeShadowMCPApprovalApikeyTokenFlag, *riskRevokeShadowMCPApprovalSessionTokenFlag, *riskRevokeShadowMCPApprovalProjectSlugInputFlag)
 			case "create-risk-policy-bypass-request":
 				endpoint = c.CreateRiskPolicyBypassRequest()
 				data, err = riskc.BuildCreateRiskPolicyBypassRequestPayload(*riskCreateRiskPolicyBypassRequestBodyFlag, *riskCreateRiskPolicyBypassRequestSessionTokenFlag)
@@ -4684,34 +4619,24 @@ func ParseEndpoint(
 			case "delete-custom-detection-rule":
 				endpoint = c.DeleteCustomDetectionRule()
 				data, err = riskc.BuildDeleteCustomDetectionRulePayload(*riskDeleteCustomDetectionRuleBodyFlag, *riskDeleteCustomDetectionRuleApikeyTokenFlag, *riskDeleteCustomDetectionRuleSessionTokenFlag, *riskDeleteCustomDetectionRuleProjectSlugInputFlag)
+			case "list-risk-exclusions":
+				endpoint = c.ListRiskExclusions()
+				data, err = riskc.BuildListRiskExclusionsPayload(*riskListRiskExclusionsRiskPolicyIDFlag, *riskListRiskExclusionsApikeyTokenFlag, *riskListRiskExclusionsSessionTokenFlag, *riskListRiskExclusionsProjectSlugInputFlag)
+			case "create-risk-exclusion":
+				endpoint = c.CreateRiskExclusion()
+				data, err = riskc.BuildCreateRiskExclusionPayload(*riskCreateRiskExclusionBodyFlag, *riskCreateRiskExclusionApikeyTokenFlag, *riskCreateRiskExclusionSessionTokenFlag, *riskCreateRiskExclusionProjectSlugInputFlag)
+			case "update-risk-exclusion":
+				endpoint = c.UpdateRiskExclusion()
+				data, err = riskc.BuildUpdateRiskExclusionPayload(*riskUpdateRiskExclusionBodyFlag, *riskUpdateRiskExclusionApikeyTokenFlag, *riskUpdateRiskExclusionSessionTokenFlag, *riskUpdateRiskExclusionProjectSlugInputFlag)
+			case "delete-risk-exclusion":
+				endpoint = c.DeleteRiskExclusion()
+				data, err = riskc.BuildDeleteRiskExclusionPayload(*riskDeleteRiskExclusionIDFlag, *riskDeleteRiskExclusionApikeyTokenFlag, *riskDeleteRiskExclusionSessionTokenFlag, *riskDeleteRiskExclusionProjectSlugInputFlag)
 			case "suggest-custom-detection-rule":
 				endpoint = c.SuggestCustomDetectionRule()
 				data, err = riskc.BuildSuggestCustomDetectionRulePayload(*riskSuggestCustomDetectionRuleBodyFlag, *riskSuggestCustomDetectionRuleApikeyTokenFlag, *riskSuggestCustomDetectionRuleSessionTokenFlag, *riskSuggestCustomDetectionRuleProjectSlugInputFlag)
 			case "test-detection-rule":
 				endpoint = c.TestDetectionRule()
 				data, err = riskc.BuildTestDetectionRulePayload(*riskTestDetectionRuleBodyFlag, *riskTestDetectionRuleApikeyTokenFlag, *riskTestDetectionRuleSessionTokenFlag, *riskTestDetectionRuleProjectSlugInputFlag)
-			}
-		case "slack":
-			c := slackc.NewClient(scheme, host, doer, enc, dec, restore)
-			switch epn {
-			case "create-slack-app":
-				endpoint = c.CreateSlackApp()
-				data, err = slackc.BuildCreateSlackAppPayload(*slackCreateSlackAppBodyFlag, *slackCreateSlackAppSessionTokenFlag, *slackCreateSlackAppProjectSlugInputFlag)
-			case "list-slack-apps":
-				endpoint = c.ListSlackApps()
-				data, err = slackc.BuildListSlackAppsPayload(*slackListSlackAppsSessionTokenFlag, *slackListSlackAppsProjectSlugInputFlag)
-			case "get-slack-app":
-				endpoint = c.GetSlackApp()
-				data, err = slackc.BuildGetSlackAppPayload(*slackGetSlackAppIDFlag, *slackGetSlackAppSessionTokenFlag, *slackGetSlackAppProjectSlugInputFlag)
-			case "configure-slack-app":
-				endpoint = c.ConfigureSlackApp()
-				data, err = slackc.BuildConfigureSlackAppPayload(*slackConfigureSlackAppBodyFlag, *slackConfigureSlackAppSessionTokenFlag, *slackConfigureSlackAppProjectSlugInputFlag)
-			case "update-slack-app":
-				endpoint = c.UpdateSlackApp()
-				data, err = slackc.BuildUpdateSlackAppPayload(*slackUpdateSlackAppBodyFlag, *slackUpdateSlackAppSessionTokenFlag, *slackUpdateSlackAppProjectSlugInputFlag)
-			case "delete-slack-app":
-				endpoint = c.DeleteSlackApp()
-				data, err = slackc.BuildDeleteSlackAppPayload(*slackDeleteSlackAppIDFlag, *slackDeleteSlackAppSessionTokenFlag, *slackDeleteSlackAppProjectSlugInputFlag)
 			}
 		case "telemetry":
 			c := telemetryc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -5861,7 +5786,7 @@ func aiIntegrationsUpsertConfigUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ai-integrations upsert-config --body '{\n      \"api_key\": \"abc123\",\n      \"enabled\": false,\n      \"provider\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ai-integrations upsert-config --body '{\n      \"api_key\": \"abc123\",\n      \"enabled\": false,\n      \"external_organization_id\": \"abc123\",\n      \"provider\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func aiIntegrationsDeleteConfigUsage() {
@@ -7592,8 +7517,8 @@ func collectionsUsage() {
 	fmt.Fprintln(os.Stderr, `    list: List MCP collections in the organization`)
 	fmt.Fprintln(os.Stderr, `    update: Update an MCP collection`)
 	fmt.Fprintln(os.Stderr, `    delete: Delete an MCP collection`)
-	fmt.Fprintln(os.Stderr, `    attach-server: Attach a server (toolset) to a collection`)
-	fmt.Fprintln(os.Stderr, `    detach-server: Detach a server (toolset) from a collection`)
+	fmt.Fprintln(os.Stderr, `    attach-server: Attach a server to a collection. Provide exactly one of toolset_id or mcp_server_id.`)
+	fmt.Fprintln(os.Stderr, `    detach-server: Detach a server from a collection. Provide exactly one of toolset_id or mcp_server_id.`)
 	fmt.Fprintln(os.Stderr, `    list-servers: List published MCP servers from a collection`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -7618,7 +7543,7 @@ func collectionsCreateUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections create --body '{\n      \"description\": \"aaa\",\n      \"mcp_registry_namespace\": \"aa\",\n      \"name\": \"aa\",\n      \"slug\": \"aa\",\n      \"toolset_ids\": [\n         \"abc123\"\n      ],\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections create --body '{\n      \"description\": \"aaa\",\n      \"mcp_registry_namespace\": \"aa\",\n      \"mcp_server_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"aa\",\n      \"slug\": \"aa\",\n      \"toolset_ids\": [\n         \"abc123\"\n      ],\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func collectionsListUsage() {
@@ -7695,7 +7620,7 @@ func collectionsAttachServerUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Attach a server (toolset) to a collection`)
+	fmt.Fprintln(os.Stderr, `Attach a server to a collection. Provide exactly one of toolset_id or mcp_server_id.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -7704,7 +7629,7 @@ func collectionsAttachServerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections attach-server --body '{\n      \"collection_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections attach-server --body '{\n      \"collection_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func collectionsDetachServerUsage() {
@@ -7717,7 +7642,7 @@ func collectionsDetachServerUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Detach a server (toolset) from a collection`)
+	fmt.Fprintln(os.Stderr, `Detach a server from a collection. Provide exactly one of toolset_id or mcp_server_id.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -7726,7 +7651,7 @@ func collectionsDetachServerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections detach-server --body '{\n      \"collection_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections detach-server --body '{\n      \"collection_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func collectionsListServersUsage() {
@@ -10124,7 +10049,7 @@ func remoteSessionIssuersCreateRemoteSessionIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers create-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"oidc\": false,\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers create-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionIssuersUpdateRemoteSessionIssuerUsage() {
@@ -10148,7 +10073,7 @@ func remoteSessionIssuersUpdateRemoteSessionIssuerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers update-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"oidc\": false,\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-issuers update-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionIssuersListRemoteSessionIssuersUsage() {
@@ -10261,7 +10186,7 @@ func organizationRemoteSessionIssuersCreateOrganizationRemoteSessionIssuerUsage(
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers create-organization-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"oidc\": false,\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers create-organization-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerUsage() {
@@ -10283,7 +10208,7 @@ func organizationRemoteSessionIssuersUpdateOrganizationRemoteSessionIssuerUsage(
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers update-organization-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"oidc\": false,\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers update-organization-remote-session-issuer --body '{\n      \"authorization_endpoint\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func organizationRemoteSessionIssuersListOrganizationRemoteSessionIssuersUsage() {
@@ -10476,9 +10401,6 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    get-risk-user-breakdown: Per-user breakdowns of findings by category and by rule_id within a time window. Powers the user drill-down on /risk-overview.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-rule-breakdown: Get per-rule_id finding counts for a category within a time window. Powers the per-category drill-down chart on /risk-overview.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-policy-status: Get the analysis status of a risk policy including progress and workflow state.`)
-	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-approvals: List shadow-MCP approvals (URL- or command-keyed) for a policy. Temporary Redis-backed storage; will move to a dedicated table once the feature graduates.`)
-	fmt.Fprintln(os.Stderr, `    approve-shadow-mcp: Approve a shadow-MCP server so the named policy stops blocking calls to it. `+"`"+`match`+"`"+` is the same opaque server identifier surfaced in `+"`"+`RiskResult.match`+"`"+` — typically a server URL, stdio command, or `+"`"+`mcp__<server>__`+"`"+` prefix.`)
-	fmt.Fprintln(os.Stderr, `    revoke-shadow-mcp-approval: Remove a previously-approved shadow-MCP server for a policy.`)
 	fmt.Fprintln(os.Stderr, `    create-risk-policy-bypass-request: Create or refresh a risk policy bypass request from a signed request URL token.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-policy-bypass-requests: List current risk policy bypass request workflow records.`)
 	fmt.Fprintln(os.Stderr, `    approve-risk-policy-bypass-request: Approve a risk policy bypass request for the requested policy target.`)
@@ -10490,6 +10412,10 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    get-custom-detection-rule: Get a custom detection rule by ID.`)
 	fmt.Fprintln(os.Stderr, `    update-custom-detection-rule: Update a custom detection rule.`)
 	fmt.Fprintln(os.Stderr, `    delete-custom-detection-rule: Delete a custom detection rule.`)
+	fmt.Fprintln(os.Stderr, `    list-risk-exclusions: List risk exclusions for the current project. Optionally filter to a single policy.`)
+	fmt.Fprintln(os.Stderr, `    create-risk-exclusion: Create a risk exclusion. Omit risk_policy_id to create a global exclusion that applies to every policy in the project.`)
+	fmt.Fprintln(os.Stderr, `    update-risk-exclusion: Update a risk exclusion.`)
+	fmt.Fprintln(os.Stderr, `    delete-risk-exclusion: Delete a risk exclusion. Previously suppressed findings are restored.`)
 	fmt.Fprintln(os.Stderr, `    suggest-custom-detection-rule: Suggest a custom detection rule (rule_id, title, description, regex, severity) from a natural-language prompt. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create form.`)
 	fmt.Fprintln(os.Stderr, `    test-detection-rule: Run a single detection rule against pasted sample text and return any matches. Reuses the same scanner code (gitleaks, Presidio, prompt-injection, custom regex) that the analyzer runs in production so the playground match shape mirrors the chat-message path.`)
 	fmt.Fprintln(os.Stderr)
@@ -10517,7 +10443,7 @@ func riskCreateRiskPolicyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy --body '{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy --body '{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"policy_type\": \"prompt_based\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskListRiskPoliciesUsage() {
@@ -10609,7 +10535,7 @@ func riskUpdateRiskPolicyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk update-risk-policy --body '{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk update-risk-policy --body '{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskDeleteRiskPolicyUsage() {
@@ -10874,80 +10800,6 @@ func riskGetRiskPolicyStatusUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk get-risk-policy-status --id \"550e8400-e29b-41d4-a716-446655440000\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
-func riskListShadowMCPApprovalsUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] risk list-shadow-mcp-approvals", os.Args[0])
-	fmt.Fprint(os.Stderr, " -policy-id STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List shadow-MCP approvals (URL- or command-keyed) for a policy. Temporary Redis-backed storage; will move to a dedicated table once the feature graduates.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -policy-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-shadow-mcp-approvals --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func riskApproveShadowMCPUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] risk approve-shadow-mcp", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Approve a shadow-MCP server so the named policy stops blocking calls to it. `+"`"+`match`+"`"+` is the same opaque server identifier surfaced in `+"`"+`RiskResult.match`+"`"+` — typically a server URL, stdio command, or `+"`"+`mcp__<server>__`+"`"+` prefix.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk approve-shadow-mcp --body '{\n      \"match\": \"abc123\",\n      \"policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_name\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func riskRevokeShadowMCPApprovalUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] risk revoke-shadow-mcp-approval", os.Args[0])
-	fmt.Fprint(os.Stderr, " -policy-id STRING")
-	fmt.Fprint(os.Stderr, " -match STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Remove a previously-approved shadow-MCP server for a policy.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -policy-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -match STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk revoke-shadow-mcp-approval --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --match \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
 func riskCreateRiskPolicyBypassRequestUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] risk create-risk-policy-bypass-request", os.Args[0])
@@ -11015,7 +10867,7 @@ func riskApproveRiskPolicyBypassRequestUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk approve-risk-policy-bypass-request --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk approve-risk-policy-bypass-request --body '{\n      \"granted_principal_urns\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskDenyRiskPolicyBypassRequestUsage() {
@@ -11208,6 +11060,102 @@ func riskDeleteCustomDetectionRuleUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk delete-custom-detection-rule --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
+func riskListRiskExclusionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk list-risk-exclusions", os.Args[0])
+	fmt.Fprint(os.Stderr, " -risk-policy-id STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List risk exclusions for the current project. Optionally filter to a single policy.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -risk-policy-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-exclusions --risk-policy-id \"550e8400-e29b-41d4-a716-446655440000\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskCreateRiskExclusionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk create-risk-exclusion", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a risk exclusion. Omit risk_policy_id to create a global exclusion that applies to every policy in the project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-exclusion --body '{\n      \"enabled\": false,\n      \"match_type\": \"regex\",\n      \"match_value\": \"abc123\",\n      \"risk_policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"rule_id_filter\": \"abc123\",\n      \"source_filter\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskUpdateRiskExclusionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk update-risk-exclusion", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update a risk exclusion.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk update-risk-exclusion --body '{\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"match_type\": \"regex\",\n      \"match_value\": \"abc123\",\n      \"risk_policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"rule_id_filter\": \"abc123\",\n      \"source_filter\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskDeleteRiskExclusionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk delete-risk-exclusion", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete a risk exclusion. Previously suppressed findings are restored.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk delete-risk-exclusion --id \"550e8400-e29b-41d4-a716-446655440000\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 func riskSuggestCustomDetectionRuleUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] risk suggest-custom-detection-rule", os.Args[0])
@@ -11254,151 +11202,6 @@ func riskTestDetectionRuleUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk test-detection-rule --body '{\n      \"regex\": \"abc123\",\n      \"rule_id\": \"aa\",\n      \"text\": \"aa\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-// slackUsage displays the usage of the slack command and its subcommands.
-func slackUsage() {
-	fmt.Fprintln(os.Stderr, `Auth and interactions for the Gram Slack App.`)
-	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] slack COMMAND [flags]\n\n", os.Args[0])
-	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    create-slack-app: Create a new Slack app and generate its manifest.`)
-	fmt.Fprintln(os.Stderr, `    list-slack-apps: List Slack apps for a project.`)
-	fmt.Fprintln(os.Stderr, `    get-slack-app: Get details of a specific Slack app.`)
-	fmt.Fprintln(os.Stderr, `    configure-slack-app: Store Slack credentials (client ID, client secret, signing secret) for an app.`)
-	fmt.Fprintln(os.Stderr, `    update-slack-app: Update a Slack app's settings.`)
-	fmt.Fprintln(os.Stderr, `    delete-slack-app: Soft-delete a Slack app.`)
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Additional help:")
-	fmt.Fprintf(os.Stderr, "    %s slack COMMAND --help\n", os.Args[0])
-}
-func slackCreateSlackAppUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] slack create-slack-app", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Create a new Slack app and generate its manifest.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack create-slack-app --body '{\n      \"icon_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aa\",\n      \"system_prompt\": \"abc123\",\n      \"toolset_ids\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func slackListSlackAppsUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] slack list-slack-apps", os.Args[0])
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List Slack apps for a project.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack list-slack-apps --session-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func slackGetSlackAppUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] slack get-slack-app", os.Args[0])
-	fmt.Fprint(os.Stderr, " -id STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get details of a specific Slack app.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack get-slack-app --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func slackConfigureSlackAppUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] slack configure-slack-app", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Store Slack credentials (client ID, client secret, signing secret) for an app.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack configure-slack-app --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"slack_client_id\": \"abc123\",\n      \"slack_client_secret\": \"abc123\",\n      \"slack_signing_secret\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func slackUpdateSlackAppUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] slack update-slack-app", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Update a Slack app's settings.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack update-slack-app --body '{\n      \"icon_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aa\",\n      \"system_prompt\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func slackDeleteSlackAppUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] slack delete-slack-app", os.Args[0])
-	fmt.Fprint(os.Stderr, " -id STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Soft-delete a Slack app.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "slack delete-slack-app --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // telemetryUsage displays the usage of the telemetry command and its

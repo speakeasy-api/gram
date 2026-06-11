@@ -20,7 +20,7 @@ func MCPToolCallCheck(toolsetID string, dims MCPToolCallDimensions) Check {
 	if dims.ProjectID != "" {
 		dimensions[SelectorKeyProjectID] = dims.ProjectID
 	}
-	return Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: toolsetID, Dimensions: dimensions, expanded: false}
+	return Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: toolsetID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, expanded: false}
 }
 
 // MCPCheck builds a Check for an MCP scope (read/write/connect) with project_id
@@ -30,17 +30,25 @@ func MCPCheck(scope Scope, resourceID, projectID string) Check {
 	if projectID != "" {
 		dimensions = map[string]string{SelectorKeyProjectID: projectID}
 	}
-	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, expanded: false}
+	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, expanded: false}
 }
 
 type RiskPolicyBypassDimensions struct {
-	ServerURL string
+	ServerURL      string
+	ServerIdentity string
 }
 
 func RiskPolicyBypassCheck(policyID string, dims RiskPolicyBypassDimensions) Check {
 	var dimensions map[string]string
 	if dims.ServerURL != "" {
-		dimensions = map[string]string{SelectorKeyServerURL: dims.ServerURL}
+		dimensions = map[string]string{}
+		dimensions[SelectorKeyServerURL] = dims.ServerURL
 	}
-	return Check{Scope: ScopeRiskPolicyBypass, ResourceKind: "", ResourceID: policyID, Dimensions: dimensions, expanded: false}
+	if dims.ServerIdentity != "" {
+		if dimensions == nil {
+			dimensions = map[string]string{}
+		}
+		dimensions[SelectorKeyServerIdentity] = dims.ServerIdentity
+	}
+	return Check{Scope: ScopeRiskPolicyBypass, ResourceKind: "", ResourceID: policyID, Dimensions: dimensions, selectorMatch: selectorMatchStrict, expanded: false}
 }

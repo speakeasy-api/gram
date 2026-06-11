@@ -166,12 +166,6 @@ func newWorkerCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_ENCRYPTION_KEY"},
 		},
 		&cli.StringFlag{
-			Name:     "slack-client-secret",
-			Usage:    "The slack client secret",
-			EnvVars:  []string{"SLACK_CLIENT_SECRET"},
-			Required: false,
-		},
-		&cli.StringFlag{
 			Name:    "openrouter-dev-key",
 			Usage:   "Dev API key for OpenRouter (primarily for local development) - https://openrouter.ai/settings/keys",
 			EnvVars: []string{"OPENROUTER_DEV_KEY"},
@@ -207,7 +201,7 @@ func newWorkerCommand() *cli.Command {
 		},
 		&cli.StringFlag{
 			Name:     "local-feature-flags-csv",
-			Usage:    "Path to a CSV file containing local feature flags. Format: distinct_id,flag,enabled (with header row).",
+			Usage:    "Path to a CSV file containing local feature flags. Format: distinct_id,flag,enabled (with header row). The path must be under the worker working directory.",
 			EnvVars:  []string{"GRAM_LOCAL_FEATURE_FLAGS_CSV"},
 			Required: false,
 		},
@@ -336,6 +330,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, assistantRuntimeFlags...)
 	flags = append(flags, svixFlags...)
 	flags = append(flags, pluginsFlags...)
+	flags = append(flags, gcpFlags...)
 
 	return &cli.Command{
 		Name:  "worker",
@@ -526,7 +521,7 @@ func newWorkerCommand() *cli.Command {
 
 			runnerVersion := functions.RunnerVersion(conv.Default(strings.TrimPrefix(c.String("functions-runner-version"), "sha-"), GitSHA))
 
-			slackClient := slack_client.NewSlackClient(guardianPolicy, "", "", db, encryptionClient)
+			slackClient := slack_client.NewSlackClient(guardianPolicy)
 
 			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
 			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
@@ -642,7 +637,7 @@ func newWorkerCommand() *cli.Command {
 			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String(usersessions.JWTSigningKeyFlag))
 
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager, identityResolver, guardianPolicy)
-			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemetryLogger, auditLogger, serverURL)
+			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemetryLogger, auditLogger, serverURL, slackClient)
 
 			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine)
 
@@ -754,6 +749,7 @@ func newWorkerCommand() *cli.Command {
 				FeatureProvider:                featureFlags,
 				AssetStorage:                   assetStorage,
 				SlackClient:                    slackClient,
+				ChatMessageWriter:              chatWriter,
 				ChatClient:                     chatClient,
 				OpenRouter:                     openRouter,
 				K8sClient:                      k8sClient,

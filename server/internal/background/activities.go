@@ -21,6 +21,7 @@ import (
 	resolution_activities "github.com/speakeasy-api/gram/server/internal/background/activities/chat_resolutions"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/outbox_relay"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
+	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_exclusion"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -34,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/riskjudge"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -41,14 +43,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
-	slacktypes "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/types"
 )
 
 type Activities struct {
 	collectOpenRouterCreditsMetrics *activities.CollectOpenRouterCreditsMetrics
 	collectPlatformUsageMetrics     *activities.CollectPlatformUsageMetrics
 	getAIIntegrationsCandidates     *activities.GetAIIntegrationsCandidates
-	pollCursorUsageMetrics          *activities.PollCursorUsageMetrics
+	pollAIData                      *activities.PollAIData
 	customDomainIngress             *activities.CustomDomainIngress
 	defaultCustomDomainProvisioner  k8s.ProvisionerKind
 	fallbackModelUsageTracking      *activities.FallbackModelUsageTracking
@@ -56,15 +57,12 @@ type Activities struct {
 	firePlatformUsageMetrics        *activities.FirePlatformUsageMetrics
 	generateChatTitle               *activities.GenerateChatTitle
 	getAllOrganizations             *activities.GetAllOrganizations
-	getSlackProjectContext          *activities.GetSlackProjectContext
-	postSlackMessage                *activities.PostSlackMessage
 	processDeployment               *activities.ProcessDeployment
 	provisionFunctionsAccess        *activities.ProvisionFunctionsAccess
 	deployFunctionRunners           *activities.DeployFunctionRunners
 	reapFlyApps                     *activities.ReapFlyApps
 	refreshBillingUsage             *activities.RefreshBillingUsage
 	refreshOpenRouterKey            *activities.RefreshOpenRouterKey
-	slackChatCompletion             *activities.SlackChatCompletion
 	transitionDeployment            *activities.TransitionDeployment
 	validateDeployment              *activities.ValidateDeployment
 	verifyCustomDomain              *activities.VerifyCustomDomain
@@ -79,6 +77,7 @@ type Activities struct {
 	fetchUnanalyzedMessages         *risk_analysis.FetchUnanalyzed
 	analyzeBatch                    *risk_analysis.AnalyzeBatch
 	markMessagesAnalyzed            *risk_analysis.MarkMessagesAnalyzed
+	reconcileExclusion              *risk_exclusion.Reconcile
 	admitAssistantThreads           *activities.AdmitAssistantThreads
 	processAssistantThread          *activities.ProcessAssistantThread
 	expireAssistantThreadRuntime    *activities.ExpireAssistantThreadRuntime
@@ -136,6 +135,7 @@ func NewActivities(
 	svixClient *svix.Svix,
 	productFeatures *productfeatures.Client,
 	pluginPublisher activities.PluginPublishClient,
+	chatWriter *chat.ChatMessageWriter,
 ) *Activities {
 	usageTrackingStrategy := chat.NewDefaultUsageTrackingStrategy(db, logger, openrouterProvisioner, billingTracker, nil)
 
@@ -143,7 +143,7 @@ func NewActivities(
 		collectOpenRouterCreditsMetrics: activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner),
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
 		getAIIntegrationsCandidates:     activities.NewGetAIIntegrationsCandidates(logger, db, encryption),
-		pollCursorUsageMetrics:          activities.NewPollCursorUsageMetrics(logger, db, encryption, telemetryLogger, guardianPolicy),
+		pollAIData:                      activities.NewPollAIData(logger, db, encryption, telemetryLogger, guardianPolicy, chatWriter),
 		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient, defaultCustomDomainProvisioner),
 		defaultCustomDomainProvisioner:  defaultCustomDomainProvisioner,
 		fallbackModelUsageTracking:      activities.NewFallbackModelUsageTracking(usageTrackingStrategy),
@@ -151,15 +151,12 @@ func NewActivities(
 		firePlatformUsageMetrics:        activities.NewFirePlatformUsageMetrics(logger, billingTracker),
 		generateChatTitle:               activities.NewGenerateChatTitle(logger, db, chatClient),
 		getAllOrganizations:             activities.NewGetAllOrganizations(logger, db),
-		getSlackProjectContext:          activities.NewSlackProjectContextActivity(logger, db, slackClient),
-		postSlackMessage:                activities.NewPostSlackMessageActivity(logger, slackClient),
 		processDeployment:               activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo, mcpRegistryClient),
 		provisionFunctionsAccess:        activities.NewProvisionFunctionsAccess(logger, db, encryption),
 		deployFunctionRunners:           activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
 		reapFlyApps:                     activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
 		refreshBillingUsage:             activities.NewRefreshBillingUsage(logger, db, billingRepo),
 		refreshOpenRouterKey:            activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
-		slackChatCompletion:             activities.NewSlackChatCompletionActivity(logger, slackClient, chatClient),
 		transitionDeployment:            activities.NewTransitionDeployment(logger, db),
 		validateDeployment:              activities.NewValidateDeployment(logger, db, billingRepo),
 		verifyCustomDomain:              activities.NewVerifyCustomDomain(logger, db, auditLogger, expectedTargetCNAME),
@@ -172,8 +169,9 @@ func NewActivities(
 		analyzeSegment:                  resolution_activities.NewAnalyzeSegment(logger, db, chatClient, telemetryLogger),
 		getUserFeedbackForChat:          resolution_activities.NewGetUserFeedbackForChat(logger, db),
 		fetchUnanalyzedMessages:         risk_analysis.NewFetchUnanalyzed(logger, tracerProvider, db),
-		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, piScanner, shadowMCPClient, telemetryrepo.New(chConn)),
+		analyzeBatch:                    risk_analysis.NewAnalyzeBatch(logger, tracerProvider, meterProvider, db, piiScanner, piScanner, shadowMCPClient, telemetryrepo.New(chConn), riskjudge.New(logger, tracerProvider, meterProvider, chatClient), features),
 		markMessagesAnalyzed:            risk_analysis.NewMarkMessagesAnalyzed(logger, tracerProvider, db),
+		reconcileExclusion:              risk_exclusion.NewReconcile(logger, tracerProvider, db),
 		admitAssistantThreads:           activities.NewAdmitAssistantThreads(assistantsCore),
 		processAssistantThread:          activities.NewProcessAssistantThread(assistantsCore),
 		expireAssistantThreadRuntime:    activities.NewExpireAssistantThreadRuntime(assistantsCore),
@@ -227,18 +225,6 @@ func (a *Activities) ProcessDeployment(ctx context.Context, projectID uuid.UUID,
 	return a.processDeployment.Do(ctx, projectID, deploymentID)
 }
 
-func (a *Activities) GetSlackProjectContext(ctx context.Context, event slacktypes.SlackEvent) (*activities.SlackProjectContextResponse, error) {
-	return a.getSlackProjectContext.Do(ctx, event)
-}
-
-func (a *Activities) PostSlackMessage(ctx context.Context, input activities.PostSlackMessageInput) error {
-	return a.postSlackMessage.Do(ctx, input)
-}
-
-func (a *Activities) SlackChatCompletion(ctx context.Context, input activities.SlackChatCompletionInput) (string, error) {
-	return a.slackChatCompletion.Do(ctx, input)
-}
-
 func (a *Activities) RefreshOpenRouterKey(ctx context.Context, input activities.RefreshOpenRouterKeyArgs) error {
 	return a.refreshOpenRouterKey.Do(ctx, input)
 }
@@ -275,8 +261,8 @@ func (a *Activities) GetAIIntegrationsCandidates(ctx context.Context, input acti
 	return candidates, nil
 }
 
-func (a *Activities) PollAIUsage(ctx context.Context, configID string) error {
-	return a.pollCursorUsageMetrics.Do(ctx, configID)
+func (a *Activities) PollAIData(ctx context.Context, configID string) error {
+	return a.pollAIData.Do(ctx, configID)
 }
 
 func (a *Activities) RefreshBillingUsage(ctx context.Context, orgIDs []string) error {
@@ -379,6 +365,13 @@ func (a *Activities) AnalyzeBatch(ctx context.Context, input risk_analysis.Analy
 func (a *Activities) MarkMessagesAnalyzed(ctx context.Context, input risk_analysis.MarkMessagesAnalyzedArgs) error {
 	if err := a.markMessagesAnalyzed.Do(ctx, input); err != nil {
 		return fmt.Errorf("mark messages analyzed: %w", err)
+	}
+	return nil
+}
+
+func (a *Activities) ReconcileExclusion(ctx context.Context, input risk_exclusion.ReconcileArgs) error {
+	if err := a.reconcileExclusion.Do(ctx, input); err != nil {
+		return fmt.Errorf("reconcile exclusion: %w", err)
 	}
 	return nil
 }

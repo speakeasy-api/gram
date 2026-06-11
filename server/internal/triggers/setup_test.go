@@ -110,6 +110,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		bgtriggers.NewTriggerDeliveryLogger(func(_ context.Context, _ bgtriggers.TriggerDeliveryLog) {}),
 		auditLogger,
 		serverURL,
+		nil,
 	)
 
 	svc := triggers.NewService(

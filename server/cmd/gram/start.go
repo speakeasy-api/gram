@@ -90,6 +90,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/resources"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/riskjudge"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -99,7 +100,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/triggers"
@@ -277,18 +277,6 @@ func newStartCommand() *cli.Command {
 			Value:   false,
 		},
 		&cli.StringFlag{
-			Name:     "slack-client-secret",
-			Usage:    "The slack client secret",
-			EnvVars:  []string{"SLACK_CLIENT_SECRET"},
-			Required: false,
-		},
-		&cli.StringFlag{
-			Name:     "slack-signing-secret",
-			Usage:    "The slack signing secret",
-			EnvVars:  []string{"SLACK_SIGNING_SECRET"},
-			Required: false,
-		},
-		&cli.StringFlag{
 			Name:     "pylon-verification-secret",
 			Usage:    "The identity verification secret for pylon",
 			EnvVars:  []string{"PYLON_VERIFICATION_SECRET"},
@@ -380,7 +368,7 @@ func newStartCommand() *cli.Command {
 		},
 		&cli.StringFlag{
 			Name:     "local-feature-flags-csv",
-			Usage:    "Path to a CSV file containing local feature flags. Format: distinct_id,flag,enabled (with header row).",
+			Usage:    "Path to a CSV file containing local feature flags. Format: distinct_id,flag,enabled (with header row). The path must be under the server working directory.",
 			EnvVars:  []string{"GRAM_LOCAL_FEATURE_FLAGS_CSV"},
 			Required: false,
 		},
@@ -444,6 +432,7 @@ func newStartCommand() *cli.Command {
 	flags = append(flags, assistantRuntimeFlags...)
 	flags = append(flags, pulseMCPFlags...)
 	flags = append(flags, svixFlags...)
+	flags = append(flags, gcpFlags...)
 
 	return &cli.Command{
 		Name:  "start",
@@ -692,7 +681,7 @@ func newStartCommand() *cli.Command {
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 			runnerVersion := functions.RunnerVersion(conv.Default(strings.TrimPrefix(c.String("functions-runner-version"), "sha-"), GitSHA))
 
-			slackClient := slack_client.NewSlackClient(guardianPolicy, "", "", db, encryptionClient)
+			slackClient := slack_client.NewSlackClient(guardianPolicy)
 
 			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
 			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
@@ -767,7 +756,7 @@ func newStartCommand() *cli.Command {
 			accessStore := accesscontrol.NewRedisStore(cache.NewRedisCacheAdapter(redisClient), accesscontrol.AlphaTTL)
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager, identityResolver, guardianPolicy)
 			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient), accessStore)
-			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemLogger, auditLogger, serverURL)
+			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemLogger, auditLogger, serverURL, slackClient)
 
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 
@@ -974,10 +963,12 @@ func newStartCommand() *cli.Command {
 			}
 			hookPIScanner := risk_analysis.NewPromptInjectionScanner(logger, hookPromptInjectionClassifier, featureFlags)
 
-			riskScanner, err := risk.NewScanner(logger, db, hookPIIScanner, hookPIScanner, meterProvider)
+			hookPromptJudge := riskjudge.New(logger, tracerProvider, meterProvider, completionsClient)
+			riskScanner, err := risk.NewScanner(logger, db, hookPIIScanner, hookPIScanner, hookPromptJudge, featureFlags, meterProvider)
 			if err != nil {
 				return fmt.Errorf("create risk scanner: %w", err)
 			}
+			policyBypass := risk.NewPolicyBypassEvaluator(logger, db, authzEngine)
 
 			about.Attach(mux, about.NewService(logger, tracerProvider))
 			external.AttachWebhookHandler(mux, external.NewWebhookHandler(logger, tracerProvider, newWorkOSWebhooksClient(c), temporalEnv))
@@ -993,7 +984,25 @@ func newStartCommand() *cli.Command {
 				authzEngine,
 				memorySvc,
 			))
-			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemLogger, sessionManager, hooksCache, chatClient, temporalEnv, authzEngine, productFeatures, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}, riskScanner, shadowMCPClient, chatWriter, siteURL, c.String("jwt-signing-key")))
+			hooks.Attach(mux, hooks.NewService(
+				logger,
+				db,
+				tracerProvider,
+				telemLogger,
+				sessionManager,
+				hooksCache,
+				chatClient,
+				temporalEnv,
+				authzEngine,
+				productFeatures,
+				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
+				riskScanner,
+				policyBypass,
+				shadowMCPClient,
+				chatWriter,
+				siteURL,
+				c.String("jwt-signing-key"),
+			))
 			aiintegrations.Attach(mux, aiintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, &background.TemporalAIUsagePoller{TemporalEnv: temporalEnv}))
 			otelforwarding.Attach(mux, otelforwarding.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, otelForwardClient))
 			auditapi.Attach(mux, auditapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
@@ -1075,7 +1084,24 @@ func newStartCommand() *cli.Command {
 				logger,
 			)
 			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
-			riskService := risk.NewService(logger, tracerProvider, db, sessionManager, authzEngine, riskSignaler, completionsClient, shadowMCPClient, accessStore, auditLogger, c.String(usersessions.JWTSigningKeyFlag), c.String("pi-classifier-url") != "", hookPIIScanner, hookPIScanner)
+			riskReconciler := &background.TemporalRiskExclusionReconciler{TemporalEnv: temporalEnv, Logger: logger}
+			riskService := risk.NewService(
+				logger,
+				tracerProvider,
+				db,
+				sessionManager,
+				authzEngine,
+				riskSignaler,
+				riskReconciler,
+				completionsClient,
+				shadowMCPClient,
+				auditLogger,
+				c.String(usersessions.JWTSigningKeyFlag),
+				c.String("pi-classifier-url") != "",
+				hookPIIScanner,
+				hookPIScanner,
+				featureFlags,
+			)
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
 
@@ -1088,12 +1114,6 @@ func newStartCommand() *cli.Command {
 				AssistantTriggerTools:         triggerTools,
 				ManagedAssistantInsightsTools: managedInsightsTools,
 			}))
-
-			slack.Attach(mux, slack.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, redisClient, slackClient, temporalEnv, slack.Configurations{
-				GramServerURL:     c.String("server-url"),
-				GramSiteURL:       c.String("site-url"),
-				SignInRedirectURL: auth.FormSignInRedirectURL(c.String("site-url")),
-			}, authzEngine))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),
@@ -1134,6 +1154,7 @@ func newStartCommand() *cli.Command {
 						FeatureProvider:                featureFlags,
 						AssetStorage:                   assetStorage,
 						SlackClient:                    slackClient,
+						ChatMessageWriter:              chatWriter,
 						ChatClient:                     chatClient,
 						OpenRouter:                     openRouter,
 						K8sClient:                      k8sClient,

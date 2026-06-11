@@ -85,7 +85,7 @@ func callUpdateMessage(ctx context.Context, client *apiClient, env toolconfig.To
 		request["file_ids"] = input.FileIDs
 	}
 
-	body, err := client.call(ctx, "chat.update", request, tokenPreferBot, env)
+	body, err := client.Call(ctx, "chat.update", request, tokenPreferBot, env)
 	if err != nil {
 		return err
 	}

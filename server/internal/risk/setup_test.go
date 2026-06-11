@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -64,7 +65,7 @@ type testInstance struct {
 	sessionManager *sessions.Manager
 	signaler       *signalerStub
 	chatRepo       *chatrepo.Queries
-	accessStore    accesscontrol.Store
+	flags          *feature.InMemory
 }
 
 func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
@@ -97,8 +98,9 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 	accessStore := accesscontrol.NewRedisStore(cacheAdapter, accesscontrol.AlphaTTL)
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore)
 	auditLogger := audit.NewLogger()
+	flags := &feature.InMemory{}
 
-	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, shadowMCPClient, accessStore, auditLogger, "test-jwt-secret", false, nil, nil)
+	svc := risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, nil, shadowMCPClient, auditLogger, "test-jwt-secret", false, nil, nil, flags)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -106,7 +108,7 @@ func newTestRiskService(t *testing.T) (context.Context, *testInstance) {
 		sessionManager: sessionManager,
 		signaler:       sig,
 		chatRepo:       chatrepo.New(conn),
-		accessStore:    accessStore,
+		flags:          flags,
 	}
 }
 

@@ -68,6 +68,9 @@ var registry = []toolFactory{
 		return platformslack.NewChatUpdateTool(deps.SlackHTTPClient)
 	},
 	func(deps Dependencies) PlatformToolExecutor {
+		return platformslack.NewSetThreadStatusTool(deps.SlackHTTPClient)
+	},
+	func(deps Dependencies) PlatformToolExecutor {
 		return platformslack.NewChatDeleteTool(deps.SlackHTTPClient)
 	},
 	func(deps Dependencies) PlatformToolExecutor {

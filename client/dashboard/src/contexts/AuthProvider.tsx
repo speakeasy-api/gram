@@ -49,12 +49,13 @@ const UNAUTHENTICATED_PATHS = [
   "/invite",
   "/book-demo",
   "/shadow-mcp/request",
+  "/risk-policy-bypass/request",
 ];
 
 const SLUG_EXEMPT_PATHS = [
-  "/slack/register",
   "/switch-org",
   "/shadow-mcp/request",
+  "/risk-policy-bypass/request",
 ];
 
 export const AuthProvider = ({

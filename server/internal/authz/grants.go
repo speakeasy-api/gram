@@ -214,6 +214,9 @@ func flattenRoleGrants(grants []*RoleGrant) ([]roleGrantRow, error) {
 
 		scope := Scope(grant.Scope)
 		effect := conv.Default(grant.Effect, PolicyEffectAllow)
+		if err := validatePolicyEffect(effect); err != nil {
+			return nil, err
+		}
 
 		selectors := grant.Selectors
 		// nil selectors = unrestricted wildcard access.
@@ -246,6 +249,15 @@ func flattenRoleGrants(grants []*RoleGrant) ([]roleGrantRow, error) {
 	}
 
 	return rows, nil
+}
+
+func validatePolicyEffect(effect PolicyEffect) error {
+	switch conv.Default(effect, PolicyEffectAllow) {
+	case PolicyEffectAllow, PolicyEffectDeny:
+		return nil
+	default:
+		return fmt.Errorf("invalid policy effect %q", effect)
+	}
 }
 
 func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, orgID string, roleSlug string, rolePrincipalURN string) ([]*ScopedGrant, error) {
@@ -442,8 +454,7 @@ func evaluateGrants(grants []Grant, checks []Check) (allowGrant *Grant, allowChe
 				continue
 			}
 
-			// Allow: permissive matching (skip missing dimensions).
-			if !grant.Selector.Matches(check.selector()) {
+			if !check.matchesAllowSelector(grant.Selector) {
 				continue
 			}
 			return grant, check, false

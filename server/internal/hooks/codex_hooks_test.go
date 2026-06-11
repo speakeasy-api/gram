@@ -10,7 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
-func TestCodex_PreToolUse_ShadowMCPBlockWithoutURLEvidenceOmitsRequestLink(t *testing.T) {
+func TestCodex_PreToolUse_ShadowMCPBlockWithIdentityEvidenceIncludesRequestLink(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
@@ -29,8 +29,9 @@ func TestCodex_PreToolUse_ShadowMCPBlockWithoutURLEvidenceOmitsRequestLink(t *te
 	require.NotNil(t, result.Decision)
 	require.Equal(t, "deny", *result.Decision)
 	require.NotNil(t, result.Reason)
-	require.NotContains(t, *result.Reason, "Request access:")
-	require.NotContains(t, *result.Reason, shadowMCPApprovalRequestPrompt)
+	require.Contains(t, *result.Reason, "Request access:")
+	require.Contains(t, *result.Reason, "/risk-policy-bypass/request#request_token=rpbr1.")
+	require.Contains(t, *result.Reason, shadowMCPApprovalRequestPrompt)
 }
 
 func TestBuildCodexTelemetryAttributes_UsesPayloadUserEmail(t *testing.T) {
