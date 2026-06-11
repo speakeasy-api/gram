@@ -17,6 +17,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
+// DefaultChatTitle is the placeholder a chat is seeded with before the async
+// title generator produces a real one. It MUST stay one of the sentinels
+// recognized by that generator's isDefaultChatTitle guard
+// (background/activities/generate_chat_title.go) — any other value is treated as
+// a deliberately-chosen title and never overwritten. Callers creating a chat
+// should seed this constant rather than a literal so the seed and the guard
+// can't drift apart.
+const DefaultChatTitle = "New Chat"
+
 // ChatMessageCaptureStrategy captures completion messages to the database.
 // It implements the MessageCaptureStrategy interface.
 type ChatMessageCaptureStrategy struct {
@@ -74,7 +83,7 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 		OrganizationID: orgID,
 		UserID:         conv.ToPGText(userID),
 		ExternalUserID: conv.ToPGText(externalUserID),
-		Title:          conv.ToPGText("New Chat"),
+		Title:          conv.ToPGText(DefaultChatTitle),
 	})
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to create chat", attr.SlogError(err))

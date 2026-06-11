@@ -16,6 +16,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -42,7 +43,9 @@ type GenerateChatTitleArgs struct {
 }
 
 const (
-	defaultChatTitle       = "New Chat"
+	// defaultChatTitle is the shared placeholder seeded at chat creation. It
+	// aliases chat.DefaultChatTitle so the seed site and this guard can't drift.
+	defaultChatTitle       = chat.DefaultChatTitle
 	DefaultClaudeChatTitle = "Claude Code Session"
 	DefaultCoworkChatTitle = "Cowork Session"
 	DefaultClaudeAmbiguous = "Claude Session"
