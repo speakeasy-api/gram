@@ -1307,7 +1307,17 @@ const listInactiveAssistantRuntimesForReap = `-- name: ListInactiveAssistantRunt
 SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
 WHERE r.backend_metadata_json <> '{}'::jsonb
-  AND (r.deleted IS TRUE OR r.ended IS TRUE)
+  AND (
+    r.deleted IS TRUE
+    OR r.ended IS TRUE
+    OR EXISTS (
+      SELECT 1
+      FROM assistants a
+      WHERE a.id = r.assistant_id
+        AND a.project_id = r.project_id
+        AND a.deleted IS TRUE
+    )
+  )
   AND NOT EXISTS (
     SELECT 1
     FROM assistant_runtimes r2
@@ -1335,12 +1345,15 @@ type ListInactiveAssistantRuntimesForReapRow struct {
 	WarmUntil           pgtype.Timestamptz
 }
 
-// Returns finalized (soft-deleted or ended) runtime rows that still carry
-// backend metadata whose owning assistant has had no runtime activity since
-// @inactive_before — orphaned backend apps whose Stop/Reap never completed.
-// Live rows are never candidates: an idle runtime keeps its VM until the
-// assistant is deleted. The state value itself is intentionally ignored
-// (a tombstone can carry any state, e.g. one stamped by a racing turn).
+// Returns runtime rows that still carry backend metadata, are no longer
+// supposed to have a backend app, and whose owning assistant has had no
+// runtime activity since @inactive_before — orphans whose Stop/Reap never
+// completed. A row qualifies when it is finalized (soft-deleted or ended;
+// the state value is intentionally ignored since a tombstone can carry any
+// state, e.g. one stamped by a racing turn) or when its owning assistant is
+// soft-deleted (delete paths reap best-effort and rely on this janitor as
+// the safety net). A live row under a live assistant is never a candidate:
+// an idle runtime keeps its VM until the assistant is deleted.
 func (q *Queries) ListInactiveAssistantRuntimesForReap(ctx context.Context, arg ListInactiveAssistantRuntimesForReapParams) ([]ListInactiveAssistantRuntimesForReapRow, error) {
 	rows, err := q.db.Query(ctx, listInactiveAssistantRuntimesForReap, arg.InactiveBefore, arg.LimitCount)
 	if err != nil {

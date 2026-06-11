@@ -1030,10 +1030,11 @@ type ReapInactiveAssistantRuntimesParams struct {
 }
 
 // ReapInactiveAssistantRuntimes drives the long-inactivity janitor. It picks
-// finalized (soft-deleted or ended) runtime rows whose owning assistant has
-// had no recorded activity within InactivityThreshold and tears down the
-// backend resources their Stop/Reap left behind. Live rows are never
-// candidates: an idle runtime keeps its VM until the assistant is deleted.
+// runtime rows that are finalized (soft-deleted or ended) or belong to a
+// soft-deleted assistant, whose owning assistant has had no recorded
+// activity within InactivityThreshold, and tears down the backend resources
+// their Stop/Reap left behind. A live row under a live assistant is never a
+// candidate: an idle runtime keeps its VM until the assistant is deleted.
 func (s *ServiceCore) ReapInactiveAssistantRuntimes(ctx context.Context, params ReapInactiveAssistantRuntimesParams) (ReapAssistantRuntimesResult, error) {
 	if params.InactivityThreshold <= 0 {
 		return ReapAssistantRuntimesResult{}, fmt.Errorf("inactivity threshold must be positive")

@@ -1307,6 +1307,16 @@ func TestServiceCoreReapInactiveAssistantRuntimesSkipsLiveRowsCollectsFinalized(
 	})
 	require.NoError(t, err)
 
+	// Live row under a soft-deleted assistant: the delete path's inline reap
+	// is best-effort, so the janitor stays the safety net here.
+	orphanProject, orphanAssistantID, orphanThreadID := insertReapableProject(t, conn, "deleted-assistant")
+	orphanRuntimeID := insertReapableRuntimeRow(t, conn, orphanProject, orphanAssistantID, orphanThreadID, runtimeStateActive, "gram-asst-orphan", stale)
+	err = assistantsrepo.New(conn).DeleteAssistant(t.Context(), assistantsrepo.DeleteAssistantParams{
+		AssistantID: orphanAssistantID,
+		ProjectID:   orphanProject,
+	})
+	require.NoError(t, err)
+
 	reapCalls := &atomic.Int64{}
 	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, reapCalls: reapCalls}
 	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
@@ -1318,9 +1328,9 @@ func TestServiceCoreReapInactiveAssistantRuntimesSkipsLiveRowsCollectsFinalized(
 		OnRowProcessed:      func() { rowProcessed.Add(1) },
 	})
 	require.NoError(t, err)
-	require.Equal(t, 1, result.Reaped)
-	require.EqualValues(t, 1, reapCalls.Load())
-	require.EqualValues(t, 1, rowProcessed.Load(), "OnRowProcessed must fire once per row so the activity can heartbeat")
+	require.Equal(t, 2, result.Reaped)
+	require.EqualValues(t, 2, reapCalls.Load())
+	require.EqualValues(t, 2, rowProcessed.Load(), "OnRowProcessed must fire once per row so the activity can heartbeat")
 
 	liveRuntime, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{ID: liveRuntimeID, ProjectID: liveProject})
 	require.NoError(t, err)
@@ -1330,6 +1340,10 @@ func TestServiceCoreReapInactiveAssistantRuntimesSkipsLiveRowsCollectsFinalized(
 	tombRuntime, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{ID: tombRuntimeID, ProjectID: tombProject})
 	require.NoError(t, err)
 	require.Equal(t, runtimeStateReaped, tombRuntime.State)
+
+	orphanRuntime, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{ID: orphanRuntimeID, ProjectID: orphanProject})
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateReaped, orphanRuntime.State, "live row under deleted assistant must be collected")
 }
 
 type testRuntimeBackend struct {
