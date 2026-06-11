@@ -1437,10 +1437,11 @@ func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assis
 	}
 
 	active, err := queries.CountActiveAssistantThreads(ctx, assistantrepo.CountActiveAssistantThreadsParams{
-		ProjectID:     assistant.ProjectID,
-		AssistantID:   assistant.ID,
-		ActiveSince:   conv.ToPGTimestamptz(time.Now().UTC().Add(-time.Duration(assistant.WarmTTLSeconds) * time.Second)),
-		PendingStatus: eventStatusPending,
+		ProjectID:        assistant.ProjectID,
+		AssistantID:      assistant.ID,
+		WarmupSourceKind: sourceKindWarmup,
+		ActiveSince:      conv.ToPGTimestamptz(time.Now().UTC().Add(-time.Duration(assistant.WarmTTLSeconds) * time.Second)),
+		PendingStatus:    eventStatusPending,
 	})
 	if err != nil {
 		return AdmitPendingThreadsResult{}, fmt.Errorf("count active assistant threads: %w", err)

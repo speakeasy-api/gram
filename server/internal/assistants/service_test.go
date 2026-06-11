@@ -211,6 +211,31 @@ func TestServiceCoreEnsureWarmupThreadIsIdempotent(t *testing.T) {
 	require.Equal(t, first.ThreadID, row.AssistantThreadID)
 }
 
+func TestServiceCoreWarmupThreadDoesNotConsumeConcurrencySlot(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_warmup_cap")
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	assistantID, projectID := seedAssistant(t, conn, "assistants-warmup-cap", 1)
+
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
+
+	warmup, err := core.EnsureWarmupThread(ctx, assistantID)
+	require.NoError(t, err)
+	require.True(t, warmup.ShouldSignal)
+	_, err = core.ProcessThreadEvents(ctx, projectID, warmup.ThreadID)
+	require.NoError(t, err)
+
+	// With max_concurrency=1 and the warmup thread freshly stamped, the
+	// first real turn must still be admitted against the active runtime.
+	pending := seedThreadWithEvent(t, conn, assistantID, "assistants-warmup-cap", "first-turn", eventStatusPending)
+	admitted, err := core.AdmitPendingThreads(ctx, assistantID)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{pending}, admitted.ThreadIDs, "the warmup thread must not occupy a concurrency slot")
+}
+
 func TestServiceCoreEnsureWarmupThreadSkipsWhenTrafficOwnsRuntime(t *testing.T) {
 	t.Parallel()
 

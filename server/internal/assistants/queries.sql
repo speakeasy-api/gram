@@ -363,12 +363,16 @@ WHERE project_id = @project_id
 -- name: CountActiveAssistantThreads :one
 -- Threads with last_event_at inside the warm TTL window. Excludes threads
 -- that themselves have a pending event so callers computing headroom for
--- a fresh pending admit don't double-count it.
+-- a fresh pending admit don't double-count it. The event-less warmup
+-- thread is excluded too: it holds the VM warm but never occupies a
+-- runner slot, and counting it would block max_concurrency=1 assistants
+-- from admitting their first real turn until the window lapses.
 SELECT COUNT(*)::BIGINT AS active_threads
 FROM assistant_threads t
 WHERE t.project_id = @project_id
   AND t.assistant_id = @assistant_id
   AND t.deleted IS FALSE
+  AND t.source_kind <> @warmup_source_kind
   AND t.last_event_at > @active_since
   AND NOT EXISTS (
     SELECT 1
