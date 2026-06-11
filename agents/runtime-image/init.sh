@@ -18,10 +18,16 @@ mkdir -p "$workdir_mount"
 mount -o loop "$workdir_image" "$workdir_mount"
 
 ip link set lo up || true
-cat >/etc/resolv.conf <<'EOF'
+# On Fly, init has already written a resolv.conf pointing at the 6PN resolver
+# (fdaa::3), which is the only way to resolve .internal names — leave it
+# alone. Bare Firecracker boots have no resolv.conf, so provision public
+# resolvers only when the file is absent or empty.
+if [ ! -s /etc/resolv.conf ]; then
+  cat >/etc/resolv.conf <<'EOF'
 nameserver 1.1.1.1
 nameserver 8.8.8.8
 EOF
+fi
 
 cmdline="$(cat /proc/cmdline 2>/dev/null || true)"
 cmdline_value() {
