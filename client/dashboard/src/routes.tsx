@@ -3,7 +3,6 @@ import React, { useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import {
   RedirectToInsightsTools,
-  RedirectToLogAgents,
   RedirectToLogTools,
 } from "./components/observe/ObserveRedirects";
 import { ReleaseStage } from "./components/release-stage-badge";
@@ -451,18 +450,13 @@ const ROUTE_STRUCTURE = {
         url: "mcp",
         component: LogsMCPPage,
       },
-      agents: {
-        title: "Agent Sessions",
-        url: "agents",
-        component: ChatSessions,
-      },
     },
   },
-  chatSessions: {
-    // redirect to logs/agents. TODO: remove this in a month
+  agentSessions: {
     title: "Agent Sessions",
     url: "agent-sessions",
-    component: RedirectToLogAgents,
+    icon: "message-square",
+    component: ChatSessions,
   },
   riskOverview: {
     title: "Risk Overview",

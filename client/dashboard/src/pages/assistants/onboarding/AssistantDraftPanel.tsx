@@ -66,13 +66,13 @@ export function AssistantDraftPanel(): JSX.Element {
           {a?.name ?? "Loading…"}
         </Type>
         <div className="flex shrink-0 items-center gap-1">
-          <routes.logs.agents.Link
+          <routes.agentSessions.Link
             queryParams={{ assistantId: draft.assistantId }}
             className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs no-underline transition-colors hover:no-underline"
           >
             <Icon name="activity" className="h-3 w-3" />
             Sessions
-          </routes.logs.agents.Link>
+          </routes.agentSessions.Link>
           <Button
             variant="ghost"
             size="sm"

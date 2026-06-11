@@ -105,7 +105,11 @@ export function AppSidebar({
     ...(isAssistantsEnabled ? [routes.assistants] : []),
   ].some((r) => r.active);
 
-  const observeActive = [routes.insights, routes.logs].some((r) => r.active);
+  const observeActive = [
+    routes.insights,
+    routes.agentSessions,
+    routes.logs,
+  ].some((r) => r.active);
 
   const securityActive = [
     routes.riskOverview,
@@ -243,6 +247,10 @@ export function AppSidebar({
                 <ScopeGatedNavItem
                   item={routes.insights}
                   scope={scopeFor(routes.insights)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.agentSessions}
+                  scope={scopeFor(routes.agentSessions)}
                 />
                 <ScopeGatedNavItem
                   item={routes.logs}
