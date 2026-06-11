@@ -1128,6 +1128,36 @@ func (s *ServiceCore) RecycleActiveRuntimeImages(ctx context.Context, params Rec
 			State:               row.State,
 			WarmUntil:           row.WarmUntil,
 		}
+		// In-flight events mean turns are queued for or running on this VM —
+		// the runner's idle clock only clears on /turn enqueue, so the idle
+		// probe alone can miss a turn that admission is about to deliver.
+		// Those admissions recycle the image lazily through Ensure anyway.
+		inFlight, err := queries.CountInFlightAssistantThreadEvents(ctx, assistantrepo.CountInFlightAssistantThreadEventsParams{
+			ProjectID:        row.ProjectID,
+			AssistantID:      row.AssistantID,
+			PendingStatus:    eventStatusPending,
+			ProcessingStatus: eventStatusProcessing,
+		})
+		if err != nil {
+			s.logger.WarnContext(ctx, "count in-flight assistant thread events for image recycle failed",
+				attr.SlogAssistantID(row.AssistantID.String()),
+				attr.SlogProjectID(row.ProjectID.String()),
+				attr.SlogError(err),
+			)
+			result.Errors++
+			if params.OnRowProcessed != nil {
+				params.OnRowProcessed()
+			}
+			continue
+		}
+		if inFlight > 0 {
+			result.Skipped++
+			if params.OnRowProcessed != nil {
+				params.OnRowProcessed()
+			}
+			continue
+		}
+
 		recycled, err := s.runtime.RecycleImage(ctx, record)
 		switch {
 		case err != nil:

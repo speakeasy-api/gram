@@ -792,6 +792,18 @@ WHERE r.backend_metadata_json <> '{}'::jsonb
 ORDER BY r.updated_at ASC
 LIMIT @limit_count;
 
+-- name: CountInFlightAssistantThreadEvents :one
+-- Counts events that are queued for or currently using the assistant's
+-- runtime. The image recycle sweep skips assistants with any in-flight
+-- events: their turns are about to hit the VM (the runner's idle clock
+-- only clears on /turn enqueue) and their admissions recycle the image
+-- lazily anyway.
+SELECT COUNT(*)
+FROM assistant_thread_events
+WHERE project_id = @project_id
+  AND assistant_id = @assistant_id
+  AND status IN (@pending_status, @processing_status);
+
 -- name: UpdateActiveAssistantRuntimeMetadata :execrows
 -- Persists post-recycle backend metadata only while the row is still live.
 -- Zero rows affected means the warm timer expired the runtime mid-recycle;

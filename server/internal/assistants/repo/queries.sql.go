@@ -346,6 +346,38 @@ func (q *Queries) CountActiveAssistantThreads(ctx context.Context, arg CountActi
 	return active_threads, err
 }
 
+const countInFlightAssistantThreadEvents = `-- name: CountInFlightAssistantThreadEvents :one
+SELECT COUNT(*)
+FROM assistant_thread_events
+WHERE project_id = $1
+  AND assistant_id = $2
+  AND status IN ($3, $4)
+`
+
+type CountInFlightAssistantThreadEventsParams struct {
+	ProjectID        uuid.UUID
+	AssistantID      uuid.UUID
+	PendingStatus    string
+	ProcessingStatus string
+}
+
+// Counts events that are queued for or currently using the assistant's
+// runtime. The image recycle sweep skips assistants with any in-flight
+// events: their turns are about to hit the VM (the runner's idle clock
+// only clears on /turn enqueue) and their admissions recycle the image
+// lazily anyway.
+func (q *Queries) CountInFlightAssistantThreadEvents(ctx context.Context, arg CountInFlightAssistantThreadEventsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countInFlightAssistantThreadEvents,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.PendingStatus,
+		arg.ProcessingStatus,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createAssistant = `-- name: CreateAssistant :one
 INSERT INTO assistants (
   project_id,
