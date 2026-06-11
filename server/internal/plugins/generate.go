@@ -1086,10 +1086,12 @@ if data.get("hook_event_name") == "SessionStart" and not data.get("user_email"):
 # carries env vars and HTTP headers, which often contain credentials and
 # must never leave the machine. Stdio launch args are kept for server
 # identity (e.g. npx package names) but credential-shaped values are
-# redacted: values following a secret-named flag, inline flag=value pairs,
-# and well-known token prefixes.
+# redacted: values following a secret-named flag (including the short -H
+# header alias), inline flag=value pairs, header-shaped values whose name
+# suggests credentials, and well-known token prefixes.
 secret_flag = re.compile(r"(key|token|secret|password|passwd|auth|credential|header)", re.I)
 secret_value = re.compile(r"^(sk-|pk-|ghp_|gho_|github_pat_|xox[a-z]-|ya29\.|AKIA|eyJ)")
+secret_header = re.compile(r"^(authorization|proxy-authorization|cookie|[a-z0-9_-]*(key|token|secret|auth)[a-z0-9_-]*)\s*:", re.I)
 
 def redact_args(args):
     if not isinstance(args, list):
@@ -1104,9 +1106,11 @@ def redact_args(args):
             redact_next = False
         elif "=" in a and secret_flag.search(a.split("=", 1)[0]):
             out.append(a.split("=", 1)[0] + "=[REDACTED]")
-        elif a.startswith("-") and secret_flag.search(a):
+        elif a.startswith("-") and (a == "-H" or secret_flag.search(a)):
             out.append(a)
             redact_next = True
+        elif secret_header.match(a):
+            out.append(a.split(":", 1)[0] + ": [REDACTED]")
         elif secret_value.match(a):
             out.append("[REDACTED]")
         else:
