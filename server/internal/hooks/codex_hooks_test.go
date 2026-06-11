@@ -205,7 +205,7 @@ func TestCodexInventoryProvenanceDetail(t *testing.T) {
 		ConnectorUUID: "",
 		ToolPrefix:    "",
 	}
-	detail := ti.service.codexInventoryProvenanceDetail(ctx, external, "evil", "org-id")
+	detail := ti.service.codexInventoryProvenanceDetail(ctx, external, "org-id")
 	require.Contains(t, detail, "not Gram-hosted")
 	require.Contains(t, detail, "https://mcp.attacker.example/mcp")
 
@@ -222,7 +222,7 @@ func TestCodexInventoryProvenanceDetail(t *testing.T) {
 		ConnectorUUID: "",
 		ToolPrefix:    "local_tool",
 	}
-	detail = ti.service.codexInventoryProvenanceDetail(ctx, stdio, "local-tool", "org-id")
+	detail = ti.service.codexInventoryProvenanceDetail(ctx, stdio, "org-id")
 	require.Contains(t, detail, "local stdio server")
 
 	gramHosted := &MCPServerEntry{
@@ -238,9 +238,9 @@ func TestCodexInventoryProvenanceDetail(t *testing.T) {
 		ConnectorUUID: "",
 		ToolPrefix:    "",
 	}
-	require.Empty(t, ti.service.codexInventoryProvenanceDetail(ctx, gramHosted, "gram", "org-id"))
+	require.Empty(t, ti.service.codexInventoryProvenanceDetail(ctx, gramHosted, "org-id"))
 
-	require.Empty(t, ti.service.codexInventoryProvenanceDetail(ctx, nil, "anything", "org-id"))
+	require.Empty(t, ti.service.codexInventoryProvenanceDetail(ctx, nil, "org-id"))
 }
 
 func TestCodexSessionMetadata_CachesSessionStartEmail(t *testing.T) {

@@ -74,10 +74,11 @@ func (s *Service) canBypassPolicy(
 // attached so bypass grants and access requests can be scoped to the server
 // URL rather than just the name.
 func (s *Service) codexShadowMCPEvidence(ctx context.Context, payload *gen.CodexPayload) (shadowmcp.AccessEvidence, *MCPServerEntry) {
+	rawToolName := conv.PtrValOr(payload.ToolName, "")
 	evidence := shadowmcp.AccessEvidence{
 		FullURL:        "",
 		URLHost:        "",
-		ServerIdentity: mcpServerIdentityFromToolName(conv.PtrValOr(payload.ToolName, "")),
+		ServerIdentity: mcpServerIdentityFromToolName(rawToolName),
 	}
 	sessionID := conv.PtrValOr(payload.SessionID, "")
 	if evidence.ServerIdentity == "" || sessionID == "" {
@@ -87,8 +88,13 @@ func (s *Service) codexShadowMCPEvidence(ctx context.Context, payload *gen.Codex
 	if err != nil {
 		return evidence, nil
 	}
-	matched := matchCachedMCPEntry(entries, evidence.ServerIdentity)
+	matched := matchCodexCachedMCPEntry(entries, rawToolName)
 	if matched != nil {
+		if matched.ToolPrefix != "" {
+			// The naive 3-way split truncates prefixes containing "__"; the
+			// matched entry carries the full sanitized prefix.
+			evidence.ServerIdentity = matched.ToolPrefix
+		}
 		if matched.URL != "" {
 			evidence.FullURL = matched.URL
 		}
@@ -107,15 +113,15 @@ func (s *Service) codexShadowMCPEvidence(ctx context.Context, payload *gen.Codex
 // empty string means the inventory raises no objection — either the entry is
 // Gram-hosted or there is nothing to cross-check (nil entry). Mirrors the
 // target checks of the Claude PreToolUse guard.
-func (s *Service) codexInventoryProvenanceDetail(ctx context.Context, matched *MCPServerEntry, serverIdentity, orgID string) string {
+func (s *Service) codexInventoryProvenanceDetail(ctx context.Context, matched *MCPServerEntry, orgID string) string {
 	if matched == nil {
 		return ""
 	}
 	switch {
 	case matched.URL != "" && !s.isGramHostedMCPURLForOrg(ctx, matched.URL, orgID):
-		return fmt.Sprintf("MCP server %q is not Gram-hosted (URL: %s)", serverIdentity, matched.URL)
+		return fmt.Sprintf("MCP server %q is not Gram-hosted (URL: %s)", matched.Name, matched.URL)
 	case matched.URL == "" && matched.Command != "":
-		return fmt.Sprintf("MCP server %q is a local stdio server (command: %s)", serverIdentity, matched.Command)
+		return fmt.Sprintf("MCP server %q is a local stdio server (command: %s)", matched.Name, matched.Command)
 	default:
 		return ""
 	}

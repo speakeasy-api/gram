@@ -103,3 +103,42 @@ func TestParseCodexMCPList_MalformedInput(t *testing.T) {
 		map[string]any{"name": "empty", "transport": map[string]any{"type": "stdio"}}, // no url or command
 	}))
 }
+
+func TestMatchCodexCachedMCPEntry_DoubleUnderscorePrefix(t *testing.T) {
+	t.Parallel()
+
+	entries := ParseCodexMCPList([]any{
+		map[string]any{
+			"name":    "foo--bar",
+			"enabled": true,
+			"transport": map[string]any{
+				"type": "streamable_http",
+				"url":  "https://mcp.example.com/foo-bar",
+			},
+		},
+		map[string]any{
+			"name":    "int-linear",
+			"enabled": true,
+			"transport": map[string]any{
+				"type": "streamable_http",
+				"url":  "https://chat.example.com/mcp/int-linear",
+			},
+		},
+	})
+	require.Len(t, entries, 2)
+	require.Equal(t, "foo__bar", entries[0].ToolPrefix)
+
+	// "foo--bar" sanitizes to "foo__bar", so a naive 3-way split of the tool
+	// name yields prefix "foo" — longest-ToolPrefix matching must still
+	// resolve the entry.
+	matched := matchCodexCachedMCPEntry(entries, "mcp__foo__bar__run")
+	require.NotNil(t, matched)
+	require.Equal(t, "https://mcp.example.com/foo-bar", matched.URL)
+
+	matched = matchCodexCachedMCPEntry(entries, "mcp__int_linear__get_issue")
+	require.NotNil(t, matched)
+	require.Equal(t, "https://chat.example.com/mcp/int-linear", matched.URL)
+
+	require.Nil(t, matchCodexCachedMCPEntry(entries, "mcp__unknown__tool"))
+	require.Nil(t, matchCodexCachedMCPEntry(entries, "Bash"))
+}

@@ -15,7 +15,6 @@ import (
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/mcpname"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
@@ -71,7 +70,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 				// call actually routes — deny when it points at a non-Gram
 				// target. Unmatched prefixes and missing snapshots stay
 				// allowed: older plugin installs ship no inventory.
-				if d := s.codexInventoryProvenanceDetail(ctx, matched, mcpServerIdentityFromToolName(toolName), orgID); d != "" {
+				if d := s.codexInventoryProvenanceDetail(ctx, matched, orgID); d != "" {
 					if _, allowed := s.canBypassPolicy(ctx, orgID, metadata.UserID, policy.ID, evidence, toolName); !allowed {
 						detail, denied = d, true
 					}
@@ -308,12 +307,25 @@ func (s *Service) buildCodexTelemetryAttributes(ctx context.Context, payload *ge
 	}
 
 	// Parse MCP tool names using the mcp__<server>__<tool> convention.
-	if server, fn, ok := mcpname.AttributeTool(toolName); ok {
-		attrs[attr.ToolCallSourceKey] = server
-		attrs[attr.ToolNameKey] = fn
-		if metadata.SessionID != "" {
-			if entries, err := s.getCachedMCPList(ctx, metadata.SessionID); err == nil {
-				applyMCPInventoryAttrs(attrs, matchCachedMCPEntry(entries, server))
+	if strings.HasPrefix(toolName, "mcp__") {
+		parts := strings.SplitN(toolName, "__", 3)
+		if len(parts) == 3 {
+			attrs[attr.ToolCallSourceKey] = parts[1]
+			attrs[attr.ToolNameKey] = parts[2]
+			if metadata.SessionID != "" {
+				if entries, err := s.getCachedMCPList(ctx, metadata.SessionID); err == nil {
+					matched := matchCodexCachedMCPEntry(entries, toolName)
+					if matched != nil && matched.ToolPrefix != "" {
+						// Sanitized prefixes can contain "__", in which case
+						// the naive split misattributes part of the server
+						// name to the tool — recompute from the full prefix.
+						if rest, ok := strings.CutPrefix(toolName, "mcp__"+matched.ToolPrefix+"__"); ok {
+							attrs[attr.ToolCallSourceKey] = matched.ToolPrefix
+							attrs[attr.ToolNameKey] = rest
+						}
+					}
+					applyMCPInventoryAttrs(attrs, matched)
+				}
 			}
 		}
 	}
