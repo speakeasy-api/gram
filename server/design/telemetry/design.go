@@ -1477,11 +1477,6 @@ var ToolUsageTargetType = Type("ToolUsageTargetType", String, func() {
 	Enum("hosted_mcp_server", "shadow_mcp_server", "local_tool", "skill")
 })
 
-var ToolUsageObservationSource = Type("ToolUsageObservationSource", String, func() {
-	Description("How Gram observed the tool call")
-	Enum("hosted", "hook")
-})
-
 var ToolUsageTargetKind = Type("ToolUsageTargetKind", String, func() {
 	Description("Tool usage aggregation target kind")
 	Enum("server", "local_tools", "skill")

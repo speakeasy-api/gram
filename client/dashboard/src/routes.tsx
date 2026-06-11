@@ -386,7 +386,7 @@ const ROUTE_STRUCTURE = {
     indexComponent: TriggersIndex,
   },
   insights: {
-    title: "Insights",
+    title: "MCP & Tools",
     url: "insights",
     icon: "layout-dashboard",
     component: InsightsRoot,
