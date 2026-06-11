@@ -15,8 +15,3 @@ export function RedirectToLogTools(): JSX.Element {
   const routes = useRoutes();
   return <RedirectPreservingLocation to={routes.logs.tools.href()} />;
 }
-
-export function RedirectToLogAgents(): JSX.Element {
-  const routes = useRoutes();
-  return <RedirectPreservingLocation to={routes.logs.agents.href()} />;
-}

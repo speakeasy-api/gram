@@ -221,6 +221,7 @@ export default function RiskEvents(): JSX.Element {
     <RevealAllProvider>
       <LogWorkbench
         title="Risk Events"
+        stage="beta"
         description="Review policy findings across recent analyzed chats."
         actions={
           <div className="flex items-center gap-2">

@@ -117,11 +117,18 @@ export function AppSidebar({
     ...(isAssistantsEnabled ? [routes.assistants] : []),
   ].some((r) => r.active);
 
-  const observeActive = [routes.insights, routes.logs].some((r) => r.active);
+  const observeActive = [
+    routes.employees,
+    routes.costs,
+    routes.insights,
+    routes.agentSessions,
+    routes.logs,
+  ].some((r) => r.active);
 
   const securityActive = [
     routes.riskOverview,
     routes.policyCenter,
+    routes.riskEvents,
     routes.approvalRequests,
     routes.detectionRules,
   ].some((r) => r.active);
@@ -251,11 +258,23 @@ export function AppSidebar({
               <CollapsibleNavGroup
                 label="Observe"
                 Icon={(p) => <Icon {...p} name="eye" />}
-                defaultHref={routes.insights.href()}
+                defaultHref={routes.employees.href()}
               >
+                <ScopeGatedNavItem
+                  item={routes.employees}
+                  scope={scopeFor(routes.employees)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.costs}
+                  scope={scopeFor(routes.costs)}
+                />
                 <ScopeGatedNavItem
                   item={routes.insights}
                   scope={scopeFor(routes.insights)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.agentSessions}
+                  scope={scopeFor(routes.agentSessions)}
                 />
                 <ScopeGatedNavItem
                   item={routes.logs}
@@ -277,6 +296,10 @@ export function AppSidebar({
                 <ScopeGatedNavItem
                   item={routes.policyCenter}
                   scope={scopeFor(routes.policyCenter)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.riskEvents}
+                  scope={scopeFor(routes.riskEvents)}
                 />
                 <ScopeGatedNavItem
                   item={routes.approvalRequests}

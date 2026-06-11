@@ -456,7 +456,7 @@ export function ProjectDashboard(): JSX.Element {
                           })
                         }
                       />
-                      <ViewAllLink to={routes.insights.employees.href()} />
+                      <ViewAllLink to={routes.employees.href()} />
                     </CardActions>
                   }
                 >
@@ -552,7 +552,7 @@ export function ProjectDashboard(): JSX.Element {
                                   !isProjectEmpty &&
                                     overview?.summary.totalChats === 0
                                   ? routes.insights.href()
-                                  : routes.logs.agents.href()
+                                  : routes.agentSessions.href()
                             }
                           />
                         </CardActions>

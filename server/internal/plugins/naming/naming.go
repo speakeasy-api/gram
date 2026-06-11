@@ -13,10 +13,27 @@ package naming
 
 import "github.com/speakeasy-api/gram/server/internal/conv"
 
-// MarketplaceName is the marketplace.json "name" for an org's published
+// MarketplaceName is the marketplace.json "name" for a project's published
 // marketplace.
-func MarketplaceName(orgName string) string {
-	return conv.ToSlug(orgName) + "-speakeasy"
+//
+// An org can publish multiple projects, each its own marketplace, and a
+// marketplace.json name is a single identifier that must be unique on the
+// device. So names are project-scoped: `<org>-<project>-speakeasy`. The one
+// exception is the org's default project (and the no-project fallback), which
+// keeps the bare `<org>-speakeasy` name it has always had — so existing installs
+// for single-project orgs don't churn when this scoping lands; only an org's
+// non-default projects get a new, distinct name.
+//
+// isDefaultProject must be resolved the same way on both surfaces (the publish
+// path and the device-agent endpoint) — the org's oldest non-deleted project,
+// by id ASC — or the two will compute different names and silently fail to match.
+func MarketplaceName(orgName, projectSlug string, isDefaultProject bool) string {
+	base := conv.ToSlug(orgName)
+	slug := conv.ToSlug(projectSlug)
+	if isDefaultProject || slug == "" {
+		return base + "-speakeasy"
+	}
+	return base + "-" + slug + "-speakeasy"
 }
 
 // ObservabilitySlug is the slug of the always-required observability plugin

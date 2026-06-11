@@ -1142,7 +1142,7 @@ function ChatDetailPanel({
   const isSuperAdmin = useIsAdmin();
   const { hasScope } = useRBAC();
   // Export + delete should be available to anyone with org:admin (the scope
-  // that already gates /risk-overview and /logs/risk-events). Falling back to
+  // that already gates /risk-overview and /risk-events). Falling back to
   // the platform super-admin flag locked out customer org admins who can
   // already see the data in this panel.
   const canManageChat = isSuperAdmin || hasScope("org:admin");

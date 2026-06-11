@@ -22,6 +22,7 @@ import {
   DEFAULT_USER_SESSION_DURATION_HOURS,
 } from "@/lib/externalMcpUserSessions";
 import { proxyRegisterUpstreamClient } from "@/lib/proxyRegisterUpstreamClient";
+import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
 import type {
   McpServer,
   RemoteSessionIssuer,
@@ -342,7 +343,7 @@ export function AttachRemoteIdentityProviderSheet({
         buildUserSessionResourceSlug(mcpServer.slug ?? "mcp"),
     );
     setSlugDirty(false);
-    setName(deriveNameFromUrl(initialIssuerUrl ?? "") ?? "");
+    setName(deriveRemoteSessionIssuerNameFromUrl(initialIssuerUrl ?? "") ?? "");
     setNameDirty(false);
     setIssuerUrl(initialIssuerUrl ?? "");
     resetEndpointState();
@@ -460,7 +461,8 @@ export function AttachRemoteIdentityProviderSheet({
                   // Same auto-derive-until-edited behavior for the Display name,
                   // seeded from the URL hostname.
                   if (!nameDirty) {
-                    const derivedName = deriveNameFromUrl(value);
+                    const derivedName =
+                      deriveRemoteSessionIssuerNameFromUrl(value);
                     if (derivedName) setName(derivedName);
                   }
                   // When the URL diverges from a settled discovery, every
@@ -672,21 +674,6 @@ function deriveSlugFromUrl(url: string): string | null {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "");
     return slug || null;
-  } catch {
-    return null;
-  }
-}
-
-// Derive a default Display name from the Issuer URL's hostname. Unlike the slug
-// transform this keeps the hostname human-readable (no hyphenation/lowercasing).
-// Returns null for unparseable URLs so the caller leaves the prior value intact
-// while a partial URL is being typed.
-function deriveNameFromUrl(url: string): string | null {
-  const trimmed = url.trim();
-  if (!trimmed) return null;
-  try {
-    const host = new URL(trimmed).hostname;
-    return host || null;
   } catch {
     return null;
   }
