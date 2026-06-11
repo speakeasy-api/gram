@@ -20,7 +20,7 @@ import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
 import {
   narrowTokenEndpointAuthMethod,
   pickPreferredAuthMethod,
-} from "@/pages/mcp/x/tabs/authentication/issuerFormUtils";
+} from "@/pages/mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
 
 type AutoConfigureAuthInput = {
   client: Gram;

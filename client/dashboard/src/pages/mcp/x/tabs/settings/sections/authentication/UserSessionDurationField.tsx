@@ -1,7 +1,11 @@
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+} from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -9,14 +13,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Type } from "@/components/ui/type";
 import type { UserSessionIssuer } from "@gram/client/models/components";
 import {
   invalidateAllUserSessionIssuer,
   invalidateAllUserSessionIssuers,
   useUpdateUserSessionIssuerMutation,
 } from "@gram/client/react-query/index.js";
-import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -38,9 +41,6 @@ const DURATION_UNIT_OPTIONS: ReadonlyArray<{
   { value: "week", label: "Weeks" },
 ];
 
-// Pick the largest whole unit that divides the hours value evenly. 168 → 1
-// week, 48 → 2 days, 36 → 36 hours. Keeps the inputs readable when the row
-// loads a saved value.
 function splitIntoUnit(hours: number): {
   number: number;
   unit: DurationUnit;
@@ -54,7 +54,7 @@ function splitIntoUnit(hours: number): {
   return { number: Math.max(0, hours), unit: "hour" };
 }
 
-export function UserSessionsSection({
+export function UserSessionDurationField({
   userSessionIssuer,
 }: {
   userSessionIssuer: UserSessionIssuer;
@@ -66,9 +66,6 @@ export function UserSessionsSection({
     initialSplit.unit,
   );
 
-  // Resync from the saved record whenever it changes — post-save refetch,
-  // switching MCP servers, etc. Safe because dirty edits can't have produced
-  // a new server value without going through handleSave first.
   useEffect(() => {
     const split = splitIntoUnit(userSessionIssuer.sessionDurationHours);
     setDurationNumber(split.number);
@@ -117,61 +114,47 @@ export function UserSessionsSection({
   };
 
   return (
-    <section>
-      <Heading variant="h4" className="mb-3">
-        User Sessions
-      </Heading>
-      <Type muted small className="mb-4">
-        The platform issues user sessions for this MCP server. Attach remote
-        identity providers to delegate server functionality authentication.
-      </Type>
-      <Stack gap={4}>
-        <Stack gap={2}>
-          <Label className="text-muted-foreground text-xs">
-            Session Duration
-          </Label>
-          <Stack direction="horizontal" gap={2} align="center">
-            <Input
-              type="number"
-              min="1"
-              value={String(durationNumber)}
-              onChange={handleNumberChange}
-              className="w-[100px]"
-            />
-            <Select value={durationUnit} onValueChange={handleUnitChange}>
-              <SelectTrigger className="w-[120px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {DURATION_UNIT_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <RequireScope scope="mcp:write" level="component">
-              <Button
-                variant="primary"
-                disabled={!dirty || !valid || update.isPending}
-                onClick={handleSave}
-              >
-                <Button.Text>Save</Button.Text>
-              </Button>
-            </RequireScope>
-          </Stack>
-          <Type muted small>
-            How long an issued user session stays valid before the user must
-            re-authenticate.
-          </Type>
-        </Stack>
-
-        {update.isError && (
-          <Alert variant="error" dismissible={false}>
-            {update.error.message}
-          </Alert>
-        )}
-      </Stack>
-    </section>
+    <Field data-invalid={update.isError ? true : undefined}>
+      <FieldLabel htmlFor="mcp-auth-session-duration">
+        Session Duration
+      </FieldLabel>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+        <Input
+          id="mcp-auth-session-duration"
+          type="number"
+          min="1"
+          value={String(durationNumber)}
+          onChange={handleNumberChange}
+          className="w-[100px]"
+        />
+        <Select value={durationUnit} onValueChange={handleUnitChange}>
+          <SelectTrigger className="w-[120px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {DURATION_UNIT_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <RequireScope scope="mcp:write" level="component">
+          <Button
+            variant="primary"
+            size="md"
+            disabled={!dirty || !valid || update.isPending}
+            onClick={handleSave}
+          >
+            <Button.Text>Save</Button.Text>
+          </Button>
+        </RequireScope>
+      </div>
+      <FieldDescription>
+        Users authenticate with Speakeasy before using this server. Choose how
+        long issued sessions stay valid before re-authentication.
+      </FieldDescription>
+      {update.isError && <FieldError>{update.error.message}</FieldError>}
+    </Field>
   );
 }

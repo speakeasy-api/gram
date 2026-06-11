@@ -1461,6 +1461,30 @@ func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assis
 func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, threadID uuid.UUID) (ProcessThreadEventsResult, error) {
 	bootstrappedRuntime := false
 	thread, assistant, runtimeRecord, err := s.loadThreadContext(ctx, projectID, threadID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// The runtime row was retired (reaper, expire, manual stop) between
+		// this thread being admitted and the activity executing. The events
+		// are still pending, so hand back to the coordinator: re-admission
+		// reserves a fresh runtime row and re-dispatches. Failing the
+		// activity here instead would burn its retry budget against a
+		// tombstone and drop the turn.
+		row, rerr := assistantrepo.New(s.db).ResolveThreadCorrelation(ctx, assistantrepo.ResolveThreadCorrelationParams{
+			ThreadID:  threadID,
+			ProjectID: projectID,
+		})
+		if rerr != nil {
+			return ProcessThreadEventsResult{}, fmt.Errorf("resolve thread for retry admission: %w", errors.Join(err, rerr))
+		}
+		return ProcessThreadEventsResult{
+			AssistantID:         row.AssistantID,
+			WarmUntil:           time.Time{},
+			WarmTTLSeconds:      0,
+			RuntimeActive:       false,
+			RetryAdmission:      true,
+			ProcessedAnyEvent:   false,
+			BootstrappedRuntime: false,
+		}, nil
+	}
 	if err != nil {
 		return ProcessThreadEventsResult{}, err
 	}

@@ -1,9 +1,5 @@
-const VALID_TABS = [
-  "overview",
-  "authentication",
-  "team-access",
-  "settings",
-] as const;
+const VALID_TABS = ["overview", "team-access", "settings"] as const;
+const LEGACY_AUTHENTICATION_TAB = "authentication";
 
 export type TabValue = (typeof VALID_TABS)[number];
 
@@ -19,10 +15,10 @@ function decodePathSegment(segment: string): string {
   }
 }
 
-export function activeTabFromPath(
+function tabSegmentFromPath(
   pathname: string,
   mcpServerSlug: string,
-): TabValue | undefined {
+): string | undefined {
   if (!mcpServerSlug) {
     return undefined;
   }
@@ -39,8 +35,24 @@ export function activeTabFromPath(
     return undefined;
   }
 
-  const tabSegment = segments[serverSlugIndex + 1];
+  return segments[serverSlugIndex + 1];
+}
+
+export function activeTabFromPath(
+  pathname: string,
+  mcpServerSlug: string,
+): TabValue | undefined {
+  const tabSegment = tabSegmentFromPath(pathname, mcpServerSlug);
   return tabSegment && isValidTab(tabSegment) ? tabSegment : undefined;
+}
+
+export function isLegacyAuthenticationTabPath(
+  pathname: string,
+  mcpServerSlug: string,
+): boolean {
+  return (
+    tabSegmentFromPath(pathname, mcpServerSlug) === LEGACY_AUTHENTICATION_TAB
+  );
 }
 
 export function initialTabFromHash(
@@ -48,6 +60,7 @@ export function initialTabFromHash(
   isRbacEnabled: boolean,
 ): TabValue {
   const hashValue = hash.replace("#", "");
+  if (hashValue === LEGACY_AUTHENTICATION_TAB) return "settings";
   if (!isValidTab(hashValue)) return "overview";
   if (hashValue === "team-access" && !isRbacEnabled) return "overview";
   return hashValue;
