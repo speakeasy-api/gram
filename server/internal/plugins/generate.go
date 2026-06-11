@@ -1080,6 +1080,10 @@ if data.get("hook_event_name") == "SessionStart" and not data.get("user_email"):
 # for a codex invocation; SessionStart itself is routed through hook_async.sh
 # so the latency is invisible to Codex. The timeout caps wall time in case
 # the codex CLI misbehaves.
+#
+# Only the fields Gram consumes are shipped — the raw transport object also
+# carries env vars and HTTP headers, which often contain credentials and
+# must never leave the machine.
 if data.get("hook_event_name") == "SessionStart" and shutil.which("codex"):
     try:
         out = subprocess.run(
@@ -1092,8 +1096,26 @@ if data.get("hook_event_name") == "SessionStart" and shutil.which("codex"):
     except Exception:
         inventory = None
     if isinstance(inventory, list):
+        slim = []
+        for item in inventory:
+            if not isinstance(item, dict):
+                continue
+            transport = item.get("transport")
+            if not isinstance(transport, dict):
+                transport = {}
+            slim.append({
+                "name": item.get("name"),
+                "enabled": item.get("enabled"),
+                "auth_status": item.get("auth_status"),
+                "transport": {
+                    "type": transport.get("type"),
+                    "url": transport.get("url"),
+                    "command": transport.get("command"),
+                    "args": transport.get("args"),
+                },
+            })
         additional = data.get("additional_data") or {}
-        additional["mcp_inventory_codex"] = inventory
+        additional["mcp_inventory_codex"] = slim
         data["additional_data"] = additional
 
 print(json.dumps(data, separators=(",", ":")), end="")

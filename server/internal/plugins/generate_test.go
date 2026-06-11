@@ -1181,6 +1181,7 @@ func TestGenerateCodexObservabilityPluginScriptShipsMCPInventoryOnSessionStart(t
 	require.Contains(t, script, "mcp_inventory_codex", "hook.sh must ship the inventory under additional_data.mcp_inventory_codex")
 	require.Contains(t, script, `data.get("hook_event_name") == "SessionStart" and shutil.which("codex")`, "inventory collection must be gated on the parsed event name")
 	require.Contains(t, script, "timeout=15", "codex invocation must be wall-time capped")
+	require.Contains(t, script, `additional["mcp_inventory_codex"] = slim`, "hook.sh must ship the sanitized projection — raw transport objects carry env vars and HTTP headers with credentials")
 }
 
 // An upgraded install already carries [hooks.state] entries whose trusted_hash
