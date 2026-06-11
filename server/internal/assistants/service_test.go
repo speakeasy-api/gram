@@ -534,7 +534,7 @@ func TestServiceCoreReapStuckRuntimesSkipsLiveProcessingLease(t *testing.T) {
 	require.Equal(t, eventStatusProcessing, event.Status)
 }
 
-func TestServiceCoreReapStuckRuntimesReclaimsStaleProcessingLease(t *testing.T) {
+func TestServiceCoreReapStuckRuntimesLeavesIdleActiveRuntime(t *testing.T) {
 	t.Parallel()
 
 	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants")
@@ -548,8 +548,10 @@ func TestServiceCoreReapStuckRuntimesReclaimsStaleProcessingLease(t *testing.T) 
 	event, err := assistantsrepo.New(conn).GetLatestAssistantThreadEventByThreadID(ctx, threadKey)
 	require.NoError(t, err)
 
-	staleHeartbeat := time.Now().UTC().Add(-(runtimeProcessingLeaseGrace + time.Minute))
-	staleWarmUntil := time.Now().UTC().Add(-(runtimeWarmExpiryReapGrace + time.Minute))
+	// Long-idle active runtime: warm window long passed, no heartbeat in
+	// ages. Idle runtimes keep their VM — only the stale processing lease
+	// on the event gets requeued.
+	idleSince := time.Now().UTC().Add(-30 * time.Minute)
 	err = assistantsrepo.New(conn).CreateAssistantRuntime(ctx, assistantsrepo.CreateAssistantRuntimeParams{
 		ID:                  uuid.New(),
 		AssistantThreadID:   threadID,
@@ -558,9 +560,9 @@ func TestServiceCoreReapStuckRuntimesReclaimsStaleProcessingLease(t *testing.T) 
 		Backend:             runtimeBackendFlyIO,
 		BackendMetadataJson: []byte(`{}`),
 		State:               runtimeStateActive,
-		WarmUntil:           pgtype.Timestamptz{Time: staleWarmUntil, Valid: true},
-		LastHeartbeatAt:     pgtype.Timestamptz{Time: staleHeartbeat, Valid: true},
-		UpdatedAt:           pgtype.Timestamptz{Time: staleHeartbeat, Valid: true},
+		WarmUntil:           pgtype.Timestamptz{Time: idleSince, Valid: true},
+		LastHeartbeatAt:     pgtype.Timestamptz{Time: idleSince, Valid: true},
+		UpdatedAt:           pgtype.Timestamptz{Time: idleSince, Valid: true},
 		EndedAt:             pgtype.Timestamptz{},
 		DeletedAt:           pgtype.Timestamptz{},
 	})
@@ -578,13 +580,13 @@ func TestServiceCoreReapStuckRuntimesReclaimsStaleProcessingLease(t *testing.T) 
 
 	result, err := core.ReapStuckRuntimes(ctx)
 	require.NoError(t, err)
-	require.EqualValues(t, 1, result.StaleRuntimesStopped)
+	require.EqualValues(t, 0, result.StaleRuntimesStopped, "idle active runtimes must never be reaped")
 	require.EqualValues(t, 1, result.StaleEventsRequeued)
 
 	runtime, err := assistantsrepo.New(conn).GetLatestAssistantRuntimeByThreadID(ctx, runtimeKey)
 	require.NoError(t, err)
-	require.True(t, runtime.DeletedAt.Valid)
-	require.Equal(t, runtimeStateStopped, runtime.State)
+	require.False(t, runtime.DeletedAt.Valid)
+	require.Equal(t, runtimeStateActive, runtime.State)
 
 	event, err = assistantsrepo.New(conn).GetLatestAssistantThreadEventByThreadID(ctx, threadKey)
 	require.NoError(t, err)
@@ -1272,18 +1274,38 @@ func TestServiceCoreReapInactiveAssistantRuntimesReapsSiblingsAcrossSweeps(t *te
 	require.EqualValues(t, 2, reapCalls.Load())
 }
 
-func TestServiceCoreReapInactiveAssistantRuntimesReapsStaleRowsRegardlessOfState(t *testing.T) {
+func TestServiceCoreReapInactiveAssistantRuntimesSkipsLiveRowsCollectsFinalized(t *testing.T) {
 	t.Parallel()
 
 	conn, err := assistantsInfra.CloneTestDatabase(t, "reap_inactive_state_agnostic")
 	require.NoError(t, err)
 
 	stale := time.Now().UTC().Add(-30 * 24 * time.Hour)
-	projectID, assistantID, threadID := insertReapableProject(t, conn, "active-state")
-	insertReapableRuntimeRow(t, conn, projectID, assistantID, threadID, runtimeStateActive, "gram-asst-active", stale)
 
-	startingProject, startingAssistantID, startingThreadID := insertReapableProject(t, conn, "starting-state")
-	insertReapableRuntimeRow(t, conn, startingProject, startingAssistantID, startingThreadID, runtimeStateStarting, "gram-asst-starting", stale)
+	// Live row: no matter how long idle, the VM stays until the assistant
+	// is deleted.
+	liveProject, liveAssistantID, liveThreadID := insertReapableProject(t, conn, "live-idle")
+	liveRuntimeID := insertReapableRuntimeRow(t, conn, liveProject, liveAssistantID, liveThreadID, runtimeStateActive, "gram-asst-live", stale)
+
+	// Finalized row that kept a live-looking state (a turn racing the
+	// teardown can re-stamp `active` post-delete): still collected.
+	tombProject, tombAssistantID, tombThreadID := insertReapableProject(t, conn, "tombstone")
+	tombRuntimeID := insertReapableRuntimeRow(t, conn, tombProject, tombAssistantID, tombThreadID, runtimeStateActive, "gram-asst-tomb", stale)
+	err = assistantsrepo.New(conn).StopAssistantRuntime(t.Context(), assistantsrepo.StopAssistantRuntimeParams{
+		State:         runtimeStateActive,
+		ProjectID:     tombProject,
+		RuntimeID:     tombRuntimeID,
+		StartingState: runtimeStateStarting,
+		ActiveState:   runtimeStateActive,
+		ExpiringState: runtimeStateExpiring,
+	})
+	require.NoError(t, err)
+	err = assistantsrepo.New(conn).BackdateAssistantRuntimeUpdatedAt(t.Context(), assistantsrepo.BackdateAssistantRuntimeUpdatedAtParams{
+		UpdatedAt:         pgtype.Timestamptz{Time: stale, Valid: true},
+		AssistantThreadID: tombThreadID,
+		State:             runtimeStateActive,
+	})
+	require.NoError(t, err)
 
 	reapCalls := &atomic.Int64{}
 	backend := testRuntimeBackend{backend: runtimeBackendFlyIO, reapCalls: reapCalls}
@@ -1296,9 +1318,18 @@ func TestServiceCoreReapInactiveAssistantRuntimesReapsStaleRowsRegardlessOfState
 		OnRowProcessed:      func() { rowProcessed.Add(1) },
 	})
 	require.NoError(t, err)
-	require.Equal(t, 2, result.Reaped)
-	require.EqualValues(t, 2, reapCalls.Load())
-	require.EqualValues(t, 2, rowProcessed.Load(), "OnRowProcessed must fire once per row so the activity can heartbeat")
+	require.Equal(t, 1, result.Reaped)
+	require.EqualValues(t, 1, reapCalls.Load())
+	require.EqualValues(t, 1, rowProcessed.Load(), "OnRowProcessed must fire once per row so the activity can heartbeat")
+
+	liveRuntime, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{ID: liveRuntimeID, ProjectID: liveProject})
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateActive, liveRuntime.State, "live idle runtime must not be collected")
+	require.False(t, liveRuntime.DeletedAt.Valid)
+
+	tombRuntime, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{ID: tombRuntimeID, ProjectID: tombProject})
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateReaped, tombRuntime.State)
 }
 
 type testRuntimeBackend struct {

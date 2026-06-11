@@ -1307,6 +1307,7 @@ const listInactiveAssistantRuntimesForReap = `-- name: ListInactiveAssistantRunt
 SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
 WHERE r.backend_metadata_json <> '{}'::jsonb
+  AND (r.deleted IS TRUE OR r.ended IS TRUE)
   AND NOT EXISTS (
     SELECT 1
     FROM assistant_runtimes r2
@@ -1334,10 +1335,12 @@ type ListInactiveAssistantRuntimesForReapRow struct {
 	WarmUntil           pgtype.Timestamptz
 }
 
-// Returns runtime rows that still carry backend metadata whose owning
-// assistant has had no runtime activity since @inactive_before. Liveness is
-// judged solely by the EXISTS-on-updated_at join across the assistant's
-// runtime rows; row state is intentionally ignored.
+// Returns finalized (soft-deleted or ended) runtime rows that still carry
+// backend metadata whose owning assistant has had no runtime activity since
+// @inactive_before — orphaned backend apps whose Stop/Reap never completed.
+// Live rows are never candidates: an idle runtime keeps its VM until the
+// assistant is deleted. The state value itself is intentionally ignored
+// (a tombstone can carry any state, e.g. one stamped by a racing turn).
 func (q *Queries) ListInactiveAssistantRuntimesForReap(ctx context.Context, arg ListInactiveAssistantRuntimesForReapParams) ([]ListInactiveAssistantRuntimesForReapRow, error) {
 	rows, err := q.db.Query(ctx, listInactiveAssistantRuntimesForReap, arg.InactiveBefore, arg.LimitCount)
 	if err != nil {
@@ -1885,47 +1888,35 @@ SET
 WHERE deleted IS FALSE
   AND (
     (state = $2 AND updated_at < $3)
-    OR (
-      state = $4
-      AND warm_until IS NOT NULL
-      AND warm_until < $5
-      AND COALESCE(last_heartbeat_at, updated_at) < $6
-    )
-    -- Backstop for activities that exhaust Temporal's retry budget after CAS
-    -- active->expiring without reaching Stop. Without this the partial unique
-    -- indexes (v1 on assistant_thread_id, v2 on assistant_id) block new
-    -- admits indefinitely.
-    OR (state = $7 AND updated_at < $8)
+    OR (state = $4 AND updated_at < $5)
   )
 RETURNING assistant_id
 `
 
 type ReapStuckAssistantRuntimesParams struct {
-	StoppedState    string
-	StartingState   string
-	StartingCutoff  pgtype.Timestamptz
-	ActiveState     string
-	WarmCutoff      pgtype.Timestamptz
-	HeartbeatCutoff pgtype.Timestamptz
-	ExpiringState   string
-	ExpiringCutoff  pgtype.Timestamptz
+	StoppedState   string
+	StartingState  string
+	StartingCutoff pgtype.Timestamptz
+	ExpiringState  string
+	ExpiringCutoff pgtype.Timestamptz
 }
 
-// Short-horizon reaper for rows the happy-path can no longer move. Applies
-// to both v1 (per-thread VM) and v2 (single VM per assistant) rows: the
-// starting/active/expiring liveness markers it keys on are version-agnostic.
-// A v2 VM in active use updates warm_until and last_heartbeat_at via every
-// thread workflow, so an in-flight VM is never matched by the active branch;
-// only assistants whose entire thread set has gone idle past the cutoffs are
-// collected.
+// Short-horizon reaper for rows the happy-path can no longer move — crash
+// recovery only. Idle runtimes are deliberately not collected: a VM with no
+// traffic stays up until its assistant is deleted. Both branches cover rows
+// stranded by a dead process, and the next admit recreates the runtime:
+//   - 'starting' rows that never transitioned to active within the startup
+//     grace window (server crashed mid-boot).
+//   - 'expiring' rows older than the ExpireThreadRuntime activity's full
+//     retry budget (legacy expire workflows that gave up after CAS
+//     active->expiring without reaching Stop). Without this the partial
+//     unique indexes (v1 on assistant_thread_id, v2 on assistant_id) block
+//     new admits indefinitely.
 func (q *Queries) ReapStuckAssistantRuntimes(ctx context.Context, arg ReapStuckAssistantRuntimesParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, reapStuckAssistantRuntimes,
 		arg.StoppedState,
 		arg.StartingState,
 		arg.StartingCutoff,
-		arg.ActiveState,
-		arg.WarmCutoff,
-		arg.HeartbeatCutoff,
 		arg.ExpiringState,
 		arg.ExpiringCutoff,
 	)
