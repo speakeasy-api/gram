@@ -383,7 +383,7 @@ export function DistributeServersStep({
                       }
                     }}
                     className={cn(
-                      "flex items-start gap-3 rounded-lg border p-4 text-left transition-all",
+                      "flex min-h-[118px] items-start gap-3 rounded-lg border p-4 text-left transition-all",
                       isSelected && !isDistributed
                         ? "border-foreground bg-secondary"
                         : "border-border bg-card hover:border-foreground/30",
