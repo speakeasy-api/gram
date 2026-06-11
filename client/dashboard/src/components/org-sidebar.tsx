@@ -23,6 +23,7 @@ import { Link } from "react-router";
 import { GramLogo } from "./gram-logo";
 import { CommandPaletteTrigger } from "./command-palette/CommandPaletteTrigger";
 import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
+import { OnboardingResumeButton } from "./onboarding-resume-button";
 import { SidebarUserMenu } from "./sidebar-user-menu";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 
@@ -213,6 +214,7 @@ export function OrgSidebar({
         )}
       </SidebarContent>
       <SidebarFooter className="border-t">
+        <OnboardingResumeButton />
         <SidebarUserMenu />
       </SidebarFooter>
     </Sidebar>
