@@ -142,12 +142,9 @@ WHERE risk_policy_id = @risk_policy_id
   AND project_id = @project_id;
 
 -- name: DeleteRiskExclusionsByPolicy :exec
-UPDATE risk_exclusions
-SET deleted_at = clock_timestamp()
-  , updated_at = clock_timestamp()
+DELETE FROM risk_exclusions
 WHERE risk_policy_id = @risk_policy_id
-  AND project_id = @project_id
-  AND deleted IS FALSE;
+  AND project_id = @project_id;
 
 -- name: CountRiskResultsByPolicyID :one
 SELECT COUNT(*)::BIGINT

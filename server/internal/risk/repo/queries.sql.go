@@ -692,12 +692,9 @@ func (q *Queries) DeleteRiskExclusion(ctx context.Context, arg DeleteRiskExclusi
 }
 
 const deleteRiskExclusionsByPolicy = `-- name: DeleteRiskExclusionsByPolicy :exec
-UPDATE risk_exclusions
-SET deleted_at = clock_timestamp()
-  , updated_at = clock_timestamp()
+DELETE FROM risk_exclusions
 WHERE risk_policy_id = $1
   AND project_id = $2
-  AND deleted IS FALSE
 `
 
 type DeleteRiskExclusionsByPolicyParams struct {
