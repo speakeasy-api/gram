@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -49,7 +50,7 @@ func (p *workosDirectoryGroupMembershipEventPayload) UnmarshalJSON(data []byte) 
 	type alias workosDirectoryGroupMembershipEventPayload
 	var decoded alias
 	if err := json.Unmarshal(data, &decoded); err != nil {
-		return err
+		return fmt.Errorf("decode directory group membership JSON: %w", err)
 	}
 
 	*p = workosDirectoryGroupMembershipEventPayload(decoded)
@@ -216,7 +217,7 @@ func openDirectoryGroupMembership(ctx context.Context, logger *slog.Logger, dbtx
 	userID, err := workosrepo.New(dbtx).GetDirectoryUserIDByWorkOSID(ctx, payload.User.ID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		logger.WarnContext(ctx, "skipping directory group membership for unknown user",
-			attr.SlogWorkOSUserID(payload.User.ID),
+			attr.SlogWorkOSDirectoryUserID(payload.User.ID),
 		)
 		return nil
 	}
