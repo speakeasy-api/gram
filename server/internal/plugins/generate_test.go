@@ -1186,6 +1186,35 @@ func TestGenerateCodexObservabilityPluginScriptShipsMCPInventoryOnSessionStart(t
 	require.Contains(t, script, `redact_args(transport.get("args"))`, "stdio launch args must pass through credential redaction before upload")
 }
 
+// The hook scripts embed python inside bash single-quoted heredocs, where a
+// stray apostrophe in a comment is enough to break the whole script.
+// Substring assertions cannot catch that — run bash -n over every generated
+// shell script.
+func TestGeneratedHookScriptsAreValidBash(t *testing.T) {
+	t.Parallel()
+	bashPath, err := exec.LookPath("bash")
+	require.NoError(t, err, "bash is required to syntax-check generated hook scripts")
+
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	for _, platform := range []string{"claude", "cursor", "codex"} {
+		files, err := GenerateObservabilityPluginPackage(cfg, platform)
+		require.NoError(t, err)
+		for name, content := range files {
+			if !strings.HasSuffix(name, ".sh") {
+				continue
+			}
+			path := filepath.Join(t.TempDir(), filepath.Base(name))
+			require.NoError(t, os.WriteFile(path, content, 0o755))
+			out, err := exec.Command(bashPath, "-n", path).CombinedOutput()
+			require.NoError(t, err, "%s %s failed bash -n: %s", platform, name, out)
+		}
+	}
+}
+
 // An upgraded install already carries [hooks.state] entries whose trusted_hash
 // was computed against the previous hook command. When the command changes
 // (e.g. SessionStart moving from hook.sh to hook_async.sh) the installer must
