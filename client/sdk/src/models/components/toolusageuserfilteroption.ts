@@ -12,7 +12,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * Tool usage user identity kind
  */
-export const ToolUsageUserTimeSeriesPointUserKind = {
+export const UserKind = {
   Email: "email",
   ExternalUserId: "external_user_id",
   UserId: "user_id",
@@ -21,48 +21,40 @@ export const ToolUsageUserTimeSeriesPointUserKind = {
 /**
  * Tool usage user identity kind
  */
-export type ToolUsageUserTimeSeriesPointUserKind = ClosedEnum<
-  typeof ToolUsageUserTimeSeriesPointUserKind
->;
+export type UserKind = ClosedEnum<typeof UserKind>;
 
 /**
- * A time-series bucket for one tool usage user identity
+ * Tool usage user filter option with usage in the selected time window
  */
-export type ToolUsageUserTimeSeriesPoint = {
-  bucketStartNs: string;
+export type ToolUsageUserFilterOption = {
   eventCount: number;
-  failureCount: number;
   userKey: string;
   /**
    * Tool usage user identity kind
    */
-  userKind: ToolUsageUserTimeSeriesPointUserKind;
+  userKind: UserKind;
   userLabel: string;
 };
 
 /** @internal */
-export const ToolUsageUserTimeSeriesPointUserKind$inboundSchema: z.ZodMiniEnum<
-  typeof ToolUsageUserTimeSeriesPointUserKind
-> = z.enum(ToolUsageUserTimeSeriesPointUserKind);
+export const UserKind$inboundSchema: z.ZodMiniEnum<typeof UserKind> = z.enum(
+  UserKind,
+);
 
 /** @internal */
-export const ToolUsageUserTimeSeriesPoint$inboundSchema: z.ZodMiniType<
-  ToolUsageUserTimeSeriesPoint,
+export const ToolUsageUserFilterOption$inboundSchema: z.ZodMiniType<
+  ToolUsageUserFilterOption,
   unknown
 > = z.pipe(
   z.object({
-    bucket_start_ns: z.string(),
     event_count: z.int(),
-    failure_count: z.int(),
     user_key: z.string(),
-    user_kind: ToolUsageUserTimeSeriesPointUserKind$inboundSchema,
+    user_kind: UserKind$inboundSchema,
     user_label: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
-      "bucket_start_ns": "bucketStartNs",
       "event_count": "eventCount",
-      "failure_count": "failureCount",
       "user_key": "userKey",
       "user_kind": "userKind",
       "user_label": "userLabel",
@@ -70,12 +62,12 @@ export const ToolUsageUserTimeSeriesPoint$inboundSchema: z.ZodMiniType<
   }),
 );
 
-export function toolUsageUserTimeSeriesPointFromJSON(
+export function toolUsageUserFilterOptionFromJSON(
   jsonString: string,
-): SafeParseResult<ToolUsageUserTimeSeriesPoint, SDKValidationError> {
+): SafeParseResult<ToolUsageUserFilterOption, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => ToolUsageUserTimeSeriesPoint$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'ToolUsageUserTimeSeriesPoint' from JSON`,
+    (x) => ToolUsageUserFilterOption$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ToolUsageUserFilterOption' from JSON`,
   );
 }

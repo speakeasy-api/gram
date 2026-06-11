@@ -143,6 +143,7 @@ export * from "./gettemplate.js";
 export * from "./gettokensundermanagement.js";
 export * from "./gettoolset.js";
 export * from "./gettoolsetenvironment.js";
+export * from "./gettoolusagefilteroptions.js";
 export * from "./gettoolusagesummary.js";
 export * from "./gettriggerinstance.js";
 export * from "./getusermetricssummary.js";

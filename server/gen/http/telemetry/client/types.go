@@ -213,6 +213,17 @@ type GetToolUsageSummaryRequestBody struct {
 	UserFilters []*ToolUsageUserFilterRequestBody `form:"user_filters,omitempty" json:"user_filters,omitempty" xml:"user_filters,omitempty"`
 }
 
+// GetToolUsageFilterOptionsRequestBody is the type of the "telemetry" service
+// "getToolUsageFilterOptions" endpoint HTTP request body.
+type GetToolUsageFilterOptionsRequestBody struct {
+	// Start time in ISO 8601 format
+	From string `form:"from" json:"from" xml:"from"`
+	// End time in ISO 8601 format
+	To string `form:"to" json:"to" xml:"to"`
+	// Filter option types to include. Empty means all option types.
+	OptionTypes []string `form:"option_types,omitempty" json:"option_types,omitempty" xml:"option_types,omitempty"`
+}
+
 // ListHooksTracesRequestBody is the type of the "telemetry" service
 // "listHooksTraces" endpoint HTTP request body.
 type ListHooksTracesRequestBody struct {
@@ -376,6 +387,13 @@ type GetToolUsageSummaryResponseBody struct {
 	UserTimeSeries      []*ToolUsageUserTimeSeriesPointResponseBody    `form:"user_time_series,omitempty" json:"user_time_series,omitempty" xml:"user_time_series,omitempty"`
 	UsersByTarget       []*ToolUsageUsersByTargetRowResponseBody       `form:"users_by_target,omitempty" json:"users_by_target,omitempty" xml:"users_by_target,omitempty"`
 	TargetToolBreakdown []*ToolUsageTargetToolBreakdownRowResponseBody `form:"target_tool_breakdown,omitempty" json:"target_tool_breakdown,omitempty" xml:"target_tool_breakdown,omitempty"`
+}
+
+// GetToolUsageFilterOptionsResponseBody is the type of the "telemetry" service
+// "getToolUsageFilterOptions" endpoint HTTP response body.
+type GetToolUsageFilterOptionsResponseBody struct {
+	ShadowServers []*ToolUsageShadowServerFilterOptionResponseBody `form:"shadow_servers,omitempty" json:"shadow_servers,omitempty" xml:"shadow_servers,omitempty"`
+	Users         []*ToolUsageUserFilterOptionResponseBody         `form:"users,omitempty" json:"users,omitempty" xml:"users,omitempty"`
 }
 
 // ListHooksTracesResponseBody is the type of the "telemetry" service
@@ -2996,6 +3014,196 @@ type GetToolUsageSummaryGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetToolUsageFilterOptionsUnauthorizedResponseBody is the type of the
+// "telemetry" service "getToolUsageFilterOptions" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetToolUsageFilterOptionsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetToolUsageFilterOptionsForbiddenResponseBody is the type of the
+// "telemetry" service "getToolUsageFilterOptions" endpoint HTTP response body
+// for the "forbidden" error.
+type GetToolUsageFilterOptionsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetToolUsageFilterOptionsBadRequestResponseBody is the type of the
+// "telemetry" service "getToolUsageFilterOptions" endpoint HTTP response body
+// for the "bad_request" error.
+type GetToolUsageFilterOptionsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetToolUsageFilterOptionsNotFoundResponseBody is the type of the "telemetry"
+// service "getToolUsageFilterOptions" endpoint HTTP response body for the
+// "not_found" error.
+type GetToolUsageFilterOptionsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetToolUsageFilterOptionsConflictResponseBody is the type of the "telemetry"
+// service "getToolUsageFilterOptions" endpoint HTTP response body for the
+// "conflict" error.
+type GetToolUsageFilterOptionsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetToolUsageFilterOptionsUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "getToolUsageFilterOptions" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetToolUsageFilterOptionsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetToolUsageFilterOptionsInvalidResponseBody is the type of the "telemetry"
+// service "getToolUsageFilterOptions" endpoint HTTP response body for the
+// "invalid" error.
+type GetToolUsageFilterOptionsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetToolUsageFilterOptionsInvariantViolationResponseBody is the type of the
+// "telemetry" service "getToolUsageFilterOptions" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetToolUsageFilterOptionsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetToolUsageFilterOptionsUnexpectedResponseBody is the type of the
+// "telemetry" service "getToolUsageFilterOptions" endpoint HTTP response body
+// for the "unexpected" error.
+type GetToolUsageFilterOptionsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetToolUsageFilterOptionsGatewayErrorResponseBody is the type of the
+// "telemetry" service "getToolUsageFilterOptions" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetToolUsageFilterOptionsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListHooksTracesUnauthorizedResponseBody is the type of the "telemetry"
 // service "listHooksTraces" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -3883,6 +4091,22 @@ type ToolUsageTargetToolBreakdownRowResponseBody struct {
 	FailureRate  *float64 `form:"failure_rate,omitempty" json:"failure_rate,omitempty" xml:"failure_rate,omitempty"`
 }
 
+// ToolUsageShadowServerFilterOptionResponseBody is used to define fields on
+// response body types.
+type ToolUsageShadowServerFilterOptionResponseBody struct {
+	ServerName *string `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
+	EventCount *int64  `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
+}
+
+// ToolUsageUserFilterOptionResponseBody is used to define fields on response
+// body types.
+type ToolUsageUserFilterOptionResponseBody struct {
+	UserKey    *string `form:"user_key,omitempty" json:"user_key,omitempty" xml:"user_key,omitempty"`
+	UserLabel  *string `form:"user_label,omitempty" json:"user_label,omitempty" xml:"user_label,omitempty"`
+	UserKind   *string `form:"user_kind,omitempty" json:"user_kind,omitempty" xml:"user_kind,omitempty"`
+	EventCount *int64  `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
+}
+
 // HookTraceSummaryResponseBody is used to define fields on response body types.
 type HookTraceSummaryResponseBody struct {
 	// Trace ID (32 hex characters)
@@ -4207,6 +4431,23 @@ func NewGetToolUsageSummaryRequestBody(p *telemetry.GetToolUsageSummaryPayload) 
 				continue
 			}
 			body.UserFilters[i] = marshalTelemetryToolUsageUserFilterToToolUsageUserFilterRequestBody(val)
+		}
+	}
+	return body
+}
+
+// NewGetToolUsageFilterOptionsRequestBody builds the HTTP request body from
+// the payload of the "getToolUsageFilterOptions" endpoint of the "telemetry"
+// service.
+func NewGetToolUsageFilterOptionsRequestBody(p *telemetry.GetToolUsageFilterOptionsPayload) *GetToolUsageFilterOptionsRequestBody {
+	body := &GetToolUsageFilterOptionsRequestBody{
+		From: p.From,
+		To:   p.To,
+	}
+	if p.OptionTypes != nil {
+		body.OptionTypes = make([]string, len(p.OptionTypes))
+		for i, val := range p.OptionTypes {
+			body.OptionTypes[i] = string(val)
 		}
 	}
 	return body
@@ -6687,6 +6928,180 @@ func NewGetToolUsageSummaryGatewayError(body *GetToolUsageSummaryGatewayErrorRes
 	return v
 }
 
+// NewGetToolUsageFilterOptionsResultOK builds a "telemetry" service
+// "getToolUsageFilterOptions" endpoint result from a HTTP "OK" response.
+func NewGetToolUsageFilterOptionsResultOK(body *GetToolUsageFilterOptionsResponseBody) *telemetry.GetToolUsageFilterOptionsResult {
+	v := &telemetry.GetToolUsageFilterOptionsResult{}
+	v.ShadowServers = make([]*telemetry.ToolUsageShadowServerFilterOption, len(body.ShadowServers))
+	for i, val := range body.ShadowServers {
+		if val == nil {
+			v.ShadowServers[i] = nil
+			continue
+		}
+		v.ShadowServers[i] = unmarshalToolUsageShadowServerFilterOptionResponseBodyToTelemetryToolUsageShadowServerFilterOption(val)
+	}
+	v.Users = make([]*telemetry.ToolUsageUserFilterOption, len(body.Users))
+	for i, val := range body.Users {
+		if val == nil {
+			v.Users[i] = nil
+			continue
+		}
+		v.Users[i] = unmarshalToolUsageUserFilterOptionResponseBodyToTelemetryToolUsageUserFilterOption(val)
+	}
+
+	return v
+}
+
+// NewGetToolUsageFilterOptionsUnauthorized builds a telemetry service
+// getToolUsageFilterOptions endpoint unauthorized error.
+func NewGetToolUsageFilterOptionsUnauthorized(body *GetToolUsageFilterOptionsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetToolUsageFilterOptionsForbidden builds a telemetry service
+// getToolUsageFilterOptions endpoint forbidden error.
+func NewGetToolUsageFilterOptionsForbidden(body *GetToolUsageFilterOptionsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetToolUsageFilterOptionsBadRequest builds a telemetry service
+// getToolUsageFilterOptions endpoint bad_request error.
+func NewGetToolUsageFilterOptionsBadRequest(body *GetToolUsageFilterOptionsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetToolUsageFilterOptionsNotFound builds a telemetry service
+// getToolUsageFilterOptions endpoint not_found error.
+func NewGetToolUsageFilterOptionsNotFound(body *GetToolUsageFilterOptionsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetToolUsageFilterOptionsConflict builds a telemetry service
+// getToolUsageFilterOptions endpoint conflict error.
+func NewGetToolUsageFilterOptionsConflict(body *GetToolUsageFilterOptionsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetToolUsageFilterOptionsUnsupportedMedia builds a telemetry service
+// getToolUsageFilterOptions endpoint unsupported_media error.
+func NewGetToolUsageFilterOptionsUnsupportedMedia(body *GetToolUsageFilterOptionsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetToolUsageFilterOptionsInvalid builds a telemetry service
+// getToolUsageFilterOptions endpoint invalid error.
+func NewGetToolUsageFilterOptionsInvalid(body *GetToolUsageFilterOptionsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetToolUsageFilterOptionsInvariantViolation builds a telemetry service
+// getToolUsageFilterOptions endpoint invariant_violation error.
+func NewGetToolUsageFilterOptionsInvariantViolation(body *GetToolUsageFilterOptionsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetToolUsageFilterOptionsUnexpected builds a telemetry service
+// getToolUsageFilterOptions endpoint unexpected error.
+func NewGetToolUsageFilterOptionsUnexpected(body *GetToolUsageFilterOptionsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetToolUsageFilterOptionsGatewayError builds a telemetry service
+// getToolUsageFilterOptions endpoint gateway_error error.
+func NewGetToolUsageFilterOptionsGatewayError(body *GetToolUsageFilterOptionsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListHooksTracesResultOK builds a "telemetry" service "listHooksTraces"
 // endpoint result from a HTTP "OK" response.
 func NewListHooksTracesResultOK(body *ListHooksTracesResponseBody) *telemetry.ListHooksTracesResult {
@@ -7248,6 +7663,32 @@ func ValidateGetToolUsageSummaryResponseBody(body *GetToolUsageSummaryResponseBo
 	for _, e := range body.TargetToolBreakdown {
 		if e != nil {
 			if err2 := ValidateToolUsageTargetToolBreakdownRowResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateGetToolUsageFilterOptionsResponseBody runs the validations defined
+// on GetToolUsageFilterOptionsResponseBody
+func ValidateGetToolUsageFilterOptionsResponseBody(body *GetToolUsageFilterOptionsResponseBody) (err error) {
+	if body.ShadowServers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("shadow_servers", "body"))
+	}
+	if body.Users == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("users", "body"))
+	}
+	for _, e := range body.ShadowServers {
+		if e != nil {
+			if err2 := ValidateToolUsageShadowServerFilterOptionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Users {
+		if e != nil {
+			if err2 := ValidateToolUsageUserFilterOptionResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -10638,6 +11079,248 @@ func ValidateGetToolUsageSummaryGatewayErrorResponseBody(body *GetToolUsageSumma
 	return
 }
 
+// ValidateGetToolUsageFilterOptionsUnauthorizedResponseBody runs the
+// validations defined on getToolUsageFilterOptions_unauthorized_response_body
+func ValidateGetToolUsageFilterOptionsUnauthorizedResponseBody(body *GetToolUsageFilterOptionsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetToolUsageFilterOptionsForbiddenResponseBody runs the validations
+// defined on getToolUsageFilterOptions_forbidden_response_body
+func ValidateGetToolUsageFilterOptionsForbiddenResponseBody(body *GetToolUsageFilterOptionsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetToolUsageFilterOptionsBadRequestResponseBody runs the validations
+// defined on getToolUsageFilterOptions_bad_request_response_body
+func ValidateGetToolUsageFilterOptionsBadRequestResponseBody(body *GetToolUsageFilterOptionsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetToolUsageFilterOptionsNotFoundResponseBody runs the validations
+// defined on getToolUsageFilterOptions_not_found_response_body
+func ValidateGetToolUsageFilterOptionsNotFoundResponseBody(body *GetToolUsageFilterOptionsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetToolUsageFilterOptionsConflictResponseBody runs the validations
+// defined on getToolUsageFilterOptions_conflict_response_body
+func ValidateGetToolUsageFilterOptionsConflictResponseBody(body *GetToolUsageFilterOptionsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetToolUsageFilterOptionsUnsupportedMediaResponseBody runs the
+// validations defined on
+// getToolUsageFilterOptions_unsupported_media_response_body
+func ValidateGetToolUsageFilterOptionsUnsupportedMediaResponseBody(body *GetToolUsageFilterOptionsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetToolUsageFilterOptionsInvalidResponseBody runs the validations
+// defined on getToolUsageFilterOptions_invalid_response_body
+func ValidateGetToolUsageFilterOptionsInvalidResponseBody(body *GetToolUsageFilterOptionsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetToolUsageFilterOptionsInvariantViolationResponseBody runs the
+// validations defined on
+// getToolUsageFilterOptions_invariant_violation_response_body
+func ValidateGetToolUsageFilterOptionsInvariantViolationResponseBody(body *GetToolUsageFilterOptionsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetToolUsageFilterOptionsUnexpectedResponseBody runs the validations
+// defined on getToolUsageFilterOptions_unexpected_response_body
+func ValidateGetToolUsageFilterOptionsUnexpectedResponseBody(body *GetToolUsageFilterOptionsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetToolUsageFilterOptionsGatewayErrorResponseBody runs the
+// validations defined on getToolUsageFilterOptions_gateway_error_response_body
+func ValidateGetToolUsageFilterOptionsGatewayErrorResponseBody(body *GetToolUsageFilterOptionsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListHooksTracesUnauthorizedResponseBody runs the validations defined
 // on listHooksTraces_unauthorized_response_body
 func ValidateListHooksTracesUnauthorizedResponseBody(body *ListHooksTracesUnauthorizedResponseBody) (err error) {
@@ -12026,6 +12709,41 @@ func ValidateToolUsageTargetToolBreakdownRowResponseBody(body *ToolUsageTargetTo
 	if body.TargetKind != nil {
 		if !(*body.TargetKind == "server" || *body.TargetKind == "local_tools" || *body.TargetKind == "skill") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_kind", *body.TargetKind, []any{"server", "local_tools", "skill"}))
+		}
+	}
+	return
+}
+
+// ValidateToolUsageShadowServerFilterOptionResponseBody runs the validations
+// defined on ToolUsageShadowServerFilterOptionResponseBody
+func ValidateToolUsageShadowServerFilterOptionResponseBody(body *ToolUsageShadowServerFilterOptionResponseBody) (err error) {
+	if body.ServerName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("server_name", "body"))
+	}
+	if body.EventCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("event_count", "body"))
+	}
+	return
+}
+
+// ValidateToolUsageUserFilterOptionResponseBody runs the validations defined
+// on ToolUsageUserFilterOptionResponseBody
+func ValidateToolUsageUserFilterOptionResponseBody(body *ToolUsageUserFilterOptionResponseBody) (err error) {
+	if body.UserKey == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_key", "body"))
+	}
+	if body.UserLabel == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_label", "body"))
+	}
+	if body.UserKind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_kind", "body"))
+	}
+	if body.EventCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("event_count", "body"))
+	}
+	if body.UserKind != nil {
+		if !(*body.UserKind == "email" || *body.UserKind == "external_user_id" || *body.UserKind == "user_id" || *body.UserKind == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.user_kind", *body.UserKind, []any{"email", "external_user_id", "user_id", "unknown"}))
 		}
 	}
 	return

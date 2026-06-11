@@ -851,6 +851,62 @@ func BuildGetToolUsageSummaryPayload(telemetryGetToolUsageSummaryBody string, te
 	return v, nil
 }
 
+// BuildGetToolUsageFilterOptionsPayload builds the payload for the telemetry
+// getToolUsageFilterOptions endpoint from CLI flags.
+func BuildGetToolUsageFilterOptionsPayload(telemetryGetToolUsageFilterOptionsBody string, telemetryGetToolUsageFilterOptionsApikeyToken string, telemetryGetToolUsageFilterOptionsSessionToken string, telemetryGetToolUsageFilterOptionsProjectSlugInput string) (*telemetry.GetToolUsageFilterOptionsPayload, error) {
+	var err error
+	var body GetToolUsageFilterOptionsRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryGetToolUsageFilterOptionsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"option_types\": [\n         \"users\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		for _, e := range body.OptionTypes {
+			if !(e == "shadow_servers" || e == "users") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.option_types[*]", e, []any{"shadow_servers", "users"}))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryGetToolUsageFilterOptionsApikeyToken != "" {
+			apikeyToken = &telemetryGetToolUsageFilterOptionsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryGetToolUsageFilterOptionsSessionToken != "" {
+			sessionToken = &telemetryGetToolUsageFilterOptionsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryGetToolUsageFilterOptionsProjectSlugInput != "" {
+			projectSlugInput = &telemetryGetToolUsageFilterOptionsProjectSlugInput
+		}
+	}
+	v := &telemetry.GetToolUsageFilterOptionsPayload{
+		From: body.From,
+		To:   body.To,
+	}
+	if body.OptionTypes != nil {
+		v.OptionTypes = make([]telemetry.ToolUsageFilterOptionType, len(body.OptionTypes))
+		for i, val := range body.OptionTypes {
+			v.OptionTypes[i] = telemetry.ToolUsageFilterOptionType(val)
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildListHooksTracesPayload builds the payload for the telemetry
 // listHooksTraces endpoint from CLI flags.
 func BuildListHooksTracesPayload(telemetryListHooksTracesBody string, telemetryListHooksTracesApikeyToken string, telemetryListHooksTracesSessionToken string, telemetryListHooksTracesProjectSlugInput string) (*telemetry.ListHooksTracesPayload, error) {

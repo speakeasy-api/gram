@@ -8,6 +8,7 @@ import { telemetryGetHooksSummary } from "../funcs/telemetryGetHooksSummary.js";
 import { telemetryGetObservabilityOverview } from "../funcs/telemetryGetObservabilityOverview.js";
 import { telemetryGetProjectMetricsSummary } from "../funcs/telemetryGetProjectMetricsSummary.js";
 import { telemetryGetProjectOverview } from "../funcs/telemetryGetProjectOverview.js";
+import { telemetryGetToolUsageFilterOptions } from "../funcs/telemetryGetToolUsageFilterOptions.js";
 import { telemetryGetToolUsageSummary } from "../funcs/telemetryGetToolUsageSummary.js";
 import { telemetryGetUserMetricsSummary } from "../funcs/telemetryGetUserMetricsSummary.js";
 import { telemetryListAttributeKeys } from "../funcs/telemetryListAttributeKeys.js";
@@ -130,6 +131,25 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.GetProjectOverviewResult> {
     return unwrapAsync(telemetryGetProjectOverview(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getToolUsageFilterOptions telemetry
+   *
+   * @remarks
+   * Get filter options for target-aware MCP and tool usage metrics
+   */
+  async getToolUsageFilterOptions(
+    request: operations.GetToolUsageFilterOptionsRequest,
+    security?: operations.GetToolUsageFilterOptionsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.GetToolUsageFilterOptionsResult> {
+    return unwrapAsync(telemetryGetToolUsageFilterOptions(
       this,
       request,
       security,

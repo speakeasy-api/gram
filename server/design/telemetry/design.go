@@ -423,6 +423,35 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetToolUsageSummary", "type": "query"}`)
 	})
 
+	Method("getToolUsageFilterOptions", func() {
+		Description("Get filter options for target-aware MCP and tool usage metrics")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetToolUsageFilterOptionsPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetToolUsageFilterOptionsResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getToolUsageFilterOptions")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getToolUsageFilterOptions")
+		Meta("openapi:extension:x-speakeasy-name-override", "getToolUsageFilterOptions")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetToolUsageFilterOptions", "type": "query"}`)
+	})
+
 	Method("listHooksTraces", func() {
 		Description("List hook traces aggregated by trace_id with user information")
 		Security(security.ByKey, security.ProjectSlug, func() {
@@ -1470,6 +1499,11 @@ var ToolUsageUserFilter = Type("ToolUsageUserFilter", func() {
 	Required("kind", "key")
 })
 
+var ToolUsageFilterOptionType = Type("ToolUsageFilterOptionType", String, func() {
+	Description("Tool usage filter option type")
+	Enum("shadow_servers", "users")
+})
+
 var GetToolUsageSummaryPayload = Type("GetToolUsageSummaryPayload", func() {
 	Description("Payload for target-aware MCP and tool usage metrics")
 
@@ -1501,6 +1535,51 @@ var GetToolUsageSummaryResult = Type("GetToolUsageSummaryResult", func() {
 	Attribute("target_tool_breakdown", ArrayOf(ToolUsageTargetToolBreakdownRow))
 
 	Required("totals", "targets", "users", "target_time_series", "user_time_series", "users_by_target", "target_tool_breakdown")
+})
+
+var GetToolUsageFilterOptionsPayload = Type("GetToolUsageFilterOptionsPayload", func() {
+	Description("Payload for target-aware MCP and tool usage filter options")
+
+	Attribute("from", String, "Start time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T11:00:00Z")
+	})
+	Attribute("option_types", ArrayOf(ToolUsageFilterOptionType), "Filter option types to include. Empty means all option types.")
+
+	Required("from", "to")
+})
+
+var GetToolUsageFilterOptionsResult = Type("GetToolUsageFilterOptionsResult", func() {
+	Description("Filter options for target-aware MCP and tool usage metrics")
+
+	Attribute("shadow_servers", ArrayOf(ToolUsageShadowServerFilterOption))
+	Attribute("users", ArrayOf(ToolUsageUserFilterOption))
+
+	Required("shadow_servers", "users")
+})
+
+var ToolUsageShadowServerFilterOption = Type("ToolUsageShadowServerFilterOption", func() {
+	Description("Shadow MCP server filter option with usage in the selected time window")
+
+	Attribute("server_name", String)
+	Attribute("event_count", Int64)
+
+	Required("server_name", "event_count")
+})
+
+var ToolUsageUserFilterOption = Type("ToolUsageUserFilterOption", func() {
+	Description("Tool usage user filter option with usage in the selected time window")
+
+	Attribute("user_key", String)
+	Attribute("user_label", String)
+	Attribute("user_kind", ToolUsageUserKind)
+	Attribute("event_count", Int64)
+
+	Required("user_key", "user_label", "user_kind", "event_count")
 })
 
 var ToolUsageTotals = Type("ToolUsageTotals", func() {

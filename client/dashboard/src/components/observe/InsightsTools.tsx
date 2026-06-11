@@ -17,10 +17,12 @@ import { useServerNameMappings } from "@/hooks/useServerNameMappings";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import { getPresetRange, type DateRangePreset } from "@gram-ai/elements";
+import { telemetryGetToolUsageFilterOptions } from "@gram/client/funcs/telemetryGetToolUsageFilterOptions";
 import { telemetryGetToolUsageSummary } from "@gram/client/funcs/telemetryGetToolUsageSummary";
 import type {
   GetToolUsageSummaryResult,
-  ToolUsageTargetSummary,
+  ToolsetEntry,
+  ToolUsageShadowServerFilterOption,
   ToolUsageTargetTimeSeriesPoint,
   ToolUsageTargetToolBreakdownRow,
   ToolUsageUserSummary,
@@ -28,7 +30,7 @@ import type {
   ToolUsageUsersByTargetRow,
 } from "@gram/client/models/components";
 import type { TargetTypes } from "@gram/client/models/components/gettoolusagesummarypayload";
-import { useGramContext } from "@gram/client/react-query";
+import { useGramContext, useListToolsets } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Badge, Icon } from "@speakeasy-api/moonshine";
 import { ChartCard } from "@/components/chart/ChartCard";
@@ -176,13 +178,6 @@ function toTargetTypes(
   return mapped.length > 0 ? mapped : undefined;
 }
 
-function isServerTarget(target: ToolUsageTargetSummary): boolean {
-  return (
-    target.targetType === "hosted_mcp_server" ||
-    target.targetType === "shadow_mcp_server"
-  );
-}
-
 function displayTargetLabel(
   targetLabel: string,
   targetType: string,
@@ -196,35 +191,34 @@ function displayTargetLabel(
 }
 
 function buildServerOptionGroups({
-  summary,
+  hostedToolsets,
+  shadowServers,
   activeFilters,
   serverNameMappings,
 }: {
-  summary: GetToolUsageSummaryResult | undefined;
+  hostedToolsets: ToolsetEntry[];
+  shadowServers: ToolUsageShadowServerFilterOption[];
   activeFilters: FilterChip[];
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
 }): MultiSelectGroup[] {
   const hosted = new Map<string, { label: string; count: number }>();
   const shadow = new Map<string, { label: string; count: number }>();
 
-  for (const target of summary?.targets ?? []) {
-    if (!isServerTarget(target)) continue;
-    const label = displayTargetLabel(
-      target.targetLabel,
-      target.targetType,
-      serverNameMappings,
-    );
-    if (target.targetType === "hosted_mcp_server") {
-      hosted.set(encodeHostedServerFilter(target.targetId), {
-        label,
-        count: target.eventCount,
-      });
-    } else {
-      shadow.set(encodeShadowServerFilter(target.targetId), {
-        label,
-        count: target.eventCount,
-      });
-    }
+  for (const toolset of hostedToolsets) {
+    if (!toolset.mcpEnabled) continue;
+    hosted.set(encodeHostedServerFilter(toolset.slug), {
+      label: toolset.name || toolset.slug,
+      count: 0,
+    });
+  }
+
+  for (const server of shadowServers) {
+    shadow.set(encodeShadowServerFilter(server.serverName), {
+      label:
+        serverNameMappings.rawToDisplay.get(server.serverName) ??
+        server.serverName,
+      count: server.eventCount,
+    });
   }
 
   for (const value of selectedServerValues(activeFilters)) {
@@ -416,43 +410,53 @@ export function InsightsToolsContent(): JSX.Element {
     }),
   );
 
-  const { data: filterOptionsSummary, isPending: filterOptionsPending } =
-    useQuery({
-      queryKey: [
-        "tool-usage-filter-options",
-        from.toISOString(),
-        to.toISOString(),
-      ],
-      queryFn: () =>
-        unwrapAsync(
-          telemetryGetToolUsageSummary(client, {
-            getToolUsageSummaryPayload: {
-              from,
-              to,
-            },
-          }),
-        ),
-      throwOnError: false,
-    });
+  const { data: toolsetsData } = useListToolsets();
+  const { data: filterOptionsData } = useQuery({
+    queryKey: [
+      "tool-usage-filter-options",
+      from.toISOString(),
+      to.toISOString(),
+    ],
+    queryFn: () =>
+      unwrapAsync(
+        telemetryGetToolUsageFilterOptions(client, {
+          getToolUsageFilterOptionsPayload: {
+            from,
+            to,
+          },
+        }),
+      ),
+    throwOnError: false,
+  });
 
   const serverOptionGroups = useMemo(
     () =>
       buildServerOptionGroups({
-        summary: filterOptionsSummary,
+        hostedToolsets: toolsetsData?.toolsets ?? [],
+        shadowServers: filterOptionsData?.shadowServers ?? [],
         activeFilters,
         serverNameMappings,
       }),
-    [activeFilters, filterOptionsSummary, serverNameMappings],
+    [
+      activeFilters,
+      filterOptionsData?.shadowServers,
+      serverNameMappings,
+      toolsetsData?.toolsets,
+    ],
   );
 
   const toolUsageUserEmailOptions = useMemo(() => {
     const selected = selectedUserEmails(activeFilters);
-    const known = (filterOptionsSummary?.users ?? [])
+    const known = (filterOptionsData?.users ?? [])
       .filter((user) => user.userKind === "email")
       .map((user) => user.userKey || user.userLabel)
       .filter(Boolean);
     return [...new Set([...known, ...selected])];
-  }, [activeFilters, filterOptionsSummary]);
+  }, [activeFilters, filterOptionsData?.users]);
+
+  const displayError = error
+    ? new Error("Unable to load tool usage. Please try again.")
+    : null;
 
   const refetch = useCallback(() => {
     void refetchSummary();
@@ -491,7 +495,7 @@ export function InsightsToolsContent(): JSX.Element {
         <HooksInnerContent
           isLogsDisabled={isLogsDisabled}
           isLoading={isLoading}
-          error={error}
+          error={displayError}
           serverOptions={serverOptions}
           serverOptionGroups={serverOptionGroups}
           onServerSelectionChange={handleServerSelectionChange}
@@ -516,7 +520,7 @@ export function InsightsToolsContent(): JSX.Element {
           projectSlug={projectSlug}
           serverNameMappings={serverNameMappings}
           summaryData={summaryData}
-          summaryPending={summaryPending || filterOptionsPending}
+          summaryPending={summaryPending}
           summaryIsError={summaryIsError}
         />
       )}

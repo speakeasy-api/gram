@@ -24649,6 +24649,112 @@ paths:
       x-speakeasy-react-hook:
         name: GetProjectOverview
         type: query
+  /rpc/telemetry.getToolUsageFilterOptions:
+    post:
+      description: Get filter options for target-aware MCP and tool usage metrics
+      operationId: getToolUsageFilterOptions
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetToolUsageFilterOptionsPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetToolUsageFilterOptionsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getToolUsageFilterOptions telemetry
+      tags:
+        - telemetry
+      x-speakeasy-name-override: getToolUsageFilterOptions
+      x-speakeasy-react-hook:
+        name: GetToolUsageFilterOptions
+        type: query
   /rpc/telemetry.getToolUsageSummary:
     post:
       description: Get target-aware MCP and tool usage metrics
@@ -36144,6 +36250,47 @@ components:
           description: The signed URL to access the asset
       required:
         - url
+    GetToolUsageFilterOptionsPayload:
+      type: object
+      properties:
+        from:
+          type: string
+          description: Start time in ISO 8601 format
+          example: "2025-12-19T10:00:00Z"
+          format: date-time
+        option_types:
+          type: array
+          items:
+            type: string
+            description: Tool usage filter option type
+            enum:
+              - shadow_servers
+              - users
+          description: Filter option types to include. Empty means all option types.
+        to:
+          type: string
+          description: End time in ISO 8601 format
+          example: "2025-12-19T11:00:00Z"
+          format: date-time
+      description: Payload for target-aware MCP and tool usage filter options
+      required:
+        - from
+        - to
+    GetToolUsageFilterOptionsResult:
+      type: object
+      properties:
+        shadow_servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolUsageShadowServerFilterOption'
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolUsageUserFilterOption'
+      description: Filter options for target-aware MCP and tool usage metrics
+      required:
+        - shadow_servers
+        - users
     GetToolUsageSummaryPayload:
       type: object
       properties:
@@ -42855,6 +43002,18 @@ components:
         - count
         - success_count
         - failure_count
+    ToolUsageShadowServerFilterOption:
+      type: object
+      properties:
+        event_count:
+          type: integer
+          format: int64
+        server_name:
+          type: string
+      description: Shadow MCP server filter option with usage in the selected time window
+      required:
+        - server_name
+        - event_count
     ToolUsageTargetSummary:
       type: object
       properties:
@@ -43039,6 +43198,30 @@ components:
       required:
         - kind
         - key
+    ToolUsageUserFilterOption:
+      type: object
+      properties:
+        event_count:
+          type: integer
+          format: int64
+        user_key:
+          type: string
+        user_kind:
+          type: string
+          description: Tool usage user identity kind
+          enum:
+            - email
+            - external_user_id
+            - user_id
+            - unknown
+        user_label:
+          type: string
+      description: Tool usage user filter option with usage in the selected time window
+      required:
+        - user_key
+        - user_label
+        - user_kind
+        - event_count
     ToolUsageUserSummary:
       type: object
       properties:

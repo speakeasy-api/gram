@@ -1783,6 +1783,32 @@ type ToolUsageSummary struct {
 	TargetToolBreakdown []ToolUsageTargetToolBreakdownRow
 }
 
+// GetToolUsageFilterOptionsParams defines the parameters for tool usage filter option queries.
+type GetToolUsageFilterOptionsParams struct {
+	GramProjectID     string
+	TimeStart         int64
+	TimeEnd           int64
+	HostedMCPMatchers []HostedMCPMatcher
+}
+
+// ToolUsageFilterOptions contains all selectable usage-derived filter options for a time window.
+type ToolUsageFilterOptions struct {
+	ShadowServers []ToolUsageShadowServerFilterOptionRow
+	Users         []ToolUsageUserFilterOptionRow
+}
+
+type ToolUsageShadowServerFilterOptionRow struct {
+	ServerName string `ch:"server_name"`
+	EventCount uint64 `ch:"event_count"`
+}
+
+type ToolUsageUserFilterOptionRow struct {
+	UserKey    string `ch:"user_key"`
+	UserLabel  string `ch:"user_label"`
+	UserKind   string `ch:"user_kind"`
+	EventCount uint64 `ch:"event_count"`
+}
+
 type ToolUsageTotalsRow struct {
 	EventCount    uint64  `ch:"event_count"`
 	SuccessCount  uint64  `ch:"success_count"`
@@ -1907,8 +1933,44 @@ func (q *Queries) GetToolUsageSummary(ctx context.Context, arg GetToolUsageSumma
 	}, nil
 }
 
+// GetToolUsageFilterOptions retrieves usage-derived tool usage filter options for a time window.
+func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsageFilterOptionsParams) (*ToolUsageFilterOptions, error) {
+	summaryArg := GetToolUsageSummaryParams{
+		GramProjectID:      arg.GramProjectID,
+		TimeStart:          arg.TimeStart,
+		TimeEnd:            arg.TimeEnd,
+		BucketSizeNs:       0,
+		HostedMCPMatchers:  arg.HostedMCPMatchers,
+		TargetTypes:        nil,
+		HostedToolsetSlugs: nil,
+		ShadowServerNames:  nil,
+		UserFilters:        nil,
+		TargetLimit:        0,
+		UserLimit:          0,
+		UsersByTargetLimit: 0,
+		TargetToolRowLimit: 0,
+		TimeSeriesRowLimit: 0,
+		UserSeriesRowLimit: 0,
+	}
+
+	shadowServers, err := q.getToolUsageShadowServerFilterOptions(ctx, summaryArg)
+	if err != nil {
+		return nil, err
+	}
+
+	users, err := q.getToolUsageUserFilterOptions(ctx, summaryArg)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ToolUsageFilterOptions{
+		ShadowServers: shadowServers,
+		Users:         users,
+	}, nil
+}
+
 func (q *Queries) getToolUsageTotals(ctx context.Context, arg GetToolUsageSummaryParams) (ToolUsageTotalsRow, error) {
-	sb := toolUsageFilteredSelect(arg,
+	sb, err := toolUsageFilteredSelect(arg,
 		"count() AS event_count",
 		"sum(success) AS success_count",
 		"sum(failure) AS failure_count",
@@ -1917,6 +1979,9 @@ func (q *Queries) getToolUsageTotals(ctx context.Context, arg GetToolUsageSummar
 		"uniqExact(user_kind || ':' || user_key) AS unique_users",
 		"uniqExact(target_type || ':' || target_kind || ':' || target_id) AS unique_targets",
 	)
+	if err != nil {
+		return ToolUsageTotalsRow{}, fmt.Errorf("building tool usage totals source: %w", err)
+	}
 
 	query, args, err := sb.ToSql()
 	if err != nil {
@@ -1945,7 +2010,7 @@ func (q *Queries) getToolUsageTotals(ctx context.Context, arg GetToolUsageSummar
 }
 
 func (q *Queries) getToolUsageTargets(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageTargetSummaryRow, error) {
-	sb := toolUsageFilteredSelect(arg,
+	sb, err := toolUsageFilteredSelect(arg,
 		"target_type",
 		"target_kind",
 		"target_id",
@@ -1955,7 +2020,11 @@ func (q *Queries) getToolUsageTargets(ctx context.Context, arg GetToolUsageSumma
 		"sum(success) AS success_count",
 		"sum(failure) AS failure_count",
 		"failure_count / greatest(success_count + failure_count, 1) AS failure_rate",
-	).
+	)
+	if err != nil {
+		return nil, fmt.Errorf("building tool usage targets source: %w", err)
+	}
+	sb = sb.
 		GroupBy("target_type", "target_kind", "target_id", "target_label").
 		OrderBy("event_count DESC", "target_label ASC").
 		Limit(nonZeroLimit(arg.TargetLimit, 25))
@@ -1986,7 +2055,7 @@ func (q *Queries) getToolUsageTargets(ctx context.Context, arg GetToolUsageSumma
 }
 
 func (q *Queries) getToolUsageUsers(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageUserSummaryRow, error) {
-	sb := toolUsageFilteredSelect(arg,
+	sb, err := toolUsageFilteredSelect(arg,
 		"user_key",
 		"user_label",
 		"user_kind",
@@ -1995,7 +2064,11 @@ func (q *Queries) getToolUsageUsers(ctx context.Context, arg GetToolUsageSummary
 		"sum(success) AS success_count",
 		"sum(failure) AS failure_count",
 		"failure_count / greatest(success_count + failure_count, 1) AS failure_rate",
-	).
+	)
+	if err != nil {
+		return nil, fmt.Errorf("building tool usage users source: %w", err)
+	}
+	sb = sb.
 		GroupBy("user_key", "user_label", "user_kind").
 		OrderBy("event_count DESC", "user_label ASC").
 		Limit(nonZeroLimit(arg.UserLimit, 25))
@@ -2027,7 +2100,7 @@ func (q *Queries) getToolUsageUsers(ctx context.Context, arg GetToolUsageSummary
 
 func (q *Queries) getToolUsageTargetTimeSeries(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageTargetTimeSeriesPointRow, error) {
 	bucketExpr := fmt.Sprintf("intDiv(event_time_ns, %d) * %d AS bucket_start_ns", arg.BucketSizeNs, arg.BucketSizeNs)
-	sb := toolUsageFilteredSelect(arg,
+	sb, err := toolUsageFilteredSelect(arg,
 		bucketExpr,
 		"target_type",
 		"target_kind",
@@ -2035,7 +2108,11 @@ func (q *Queries) getToolUsageTargetTimeSeries(ctx context.Context, arg GetToolU
 		"target_label",
 		"count() AS event_count",
 		"sum(failure) AS failure_count",
-	).
+	)
+	if err != nil {
+		return nil, fmt.Errorf("building tool usage target time series source: %w", err)
+	}
+	sb = sb.
 		GroupBy("bucket_start_ns", "target_type", "target_kind", "target_id", "target_label").
 		OrderBy("bucket_start_ns ASC", "event_count DESC").
 		Limit(nonZeroLimit(arg.TimeSeriesRowLimit, 10000))
@@ -2067,14 +2144,18 @@ func (q *Queries) getToolUsageTargetTimeSeries(ctx context.Context, arg GetToolU
 
 func (q *Queries) getToolUsageUserTimeSeries(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageUserTimeSeriesPointRow, error) {
 	bucketExpr := fmt.Sprintf("intDiv(event_time_ns, %d) * %d AS bucket_start_ns", arg.BucketSizeNs, arg.BucketSizeNs)
-	sb := toolUsageFilteredSelect(arg,
+	sb, err := toolUsageFilteredSelect(arg,
 		bucketExpr,
 		"user_key",
 		"user_label",
 		"user_kind",
 		"count() AS event_count",
 		"sum(failure) AS failure_count",
-	).
+	)
+	if err != nil {
+		return nil, fmt.Errorf("building tool usage user time series source: %w", err)
+	}
+	sb = sb.
 		GroupBy("bucket_start_ns", "user_key", "user_label", "user_kind").
 		OrderBy("bucket_start_ns ASC", "event_count DESC").
 		Limit(nonZeroLimit(arg.UserSeriesRowLimit, 10000))
@@ -2105,7 +2186,7 @@ func (q *Queries) getToolUsageUserTimeSeries(ctx context.Context, arg GetToolUsa
 }
 
 func (q *Queries) getToolUsageUsersByTarget(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageUsersByTargetRow, error) {
-	sb := toolUsageFilteredSelect(arg,
+	sb, err := toolUsageFilteredSelect(arg,
 		"target_type",
 		"target_kind",
 		"target_id",
@@ -2115,7 +2196,11 @@ func (q *Queries) getToolUsageUsersByTarget(ctx context.Context, arg GetToolUsag
 		"user_kind",
 		"count() AS event_count",
 		"sum(failure) AS failure_count",
-	).
+	)
+	if err != nil {
+		return nil, fmt.Errorf("building tool usage users by target source: %w", err)
+	}
+	sb = sb.
 		GroupBy("target_type", "target_kind", "target_id", "target_label", "user_key", "user_label", "user_kind").
 		OrderBy("event_count DESC", "target_label ASC", "user_label ASC").
 		Limit(nonZeroLimit(arg.UsersByTargetLimit, 100))
@@ -2146,7 +2231,7 @@ func (q *Queries) getToolUsageUsersByTarget(ctx context.Context, arg GetToolUsag
 }
 
 func (q *Queries) getToolUsageTargetToolBreakdown(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageTargetToolBreakdownRow, error) {
-	sb := toolUsageFilteredSelect(arg,
+	sb, err := toolUsageFilteredSelect(arg,
 		"target_type",
 		"target_kind",
 		"target_id",
@@ -2156,7 +2241,11 @@ func (q *Queries) getToolUsageTargetToolBreakdown(ctx context.Context, arg GetTo
 		"sum(success) AS success_count",
 		"sum(failure) AS failure_count",
 		"failure_count / greatest(success_count + failure_count, 1) AS failure_rate",
-	).
+	)
+	if err != nil {
+		return nil, fmt.Errorf("building tool usage target tool breakdown source: %w", err)
+	}
+	sb = sb.
 		GroupBy("target_type", "target_kind", "target_id", "target_label", "tool_name").
 		OrderBy("event_count DESC", "target_label ASC", "tool_name ASC").
 		Limit(nonZeroLimit(arg.TargetToolRowLimit, 100))
@@ -2186,15 +2275,100 @@ func (q *Queries) getToolUsageTargetToolBreakdown(ctx context.Context, arg GetTo
 	return result, nil
 }
 
-func toolUsageFilteredSelect(arg GetToolUsageSummaryParams, columns ...string) squirrel.SelectBuilder {
-	cteSQL, cteArgs, err := toolUsageNormalizedEventsCTE(arg)
+func (q *Queries) getToolUsageShadowServerFilterOptions(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageShadowServerFilterOptionRow, error) {
+	sb, err := toolUsageBaseSelect(arg,
+		"target_id AS server_name",
+		"count() AS event_count",
+	)
 	if err != nil {
-		return sq.Select(columns...).From("normalized_events").Where("0 = 1")
+		return nil, fmt.Errorf("building tool usage shadow server filter options source: %w", err)
+	}
+	sb = sb.
+		Where(squirrel.Eq{"target_type": ToolUsageTargetTypeShadowMCP}).
+		GroupBy("server_name").
+		OrderBy("event_count DESC", "server_name ASC")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building tool usage shadow server filter options query: %w", err)
 	}
 
-	sb := sq.Select(columns...).
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []ToolUsageShadowServerFilterOptionRow{}
+	for rows.Next() {
+		var row ToolUsageShadowServerFilterOptionRow
+		if err = rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scan tool usage shadow server filter option row: %w", err)
+		}
+		result = append(result, row)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func (q *Queries) getToolUsageUserFilterOptions(ctx context.Context, arg GetToolUsageSummaryParams) ([]ToolUsageUserFilterOptionRow, error) {
+	sb, err := toolUsageBaseSelect(arg,
+		"user_key",
+		"user_label",
+		"user_kind",
+		"count() AS event_count",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("building tool usage user filter options source: %w", err)
+	}
+	sb = sb.
+		Where(squirrel.NotEq{"user_kind": toolUsageUserKindUnknown}).
+		GroupBy("user_key", "user_label", "user_kind").
+		OrderBy("event_count DESC", "user_label ASC")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building tool usage user filter options query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []ToolUsageUserFilterOptionRow{}
+	for rows.Next() {
+		var row ToolUsageUserFilterOptionRow
+		if err = rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scan tool usage user filter option row: %w", err)
+		}
+		result = append(result, row)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func toolUsageBaseSelect(arg GetToolUsageSummaryParams, columns ...string) (squirrel.SelectBuilder, error) {
+	cteSQL, cteArgs, err := toolUsageNormalizedEventsCTE(arg)
+	if err != nil {
+		return squirrel.SelectBuilder{}, err
+	}
+
+	return sq.Select(columns...).
 		Prefix(cteSQL, cteArgs...).
-		From("normalized_events")
+		From("normalized_events"), nil
+}
+
+func toolUsageFilteredSelect(arg GetToolUsageSummaryParams, columns ...string) (squirrel.SelectBuilder, error) {
+	sb, err := toolUsageBaseSelect(arg, columns...)
+	if err != nil {
+		return squirrel.SelectBuilder{}, err
+	}
 
 	if len(arg.TargetTypes) > 0 {
 		sb = sb.Where(squirrel.Eq{"target_type": arg.TargetTypes})
@@ -2228,7 +2402,7 @@ func toolUsageFilteredSelect(arg GetToolUsageSummaryParams, columns ...string) s
 		sb = sb.Where(userFilters)
 	}
 
-	return sb
+	return sb, nil
 }
 
 func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any, error) {

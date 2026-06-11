@@ -3416,6 +3416,249 @@ func DecodeGetToolUsageSummaryResponse(decoder func(*http.Response) goahttp.Deco
 	}
 }
 
+// BuildGetToolUsageFilterOptionsRequest instantiates a HTTP request object
+// with method and path set to call the "telemetry" service
+// "getToolUsageFilterOptions" endpoint
+func (c *Client) BuildGetToolUsageFilterOptionsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetToolUsageFilterOptionsTelemetryPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("telemetry", "getToolUsageFilterOptions", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetToolUsageFilterOptionsRequest returns an encoder for requests sent
+// to the telemetry getToolUsageFilterOptions server.
+func EncodeGetToolUsageFilterOptionsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*telemetry.GetToolUsageFilterOptionsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("telemetry", "getToolUsageFilterOptions", "*telemetry.GetToolUsageFilterOptionsPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewGetToolUsageFilterOptionsRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("telemetry", "getToolUsageFilterOptions", err)
+		}
+		return nil
+	}
+}
+
+// DecodeGetToolUsageFilterOptionsResponse returns a decoder for responses
+// returned by the telemetry getToolUsageFilterOptions endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeGetToolUsageFilterOptionsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetToolUsageFilterOptionsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetToolUsageFilterOptionsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			err = ValidateGetToolUsageFilterOptionsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			res := NewGetToolUsageFilterOptionsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetToolUsageFilterOptionsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			err = ValidateGetToolUsageFilterOptionsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			return nil, NewGetToolUsageFilterOptionsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetToolUsageFilterOptionsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			err = ValidateGetToolUsageFilterOptionsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			return nil, NewGetToolUsageFilterOptionsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetToolUsageFilterOptionsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			err = ValidateGetToolUsageFilterOptionsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			return nil, NewGetToolUsageFilterOptionsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetToolUsageFilterOptionsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			err = ValidateGetToolUsageFilterOptionsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			return nil, NewGetToolUsageFilterOptionsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetToolUsageFilterOptionsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			err = ValidateGetToolUsageFilterOptionsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			return nil, NewGetToolUsageFilterOptionsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetToolUsageFilterOptionsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			err = ValidateGetToolUsageFilterOptionsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			return nil, NewGetToolUsageFilterOptionsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetToolUsageFilterOptionsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			err = ValidateGetToolUsageFilterOptionsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			return nil, NewGetToolUsageFilterOptionsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetToolUsageFilterOptionsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageFilterOptions", err)
+				}
+				err = ValidateGetToolUsageFilterOptionsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "getToolUsageFilterOptions", err)
+				}
+				return nil, NewGetToolUsageFilterOptionsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetToolUsageFilterOptionsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageFilterOptions", err)
+				}
+				err = ValidateGetToolUsageFilterOptionsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "getToolUsageFilterOptions", err)
+				}
+				return nil, NewGetToolUsageFilterOptionsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("telemetry", "getToolUsageFilterOptions", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetToolUsageFilterOptionsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			err = ValidateGetToolUsageFilterOptionsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			return nil, NewGetToolUsageFilterOptionsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("telemetry", "getToolUsageFilterOptions", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListHooksTracesRequest instantiates a HTTP request object with method
 // and path set to call the "telemetry" service "listHooksTraces" endpoint
 func (c *Client) BuildListHooksTracesRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -4550,6 +4793,32 @@ func unmarshalToolUsageTargetToolBreakdownRowResponseBodyToTelemetryToolUsageTar
 		SuccessCount: *v.SuccessCount,
 		FailureCount: *v.FailureCount,
 		FailureRate:  *v.FailureRate,
+	}
+
+	return res
+}
+
+// unmarshalToolUsageShadowServerFilterOptionResponseBodyToTelemetryToolUsageShadowServerFilterOption
+// builds a value of type *telemetry.ToolUsageShadowServerFilterOption from a
+// value of type *ToolUsageShadowServerFilterOptionResponseBody.
+func unmarshalToolUsageShadowServerFilterOptionResponseBodyToTelemetryToolUsageShadowServerFilterOption(v *ToolUsageShadowServerFilterOptionResponseBody) *telemetry.ToolUsageShadowServerFilterOption {
+	res := &telemetry.ToolUsageShadowServerFilterOption{
+		ServerName: *v.ServerName,
+		EventCount: *v.EventCount,
+	}
+
+	return res
+}
+
+// unmarshalToolUsageUserFilterOptionResponseBodyToTelemetryToolUsageUserFilterOption
+// builds a value of type *telemetry.ToolUsageUserFilterOption from a value of
+// type *ToolUsageUserFilterOptionResponseBody.
+func unmarshalToolUsageUserFilterOptionResponseBodyToTelemetryToolUsageUserFilterOption(v *ToolUsageUserFilterOptionResponseBody) *telemetry.ToolUsageUserFilterOption {
+	res := &telemetry.ToolUsageUserFilterOption{
+		UserKey:    *v.UserKey,
+		UserLabel:  *v.UserLabel,
+		UserKind:   telemetry.ToolUsageUserKind(*v.UserKind),
+		EventCount: *v.EventCount,
 	}
 
 	return res

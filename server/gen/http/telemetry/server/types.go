@@ -213,6 +213,17 @@ type GetToolUsageSummaryRequestBody struct {
 	UserFilters []*ToolUsageUserFilterRequestBody `form:"user_filters,omitempty" json:"user_filters,omitempty" xml:"user_filters,omitempty"`
 }
 
+// GetToolUsageFilterOptionsRequestBody is the type of the "telemetry" service
+// "getToolUsageFilterOptions" endpoint HTTP request body.
+type GetToolUsageFilterOptionsRequestBody struct {
+	// Start time in ISO 8601 format
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// End time in ISO 8601 format
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// Filter option types to include. Empty means all option types.
+	OptionTypes []string `form:"option_types,omitempty" json:"option_types,omitempty" xml:"option_types,omitempty"`
+}
+
 // ListHooksTracesRequestBody is the type of the "telemetry" service
 // "listHooksTraces" endpoint HTTP request body.
 type ListHooksTracesRequestBody struct {
@@ -376,6 +387,13 @@ type GetToolUsageSummaryResponseBody struct {
 	UserTimeSeries      []*ToolUsageUserTimeSeriesPointResponseBody    `form:"user_time_series" json:"user_time_series" xml:"user_time_series"`
 	UsersByTarget       []*ToolUsageUsersByTargetRowResponseBody       `form:"users_by_target" json:"users_by_target" xml:"users_by_target"`
 	TargetToolBreakdown []*ToolUsageTargetToolBreakdownRowResponseBody `form:"target_tool_breakdown" json:"target_tool_breakdown" xml:"target_tool_breakdown"`
+}
+
+// GetToolUsageFilterOptionsResponseBody is the type of the "telemetry" service
+// "getToolUsageFilterOptions" endpoint HTTP response body.
+type GetToolUsageFilterOptionsResponseBody struct {
+	ShadowServers []*ToolUsageShadowServerFilterOptionResponseBody `form:"shadow_servers" json:"shadow_servers" xml:"shadow_servers"`
+	Users         []*ToolUsageUserFilterOptionResponseBody         `form:"users" json:"users" xml:"users"`
 }
 
 // ListHooksTracesResponseBody is the type of the "telemetry" service
@@ -2996,6 +3014,196 @@ type GetToolUsageSummaryGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetToolUsageFilterOptionsUnauthorizedResponseBody is the type of the
+// "telemetry" service "getToolUsageFilterOptions" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetToolUsageFilterOptionsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolUsageFilterOptionsForbiddenResponseBody is the type of the
+// "telemetry" service "getToolUsageFilterOptions" endpoint HTTP response body
+// for the "forbidden" error.
+type GetToolUsageFilterOptionsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolUsageFilterOptionsBadRequestResponseBody is the type of the
+// "telemetry" service "getToolUsageFilterOptions" endpoint HTTP response body
+// for the "bad_request" error.
+type GetToolUsageFilterOptionsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolUsageFilterOptionsNotFoundResponseBody is the type of the "telemetry"
+// service "getToolUsageFilterOptions" endpoint HTTP response body for the
+// "not_found" error.
+type GetToolUsageFilterOptionsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolUsageFilterOptionsConflictResponseBody is the type of the "telemetry"
+// service "getToolUsageFilterOptions" endpoint HTTP response body for the
+// "conflict" error.
+type GetToolUsageFilterOptionsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolUsageFilterOptionsUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "getToolUsageFilterOptions" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetToolUsageFilterOptionsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolUsageFilterOptionsInvalidResponseBody is the type of the "telemetry"
+// service "getToolUsageFilterOptions" endpoint HTTP response body for the
+// "invalid" error.
+type GetToolUsageFilterOptionsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolUsageFilterOptionsInvariantViolationResponseBody is the type of the
+// "telemetry" service "getToolUsageFilterOptions" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetToolUsageFilterOptionsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolUsageFilterOptionsUnexpectedResponseBody is the type of the
+// "telemetry" service "getToolUsageFilterOptions" endpoint HTTP response body
+// for the "unexpected" error.
+type GetToolUsageFilterOptionsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetToolUsageFilterOptionsGatewayErrorResponseBody is the type of the
+// "telemetry" service "getToolUsageFilterOptions" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetToolUsageFilterOptionsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListHooksTracesUnauthorizedResponseBody is the type of the "telemetry"
 // service "listHooksTraces" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -3776,6 +3984,22 @@ type ToolUsageTargetToolBreakdownRowResponseBody struct {
 	FailureRate  float64 `form:"failure_rate" json:"failure_rate" xml:"failure_rate"`
 }
 
+// ToolUsageShadowServerFilterOptionResponseBody is used to define fields on
+// response body types.
+type ToolUsageShadowServerFilterOptionResponseBody struct {
+	ServerName string `form:"server_name" json:"server_name" xml:"server_name"`
+	EventCount int64  `form:"event_count" json:"event_count" xml:"event_count"`
+}
+
+// ToolUsageUserFilterOptionResponseBody is used to define fields on response
+// body types.
+type ToolUsageUserFilterOptionResponseBody struct {
+	UserKey    string `form:"user_key" json:"user_key" xml:"user_key"`
+	UserLabel  string `form:"user_label" json:"user_label" xml:"user_label"`
+	UserKind   string `form:"user_kind" json:"user_kind" xml:"user_kind"`
+	EventCount int64  `form:"event_count" json:"event_count" xml:"event_count"`
+}
+
 // HookTraceSummaryResponseBody is used to define fields on response body types.
 type HookTraceSummaryResponseBody struct {
 	// Trace ID (32 hex characters)
@@ -4340,6 +4564,38 @@ func NewGetToolUsageSummaryResponseBody(res *telemetry.GetToolUsageSummaryResult
 		}
 	} else {
 		body.TargetToolBreakdown = []*ToolUsageTargetToolBreakdownRowResponseBody{}
+	}
+	return body
+}
+
+// NewGetToolUsageFilterOptionsResponseBody builds the HTTP response body from
+// the result of the "getToolUsageFilterOptions" endpoint of the "telemetry"
+// service.
+func NewGetToolUsageFilterOptionsResponseBody(res *telemetry.GetToolUsageFilterOptionsResult) *GetToolUsageFilterOptionsResponseBody {
+	body := &GetToolUsageFilterOptionsResponseBody{}
+	if res.ShadowServers != nil {
+		body.ShadowServers = make([]*ToolUsageShadowServerFilterOptionResponseBody, len(res.ShadowServers))
+		for i, val := range res.ShadowServers {
+			if val == nil {
+				body.ShadowServers[i] = nil
+				continue
+			}
+			body.ShadowServers[i] = marshalTelemetryToolUsageShadowServerFilterOptionToToolUsageShadowServerFilterOptionResponseBody(val)
+		}
+	} else {
+		body.ShadowServers = []*ToolUsageShadowServerFilterOptionResponseBody{}
+	}
+	if res.Users != nil {
+		body.Users = make([]*ToolUsageUserFilterOptionResponseBody, len(res.Users))
+		for i, val := range res.Users {
+			if val == nil {
+				body.Users[i] = nil
+				continue
+			}
+			body.Users[i] = marshalTelemetryToolUsageUserFilterOptionToToolUsageUserFilterOptionResponseBody(val)
+		}
+	} else {
+		body.Users = []*ToolUsageUserFilterOptionResponseBody{}
 	}
 	return body
 }
@@ -6395,6 +6651,156 @@ func NewGetToolUsageSummaryGatewayErrorResponseBody(res *goa.ServiceError) *GetT
 	return body
 }
 
+// NewGetToolUsageFilterOptionsUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "getToolUsageFilterOptions" endpoint of
+// the "telemetry" service.
+func NewGetToolUsageFilterOptionsUnauthorizedResponseBody(res *goa.ServiceError) *GetToolUsageFilterOptionsUnauthorizedResponseBody {
+	body := &GetToolUsageFilterOptionsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolUsageFilterOptionsForbiddenResponseBody builds the HTTP response
+// body from the result of the "getToolUsageFilterOptions" endpoint of the
+// "telemetry" service.
+func NewGetToolUsageFilterOptionsForbiddenResponseBody(res *goa.ServiceError) *GetToolUsageFilterOptionsForbiddenResponseBody {
+	body := &GetToolUsageFilterOptionsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolUsageFilterOptionsBadRequestResponseBody builds the HTTP response
+// body from the result of the "getToolUsageFilterOptions" endpoint of the
+// "telemetry" service.
+func NewGetToolUsageFilterOptionsBadRequestResponseBody(res *goa.ServiceError) *GetToolUsageFilterOptionsBadRequestResponseBody {
+	body := &GetToolUsageFilterOptionsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolUsageFilterOptionsNotFoundResponseBody builds the HTTP response
+// body from the result of the "getToolUsageFilterOptions" endpoint of the
+// "telemetry" service.
+func NewGetToolUsageFilterOptionsNotFoundResponseBody(res *goa.ServiceError) *GetToolUsageFilterOptionsNotFoundResponseBody {
+	body := &GetToolUsageFilterOptionsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolUsageFilterOptionsConflictResponseBody builds the HTTP response
+// body from the result of the "getToolUsageFilterOptions" endpoint of the
+// "telemetry" service.
+func NewGetToolUsageFilterOptionsConflictResponseBody(res *goa.ServiceError) *GetToolUsageFilterOptionsConflictResponseBody {
+	body := &GetToolUsageFilterOptionsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolUsageFilterOptionsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getToolUsageFilterOptions" endpoint of
+// the "telemetry" service.
+func NewGetToolUsageFilterOptionsUnsupportedMediaResponseBody(res *goa.ServiceError) *GetToolUsageFilterOptionsUnsupportedMediaResponseBody {
+	body := &GetToolUsageFilterOptionsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolUsageFilterOptionsInvalidResponseBody builds the HTTP response
+// body from the result of the "getToolUsageFilterOptions" endpoint of the
+// "telemetry" service.
+func NewGetToolUsageFilterOptionsInvalidResponseBody(res *goa.ServiceError) *GetToolUsageFilterOptionsInvalidResponseBody {
+	body := &GetToolUsageFilterOptionsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolUsageFilterOptionsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getToolUsageFilterOptions" endpoint of
+// the "telemetry" service.
+func NewGetToolUsageFilterOptionsInvariantViolationResponseBody(res *goa.ServiceError) *GetToolUsageFilterOptionsInvariantViolationResponseBody {
+	body := &GetToolUsageFilterOptionsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolUsageFilterOptionsUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getToolUsageFilterOptions" endpoint of the
+// "telemetry" service.
+func NewGetToolUsageFilterOptionsUnexpectedResponseBody(res *goa.ServiceError) *GetToolUsageFilterOptionsUnexpectedResponseBody {
+	body := &GetToolUsageFilterOptionsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetToolUsageFilterOptionsGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "getToolUsageFilterOptions" endpoint of
+// the "telemetry" service.
+func NewGetToolUsageFilterOptionsGatewayErrorResponseBody(res *goa.ServiceError) *GetToolUsageFilterOptionsGatewayErrorResponseBody {
+	body := &GetToolUsageFilterOptionsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListHooksTracesUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "listHooksTraces" endpoint of the "telemetry" service.
 func NewListHooksTracesUnauthorizedResponseBody(res *goa.ServiceError) *ListHooksTracesUnauthorizedResponseBody {
@@ -6878,6 +7284,26 @@ func NewGetToolUsageSummaryPayload(body *GetToolUsageSummaryRequestBody, apikeyT
 	return v
 }
 
+// NewGetToolUsageFilterOptionsPayload builds a telemetry service
+// getToolUsageFilterOptions endpoint payload.
+func NewGetToolUsageFilterOptionsPayload(body *GetToolUsageFilterOptionsRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.GetToolUsageFilterOptionsPayload {
+	v := &telemetry.GetToolUsageFilterOptionsPayload{
+		From: *body.From,
+		To:   *body.To,
+	}
+	if body.OptionTypes != nil {
+		v.OptionTypes = make([]telemetry.ToolUsageFilterOptionType, len(body.OptionTypes))
+		for i, val := range body.OptionTypes {
+			v.OptionTypes[i] = telemetry.ToolUsageFilterOptionType(val)
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewListHooksTracesPayload builds a telemetry service listHooksTraces
 // endpoint payload.
 func NewListHooksTracesPayload(body *ListHooksTracesRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.ListHooksTracesPayload {
@@ -7265,6 +7691,29 @@ func ValidateGetToolUsageSummaryRequestBody(body *GetToolUsageSummaryRequestBody
 			if err2 := ValidateToolUsageUserFilterRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	return
+}
+
+// ValidateGetToolUsageFilterOptionsRequestBody runs the validations defined on
+// GetToolUsageFilterOptionsRequestBody
+func ValidateGetToolUsageFilterOptionsRequestBody(body *GetToolUsageFilterOptionsRequestBody) (err error) {
+	if body.From == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
+	}
+	if body.To == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	for _, e := range body.OptionTypes {
+		if !(e == "shadow_servers" || e == "users") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.option_types[*]", e, []any{"shadow_servers", "users"}))
 		}
 	}
 	return

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -196,6 +197,109 @@ func TestGetToolUsageSummary_ClassifiesHookObservedHostedMCP(t *testing.T) {
 	targets := toolUsageTargetsByKey(result.Targets)
 	require.NotNil(t, targets["hosted_mcp_server:server:hosted-payments"])
 	require.Nil(t, targets["shadow_mcp_server:server:hosted.example.com"])
+}
+
+func TestGetToolUsageFilterOptions_ReturnsUncappedShadowServersAndUsers(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	for i := range 30 {
+		insertHookEvent(t, ctx, hookEventParams{
+			projectID:      projectID,
+			deploymentID:   uuid.New().String(),
+			timestamp:      now.Add(time.Duration(-i) * time.Minute),
+			traceID:        uuid.New().String(),
+			userEmail:      fmt.Sprintf("user-%02d@example.com", i),
+			hookSource:     "mcp",
+			toolSource:     fmt.Sprintf("shadow-%02d", i),
+			toolName:       "query",
+			result:         `"ok"`,
+			conversationID: fmt.Sprintf("conv-shadow-%02d", i),
+		})
+	}
+
+	time.Sleep(200 * time.Millisecond)
+
+	options, err := ti.service.GetToolUsageFilterOptions(ctx, &gen.GetToolUsageFilterOptionsPayload{
+		From: now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:   now.Add(1 * time.Hour).Format(time.RFC3339),
+	})
+
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Len(t, options.ShadowServers, 30)
+	require.Len(t, options.Users, 30)
+
+	userOptionsOnly, err := ti.service.GetToolUsageFilterOptions(ctx, &gen.GetToolUsageFilterOptionsPayload{
+		From:        now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:          now.Add(1 * time.Hour).Format(time.RFC3339),
+		OptionTypes: []gen.ToolUsageFilterOptionType{"users"},
+	})
+
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Empty(t, userOptionsOnly.ShadowServers)
+	require.Len(t, userOptionsOnly.Users, 30)
+
+	summary, err := ti.service.GetToolUsageSummary(ctx, &gen.GetToolUsageSummaryPayload{
+		From: now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:   now.Add(1 * time.Hour).Format(time.RFC3339),
+	})
+
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Len(t, summary.Targets, 25)
+}
+
+func TestGetToolUsageFilterOptions_ClassifiesHookObservedHostedMCP(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	toolsets := toolsetsRepo.New(ti.conn)
+	_, err := toolsets.CreateToolset(ctx, toolsetsRepo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Hosted Payments",
+		Slug:                   "hosted-payments",
+		Description:            pgtype.Text{},
+		DefaultEnvironmentSlug: pgtype.Text{},
+		McpSlug:                pgtype.Text{String: "acme-hosted-payments", Valid: true},
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	now := time.Now().UTC()
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      projectID,
+		deploymentID:   uuid.New().String(),
+		timestamp:      now.Add(-5 * time.Minute),
+		traceID:        uuid.New().String(),
+		userEmail:      "alice@example.com",
+		hookSource:     "mcp",
+		toolSource:     "hosted.example.com",
+		toolName:       "charge",
+		result:         `"ok"`,
+		mcpMatch:       "acme-hosted-payments",
+		mcpServerURL:   "https://app.example.com/mcp/acme-hosted-payments",
+		conversationID: "conv-hosted-hook",
+	})
+
+	time.Sleep(200 * time.Millisecond)
+
+	options, err := ti.service.GetToolUsageFilterOptions(ctx, &gen.GetToolUsageFilterOptionsPayload{
+		From: now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:   now.Add(1 * time.Hour).Format(time.RFC3339),
+	})
+
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Empty(t, options.ShadowServers)
+	require.Len(t, options.Users, 1)
+	require.Equal(t, "alice@example.com", options.Users[0].UserKey)
 }
 
 type hostedToolEventParams struct {

@@ -48,6 +48,8 @@ type Service interface {
 	GetHooksSummary(context.Context, *GetHooksSummaryPayload) (res *GetHooksSummaryResult, err error)
 	// Get target-aware MCP and tool usage metrics
 	GetToolUsageSummary(context.Context, *GetToolUsageSummaryPayload) (res *GetToolUsageSummaryResult, err error)
+	// Get filter options for target-aware MCP and tool usage metrics
+	GetToolUsageFilterOptions(context.Context, *GetToolUsageFilterOptionsPayload) (res *GetToolUsageFilterOptionsResult, err error)
 	// List hook traces aggregated by trace_id with user information
 	ListHooksTraces(context.Context, *ListHooksTracesPayload) (res *ListHooksTracesResult, err error)
 }
@@ -74,7 +76,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [15]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "listHooksTraces"}
+var MethodNames = [16]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "getToolUsageFilterOptions", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -319,6 +321,27 @@ type GetProjectOverviewResult struct {
 	Comparison *ProjectOverviewSummary
 	// Indicates whether metrics are session-based or tool-call-based
 	MetricsMode string
+}
+
+// GetToolUsageFilterOptionsPayload is the payload type of the telemetry
+// service getToolUsageFilterOptions method.
+type GetToolUsageFilterOptionsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Filter option types to include. Empty means all option types.
+	OptionTypes []ToolUsageFilterOptionType
+}
+
+// GetToolUsageFilterOptionsResult is the result type of the telemetry service
+// getToolUsageFilterOptions method.
+type GetToolUsageFilterOptionsResult struct {
+	ShadowServers []*ToolUsageShadowServerFilterOption
+	Users         []*ToolUsageUserFilterOption
 }
 
 // GetToolUsageSummaryPayload is the payload type of the telemetry service
@@ -1064,6 +1087,15 @@ type ToolUsage struct {
 	FailureCount int64
 }
 
+// Tool usage filter option type
+type ToolUsageFilterOptionType string
+
+// Shadow MCP server filter option with usage in the selected time window
+type ToolUsageShadowServerFilterOption struct {
+	ServerName string
+	EventCount int64
+}
+
 // Tool usage aggregation target kind
 type ToolUsageTargetKind string
 
@@ -1122,6 +1154,14 @@ type ToolUsageTotals struct {
 type ToolUsageUserFilter struct {
 	Kind ToolUsageUserKind
 	Key  string
+}
+
+// Tool usage user filter option with usage in the selected time window
+type ToolUsageUserFilterOption struct {
+	UserKey    string
+	UserLabel  string
+	UserKind   ToolUsageUserKind
+	EventCount int64
 }
 
 // Tool usage user identity kind

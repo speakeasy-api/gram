@@ -2289,6 +2289,49 @@ func (s *Service) GetToolUsageSummary(ctx context.Context, payload *telem_gen.Ge
 	return toToolUsageSummaryResult(summary), nil
 }
 
+// GetToolUsageFilterOptions returns selectable filter options for target-aware MCP and tool usage metrics.
+func (s *Service) GetToolUsageFilterOptions(ctx context.Context, payload *telem_gen.GetToolUsageFilterOptionsPayload) (res *telem_gen.GetToolUsageFilterOptionsResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	hostedMCPMatchers, err := s.toolUsageHostedMCPMatchers(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing hosted MCP servers")
+	}
+
+	options, err := s.chRepo.GetToolUsageFilterOptions(ctx, repo.GetToolUsageFilterOptionsParams{
+		GramProjectID:     authCtx.ProjectID.String(),
+		TimeStart:         timeStart,
+		TimeEnd:           timeEnd,
+		HostedMCPMatchers: hostedMCPMatchers,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage filter options")
+	}
+
+	return toToolUsageFilterOptionsResult(options, payload.OptionTypes), nil
+}
+
 func (s *Service) toolUsageHostedMCPMatchers(ctx context.Context, projectID uuid.UUID) ([]repo.HostedMCPMatcher, error) {
 	toolsets, err := toolsetsRepo.New(s.db).ListToolsetsByProject(ctx, projectID)
 	if err != nil {
@@ -2306,6 +2349,60 @@ func (s *Service) toolUsageHostedMCPMatchers(ctx context.Context, projectID uuid
 		})
 	}
 	return matchers, nil
+}
+
+func toToolUsageFilterOptionsResult(options *repo.ToolUsageFilterOptions, optionTypes []telem_gen.ToolUsageFilterOptionType) *telem_gen.GetToolUsageFilterOptionsResult {
+	includeShadowServers, includeUsers := toolUsageFilterOptionTypeSet(optionTypes)
+	if options == nil {
+		return &telem_gen.GetToolUsageFilterOptionsResult{
+			ShadowServers: []*telem_gen.ToolUsageShadowServerFilterOption{},
+			Users:         []*telem_gen.ToolUsageUserFilterOption{},
+		}
+	}
+
+	shadowServers := make([]*telem_gen.ToolUsageShadowServerFilterOption, 0, len(options.ShadowServers))
+	if includeShadowServers {
+		for _, row := range options.ShadowServers {
+			shadowServers = append(shadowServers, &telem_gen.ToolUsageShadowServerFilterOption{
+				ServerName: row.ServerName,
+				EventCount: uint64ToInt64(row.EventCount),
+			})
+		}
+	}
+
+	users := make([]*telem_gen.ToolUsageUserFilterOption, 0, len(options.Users))
+	if includeUsers {
+		for _, row := range options.Users {
+			users = append(users, &telem_gen.ToolUsageUserFilterOption{
+				UserKey:    row.UserKey,
+				UserLabel:  row.UserLabel,
+				UserKind:   telem_gen.ToolUsageUserKind(row.UserKind),
+				EventCount: uint64ToInt64(row.EventCount),
+			})
+		}
+	}
+
+	return &telem_gen.GetToolUsageFilterOptionsResult{
+		ShadowServers: shadowServers,
+		Users:         users,
+	}
+}
+
+func toolUsageFilterOptionTypeSet(optionTypes []telem_gen.ToolUsageFilterOptionType) (includeShadowServers bool, includeUsers bool) {
+	if len(optionTypes) == 0 {
+		return true, true
+	}
+
+	for _, optionType := range optionTypes {
+		switch string(optionType) {
+		case "shadow_servers":
+			includeShadowServers = true
+		case "users":
+			includeUsers = true
+		}
+	}
+
+	return includeShadowServers, includeUsers
 }
 
 func toToolUsageSummaryResult(summary *repo.ToolUsageSummary) *telem_gen.GetToolUsageSummaryResult {
