@@ -29,6 +29,10 @@ export type CodexHookPayloadHookEventName = ClosedEnum<
  */
 export type CodexHookPayload = {
   /**
+   * Additional hook-specific data
+   */
+  additionalData?: { [k: string]: any } | undefined;
+  /**
    * The working directory when the event fired
    */
   cwd?: string | undefined;
@@ -85,6 +89,7 @@ export const CodexHookPayloadHookEventName$outboundSchema: z.ZodMiniEnum<
 
 /** @internal */
 export type CodexHookPayload$Outbound = {
+  additional_data?: { [k: string]: any } | undefined;
   cwd?: string | undefined;
   hook_event_name: string;
   last_assistant_message?: string | undefined;
@@ -105,6 +110,7 @@ export const CodexHookPayload$outboundSchema: z.ZodMiniType<
   CodexHookPayload
 > = z.pipe(
   z.object({
+    additionalData: z.optional(z.record(z.string(), z.any())),
     cwd: z.optional(z.string()),
     hookEventName: CodexHookPayloadHookEventName$outboundSchema,
     lastAssistantMessage: z.optional(z.string()),
@@ -120,6 +126,7 @@ export const CodexHookPayload$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      additionalData: "additional_data",
       hookEventName: "hook_event_name",
       lastAssistantMessage: "last_assistant_message",
       permissionType: "permission_type",
