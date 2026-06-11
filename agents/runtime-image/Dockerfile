@@ -67,7 +67,6 @@ RUN apt-get update \
     bash \
     ca-certificates \
     curl \
-    iproute2 \
     libcurl4 \
     libssl3 \
     mount \
