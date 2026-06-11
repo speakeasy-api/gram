@@ -106,6 +106,7 @@ function presetRangeLabel(preset: DateRangePreset): string {
 function EmployeeFilterBar({
   view,
   onViewChange,
+  dimensions,
   dimension,
   onDimensionChange,
   selectedValue,
@@ -115,6 +116,7 @@ function EmployeeFilterBar({
 }: {
   view: EmployeeView;
   onViewChange: (view: EmployeeView) => void;
+  dimensions: EmployeeFilterDimension[];
   dimension: EmployeeFilterDimension;
   onDimensionChange: (dimension: EmployeeFilterDimension) => void;
   selectedValue: string | null;
@@ -163,7 +165,7 @@ function EmployeeFilterBar({
         })}
 
         <div className="bg-border/50 mx-1 h-6 w-px" />
-        {EMPLOYEE_FILTER_DIMENSIONS.map((value) => {
+        {dimensions.map((value) => {
           const isSelected = dimension === value;
           return (
             <button
@@ -310,6 +312,10 @@ export function InsightsEmployeesContent(): JSX.Element {
         }
         return params;
       });
+      // Unknown users have no role, so the role dimension doesn't apply there.
+      if (next === "unattributed") {
+        setFilterDimension((prev) => (prev === "role" ? "all" : prev));
+      }
       // The selected user/role may not exist in the other view.
       setSelectedFilterValue(null);
     },
@@ -371,6 +377,15 @@ export function InsightsEmployeesContent(): JSX.Element {
       roleName ? item.role === roleName : false,
     );
   }, [viewEmployees, filterDimension, roleNameById, selectedFilterValue]);
+  // Unattributed rows carry a placeholder role, so role filtering would
+  // always come back empty in that view.
+  const filterDimensions = useMemo<EmployeeFilterDimension[]>(
+    () =>
+      isUnattributedView
+        ? EMPLOYEE_FILTER_DIMENSIONS.filter((value) => value !== "role")
+        : EMPLOYEE_FILTER_DIMENSIONS,
+    [isUnattributedView],
+  );
   const filterOptions = useMemo<FilterOption[]>(() => {
     if (filterDimension === "user") {
       return viewEmployees.map((item) => ({
@@ -490,6 +505,7 @@ export function InsightsEmployeesContent(): JSX.Element {
               <EmployeeFilterBar
                 view={view}
                 onViewChange={handleViewChange}
+                dimensions={filterDimensions}
                 dimension={filterDimension}
                 onDimensionChange={handleFilterDimensionChange}
                 selectedValue={selectedFilterValue}
