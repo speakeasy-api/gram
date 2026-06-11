@@ -703,6 +703,9 @@ WHERE id = @event_id
   AND project_id = @project_id;
 
 -- name: SetAssistantRuntimeActive :exec
+-- Guarded against finalized rows: the reaper can soft-delete a runtime row
+-- between a turn loading it and reaching this write, and re-stamping state
+-- on a tombstone would make it look live again.
 UPDATE assistant_runtimes
 SET
   state = @active_state,
@@ -710,7 +713,9 @@ SET
   last_heartbeat_at = clock_timestamp(),
   updated_at = clock_timestamp()
 WHERE id = @runtime_id
-  AND project_id = @project_id;
+  AND project_id = @project_id
+  AND deleted IS FALSE
+  AND ended IS FALSE;
 
 -- name: UpdateAssistantRuntimeMetadata :exec
 UPDATE assistant_runtimes
@@ -823,7 +828,9 @@ SET
   updated_at = clock_timestamp()
 WHERE id = @runtime_id
   AND project_id = @project_id
-  AND state = @expiring_state;
+  AND state = @expiring_state
+  AND deleted IS FALSE
+  AND ended IS FALSE;
 
 -- name: CreateAssistantRuntime :exec
 -- Inserts an assistant_runtimes row with caller-controlled id, timestamps,
