@@ -10,6 +10,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { TextArea } from "@/components/ui/textarea";
@@ -1324,7 +1331,7 @@ function PromptPolicySheetBody({
           rows={5}
         />
         {!isEditing && (
-          <PromptExamplesRadioGroup
+          <PromptExampleChips
             selectedExampleName={selectedExampleName}
             onSelect={(template) => {
               setSelectedExampleName(template.name);
@@ -1337,8 +1344,6 @@ function PromptPolicySheetBody({
         )}
       </div>
 
-      <PromptPolicyMessageTypesPicker />
-
       <JudgeConfigSection
         formModel={formModel}
         setFormModel={setFormModel}
@@ -1347,6 +1352,8 @@ function PromptPolicySheetBody({
         formFailOpen={formFailOpen}
         setFormFailOpen={setFormFailOpen}
       />
+
+      <PromptPolicyMessageTypesPicker />
 
       <ActionPicker formAction={formAction} setFormAction={setFormAction} />
 
@@ -1378,6 +1385,9 @@ const TEMPERATURE_TICKS = Array.from(
   { length: 11 },
   (_, i) => Math.round(i * TEMPERATURE_STEP * 10) / 10,
 );
+// Sentinel for the recommended (server-default) model in the Select, since
+// Radix disallows an empty-string item value. Maps to "" in form state.
+const RECOMMENDED_MODEL_VALUE = "__recommended__";
 
 // JUDGE_MODEL_OPTIONS lists the models a prompt policy may run its LLM judge on.
 // The recommended option uses the empty value, which follows the server's
@@ -1433,8 +1443,25 @@ function JudgeConfigSection({
   formFailOpen: boolean;
   setFormFailOpen: (v: boolean) => void;
 }) {
+  // Radix Select disallows an empty-string item value, so the recommended
+  // (default) model uses a sentinel in the dropdown and maps back to "".
+  const knownValues = JUDGE_MODEL_OPTIONS.map((o) => o.value);
+  const options =
+    formModel && !knownValues.includes(formModel)
+      ? [
+          ...JUDGE_MODEL_OPTIONS,
+          {
+            value: formModel,
+            label: formModel,
+            description: "Custom model configured via the API.",
+          },
+        ]
+      : JUDGE_MODEL_OPTIONS;
+  const selected = options.find((o) => o.value === formModel);
+  const toItemValue = (v: string) => v || RECOMMENDED_MODEL_VALUE;
+
   return (
-    <div className="border-border bg-muted/30 space-y-5 rounded-lg border p-4">
+    <div className="space-y-2">
       <div className="space-y-1">
         <Label className="text-sm font-medium">Judge configuration</Label>
         <p className="text-muted-foreground text-xs">
@@ -1442,107 +1469,86 @@ function JudgeConfigSection({
         </p>
       </div>
 
-      <JudgeModelPicker formModel={formModel} setFormModel={setFormModel} />
-
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label className="text-sm font-medium">Temperature</Label>
-          <span className="text-muted-foreground text-xs tabular-nums">
-            {formTemperature.toFixed(1)}
-            {formTemperature === DEFAULT_JUDGE_TEMPERATURE ? " · default" : ""}
-          </span>
+      <div className="border-border bg-muted/30 space-y-5 rounded-lg border p-4">
+        {/* Model */}
+        <div className="space-y-1.5">
+          <Label className="text-sm font-medium">Model</Label>
+          <Select
+            value={toItemValue(formModel)}
+            onValueChange={(v) =>
+              setFormModel(v === RECOMMENDED_MODEL_VALUE ? "" : v)
+            }
+          >
+            <SelectTrigger className="bg-background w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {options.map((opt) => (
+                <SelectItem
+                  key={toItemValue(opt.value)}
+                  value={toItemValue(opt.value)}
+                >
+                  <span className="flex items-center gap-2">
+                    {opt.label}
+                    {opt.recommended && (
+                      <Badge variant="neutral" className="text-[10px]">
+                        <Badge.Text>Recommended</Badge.Text>
+                      </Badge>
+                    )}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {selected?.description && (
+            <p className="text-muted-foreground text-xs">
+              {selected.description}
+            </p>
+          )}
         </div>
-        <Slider
-          value={formTemperature}
-          // Round to one decimal so float steps don't drift (e.g. 0.30000004).
-          onChange={(v) => setFormTemperature(Math.round(v * 10) / 10)}
-          min={TEMPERATURE_MIN}
-          max={TEMPERATURE_MAX}
-          step={TEMPERATURE_STEP}
-          ticks={TEMPERATURE_TICKS}
-        />
-        <div className="text-muted-foreground flex justify-between text-[10px]">
-          <span>0 · deterministic</span>
-          <span>1 · varied</span>
-        </div>
-        <p className="text-muted-foreground text-xs">
-          Lower is more consistent. 0 is recommended for repeatable verdicts.
-        </p>
-      </div>
 
-      <div className="flex items-center justify-between">
-        <div className="pr-4">
-          <Label className="text-sm font-medium">Fail open</Label>
+        {/* Temperature */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Label className="text-sm font-medium">Temperature</Label>
+            <span className="text-muted-foreground text-xs tabular-nums">
+              {formTemperature.toFixed(1)}
+              {formTemperature === DEFAULT_JUDGE_TEMPERATURE
+                ? " · default"
+                : ""}
+            </span>
+          </div>
+          <Slider
+            value={formTemperature}
+            // Round to one decimal so float steps don't drift (e.g. 0.30000004).
+            onChange={(v) => setFormTemperature(Math.round(v * 10) / 10)}
+            min={TEMPERATURE_MIN}
+            max={TEMPERATURE_MAX}
+            step={TEMPERATURE_STEP}
+            ticks={TEMPERATURE_TICKS}
+          />
           <p className="text-muted-foreground text-xs">
-            When the judge errors or times out, allow the message instead of
-            blocking it.
+            Lower is more consistent. 0 is recommended for repeatable verdicts.
           </p>
         </div>
-        <Switch checked={formFailOpen} onCheckedChange={setFormFailOpen} />
+
+        {/* Fail open */}
+        <div className="flex items-center justify-between gap-4">
+          <div className="pr-2">
+            <Label className="text-sm font-medium">Fail open</Label>
+            <p className="text-muted-foreground text-xs">
+              When the judge errors or times out, allow the message instead of
+              blocking it.
+            </p>
+          </div>
+          <Switch checked={formFailOpen} onCheckedChange={setFormFailOpen} />
+        </div>
       </div>
     </div>
   );
 }
 
-function JudgeModelPicker({
-  formModel,
-  setFormModel,
-}: {
-  formModel: string;
-  setFormModel: (v: string) => void;
-}) {
-  // A model that's persisted on the policy but not one of the curated options
-  // (e.g. set via the API) still needs to round-trip, so surface it as selected.
-  const knownValues = JUDGE_MODEL_OPTIONS.map((o) => o.value);
-  const options = knownValues.includes(formModel)
-    ? JUDGE_MODEL_OPTIONS
-    : [
-        ...JUDGE_MODEL_OPTIONS,
-        {
-          value: formModel,
-          label: formModel,
-          description: "Custom model configured via the API.",
-        },
-      ];
-
-  return (
-    <div className="space-y-2">
-      <Label className="text-sm font-medium">Model</Label>
-      <RadioGroup value={formModel} onValueChange={setFormModel}>
-        <div className="border-border divide-border divide-y rounded-lg border">
-          {options.map((opt) => (
-            <label
-              key={opt.value || "recommended"}
-              htmlFor={`judge-model-${opt.value || "recommended"}`}
-              className="hover:bg-muted/50 flex cursor-pointer items-start gap-3 p-3"
-            >
-              <RadioGroupItem
-                value={opt.value}
-                id={`judge-model-${opt.value || "recommended"}`}
-                className="mt-0.5"
-              />
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">{opt.label}</span>
-                  {opt.recommended && (
-                    <Badge variant="neutral" className="text-[10px]">
-                      <Badge.Text>Recommended</Badge.Text>
-                    </Badge>
-                  )}
-                </div>
-                <div className="text-muted-foreground mt-1 text-xs">
-                  {opt.description}
-                </div>
-              </div>
-            </label>
-          ))}
-        </div>
-      </RadioGroup>
-    </div>
-  );
-}
-
-function PromptExamplesRadioGroup({
+function PromptExampleChips({
   selectedExampleName,
   onSelect,
 }: {
@@ -1550,43 +1556,27 @@ function PromptExamplesRadioGroup({
   onSelect: (template: (typeof PROMPT_POLICY_TEMPLATES)[number]) => void;
 }) {
   return (
-    <div className="space-y-2">
-      <Label className="text-sm font-medium">Prompt Examples</Label>
-      <RadioGroup
-        value={selectedExampleName}
-        onValueChange={(name) => {
-          const template = PROMPT_POLICY_TEMPLATES.find((t) => t.name === name);
-          if (template) {
-            onSelect(template);
-          }
-        }}
-      >
-        <div className="border-border divide-border divide-y rounded-lg border">
-          {PROMPT_POLICY_TEMPLATES.map((template, index) => {
-            const exampleId = `prompt-example-${index}`;
-
-            return (
-              <label
-                key={template.name}
-                htmlFor={exampleId}
-                className="hover:bg-muted/40 flex cursor-pointer items-start gap-3 px-4 py-3"
-              >
-                <RadioGroupItem
-                  value={template.name}
-                  id={exampleId}
-                  className="mt-0.5"
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium">{template.name}</div>
-                  <div className="text-muted-foreground text-xs">
-                    {template.prompt}
-                  </div>
-                </div>
-              </label>
-            );
-          })}
-        </div>
-      </RadioGroup>
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-muted-foreground text-xs">Try:</span>
+      {PROMPT_POLICY_TEMPLATES.map((template) => {
+        const active = selectedExampleName === template.name;
+        return (
+          <SimpleTooltip key={template.name} tooltip={template.prompt}>
+            <button
+              type="button"
+              onClick={() => onSelect(template)}
+              className={cn(
+                "rounded-full border px-2.5 py-1 text-xs transition-colors",
+                active
+                  ? "border-foreground/30 bg-muted text-foreground"
+                  : "border-border text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+              )}
+            >
+              {template.name}
+            </button>
+          </SimpleTooltip>
+        );
+      })}
     </div>
   );
 }
@@ -1628,7 +1618,7 @@ function PromptPolicyHowItWorks({ isEditing }: { isEditing: boolean }) {
 
 function PromptPolicyMessageTypesPicker() {
   const selectedMessageTypes = promptPolicyMessageTypes();
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="space-y-3">
