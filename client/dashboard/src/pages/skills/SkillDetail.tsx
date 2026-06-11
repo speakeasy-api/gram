@@ -485,21 +485,6 @@ export function SkillActivityPage() {
   });
 
   const traces = tracesData?.traces ?? [];
-  const tracesWithVersion = traces.filter((trace) =>
-    Boolean(trace.skillVersionId),
-  );
-
-  const versionUseCount = tracesWithVersion.reduce<Record<string, number>>(
-    (acc, trace) => {
-      const versionId = trace.skillVersionId;
-      if (!versionId) {
-        return acc;
-      }
-      acc[versionId] = (acc[versionId] ?? 0) + 1;
-      return acc;
-    },
-    {},
-  );
 
   const totalEvents = summaryData?.totalEvents ?? traces.length;
   const totalSessions = summaryData?.totalSessions ?? traces.length;
@@ -522,38 +507,7 @@ export function SkillActivityPage() {
         />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <div className="border-border bg-card rounded-xl border p-5">
-          <Type variant="subheading">Per-version usage</Type>
-          {summaryPending && tracesPending ? (
-            <Type small muted className="mt-3">
-              Loading usage…
-            </Type>
-          ) : Object.keys(versionUseCount).length === 0 ? (
-            <Type small muted className="mt-3">
-              No version-linked usage yet.
-            </Type>
-          ) : (
-            <div className="mt-3 space-y-2">
-              {Object.entries(versionUseCount)
-                .sort((a, b) => b[1] - a[1])
-                .map(([versionId, count]) => (
-                  <div
-                    key={versionId}
-                    className="border-border bg-muted/20 flex items-center justify-between rounded-lg border px-3 py-2"
-                  >
-                    <Type small className="font-mono">
-                      {versionId.slice(0, 8)}
-                    </Type>
-                    <Type small muted>
-                      {count} trace{count === 1 ? "" : "s"}
-                    </Type>
-                  </div>
-                ))}
-            </div>
-          )}
-        </div>
-
+      <div className="grid gap-6">
         <div className="border-border bg-card rounded-xl border p-5">
           <Type variant="subheading">Recent traces</Type>
           {tracesPending ? (
@@ -711,11 +665,6 @@ function SkillTraceRow({ trace }: { trace: HookTraceSummary }) {
         <Type small muted>
           {trace.skillName || "Unknown skill"}
         </Type>
-        {trace.skillVersionId ? (
-          <Type small muted className="font-mono">
-            v:{trace.skillVersionId.slice(0, 8)}
-          </Type>
-        ) : null}
         {trace.userEmail ? (
           <Type small muted className="truncate">
             {trace.userEmail}

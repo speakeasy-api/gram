@@ -4162,24 +4162,18 @@ func unmarshalSkillBreakdownRowResponseBodyToTelemetrySkillBreakdownRow(v *Skill
 // *HookTraceSummaryResponseBody.
 func unmarshalHookTraceSummaryResponseBodyToTelemetryHookTraceSummary(v *HookTraceSummaryResponseBody) *telemetry.HookTraceSummary {
 	res := &telemetry.HookTraceSummary{
-		TraceID:               *v.TraceID,
-		StartTimeUnixNano:     *v.StartTimeUnixNano,
-		LogCount:              *v.LogCount,
-		HookStatus:            v.HookStatus,
-		BlockReason:           v.BlockReason,
-		GramUrn:               *v.GramUrn,
-		ToolName:              v.ToolName,
-		ToolSource:            v.ToolSource,
-		EventSource:           v.EventSource,
-		UserEmail:             v.UserEmail,
-		HookSource:            v.HookSource,
-		SkillName:             v.SkillName,
-		SkillScope:            v.SkillScope,
-		SkillDiscoveryRoot:    v.SkillDiscoveryRoot,
-		SkillSourceType:       v.SkillSourceType,
-		SkillID:               v.SkillID,
-		SkillVersionID:        v.SkillVersionID,
-		SkillResolutionStatus: v.SkillResolutionStatus,
+		TraceID:           *v.TraceID,
+		StartTimeUnixNano: *v.StartTimeUnixNano,
+		LogCount:          *v.LogCount,
+		HookStatus:        v.HookStatus,
+		BlockReason:       v.BlockReason,
+		GramUrn:           *v.GramUrn,
+		ToolName:          v.ToolName,
+		ToolSource:        v.ToolSource,
+		EventSource:       v.EventSource,
+		UserEmail:         v.UserEmail,
+		HookSource:        v.HookSource,
+		SkillName:         v.SkillName,
 	}
 
 	return res

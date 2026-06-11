@@ -3,7 +3,6 @@ package skills
 import (
 	"context"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -277,7 +276,7 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.Skill,
 		Slug:      string(payload.Slug),
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.C(oops.CodeNotFound)
 		}
 
@@ -368,7 +367,7 @@ func (s *Service) SetSettings(ctx context.Context, payload *gen.SetSettingsPaylo
 			if _, err := s.skillsRepo.DeleteProjectCapturePolicyOverride(ctx, skillsrepo.DeleteProjectCapturePolicyOverrideParams{
 				OrganizationID: authCtx.ActiveOrganizationID,
 				ProjectID:      *authCtx.ProjectID,
-			}); err != nil && !errors.Is(err, sql.ErrNoRows) && !errors.Is(err, pgx.ErrNoRows) {
+			}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 				return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("delete capture policy override: %w", err), "error saving capture policy")
 			}
 		}
@@ -491,7 +490,7 @@ func (s *Service) ApproveVersion(ctx context.Context, payload *gen.ApproveVersio
 		ID:        versionID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.C(oops.CodeNotFound)
 		}
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get skill version: %w", err), "error loading skill version").Log(ctx, s.logger)
@@ -576,7 +575,7 @@ func (s *Service) SupersedeVersion(ctx context.Context, payload *gen.SupersedeVe
 		ID:        versionID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.C(oops.CodeNotFound)
 		}
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get skill version for supersede: %w", err), "error superseding skill version").Log(ctx, s.logger)
@@ -654,7 +653,7 @@ func (s *Service) RejectVersion(ctx context.Context, payload *gen.RejectVersionP
 		ID:        versionID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.C(oops.CodeNotFound)
 		}
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get skill version for reject: %w", err), "error rejecting skill version").Log(ctx, s.logger)
@@ -670,7 +669,7 @@ func (s *Service) RejectVersion(ctx context.Context, payload *gen.RejectVersionP
 		ProjectID:        *authCtx.ProjectID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeConflict, nil, "skill version must be pending review to reject")
 		}
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("reject skill version: %w", err), "error rejecting skill version").Log(ctx, s.logger)
@@ -705,7 +704,7 @@ func (s *Service) Archive(ctx context.Context, payload *gen.ArchivePayload) (*ge
 		ID:        skillID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.C(oops.CodeNotFound)
 		}
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("archive skill: %w", err), "error archiving skill").Log(ctx, s.logger)
@@ -1177,7 +1176,7 @@ func (s *Service) ensureSkillLineageForCapture(
 			ID:        skillID,
 		})
 		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, pgx.ErrNoRows) {
 				return skillsrepo.Skill{}, skillsrepo.SkillVersion{}, oops.C(oops.CodeNotFound)
 			}
 			return skillsrepo.Skill{}, skillsrepo.SkillVersion{}, oops.E(oops.CodeUnexpected, fmt.Errorf("get skill by id: %w", err), "error loading skill")
@@ -1188,7 +1187,7 @@ func (s *Service) ensureSkillLineageForCapture(
 			Slug:      skillSlug,
 		})
 		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, pgx.ErrNoRows) {
 				skill, err = repo.CreateSkill(ctx, skillsrepo.CreateSkillParams{
 					OrganizationID: organizationID,
 					ProjectID:      projectID,
@@ -1234,7 +1233,7 @@ func (s *Service) ensureSkillLineageForCapture(
 		ProjectID:     projectID,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			version, err = repo.CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
 				AssetID:       assetID,
 				ContentSha256: contentSHA,
@@ -1306,7 +1305,7 @@ func (s *Service) ensureSkillLineageForCapture(
 			ID:              skill.ID,
 		})
 		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, pgx.ErrNoRows) {
 				return skill, version, nil
 			}
 			return skillsrepo.Skill{}, skillsrepo.SkillVersion{}, oops.E(oops.CodeUnexpected, fmt.Errorf("set skill active version when empty: %w", err), "error saving skill artifact")
@@ -1526,7 +1525,7 @@ func (s *Service) findExistingAsset(ctx context.Context, projectID uuid.UUID, sh
 		Sha256:    sha,
 	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("find existing skill asset: %w", err), "error loading skill asset")
