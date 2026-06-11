@@ -1143,7 +1143,9 @@ if data.get("hook_event_name") == "SessionStart" and shutil.which("codex"):
                     "args": redact_args(transport.get("args")),
                 },
             })
-        additional = data.get("additional_data") or {}
+        additional = data.get("additional_data")
+        if not isinstance(additional, dict):
+            additional = {}
         additional["mcp_inventory_codex"] = slim
         data["additional_data"] = additional
 
