@@ -234,7 +234,7 @@ func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx data
 	case string(workos.EventKindDirectorySyncDeleted):
 		return nil, handleDSyncChange(ctx, logger, dbtx, event, false)
 	case string(workos.EventKindDirectorySyncUserCreated), string(workos.EventKindDirectorySyncUserUpdated), string(workos.EventKindDirectorySyncUserDeleted):
-		return nil, handleDirectoryUserEvent(ctx, logger, dbtx, event.ID, workos.EventKind(event.Event), event.Data)
+		return nil, handleDirectoryUserEvent(ctx, logger, dbtx, workos.EventKind(event.Event), event.Data)
 	case string(workos.EventKindDirectorySyncGroupCreated), string(workos.EventKindDirectorySyncGroupUpdated), string(workos.EventKindDirectorySyncGroupDeleted),
 		string(workos.EventKindDirectorySyncGroupUserAdded), string(workos.EventKindDirectorySyncGroupUserRemoved):
 		return nil, handleDirectoryAttributesEvent(ctx, logger, dbtx, workos.EventKind(event.Event), event.Data)

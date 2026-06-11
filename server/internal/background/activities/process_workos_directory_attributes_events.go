@@ -4,12 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -29,7 +26,6 @@ type workosDirectoryGroupEventPayload struct {
 	Name           string          `json:"name"`
 	RawAttributes  json.RawMessage `json:"raw_attributes"`
 	Attributes     json.RawMessage `json:"attributes"`
-	RawPayload     json.RawMessage `json:"-"`
 }
 
 type workosDirectoryUserEventPayload struct {
@@ -41,7 +37,6 @@ type workosDirectoryUserEventPayload struct {
 	FirstName        string          `json:"first_name"`
 	LastName         string          `json:"last_name"`
 	UpdatedAt        time.Time       `json:"updated_at"`
-	RawPayload       json.RawMessage `json:"-"`
 }
 
 type workosDirectoryGroupMembershipEventPayload struct {
@@ -49,7 +44,19 @@ type workosDirectoryGroupMembershipEventPayload struct {
 	Group workosDirectoryGroupEventPayload `json:"group"`
 }
 
-func handleDirectoryUserEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, eventID string, eventKind workos.EventKind, raw json.RawMessage) error {
+func (p *workosDirectoryGroupMembershipEventPayload) UnmarshalJSON(data []byte) error {
+	// Alias avoids infinite recursion into this method.
+	type alias workosDirectoryGroupMembershipEventPayload
+	var decoded alias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+
+	*p = workosDirectoryGroupMembershipEventPayload(decoded)
+	return nil
+}
+
+func handleDirectoryUserEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, eventKind workos.EventKind, raw json.RawMessage) error {
 	payload, err := unmarshalDirectoryUserPayload(raw)
 	if err != nil {
 		return err
@@ -57,11 +64,10 @@ func handleDirectoryUserEvent(ctx context.Context, logger *slog.Logger, dbtx dat
 
 	switch eventKind {
 	case workos.EventKindDirectorySyncUserCreated, workos.EventKindDirectorySyncUserUpdated:
-		_, err := upsertDirectoryUser(ctx, logger, dbtx, payload)
-		return err
+		return upsertDirectoryUser(ctx, dbtx, payload)
 	case workos.EventKindDirectorySyncUserDeleted:
 		if _, err := workosrepo.New(dbtx).DeleteDirectoryUserByWorkOSID(ctx, payload.ID); err != nil {
-			return fmt.Errorf("delete directory user %q from event %q: %w", payload.ID, eventID, err)
+			return oops.E(oops.CodeUnexpected, err, "delete directory user")
 		}
 		return nil
 	default:
@@ -76,8 +82,7 @@ func handleDirectoryAttributesEvent(ctx context.Context, logger *slog.Logger, db
 		if err != nil {
 			return err
 		}
-		_, err = upsertDirectoryGroup(ctx, dbtx, payload)
-		return err
+		return upsertDirectoryGroup(ctx, dbtx, payload)
 
 	case workos.EventKindDirectorySyncGroupDeleted:
 		payload, err := unmarshalDirectoryGroupPayload(raw)
@@ -113,7 +118,6 @@ func unmarshalDirectoryGroupPayload(raw json.RawMessage) (workosDirectoryGroupEv
 	if payload.ID == "" {
 		return payload, oops.Permanent(oops.E(oops.CodeBadRequest, nil, "invalid directory group event payload missing ID"))
 	}
-	payload.RawPayload = append(json.RawMessage(nil), raw...)
 	return payload, nil
 }
 
@@ -125,67 +129,46 @@ func unmarshalDirectoryUserPayload(raw json.RawMessage) (workosDirectoryUserEven
 	if payload.ID == "" {
 		return payload, oops.Permanent(oops.E(oops.CodeBadRequest, nil, "invalid directory user event payload missing ID"))
 	}
-	payload.RawPayload = append(json.RawMessage(nil), raw...)
 	return payload, nil
 }
 
 func unmarshalDirectoryGroupMembershipPayload(raw json.RawMessage) (workosDirectoryGroupMembershipEventPayload, error) {
 	var payload workosDirectoryGroupMembershipEventPayload
-	var rawPayload struct {
-		User  json.RawMessage `json:"user"`
-		Group json.RawMessage `json:"group"`
-	}
-	if err := json.Unmarshal(raw, &rawPayload); err != nil {
+	if err := json.Unmarshal(raw, &payload); err != nil {
 		return payload, oops.Permanent(oops.E(oops.CodeBadRequest, err, "unmarshal directory group membership event payload"))
 	}
-	user, err := unmarshalDirectoryUserPayload(rawPayload.User)
-	if err != nil {
-		return payload, err
-	}
-	group, err := unmarshalDirectoryGroupPayload(rawPayload.Group)
-	if err != nil {
-		return payload, err
-	}
-	payload = workosDirectoryGroupMembershipEventPayload{User: user, Group: group}
 	if payload.User.ID == "" || payload.Group.ID == "" {
 		return payload, oops.Permanent(oops.E(oops.CodeBadRequest, nil, "invalid directory group membership event payload missing user or group ID"))
-	}
-	if payload.User.OrganizationID == "" {
-		payload.User.OrganizationID = payload.Group.OrganizationID
-	}
-	if payload.Group.OrganizationID == "" {
-		payload.Group.OrganizationID = payload.User.OrganizationID
 	}
 	return payload, nil
 }
 
-func upsertDirectoryGroup(ctx context.Context, dbtx database.DBTX, payload workosDirectoryGroupEventPayload) (uuid.UUID, error) {
+func upsertDirectoryGroup(ctx context.Context, dbtx database.DBTX, payload workosDirectoryGroupEventPayload) error {
 	org, err := organizationsrepo.New(dbtx).GetOrganizationByWorkosID(ctx, conv.ToPGText(payload.OrganizationID))
 	if err != nil {
-		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "get organization by WorkOS ID")
+		return oops.E(oops.CodeUnexpected, err, "get organization by WorkOS ID")
 	}
 
-	groupID, err := workosrepo.New(dbtx).UpsertDirectoryGroup(ctx, workosrepo.UpsertDirectoryGroupParams{
+	if _, err := workosrepo.New(dbtx).UpsertDirectoryGroup(ctx, workosrepo.UpsertDirectoryGroupParams{
 		OrganizationID:         org.ID,
 		WorkosDirectoryGroupID: payload.ID,
 		Name:                   payload.Name,
-		Attributes:             payload.RawPayload,
-	})
-	if err != nil {
-		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "upsert directory group")
+		Attributes:             payload.Attributes,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "upsert directory group")
 	}
 
-	return groupID, nil
+	return nil
 }
 
-func upsertDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, payload workosDirectoryUserEventPayload) (uuid.UUID, error) {
+func upsertDirectoryUser(ctx context.Context, dbtx database.DBTX, payload workosDirectoryUserEventPayload) error {
 	org, err := organizationsrepo.New(dbtx).GetOrganizationByWorkosID(ctx, conv.ToPGText(payload.OrganizationID))
 	if err != nil {
-		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "get organization by WorkOS ID")
+		return oops.E(oops.CodeUnexpected, err, "get organization by WorkOS ID")
 	}
 
 	var userID pgtype.Text
-	email := directoryUserEmail(payload)
+	email := conv.NormalizeEmail(payload.Email)
 	if email != "" {
 		user, err := usersrepo.New(dbtx).GetUserByEmail(ctx, email)
 		switch {
@@ -193,27 +176,20 @@ func upsertDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx database
 			userID = conv.ToPGText(user.ID)
 		case errors.Is(err, pgx.ErrNoRows):
 		default:
-			return uuid.Nil, oops.E(oops.CodeUnexpected, err, "get user by directory email")
+			return oops.E(oops.CodeUnexpected, err, "get user by directory email")
 		}
 	}
 
-	directoryUserID, err := workosrepo.New(dbtx).UpsertDirectoryUser(ctx, workosrepo.UpsertDirectoryUserParams{
+	if _, err := workosrepo.New(dbtx).UpsertDirectoryUser(ctx, workosrepo.UpsertDirectoryUserParams{
 		OrganizationID:        org.ID,
 		UserID:                userID,
 		WorkosDirectoryUserID: payload.ID,
 		Email:                 conv.ToPGText(email),
-		Attributes:            payload.RawPayload,
-	})
-	if err != nil {
-		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "upsert directory user")
+		Attributes:            payload.CustomAttributes,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "upsert directory user")
 	}
-	if userID.Valid {
-		logger.DebugContext(ctx, "linked directory user to existing user by email",
-			attr.SlogUserID(userID.String),
-			attr.SlogWorkOSUserID(payload.ID),
-		)
-	}
-	return directoryUserID, nil
+	return nil
 }
 
 func deleteDirectoryGroup(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, payload workosDirectoryGroupEventPayload) error {
@@ -240,14 +216,26 @@ func deleteDirectoryGroup(ctx context.Context, logger *slog.Logger, dbtx databas
 }
 
 func openDirectoryGroupMembership(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, payload workosDirectoryGroupMembershipEventPayload) error {
-	userID, err := upsertDirectoryUser(ctx, logger, dbtx, payload.User)
+	userID, err := workosrepo.New(dbtx).GetDirectoryUserIDByWorkOSID(ctx, payload.User.ID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		logger.WarnContext(ctx, "skipping directory group membership for unknown user",
+			attr.SlogWorkOSDirectoryAttributesEntityID(payload.User.ID),
+		)
+		return nil
+	}
 	if err != nil {
-		return err
+		return oops.E(oops.CodeUnexpected, err, "get directory user ID by WorkOS ID")
 	}
 
-	groupID, err := upsertDirectoryGroup(ctx, dbtx, payload.Group)
+	groupID, err := workosrepo.New(dbtx).GetDirectoryGroupIDByWorkOSID(ctx, payload.Group.ID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		logger.WarnContext(ctx, "skipping directory group membership for unknown group",
+			attr.SlogWorkOSDirectoryAttributesEntityID(payload.Group.ID),
+		)
+		return nil
+	}
 	if err != nil {
-		return err
+		return oops.E(oops.CodeUnexpected, err, "get directory group ID by WorkOS ID")
 	}
 
 	if _, err := workosrepo.New(dbtx).OpenDirectoryUserGroupMembership(ctx, workosrepo.OpenDirectoryUserGroupMembershipParams{
@@ -273,11 +261,4 @@ func closeDirectoryGroupMembership(ctx context.Context, logger *slog.Logger, dbt
 		return nil
 	}
 	return nil
-}
-
-func directoryUserEmail(payload workosDirectoryUserEventPayload) string {
-	if payload.Email != "" {
-		return strings.ToLower(strings.TrimSpace(payload.Email))
-	}
-	return ""
 }
