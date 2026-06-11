@@ -63,9 +63,7 @@ const (
 	// loop forever.
 	maxEventAttempts = 5
 
-	runtimeStartupReapGrace     = 2 * time.Minute
-	runtimeWarmExpiryReapGrace  = 1 * time.Minute
-	runtimeProcessingLeaseGrace = 2 * time.Minute
+	runtimeStartupReapGrace = 2 * time.Minute
 	// runtimeExpiringReapGrace is the cushion the reaper waits before
 	// reclaiming a row stuck in `expiring`. It must exceed the worst-case
 	// total budget of the ExpireThreadRuntime activity (Temporal
@@ -476,24 +474,20 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 	// process is gone or its driving workflow has given up:
 	//   - 'starting' rows that never transitioned to active within the
 	//     startup grace window (usually server crashed mid-boot).
-	//   - 'active' rows whose warm_until passed a grace window ago (usually
-	//     server crashed after a turn; unexpected-exit callback didn't fire
-	//     because the whole process died).
 	//   - 'expiring' rows whose updated_at is older than the activity's full
 	//     retry budget — the ExpireThreadRuntime activity exhausted Temporal
 	//     attempts after CAS active->expiring without reaching Stop or
 	//     Revert. Without this the row blocks the partial unique index
 	//     ReserveAssistantRuntime depends on.
+	// 'active' rows are never reaped: an idle runtime keeps its VM until the
+	// assistant is deleted.
 	queries := assistantrepo.New(s.db)
 	runtimeAssistantIDs, err := queries.ReapStuckAssistantRuntimes(ctx, assistantrepo.ReapStuckAssistantRuntimesParams{
-		StoppedState:    runtimeStateStopped,
-		StartingState:   runtimeStateStarting,
-		StartingCutoff:  conv.ToPGTimestamptz(now.Add(-runtimeStartupReapGrace)),
-		ActiveState:     runtimeStateActive,
-		WarmCutoff:      conv.ToPGTimestamptz(now.Add(-runtimeWarmExpiryReapGrace)),
-		HeartbeatCutoff: conv.ToPGTimestamptz(now.Add(-runtimeProcessingLeaseGrace)),
-		ExpiringState:   runtimeStateExpiring,
-		ExpiringCutoff:  conv.ToPGTimestamptz(now.Add(-runtimeExpiringReapGrace)),
+		StoppedState:   runtimeStateStopped,
+		StartingState:  runtimeStateStarting,
+		StartingCutoff: conv.ToPGTimestamptz(now.Add(-runtimeStartupReapGrace)),
+		ExpiringState:  runtimeStateExpiring,
+		ExpiringCutoff: conv.ToPGTimestamptz(now.Add(-runtimeExpiringReapGrace)),
 	})
 	if err != nil {
 		return out, fmt.Errorf("reap stuck assistant runtimes: %w", err)
@@ -1036,8 +1030,11 @@ type ReapInactiveAssistantRuntimesParams struct {
 }
 
 // ReapInactiveAssistantRuntimes drives the long-inactivity janitor. It picks
-// runtime rows whose owning assistant has had no recorded activity within
-// InactivityThreshold and tears down the corresponding backend resources.
+// runtime rows that are finalized (soft-deleted or ended) or belong to a
+// soft-deleted assistant, whose owning assistant has had no recorded
+// activity within InactivityThreshold, and tears down the backend resources
+// their Stop/Reap left behind. A live row under a live assistant is never a
+// candidate: an idle runtime keeps its VM until the assistant is deleted.
 func (s *ServiceCore) ReapInactiveAssistantRuntimes(ctx context.Context, params ReapInactiveAssistantRuntimesParams) (ReapAssistantRuntimesResult, error) {
 	if params.InactivityThreshold <= 0 {
 		return ReapAssistantRuntimesResult{}, fmt.Errorf("inactivity threshold must be positive")

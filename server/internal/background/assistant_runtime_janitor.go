@@ -64,11 +64,13 @@ type AssistantRuntimeJanitorWorkflowResult struct {
 	Errors int
 }
 
-// AssistantRuntimeJanitorWorkflow reaps backend resources (Fly apps,
-// long-lived runner state) belonging to assistants that have had no runtime
-// activity for AssistantRuntimeJanitorInactivityThreshold. Active and
-// starting runtimes are filtered out at the SQL layer so an in-flight
-// admit is never collected mid-flight.
+// AssistantRuntimeJanitorWorkflow reaps orphaned backend resources (Fly
+// apps, long-lived runner state) whose Stop/Reap never completed — finalized
+// runtime rows, plus live rows under soft-deleted assistants — once the
+// owning assistant has had no runtime activity for
+// AssistantRuntimeJanitorInactivityThreshold. A live runtime row under a
+// live assistant is never a candidate: an idle runtime keeps its VM until
+// the assistant is deleted.
 func AssistantRuntimeJanitorWorkflow(ctx workflow.Context, params AssistantRuntimeJanitorWorkflowParams) (*AssistantRuntimeJanitorWorkflowResult, error) {
 	var a *Activities
 
