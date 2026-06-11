@@ -2210,6 +2210,49 @@ func (s *Service) GetHooksSummary(ctx context.Context, payload *telem_gen.GetHoo
 	}, nil
 }
 
+// GetToolUsageSummary returns target-aware MCP and tool usage metrics.
+func (s *Service) GetToolUsageSummary(ctx context.Context, payload *telem_gen.GetToolUsageSummaryPayload) (res *telem_gen.GetToolUsageSummaryResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
+	}
+
+	if _, _, err := parseTimeRange(&payload.From, &payload.To); err != nil {
+		return nil, err
+	}
+
+	return &telem_gen.GetToolUsageSummaryResult{
+		Totals: &telem_gen.ToolUsageTotals{
+			EventCount:    0,
+			SuccessCount:  0,
+			FailureCount:  0,
+			FailureRate:   0,
+			UniqueTools:   0,
+			UniqueUsers:   0,
+			UniqueTargets: 0,
+		},
+		Targets:             []*telem_gen.ToolUsageTargetSummary{},
+		Users:               []*telem_gen.ToolUsageUserSummary{},
+		TargetTimeSeries:    []*telem_gen.ToolUsageTargetTimeSeriesPoint{},
+		UserTimeSeries:      []*telem_gen.ToolUsageUserTimeSeriesPoint{},
+		UsersByTarget:       []*telem_gen.ToolUsageUsersByTargetRow{},
+		TargetToolBreakdown: []*telem_gen.ToolUsageTargetToolBreakdownRow{},
+	}, nil
+}
+
 // ListHooksTraces retrieves hook trace summaries with pagination and filtering.
 // Uses materialized columns for efficient querying while accessing user_email from JSON.
 func (s *Service) ListHooksTraces(ctx context.Context, payload *telem_gen.ListHooksTracesPayload) (res *telem_gen.ListHooksTracesResult, err error) {

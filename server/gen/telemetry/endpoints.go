@@ -29,6 +29,7 @@ type Endpoints struct {
 	ListFilterOptions        goa.Endpoint
 	ListAttributeKeys        goa.Endpoint
 	GetHooksSummary          goa.Endpoint
+	GetToolUsageSummary      goa.Endpoint
 	ListHooksTraces          goa.Endpoint
 }
 
@@ -50,6 +51,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListFilterOptions:        NewListFilterOptionsEndpoint(s, a.APIKeyAuth),
 		ListAttributeKeys:        NewListAttributeKeysEndpoint(s, a.APIKeyAuth),
 		GetHooksSummary:          NewGetHooksSummaryEndpoint(s, a.APIKeyAuth),
+		GetToolUsageSummary:      NewGetToolUsageSummaryEndpoint(s, a.APIKeyAuth),
 		ListHooksTraces:          NewListHooksTracesEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -69,6 +71,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListFilterOptions = m(e.ListFilterOptions)
 	e.ListAttributeKeys = m(e.ListAttributeKeys)
 	e.GetHooksSummary = m(e.GetHooksSummary)
+	e.GetToolUsageSummary = m(e.GetToolUsageSummary)
 	e.ListHooksTraces = m(e.ListHooksTraces)
 }
 
@@ -848,6 +851,65 @@ func NewGetHooksSummaryEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			return nil, err
 		}
 		return s.GetHooksSummary(ctx, p)
+	}
+}
+
+// NewGetToolUsageSummaryEndpoint returns an endpoint function that calls the
+// method "getToolUsageSummary" of service "telemetry".
+func NewGetToolUsageSummaryEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetToolUsageSummaryPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetToolUsageSummary(ctx, p)
 	}
 }
 

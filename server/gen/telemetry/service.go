@@ -46,6 +46,8 @@ type Service interface {
 	ListAttributeKeys(context.Context, *ListAttributeKeysPayload) (res *ListAttributeKeysResult, err error)
 	// Get aggregated hooks metrics grouped by server
 	GetHooksSummary(context.Context, *GetHooksSummaryPayload) (res *GetHooksSummaryResult, err error)
+	// Get target-aware MCP and tool usage metrics
+	GetToolUsageSummary(context.Context, *GetToolUsageSummaryPayload) (res *GetToolUsageSummaryResult, err error)
 	// List hook traces aggregated by trace_id with user information
 	ListHooksTraces(context.Context, *ListHooksTracesPayload) (res *ListHooksTracesResult, err error)
 }
@@ -72,7 +74,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [14]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "listHooksTraces"}
+var MethodNames = [15]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -317,6 +319,38 @@ type GetProjectOverviewResult struct {
 	Comparison *ProjectOverviewSummary
 	// Indicates whether metrics are session-based or tool-call-based
 	MetricsMode string
+}
+
+// GetToolUsageSummaryPayload is the payload type of the telemetry service
+// getToolUsageSummary method.
+type GetToolUsageSummaryPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Target types to include. Empty means all target types.
+	TargetTypes []ToolUsageTargetType
+	// Hosted MCP toolset slugs to include
+	HostedToolsetSlugs []string
+	// Shadow MCP server names to include
+	ShadowServerNames []string
+	// Typed user identities to include
+	UserFilters []*ToolUsageUserFilter
+}
+
+// GetToolUsageSummaryResult is the result type of the telemetry service
+// getToolUsageSummary method.
+type GetToolUsageSummaryResult struct {
+	Totals              *ToolUsageTotals
+	Targets             []*ToolUsageTargetSummary
+	Users               []*ToolUsageUserSummary
+	TargetTimeSeries    []*ToolUsageTargetTimeSeriesPoint
+	UserTimeSeries      []*ToolUsageUserTimeSeriesPoint
+	UsersByTarget       []*ToolUsageUsersByTargetRow
+	TargetToolBreakdown []*ToolUsageTargetToolBreakdownRow
 }
 
 // GetUserMetricsSummaryPayload is the payload type of the telemetry service
@@ -1027,6 +1061,104 @@ type ToolUsage struct {
 	// Successful calls (2xx status)
 	SuccessCount int64
 	// Failed calls (4xx/5xx status)
+	FailureCount int64
+}
+
+// Tool usage aggregation target kind
+type ToolUsageTargetKind string
+
+// Aggregated tool usage metrics for one target
+type ToolUsageTargetSummary struct {
+	TargetType   ToolUsageTargetType
+	TargetKind   ToolUsageTargetKind
+	TargetID     string
+	TargetLabel  string
+	EventCount   int64
+	UniqueTools  int64
+	SuccessCount int64
+	FailureCount int64
+	FailureRate  float64
+}
+
+// A time-series bucket for one tool usage target
+type ToolUsageTargetTimeSeriesPoint struct {
+	BucketStartNs string
+	TargetType    ToolUsageTargetType
+	TargetKind    ToolUsageTargetKind
+	TargetID      string
+	TargetLabel   string
+	EventCount    int64
+	FailureCount  int64
+}
+
+// Aggregated tool usage metrics for one target and tool
+type ToolUsageTargetToolBreakdownRow struct {
+	TargetType   ToolUsageTargetType
+	TargetKind   ToolUsageTargetKind
+	TargetID     string
+	TargetLabel  string
+	ToolName     string
+	EventCount   int64
+	SuccessCount int64
+	FailureCount int64
+	FailureRate  float64
+}
+
+// Tool usage target type
+type ToolUsageTargetType string
+
+// Target-aware MCP and tool usage totals
+type ToolUsageTotals struct {
+	EventCount    int64
+	SuccessCount  int64
+	FailureCount  int64
+	FailureRate   float64
+	UniqueTools   int64
+	UniqueUsers   int64
+	UniqueTargets int64
+}
+
+// Typed user identity filter
+type ToolUsageUserFilter struct {
+	Kind ToolUsageUserKind
+	Key  string
+}
+
+// Tool usage user identity kind
+type ToolUsageUserKind string
+
+// Aggregated tool usage metrics for one user identity
+type ToolUsageUserSummary struct {
+	UserKey      string
+	UserLabel    string
+	UserKind     ToolUsageUserKind
+	EventCount   int64
+	UniqueTools  int64
+	SuccessCount int64
+	FailureCount int64
+	FailureRate  float64
+}
+
+// A time-series bucket for one tool usage user identity
+type ToolUsageUserTimeSeriesPoint struct {
+	BucketStartNs string
+	UserKey       string
+	UserLabel     string
+	UserKind      ToolUsageUserKind
+	EventCount    int64
+	FailureCount  int64
+}
+
+// Aggregated tool usage metrics for one target and user identity
+type ToolUsageUsersByTargetRow struct {
+	TargetType   ToolUsageTargetType
+	TargetKind   ToolUsageTargetKind
+	TargetID     string
+	TargetLabel  string
+	UserKey      string
+	UserLabel    string
+	UserKind     ToolUsageUserKind
+	EventCount   int64
 	FailureCount int64
 }
 

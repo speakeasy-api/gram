@@ -116,6 +116,7 @@ export * from "./getRemoteMcpServer.js";
 export * from "./getSourceEnvironment.js";
 export * from "./getTokensUnderManagement.js";
 export * from "./getToolsetEnvironment.js";
+export * from "./getToolUsageSummary.js";
 export * from "./getUsageTiers.js";
 export * from "./getUserMetricsSummary.js";
 export * from "./globalVariations.js";
