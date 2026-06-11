@@ -71,7 +71,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 				// call actually routes — deny when it points at a non-Gram
 				// target. Unmatched prefixes and missing snapshots stay
 				// allowed: older plugin installs ship no inventory.
-				if d := s.codexInventoryProvenanceDetail(ctx, matched, evidence.ServerIdentity, orgID); d != "" {
+				if d := s.codexInventoryProvenanceDetail(ctx, matched, mcpServerIdentityFromToolName(toolName), orgID); d != "" {
 					if _, allowed := s.canBypassPolicy(ctx, orgID, metadata.UserID, policy.ID, evidence, toolName); !allowed {
 						detail, denied = d, true
 					}

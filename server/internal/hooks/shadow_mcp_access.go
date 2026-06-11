@@ -88,8 +88,15 @@ func (s *Service) codexShadowMCPEvidence(ctx context.Context, payload *gen.Codex
 		return evidence, nil
 	}
 	matched := matchCachedMCPEntry(entries, evidence.ServerIdentity)
-	if matched != nil && matched.URL != "" {
-		evidence.FullURL = matched.URL
+	if matched != nil {
+		if matched.URL != "" {
+			evidence.FullURL = matched.URL
+		}
+		if matched.Command != "" {
+			// Pin stdio identity to the launch command, mirroring the Claude
+			// guard — a bypass grant must not follow a renamed config alias.
+			evidence.ServerIdentity = matched.Command
+		}
 	}
 	return evidence, matched
 }

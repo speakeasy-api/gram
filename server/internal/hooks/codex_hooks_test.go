@@ -141,6 +141,17 @@ func TestCodexShadowMCPEvidence_ResolvesURLFromInventory(t *testing.T) {
 		Status:        "unknown",
 		StatusRaw:     "o_auth",
 		ConnectorUUID: "",
+	}, {
+		RawLine:       "",
+		Source:        "local",
+		PluginName:    "",
+		Name:          "local-tool",
+		URL:           "",
+		Command:       "npx -y some-server",
+		Transport:     "STDIO",
+		Status:        "unknown",
+		StatusRaw:     "",
+		ConnectorUUID: "",
 	}}, sessionMCPListTTL))
 
 	toolName := "mcp__int-linear__get_issue"
@@ -151,6 +162,16 @@ func TestCodexShadowMCPEvidence_ResolvesURLFromInventory(t *testing.T) {
 	})
 	require.Equal(t, "int-linear", evidence.ServerIdentity)
 	require.Equal(t, "https://chat.example.com/mcp/int-linear", evidence.FullURL)
+	require.NotNil(t, matched)
+
+	stdioTool := "mcp__local-tool__run"
+	evidence, matched = ti.service.codexShadowMCPEvidence(ctx, &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		ToolName:      &stdioTool,
+	})
+	require.Equal(t, "npx -y some-server", evidence.ServerIdentity, "stdio identity must pin to the launch command so bypass grants do not follow renamed aliases")
+	require.Empty(t, evidence.FullURL)
 	require.NotNil(t, matched)
 
 	unknownTool := "mcp__unknown__do_thing"

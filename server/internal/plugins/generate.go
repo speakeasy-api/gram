@@ -1049,6 +1049,7 @@ import re
 import shutil
 import subprocess
 import sys
+import urllib.parse
 
 payload = sys.stdin.read()
 try:
@@ -1106,7 +1107,12 @@ def redact_args(args):
             redact_next = False
         elif "=" in a and secret_flag.search(a.split("=", 1)[0]):
             out.append(a.split("=", 1)[0] + "=[REDACTED]")
-        elif a.startswith("-") and (a == "-H" or secret_flag.search(a)):
+        elif a == "-H":
+            out.append(a)
+            redact_next = True
+        elif a.startswith("-H") and secret_header.match(a[2:]):
+            out.append("-H" + a[2:].split(":", 1)[0] + ": [REDACTED]")
+        elif a.startswith("-") and secret_flag.search(a):
             out.append(a)
             redact_next = True
         elif secret_header.match(a):
@@ -1116,6 +1122,25 @@ def redact_args(args):
         else:
             out.append(a)
     return out
+
+# URLs are their own credential channel: strip userinfo and redact
+# secret-named query parameters while preserving scheme/host/path, which
+# the server needs for provenance checks.
+def redact_url(url):
+    if not isinstance(url, str) or not url:
+        return url
+    try:
+        parts = urllib.parse.urlsplit(url)
+        netloc = parts.netloc.rsplit("@", 1)[-1]
+        pairs = []
+        for k, v in urllib.parse.parse_qsl(parts.query, keep_blank_values=True):
+            if secret_flag.search(k):
+                v = "[REDACTED]"
+            pairs.append((k, v))
+        query = urllib.parse.urlencode(pairs)
+        return urllib.parse.urlunsplit((parts.scheme, netloc, parts.path, query, parts.fragment))
+    except Exception:
+        return url
 
 # PATH lookup alone misses real installs: hooks fired by the Codex desktop
 # app inherit the minimal GUI environment, and desktop-only users never have
@@ -1166,7 +1191,7 @@ if codex_bin:
                 "auth_status": item.get("auth_status"),
                 "transport": {
                     "type": transport.get("type"),
-                    "url": transport.get("url"),
+                    "url": redact_url(transport.get("url")),
                     "command": transport.get("command"),
                     "args": redact_args(transport.get("args")),
                 },
