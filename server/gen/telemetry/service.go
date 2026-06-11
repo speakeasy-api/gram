@@ -340,9 +340,12 @@ type GetToolUsageFilterOptionsPayload struct {
 // GetToolUsageFilterOptionsResult is the result type of the telemetry service
 // getToolUsageFilterOptions method.
 type GetToolUsageFilterOptionsResult struct {
+	// Hosted MCP servers with usage in the selected time range
 	HostedServers []*ToolUsageHostedServerFilterOption
+	// Shadow MCP servers with usage in the selected time range
 	ShadowServers []*ToolUsageShadowServerFilterOption
-	Users         []*ToolUsageUserFilterOption
+	// User identities with usage in the selected time range
+	Users []*ToolUsageUserFilterOption
 }
 
 // GetToolUsageSummaryPayload is the payload type of the telemetry service
@@ -368,12 +371,19 @@ type GetToolUsageSummaryPayload struct {
 // GetToolUsageSummaryResult is the result type of the telemetry service
 // getToolUsageSummary method.
 type GetToolUsageSummaryResult struct {
-	Totals              *ToolUsageTotals
-	Targets             []*ToolUsageTargetSummary
-	Users               []*ToolUsageUserSummary
-	TargetTimeSeries    []*ToolUsageTargetTimeSeriesPoint
-	UserTimeSeries      []*ToolUsageUserTimeSeriesPoint
-	UsersByTarget       []*ToolUsageUsersByTargetRow
+	// Overall usage totals for the selected filters and time range
+	Totals *ToolUsageTotals
+	// Top usage targets for the selected filters and time range
+	Targets []*ToolUsageTargetSummary
+	// Top user identities for the selected filters and time range
+	Users []*ToolUsageUserSummary
+	// Time-series usage buckets grouped by target
+	TargetTimeSeries []*ToolUsageTargetTimeSeriesPoint
+	// Time-series usage buckets grouped by user identity
+	UserTimeSeries []*ToolUsageUserTimeSeriesPoint
+	// Cross-dimensional usage rows grouped by target and user identity
+	UsersByTarget []*ToolUsageUsersByTargetRow
+	// Per-tool usage rows grouped by target
 	TargetToolBreakdown []*ToolUsageTargetToolBreakdownRow
 }
 
@@ -1093,13 +1103,17 @@ type ToolUsageFilterOptionType string
 
 // Hosted MCP server filter option with usage in the selected time window
 type ToolUsageHostedServerFilterOption struct {
+	// Hosted MCP toolset slug
 	ToolsetSlug string
-	EventCount  int64
+	// Number of tool usage events observed for the hosted MCP server
+	EventCount int64
 }
 
 // Shadow MCP server filter option with usage in the selected time window
 type ToolUsageShadowServerFilterOption struct {
+	// Observed Shadow MCP server name
 	ServerName string
+	// Number of tool usage events observed for the Shadow MCP server
 	EventCount int64
 }
 
@@ -1108,39 +1122,65 @@ type ToolUsageTargetKind string
 
 // Aggregated tool usage metrics for one target
 type ToolUsageTargetSummary struct {
-	TargetType   ToolUsageTargetType
-	TargetKind   ToolUsageTargetKind
-	TargetID     string
-	TargetLabel  string
-	EventCount   int64
-	UniqueTools  int64
+	// Specific kind of tool usage target
+	TargetType ToolUsageTargetType
+	// Display grouping for the target
+	TargetKind ToolUsageTargetKind
+	// Stable target identifier used by filters and chart grouping
+	TargetID string
+	// User-facing label for the target
+	TargetLabel string
+	// Total number of tool usage events for the target
+	EventCount int64
+	// Number of distinct tools observed for the target
+	UniqueTools int64
+	// Number of successful tool usage events for the target
 	SuccessCount int64
+	// Number of failed tool usage events for the target
 	FailureCount int64
-	FailureRate  float64
+	// Fraction of completed tool usage events for the target that failed
+	FailureRate float64
 }
 
 // A time-series bucket for one tool usage target
 type ToolUsageTargetTimeSeriesPoint struct {
+	// Bucket start time in Unix nanoseconds as a string for JavaScript integer
+	// safety
 	BucketStartNs string
-	TargetType    ToolUsageTargetType
-	TargetKind    ToolUsageTargetKind
-	TargetID      string
-	TargetLabel   string
-	EventCount    int64
-	FailureCount  int64
+	// Specific kind of tool usage target
+	TargetType ToolUsageTargetType
+	// Display grouping for the target
+	TargetKind ToolUsageTargetKind
+	// Stable target identifier used by filters and chart grouping
+	TargetID string
+	// User-facing label for the target
+	TargetLabel string
+	// Number of tool usage events in the bucket
+	EventCount int64
+	// Number of failed tool usage events in the bucket
+	FailureCount int64
 }
 
 // Aggregated tool usage metrics for one target and tool
 type ToolUsageTargetToolBreakdownRow struct {
-	TargetType   ToolUsageTargetType
-	TargetKind   ToolUsageTargetKind
-	TargetID     string
-	TargetLabel  string
-	ToolName     string
-	EventCount   int64
+	// Specific kind of tool usage target
+	TargetType ToolUsageTargetType
+	// Display grouping for the target
+	TargetKind ToolUsageTargetKind
+	// Stable target identifier used by filters and chart grouping
+	TargetID string
+	// User-facing label for the target
+	TargetLabel string
+	// Observed tool name
+	ToolName string
+	// Total number of tool usage events for the target and tool
+	EventCount int64
+	// Number of successful tool usage events for the target and tool
 	SuccessCount int64
+	// Number of failed tool usage events for the target and tool
 	FailureCount int64
-	FailureRate  float64
+	// Fraction of completed tool usage events for the target and tool that failed
+	FailureRate float64
 }
 
 // Tool usage target type
@@ -1148,26 +1188,39 @@ type ToolUsageTargetType string
 
 // Target-aware MCP and tool usage totals
 type ToolUsageTotals struct {
-	EventCount    int64
-	SuccessCount  int64
-	FailureCount  int64
-	FailureRate   float64
-	UniqueTools   int64
-	UniqueUsers   int64
+	// Total number of tool usage events
+	EventCount int64
+	// Number of successful tool usage events
+	SuccessCount int64
+	// Number of failed tool usage events
+	FailureCount int64
+	// Fraction of completed tool usage events that failed
+	FailureRate float64
+	// Number of distinct tools observed
+	UniqueTools int64
+	// Number of distinct user identities observed
+	UniqueUsers int64
+	// Number of distinct usage targets observed
 	UniqueTargets int64
 }
 
 // Typed user identity filter
 type ToolUsageUserFilter struct {
+	// Type of user identity represented by the filter key
 	Kind ToolUsageUserKind
-	Key  string
+	// User identity value to include
+	Key string
 }
 
 // Tool usage user filter option with usage in the selected time window
 type ToolUsageUserFilterOption struct {
-	UserKey    string
-	UserLabel  string
-	UserKind   ToolUsageUserKind
+	// Stable user identity value used by filters
+	UserKey string
+	// User-facing label for the user identity
+	UserLabel string
+	// Type of user identity represented by the option
+	UserKind ToolUsageUserKind
+	// Number of tool usage events observed for the user identity
 	EventCount int64
 }
 
@@ -1176,36 +1229,60 @@ type ToolUsageUserKind string
 
 // Aggregated tool usage metrics for one user identity
 type ToolUsageUserSummary struct {
-	UserKey      string
-	UserLabel    string
-	UserKind     ToolUsageUserKind
-	EventCount   int64
-	UniqueTools  int64
+	// Stable user identity value used by filters and chart grouping
+	UserKey string
+	// User-facing label for the user identity
+	UserLabel string
+	// Type of user identity represented by the row
+	UserKind ToolUsageUserKind
+	// Total number of tool usage events for the user identity
+	EventCount int64
+	// Number of distinct tools observed for the user identity
+	UniqueTools int64
+	// Number of successful tool usage events for the user identity
 	SuccessCount int64
+	// Number of failed tool usage events for the user identity
 	FailureCount int64
-	FailureRate  float64
+	// Fraction of completed tool usage events for the user identity that failed
+	FailureRate float64
 }
 
 // A time-series bucket for one tool usage user identity
 type ToolUsageUserTimeSeriesPoint struct {
+	// Bucket start time in Unix nanoseconds as a string for JavaScript integer
+	// safety
 	BucketStartNs string
-	UserKey       string
-	UserLabel     string
-	UserKind      ToolUsageUserKind
-	EventCount    int64
-	FailureCount  int64
+	// Stable user identity value used by filters and chart grouping
+	UserKey string
+	// User-facing label for the user identity
+	UserLabel string
+	// Type of user identity represented by the row
+	UserKind ToolUsageUserKind
+	// Number of tool usage events in the bucket
+	EventCount int64
+	// Number of failed tool usage events in the bucket
+	FailureCount int64
 }
 
 // Aggregated tool usage metrics for one target and user identity
 type ToolUsageUsersByTargetRow struct {
-	TargetType   ToolUsageTargetType
-	TargetKind   ToolUsageTargetKind
-	TargetID     string
-	TargetLabel  string
-	UserKey      string
-	UserLabel    string
-	UserKind     ToolUsageUserKind
-	EventCount   int64
+	// Specific kind of tool usage target
+	TargetType ToolUsageTargetType
+	// Display grouping for the target
+	TargetKind ToolUsageTargetKind
+	// Stable target identifier used by filters and chart grouping
+	TargetID string
+	// User-facing label for the target
+	TargetLabel string
+	// Stable user identity value used by filters and chart grouping
+	UserKey string
+	// User-facing label for the user identity
+	UserLabel string
+	// Type of user identity represented by the row
+	UserKind ToolUsageUserKind
+	// Total number of tool usage events for the target and user identity
+	EventCount int64
+	// Number of failed tool usage events for the target and user identity
 	FailureCount int64
 }
 

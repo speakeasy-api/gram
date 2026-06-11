@@ -40,14 +40,29 @@ export type TargetType = ClosedEnum<typeof TargetType>;
  * A time-series bucket for one tool usage target
  */
 export type ToolUsageTargetTimeSeriesPoint = {
+  /**
+   * Bucket start time in Unix nanoseconds as a string for JavaScript integer safety
+   */
   bucketStartNs: string;
+  /**
+   * Number of tool usage events in the bucket
+   */
   eventCount: number;
+  /**
+   * Number of failed tool usage events in the bucket
+   */
   failureCount: number;
+  /**
+   * Stable target identifier used by filters and chart grouping
+   */
   targetId: string;
   /**
    * Tool usage aggregation target kind
    */
   targetKind: TargetKind;
+  /**
+   * User-facing label for the target
+   */
   targetLabel: string;
   /**
    * Tool usage target type

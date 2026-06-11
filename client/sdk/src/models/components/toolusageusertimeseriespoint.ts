@@ -29,14 +29,29 @@ export type ToolUsageUserTimeSeriesPointUserKind = ClosedEnum<
  * A time-series bucket for one tool usage user identity
  */
 export type ToolUsageUserTimeSeriesPoint = {
+  /**
+   * Bucket start time in Unix nanoseconds as a string for JavaScript integer safety
+   */
   bucketStartNs: string;
+  /**
+   * Number of tool usage events in the bucket
+   */
   eventCount: number;
+  /**
+   * Number of failed tool usage events in the bucket
+   */
   failureCount: number;
+  /**
+   * Stable user identity value used by filters and chart grouping
+   */
   userKey: string;
   /**
    * Tool usage user identity kind
    */
   userKind: ToolUsageUserTimeSeriesPointUserKind;
+  /**
+   * User-facing label for the user identity
+   */
   userLabel: string;
 };
 

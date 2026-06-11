@@ -12,7 +12,13 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  * Hosted MCP server filter option with usage in the selected time window
  */
 export type ToolUsageHostedServerFilterOption = {
+  /**
+   * Number of tool usage events observed for the hosted MCP server
+   */
   eventCount: number;
+  /**
+   * Hosted MCP toolset slug
+   */
   toolsetSlug: string;
 };
 

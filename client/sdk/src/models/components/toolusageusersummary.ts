@@ -29,16 +29,37 @@ export type ToolUsageUserSummaryUserKind = ClosedEnum<
  * Aggregated tool usage metrics for one user identity
  */
 export type ToolUsageUserSummary = {
+  /**
+   * Total number of tool usage events for the user identity
+   */
   eventCount: number;
+  /**
+   * Number of failed tool usage events for the user identity
+   */
   failureCount: number;
+  /**
+   * Fraction of completed tool usage events for the user identity that failed
+   */
   failureRate: number;
+  /**
+   * Number of successful tool usage events for the user identity
+   */
   successCount: number;
+  /**
+   * Number of distinct tools observed for the user identity
+   */
   uniqueTools: number;
+  /**
+   * Stable user identity value used by filters and chart grouping
+   */
   userKey: string;
   /**
    * Tool usage user identity kind
    */
   userKind: ToolUsageUserSummaryUserKind;
+  /**
+   * User-facing label for the user identity
+   */
   userLabel: string;
 };
 

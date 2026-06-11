@@ -12,7 +12,13 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  * Shadow MCP server filter option with usage in the selected time window
  */
 export type ToolUsageShadowServerFilterOption = {
+  /**
+   * Number of tool usage events observed for the Shadow MCP server
+   */
   eventCount: number;
+  /**
+   * Observed Shadow MCP server name
+   */
   serverName: string;
 };
 

@@ -40,15 +40,33 @@ import {
  * Target-aware MCP and tool usage metrics
  */
 export type GetToolUsageSummaryResult = {
+  /**
+   * Time-series usage buckets grouped by target
+   */
   targetTimeSeries: Array<ToolUsageTargetTimeSeriesPoint>;
+  /**
+   * Per-tool usage rows grouped by target
+   */
   targetToolBreakdown: Array<ToolUsageTargetToolBreakdownRow>;
+  /**
+   * Top usage targets for the selected filters and time range
+   */
   targets: Array<ToolUsageTargetSummary>;
   /**
    * Target-aware MCP and tool usage totals
    */
   totals: ToolUsageTotals;
+  /**
+   * Time-series usage buckets grouped by user identity
+   */
   userTimeSeries: Array<ToolUsageUserTimeSeriesPoint>;
+  /**
+   * Top user identities for the selected filters and time range
+   */
   users: Array<ToolUsageUserSummary>;
+  /**
+   * Cross-dimensional usage rows grouped by target and user identity
+   */
   usersByTarget: Array<ToolUsageUsersByTargetRow>;
 };
 

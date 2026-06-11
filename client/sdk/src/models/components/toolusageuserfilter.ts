@@ -25,6 +25,9 @@ export type ToolUsageUserFilterKind = ClosedEnum<
  * Typed user identity filter
  */
 export type ToolUsageUserFilter = {
+  /**
+   * User identity value to include
+   */
   key: string;
   /**
    * Tool usage user identity kind

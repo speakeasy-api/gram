@@ -36738,14 +36738,17 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/ToolUsageHostedServerFilterOption'
+                    description: Hosted MCP servers with usage in the selected time range
                 shadow_servers:
                     type: array
                     items:
                         $ref: '#/components/schemas/ToolUsageShadowServerFilterOption'
+                    description: Shadow MCP servers with usage in the selected time range
                 users:
                     type: array
                     items:
                         $ref: '#/components/schemas/ToolUsageUserFilterOption'
+                    description: User identities with usage in the selected time range
             description: Filter options for target-aware MCP and tool usage metrics
             required:
                 - hosted_servers
@@ -36801,28 +36804,34 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/ToolUsageTargetTimeSeriesPoint'
+                    description: Time-series usage buckets grouped by target
                 target_tool_breakdown:
                     type: array
                     items:
                         $ref: '#/components/schemas/ToolUsageTargetToolBreakdownRow'
+                    description: Per-tool usage rows grouped by target
                 targets:
                     type: array
                     items:
                         $ref: '#/components/schemas/ToolUsageTargetSummary'
+                    description: Top usage targets for the selected filters and time range
                 totals:
                     $ref: '#/components/schemas/ToolUsageTotals'
                 user_time_series:
                     type: array
                     items:
                         $ref: '#/components/schemas/ToolUsageUserTimeSeriesPoint'
+                    description: Time-series usage buckets grouped by user identity
                 users:
                     type: array
                     items:
                         $ref: '#/components/schemas/ToolUsageUserSummary'
+                    description: Top user identities for the selected filters and time range
                 users_by_target:
                     type: array
                     items:
                         $ref: '#/components/schemas/ToolUsageUsersByTargetRow'
+                    description: Cross-dimensional usage rows grouped by target and user identity
             description: Target-aware MCP and tool usage metrics
             required:
                 - totals
@@ -43467,9 +43476,11 @@ components:
             properties:
                 event_count:
                     type: integer
+                    description: Number of tool usage events observed for the hosted MCP server
                     format: int64
                 toolset_slug:
                     type: string
+                    description: Hosted MCP toolset slug
             description: Hosted MCP server filter option with usage in the selected time window
             required:
                 - toolset_slug
@@ -43479,9 +43490,11 @@ components:
             properties:
                 event_count:
                     type: integer
+                    description: Number of tool usage events observed for the Shadow MCP server
                     format: int64
                 server_name:
                     type: string
+                    description: Observed Shadow MCP server name
             description: Shadow MCP server filter option with usage in the selected time window
             required:
                 - server_name
@@ -43491,18 +43504,23 @@ components:
             properties:
                 event_count:
                     type: integer
+                    description: Total number of tool usage events for the target
                     format: int64
                 failure_count:
                     type: integer
+                    description: Number of failed tool usage events for the target
                     format: int64
                 failure_rate:
                     type: number
+                    description: Fraction of completed tool usage events for the target that failed
                     format: double
                 success_count:
                     type: integer
+                    description: Number of successful tool usage events for the target
                     format: int64
                 target_id:
                     type: string
+                    description: Stable target identifier used by filters and chart grouping
                 target_kind:
                     type: string
                     description: Tool usage aggregation target kind
@@ -43512,6 +43530,7 @@ components:
                         - skill
                 target_label:
                     type: string
+                    description: User-facing label for the target
                 target_type:
                     type: string
                     description: Tool usage target type
@@ -43522,6 +43541,7 @@ components:
                         - skill
                 unique_tools:
                     type: integer
+                    description: Number of distinct tools observed for the target
                     format: int64
             description: Aggregated tool usage metrics for one target
             required:
@@ -43539,14 +43559,18 @@ components:
             properties:
                 bucket_start_ns:
                     type: string
+                    description: Bucket start time in Unix nanoseconds as a string for JavaScript integer safety
                 event_count:
                     type: integer
+                    description: Number of tool usage events in the bucket
                     format: int64
                 failure_count:
                     type: integer
+                    description: Number of failed tool usage events in the bucket
                     format: int64
                 target_id:
                     type: string
+                    description: Stable target identifier used by filters and chart grouping
                 target_kind:
                     type: string
                     description: Tool usage aggregation target kind
@@ -43556,6 +43580,7 @@ components:
                         - skill
                 target_label:
                     type: string
+                    description: User-facing label for the target
                 target_type:
                     type: string
                     description: Tool usage target type
@@ -43578,18 +43603,23 @@ components:
             properties:
                 event_count:
                     type: integer
+                    description: Total number of tool usage events for the target and tool
                     format: int64
                 failure_count:
                     type: integer
+                    description: Number of failed tool usage events for the target and tool
                     format: int64
                 failure_rate:
                     type: number
+                    description: Fraction of completed tool usage events for the target and tool that failed
                     format: double
                 success_count:
                     type: integer
+                    description: Number of successful tool usage events for the target and tool
                     format: int64
                 target_id:
                     type: string
+                    description: Stable target identifier used by filters and chart grouping
                 target_kind:
                     type: string
                     description: Tool usage aggregation target kind
@@ -43599,6 +43629,7 @@ components:
                         - skill
                 target_label:
                     type: string
+                    description: User-facing label for the target
                 target_type:
                     type: string
                     description: Tool usage target type
@@ -43609,6 +43640,7 @@ components:
                         - skill
                 tool_name:
                     type: string
+                    description: Observed tool name
             description: Aggregated tool usage metrics for one target and tool
             required:
                 - target_type
@@ -43625,24 +43657,31 @@ components:
             properties:
                 event_count:
                     type: integer
+                    description: Total number of tool usage events
                     format: int64
                 failure_count:
                     type: integer
+                    description: Number of failed tool usage events
                     format: int64
                 failure_rate:
                     type: number
+                    description: Fraction of completed tool usage events that failed
                     format: double
                 success_count:
                     type: integer
+                    description: Number of successful tool usage events
                     format: int64
                 unique_targets:
                     type: integer
+                    description: Number of distinct usage targets observed
                     format: int64
                 unique_tools:
                     type: integer
+                    description: Number of distinct tools observed
                     format: int64
                 unique_users:
                     type: integer
+                    description: Number of distinct user identities observed
                     format: int64
             description: Target-aware MCP and tool usage totals
             required:
@@ -43658,6 +43697,7 @@ components:
             properties:
                 key:
                     type: string
+                    description: User identity value to include
                 kind:
                     type: string
                     description: Tool usage user identity kind
@@ -43675,9 +43715,11 @@ components:
             properties:
                 event_count:
                     type: integer
+                    description: Number of tool usage events observed for the user identity
                     format: int64
                 user_key:
                     type: string
+                    description: Stable user identity value used by filters
                 user_kind:
                     type: string
                     description: Tool usage user identity kind
@@ -43688,6 +43730,7 @@ components:
                         - unknown
                 user_label:
                     type: string
+                    description: User-facing label for the user identity
             description: Tool usage user filter option with usage in the selected time window
             required:
                 - user_key
@@ -43699,21 +43742,27 @@ components:
             properties:
                 event_count:
                     type: integer
+                    description: Total number of tool usage events for the user identity
                     format: int64
                 failure_count:
                     type: integer
+                    description: Number of failed tool usage events for the user identity
                     format: int64
                 failure_rate:
                     type: number
+                    description: Fraction of completed tool usage events for the user identity that failed
                     format: double
                 success_count:
                     type: integer
+                    description: Number of successful tool usage events for the user identity
                     format: int64
                 unique_tools:
                     type: integer
+                    description: Number of distinct tools observed for the user identity
                     format: int64
                 user_key:
                     type: string
+                    description: Stable user identity value used by filters and chart grouping
                 user_kind:
                     type: string
                     description: Tool usage user identity kind
@@ -43724,6 +43773,7 @@ components:
                         - unknown
                 user_label:
                     type: string
+                    description: User-facing label for the user identity
             description: Aggregated tool usage metrics for one user identity
             required:
                 - user_key
@@ -43739,14 +43789,18 @@ components:
             properties:
                 bucket_start_ns:
                     type: string
+                    description: Bucket start time in Unix nanoseconds as a string for JavaScript integer safety
                 event_count:
                     type: integer
+                    description: Number of tool usage events in the bucket
                     format: int64
                 failure_count:
                     type: integer
+                    description: Number of failed tool usage events in the bucket
                     format: int64
                 user_key:
                     type: string
+                    description: Stable user identity value used by filters and chart grouping
                 user_kind:
                     type: string
                     description: Tool usage user identity kind
@@ -43757,6 +43811,7 @@ components:
                         - unknown
                 user_label:
                     type: string
+                    description: User-facing label for the user identity
             description: A time-series bucket for one tool usage user identity
             required:
                 - bucket_start_ns
@@ -43770,12 +43825,15 @@ components:
             properties:
                 event_count:
                     type: integer
+                    description: Total number of tool usage events for the target and user identity
                     format: int64
                 failure_count:
                     type: integer
+                    description: Number of failed tool usage events for the target and user identity
                     format: int64
                 target_id:
                     type: string
+                    description: Stable target identifier used by filters and chart grouping
                 target_kind:
                     type: string
                     description: Tool usage aggregation target kind
@@ -43785,6 +43843,7 @@ components:
                         - skill
                 target_label:
                     type: string
+                    description: User-facing label for the target
                 target_type:
                     type: string
                     description: Tool usage target type
@@ -43795,6 +43854,7 @@ components:
                         - skill
                 user_key:
                     type: string
+                    description: Stable user identity value used by filters and chart grouping
                 user_kind:
                     type: string
                     description: Tool usage user identity kind
@@ -43805,6 +43865,7 @@ components:
                         - unknown
                 user_label:
                     type: string
+                    description: User-facing label for the user identity
             description: Aggregated tool usage metrics for one target and user identity
             required:
                 - target_type

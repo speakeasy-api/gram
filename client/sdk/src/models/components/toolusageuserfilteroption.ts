@@ -27,12 +27,21 @@ export type UserKind = ClosedEnum<typeof UserKind>;
  * Tool usage user filter option with usage in the selected time window
  */
 export type ToolUsageUserFilterOption = {
+  /**
+   * Number of tool usage events observed for the user identity
+   */
   eventCount: number;
+  /**
+   * Stable user identity value used by filters
+   */
   userKey: string;
   /**
    * Tool usage user identity kind
    */
   userKind: UserKind;
+  /**
+   * User-facing label for the user identity
+   */
   userLabel: string;
 };
 

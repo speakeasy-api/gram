@@ -380,21 +380,31 @@ type GetHooksSummaryResponseBody struct {
 // GetToolUsageSummaryResponseBody is the type of the "telemetry" service
 // "getToolUsageSummary" endpoint HTTP response body.
 type GetToolUsageSummaryResponseBody struct {
-	Totals              *ToolUsageTotalsResponseBody                   `form:"totals,omitempty" json:"totals,omitempty" xml:"totals,omitempty"`
-	Targets             []*ToolUsageTargetSummaryResponseBody          `form:"targets,omitempty" json:"targets,omitempty" xml:"targets,omitempty"`
-	Users               []*ToolUsageUserSummaryResponseBody            `form:"users,omitempty" json:"users,omitempty" xml:"users,omitempty"`
-	TargetTimeSeries    []*ToolUsageTargetTimeSeriesPointResponseBody  `form:"target_time_series,omitempty" json:"target_time_series,omitempty" xml:"target_time_series,omitempty"`
-	UserTimeSeries      []*ToolUsageUserTimeSeriesPointResponseBody    `form:"user_time_series,omitempty" json:"user_time_series,omitempty" xml:"user_time_series,omitempty"`
-	UsersByTarget       []*ToolUsageUsersByTargetRowResponseBody       `form:"users_by_target,omitempty" json:"users_by_target,omitempty" xml:"users_by_target,omitempty"`
+	// Overall usage totals for the selected filters and time range
+	Totals *ToolUsageTotalsResponseBody `form:"totals,omitempty" json:"totals,omitempty" xml:"totals,omitempty"`
+	// Top usage targets for the selected filters and time range
+	Targets []*ToolUsageTargetSummaryResponseBody `form:"targets,omitempty" json:"targets,omitempty" xml:"targets,omitempty"`
+	// Top user identities for the selected filters and time range
+	Users []*ToolUsageUserSummaryResponseBody `form:"users,omitempty" json:"users,omitempty" xml:"users,omitempty"`
+	// Time-series usage buckets grouped by target
+	TargetTimeSeries []*ToolUsageTargetTimeSeriesPointResponseBody `form:"target_time_series,omitempty" json:"target_time_series,omitempty" xml:"target_time_series,omitempty"`
+	// Time-series usage buckets grouped by user identity
+	UserTimeSeries []*ToolUsageUserTimeSeriesPointResponseBody `form:"user_time_series,omitempty" json:"user_time_series,omitempty" xml:"user_time_series,omitempty"`
+	// Cross-dimensional usage rows grouped by target and user identity
+	UsersByTarget []*ToolUsageUsersByTargetRowResponseBody `form:"users_by_target,omitempty" json:"users_by_target,omitempty" xml:"users_by_target,omitempty"`
+	// Per-tool usage rows grouped by target
 	TargetToolBreakdown []*ToolUsageTargetToolBreakdownRowResponseBody `form:"target_tool_breakdown,omitempty" json:"target_tool_breakdown,omitempty" xml:"target_tool_breakdown,omitempty"`
 }
 
 // GetToolUsageFilterOptionsResponseBody is the type of the "telemetry" service
 // "getToolUsageFilterOptions" endpoint HTTP response body.
 type GetToolUsageFilterOptionsResponseBody struct {
+	// Hosted MCP servers with usage in the selected time range
 	HostedServers []*ToolUsageHostedServerFilterOptionResponseBody `form:"hosted_servers,omitempty" json:"hosted_servers,omitempty" xml:"hosted_servers,omitempty"`
+	// Shadow MCP servers with usage in the selected time range
 	ShadowServers []*ToolUsageShadowServerFilterOptionResponseBody `form:"shadow_servers,omitempty" json:"shadow_servers,omitempty" xml:"shadow_servers,omitempty"`
-	Users         []*ToolUsageUserFilterOptionResponseBody         `form:"users,omitempty" json:"users,omitempty" xml:"users,omitempty"`
+	// User identities with usage in the selected time range
+	Users []*ToolUsageUserFilterOptionResponseBody `form:"users,omitempty" json:"users,omitempty" xml:"users,omitempty"`
 }
 
 // ListHooksTracesResponseBody is the type of the "telemetry" service
@@ -3999,120 +4009,187 @@ type SkillBreakdownRowResponseBody struct {
 // ToolUsageUserFilterRequestBody is used to define fields on request body
 // types.
 type ToolUsageUserFilterRequestBody struct {
+	// Type of user identity represented by the filter key
 	Kind string `form:"kind" json:"kind" xml:"kind"`
-	Key  string `form:"key" json:"key" xml:"key"`
+	// User identity value to include
+	Key string `form:"key" json:"key" xml:"key"`
 }
 
 // ToolUsageTotalsResponseBody is used to define fields on response body types.
 type ToolUsageTotalsResponseBody struct {
-	EventCount    *int64   `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
-	SuccessCount  *int64   `form:"success_count,omitempty" json:"success_count,omitempty" xml:"success_count,omitempty"`
-	FailureCount  *int64   `form:"failure_count,omitempty" json:"failure_count,omitempty" xml:"failure_count,omitempty"`
-	FailureRate   *float64 `form:"failure_rate,omitempty" json:"failure_rate,omitempty" xml:"failure_rate,omitempty"`
-	UniqueTools   *int64   `form:"unique_tools,omitempty" json:"unique_tools,omitempty" xml:"unique_tools,omitempty"`
-	UniqueUsers   *int64   `form:"unique_users,omitempty" json:"unique_users,omitempty" xml:"unique_users,omitempty"`
-	UniqueTargets *int64   `form:"unique_targets,omitempty" json:"unique_targets,omitempty" xml:"unique_targets,omitempty"`
+	// Total number of tool usage events
+	EventCount *int64 `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
+	// Number of successful tool usage events
+	SuccessCount *int64 `form:"success_count,omitempty" json:"success_count,omitempty" xml:"success_count,omitempty"`
+	// Number of failed tool usage events
+	FailureCount *int64 `form:"failure_count,omitempty" json:"failure_count,omitempty" xml:"failure_count,omitempty"`
+	// Fraction of completed tool usage events that failed
+	FailureRate *float64 `form:"failure_rate,omitempty" json:"failure_rate,omitempty" xml:"failure_rate,omitempty"`
+	// Number of distinct tools observed
+	UniqueTools *int64 `form:"unique_tools,omitempty" json:"unique_tools,omitempty" xml:"unique_tools,omitempty"`
+	// Number of distinct user identities observed
+	UniqueUsers *int64 `form:"unique_users,omitempty" json:"unique_users,omitempty" xml:"unique_users,omitempty"`
+	// Number of distinct usage targets observed
+	UniqueTargets *int64 `form:"unique_targets,omitempty" json:"unique_targets,omitempty" xml:"unique_targets,omitempty"`
 }
 
 // ToolUsageTargetSummaryResponseBody is used to define fields on response body
 // types.
 type ToolUsageTargetSummaryResponseBody struct {
-	TargetType   *string  `form:"target_type,omitempty" json:"target_type,omitempty" xml:"target_type,omitempty"`
-	TargetKind   *string  `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
-	TargetID     *string  `form:"target_id,omitempty" json:"target_id,omitempty" xml:"target_id,omitempty"`
-	TargetLabel  *string  `form:"target_label,omitempty" json:"target_label,omitempty" xml:"target_label,omitempty"`
-	EventCount   *int64   `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
-	UniqueTools  *int64   `form:"unique_tools,omitempty" json:"unique_tools,omitempty" xml:"unique_tools,omitempty"`
-	SuccessCount *int64   `form:"success_count,omitempty" json:"success_count,omitempty" xml:"success_count,omitempty"`
-	FailureCount *int64   `form:"failure_count,omitempty" json:"failure_count,omitempty" xml:"failure_count,omitempty"`
-	FailureRate  *float64 `form:"failure_rate,omitempty" json:"failure_rate,omitempty" xml:"failure_rate,omitempty"`
+	// Specific kind of tool usage target
+	TargetType *string `form:"target_type,omitempty" json:"target_type,omitempty" xml:"target_type,omitempty"`
+	// Display grouping for the target
+	TargetKind *string `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
+	// Stable target identifier used by filters and chart grouping
+	TargetID *string `form:"target_id,omitempty" json:"target_id,omitempty" xml:"target_id,omitempty"`
+	// User-facing label for the target
+	TargetLabel *string `form:"target_label,omitempty" json:"target_label,omitempty" xml:"target_label,omitempty"`
+	// Total number of tool usage events for the target
+	EventCount *int64 `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
+	// Number of distinct tools observed for the target
+	UniqueTools *int64 `form:"unique_tools,omitempty" json:"unique_tools,omitempty" xml:"unique_tools,omitempty"`
+	// Number of successful tool usage events for the target
+	SuccessCount *int64 `form:"success_count,omitempty" json:"success_count,omitempty" xml:"success_count,omitempty"`
+	// Number of failed tool usage events for the target
+	FailureCount *int64 `form:"failure_count,omitempty" json:"failure_count,omitempty" xml:"failure_count,omitempty"`
+	// Fraction of completed tool usage events for the target that failed
+	FailureRate *float64 `form:"failure_rate,omitempty" json:"failure_rate,omitempty" xml:"failure_rate,omitempty"`
 }
 
 // ToolUsageUserSummaryResponseBody is used to define fields on response body
 // types.
 type ToolUsageUserSummaryResponseBody struct {
-	UserKey      *string  `form:"user_key,omitempty" json:"user_key,omitempty" xml:"user_key,omitempty"`
-	UserLabel    *string  `form:"user_label,omitempty" json:"user_label,omitempty" xml:"user_label,omitempty"`
-	UserKind     *string  `form:"user_kind,omitempty" json:"user_kind,omitempty" xml:"user_kind,omitempty"`
-	EventCount   *int64   `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
-	UniqueTools  *int64   `form:"unique_tools,omitempty" json:"unique_tools,omitempty" xml:"unique_tools,omitempty"`
-	SuccessCount *int64   `form:"success_count,omitempty" json:"success_count,omitempty" xml:"success_count,omitempty"`
-	FailureCount *int64   `form:"failure_count,omitempty" json:"failure_count,omitempty" xml:"failure_count,omitempty"`
-	FailureRate  *float64 `form:"failure_rate,omitempty" json:"failure_rate,omitempty" xml:"failure_rate,omitempty"`
+	// Stable user identity value used by filters and chart grouping
+	UserKey *string `form:"user_key,omitempty" json:"user_key,omitempty" xml:"user_key,omitempty"`
+	// User-facing label for the user identity
+	UserLabel *string `form:"user_label,omitempty" json:"user_label,omitempty" xml:"user_label,omitempty"`
+	// Type of user identity represented by the row
+	UserKind *string `form:"user_kind,omitempty" json:"user_kind,omitempty" xml:"user_kind,omitempty"`
+	// Total number of tool usage events for the user identity
+	EventCount *int64 `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
+	// Number of distinct tools observed for the user identity
+	UniqueTools *int64 `form:"unique_tools,omitempty" json:"unique_tools,omitempty" xml:"unique_tools,omitempty"`
+	// Number of successful tool usage events for the user identity
+	SuccessCount *int64 `form:"success_count,omitempty" json:"success_count,omitempty" xml:"success_count,omitempty"`
+	// Number of failed tool usage events for the user identity
+	FailureCount *int64 `form:"failure_count,omitempty" json:"failure_count,omitempty" xml:"failure_count,omitempty"`
+	// Fraction of completed tool usage events for the user identity that failed
+	FailureRate *float64 `form:"failure_rate,omitempty" json:"failure_rate,omitempty" xml:"failure_rate,omitempty"`
 }
 
 // ToolUsageTargetTimeSeriesPointResponseBody is used to define fields on
 // response body types.
 type ToolUsageTargetTimeSeriesPointResponseBody struct {
+	// Bucket start time in Unix nanoseconds as a string for JavaScript integer
+	// safety
 	BucketStartNs *string `form:"bucket_start_ns,omitempty" json:"bucket_start_ns,omitempty" xml:"bucket_start_ns,omitempty"`
-	TargetType    *string `form:"target_type,omitempty" json:"target_type,omitempty" xml:"target_type,omitempty"`
-	TargetKind    *string `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
-	TargetID      *string `form:"target_id,omitempty" json:"target_id,omitempty" xml:"target_id,omitempty"`
-	TargetLabel   *string `form:"target_label,omitempty" json:"target_label,omitempty" xml:"target_label,omitempty"`
-	EventCount    *int64  `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
-	FailureCount  *int64  `form:"failure_count,omitempty" json:"failure_count,omitempty" xml:"failure_count,omitempty"`
+	// Specific kind of tool usage target
+	TargetType *string `form:"target_type,omitempty" json:"target_type,omitempty" xml:"target_type,omitempty"`
+	// Display grouping for the target
+	TargetKind *string `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
+	// Stable target identifier used by filters and chart grouping
+	TargetID *string `form:"target_id,omitempty" json:"target_id,omitempty" xml:"target_id,omitempty"`
+	// User-facing label for the target
+	TargetLabel *string `form:"target_label,omitempty" json:"target_label,omitempty" xml:"target_label,omitempty"`
+	// Number of tool usage events in the bucket
+	EventCount *int64 `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
+	// Number of failed tool usage events in the bucket
+	FailureCount *int64 `form:"failure_count,omitempty" json:"failure_count,omitempty" xml:"failure_count,omitempty"`
 }
 
 // ToolUsageUserTimeSeriesPointResponseBody is used to define fields on
 // response body types.
 type ToolUsageUserTimeSeriesPointResponseBody struct {
+	// Bucket start time in Unix nanoseconds as a string for JavaScript integer
+	// safety
 	BucketStartNs *string `form:"bucket_start_ns,omitempty" json:"bucket_start_ns,omitempty" xml:"bucket_start_ns,omitempty"`
-	UserKey       *string `form:"user_key,omitempty" json:"user_key,omitempty" xml:"user_key,omitempty"`
-	UserLabel     *string `form:"user_label,omitempty" json:"user_label,omitempty" xml:"user_label,omitempty"`
-	UserKind      *string `form:"user_kind,omitempty" json:"user_kind,omitempty" xml:"user_kind,omitempty"`
-	EventCount    *int64  `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
-	FailureCount  *int64  `form:"failure_count,omitempty" json:"failure_count,omitempty" xml:"failure_count,omitempty"`
+	// Stable user identity value used by filters and chart grouping
+	UserKey *string `form:"user_key,omitempty" json:"user_key,omitempty" xml:"user_key,omitempty"`
+	// User-facing label for the user identity
+	UserLabel *string `form:"user_label,omitempty" json:"user_label,omitempty" xml:"user_label,omitempty"`
+	// Type of user identity represented by the row
+	UserKind *string `form:"user_kind,omitempty" json:"user_kind,omitempty" xml:"user_kind,omitempty"`
+	// Number of tool usage events in the bucket
+	EventCount *int64 `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
+	// Number of failed tool usage events in the bucket
+	FailureCount *int64 `form:"failure_count,omitempty" json:"failure_count,omitempty" xml:"failure_count,omitempty"`
 }
 
 // ToolUsageUsersByTargetRowResponseBody is used to define fields on response
 // body types.
 type ToolUsageUsersByTargetRowResponseBody struct {
-	TargetType   *string `form:"target_type,omitempty" json:"target_type,omitempty" xml:"target_type,omitempty"`
-	TargetKind   *string `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
-	TargetID     *string `form:"target_id,omitempty" json:"target_id,omitempty" xml:"target_id,omitempty"`
-	TargetLabel  *string `form:"target_label,omitempty" json:"target_label,omitempty" xml:"target_label,omitempty"`
-	UserKey      *string `form:"user_key,omitempty" json:"user_key,omitempty" xml:"user_key,omitempty"`
-	UserLabel    *string `form:"user_label,omitempty" json:"user_label,omitempty" xml:"user_label,omitempty"`
-	UserKind     *string `form:"user_kind,omitempty" json:"user_kind,omitempty" xml:"user_kind,omitempty"`
-	EventCount   *int64  `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
-	FailureCount *int64  `form:"failure_count,omitempty" json:"failure_count,omitempty" xml:"failure_count,omitempty"`
+	// Specific kind of tool usage target
+	TargetType *string `form:"target_type,omitempty" json:"target_type,omitempty" xml:"target_type,omitempty"`
+	// Display grouping for the target
+	TargetKind *string `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
+	// Stable target identifier used by filters and chart grouping
+	TargetID *string `form:"target_id,omitempty" json:"target_id,omitempty" xml:"target_id,omitempty"`
+	// User-facing label for the target
+	TargetLabel *string `form:"target_label,omitempty" json:"target_label,omitempty" xml:"target_label,omitempty"`
+	// Stable user identity value used by filters and chart grouping
+	UserKey *string `form:"user_key,omitempty" json:"user_key,omitempty" xml:"user_key,omitempty"`
+	// User-facing label for the user identity
+	UserLabel *string `form:"user_label,omitempty" json:"user_label,omitempty" xml:"user_label,omitempty"`
+	// Type of user identity represented by the row
+	UserKind *string `form:"user_kind,omitempty" json:"user_kind,omitempty" xml:"user_kind,omitempty"`
+	// Total number of tool usage events for the target and user identity
+	EventCount *int64 `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
+	// Number of failed tool usage events for the target and user identity
+	FailureCount *int64 `form:"failure_count,omitempty" json:"failure_count,omitempty" xml:"failure_count,omitempty"`
 }
 
 // ToolUsageTargetToolBreakdownRowResponseBody is used to define fields on
 // response body types.
 type ToolUsageTargetToolBreakdownRowResponseBody struct {
-	TargetType   *string  `form:"target_type,omitempty" json:"target_type,omitempty" xml:"target_type,omitempty"`
-	TargetKind   *string  `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
-	TargetID     *string  `form:"target_id,omitempty" json:"target_id,omitempty" xml:"target_id,omitempty"`
-	TargetLabel  *string  `form:"target_label,omitempty" json:"target_label,omitempty" xml:"target_label,omitempty"`
-	ToolName     *string  `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
-	EventCount   *int64   `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
-	SuccessCount *int64   `form:"success_count,omitempty" json:"success_count,omitempty" xml:"success_count,omitempty"`
-	FailureCount *int64   `form:"failure_count,omitempty" json:"failure_count,omitempty" xml:"failure_count,omitempty"`
-	FailureRate  *float64 `form:"failure_rate,omitempty" json:"failure_rate,omitempty" xml:"failure_rate,omitempty"`
+	// Specific kind of tool usage target
+	TargetType *string `form:"target_type,omitempty" json:"target_type,omitempty" xml:"target_type,omitempty"`
+	// Display grouping for the target
+	TargetKind *string `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
+	// Stable target identifier used by filters and chart grouping
+	TargetID *string `form:"target_id,omitempty" json:"target_id,omitempty" xml:"target_id,omitempty"`
+	// User-facing label for the target
+	TargetLabel *string `form:"target_label,omitempty" json:"target_label,omitempty" xml:"target_label,omitempty"`
+	// Observed tool name
+	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	// Total number of tool usage events for the target and tool
+	EventCount *int64 `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
+	// Number of successful tool usage events for the target and tool
+	SuccessCount *int64 `form:"success_count,omitempty" json:"success_count,omitempty" xml:"success_count,omitempty"`
+	// Number of failed tool usage events for the target and tool
+	FailureCount *int64 `form:"failure_count,omitempty" json:"failure_count,omitempty" xml:"failure_count,omitempty"`
+	// Fraction of completed tool usage events for the target and tool that failed
+	FailureRate *float64 `form:"failure_rate,omitempty" json:"failure_rate,omitempty" xml:"failure_rate,omitempty"`
 }
 
 // ToolUsageHostedServerFilterOptionResponseBody is used to define fields on
 // response body types.
 type ToolUsageHostedServerFilterOptionResponseBody struct {
+	// Hosted MCP toolset slug
 	ToolsetSlug *string `form:"toolset_slug,omitempty" json:"toolset_slug,omitempty" xml:"toolset_slug,omitempty"`
-	EventCount  *int64  `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
+	// Number of tool usage events observed for the hosted MCP server
+	EventCount *int64 `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
 }
 
 // ToolUsageShadowServerFilterOptionResponseBody is used to define fields on
 // response body types.
 type ToolUsageShadowServerFilterOptionResponseBody struct {
+	// Observed Shadow MCP server name
 	ServerName *string `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
-	EventCount *int64  `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
+	// Number of tool usage events observed for the Shadow MCP server
+	EventCount *int64 `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
 }
 
 // ToolUsageUserFilterOptionResponseBody is used to define fields on response
 // body types.
 type ToolUsageUserFilterOptionResponseBody struct {
-	UserKey    *string `form:"user_key,omitempty" json:"user_key,omitempty" xml:"user_key,omitempty"`
-	UserLabel  *string `form:"user_label,omitempty" json:"user_label,omitempty" xml:"user_label,omitempty"`
-	UserKind   *string `form:"user_kind,omitempty" json:"user_kind,omitempty" xml:"user_kind,omitempty"`
-	EventCount *int64  `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
+	// Stable user identity value used by filters
+	UserKey *string `form:"user_key,omitempty" json:"user_key,omitempty" xml:"user_key,omitempty"`
+	// User-facing label for the user identity
+	UserLabel *string `form:"user_label,omitempty" json:"user_label,omitempty" xml:"user_label,omitempty"`
+	// Type of user identity represented by the option
+	UserKind *string `form:"user_kind,omitempty" json:"user_kind,omitempty" xml:"user_kind,omitempty"`
+	// Number of tool usage events observed for the user identity
+	EventCount *int64 `form:"event_count,omitempty" json:"event_count,omitempty" xml:"event_count,omitempty"`
 }
 
 // HookTraceSummaryResponseBody is used to define fields on response body types.

@@ -24,8 +24,17 @@ import {
  * Filter options for target-aware MCP and tool usage metrics
  */
 export type GetToolUsageFilterOptionsResult = {
+  /**
+   * Hosted MCP servers with usage in the selected time range
+   */
   hostedServers: Array<ToolUsageHostedServerFilterOption>;
+  /**
+   * Shadow MCP servers with usage in the selected time range
+   */
   shadowServers: Array<ToolUsageShadowServerFilterOption>;
+  /**
+   * User identities with usage in the selected time range
+   */
   users: Array<ToolUsageUserFilterOption>;
 };
 

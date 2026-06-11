@@ -44,20 +44,41 @@ export type ToolUsageTargetSummaryTargetType = ClosedEnum<
  * Aggregated tool usage metrics for one target
  */
 export type ToolUsageTargetSummary = {
+  /**
+   * Total number of tool usage events for the target
+   */
   eventCount: number;
+  /**
+   * Number of failed tool usage events for the target
+   */
   failureCount: number;
+  /**
+   * Fraction of completed tool usage events for the target that failed
+   */
   failureRate: number;
+  /**
+   * Number of successful tool usage events for the target
+   */
   successCount: number;
+  /**
+   * Stable target identifier used by filters and chart grouping
+   */
   targetId: string;
   /**
    * Tool usage aggregation target kind
    */
   targetKind: ToolUsageTargetSummaryTargetKind;
+  /**
+   * User-facing label for the target
+   */
   targetLabel: string;
   /**
    * Tool usage target type
    */
   targetType: ToolUsageTargetSummaryTargetType;
+  /**
+   * Number of distinct tools observed for the target
+   */
   uniqueTools: number;
 };
 
