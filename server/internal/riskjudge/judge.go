@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
@@ -32,9 +33,20 @@ const (
 	// judgeTimeout bounds a single judge call on both the realtime and batch
 	// paths.
 	judgeTimeout = 10 * time.Second
+	// defaultJudgeModel is used when a policy's model_config does not pin a
+	// model. It is a fast, cheap, high-recall classifier chosen by the
+	// server/cmd/riskjudgebench benchmark — see that tool's README. Without it,
+	// an empty model falls through to the openrouter client's general
+	// DefaultChatModel (a large, expensive chat model), which is a poor fit for
+	// a high-volume per-message guardrail.
+	defaultJudgeModel = "google/gemini-3.1-flash-lite"
 	// defaultJudgeTemperature keeps verdicts deterministic when a policy does
 	// not pin its own temperature.
 	defaultJudgeTemperature = 0.0
+	// maxRationaleLen caps the stored rationale. Previously enforced via the
+	// response schema's maxLength, now enforced in code because Anthropic routes
+	// reject that constraint (see call()).
+	maxRationaleLen = 500
 	// judgeRatePerMin and judgeRateBurst cap how many judge calls a single org
 	// can drive per process. Judge calls are billable OpenRouter requests, so
 	// this is a cost/abuse guardrail against a thrashing session or runaway
@@ -200,12 +212,19 @@ func (j *Judge) Evaluate(ctx context.Context, in ra.JudgeInput) *ra.JudgeVerdict
 
 func (j *Judge) call(ctx context.Context, in ra.JudgeInput) (matched bool, confidence float64, rationale string, err error) {
 	strict := true
+	// NOTE: deliberately no minimum/maximum on confidence or maxLength on
+	// rationale. Anthropic routes (via Amazon Bedrock) reject those JSON-schema
+	// constraints with a 400 ("For 'number' type, properties maximum, minimum
+	// are not supported"), which would make every Anthropic model fail-open. The
+	// guarantees are enforced in code instead: confidence is clamped and the
+	// rationale is truncated below. See server/cmd/riskjudgebench for the bench
+	// that surfaced this.
 	schema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"matched":    map[string]any{"type": "boolean"},
-			"confidence": map[string]any{"type": "number", "minimum": 0, "maximum": 1},
-			"rationale":  map[string]any{"type": "string", "maxLength": 500},
+			"confidence": map[string]any{"type": "number"},
+			"rationale":  map[string]any{"type": "string"},
 		},
 		"required":             []string{"matched", "confidence", "rationale"},
 		"additionalProperties": false,
@@ -222,6 +241,11 @@ func (j *Judge) call(ctx context.Context, in ra.JudgeInput) (matched bool, confi
 		temperature = *in.Config.Temperature
 	}
 
+	model := in.Config.Model
+	if model == "" {
+		model = defaultJudgeModel
+	}
+
 	userMessage := fmt.Sprintf("Policy:\n%s\n\nMessage to evaluate:\n%s", in.Prompt, in.Text)
 
 	callCtx, cancel := context.WithTimeout(ctx, judgeTimeout)
@@ -230,7 +254,7 @@ func (j *Judge) call(ctx context.Context, in ra.JudgeInput) (matched bool, confi
 	response, err := j.client.GetObjectCompletion(callCtx, openrouter.ObjectCompletionRequest{
 		OrgID:          in.OrgID,
 		ProjectID:      in.ProjectID,
-		Model:          in.Config.Model,
+		Model:          model,
 		SystemPrompt:   systemPrompt,
 		Prompt:         userMessage,
 		Temperature:    &temperature,
@@ -259,5 +283,13 @@ func (j *Judge) call(ctx context.Context, in ra.JudgeInput) (matched bool, confi
 	if err := json.Unmarshal([]byte(raw), &verdict); err != nil {
 		return false, 0, "", fmt.Errorf("parse judge response: %w", err)
 	}
-	return verdict.Matched, max(0, min(1, verdict.Confidence)), verdict.Rationale, nil
+	// Clamp confidence and cap rationale length in code — the schema no longer
+	// enforces these (see the schema note above re: Anthropic route 400s).
+	// Truncate by rune, not byte, so a multi-byte character can't be split into
+	// invalid UTF-8 that later flows into stored finding descriptions.
+	rationale = verdict.Rationale
+	if utf8.RuneCountInString(rationale) > maxRationaleLen {
+		rationale = string([]rune(rationale)[:maxRationaleLen])
+	}
+	return verdict.Matched, max(0, min(1, verdict.Confidence)), rationale, nil
 }
