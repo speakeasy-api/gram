@@ -357,12 +357,16 @@ WHERE project_id = @project_id
 -- name: CountActiveAssistantThreads :one
 -- Threads with last_event_at inside the warm TTL window. Excludes threads
 -- that themselves have a pending event so callers computing headroom for
--- a fresh pending admit don't double-count it.
+-- a fresh pending admit don't double-count it. The event-less warmup
+-- thread is excluded too: it holds the VM warm but never occupies a
+-- runner slot, and counting it would block max_concurrency=1 assistants
+-- from admitting their first real turn until the window lapses.
 SELECT COUNT(*)::BIGINT AS active_threads
 FROM assistant_threads t
 WHERE t.project_id = @project_id
   AND t.assistant_id = @assistant_id
   AND t.deleted IS FALSE
+  AND t.source_kind <> @warmup_source_kind
   AND t.last_event_at > @active_since
   AND NOT EXISTS (
     SELECT 1
@@ -524,6 +528,20 @@ ORDER BY (
 -- on the next coordinator kick). The unique partial index keyed on
 -- (project_id, assistant_id) means there is at most one matching row.
 SELECT id, state
+FROM assistant_runtimes
+WHERE project_id = @project_id
+  AND assistant_id = @assistant_id
+  AND runtime_version = 2
+  AND deleted IS FALSE
+  AND ended IS FALSE
+LIMIT 1;
+
+-- name: GetAssistantRuntimeV2 :one
+-- Full-row sibling of LookupActiveAssistantRuntimeV2 for callers that need
+-- the backend metadata to drive Ensure without a thread to join through
+-- (eager warmup at assistant creation). At most one row matches per the
+-- v2 unique partial index.
+SELECT id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until
 FROM assistant_runtimes
 WHERE project_id = @project_id
   AND assistant_id = @assistant_id
