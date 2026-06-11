@@ -134,13 +134,6 @@ export function AuthenticationSection({
           onAdd={() => openSheet(undefined)}
           onEdit={handleEdit}
           onDelete={handleDelete}
-          // TODO(AGE-2554): remove this gate when the runtime resolver
-          // supports multiple remote_session_clients per user_session_issuer.
-          attachDisabledReason={
-            associatedIssuers.length > 0
-              ? "Multiple identity providers per server are not yet supported."
-              : undefined
-          }
         />
       </>
     );

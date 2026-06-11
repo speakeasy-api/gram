@@ -1,11 +1,6 @@
 import { AssetImage } from "@/components/asset-image";
 import { RequireScope } from "@/components/require-scope";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { formatRemoteSessionIssuerDisplay } from "@/lib/sources";
 import type { RemoteSessionIssuer } from "@gram/client/models/components";
@@ -20,17 +15,12 @@ export function RemoteIdentityProvidersField({
   onAdd,
   onEdit,
   onDelete,
-  attachDisabledReason,
 }: {
   associatedIssuers: RemoteSessionIssuer[];
   isLoading: boolean;
   onAdd: () => void;
   onEdit: (issuer: RemoteSessionIssuer) => void;
   onDelete: (issuer: RemoteSessionIssuer) => void;
-  // When set, the Attach button renders disabled with this string as its
-  // tooltip. Used to surface the temporary single-provider constraint until
-  // multi-client support lands.
-  attachDisabledReason?: string;
 }): JSX.Element {
   let providerControls: ReactNode;
   if (isLoading) {
@@ -45,10 +35,14 @@ export function RemoteIdentityProvidersField({
         title="No remote identity providers"
         description="Attach an identity provider so users can sign in to the upstream service and access their own data."
         action={
-          <AttachRemoteIdentityProviderButton
-            onAdd={onAdd}
-            disabledReason={attachDisabledReason}
-          />
+          <RequireScope scope="mcp:write" level="component">
+            <Button variant="secondary" onClick={onAdd}>
+              <Button.LeftIcon>
+                <Plus className="size-4" />
+              </Button.LeftIcon>
+              <Button.Text>Attach Provider</Button.Text>
+            </Button>
+          </RequireScope>
         }
       />
     );
@@ -76,51 +70,6 @@ export function RemoteIdentityProvidersField({
         server functionality.
       </FieldDescription>
     </Field>
-  );
-}
-
-function AttachRemoteIdentityProviderButton({
-  onAdd,
-  disabledReason,
-}: {
-  onAdd: () => void;
-  disabledReason?: string;
-}) {
-  const button = (
-    <Button variant="secondary" disabled={!!disabledReason} onClick={onAdd}>
-      <Button.LeftIcon>
-        <Plus className="size-4" />
-      </Button.LeftIcon>
-      <Button.Text>Attach Provider</Button.Text>
-    </Button>
-  );
-
-  if (!disabledReason) {
-    return (
-      <RequireScope scope="mcp:write" level="component">
-        {button}
-      </RequireScope>
-    );
-  }
-
-  return (
-    <RequireScope scope="mcp:write" level="component">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          {/* Disabled native buttons do not fire pointer events, so the tooltip
-              needs a focusable wrapper. */}
-          <span
-            role="button"
-            aria-disabled="true"
-            tabIndex={0}
-            aria-label={disabledReason}
-          >
-            {button}
-          </span>
-        </TooltipTrigger>
-        <TooltipContent>{disabledReason}</TooltipContent>
-      </Tooltip>
-    </RequireScope>
   );
 }
 
