@@ -190,6 +190,37 @@ func TestServiceCoreWarmAssistantRuntimeNoopWhenRuntimeExists(t *testing.T) {
 	require.Equal(t, runtimeStateActive, runtime.State, "the traffic-owned runtime row must be left alone")
 }
 
+func TestServiceCoreWarmAssistantRuntimeResumesStrandedWarmupRow(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_warmup_resume")
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	assistantID, projectID := seedAssistant(t, conn, "assistants-warmup-resume", 2)
+
+	// A prior warmup attempt reserved the row (uuid.Nil thread sentinel) and
+	// died before marking it active or failed.
+	require.NoError(t, assistantsrepo.New(conn).ReserveAssistantRuntimeV2(ctx, assistantsrepo.ReserveAssistantRuntimeV2Params{
+		AssistantThreadID: uuid.Nil,
+		AssistantID:       assistantID,
+		ProjectID:         projectID,
+		Backend:           runtimeBackendFlyIO,
+		State:             runtimeStateStarting,
+	}))
+
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, ensureResult: RuntimeBackendEnsureResult{ColdStart: true, BackendMetadataJSON: []byte(`{"app_name":"gram-asst-resume"}`)}}, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
+
+	require.NoError(t, core.WarmAssistantRuntime(ctx, assistantID))
+
+	row, err := assistantsrepo.New(conn).GetAssistantRuntimeV2(ctx, assistantsrepo.GetAssistantRuntimeV2Params{
+		ProjectID:   projectID,
+		AssistantID: assistantID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateActive, row.State, "a retried warmup must drive the stranded starting row to active instead of no-oping")
+}
+
 func TestServiceCoreWarmAssistantRuntimeMarksFailedOnEnsureError(t *testing.T) {
 	t.Parallel()
 

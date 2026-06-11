@@ -1542,8 +1542,9 @@ func (s *ServiceCore) WarmAssistantRuntime(ctx context.Context, assistantID uuid
 
 // reserveRuntimeForWarmup inserts the v2 runtime row warmup will drive,
 // using the same advisory lock as admit so it never races a concurrent
-// thread admission into a second VM. Returns false when a live row already
-// exists — organic traffic got there first and owns the boot. The
+// thread admission into a second VM. Returns true when warmup owns the boot:
+// either it reserved a fresh row, or it found one a prior warmup attempt
+// left in `starting`. Returns false when organic traffic owns the row. The
 // transaction only covers the reservation: Ensure can run for minutes and
 // must not hold a pool connection.
 func (s *ServiceCore) reserveRuntimeForWarmup(ctx context.Context, assistant assistantRecord) (bool, error) {
@@ -1560,15 +1561,25 @@ func (s *ServiceCore) reserveRuntimeForWarmup(ctx context.Context, assistant ass
 		return false, fmt.Errorf("acquire assistant advisory lock: %w", err)
 	}
 
-	_, err = queries.LookupActiveAssistantRuntimeV2(ctx, assistantrepo.LookupActiveAssistantRuntimeV2Params{
+	row, err := queries.GetAssistantRuntimeV2(ctx, assistantrepo.GetAssistantRuntimeV2Params{
 		ProjectID:   assistant.ProjectID,
 		AssistantID: assistant.ID,
 	})
 	switch {
-	case err == nil:
-		return false, nil
-	case !errors.Is(err, pgx.ErrNoRows):
+	case errors.Is(err, pgx.ErrNoRows):
+		// No live row — fall through to reserve one.
+	case err != nil:
 		return false, fmt.Errorf("lookup v2 runtime for warmup: %w", err)
+	case row.State == runtimeStateStarting && row.AssistantThreadID == uuid.Nil:
+		// A previous warmup attempt reserved the row but died before marking
+		// it active or failed, and Temporal retried us. Nothing else can own
+		// a starting row with no admitting thread (warmups are serialized on
+		// the workflow id; thread admits stamp a real thread id), so resume
+		// driving Ensure rather than stranding the row in `starting` — admit
+		// holds every thread back while it stays there.
+		return true, nil
+	default:
+		return false, nil
 	}
 
 	// uuid.Nil thread sentinel: there is no admitting thread, the runtime is
