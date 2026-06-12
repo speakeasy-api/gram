@@ -6,6 +6,7 @@
     "oxc.oxc-vscode",
     "redhat.vscode-yaml",
     "stateful.runme",
-    "bufbuild.vscode-buf"
+    "bufbuild.vscode-buf",
+    "charliermarsh.ruff"
   ]
 }
