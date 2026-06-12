@@ -34,7 +34,7 @@ import {
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Bot, Boxes, Cpu, Info, Plus } from "lucide-react";
-import { useQueryState } from "nuqs";
+import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { MouseEvent } from "react";
 import { Outlet } from "react-router";
 import { toast } from "sonner";
@@ -124,9 +124,10 @@ function AssistantsEmptyState({ onCreate }: { onCreate: () => void }) {
 
 export default function AssistantsIndex(): JSX.Element {
   const routes = useRoutes();
-  const [activeTab, setActiveTab] = useQueryState("tab", {
-    defaultValue: "assistants",
-  });
+  const [activeTab, setActiveTab] = useQueryState(
+    "tab",
+    parseAsStringLiteral(["assistants", "audit"]).withDefault("assistants"),
+  );
   const { data, isLoading } = useAssistantsList(undefined, undefined, {
     retry: false,
     throwOnError: false,
@@ -190,7 +191,7 @@ export default function AssistantsIndex(): JSX.Element {
         <Tabs
           value={activeTab}
           onValueChange={(value) => {
-            void setActiveTab(value);
+            void setActiveTab(value === "audit" ? "audit" : "assistants");
           }}
           className="flex w-full flex-col"
         >

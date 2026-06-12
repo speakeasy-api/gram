@@ -338,7 +338,7 @@ func (s *Service) callPlatformToolsetTool(
 			organizationID: authCtx.ActiveOrganizationID,
 			projectID:      *authCtx.ProjectID,
 			principal:      principal,
-			chatID:         chatIDHeader,
+			chatID:         chatID,
 			toolsetSlug:    platformToolsetSlug,
 			toolName:       params.Name,
 			toolURN:        descriptor.URN,
