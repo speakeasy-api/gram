@@ -6,7 +6,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn, isMacPlatform } from "@/lib/utils";
-import { useRoutes } from "@/routes.tsx";
 import speakeasyIcon from "@/assets/speakeasy-icon.svg";
 import { useAssistantRuntime } from "@assistant-ui/react";
 import type {
@@ -20,7 +19,7 @@ import {
   INSIGHTS_DOCK_VT_CLASS,
   useInsightsDockCta,
 } from "@/hooks/useInsightsDockCta";
-import { Link, useLocation } from "react-router";
+import { useLocation } from "react-router";
 import { motion } from "motion/react";
 import {
   getRouteSuggestions,
@@ -35,6 +34,7 @@ import {
   HistoryIcon,
   Loader2,
   Maximize2,
+  Minimize2,
   SquarePen,
   Terminal,
   X,
@@ -172,12 +172,19 @@ interface InsightsDockProps {
   onDismiss: () => void;
   /** Chat panel content, rendered inside the card when `open`. */
   panel: React.ReactNode;
+  /** Stretch the open chat panel to fill the content area. */
+  maximized: boolean;
 }
 
-/** Width/shape/elevation of the dock card across its three states: chat
- *  panel open, composer focused (or holding draft text), and collapsed
- *  pill. Activity is signalled by deepening shadow. */
-function dockCardShapeClass(open: boolean, composerExpanded: boolean): string {
+/** Width/shape/elevation of the dock card across its states: chat panel
+ *  full-screen, chat panel open, composer focused (or holding draft text),
+ *  and collapsed pill. Activity is signalled by deepening shadow. */
+function dockCardShapeClass(
+  open: boolean,
+  composerExpanded: boolean,
+  maximized: boolean,
+): string {
+  if (open && maximized) return "h-full max-w-none rounded-2xl shadow-2xl";
   if (open) return "max-w-3xl rounded-2xl shadow-2xl";
   if (composerExpanded) return "max-w-2xl rounded-2xl shadow-xl";
   return "max-w-md rounded-full shadow-md hover:shadow-lg";
@@ -205,6 +212,7 @@ function InsightsDock({
   onSubmitPrompt,
   onDismiss,
   panel,
+  maximized,
 }: InsightsDockProps): ReactElement {
   const [value, setValue] = useState("");
   // Expansion is sticky state, not a focus mirror: it must survive the input
@@ -298,7 +306,14 @@ function InsightsDock({
   };
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center px-4 pt-14 pb-8">
+    <div
+      className={cn(
+        "pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center px-4 pt-14 pb-8",
+        // Full-screen: anchor the wrapper to the whole content area so the
+        // card (h-full) fills it, keeping the floating-card margins.
+        open && maximized && "top-0 pt-8",
+      )}
+    >
       {/* Frosted veil under the dock: blurs the page content directly behind
           the card, radiating out as a soft ellipse centred on the dock so
           there is no rectangular edge. Pointer-events stay off so the page
@@ -311,7 +326,7 @@ function InsightsDock({
         className={cn(
           "border-border bg-card text-card-foreground pointer-events-auto w-full border",
           "transition-all duration-300 ease-out",
-          dockCardShapeClass(open, composerExpanded),
+          dockCardShapeClass(open, composerExpanded, maximized),
           // Pairs with the sidebar resume button for the dismiss/resume genie
           // (see useInsightsDockCta). The inner wrapper carries the content
           // name so text fades at the endpoints instead of warping mid-flight.
@@ -337,7 +352,14 @@ function InsightsDock({
           }
         }}
       >
-        <div className={INSIGHTS_DOCK_CONTENT_VT_CLASS}>
+        <div
+          className={cn(
+            INSIGHTS_DOCK_CONTENT_VT_CLASS,
+            // Full-screen: the card is h-full, so switch the content wrapper
+            // to a column flex and let the panel row absorb the height.
+            open && maximized && "flex h-full flex-col",
+          )}
+        >
           {/* Chat panel — grows up out of the dock when open. The 0fr->1fr grid
             row transition animates from zero height to the panel's fixed
             height without hardcoding it on the card; since the card is
@@ -348,15 +370,28 @@ function InsightsDock({
             className={cn(
               "grid grid-rows-[0fr] transition-[grid-template-rows] duration-300 ease-out",
               open && "grid-rows-[1fr]",
+              open && maximized && "min-h-0 flex-1",
             )}
           >
-            <div className="overflow-hidden">
+            <div
+              className={cn("overflow-hidden", open && maximized && "h-full")}
+            >
               {/* Same grey-tray-around-white-surface treatment as the
                   expanded composer, so opening the chat reads as the input
                   surface growing into the conversation rather than an
                   unrelated white panel appearing. */}
-              <div className="bg-muted/40 rounded-2xl p-2">
-                <div className="border-border bg-card h-[min(640px,70vh)] overflow-hidden rounded-xl border">
+              <div
+                className={cn(
+                  "bg-muted/40 rounded-2xl p-2",
+                  open && maximized && "h-full",
+                )}
+              >
+                <div
+                  className={cn(
+                    "border-border bg-card h-[min(640px,70vh)] overflow-hidden rounded-xl border",
+                    open && maximized && "h-full",
+                  )}
+                >
                   {panel}
                 </div>
               </div>
@@ -550,8 +585,13 @@ export function InsightsProvider({
   // found for lookup: __LOCALID_…` during render.
   const [sessionKey, setSessionKey] = useState(0);
   const [historyOpen, setHistoryOpen] = useState(false);
+  // Full-screen chat panel, toggled from the panel header. Reset on close so
+  // the next open always starts at the regular panel size.
+  const [panelMaximized, setPanelMaximized] = useState(false);
+  useEffect(() => {
+    if (!isExpanded) setPanelMaximized(false);
+  }, [isExpanded]);
   const { theme } = useMoonshineConfig();
-  const routes = useRoutes();
   const { pathname } = useLocation();
 
   // Resolve effective values: per-page override wins, then the colocated
@@ -893,18 +933,20 @@ export function InsightsProvider({
                 >
                   <SquarePen className="size-4" />
                 </button>
-                {/* Navigates to the full Assistants page; closing the panel at
-                    the same time makes the navigation visible — the panel
-                    would otherwise keep covering the new page. */}
-                <Link
-                  to={routes.assistants.href()}
-                  onClick={() => setIsExpanded(false)}
+                <button
+                  onClick={() => setPanelMaximized((m) => !m)}
                   className={PANEL_ICON_BUTTON_CLASS}
-                  aria-label="Open Assistants"
-                  title="Open Assistants"
+                  aria-label={
+                    panelMaximized ? "Exit full screen" : "Full screen"
+                  }
+                  title={panelMaximized ? "Exit full screen" : "Full screen"}
                 >
-                  <Maximize2 className="size-4" />
-                </Link>
+                  {panelMaximized ? (
+                    <Minimize2 className="size-4" />
+                  ) : (
+                    <Maximize2 className="size-4" />
+                  )}
+                </button>
                 {panelCloseButton}
               </div>
             </div>
@@ -962,6 +1004,7 @@ export function InsightsProvider({
             onSubmitPrompt={handleDockSubmit}
             onDismiss={handleDockDismiss}
             panel={panelContent}
+            maximized={panelMaximized}
           />
         )}
       </div>
