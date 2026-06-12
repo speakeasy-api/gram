@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
@@ -31,6 +33,37 @@ type recallEntry struct {
 	Score     float64  `json:"score"`
 	Tags      []string `json:"tags"`
 	CreatedAt string   `json:"created_at"`
+	// Source is a compact provenance line, e.g.
+	// "from slack user U123 in C456, 2026-06-12". It identifies who originally
+	// said the remembered fact and where, so the assistant can weigh how much
+	// to trust the memory. Absent when the memory has no recorded provenance.
+	Source *string `json:"source,omitempty"`
+}
+
+// formatSource renders provenance as a compact human-readable attribution.
+// For slack: "from slack user U123 in C456, 2026-06-12". The channel slot
+// carries the trigger instance id for cron/wake sources.
+func formatSource(r memory.RecallResult) *string {
+	if r.SourceKind == nil {
+		return nil
+	}
+	var b strings.Builder
+	b.WriteString("from ")
+	b.WriteString(*r.SourceKind)
+	if r.SourceUserID != nil {
+		b.WriteString(" user ")
+		b.WriteString(*r.SourceUserID)
+	}
+	if r.SourceChannel != nil {
+		b.WriteString(" in ")
+		b.WriteString(*r.SourceChannel)
+	}
+	if r.SourceTimestamp != nil {
+		b.WriteString(", ")
+		b.WriteString(r.SourceTimestamp.UTC().Format(time.DateOnly))
+	}
+	s := b.String()
+	return &s
 }
 
 // RecallTool implements gram://memory/recall.
@@ -109,6 +142,7 @@ func (t *RecallTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload
 			Score:     r.Score,
 			Tags:      r.Tags,
 			CreatedAt: r.CreatedAt.UTC().Format(time.RFC3339Nano),
+			Source:    formatSource(r),
 		})
 	}
 

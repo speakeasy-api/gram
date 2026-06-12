@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/memory/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -204,6 +205,15 @@ type RecallResult struct {
 	Score      float64
 	Similarity float64
 	CreatedAt  time.Time
+
+	// Provenance of the memory write: which source surface it came from
+	// (slack|cron|wake|dashboard), the external user who said it, the channel
+	// it was said in, and when. Nil when unknown (e.g. rows written before
+	// provenance existed or outside an assistant thread).
+	SourceKind      *string
+	SourceUserID    *string
+	SourceChannel   *string
+	SourceTimestamp *time.Time
 }
 
 type ForgetCandidate struct {
@@ -366,21 +376,41 @@ func (s *MemoryService) Remember(
 		originThread = uuid.NullUUID{UUID: principal.ThreadID, Valid: true}
 	}
 
+	// Resolve provenance from the origin thread's source surface. Best-effort:
+	// a missing or unreadable thread leaves provenance NULL rather than failing
+	// the write, which downstream trust reasoning treats as least-trusted.
+	prov := provenance{Kind: nil, UserID: nil, Channel: nil, Timestamp: nil}
+	if originThread.Valid {
+		threadSource, srcErr := txq.GetAssistantThreadSourceForMemory(ctx, repo.GetAssistantThreadSourceForMemoryParams{
+			ID:        originThread.UUID,
+			ProjectID: projectID,
+		})
+		if srcErr != nil {
+			s.logger.WarnContext(ctx, "resolve memory provenance from origin thread", attr.SlogError(srcErr))
+		} else {
+			prov = extractProvenance(threadSource.SourceKind, threadSource.SourceRefJson)
+		}
+	}
+
 	insertTags := tags
 	if insertTags == nil {
 		insertTags = []string{}
 	}
 
 	inserted, err := txq.InsertAssistantMemory(ctx, repo.InsertAssistantMemoryParams{
-		AssistantID:    assistantID,
-		ProjectID:      projectID,
-		OrganizationID: organizationID,
-		Content:        content,
-		Embedding:      embedding,
-		Tags:           insertTags,
-		OriginThreadID: originThread,
-		OriginChatID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		SupersedesID:   supersedesID,
+		AssistantID:     assistantID,
+		ProjectID:       projectID,
+		OrganizationID:  organizationID,
+		Content:         content,
+		Embedding:       embedding,
+		Tags:            insertTags,
+		OriginThreadID:  originThread,
+		OriginChatID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		SupersedesID:    supersedesID,
+		SourceKind:      conv.PtrToPGText(prov.Kind),
+		SourceUserID:    conv.PtrToPGText(prov.UserID),
+		SourceChannel:   conv.PtrToPGText(prov.Channel),
+		SourceTimestamp: conv.PtrToPGTimestamptz(prov.Timestamp),
 	})
 	if err != nil {
 		return zero, oops.E(oops.CodeUnexpected, err, "insert memory").LogError(ctx, s.logger)
@@ -512,13 +542,22 @@ func (s *MemoryService) Recall(
 		if row.LastAccess.Valid {
 			age = now.Sub(row.LastAccess.Time)
 		}
+		var sourceTimestamp *time.Time
+		if row.SourceTimestamp.Valid {
+			ts := row.SourceTimestamp.Time
+			sourceTimestamp = &ts
+		}
 		scored = append(scored, RecallResult{
-			ID:         row.ID,
-			Content:    row.Content,
-			Tags:       row.Tags,
-			Similarity: row.Similarity,
-			Score:      computeScore(row.Similarity, age, s.halfLife),
-			CreatedAt:  row.CreatedAt.Time,
+			ID:              row.ID,
+			Content:         row.Content,
+			Tags:            row.Tags,
+			Similarity:      row.Similarity,
+			Score:           computeScore(row.Similarity, age, s.halfLife),
+			CreatedAt:       row.CreatedAt.Time,
+			SourceKind:      conv.FromPGText[string](row.SourceKind),
+			SourceUserID:    conv.FromPGText[string](row.SourceUserID),
+			SourceChannel:   conv.FromPGText[string](row.SourceChannel),
+			SourceTimestamp: sourceTimestamp,
 		})
 	}
 
