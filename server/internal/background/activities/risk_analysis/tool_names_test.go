@@ -38,17 +38,48 @@ func TestAttributeTool(t *testing.T) {
 func TestNewJudgeMessage(t *testing.T) {
 	t.Parallel()
 
-	require.IsType(t, risk_analysis.UserMessage{}, risk_analysis.NewJudgeMessage(message.User, "", "hi"))
-	require.IsType(t, risk_analysis.AssistantMessage{}, risk_analysis.NewJudgeMessage(message.Assistant, "", "hi"))
-	require.IsType(t, risk_analysis.ToolResultMessage{}, risk_analysis.NewJudgeMessage(message.ToolResponse, "", "ok"))
-	require.IsType(t, risk_analysis.OpaqueMessage{}, risk_analysis.NewJudgeMessage("", "", "x"))
+	// Type + body carry through; native/non-tool messages leave MCP fields empty.
+	user := risk_analysis.NewJudgeMessage(message.User, "", "hi")
+	require.Equal(t, message.User, user.Type)
+	require.Equal(t, "hi", user.Body)
+	require.Empty(t, user.ToolName)
 
-	m := risk_analysis.NewJudgeMessage(message.ToolRequest, "mcp__github__create_issue", `{"title":"x"}`)
-	tc, ok := m.(risk_analysis.ToolCallMessage)
-	require.True(t, ok)
-	require.Equal(t, message.ToolRequest, tc.Type())
+	// MCP tool name is destructured into server + function.
+	tc := risk_analysis.NewJudgeMessage(message.ToolRequest, "mcp__github__create_issue", `{"title":"x"}`)
+	require.Equal(t, message.ToolRequest, tc.Type)
+	require.Equal(t, "mcp__github__create_issue", tc.ToolName)
 	require.Equal(t, "github", tc.MCPServer)
 	require.Equal(t, "create_issue", tc.MCPFunction)
-	require.JSONEq(t, `{"title":"x"}`, tc.Arguments)
-	require.JSONEq(t, `{"title":"x"}`, tc.Body())
+	require.JSONEq(t, `{"title":"x"}`, tc.Body)
+
+	// Native tool: no MCP destructuring.
+	native := risk_analysis.NewJudgeMessage(message.ToolResponse, "Bash", "ok")
+	require.Equal(t, message.ToolResponse, native.Type)
+	require.Equal(t, "Bash", native.ToolName)
+	require.Empty(t, native.MCPServer)
+	require.Empty(t, native.MCPFunction)
+	require.Empty(t, native.ToolCalls, "single-tool message carries no ToolCalls")
+}
+
+func TestNewJudgeMessageForToolCalls(t *testing.T) {
+	t.Parallel()
+
+	msg := risk_analysis.NewJudgeMessageForToolCalls([]risk_analysis.JudgeToolCall{
+		risk_analysis.NewJudgeToolCall("mcp__github__create_issue", `{"title":"x"}`),
+		risk_analysis.NewJudgeToolCall("Bash", `{"command":"ls"}`),
+	})
+
+	require.Equal(t, message.ToolRequest, msg.Type)
+	require.Empty(t, msg.ToolName, "multi-call message has no single tool name")
+	require.Len(t, msg.ToolCalls, 2)
+
+	// MCP call is destructured per-call.
+	require.Equal(t, "github", msg.ToolCalls[0].MCPServer)
+	require.Equal(t, "create_issue", msg.ToolCalls[0].MCPFunction)
+	require.JSONEq(t, `{"title":"x"}`, msg.ToolCalls[0].Arguments)
+
+	// Native call keeps its raw name, no MCP fields.
+	require.Equal(t, "Bash", msg.ToolCalls[1].ToolName)
+	require.Empty(t, msg.ToolCalls[1].MCPServer)
+	require.Empty(t, msg.ToolCalls[1].MCPFunction)
 }

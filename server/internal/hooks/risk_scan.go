@@ -9,6 +9,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 )
@@ -50,7 +51,7 @@ func (s *Service) scanClaudeForEnforcement(ctx context.Context, payload *gen.Cla
 		return nil
 	}
 
-	result, err := s.riskScanner.ScanForEnforcement(ctx, projectID, text, messageType, derefString(payload.ToolName))
+	result, err := s.riskScanner.ScanForEnforcement(ctx, projectID, text, messageType, conv.PtrValOr(payload.ToolName, ""))
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for Claude hook",
 			attr.SlogError(err),
@@ -111,7 +112,7 @@ func (s *Service) scanCursorForEnforcement(ctx context.Context, payload *gen.Cur
 		return nil
 	}
 
-	result, err := s.riskScanner.ScanForEnforcement(ctx, pid, text, messageType, derefString(payload.ToolName))
+	result, err := s.riskScanner.ScanForEnforcement(ctx, pid, text, messageType, conv.PtrValOr(payload.ToolName, ""))
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for Cursor hook",
 			attr.SlogError(err),
@@ -150,7 +151,7 @@ func (s *Service) scanCodexForEnforcement(ctx context.Context, payload *gen.Code
 		return nil
 	}
 
-	result, err := s.riskScanner.ScanForEnforcement(ctx, pid, text, messageType, derefString(payload.ToolName))
+	result, err := s.riskScanner.ScanForEnforcement(ctx, pid, text, messageType, conv.PtrValOr(payload.ToolName, ""))
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for Codex hook",
 			attr.SlogError(err),
@@ -160,15 +161,6 @@ func (s *Service) scanCodexForEnforcement(ctx context.Context, payload *gen.Code
 	}
 
 	return result
-}
-
-// derefString returns the pointed-to string, or "" when nil. Hook payloads
-// carry ToolName as *string; only tool_request/tool_response events populate it.
-func derefString(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
 }
 
 func hookEventToMessageType(hookEvent HookEvent) (message.Type, bool) {

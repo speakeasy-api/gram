@@ -519,18 +519,28 @@ func (a *AnalyzeBatch) promptPoliciesEnabled(ctx context.Context, orgID string, 
 }
 
 // judgeMessageForRow builds the polymorphic judge payload for a stored message.
-// Tool-call rows surface the (single) tool name + raw arguments; rows with
-// multiple calls fall back to the whole tool_calls JSON with no single name.
-// Tool results and plain user/assistant messages carry their content.
+// A single tool-call row surfaces the tool name + raw arguments; a multi-call
+// row surfaces each call with its own attribution so per-call MCP server and
+// function names reach the judge. A row with no parseable calls falls back to
+// the raw tool_calls JSON. Tool results and plain user/assistant messages carry
+// their content.
 func (a *AnalyzeBatch) judgeMessageForRow(ctx context.Context, msg repo.GetMessageContentBatchRow) JudgeMessage {
 	messageType, _ := messageRowMessageType(msg)
 	if messageType == message.ToolRequest {
 		calls := a.parseRecordedToolCalls(ctx, SourceLLMJudge, msg.ToolCalls)
-		if len(calls) == 1 {
+		switch len(calls) {
+		case 0:
+			// No parseable calls: hand over the raw array as opaque arguments.
+			return NewJudgeMessage(messageType, "", string(msg.ToolCalls))
+		case 1:
 			return NewJudgeMessage(messageType, calls[0].Function.Name, calls[0].Function.Arguments)
+		default:
+			judgeCalls := make([]JudgeToolCall, 0, len(calls))
+			for _, c := range calls {
+				judgeCalls = append(judgeCalls, NewJudgeToolCall(c.Function.Name, c.Function.Arguments))
+			}
+			return NewJudgeMessageForToolCalls(judgeCalls)
 		}
-		// Zero or multiple calls: no single tool name; hand over the raw array.
-		return NewJudgeMessage(messageType, "", string(msg.ToolCalls))
 	}
 	return NewJudgeMessage(messageType, "", msg.Content)
 }

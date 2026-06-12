@@ -35,84 +35,79 @@ type JudgeInput struct {
 	ProjectID string
 	// Prompt is the policy's operator-authored guardrail.
 	Prompt string
-	// Message is the polymorphic message under evaluation. Its concrete type
-	// (user/assistant content, tool call with arguments, tool result with
-	// output) drives how it is rendered for the judge.
+	// Message is the message under evaluation. Type drives how it's rendered
+	// for the judge; Body holds the type-appropriate content.
 	Message JudgeMessage
 	Config  JudgeConfig
 }
 
-// JudgeMessage is the polymorphic body of the message under evaluation. Each
-// message type has a distinct shape so the judge sees structured fields (tool
-// name, arguments, output) rather than one ambiguous text blob. Implemented by
-// UserMessage, AssistantMessage, ToolCallMessage, ToolResultMessage, and the
-// OpaqueMessage fallback.
-type JudgeMessage interface {
-	// Type reports the message type this payload represents.
-	Type() message.Type
-	// Body returns the primary evaluable content (used for the empty-input
-	// guard). Empty Body means there is nothing to judge.
-	Body() string
+// JudgeMessage is the message under evaluation. Type selects the actor/role and
+// body label the judge sees; Body is the type-appropriate content (user or
+// assistant text, tool-call arguments, or tool-result output). For tool calls
+// and results, ToolName is the raw tool name and MCPServer/MCPFunction are its
+// destructured MCP components (empty for native tools and non-tool messages).
+// When a single assistant message issued more than one tool call, ToolCalls
+// carries each call with its own attribution and takes precedence over the
+// single ToolName/Body fields. An unset/unknown Type renders as opaque content.
+type JudgeMessage struct {
+	Type        message.Type
+	Body        string
+	ToolName    string
+	MCPServer   string
+	MCPFunction string
+	ToolCalls   []JudgeToolCall
 }
 
-// UserMessage is a message authored by the end user.
-type UserMessage struct{ Content string }
-
-// AssistantMessage is a message authored by the AI assistant.
-type AssistantMessage struct{ Content string }
-
-// ToolCallMessage is a tool call issued by the assistant. Name is the raw
-// tool name; MCPServer/MCPFunction are its destructured components for
-// MCP-routed tools (empty for native). Arguments is the raw JSON input.
-type ToolCallMessage struct {
-	Name        string
+// JudgeToolCall is one tool invocation within a multi-call assistant message.
+// ToolName is the raw name; MCPServer/MCPFunction are its destructured MCP
+// components (empty for native tools); Arguments is the call's raw input.
+type JudgeToolCall struct {
+	ToolName    string
 	MCPServer   string
 	MCPFunction string
 	Arguments   string
 }
 
-// ToolResultMessage is a tool result returned to the assistant. Name/MCP*
-// identify the originating tool when known; Output is the raw result.
-type ToolResultMessage struct {
-	Name        string
-	MCPServer   string
-	MCPFunction string
-	Output      string
+// NewJudgeMessage builds the message from a message type, optional tool name,
+// and the type-appropriate body. The tool name is destructured via AttributeTool
+// so an MCP server/function is surfaced separately — a no-op for native tools
+// and non-tool messages, where toolName is "".
+func NewJudgeMessage(messageType message.Type, toolName, body string) JudgeMessage {
+	server, fn, _ := AttributeTool(toolName)
+	return JudgeMessage{
+		Type:        messageType,
+		Body:        body,
+		ToolName:    toolName,
+		MCPServer:   server,
+		MCPFunction: fn,
+		ToolCalls:   nil,
+	}
 }
 
-// OpaqueMessage is the fallback for an unknown/unset message type: the body is
-// rendered without actor or tool framing.
-type OpaqueMessage struct{ Content string }
+// NewJudgeToolCall destructures a tool name into its MCP components and pairs it
+// with the call's raw arguments, for one entry of a multi-call message.
+func NewJudgeToolCall(toolName, arguments string) JudgeToolCall {
+	server, fn, _ := AttributeTool(toolName)
+	return JudgeToolCall{
+		ToolName:    toolName,
+		MCPServer:   server,
+		MCPFunction: fn,
+		Arguments:   arguments,
+	}
+}
 
-func (UserMessage) Type() message.Type       { return message.User }
-func (m UserMessage) Body() string           { return m.Content }
-func (AssistantMessage) Type() message.Type  { return message.Assistant }
-func (m AssistantMessage) Body() string      { return m.Content }
-func (ToolCallMessage) Type() message.Type   { return message.ToolRequest }
-func (m ToolCallMessage) Body() string       { return m.Arguments }
-func (ToolResultMessage) Type() message.Type { return message.ToolResponse }
-func (m ToolResultMessage) Body() string     { return m.Output }
-func (OpaqueMessage) Type() message.Type     { return "" }
-func (m OpaqueMessage) Body() string         { return m.Content }
-
-// NewJudgeMessage builds the polymorphic message for a message type, optional
-// tool name, and the type-appropriate body: user/assistant content, tool-call
-// arguments JSON, or tool-result output. Tool names are destructured via
-// AttributeTool so MCP server/function are surfaced separately.
-func NewJudgeMessage(messageType message.Type, toolName, body string) JudgeMessage {
-	switch messageType {
-	case message.ToolRequest:
-		server, fn, _ := AttributeTool(toolName)
-		return ToolCallMessage{Name: toolName, MCPServer: server, MCPFunction: fn, Arguments: body}
-	case message.ToolResponse:
-		server, fn, _ := AttributeTool(toolName)
-		return ToolResultMessage{Name: toolName, MCPServer: server, MCPFunction: fn, Output: body}
-	case message.Assistant:
-		return AssistantMessage{Content: body}
-	case message.User:
-		return UserMessage{Content: body}
-	default:
-		return OpaqueMessage{Content: body}
+// NewJudgeMessageForToolCalls builds a tool-request message carrying multiple
+// tool calls, each with its own attribution. Used by the batch analyzer when an
+// assistant message issued more than one tool call, so per-call MCP server and
+// function names reach the judge instead of an opaque tool_calls blob.
+func NewJudgeMessageForToolCalls(calls []JudgeToolCall) JudgeMessage {
+	return JudgeMessage{
+		Type:        message.ToolRequest,
+		Body:        "",
+		ToolName:    "",
+		MCPServer:   "",
+		MCPFunction: "",
+		ToolCalls:   calls,
 	}
 }
 

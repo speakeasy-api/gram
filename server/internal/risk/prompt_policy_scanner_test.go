@@ -117,12 +117,12 @@ func TestScanner_PromptBasedPolicyAttributesMCPTool(t *testing.T) {
 	_, err = scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, `{"title":"pwn"}`, message.ToolRequest, "mcp__github__create_issue")
 	require.NoError(t, err)
 
-	tc, ok := judge.lastInput().Message.(risk_analysis.ToolCallMessage)
-	require.True(t, ok, "expected ToolCallMessage, got %T", judge.lastInput().Message)
-	require.Equal(t, "mcp__github__create_issue", tc.Name)
-	require.Equal(t, "github", tc.MCPServer)
-	require.Equal(t, "create_issue", tc.MCPFunction)
-	require.JSONEq(t, `{"title":"pwn"}`, tc.Arguments)
+	msg := judge.lastInput().Message
+	require.Equal(t, message.ToolRequest, msg.Type)
+	require.Equal(t, "mcp__github__create_issue", msg.ToolName)
+	require.Equal(t, "github", msg.MCPServer)
+	require.Equal(t, "create_issue", msg.MCPFunction)
+	require.JSONEq(t, `{"title":"pwn"}`, msg.Body)
 }
 
 // TestScanner_PromptBasedPolicyJudgesNonToolMessages verifies a prompt_based
