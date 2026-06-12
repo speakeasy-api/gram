@@ -1,5 +1,18 @@
 # @gram-ai/elements
 
+## 1.36.0
+
+### Minor Changes
+
+- 87cb734: The Project Assistant now cycles a set of whimsical "thinking" verbs while it works and types replies onto the screen token-by-token, emulating an SSE stream over the poll-based transport.
+
+### Patch Changes
+
+- 9bc9a1d: Stop tool call cards from flashing while the assistant works. Cards no longer
+  reset (collapsing and re-highlighting their code) when a streaming turn grows
+  a single tool call into a group, and they no longer re-render on every text
+  chunk.
+
 ## 1.35.0
 
 ### Minor Changes

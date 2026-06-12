@@ -1,5 +1,101 @@
 # server
 
+## 0.69.0
+
+### Minor Changes
+
+- 774367b: Assistant runtime VMs are now rolled onto new runtime images right after a deploy, while they sit idle, so the next conversation turn no longer pays the image upgrade cost.
+- 6945807: Scheduled assistants now summarize their conversation history after every run, so long-lived schedules no longer accumulate unbounded context that slowed responses and risked hitting model limits. Interactive assistant threads (Slack, dashboard) also compact their history earlier, keeping long conversations responsive.
+- 3dfffb6: Assistants now boot their runtime as soon as they are created, so the first message no longer pays the cold-start wait.
+- 80b95db: Add risk exclusions: suppress false-positive risk findings by exact value, regex, rule_id, source, or presidio entity type, scoped per-policy or globally. Exclusions are applied going forward by the scanner and retroactively by a Temporal reconcile sweep that flags matching rows in `risk_results` (no presidio re-run); removing an exclusion restores the findings. Exposes `risk.exclusions.{list,create,update,delete}` on the management API.
+- 430deac: Add tokens under management (TUM) billing for enterprise organizations. The billing page now shows enterprise orgs their TUM consumption for the active billing cycle against the contracted monthly allowance, replacing the self-serve usage meters. TUM counts token usage only from agent sessions Gram has stored non-metrics data for (chats, tool calls), excluding OTEL-forwarded token metrics from uninstalled users. Platform admins get an admin-only section on the billing page to set the contracted monthly token limit, an alert email (alerting to follow), and the billing cycle anchor day, backed by the new `usage.getTokensUnderManagement` and `usage.setBillingMetadata` endpoints and a `billing_metadata` table. Contract changes emit `audit_log.billing_metadata_event_v1` audit events.
+- 430deac: Tokens under management is now computed from the new `chat_token_summaries` ClickHouse aggregate instead of raw `telemetry_logs`. The summary table buckets token usage and stored-session evidence per chat per UTC day and is retained for 2 years, so TUM remains accurate across full billing cycles and historical cycles stay computable after the 30-day raw telemetry TTL expires. A backfill script captures the raw data still within the TTL window.
+- 430deac: The tokens under management endpoint now returns usage history: the trailing 12 billing cycles, each with a per-UTC-day breakdown. Chat qualification is evaluated per cycle, so daily points sum exactly to each cycle's TUM. The enterprise billing page renders this as a bar chart with day and billing-cycle granularity toggles, including a contracted-limit line in the cycle view.
+- 0c7373d: Added unified Tools insights for hosted MCP servers, shadow MCP servers, local tools, and skills.
+
+### Patch Changes
+
+- 7ed5260: Return every published-project plugin to all org members from `agent.getPlugins`.
+
+  The endpoint previously returned only plugins assigned to the caller's exact
+  email or the org wildcard, so assignments via `role:`/`user:` principals never
+  reached a device — and there is no UI to create assignments yet. As an interim
+  step pending RBAC-backed assignment management, the per-principal assignment
+  filter (and the `@principal_urns` query param) is dropped: every non-deleted
+  plugin in the org's published projects is now returned to every org member.
+
+  The supplied email is still validated so the request contract is unchanged, and
+  the view's existing collapse handling keeps colliding-name and cross-org
+  isolation intact. No schema change.
+
+- 5294a58: Give each published project its own device-agent marketplace instead of
+  collapsing an org to one.
+
+  Previously `agent.getPlugins` derived the marketplace name from the org alone, so
+  every project in an org computed the same name and all but one were dropped — and
+  which one survived depended on alphabetical project-slug order, so a multi-project
+  org could receive the wrong project's marketplace (its observability hooks then
+  reporting to the wrong project). The view also ignored the per-project name
+  override entirely.
+
+  Marketplace names are now project-scoped: the org's default project (its oldest,
+  by id ASC) keeps the bare `<org>-speakeasy` name it always had, and every other
+  project gets `<org>-<project>-speakeasy`. The agent resolves each name exactly the
+  way the publish path does — per-project override if set, else this default — so a
+  device now receives every marketplace the org has published, each pointing at its
+  own project. Names that still genuinely collide (e.g. two equal overrides) collapse
+  deterministically to the default project.
+
+  No schema change. Single-project orgs and every org's default project keep their
+  existing name, so their installs don't churn; only non-default projects get a new
+  name, and the automated generator rollout republishes them (their content
+  fingerprint changes) so the published marketplace.json matches what the agent
+  emits.
+
+- 26855c3: Fix project-assistant thread titles all rendering as the assistant's name. New
+  threads now get a unique title generated from the conversation's first turn.
+- 2e738a7: Attribute message type + destructured tool name to LLM-judge evaluation.
+
+  The judge now receives structured context — the message type (as an actor/role
+  label), and for tool calls the destructured MCP server + function — instead of
+  one ambiguous text field, so prompt-based policies can target message types,
+  actors, and specific MCP servers/functions. Also: the chat-session risk view
+  renders the judge rationale (instead of "llm_judge · llm_judge"), shows a
+  tooltip when the annotation truncates, and drops the no-op "Create exclusion"
+  action for judge findings.
+
+  Hardens the judge against adversarial input: the policy and message are now sent
+  as a single structured JSON payload framed as untrusted data, so a hostile body
+  can't spoof prompt headings or steer the verdict via embedded instructions;
+  oversized bodies are head+tail truncated before the call so a padded payload
+  can't blow the model's context window into a fail-open allow; and multi-tool-call
+  messages render each call with its own MCP attribution instead of an opaque blob.
+
+- c5da8ff: Fix the prompt-based risk policy feature flag (`gram-prompt-policies`) being
+  treated as disabled for orgs that enabled it via a PostHog group. The backend
+  now forwards org/project group memberships when evaluating the flag, so
+  group-targeted releases match server-side the same way they do in the
+  dashboard — unblocking policy create/update and enforcement.
+- d857151: Open prompt-based ("LLM-judge") risk policies to all message types.
+
+  Previously the judge was hard-scoped to `tool_request` in both the realtime
+  scanner and the batch analyzer, regardless of the policy's `message_types`. The
+  judge now runs on whatever types a policy declares (`user_message`,
+  `tool_request`, `tool_response`, `assistant_message`), and the policy form lets
+  you choose them instead of locking to tool requests.
+
+- 685c90a: Assistant runtime machines on Fly.io now retain access to private-network DNS, so traces export reliably to the OpenTelemetry collector.
+- 91c6568: Fix shadow MCP access requests failing with a 403 ("different requester") when the request link was minted for an agent-reported identity that differs from the authenticated dashboard user (multi-domain orgs, duplicate accounts, or a shared block link). `access.shadowMcp.requests.create` no longer gates on the token's requester; org-match and project-membership checks remain, and approval stays org-admin gated.
+- 9723f90: Replace the Slack assistant's rotating loading indicator with honest, single-phrase status.
+
+  The thread indicator no longer cycles through a fake "Routing… → Calling tools… →
+  Composing…" pipeline. On ingress it shows just "Routing…", and once the assistant is
+  running it reports what it's actually doing through the set-thread-status tool — one
+  phrase at a time, updated as the work progresses. The tool now also instructs the
+  model to phrase the status mid-sentence (Slack renders it after the app's name) and
+  pins the indicator to the status text when no loading message is given, instead of
+  letting Slack rotate its own generic defaults.
+
 ## 0.68.0
 
 ### Minor Changes
