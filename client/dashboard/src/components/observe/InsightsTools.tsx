@@ -715,7 +715,7 @@ function HooksInnerContent({
 
 type StackedBarDataset = {
   label: string;
-  data: number[];
+  data: Array<number | null>;
   backgroundColor: string;
   borderColor?: string;
   borderWidth?: number;
@@ -726,23 +726,42 @@ type StackedBarDataset = {
   hoverBorderColor?: string;
 };
 
+function hideZeroBarSegments(data: Array<number | null>) {
+  return data.map((value) => (value === 0 ? null : value));
+}
+
 const stackTotalPlugin = {
   id: "stackTotal",
   afterDatasetsDraw(chart: ChartJS) {
     const { ctx, data } = chart;
-    const lastMeta = chart.getDatasetMeta(data.datasets.length - 1);
     ctx.save();
     ctx.font = "12px sans-serif";
     ctx.fillStyle = CHART_COLORS.label;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    lastMeta.data.forEach((bar, i) => {
-      const total = data.datasets.reduce(
-        (sum, ds) => sum + ((ds.data[i] as number) || 0),
-        0,
-      );
-      ctx.fillText(String(total), bar.x + 4, bar.y);
-    });
+    for (let i = 0; i < (data.labels?.length ?? 0); i++) {
+      let total = 0;
+      let labelX: number | null = null;
+      let labelY: number | null = null;
+
+      data.datasets.forEach((dataset, datasetIndex) => {
+        const value = dataset.data[i];
+        if (typeof value !== "number" || value === 0) return;
+
+        total += value;
+        const bar = chart.getDatasetMeta(datasetIndex).data[i];
+        if (!bar) return;
+
+        if (labelX === null || bar.x > labelX) {
+          labelX = bar.x;
+          labelY = bar.y;
+        }
+      });
+
+      if (total > 0 && labelX !== null && labelY !== null) {
+        ctx.fillText(String(total), labelX + 4, labelY);
+      }
+    }
     ctx.restore();
   },
 };
@@ -774,10 +793,14 @@ function StackedBarChart({
   const visibleLabels = hiddenCount > 0 ? labels.slice(0, maxRows) : labels;
   const visibleDatasets = (
     hiddenCount > 0
-      ? datasets.map((ds) => ({ ...ds, data: ds.data.slice(0, maxRows) }))
+      ? datasets.map((ds) => ({
+          ...ds,
+          data: ds.data.slice(0, maxRows),
+        }))
       : datasets
   ).map((ds) => ({
     ...ds,
+    data: hideZeroBarSegments(ds.data),
     barThickness: thickness,
     borderRadius: BAR_BORDER_RADIUS,
     borderSkipped: false,
@@ -1083,6 +1106,7 @@ function ServerErrorRateChart({
       : datasets
   ).map((ds) => ({
     ...ds,
+    data: hideZeroBarSegments(ds.data),
     barThickness: thickness,
     borderRadius: BAR_BORDER_RADIUS,
     borderSkipped: false,
