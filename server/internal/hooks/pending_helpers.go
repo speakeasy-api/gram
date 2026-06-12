@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpname"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 
@@ -150,12 +151,9 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 	}
 
 	// Parse MCP tool names
-	if strings.HasPrefix(toolName, "mcp__") {
-		parts := strings.SplitN(toolName, "__", 3)
-		if len(parts) == 3 {
-			attrs[attr.ToolCallSourceKey] = parts[1]
-			attrs[attr.ToolNameKey] = parts[2]
-		}
+	if server, fn, ok := mcpname.AttributeTool(toolName); ok {
+		attrs[attr.ToolCallSourceKey] = server
+		attrs[attr.ToolNameKey] = fn
 	}
 
 	// Annotate every MCP-routed tool call with the resolved server

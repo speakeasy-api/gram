@@ -8,6 +8,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpname"
 )
 
 // gramHostedMCPHost is the canonical host for Gram-managed MCP servers.
@@ -31,14 +32,14 @@ type parsedClaudeToolName struct {
 // convention; native Claude Code tools (Read, Edit, Bash, ...) return a
 // zero-value result with IsMCP=false.
 func parseClaudeToolName(rawName string) parsedClaudeToolName {
-	if !strings.HasPrefix(rawName, "mcp__") {
+	// Restrict to the Claude Code "mcp__<server>__<tool>" form with both parts
+	// present; the shared parser also accepts Cursor's "MCP:" prefix (which has
+	// no server) and an empty server, neither of which is a valid Claude entry.
+	server, tool, isMCP := mcpname.AttributeTool(rawName)
+	if !isMCP || server == "" || tool == "" {
 		return parsedClaudeToolName{Server: "", Tool: "", IsMCP: false}
 	}
-	parts := strings.SplitN(rawName, "__", 3)
-	if len(parts) != 3 || parts[1] == "" || parts[2] == "" {
-		return parsedClaudeToolName{Server: "", Tool: "", IsMCP: false}
-	}
-	return parsedClaudeToolName{Server: parts[1], Tool: parts[2], IsMCP: true}
+	return parsedClaudeToolName{Server: server, Tool: tool, IsMCP: true}
 }
 
 // mcpServerPrefix returns the tool-name prefix Claude Code derives for an
