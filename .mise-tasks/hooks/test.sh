@@ -36,6 +36,13 @@ else
   project_id="${project_row%%|*}"
   org_id="${project_row##*|}"
 
+  # Enable the session_capture product feature for the org. Without it,
+  # persistHook silently drops chat messages (enforcement still works, but no
+  # agent sessions are stored and no risk analysis runs), so sessions + risk
+  # events never appear locally. Idempotent: only inserts when not already set.
+  db_query -v org_id="$org_id" >/dev/null <<<"INSERT INTO organization_features (organization_id, feature_name) SELECT :'org_id', 'session_capture' WHERE NOT EXISTS (SELECT 1 FROM organization_features WHERE organization_id = :'org_id' AND feature_name = 'session_capture' AND deleted IS FALSE)"
+  echo "Enabled session_capture for org: ${org_id}"
+
   user_id=$(db_query <<<"SELECT id FROM users LIMIT 1" 2>/dev/null || true)
   if [ -z "$user_id" ]; then
     echo "Warning: no users in DB — skipping API key provisioning."
