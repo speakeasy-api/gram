@@ -33,7 +33,7 @@ class Publisher(Generic[M]):
         self._handle = handle
         self._schema = schema
 
-    async def publish(self, message: M) -> Any:
+    async def publish(self, message: M) -> str:
         """Marshal and publish a message; awaits delivery and returns the message ID."""
         # Guard against a runtime message whose type disagrees with the topic
         # this publisher was built for: otherwise we'd emit payload bytes tagged
