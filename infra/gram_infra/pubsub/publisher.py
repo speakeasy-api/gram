@@ -8,8 +8,8 @@ attributes the Go layer uses — ``content-type: application/x-protobuf`` and
 
 from __future__ import annotations
 
-from concurrent.futures import Future
-from typing import Generic, TypeVar
+import asyncio
+from typing import Any, Generic, TypeVar
 
 from google.protobuf.message import Message
 
@@ -30,8 +30,8 @@ class Publisher(Generic[M]):
         self._handle = handle
         self._schema = schema
 
-    def publish(self, message: M) -> Future:
-        """Marshal and publish a message; returns the publish future (resolves to the message ID)."""
+    async def publish(self, message: M) -> Any:
+        """Marshal and publish a message; awaits delivery and returns the message ID."""
         # Guard against a runtime message whose type disagrees with the topic
         # this publisher was built for: otherwise we'd emit payload bytes tagged
         # with a mismatched ``schema`` attribute (and onto the wrong topic).
@@ -43,11 +43,14 @@ class Publisher(Generic[M]):
             )
 
         data = message.SerializeToString()
-        return self._handle.client.publish(
+        # The client returns a ``concurrent.futures.Future`` resolved on a
+        # background thread; bridge it to asyncio so callers can simply await.
+        future = self._handle.client.publish(
             self._handle.topic_path,
             data,
             **{"content-type": CONTENT_TYPE, "schema": self._schema},
         )
+        return await asyncio.wrap_future(future)
 
 
 def pubsub_publisher_for_message(

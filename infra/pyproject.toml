@@ -10,6 +10,7 @@ dependencies = [
   # with buf.gen.yaml when the plugin version changes.
   "protobuf>=7.35.0,<8",
   "google-cloud-pubsub>=2.31.0",
+  "anyio>=4.13.0",
 ]
 
 [project.scripts]

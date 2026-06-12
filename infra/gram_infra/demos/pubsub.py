@@ -12,12 +12,12 @@ topic on demand, so no Config Connector / GCP resources are needed locally.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 import signal
 import uuid
 
+import anyio
 from google.protobuf.timestamp_pb2 import Timestamp
 from google.cloud.pubsub_v1 import PublisherClient, SubscriberClient
 from gram.ping.v1 import ping_pb2, processor_pb2
@@ -27,7 +27,6 @@ from gram_infra.pubsub import (
     pubsub_subscriber_for_message,
 )
 from gram_infra.pubsub.publisher import Publisher
-from gram_infra.pubsub.subscriber import Subscriber
 
 logger = logging.getLogger("gram-infra-pubsub-demo")
 
@@ -46,10 +45,8 @@ def make_handler(receiver_id: str):
     return handle
 
 
-async def _publish_forever(
-    publisher: Publisher[ping_pb2.Message], stop_event: asyncio.Event
-) -> None:
-    while not stop_event.is_set():
+async def _publish_forever(publisher: Publisher[ping_pb2.Message]) -> None:
+    while True:
         created_at = Timestamp()
         created_at.GetCurrentTime()
         message = ping_pb2.Message(
@@ -59,47 +56,17 @@ async def _publish_forever(
             payload=b'{"msg":"Hello, World!"}',
         )
 
-        await asyncio.to_thread(lambda: publisher.publish(message).result(timeout=30))
-        await asyncio.sleep(0)
+        await publisher.publish(message)
+        await anyio.sleep(0.2)
 
 
-async def _run_demo(
-    publisher: Publisher[ping_pb2.Message],
-    subscribers: list[tuple[str, Subscriber[ping_pb2.Message]]],
-) -> None:
-    loop = asyncio.get_running_loop()
-    stop_event = asyncio.Event()
-
-    def request_shutdown() -> None:
-        logger.info("shutting down")
-        stop_event.set()
-
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, request_shutdown)
-
-    receive_tasks = [
-        asyncio.create_task(subscriber.receive(make_handler(receiver_id)))
-        for receiver_id, subscriber in subscribers
-    ]
-    publish_task = asyncio.create_task(_publish_forever(publisher, stop_event))
-
-    try:
-        logger.info("subscribers started; publishing messages (Ctrl-C to stop)")
-        await stop_event.wait()
-    finally:
-        stop_event.set()
-        try:
-            await asyncio.wait_for(publish_task, timeout=35)
-        except asyncio.TimeoutError:
-            publish_task.cancel()
-
-        for task in receive_tasks:
-            task.cancel()
-
-        await asyncio.gather(publish_task, *receive_tasks, return_exceptions=True)
-
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            loop.remove_signal_handler(sig)
+async def _shutdown_on_signal(cancel_scope: anyio.CancelScope) -> None:
+    """Cancel the surrounding task group when SIGINT/SIGTERM arrives."""
+    with anyio.open_signal_receiver(signal.SIGINT, signal.SIGTERM) as signals:
+        async for _ in signals:
+            logger.info("shutting down")
+            cancel_scope.cancel()
+            return
 
 
 async def _main() -> None:
@@ -136,11 +103,16 @@ async def _main() -> None:
             broker, ping_pb2.Message, processor_pb2.Processor, logger=logger
         )
 
-        await _run_demo(publisher, [("receiver-1", sub1), ("receiver-2", sub2)])
+        logger.info("subscribers started; publishing messages (Ctrl-C to stop)")
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(_shutdown_on_signal, tg.cancel_scope)
+            tg.start_soon(_publish_forever, publisher)
+            tg.start_soon(sub1.receive, make_handler("receiver-1"))
+            tg.start_soon(sub2.receive, make_handler("receiver-2"))
 
 
 def main() -> None:
-    asyncio.run(_main())
+    anyio.run(_main)
 
 
 if __name__ == "__main__":
