@@ -28,7 +28,7 @@ import { Wand2 } from "lucide-react";
 import {
   INSIGHTS_AI_RAINBOW_CLASS,
   type InsightsConfigOptions,
-} from "@/components/insights-sidebar";
+} from "@/components/insights-dock";
 import { useInsightsState } from "@/components/insights-context";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import {

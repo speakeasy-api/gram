@@ -14,8 +14,8 @@ const INSIGHTS_SHORTCUT_LABEL_PC = ["Ctrl", "/"];
  * InsightsProvider is mounted, the page hides the dock, or the dock is
  * dismissed to the sidebar resume button.
  *
- * Lives in its own module (not insights-sidebar.tsx) so page-header can
- * import it without pulling in the sidebar's routes import, which would
+ * Lives in its own module (not insights-dock.tsx) so page-header can
+ * import it without pulling in the dock's routes import, which would
  * close an import cycle back through the page components.
  */
 export function InsightsDockShortcutHint({

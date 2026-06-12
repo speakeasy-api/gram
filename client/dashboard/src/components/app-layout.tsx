@@ -8,7 +8,7 @@ import { useCallback, useMemo } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
 import { AppSidebar } from "./app-sidebar.tsx";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
-import { InsightsProvider } from "./insights-sidebar.tsx";
+import { InsightsProvider } from "./insights-dock.tsx";
 import { OrgSidebar } from "./org-sidebar.tsx";
 import { SidebarInset, SidebarProvider } from "./ui/sidebar.tsx";
 

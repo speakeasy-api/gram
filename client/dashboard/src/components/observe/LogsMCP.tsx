@@ -1,5 +1,5 @@
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
-import { InsightsConfig } from "@/components/insights-sidebar";
+import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { Button } from "@/components/ui/button";

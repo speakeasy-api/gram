@@ -521,7 +521,7 @@ interface InsightsProviderProps {
   suggestions?: InsightsSuggestion[];
   /** Default expanded state. */
   defaultExpanded?: boolean;
-  /** Children rendered alongside the sidebar (page content). */
+  /** Children rendered alongside the dock (page content). */
   children: React.ReactNode;
 }
 
@@ -535,7 +535,7 @@ export function InsightsProvider({
 }: InsightsProviderProps): ReactElement {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [override, setOverride] = useState<InsightsConfigOptions | null>(null);
-  // Bumped whenever the keyboard shortcut fires (with the sidebar closed) so
+  // Bumped whenever the keyboard shortcut fires (with the chat panel closed) so
   // the docked composer grabs focus and expands. Starts at 0; the dock
   // ignores the initial value.
   const [focusComposerKey, setFocusComposerKey] = useState(0);
@@ -571,7 +571,7 @@ export function InsightsProvider({
   const hideTrigger = override?.hideTrigger ?? false;
   const noToolsetsConfigured = useNoToolsetsConfigured(mcpConfig.projectSlug);
 
-  // Server-side Project Assistant. Resolved lazily once the sidebar is first
+  // Server-side Project Assistant. Resolved lazily once the chat panel is first
   // opened. While connecting (or after a failure) the factory is undefined and
   // we gate the chat (below) instead of falling back to client-side generation.
   // assistantId scopes the conversation list to this assistant's chats.

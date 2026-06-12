@@ -2,10 +2,7 @@ import { useQueryState } from "nuqs";
 import type { MCPServerEntry } from "@gram-ai/elements";
 import { recommended } from "@gram-ai/elements/plugins";
 import { RequireScope } from "@/components/require-scope";
-import {
-  InsightsConfig,
-  InsightsProvider,
-} from "@/components/insights-sidebar";
+import { InsightsConfig, InsightsProvider } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { Page } from "@/components/page-layout";
 import { Heading } from "@/components/ui/heading";
