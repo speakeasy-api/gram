@@ -1213,7 +1213,7 @@ function PolicyKindChoice({
             </Badge>
           </div>
           <Type small muted className="mt-0.5">
-            Describe any behavior you want to detect in plain language — no
+            Describe any behavior you want to detect in plain language. No
             scanner configuration needed.
           </Type>
         </div>
@@ -1371,7 +1371,7 @@ const TEMPERATURE_TICKS = Array.from(
 
 // JUDGE_MODEL_OPTIONS lists the models a prompt policy may run its LLM judge on.
 // The recommended option uses the empty value, which follows the server's
-// default judge model — its label names that model and must stay in sync with
+// default judge model. Its label names that model and must stay in sync with
 // riskjudge.defaultJudgeModel. See server/cmd/riskjudgebench for the benchmark
 // behind these picks.
 const JUDGE_MODEL_OPTIONS: {
@@ -1422,53 +1422,50 @@ function JudgeConfigSection({
 }) {
   return (
     <div className="space-y-4">
-      <div className="space-y-1">
-        <Label className="text-sm font-medium">Judge configuration</Label>
-        <p className="text-muted-foreground text-xs">
-          How the LLM judge evaluates each in-scope message against this policy.
-        </p>
-      </div>
-
       <JudgeModelPicker formModel={formModel} setFormModel={setFormModel} />
 
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <Label className="text-sm font-medium">Temperature</Label>
-          <span className="text-muted-foreground text-xs tabular-nums">
-            {formTemperature.toFixed(1)}
-            {formTemperature === DEFAULT_JUDGE_TEMPERATURE ? " · default" : ""}
-          </span>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-muted-foreground text-xs tabular-nums">0</span>
-          <div className="flex-1">
-            <Slider
-              value={formTemperature}
-              onChange={(v) => setFormTemperature(Math.round(v * 10) / 10)}
-              min={TEMPERATURE_MIN}
-              max={TEMPERATURE_MAX}
-              step={TEMPERATURE_STEP}
-              ticks={TEMPERATURE_TICKS}
-            />
+      <div className="border-border space-y-4 rounded-lg border p-4">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Label className="text-sm font-medium">Temperature</Label>
+            <span className="text-muted-foreground text-xs tabular-nums">
+              {formTemperature.toFixed(1)}
+              {formTemperature === DEFAULT_JUDGE_TEMPERATURE
+                ? " · default"
+                : ""}
+            </span>
           </div>
-          <span className="text-muted-foreground text-xs tabular-nums">1</span>
-        </div>
-        <p className="text-muted-foreground text-xs">
-          Lower is more consistent and repeatable (0 recommended). Higher adds
-          variation, which can surface borderline or unusual violations a rigid
-          read might miss.
-        </p>
-      </div>
-
-      <div className="flex items-center justify-between gap-4">
-        <div className="pr-2">
-          <Label className="text-sm font-medium">Fail open</Label>
+          <div className="flex items-center gap-3">
+            <span className="text-foreground text-xs tabular-nums">0</span>
+            <div className="flex-1">
+              <Slider
+                value={formTemperature}
+                onChange={(v) => setFormTemperature(Math.round(v * 10) / 10)}
+                min={TEMPERATURE_MIN}
+                max={TEMPERATURE_MAX}
+                step={TEMPERATURE_STEP}
+                ticks={TEMPERATURE_TICKS}
+              />
+            </div>
+            <span className="text-foreground text-xs tabular-nums">1</span>
+          </div>
           <p className="text-muted-foreground text-xs">
-            When the judge errors or times out, allow the message instead of
-            blocking it.
+            Lower is more consistent and repeatable (0 recommended). Higher adds
+            variation, which can surface borderline or unusual violations a
+            rigid read might miss.
           </p>
         </div>
-        <Switch checked={formFailOpen} onCheckedChange={setFormFailOpen} />
+
+        <div className="border-border flex items-start justify-between gap-4 border-t pt-4">
+          <div className="space-y-2 pr-2">
+            <Label className="text-sm font-medium">Fail open</Label>
+            <p className="text-muted-foreground text-xs">
+              When the judge errors or times out, allow the message instead of
+              blocking it.
+            </p>
+          </div>
+          <Switch checked={formFailOpen} onCheckedChange={setFormFailOpen} />
+        </div>
       </div>
     </div>
   );
@@ -1580,7 +1577,7 @@ function PromptPolicyHowItWorks({ isEditing }: { isEditing: boolean }) {
         <div className="min-w-0 flex-1">
           <div className="text-sm font-medium">How this works</div>
           <div className="text-muted-foreground text-xs">
-            An LLM judge evaluates each matching message against your prompt.
+            An LLM judge checks each matching message against your prompt.
           </div>
         </div>
         <ChevronRight
@@ -1592,9 +1589,11 @@ function PromptPolicyHowItWorks({ isEditing }: { isEditing: boolean }) {
       </CollapsibleTrigger>
       <CollapsibleContent className="border-border border-t px-4 py-3">
         <p className="text-muted-foreground text-sm">
-          Prompt-based policies use an LLM judge, so each evaluated message can
-          add latency compared with standard detection rules. The judge sees one
-          message at a time — a tool call and its inputs, or message content.
+          Prompt-based policies use an LLM judge, so each evaluated message adds
+          some latency versus standard detection rules. The judge sees one
+          message at a time (a tool call and its inputs, or message content),
+          never a whole conversation. It runs on the message types you select
+          under Applies To.
         </p>
       </CollapsibleContent>
     </Collapsible>
