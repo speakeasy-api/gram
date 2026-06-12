@@ -81,4 +81,15 @@ describe("SidebarUserMenu", () => {
     expect(roadmap?.getAttribute("href")).toBe("https://roadmap.speakeasy.com");
     expect(screen.queryByText(/Bug or Feature Request/)).toBeNull();
   });
+
+  it("links Platform Status to status.speakeasyapi.dev in a new tab", () => {
+    render(<SidebarUserMenu />);
+    fireEvent.click(screen.getByTestId("user-menu-trigger"));
+    const status = screen.getByText("Platform Status").closest("a");
+    expect(status?.getAttribute("href")).toBe(
+      "https://status.speakeasyapi.dev/",
+    );
+    expect(status?.getAttribute("target")).toBe("_blank");
+    expect(status?.getAttribute("rel")).toBe("noopener noreferrer");
+  });
 });
