@@ -11,6 +11,12 @@ import (
 // assistants package adapters (slack|cron|wake|dashboard). They are duplicated
 // here as plain strings because the assistants constants are unexported and
 // importing that package would invert the dependency direction.
+//
+// The set is an open enum: source_kind is TEXT with no database constraint,
+// and extractProvenance records any kind it is handed verbatim. Adding a new
+// source surface (e.g. email) therefore requires no migration — its memories
+// carry kind-only provenance (NULL user/channel, read as less-trusted) until
+// a case is added to extractProvenance to extract the richer fields.
 const (
 	sourceKindSlack     = "slack"
 	sourceKindCron      = "cron"
