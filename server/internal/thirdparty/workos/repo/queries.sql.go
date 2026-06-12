@@ -34,14 +34,13 @@ func (q *Queries) CloseDirectoryUserGroupMembership(ctx context.Context, arg Clo
 	return result.RowsAffected(), nil
 }
 
-const closeDirectoryUserGroupMembershipByWorkOSIDs = `-- name: CloseDirectoryUserGroupMembershipByWorkOSIDs :one
+const closeDirectoryUserGroupMembershipByWorkOSIDs = `-- name: CloseDirectoryUserGroupMembershipByWorkOSIDs :execrows
 UPDATE directory_user_group_memberships
 SET deleted_at = COALESCE(deleted_at, clock_timestamp()),
   updated_at = clock_timestamp()
 WHERE workos_directory_user_id = $1
   AND workos_directory_group_id = $2
   AND deleted_at IS NULL
-RETURNING id
 `
 
 type CloseDirectoryUserGroupMembershipByWorkOSIDsParams struct {
@@ -49,11 +48,12 @@ type CloseDirectoryUserGroupMembershipByWorkOSIDsParams struct {
 	WorkosDirectoryGroupID string
 }
 
-func (q *Queries) CloseDirectoryUserGroupMembershipByWorkOSIDs(ctx context.Context, arg CloseDirectoryUserGroupMembershipByWorkOSIDsParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, closeDirectoryUserGroupMembershipByWorkOSIDs, arg.WorkosDirectoryUserID, arg.WorkosDirectoryGroupID)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+func (q *Queries) CloseDirectoryUserGroupMembershipByWorkOSIDs(ctx context.Context, arg CloseDirectoryUserGroupMembershipByWorkOSIDsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, closeDirectoryUserGroupMembershipByWorkOSIDs, arg.WorkosDirectoryUserID, arg.WorkosDirectoryGroupID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const closeDirectoryUserGroupMembershipsForGroup = `-- name: CloseDirectoryUserGroupMembershipsForGroup :execrows

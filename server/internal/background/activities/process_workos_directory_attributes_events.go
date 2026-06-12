@@ -244,16 +244,15 @@ func openDirectoryGroupMembership(ctx context.Context, logger *slog.Logger, dbtx
 	return nil
 }
 
-func closeDirectoryGroupMembership(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, payload workosDirectoryGroupMembershipEventPayload) error {
-	if _, err := workosrepo.New(dbtx).CloseDirectoryUserGroupMembershipByWorkOSIDs(ctx, workosrepo.CloseDirectoryUserGroupMembershipByWorkOSIDsParams{
+func closeDirectoryGroupMembership(ctx context.Context, _ *slog.Logger, dbtx database.DBTX, payload workosDirectoryGroupMembershipEventPayload) error {
+	_, err := workosrepo.New(dbtx).CloseDirectoryUserGroupMembershipByWorkOSIDs(ctx, workosrepo.CloseDirectoryUserGroupMembershipByWorkOSIDsParams{
 		WorkosDirectoryUserID:  payload.User.ID,
 		WorkosDirectoryGroupID: payload.Group.ID,
-	}); err != nil {
-		logger.WarnContext(ctx, "skipping directory group membership for unknown user or group",
-			attr.SlogWorkOSDirectoryUserID(payload.User.ID),
-			attr.SlogWorkOSDirectoryGroupID(payload.Group.ID),
-		)
-		return nil
+	})
+
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "close directory group membership")
 	}
+
 	return nil
 }

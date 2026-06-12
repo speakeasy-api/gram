@@ -150,14 +150,13 @@ WHERE directory_user_id = @directory_user_id
   AND directory_group_id = @directory_group_id
   AND deleted_at IS NULL;
 
--- name: CloseDirectoryUserGroupMembershipByWorkOSIDs :one
+-- name: CloseDirectoryUserGroupMembershipByWorkOSIDs :execrows
 UPDATE directory_user_group_memberships
 SET deleted_at = COALESCE(deleted_at, clock_timestamp()),
   updated_at = clock_timestamp()
 WHERE workos_directory_user_id = @workos_directory_user_id
   AND workos_directory_group_id = @workos_directory_group_id
-  AND deleted_at IS NULL
-RETURNING id;
+  AND deleted_at IS NULL;
 
 -- name: CloseDirectoryUserGroupMembershipsForGroup :execrows
 UPDATE directory_user_group_memberships
