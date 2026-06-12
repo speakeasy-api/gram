@@ -1,7 +1,10 @@
 import { ReactElement } from "react";
 import { cn } from "@/lib/utils";
 import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
-import { TelemetryLogRecord } from "@gram/client/models/components";
+import type {
+  TelemetryLogRecord,
+  ToolUsageTraceLogGroup,
+} from "@gram/client/models/components";
 import { Operator as Op } from "@gram/client/models/components/logfilter";
 import type { SearchLogsPayload } from "@gram/client/models/components/searchlogspayload";
 import { useGramContext } from "@gram/client/react-query";
@@ -10,37 +13,35 @@ import { Icon } from "@speakeasy-api/moonshine";
 import { useQuery } from "@tanstack/react-query";
 import { formatNanoTimestamp, formatLogBody } from "./utils";
 
-// Standalone trigger logs (no correlation_id, no event_id) are grouped under
-// `trigger-log:<log.id>` in use-attribute-logs-query.ts. The originating log
-// is already rendered as the group header, so there are no sub-spans to fetch.
-const TRIGGER_LOG_PREFIX = "trigger-log:";
-
 function buildTraceFilters(
-  traceId: string,
-): Pick<SearchLogsPayload, "filter" | "filters"> {
-  if (traceId.startsWith("corr:")) {
+  logGroup: ToolUsageTraceLogGroup,
+): Pick<SearchLogsPayload, "filter" | "filters"> | null {
+  if (logGroup.kind === "correlation_id") {
     return {
       filters: [
         {
           path: "gram.trigger.correlation_id",
           operator: Op.Eq,
-          values: [traceId.slice("corr:".length)],
+          values: [logGroup.value],
         },
       ],
     };
   }
-  if (traceId.startsWith("trigger:")) {
+  if (logGroup.kind === "trigger_event_id") {
     return {
       filters: [
         {
           path: "gram.trigger.event_id",
           operator: Op.Eq,
-          values: [traceId.slice("trigger:".length)],
+          values: [logGroup.value],
         },
       ],
     };
   }
-  return { filter: { traceId } };
+  if (logGroup.kind === "trace_id") {
+    return { filter: { traceId: logGroup.value } };
+  }
+  return null;
 }
 
 // Uses design system tokens where available (destructive, warning, muted).
@@ -78,43 +79,55 @@ function getSeverityColors(severity?: string) {
 }
 
 interface TraceLogsListProps {
-  traceId: string;
+  logGroup: ToolUsageTraceLogGroup;
   toolName: string;
   isExpanded: boolean;
   onLogClick: (log: TelemetryLogRecord) => void;
   parentTimestamp: string;
+  from: Date;
+  to: Date;
 }
 
 export function TraceLogsList({
-  traceId,
+  logGroup,
   toolName: _toolName,
   isExpanded,
   onLogClick,
   parentTimestamp,
+  from,
+  to,
 }: TraceLogsListProps): ReactElement | null {
   const client = useGramContext();
-  const isStandaloneTriggerLog = traceId.startsWith(TRIGGER_LOG_PREFIX);
+  const traceFilters = buildTraceFilters(logGroup);
 
   const { data, isPending, error } = useQuery({
-    queryKey: ["trace-logs", traceId],
+    queryKey: [
+      "trace-logs",
+      logGroup.kind,
+      logGroup.value,
+      from.toISOString(),
+      to.toISOString(),
+    ],
     queryFn: () =>
       unwrapAsync(
         telemetrySearchLogs(client, {
           searchLogsPayload: {
-            ...buildTraceFilters(traceId),
+            ...traceFilters,
+            from,
+            to,
             limit: 100,
             sort: "asc",
           },
         }),
       ),
-    enabled: isExpanded && !isStandaloneTriggerLog,
+    enabled: isExpanded && traceFilters !== null,
   });
 
   if (!isExpanded) {
     return null;
   }
 
-  if (isStandaloneTriggerLog) {
+  if (traceFilters === null) {
     return (
       <div className="text-muted-foreground bg-muted/30 flex items-center gap-3 px-5 py-2">
         <div className="w-1.5 shrink-0" />
