@@ -1,8 +1,8 @@
 import { useSlugs } from "@/contexts/Sdk";
+import { createDismissedCtaStore } from "@/hooks/useDismissedCtaStore";
 import { useProductTier } from "@/hooks/useProductTier";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useSyncExternalStore } from "react";
-import { flushSync } from "react-dom";
+import { withViewTransition } from "@/lib/view-transition";
 
 // Shared Tailwind class that tags BOTH the dismissable onboarding banner and the
 // sidebar resume button with the same view-transition-name. Because only one of
@@ -20,60 +20,10 @@ export const ONBOARDING_CTA_VT_CLASS = "[view-transition-name:onboarding-cta]";
 export const ONBOARDING_CTA_CONTENT_VT_CLASS =
   "[view-transition-name:onboarding-cta-content]";
 
-function storageKey(orgSlug: string) {
-  return `gram-onboarding-banner-dismissed:${orgSlug}`;
-}
-
-function readDismissed(orgSlug: string): boolean {
-  try {
-    return localStorage.getItem(storageKey(orgSlug)) === "true";
-  } catch {
-    return false;
-  }
-}
-
-// Module-level pub/sub. The banner lives in the page header and the resume button
-// lives in the sidebar footer — different parts of the tree — so they sync off a
-// single localStorage-backed source of truth instead of a shared React context.
-const listeners = new Set<() => void>();
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
-
-function writeDismissed(orgSlug: string, value: boolean) {
-  try {
-    if (value) {
-      localStorage.setItem(storageKey(orgSlug), "true");
-    } else {
-      localStorage.removeItem(storageKey(orgSlug));
-    }
-  } catch {
-    // localStorage unavailable — listeners still fire so the in-memory UI updates
-  }
-  listeners.forEach((listener) => listener());
-}
-
-// Genie the banner into the resume button (or back). flushSync forces React to
-// apply the state change synchronously inside the transition callback so the
-// browser captures the post-update DOM; without it React 19 batches the update
-// until after the snapshot and no transition plays. Falls back to a plain update
-// where the View Transitions API is unavailable.
-function withCtaViewTransition(update: () => void) {
-  if (
-    typeof document !== "undefined" &&
-    typeof document.startViewTransition === "function"
-  ) {
-    document.startViewTransition(() => {
-      flushSync(update);
-    });
-    return;
-  }
-  update();
-}
+// The banner lives in the page header and the resume button lives in the
+// sidebar footer — different parts of the tree — so they sync off this
+// localStorage-backed store instead of a shared React context.
+const store = createDismissedCtaStore("gram-onboarding-banner-dismissed");
 
 /**
  * Coordinates the enterprise onboarding call-to-action across its two surfaces:
@@ -91,21 +41,17 @@ export function useOnboardingCta(): {
   const { hasScope } = useRBAC();
   const productTier = useProductTier();
 
-  const dismissed = useSyncExternalStore(
-    subscribe,
-    () => (orgSlug ? readDismissed(orgSlug) : false),
-    () => false,
-  );
+  const dismissed = store.useDismissed(orgSlug);
 
   const eligible =
     Boolean(orgSlug) && productTier === "enterprise" && hasScope("org:admin");
 
   const dismiss = () => {
-    if (orgSlug) withCtaViewTransition(() => writeDismissed(orgSlug, true));
+    if (orgSlug) withViewTransition(() => store.write(orgSlug, true));
   };
 
   const resume = () => {
-    if (orgSlug) withCtaViewTransition(() => writeDismissed(orgSlug, false));
+    if (orgSlug) withViewTransition(() => store.write(orgSlug, false));
   };
 
   return { eligible, dismissed, dismiss, resume };
