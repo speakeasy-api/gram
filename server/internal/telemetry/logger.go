@@ -137,7 +137,7 @@ func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
 			delete(param.Attributes, attr.GenAIToolCallResultKey)
 		}
 
-		l.hydrateDirectorySnapshot(shutdownCtx, param)
+		param = l.hydrateDirectorySnapshot(shutdownCtx, param)
 
 		logParam, err := buildTelemetryLogParams(param)
 		if err != nil {
@@ -158,33 +158,48 @@ func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
 
 // hydrateDirectorySnapshot stamps the user's current directory snapshot
 // (allowlisted WorkOS predefined attributes, current groups as id + name,
-// role slugs) onto the log row's
-// attributes when a user was resolved. Telemetry rows are append-only: the
-// snapshot reflects state at write time and is never rewritten. Empty
-// snapshot parts (directory-deleted users, orgs without Directory Sync,
-// lingering API keys) are omitted rather than stamped as empty payloads.
-func (l *Logger) hydrateDirectorySnapshot(ctx context.Context, param LogParams) {
+// role slugs) onto the log row's attributes when a user was resolved.
+// Telemetry rows are append-only: the snapshot reflects state at write time
+// and is never rewritten. Empty snapshot parts (directory-deleted users,
+// orgs without Directory Sync, lingering API keys) are omitted rather than
+// stamped as empty payloads.
+//
+// The returned LogParams carries a fresh attributes map when anything was
+// stamped: callers may reuse attribute maps across rows, and mutating the
+// caller's map would make the absence checks below pin a stale snapshot
+// onto every subsequent row. Explicit caller-provided values still win.
+func (l *Logger) hydrateDirectorySnapshot(ctx context.Context, param LogParams) LogParams {
 	if l.directory == nil {
-		return
+		return param
 	}
 
 	userID, _ := param.Attributes[attr.UserIDKey].(string)
 	organizationID := param.ToolInfo.OrganizationID
 	if userID == "" || organizationID == "" {
-		return
+		return param
 	}
 
 	snapshot := l.directory.Resolve(ctx, organizationID, userID)
 
+	additions := make(map[attr.Key]any, 3)
 	if _, ok := param.Attributes[attr.UserAttributesKey]; !ok && len(snapshot.Attributes) > 0 {
-		param.Attributes[attr.UserAttributesKey] = snapshot.Attributes
+		additions[attr.UserAttributesKey] = snapshot.Attributes
 	}
 	if _, ok := param.Attributes[attr.UserGroupsKey]; !ok && len(snapshot.Groups) > 0 {
-		param.Attributes[attr.UserGroupsKey] = snapshot.Groups
+		additions[attr.UserGroupsKey] = snapshot.Groups
 	}
 	if _, ok := param.Attributes[attr.UserRolesKey]; !ok && len(snapshot.Roles) > 0 {
-		param.Attributes[attr.UserRolesKey] = snapshot.Roles
+		additions[attr.UserRolesKey] = snapshot.Roles
 	}
+	if len(additions) == 0 {
+		return param
+	}
+
+	attrs := make(map[attr.Key]any, len(param.Attributes)+len(additions))
+	maps.Copy(attrs, param.Attributes)
+	maps.Copy(attrs, additions)
+	param.Attributes = attrs
+	return param
 }
 
 // buildTelemetryLogParams constructs InsertTelemetryLogParams from attributes.

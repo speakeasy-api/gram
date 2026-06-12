@@ -140,6 +140,13 @@ func TestCreateLog_HydratesDirectorySnapshot(t *testing.T) {
 	require.Contains(t, log.Attributes, "directory_group_"+suffix)
 	// user.roles carries the current role slugs from the role tables.
 	require.Contains(t, log.Attributes, "hydrate-role-"+suffix)
+
+	// Hydration must not mutate the caller's attribute map: callers may
+	// reuse maps across rows, and a stamped snapshot would otherwise pin
+	// stale directory state onto every subsequent row.
+	require.NotContains(t, attrs, attr.UserAttributesKey)
+	require.NotContains(t, attrs, attr.UserGroupsKey)
+	require.NotContains(t, attrs, attr.UserRolesKey)
 }
 
 func TestCreateLog_NoDirectorySnapshotWhenNoDirectoryData(t *testing.T) {
