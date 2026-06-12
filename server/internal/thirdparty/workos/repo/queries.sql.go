@@ -353,6 +353,87 @@ func (q *Queries) LinkDirectoryUsersToUserByEmail(ctx context.Context, arg LinkD
 	return result.RowsAffected(), nil
 }
 
+const listCurrentDirectoryGroupsByUserID = `-- name: ListCurrentDirectoryGroupsByUserID :many
+SELECT DISTINCT ON (dg.workos_directory_group_id)
+  dg.workos_directory_group_id,
+  dg.name
+FROM directory_users AS du
+JOIN directory_user_group_memberships AS m
+  ON m.directory_user_id = du.id
+  AND m.deleted_at IS NULL
+JOIN directory_groups AS dg
+  ON dg.id = m.directory_group_id
+  AND dg.deleted_at IS NULL
+WHERE du.user_id = $1
+  AND du.organization_id = $2
+  AND du.deleted_at IS NULL
+ORDER BY dg.workos_directory_group_id
+`
+
+type ListCurrentDirectoryGroupsByUserIDParams struct {
+	UserID         pgtype.Text
+	OrganizationID string
+}
+
+type ListCurrentDirectoryGroupsByUserIDRow struct {
+	WorkosDirectoryGroupID string
+	Name                   string
+}
+
+func (q *Queries) ListCurrentDirectoryGroupsByUserID(ctx context.Context, arg ListCurrentDirectoryGroupsByUserIDParams) ([]ListCurrentDirectoryGroupsByUserIDRow, error) {
+	rows, err := q.db.Query(ctx, listCurrentDirectoryGroupsByUserID, arg.UserID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCurrentDirectoryGroupsByUserIDRow
+	for rows.Next() {
+		var i ListCurrentDirectoryGroupsByUserIDRow
+		if err := rows.Scan(&i.WorkosDirectoryGroupID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDirectoryUserAttributesByUserID = `-- name: ListDirectoryUserAttributesByUserID :many
+SELECT attributes
+FROM directory_users
+WHERE user_id = $1
+  AND organization_id = $2
+  AND deleted_at IS NULL
+ORDER BY created_at
+`
+
+type ListDirectoryUserAttributesByUserIDParams struct {
+	UserID         pgtype.Text
+	OrganizationID string
+}
+
+func (q *Queries) ListDirectoryUserAttributesByUserID(ctx context.Context, arg ListDirectoryUserAttributesByUserIDParams) ([][]byte, error) {
+	rows, err := q.db.Query(ctx, listDirectoryUserAttributesByUserID, arg.UserID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items [][]byte
+	for rows.Next() {
+		var attributes []byte
+		if err := rows.Scan(&attributes); err != nil {
+			return nil, err
+		}
+		items = append(items, attributes)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const openDirectoryUserGroupMembership = `-- name: OpenDirectoryUserGroupMembership :one
 INSERT INTO directory_user_group_memberships (
   directory_user_id,
