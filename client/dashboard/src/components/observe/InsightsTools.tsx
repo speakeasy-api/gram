@@ -478,16 +478,19 @@ export function InsightsToolsContent(): JSX.Element {
     <>
       <InsightsConfig
         mcpConfig={mcpConfig}
-        title="Explore Tools"
-        subtitle="Ask me about your tools! Powered by Elements + platform MCP"
+        title="Explore MCP Servers & Tools"
+        subtitle="Ask me about your MCP servers and tools! Powered by Elements + platform MCP"
         hideTrigger={isLogsDisabled}
       />
       {isLogsDisabled ? (
         <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
           <div className="flex min-w-0 flex-col gap-1">
-            <h1 className="text-xl font-semibold">Tools</h1>
+            <h1 className="text-xl font-semibold">
+              MCP Servers & Tool Insights
+            </h1>
             <p className="text-muted-foreground text-sm">
-              Monitor tool events across all users and agents in your project
+              Monitor MCP servers and tool events across all users and agents in
+              your project
             </p>
           </div>
           <div className="relative flex-1">
@@ -613,9 +616,12 @@ function HooksInnerContent({
       <div className="flex min-h-0 flex-1 flex-col gap-6 px-8 pt-8">
         <div className="flex shrink-0 items-start justify-between gap-4">
           <div className="flex min-w-0 flex-col gap-1">
-            <h1 className="text-xl font-semibold">Tools</h1>
+            <h1 className="text-xl font-semibold">
+              MCP Servers & Tool Insights
+            </h1>
             <p className="text-muted-foreground text-sm">
-              Monitor tool events across all users and agents in your project
+              Monitor MCP servers and tool events across all users and agents in
+              your project
             </p>
           </div>
           <div className="flex items-center gap-2">
