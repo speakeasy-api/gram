@@ -73,6 +73,16 @@ interface Snapshot {
 export function createServerAssistantTransport(
   deps: ServerAssistantTransportDeps,
 ): (ctx: ElementsTransportContext) => ChatTransport<UIMessage> {
+  // At most one poll loop alive per dock: each send aborts the previous
+  // turn's poller. Without this, a turn that never reaches a terminal row
+  // (e.g. a stuck runtime) leaves a zombie chat.load loop running until the
+  // poll timeout — nothing aborts the stream when the provider that started
+  // it unmounts. The controller lives in factory scope so a send from a
+  // remounted provider still reaps the previous instance's poller. Do NOT
+  // abort on factory invocation itself: Elements re-invokes the factory
+  // whenever its transport memo dependencies change (e.g. MCP tool discovery
+  // settling just after a cold open), which would cancel an in-flight send.
+  let activePoll: AbortController | null = null;
   return (ctx) => ({
     async sendMessages({ messages, abortSignal }) {
       let latest: UIMessage | undefined;
@@ -99,6 +109,13 @@ export function createServerAssistantTransport(
       return createUIMessageStream<UIMessage>({
         originalMessages: messages,
         execute: async ({ writer }) => {
+          activePoll?.abort();
+          const poll = new AbortController();
+          activePoll = poll;
+          const signal = abortSignal
+            ? AbortSignal.any([abortSignal, poll.signal])
+            : poll.signal;
+
           writer.write({ type: "start" });
 
           let chatId = ctx.getChatId();
@@ -121,7 +138,7 @@ export function createServerAssistantTransport(
           // "already seen". New conversations skip the snapshot — there's
           // nothing to baseline against.
           const snapshot = chatId
-            ? await snapshotAssistantIds(deps.client, chatId, abortSignal)
+            ? await snapshotAssistantIds(deps.client, chatId, signal)
             : null;
           const sent = await assistantsSendMessage(
             deps.client,
@@ -135,7 +152,7 @@ export function createServerAssistantTransport(
               },
             },
             undefined,
-            { fetchOptions: { signal: abortSignal } },
+            { fetchOptions: { signal } },
           );
           if (!sent.ok) {
             throw sent.error;
@@ -152,7 +169,7 @@ export function createServerAssistantTransport(
             chatId,
             snapshot,
             writer,
-            abortSignal,
+            abortSignal: signal,
           });
 
           writer.write({ type: "finish" });

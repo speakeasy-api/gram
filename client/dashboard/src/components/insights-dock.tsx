@@ -1036,11 +1036,17 @@ function PendingPromptBridge({
 
     const { text } = pending;
 
-    // On a cold open the runtime mounts while its remote thread-list adapter
-    // is still initialising (thread state `isLoading`), and an append fired
-    // into that window is silently dropped. Append only once the thread has
-    // finished loading, verify the optimistic user message actually landed,
-    // and otherwise wait for the next runtime event and try again.
+    // On a cold open the main thread is a placeholder (assistant-ui's
+    // EMPTY_THREAD_CORE) until the remote thread-list runtime binds the real
+    // thread core. The placeholder reports isLoading/isDisabled false but
+    // throws on append, so a throw here means nothing was sent — leave the
+    // prompt queued and retry on the next runtime event (the runtime emits
+    // when the real core binds). A successful append marks `done`
+    // immediately and never retries: the optimistic message lands in the
+    // store asynchronously, so any post-append "did it land?" check races
+    // and re-appending duplicates the send — each duplicate fires before
+    // the server-minted chat id is adopted, minting a fresh chat per
+    // attempt.
     let done = false;
     let unsubscribe: (() => void) | null = null;
 
@@ -1050,11 +1056,9 @@ function PendingPromptBridge({
       if (state.isLoading || state.isDisabled) return;
       try {
         assistantRuntime.thread.append(text);
-      } catch (err) {
-        console.error("Failed to send queued assistant prompt:", err);
+      } catch {
         return;
       }
-      if (assistantRuntime.thread.getState().messages.length === 0) return;
       done = true;
       unsubscribe?.();
       unsubscribe = null;
