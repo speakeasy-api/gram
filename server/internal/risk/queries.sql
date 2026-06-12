@@ -136,6 +136,22 @@ WHERE risk_policy_id = @risk_policy_id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
+-- name: DeleteRiskResultsByPolicy :execrows
+DELETE FROM risk_results
+WHERE risk_policy_id = @risk_policy_id
+  AND project_id = @project_id;
+
+-- name: DeleteRiskExclusionsByPolicy :execrows
+DELETE FROM risk_exclusions
+WHERE risk_policy_id = @risk_policy_id
+  AND project_id = @project_id;
+
+-- name: CountRiskResultsByPolicyID :one
+SELECT COUNT(*)::BIGINT
+FROM risk_results
+WHERE risk_policy_id = @risk_policy_id
+  AND project_id = @project_id;
+
 -- name: UpsertRiskPolicyBypassRequest :one
 INSERT INTO risk_policy_bypass_requests (
     id

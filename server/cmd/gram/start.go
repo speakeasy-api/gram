@@ -1085,6 +1085,7 @@ func newStartCommand() *cli.Command {
 			)
 			shutdownFuncs = append(shutdownFuncs, riskSignaler.Shutdown)
 			riskReconciler := &background.TemporalRiskExclusionReconciler{TemporalEnv: temporalEnv, Logger: logger}
+			riskResultsCleaner := &background.TemporalRiskPolicyResultsCleaner{TemporalEnv: temporalEnv, Logger: logger}
 			riskService := risk.NewService(
 				logger,
 				tracerProvider,
@@ -1093,6 +1094,7 @@ func newStartCommand() *cli.Command {
 				authzEngine,
 				riskSignaler,
 				riskReconciler,
+				riskResultsCleaner,
 				completionsClient,
 				shadowMCPClient,
 				auditLogger,

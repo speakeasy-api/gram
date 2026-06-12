@@ -379,6 +379,25 @@ func (q *Queries) CountFindingsByPolicy(ctx context.Context, arg CountFindingsBy
 	return column_1, err
 }
 
+const countRiskResultsByPolicyID = `-- name: CountRiskResultsByPolicyID :one
+SELECT COUNT(*)::BIGINT
+FROM risk_results
+WHERE risk_policy_id = $1
+  AND project_id = $2
+`
+
+type CountRiskResultsByPolicyIDParams struct {
+	RiskPolicyID uuid.UUID
+	ProjectID    uuid.UUID
+}
+
+func (q *Queries) CountRiskResultsByPolicyID(ctx context.Context, arg CountRiskResultsByPolicyIDParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countRiskResultsByPolicyID, arg.RiskPolicyID, arg.ProjectID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const countTotalMessages = `-- name: CountTotalMessages :one
 SELECT COUNT(*)::BIGINT
 FROM chat_messages cm
@@ -672,6 +691,25 @@ func (q *Queries) DeleteRiskExclusion(ctx context.Context, arg DeleteRiskExclusi
 	return err
 }
 
+const deleteRiskExclusionsByPolicy = `-- name: DeleteRiskExclusionsByPolicy :execrows
+DELETE FROM risk_exclusions
+WHERE risk_policy_id = $1
+  AND project_id = $2
+`
+
+type DeleteRiskExclusionsByPolicyParams struct {
+	RiskPolicyID uuid.NullUUID
+	ProjectID    uuid.UUID
+}
+
+func (q *Queries) DeleteRiskExclusionsByPolicy(ctx context.Context, arg DeleteRiskExclusionsByPolicyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteRiskExclusionsByPolicy, arg.RiskPolicyID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteRiskPolicy = `-- name: DeleteRiskPolicy :exec
 UPDATE risk_policies
 SET deleted_at = clock_timestamp()
@@ -708,6 +746,25 @@ type DeleteRiskPolicyBypassRequestsByPolicyParams struct {
 func (q *Queries) DeleteRiskPolicyBypassRequestsByPolicy(ctx context.Context, arg DeleteRiskPolicyBypassRequestsByPolicyParams) error {
 	_, err := q.db.Exec(ctx, deleteRiskPolicyBypassRequestsByPolicy, arg.RiskPolicyID, arg.ProjectID)
 	return err
+}
+
+const deleteRiskResultsByPolicy = `-- name: DeleteRiskResultsByPolicy :execrows
+DELETE FROM risk_results
+WHERE risk_policy_id = $1
+  AND project_id = $2
+`
+
+type DeleteRiskResultsByPolicyParams struct {
+	RiskPolicyID uuid.UUID
+	ProjectID    uuid.UUID
+}
+
+func (q *Queries) DeleteRiskResultsByPolicy(ctx context.Context, arg DeleteRiskResultsByPolicyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteRiskResultsByPolicy, arg.RiskPolicyID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const deleteRiskResultsForMessages = `-- name: DeleteRiskResultsForMessages :exec
