@@ -512,6 +512,8 @@ run();
 * [getObservabilityOverview](docs/sdks/telemetry/README.md#getobservabilityoverview) - getObservabilityOverview telemetry
 * [getProjectMetricsSummary](docs/sdks/telemetry/README.md#getprojectmetricssummary) - getProjectMetricsSummary telemetry
 * [getProjectOverview](docs/sdks/telemetry/README.md#getprojectoverview) - getProjectOverview telemetry
+* [getToolUsageFilterOptions](docs/sdks/telemetry/README.md#gettoolusagefilteroptions) - getToolUsageFilterOptions telemetry
+* [getToolUsageSummary](docs/sdks/telemetry/README.md#gettoolusagesummary) - getToolUsageSummary telemetry
 * [getUserMetricsSummary](docs/sdks/telemetry/README.md#getusermetricssummary) - getUserMetricsSummary telemetry
 * [listAttributeKeys](docs/sdks/telemetry/README.md#listattributekeys) - listAttributeKeys telemetry
 * [listFilterOptions](docs/sdks/telemetry/README.md#listfilteroptions) - listFilterOptions telemetry
@@ -868,6 +870,8 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`telemetryGetObservabilityOverview`](docs/sdks/telemetry/README.md#getobservabilityoverview) - getObservabilityOverview telemetry
 - [`telemetryGetProjectMetricsSummary`](docs/sdks/telemetry/README.md#getprojectmetricssummary) - getProjectMetricsSummary telemetry
 - [`telemetryGetProjectOverview`](docs/sdks/telemetry/README.md#getprojectoverview) - getProjectOverview telemetry
+- [`telemetryGetToolUsageFilterOptions`](docs/sdks/telemetry/README.md#gettoolusagefilteroptions) - getToolUsageFilterOptions telemetry
+- [`telemetryGetToolUsageSummary`](docs/sdks/telemetry/README.md#gettoolusagesummary) - getToolUsageSummary telemetry
 - [`telemetryGetUserMetricsSummary`](docs/sdks/telemetry/README.md#getusermetricssummary) - getUserMetricsSummary telemetry
 - [`telemetryListAttributeKeys`](docs/sdks/telemetry/README.md#listattributekeys) - listAttributeKeys telemetry
 - [`telemetryListFilterOptions`](docs/sdks/telemetry/README.md#listfilteroptions) - listFilterOptions telemetry
@@ -1069,6 +1073,8 @@ To learn about this feature and how to get started, check
 - [`useGetSourceEnvironment`](docs/sdks/environments/README.md#getbysource) - getSourceEnvironment environments
 - [`useGetTokensUnderManagement`](docs/sdks/usage/README.md#gettokensundermanagement) - getTokensUnderManagement usage
 - [`useGetToolsetEnvironment`](docs/sdks/environments/README.md#getbytoolset) - getToolsetEnvironment environments
+- [`useGetToolUsageFilterOptions`](docs/sdks/telemetry/README.md#gettoolusagefilteroptions) - getToolUsageFilterOptions telemetry
+- [`useGetToolUsageSummary`](docs/sdks/telemetry/README.md#gettoolusagesummary) - getToolUsageSummary telemetry
 - [`useGetUsageTiers`](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
 - [`useGetUserMetricsSummary`](docs/sdks/telemetry/README.md#getusermetricssummary) - getUserMetricsSummary telemetry
 - [`useGlobalVariations`](docs/sdks/variations/README.md#listglobal) - listGlobal variations

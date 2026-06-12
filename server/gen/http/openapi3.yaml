@@ -25169,6 +25169,216 @@ paths:
             x-speakeasy-react-hook:
                 name: GetProjectOverview
                 type: query
+    /rpc/telemetry.getToolUsageFilterOptions:
+        post:
+            description: Get filter options for target-aware MCP and tool usage metrics
+            operationId: getToolUsageFilterOptions
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetToolUsageFilterOptionsPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetToolUsageFilterOptionsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getToolUsageFilterOptions telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: getToolUsageFilterOptions
+            x-speakeasy-react-hook:
+                name: GetToolUsageFilterOptions
+                type: query
+    /rpc/telemetry.getToolUsageSummary:
+        post:
+            description: Get target-aware MCP and tool usage metrics
+            operationId: getToolUsageSummary
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetToolUsageSummaryPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetToolUsageSummaryResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getToolUsageSummary telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: getToolUsageSummary
+            x-speakeasy-react-hook:
+                name: GetToolUsageSummary
+                type: query
     /rpc/telemetry.getUserMetricsSummary:
         post:
             description: Get aggregated metrics summary grouped by user
@@ -36494,6 +36704,143 @@ components:
                     description: The signed URL to access the asset
             required:
                 - url
+        GetToolUsageFilterOptionsPayload:
+            type: object
+            properties:
+                from:
+                    type: string
+                    description: Start time in ISO 8601 format
+                    example: "2025-12-19T10:00:00Z"
+                    format: date-time
+                option_types:
+                    type: array
+                    items:
+                        type: string
+                        description: Tool usage filter option type
+                        enum:
+                            - hosted_servers
+                            - shadow_servers
+                            - users
+                    description: Filter option types to include. Empty means all option types.
+                to:
+                    type: string
+                    description: End time in ISO 8601 format
+                    example: "2025-12-19T11:00:00Z"
+                    format: date-time
+            description: Payload for target-aware MCP and tool usage filter options
+            required:
+                - from
+                - to
+        GetToolUsageFilterOptionsResult:
+            type: object
+            properties:
+                hosted_servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolUsageHostedServerFilterOption'
+                    description: Hosted MCP servers with usage in the selected time range
+                shadow_servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolUsageShadowServerFilterOption'
+                    description: Shadow MCP servers with usage in the selected time range
+                users:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolUsageUserFilterOption'
+                    description: User identities with usage in the selected time range
+            description: Filter options for target-aware MCP and tool usage metrics
+            required:
+                - hosted_servers
+                - shadow_servers
+                - users
+        GetToolUsageSummaryPayload:
+            type: object
+            properties:
+                from:
+                    type: string
+                    description: Start time in ISO 8601 format
+                    example: "2025-12-19T10:00:00Z"
+                    format: date-time
+                hosted_toolset_slugs:
+                    type: array
+                    items:
+                        type: string
+                    description: Hosted MCP toolset slugs to include
+                shadow_server_names:
+                    type: array
+                    items:
+                        type: string
+                    description: Shadow MCP server names to include
+                target_types:
+                    type: array
+                    items:
+                        type: string
+                        description: Tool usage target type
+                        enum:
+                            - hosted_mcp_server
+                            - shadow_mcp_server
+                            - local_tool
+                            - skill
+                    description: Target types to include. Empty means all target types.
+                to:
+                    type: string
+                    description: End time in ISO 8601 format
+                    example: "2025-12-19T11:00:00Z"
+                    format: date-time
+                user_filters:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolUsageUserFilter'
+                    description: Typed user identities to include
+            description: Payload for target-aware MCP and tool usage metrics
+            required:
+                - from
+                - to
+        GetToolUsageSummaryResult:
+            type: object
+            properties:
+                target_time_series:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolUsageTargetTimeSeriesPoint'
+                    description: Time-series usage buckets grouped by target
+                target_tool_breakdown:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolUsageTargetToolBreakdownRow'
+                    description: Per-tool usage rows grouped by target
+                targets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolUsageTargetSummary'
+                    description: Top usage targets for the selected filters and time range
+                totals:
+                    $ref: '#/components/schemas/ToolUsageTotals'
+                user_time_series:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolUsageUserTimeSeriesPoint'
+                    description: Time-series usage buckets grouped by user identity
+                users:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolUsageUserSummary'
+                    description: Top user identities for the selected filters and time range
+                users_by_target:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolUsageUsersByTargetRow'
+                    description: Cross-dimensional usage rows grouped by target and user identity
+            description: Target-aware MCP and tool usage metrics
+            required:
+                - totals
+                - targets
+                - users
+                - target_time_series
+                - user_time_series
+                - users_by_target
+                - target_tool_breakdown
         GetUserMetricsSummaryPayload:
             type: object
             properties:
@@ -43123,6 +43470,412 @@ components:
                 - urn
                 - count
                 - success_count
+                - failure_count
+        ToolUsageHostedServerFilterOption:
+            type: object
+            properties:
+                event_count:
+                    type: integer
+                    description: Number of tool usage events observed for the hosted MCP server
+                    format: int64
+                toolset_slug:
+                    type: string
+                    description: Hosted MCP toolset slug
+            description: Hosted MCP server filter option with usage in the selected time window
+            required:
+                - toolset_slug
+                - event_count
+        ToolUsageShadowServerFilterOption:
+            type: object
+            properties:
+                event_count:
+                    type: integer
+                    description: Number of tool usage events observed for the Shadow MCP server
+                    format: int64
+                server_name:
+                    type: string
+                    description: Observed Shadow MCP server name
+            description: Shadow MCP server filter option with usage in the selected time window
+            required:
+                - server_name
+                - event_count
+        ToolUsageTargetSummary:
+            type: object
+            properties:
+                event_count:
+                    type: integer
+                    description: Total number of tool usage events for the target
+                    format: int64
+                failure_count:
+                    type: integer
+                    description: Number of failed tool usage events for the target
+                    format: int64
+                failure_rate:
+                    type: number
+                    description: Fraction of completed tool usage events for the target that failed
+                    format: double
+                success_count:
+                    type: integer
+                    description: Number of successful tool usage events for the target
+                    format: int64
+                target_id:
+                    type: string
+                    description: Stable target identifier used by filters and chart grouping
+                target_kind:
+                    type: string
+                    description: Tool usage aggregation target kind
+                    enum:
+                        - server
+                        - local_tools
+                        - skill
+                target_label:
+                    type: string
+                    description: User-facing label for the target
+                target_type:
+                    type: string
+                    description: Tool usage target type
+                    enum:
+                        - hosted_mcp_server
+                        - shadow_mcp_server
+                        - local_tool
+                        - skill
+                unique_tools:
+                    type: integer
+                    description: Number of distinct tools observed for the target
+                    format: int64
+            description: Aggregated tool usage metrics for one target
+            required:
+                - target_type
+                - target_kind
+                - target_id
+                - target_label
+                - event_count
+                - unique_tools
+                - success_count
+                - failure_count
+                - failure_rate
+        ToolUsageTargetTimeSeriesPoint:
+            type: object
+            properties:
+                bucket_start_ns:
+                    type: string
+                    description: Bucket start time in Unix nanoseconds as a string for JavaScript integer safety
+                event_count:
+                    type: integer
+                    description: Number of tool usage events in the bucket
+                    format: int64
+                failure_count:
+                    type: integer
+                    description: Number of failed tool usage events in the bucket
+                    format: int64
+                target_id:
+                    type: string
+                    description: Stable target identifier used by filters and chart grouping
+                target_kind:
+                    type: string
+                    description: Tool usage aggregation target kind
+                    enum:
+                        - server
+                        - local_tools
+                        - skill
+                target_label:
+                    type: string
+                    description: User-facing label for the target
+                target_type:
+                    type: string
+                    description: Tool usage target type
+                    enum:
+                        - hosted_mcp_server
+                        - shadow_mcp_server
+                        - local_tool
+                        - skill
+            description: A time-series bucket for one tool usage target
+            required:
+                - bucket_start_ns
+                - target_type
+                - target_kind
+                - target_id
+                - target_label
+                - event_count
+                - failure_count
+        ToolUsageTargetToolBreakdownRow:
+            type: object
+            properties:
+                event_count:
+                    type: integer
+                    description: Total number of tool usage events for the target and tool
+                    format: int64
+                failure_count:
+                    type: integer
+                    description: Number of failed tool usage events for the target and tool
+                    format: int64
+                failure_rate:
+                    type: number
+                    description: Fraction of completed tool usage events for the target and tool that failed
+                    format: double
+                success_count:
+                    type: integer
+                    description: Number of successful tool usage events for the target and tool
+                    format: int64
+                target_id:
+                    type: string
+                    description: Stable target identifier used by filters and chart grouping
+                target_kind:
+                    type: string
+                    description: Tool usage aggregation target kind
+                    enum:
+                        - server
+                        - local_tools
+                        - skill
+                target_label:
+                    type: string
+                    description: User-facing label for the target
+                target_type:
+                    type: string
+                    description: Tool usage target type
+                    enum:
+                        - hosted_mcp_server
+                        - shadow_mcp_server
+                        - local_tool
+                        - skill
+                tool_name:
+                    type: string
+                    description: Observed tool name
+            description: Aggregated tool usage metrics for one target and tool
+            required:
+                - target_type
+                - target_kind
+                - target_id
+                - target_label
+                - tool_name
+                - event_count
+                - success_count
+                - failure_count
+                - failure_rate
+        ToolUsageTotals:
+            type: object
+            properties:
+                event_count:
+                    type: integer
+                    description: Total number of tool usage events
+                    format: int64
+                failure_count:
+                    type: integer
+                    description: Number of failed tool usage events
+                    format: int64
+                failure_rate:
+                    type: number
+                    description: Fraction of completed tool usage events that failed
+                    format: double
+                success_count:
+                    type: integer
+                    description: Number of successful tool usage events
+                    format: int64
+                unique_targets:
+                    type: integer
+                    description: Number of distinct usage targets observed
+                    format: int64
+                unique_tools:
+                    type: integer
+                    description: Number of distinct tools observed
+                    format: int64
+                unique_users:
+                    type: integer
+                    description: Number of distinct user identities observed
+                    format: int64
+            description: Target-aware MCP and tool usage totals
+            required:
+                - event_count
+                - success_count
+                - failure_count
+                - failure_rate
+                - unique_tools
+                - unique_users
+                - unique_targets
+        ToolUsageUserFilter:
+            type: object
+            properties:
+                key:
+                    type: string
+                    description: User identity value to include
+                kind:
+                    type: string
+                    description: Tool usage user identity kind
+                    enum:
+                        - email
+                        - external_user_id
+                        - user_id
+                        - unknown
+            description: Typed user identity filter
+            required:
+                - kind
+                - key
+        ToolUsageUserFilterOption:
+            type: object
+            properties:
+                event_count:
+                    type: integer
+                    description: Number of tool usage events observed for the user identity
+                    format: int64
+                user_key:
+                    type: string
+                    description: Stable user identity value used by filters
+                user_kind:
+                    type: string
+                    description: Tool usage user identity kind
+                    enum:
+                        - email
+                        - external_user_id
+                        - user_id
+                        - unknown
+                user_label:
+                    type: string
+                    description: User-facing label for the user identity
+            description: Tool usage user filter option with usage in the selected time window
+            required:
+                - user_key
+                - user_label
+                - user_kind
+                - event_count
+        ToolUsageUserSummary:
+            type: object
+            properties:
+                event_count:
+                    type: integer
+                    description: Total number of tool usage events for the user identity
+                    format: int64
+                failure_count:
+                    type: integer
+                    description: Number of failed tool usage events for the user identity
+                    format: int64
+                failure_rate:
+                    type: number
+                    description: Fraction of completed tool usage events for the user identity that failed
+                    format: double
+                success_count:
+                    type: integer
+                    description: Number of successful tool usage events for the user identity
+                    format: int64
+                unique_tools:
+                    type: integer
+                    description: Number of distinct tools observed for the user identity
+                    format: int64
+                user_key:
+                    type: string
+                    description: Stable user identity value used by filters and chart grouping
+                user_kind:
+                    type: string
+                    description: Tool usage user identity kind
+                    enum:
+                        - email
+                        - external_user_id
+                        - user_id
+                        - unknown
+                user_label:
+                    type: string
+                    description: User-facing label for the user identity
+            description: Aggregated tool usage metrics for one user identity
+            required:
+                - user_key
+                - user_label
+                - user_kind
+                - event_count
+                - unique_tools
+                - success_count
+                - failure_count
+                - failure_rate
+        ToolUsageUserTimeSeriesPoint:
+            type: object
+            properties:
+                bucket_start_ns:
+                    type: string
+                    description: Bucket start time in Unix nanoseconds as a string for JavaScript integer safety
+                event_count:
+                    type: integer
+                    description: Number of tool usage events in the bucket
+                    format: int64
+                failure_count:
+                    type: integer
+                    description: Number of failed tool usage events in the bucket
+                    format: int64
+                user_key:
+                    type: string
+                    description: Stable user identity value used by filters and chart grouping
+                user_kind:
+                    type: string
+                    description: Tool usage user identity kind
+                    enum:
+                        - email
+                        - external_user_id
+                        - user_id
+                        - unknown
+                user_label:
+                    type: string
+                    description: User-facing label for the user identity
+            description: A time-series bucket for one tool usage user identity
+            required:
+                - bucket_start_ns
+                - user_key
+                - user_label
+                - user_kind
+                - event_count
+                - failure_count
+        ToolUsageUsersByTargetRow:
+            type: object
+            properties:
+                event_count:
+                    type: integer
+                    description: Total number of tool usage events for the target and user identity
+                    format: int64
+                failure_count:
+                    type: integer
+                    description: Number of failed tool usage events for the target and user identity
+                    format: int64
+                target_id:
+                    type: string
+                    description: Stable target identifier used by filters and chart grouping
+                target_kind:
+                    type: string
+                    description: Tool usage aggregation target kind
+                    enum:
+                        - server
+                        - local_tools
+                        - skill
+                target_label:
+                    type: string
+                    description: User-facing label for the target
+                target_type:
+                    type: string
+                    description: Tool usage target type
+                    enum:
+                        - hosted_mcp_server
+                        - shadow_mcp_server
+                        - local_tool
+                        - skill
+                user_key:
+                    type: string
+                    description: Stable user identity value used by filters and chart grouping
+                user_kind:
+                    type: string
+                    description: Tool usage user identity kind
+                    enum:
+                        - email
+                        - external_user_id
+                        - user_id
+                        - unknown
+                user_label:
+                    type: string
+                    description: User-facing label for the user identity
+            description: Aggregated tool usage metrics for one target and user identity
+            required:
+                - target_type
+                - target_kind
+                - target_id
+                - target_label
+                - user_key
+                - user_label
+                - user_kind
+                - event_count
                 - failure_count
         ToolVariation:
             type: object

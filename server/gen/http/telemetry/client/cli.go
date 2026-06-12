@@ -766,6 +766,147 @@ func BuildGetHooksSummaryPayload(telemetryGetHooksSummaryBody string, telemetryG
 	return v, nil
 }
 
+// BuildGetToolUsageSummaryPayload builds the payload for the telemetry
+// getToolUsageSummary endpoint from CLI flags.
+func BuildGetToolUsageSummaryPayload(telemetryGetToolUsageSummaryBody string, telemetryGetToolUsageSummaryApikeyToken string, telemetryGetToolUsageSummarySessionToken string, telemetryGetToolUsageSummaryProjectSlugInput string) (*telemetry.GetToolUsageSummaryPayload, error) {
+	var err error
+	var body GetToolUsageSummaryRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryGetToolUsageSummaryBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"hosted_toolset_slugs\": [\n         \"abc123\"\n      ],\n      \"shadow_server_names\": [\n         \"abc123\"\n      ],\n      \"target_types\": [\n         \"shadow_mcp_server\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\",\n      \"user_filters\": [\n         {\n            \"key\": \"abc123\",\n            \"kind\": \"external_user_id\"\n         }\n      ]\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		for _, e := range body.TargetTypes {
+			if !(e == "hosted_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
+			}
+		}
+		for _, e := range body.UserFilters {
+			if e != nil {
+				if err2 := ValidateToolUsageUserFilterRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryGetToolUsageSummaryApikeyToken != "" {
+			apikeyToken = &telemetryGetToolUsageSummaryApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryGetToolUsageSummarySessionToken != "" {
+			sessionToken = &telemetryGetToolUsageSummarySessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryGetToolUsageSummaryProjectSlugInput != "" {
+			projectSlugInput = &telemetryGetToolUsageSummaryProjectSlugInput
+		}
+	}
+	v := &telemetry.GetToolUsageSummaryPayload{
+		From: body.From,
+		To:   body.To,
+	}
+	if body.TargetTypes != nil {
+		v.TargetTypes = make([]telemetry.ToolUsageTargetType, len(body.TargetTypes))
+		for i, val := range body.TargetTypes {
+			v.TargetTypes[i] = telemetry.ToolUsageTargetType(val)
+		}
+	}
+	if body.HostedToolsetSlugs != nil {
+		v.HostedToolsetSlugs = make([]string, len(body.HostedToolsetSlugs))
+		for i, val := range body.HostedToolsetSlugs {
+			v.HostedToolsetSlugs[i] = val
+		}
+	}
+	if body.ShadowServerNames != nil {
+		v.ShadowServerNames = make([]string, len(body.ShadowServerNames))
+		for i, val := range body.ShadowServerNames {
+			v.ShadowServerNames[i] = val
+		}
+	}
+	if body.UserFilters != nil {
+		v.UserFilters = make([]*telemetry.ToolUsageUserFilter, len(body.UserFilters))
+		for i, val := range body.UserFilters {
+			if val == nil {
+				v.UserFilters[i] = nil
+				continue
+			}
+			v.UserFilters[i] = marshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetToolUsageFilterOptionsPayload builds the payload for the telemetry
+// getToolUsageFilterOptions endpoint from CLI flags.
+func BuildGetToolUsageFilterOptionsPayload(telemetryGetToolUsageFilterOptionsBody string, telemetryGetToolUsageFilterOptionsApikeyToken string, telemetryGetToolUsageFilterOptionsSessionToken string, telemetryGetToolUsageFilterOptionsProjectSlugInput string) (*telemetry.GetToolUsageFilterOptionsPayload, error) {
+	var err error
+	var body GetToolUsageFilterOptionsRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryGetToolUsageFilterOptionsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"option_types\": [\n         \"shadow_servers\"\n      ],\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		for _, e := range body.OptionTypes {
+			if !(e == "hosted_servers" || e == "shadow_servers" || e == "users") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.option_types[*]", e, []any{"hosted_servers", "shadow_servers", "users"}))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryGetToolUsageFilterOptionsApikeyToken != "" {
+			apikeyToken = &telemetryGetToolUsageFilterOptionsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryGetToolUsageFilterOptionsSessionToken != "" {
+			sessionToken = &telemetryGetToolUsageFilterOptionsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryGetToolUsageFilterOptionsProjectSlugInput != "" {
+			projectSlugInput = &telemetryGetToolUsageFilterOptionsProjectSlugInput
+		}
+	}
+	v := &telemetry.GetToolUsageFilterOptionsPayload{
+		From: body.From,
+		To:   body.To,
+	}
+	if body.OptionTypes != nil {
+		v.OptionTypes = make([]telemetry.ToolUsageFilterOptionType, len(body.OptionTypes))
+		for i, val := range body.OptionTypes {
+			v.OptionTypes[i] = telemetry.ToolUsageFilterOptionType(val)
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildListHooksTracesPayload builds the payload for the telemetry
 // listHooksTraces endpoint from CLI flags.
 func BuildListHooksTracesPayload(telemetryListHooksTracesBody string, telemetryListHooksTracesApikeyToken string, telemetryListHooksTracesSessionToken string, telemetryListHooksTracesProjectSlugInput string) (*telemetry.ListHooksTracesPayload, error) {

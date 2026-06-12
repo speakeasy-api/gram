@@ -5,7 +5,6 @@ import { InsightsAgentsContent } from "@/components/observe/InsightsAgents";
 import { InsightsEmployeeDetailContent } from "@/components/observe/InsightsEmployeeDetail";
 import { InsightsEmployeesContent } from "@/components/observe/InsightsEmployees";
 import { InsightsToolsContent } from "@/components/observe/InsightsTools";
-import { InsightsMCPContent } from "@/components/observe/InsightsMCP";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { ObserveTabNav } from "@/components/observe/ObserveTabNav";
@@ -14,7 +13,7 @@ import { slugify } from "@/lib/constants";
 
 export function InsightsRoot(): JSX.Element {
   return (
-    <ObservePageShell tabsBase="insights">
+    <ObservePageShell>
       <Outlet />
     </ObservePageShell>
   );
@@ -81,14 +80,6 @@ export function InsightsHooksPage(): JSX.Element {
   return (
     <RequireScope scope={["project:read", "project:write"]} level="page">
       <InsightsToolsContent />
-    </RequireScope>
-  );
-}
-
-export function InsightsMCPPage(): JSX.Element {
-  return (
-    <RequireScope scope="project:read" level="page">
-      <InsightsMCPContent />
     </RequireScope>
   );
 }

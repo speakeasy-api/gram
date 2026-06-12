@@ -13,6 +13,7 @@ import {
   safeBase64Encode,
 } from "./observeFilterUtils";
 import { DEFAULT_HOOK_TYPES, VALID_HOOK_TYPES } from "./observeFilterConstants";
+import type { ObserveTypeFilterValue } from "@/components/observe/ObserveFilterBar";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { useGramContext } from "@gram/client/react-query";
@@ -30,16 +31,23 @@ const HOOK_SOURCE_FILTER_PATH = "gram.hook.source";
 const SERVER_SENTINEL = "local";
 const USER_EMAIL_SENTINEL = "Unknown";
 
-function parseHookTypesParam(raw: string | null): TypesToInclude[] {
-  if (!raw) return [...DEFAULT_HOOK_TYPES];
+type UseObserveFiltersOptions<T extends ObserveTypeFilterValue> = {
+  defaultTypes?: T[];
+  validTypes?: T[];
+};
+
+function parseHookTypesParam<T extends ObserveTypeFilterValue>(
+  raw: string | null,
+  defaultTypes: T[],
+  validTypes: T[],
+): T[] {
+  if (!raw) return [...defaultTypes];
 
   const parsed = raw
     .split(",")
-    .filter((t): t is TypesToInclude =>
-      VALID_HOOK_TYPES.includes(t as TypesToInclude),
-    );
+    .filter((t): t is T => validTypes.includes(t as T));
   const unique = [...new Set(parsed)];
-  return unique.length > 0 ? unique : [...DEFAULT_HOOK_TYPES];
+  return unique.length > 0 ? unique : [...defaultTypes];
 }
 
 function parseFilterParam(raw: string | null, path: string): FilterChip | null {
@@ -67,16 +75,25 @@ function buildActiveFilters(searchParams: URLSearchParams): FilterChip[] {
   ].filter((filter): filter is FilterChip => filter !== null);
 }
 
-function useObserveFiltersImpl() {
+function useObserveFiltersImpl<
+  T extends ObserveTypeFilterValue = TypesToInclude,
+>(options: UseObserveFiltersOptions<T> = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const defaultTypes = (options.defaultTypes ?? DEFAULT_HOOK_TYPES) as T[];
+  const validTypes = (options.validTypes ?? VALID_HOOK_TYPES) as T[];
 
   const activeFilters = useMemo(
     () => buildActiveFilters(searchParams),
     [searchParams],
   );
   const selectedHookTypes = useMemo(
-    () => parseHookTypesParam(searchParams.get("hookTypes")),
-    [searchParams],
+    () =>
+      parseHookTypesParam(
+        searchParams.get("hookTypes"),
+        defaultTypes,
+        validTypes,
+      ),
+    [searchParams, defaultTypes, validTypes],
   );
   const client = useGramContext();
   const { data: membersData, isLoading: membersLoading } = useMembers();
@@ -326,19 +343,14 @@ function useObserveFiltersImpl() {
 
   // Passing an empty array resets to DEFAULT_HOOK_TYPES and clears the URL param.
   const handleHookTypesChange = useCallback(
-    (types: TypesToInclude[]) => {
+    (types: T[]) => {
       const nextTypes = [
-        ...new Set(
-          types.filter((t): t is TypesToInclude =>
-            VALID_HOOK_TYPES.includes(t as TypesToInclude),
-          ),
-        ),
+        ...new Set(types.filter((t): t is T => validTypes.includes(t as T))),
       ];
-      const resolved =
-        nextTypes.length === 0 ? [...DEFAULT_HOOK_TYPES] : nextTypes;
+      const resolved = nextTypes.length === 0 ? [...defaultTypes] : nextTypes;
       const isDefault =
-        resolved.length === DEFAULT_HOOK_TYPES.length &&
-        DEFAULT_HOOK_TYPES.every((t) => resolved.includes(t));
+        resolved.length === defaultTypes.length &&
+        defaultTypes.every((t) => resolved.includes(t));
 
       setSearchParams(
         (prev) => {
@@ -353,7 +365,7 @@ function useObserveFiltersImpl() {
         { replace: true },
       );
     },
-    [setSearchParams],
+    [defaultTypes, setSearchParams, validTypes],
   );
 
   return {
@@ -378,11 +390,20 @@ function useObserveFiltersImpl() {
     clearCustomRange,
     selectedRoleIds,
     roleOptions,
+    roleEmails,
     handleRoleSelectionChange,
     roleFilterPending,
   };
 }
 
-export function useObserveFilters(): ReturnType<typeof useObserveFiltersImpl> {
-  return useObserveFiltersImpl();
+export function useObserveFilters(
+  options?: UseObserveFiltersOptions<TypesToInclude>,
+): ReturnType<typeof useObserveFiltersImpl<TypesToInclude>>;
+export function useObserveFilters<T extends ObserveTypeFilterValue>(
+  options: UseObserveFiltersOptions<T>,
+): ReturnType<typeof useObserveFiltersImpl<T>>;
+export function useObserveFilters<T extends ObserveTypeFilterValue>(
+  options?: UseObserveFiltersOptions<T>,
+): ReturnType<typeof useObserveFiltersImpl<T>> {
+  return useObserveFiltersImpl(options);
 }
