@@ -10,6 +10,7 @@ import { assetsServeChatAttachmentSigned } from "../funcs/assetsServeChatAttachm
 import { assetsServeFunction } from "../funcs/assetsServeFunction.js";
 import { assetsServeImage } from "../funcs/assetsServeImage.js";
 import { assetsServeOpenAPIv3 } from "../funcs/assetsServeOpenAPIv3.js";
+import { assetsServeSkill } from "../funcs/assetsServeSkill.js";
 import { assetsUploadChatAttachment } from "../funcs/assetsUploadChatAttachment.js";
 import { assetsUploadFunctions } from "../funcs/assetsUploadFunctions.js";
 import { assetsUploadImage } from "../funcs/assetsUploadImage.js";
@@ -161,6 +162,25 @@ export class Assets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<operations.ServeOpenAPIv3Response> {
     return unwrapAsync(assetsServeOpenAPIv3(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * serveSkill assets
+   *
+   * @remarks
+   * Serve a skill asset from Gram.
+   */
+  async serveSkill(
+    request: operations.ServeSkillRequest,
+    security?: operations.ServeSkillSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<operations.ServeSkillResponse> {
+    return unwrapAsync(assetsServeSkill(
       this,
       request,
       security,

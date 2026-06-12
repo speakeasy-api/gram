@@ -72,8 +72,8 @@ function PageHeaderTitle({
 // only needs to hold the exceptions where that produces the wrong text:
 //   - acronyms / non-standard casing (MCP, SDKs, OpenAPI, API)
 //   - lowercased connector words ("from")
-//   - rebrands where the display name differs from the URL segment. `slack` and
-//     `clis` are kept in the URL for backwards compatibility but were renamed.
+//   - rebrands where the display name differs from the URL segment. `slack` is
+//     kept in the URL for backwards compatibility but was renamed.
 const breadcrumbSubstitutions = {
   mcp: "MCP",
   sdks: "SDKs",
@@ -82,7 +82,6 @@ const breadcrumbSubstitutions = {
   "add-from-catalog": "Add from Catalog",
   "api-keys": "API Keys",
   slack: "Assistants",
-  clis: "Skills",
 };
 
 function PageHeaderBreadcrumbs({

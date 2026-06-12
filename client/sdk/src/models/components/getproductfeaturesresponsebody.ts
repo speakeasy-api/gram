@@ -26,6 +26,10 @@ export type GetProductFeaturesResponseBody = {
    */
   sessionCaptureEnabled: boolean;
   /**
+   * Whether skills capture and registry features are enabled
+   */
+  skillsCaptureEnabled: boolean;
+  /**
    * Whether SSO setup is enabled for the organization
    */
   ssoEnabled: boolean;
@@ -49,6 +53,7 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
     logs_enabled: z.boolean(),
     scim_enabled: z.boolean(),
     session_capture_enabled: z.boolean(),
+    skills_capture_enabled: z.boolean(),
     sso_enabled: z.boolean(),
     tool_io_logs_enabled: z.boolean(),
     webhooks: z.boolean(),
@@ -59,6 +64,7 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
       "logs_enabled": "logsEnabled",
       "scim_enabled": "scimEnabled",
       "session_capture_enabled": "sessionCaptureEnabled",
+      "skills_capture_enabled": "skillsCaptureEnabled",
       "sso_enabled": "ssoEnabled",
       "tool_io_logs_enabled": "toolIoLogsEnabled",
     });

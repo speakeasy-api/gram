@@ -178,6 +178,7 @@ run();
 * [serveFunction](docs/sdks/assets/README.md#servefunction) - serveFunction assets
 * [serveImage](docs/sdks/assets/README.md#serveimage) - serveImage assets
 * [serveOpenAPIv3](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
+* [serveSkill](docs/sdks/assets/README.md#serveskill) - serveSkill assets
 * [uploadChatAttachment](docs/sdks/assets/README.md#uploadchatattachment) - uploadChatAttachment assets
 * [uploadFunctions](docs/sdks/assets/README.md#uploadfunctions) - uploadFunctions assets
 * [uploadImage](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
@@ -504,6 +505,22 @@ run();
 
 * [test](docs/sdks/rules/README.md#test) - testDetectionRule risk
 
+### [Skills](docs/sdks/skills/README.md)
+
+* [approveVersion](docs/sdks/skills/README.md#approveversion) - approveVersion skills
+* [archive](docs/sdks/skills/README.md#archive) - archive skills
+* [capture](docs/sdks/skills/README.md#capture) - capture skills
+* [captureClaude](docs/sdks/skills/README.md#captureclaude) - captureClaude skills
+* [getBySlug](docs/sdks/skills/README.md#getbyslug) - get skills
+* [getSettings](docs/sdks/skills/README.md#getsettings) - getSettings skills
+* [list](docs/sdks/skills/README.md#list) - list skills
+* [listPending](docs/sdks/skills/README.md#listpending) - listPending skills
+* [rejectVersion](docs/sdks/skills/README.md#rejectversion) - rejectVersion skills
+* [setSettings](docs/sdks/skills/README.md#setsettings) - setSettings skills
+* [supersedeVersion](docs/sdks/skills/README.md#supersedeversion) - supersedeVersion skills
+* [uploadManual](docs/sdks/skills/README.md#uploadmanual) - uploadManual skills
+* [listVersions](docs/sdks/skills/README.md#listversions) - listVersions skills
+
 ### [Telemetry](docs/sdks/telemetry/README.md)
 
 * [captureEvent](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
@@ -658,6 +675,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`assetsServeFunction`](docs/sdks/assets/README.md#servefunction) - serveFunction assets
 - [`assetsServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
 - [`assetsServeOpenAPIv3`](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
+- [`assetsServeSkill`](docs/sdks/assets/README.md#serveskill) - serveSkill assets
 - [`assetsUploadChatAttachment`](docs/sdks/assets/README.md#uploadchatattachment) - uploadChatAttachment assets
 - [`assetsUploadFunctions`](docs/sdks/assets/README.md#uploadfunctions) - uploadFunctions assets
 - [`assetsUploadImage`](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
@@ -860,6 +878,19 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`riskResultsList`](docs/sdks/results/README.md#list) - listRiskResults risk
 - [`riskResultsListForAgent`](docs/sdks/results/README.md#listforagent) - listRiskResultsForAgent risk
 - [`riskRulesTest`](docs/sdks/rules/README.md#test) - testDetectionRule risk
+- [`skillsApproveVersion`](docs/sdks/skills/README.md#approveversion) - approveVersion skills
+- [`skillsArchive`](docs/sdks/skills/README.md#archive) - archive skills
+- [`skillsCapture`](docs/sdks/skills/README.md#capture) - capture skills
+- [`skillsCaptureClaude`](docs/sdks/skills/README.md#captureclaude) - captureClaude skills
+- [`skillsGetBySlug`](docs/sdks/skills/README.md#getbyslug) - get skills
+- [`skillsGetSettings`](docs/sdks/skills/README.md#getsettings) - getSettings skills
+- [`skillsList`](docs/sdks/skills/README.md#list) - list skills
+- [`skillsListPending`](docs/sdks/skills/README.md#listpending) - listPending skills
+- [`skillsListVersions`](docs/sdks/skills/README.md#listversions) - listVersions skills
+- [`skillsRejectVersion`](docs/sdks/skills/README.md#rejectversion) - rejectVersion skills
+- [`skillsSetSettings`](docs/sdks/skills/README.md#setsettings) - setSettings skills
+- [`skillsSupersedeVersion`](docs/sdks/skills/README.md#supersedeversion) - supersedeVersion skills
+- [`skillsUploadManual`](docs/sdks/skills/README.md#uploadmanual) - uploadManual skills
 - [`telemetryCaptureEvent`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
 - [`telemetryGetEmployeeDataFlowGraph`](docs/sdks/telemetry/README.md#getemployeedataflowgraph) - getEmployeeDataFlowGraph telemetry
 - [`telemetryGetHooksSummary`](docs/sdks/telemetry/README.md#gethookssummary) - getHooksSummary telemetry
@@ -1100,6 +1131,7 @@ To learn about this feature and how to get started, check
 - [`useListProjects`](docs/sdks/projects/README.md#list) - listProjects projects
 - [`useListResources`](docs/sdks/resources/README.md#list) - listResources resources
 - [`useListScopes`](docs/sdks/access/README.md#listscopes) - listScopes access
+- [`useListSkills`](docs/sdks/skills/README.md#list) - list skills
 - [`useListTools`](docs/sdks/tools/README.md#list) - listTools tools
 - [`useListToolsets`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 - [`useListToolsetsForOrg`](docs/sdks/toolsets/README.md#listfororg) - listToolsetsForOrg toolsets
@@ -1200,15 +1232,28 @@ To learn about this feature and how to get started, check
 - [`useServeFunction`](docs/sdks/assets/README.md#servefunction) - serveFunction assets
 - [`useServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
 - [`useServeOpenAPIv3`](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
+- [`useServeSkill`](docs/sdks/assets/README.md#serveskill) - serveSkill assets
 - [`useSessionInfo`](docs/sdks/auth/README.md#info) - info auth
 - [`useSetPluginAssignmentsMutation`](docs/sdks/plugins/README.md#setpluginassignments) - setPluginAssignments plugins
 - [`useSetProjectLogoMutation`](docs/sdks/projects/README.md#setlogo) - setLogo projects
+- [`useSetSkillsSettingsMutation`](docs/sdks/skills/README.md#setsettings) - setSettings skills
 - [`useSetSourceEnvironmentLinkMutation`](docs/sdks/environments/README.md#setsourcelink) - setSourceEnvironmentLink environments
 - [`useSetToolsetEnvironmentLinkMutation`](docs/sdks/environments/README.md#settoolsetlink) - setToolsetEnvironmentLink environments
 - [`useSetToolsetToolVariationsGroupMutation`](docs/sdks/toolsets/README.md#settoolvariationsgroup) - setToolVariationsGroup toolsets
 - [`useSetToolsetUserSessionIssuerMutation`](docs/sdks/toolsets/README.md#setusersessionissuer) - setUserSessionIssuer toolsets
 - [`useShadowMCPAccessRules`](docs/sdks/access/README.md#listshadowmcpaccessrules) - listShadowMCPAccessRules access
 - [`useShadowMCPApprovalRequests`](docs/sdks/access/README.md#listshadowmcpapprovalrequests) - listShadowMCPApprovalRequests access
+- [`useSkill`](docs/sdks/skills/README.md#getbyslug) - get skills
+- [`useSkillsApproveVersionMutation`](docs/sdks/skills/README.md#approveversion) - approveVersion skills
+- [`useSkillsArchiveMutation`](docs/sdks/skills/README.md#archive) - archive skills
+- [`useSkillsCaptureClaudeMutation`](docs/sdks/skills/README.md#captureclaude) - captureClaude skills
+- [`useSkillsCaptureMutation`](docs/sdks/skills/README.md#capture) - capture skills
+- [`useSkillsListPending`](docs/sdks/skills/README.md#listpending) - listPending skills
+- [`useSkillsListVersions`](docs/sdks/skills/README.md#listversions) - listVersions skills
+- [`useSkillsRejectVersionMutation`](docs/sdks/skills/README.md#rejectversion) - rejectVersion skills
+- [`useSkillsSettings`](docs/sdks/skills/README.md#getsettings) - getSettings skills
+- [`useSkillsSupersedeVersionMutation`](docs/sdks/skills/README.md#supersedeversion) - supersedeVersion skills
+- [`useSkillsUploadManualMutation`](docs/sdks/skills/README.md#uploadmanual) - uploadManual skills
 - [`useSwitchScopesMutation`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
 - [`useTelemetryCaptureEventMutation`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
 - [`useTemplate`](docs/sdks/templates/README.md#get) - getTemplate templates

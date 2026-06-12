@@ -30,6 +30,8 @@ type GetProductFeaturesResponseBody struct {
 	ToolIoLogsEnabled *bool `form:"tool_io_logs_enabled,omitempty" json:"tool_io_logs_enabled,omitempty" xml:"tool_io_logs_enabled,omitempty"`
 	// Whether Claude Code session capture is enabled
 	SessionCaptureEnabled *bool `form:"session_capture_enabled,omitempty" json:"session_capture_enabled,omitempty" xml:"session_capture_enabled,omitempty"`
+	// Whether skills capture and registry features are enabled
+	SkillsCaptureEnabled *bool `form:"skills_capture_enabled,omitempty" json:"skills_capture_enabled,omitempty" xml:"skills_capture_enabled,omitempty"`
 	// Whether authz challenge logging to ClickHouse is enabled
 	AuthzChallengeLoggingEnabled *bool `form:"authz_challenge_logging_enabled,omitempty" json:"authz_challenge_logging_enabled,omitempty" xml:"authz_challenge_logging_enabled,omitempty"`
 	// Whether webhooks are enabled
@@ -430,6 +432,7 @@ func NewGetProductFeaturesResultOK(body *GetProductFeaturesResponseBody) *featur
 		LogsEnabled:                  *body.LogsEnabled,
 		ToolIoLogsEnabled:            *body.ToolIoLogsEnabled,
 		SessionCaptureEnabled:        *body.SessionCaptureEnabled,
+		SkillsCaptureEnabled:         *body.SkillsCaptureEnabled,
 		AuthzChallengeLoggingEnabled: *body.AuthzChallengeLoggingEnabled,
 		Webhooks:                     *body.Webhooks,
 		SsoEnabled:                   *body.SsoEnabled,
@@ -750,6 +753,9 @@ func ValidateGetProductFeaturesResponseBody(body *GetProductFeaturesResponseBody
 	}
 	if body.SessionCaptureEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("session_capture_enabled", "body"))
+	}
+	if body.SkillsCaptureEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skills_capture_enabled", "body"))
 	}
 	if body.AuthzChallengeLoggingEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("authz_challenge_logging_enabled", "body"))

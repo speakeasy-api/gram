@@ -27,7 +27,9 @@ permissions:
 env:
   REGISTRY: gcr.io/linen-analyst-344721 #gcr for speakeasy-common gcr registry
   DOCKER_REPOSITORY_OWNER: ${{github.repository_owner}}
-  NODE_OPTIONS: "--max-old-space-size=5120"
+  # 4vcpu blacksmith runners have 16GB; the dashboard build's minify+sourcemap
+  # peak crossed 5120 once the skills pages landed.
+  NODE_OPTIONS: "--max-old-space-size=6144"
 
 jobs:
   changes:

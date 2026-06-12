@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useProductFeatures } from "@gram/client/react-query";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Scope } from "@/hooks/useRBAC";
 import { AppRoute, useRoutes } from "@/routes";
@@ -32,6 +33,13 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   const routes = useRoutes();
   const telemetry = useTelemetry();
 
+  const { data: featuresData } = useProductFeatures(undefined, undefined, {
+    throwOnError: false,
+  });
+  // Skills is hidden until an org admin enables the skills_capture product
+  // feature (Admin Settings), so it's invisible to orgs by default.
+  const isSkillsEnabled = featuresData?.skillsCaptureEnabled ?? false;
+
   const isAssistantsEnabled = telemetry.isFeatureEnabled("assistants") ?? false;
   // Default true: opt-out via PostHog org-group targeting on `gram-deployments-page`.
   const isDeploymentsPageEnabled =
@@ -55,7 +63,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       ...(isAssistantsEnabled
         ? [{ route: routes.assistants, scope: read }]
         : []),
-      { route: routes.clis, scope: read },
+      ...(isSkillsEnabled ? [{ route: routes.skills, scope: read }] : []),
       { route: routes.plugins, scope: readWrite },
       { route: routes.environments, scope: readWrite },
       { route: routes.employees, scope: read },
@@ -70,5 +78,5 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       { route: routes.detectionRules, scope: readWrite },
       { route: routes.settings, scope: ["project:write"] },
     ];
-  }, [routes, isAssistantsEnabled, isDeploymentsPageEnabled]);
+  }, [routes, isAssistantsEnabled, isDeploymentsPageEnabled, isSkillsEnabled]);
 }

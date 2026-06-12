@@ -26,7 +26,10 @@ import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
 import { useProductTier } from "@/hooks/useProductTier";
 import { useProjectNavRoutes } from "@/hooks/useProjectNavRoutes";
 import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
-import { useGetPeriodUsage } from "@gram/client/react-query";
+import {
+  useGetPeriodUsage,
+  useProductFeatures,
+} from "@gram/client/react-query";
 import { cn, Icon, Stack } from "@speakeasy-api/moonshine";
 import { MinusIcon, Settings, TestTube2Icon } from "lucide-react";
 import * as React from "react";
@@ -85,6 +88,13 @@ export function AppSidebar({
   const telemetry = useTelemetry();
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
+  const { data: featuresData } = useProductFeatures(undefined, undefined, {
+    throwOnError: false,
+  });
+  // Skills is hidden until an org admin enables the skills_capture product
+  // feature (Admin Settings), so it's invisible to orgs by default.
+  const isSkillsEnabled = featuresData?.skillsCaptureEnabled ?? false;
+
   const isAssistantsEnabled = telemetry.isFeatureEnabled("assistants") ?? false;
   // Default true: opt-out via PostHog org-group targeting on `gram-deployments-page`.
   const isDeploymentsPageEnabled =
@@ -99,7 +109,7 @@ export function AppSidebar({
 
   const buildActive = [
     routes.mcp,
-    routes.clis,
+    ...(isSkillsEnabled ? [routes.skills] : []),
     routes.plugins,
     routes.environments,
     ...(isAssistantsEnabled ? [routes.assistants] : []),
@@ -226,10 +236,12 @@ export function AppSidebar({
                     scope={scopeFor(routes.assistants)}
                   />
                 )}
-                <ScopeGatedNavItem
-                  item={routes.clis}
-                  scope={scopeFor(routes.clis)}
-                />
+                {isSkillsEnabled && (
+                  <ScopeGatedNavItem
+                    item={routes.skills}
+                    scope={scopeFor(routes.skills)}
+                  />
+                )}
                 <ScopeGatedNavItem
                   item={routes.plugins}
                   scope={scopeFor(routes.plugins)}
