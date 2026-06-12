@@ -37,6 +37,7 @@ import {
   useState,
 } from "react";
 import { Dialog } from "@/components/ui/dialog";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
   Sheet,
   SheetContent,
@@ -101,6 +102,54 @@ function getRiskBadgeLabel(result: RiskResult): string {
 
 function shouldShowRiskRuleId(result: RiskResult): boolean {
   return Boolean(result.ruleId) && result.ruleId !== "llm_judge";
+}
+
+// riskFindingActionLabel labels a finding in the per-finding action row.
+// Most findings read "<ruleId> · <source>"; for llm_judge both are "llm_judge",
+// so the duplicate is unhelpful — show the judge's rationale instead.
+function riskFindingActionLabel(result: RiskResult): string {
+  if (result.ruleId === "llm_judge") {
+    return result.description
+      ? `llm_judge · ${result.description}`
+      : "llm_judge";
+  }
+  return [result.ruleId, result.source].filter(Boolean).join(" · ");
+}
+
+// TruncatedAnnotation renders a single-line, truncated annotation and shows a
+// tooltip with the full text only when it actually overflows (so short labels
+// don't get a redundant hover card).
+function TruncatedAnnotation({ text, mono }: { text: string; mono: boolean }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [truncated, setTruncated] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => setTruncated(el.scrollWidth > el.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [text]);
+
+  const span = (
+    <span
+      ref={ref}
+      className={cn(
+        "text-muted-foreground min-w-0 truncate text-xs",
+        mono && "font-mono",
+      )}
+    >
+      {text}
+    </span>
+  );
+
+  return truncated ? (
+    <SimpleTooltip tooltip={text}>{span}</SimpleTooltip>
+  ) : (
+    span
+  );
 }
 
 export function ChatDetailSheet({
@@ -1005,40 +1054,55 @@ function RiskFindingActions({
 
   return (
     <div className="mt-2 space-y-1">
-      {unique.map((r) => (
-        <div
-          key={r.id}
-          className="bg-muted/30 flex items-center justify-between gap-2 rounded-md border px-3 py-1.5"
-        >
-          <span className="text-muted-foreground truncate font-mono text-xs">
-            {[r.ruleId, r.source].filter(Boolean).join(" · ")}
-          </span>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="tertiary" size="sm">
-                <Button.Icon>
-                  <Ellipsis className="h-4 w-4" />
-                </Button.Icon>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {openCreateExclusion && (
-                <DropdownMenuItem
-                  className="cursor-pointer"
-                  onSelect={() => openCreateExclusion(r)}
-                >
-                  Create exclusion
-                </DropdownMenuItem>
-              )}
-              {canHide && (
-                <DropdownMenuItem className="cursor-pointer" onSelect={onHide}>
-                  Hide again
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      ))}
+      {unique.map((r) => {
+        // Exclusions match on rule_id/match and are never applied to llm_judge
+        // findings (the batch path appends judge findings after the exclusion
+        // pass, and there's no real rule with id "llm_judge"), so offering the
+        // action there would be a no-op. Hide it for judge findings.
+        const canExclude =
+          Boolean(openCreateExclusion) && r.ruleId !== "llm_judge";
+        const showMenu = canExclude || canHide;
+        return (
+          <div
+            key={r.id}
+            className="bg-muted/30 flex items-center justify-between gap-2 rounded-md border px-3 py-1.5"
+          >
+            <TruncatedAnnotation
+              text={riskFindingActionLabel(r)}
+              mono={r.ruleId !== "llm_judge"}
+            />
+            {showMenu && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="tertiary" size="sm">
+                    <Button.Icon>
+                      <Ellipsis className="h-4 w-4" />
+                    </Button.Icon>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {canExclude && (
+                    <DropdownMenuItem
+                      className="cursor-pointer"
+                      onSelect={() => openCreateExclusion?.(r)}
+                    >
+                      Create exclusion
+                    </DropdownMenuItem>
+                  )}
+                  {canHide && (
+                    <DropdownMenuItem
+                      className="cursor-pointer"
+                      onSelect={onHide}
+                    >
+                      Hide again
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
