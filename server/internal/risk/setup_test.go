@@ -68,7 +68,7 @@ type syncResultsCleaner struct {
 }
 
 func (c *syncResultsCleaner) Clean(ctx context.Context, projectID, policyID uuid.UUID) error {
-	if err := riskrepo.New(c.conn).DeleteRiskResultsByPolicy(ctx, riskrepo.DeleteRiskResultsByPolicyParams{
+	if _, err := riskrepo.New(c.conn).DeleteRiskResultsByPolicy(ctx, riskrepo.DeleteRiskResultsByPolicyParams{
 		RiskPolicyID: policyID,
 		ProjectID:    projectID,
 	}); err != nil {

@@ -44,16 +44,19 @@ func (a *Cleanup) Do(ctx context.Context, args CleanArgs) (err error) {
 		span.End()
 	}()
 
-	if err = repo.New(a.db).DeleteRiskResultsByPolicy(ctx, repo.DeleteRiskResultsByPolicyParams{
+	deleted, err := repo.New(a.db).DeleteRiskResultsByPolicy(ctx, repo.DeleteRiskResultsByPolicyParams{
 		RiskPolicyID: args.PolicyID,
 		ProjectID:    args.ProjectID,
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("delete risk results by policy: %w", err)
 	}
 
+	span.SetAttributes(attr.DBDeletedRowsCount(deleted))
 	a.logger.InfoContext(ctx, "deleted risk results for policy",
 		attr.SlogProjectID(args.ProjectID.String()),
 		attr.SlogRiskPolicyID(args.PolicyID.String()),
+		attr.SlogDBDeletedRowsCount(deleted),
 	)
 	return nil
 }

@@ -691,7 +691,7 @@ func (q *Queries) DeleteRiskExclusion(ctx context.Context, arg DeleteRiskExclusi
 	return err
 }
 
-const deleteRiskExclusionsByPolicy = `-- name: DeleteRiskExclusionsByPolicy :exec
+const deleteRiskExclusionsByPolicy = `-- name: DeleteRiskExclusionsByPolicy :execrows
 DELETE FROM risk_exclusions
 WHERE risk_policy_id = $1
   AND project_id = $2
@@ -702,9 +702,12 @@ type DeleteRiskExclusionsByPolicyParams struct {
 	ProjectID    uuid.UUID
 }
 
-func (q *Queries) DeleteRiskExclusionsByPolicy(ctx context.Context, arg DeleteRiskExclusionsByPolicyParams) error {
-	_, err := q.db.Exec(ctx, deleteRiskExclusionsByPolicy, arg.RiskPolicyID, arg.ProjectID)
-	return err
+func (q *Queries) DeleteRiskExclusionsByPolicy(ctx context.Context, arg DeleteRiskExclusionsByPolicyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteRiskExclusionsByPolicy, arg.RiskPolicyID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const deleteRiskPolicy = `-- name: DeleteRiskPolicy :exec
@@ -745,7 +748,7 @@ func (q *Queries) DeleteRiskPolicyBypassRequestsByPolicy(ctx context.Context, ar
 	return err
 }
 
-const deleteRiskResultsByPolicy = `-- name: DeleteRiskResultsByPolicy :exec
+const deleteRiskResultsByPolicy = `-- name: DeleteRiskResultsByPolicy :execrows
 DELETE FROM risk_results
 WHERE risk_policy_id = $1
   AND project_id = $2
@@ -756,9 +759,12 @@ type DeleteRiskResultsByPolicyParams struct {
 	ProjectID    uuid.UUID
 }
 
-func (q *Queries) DeleteRiskResultsByPolicy(ctx context.Context, arg DeleteRiskResultsByPolicyParams) error {
-	_, err := q.db.Exec(ctx, deleteRiskResultsByPolicy, arg.RiskPolicyID, arg.ProjectID)
-	return err
+func (q *Queries) DeleteRiskResultsByPolicy(ctx context.Context, arg DeleteRiskResultsByPolicyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteRiskResultsByPolicy, arg.RiskPolicyID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const deleteRiskResultsForMessages = `-- name: DeleteRiskResultsForMessages :exec

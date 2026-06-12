@@ -136,12 +136,12 @@ WHERE risk_policy_id = @risk_policy_id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
--- name: DeleteRiskResultsByPolicy :exec
+-- name: DeleteRiskResultsByPolicy :execrows
 DELETE FROM risk_results
 WHERE risk_policy_id = @risk_policy_id
   AND project_id = @project_id;
 
--- name: DeleteRiskExclusionsByPolicy :exec
+-- name: DeleteRiskExclusionsByPolicy :execrows
 DELETE FROM risk_exclusions
 WHERE risk_policy_id = @risk_policy_id
   AND project_id = @project_id;

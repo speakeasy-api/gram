@@ -691,11 +691,18 @@ func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskP
 		return oops.E(oops.CodeUnexpected, err, "delete risk policy bypass requests").Log(ctx, s.logger)
 	}
 
-	if err := q.DeleteRiskExclusionsByPolicy(ctx, repo.DeleteRiskExclusionsByPolicyParams{
+	deletedExclusions, err := q.DeleteRiskExclusionsByPolicy(ctx, repo.DeleteRiskExclusionsByPolicyParams{
 		RiskPolicyID: uuid.NullUUID{UUID: id, Valid: true},
 		ProjectID:    *authCtx.ProjectID,
-	}); err != nil {
+	})
+	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete risk exclusions by policy").Log(ctx, s.logger)
+	}
+	if deletedExclusions > 0 {
+		s.logger.InfoContext(ctx, "deleted risk exclusions for policy",
+			attr.SlogRiskPolicyID(id.String()),
+			attr.SlogDBDeletedRowsCount(deletedExclusions),
+		)
 	}
 
 	if err := s.audit.LogRiskPolicyDelete(ctx, dbtx, audit.LogRiskPolicyDeleteEvent{
