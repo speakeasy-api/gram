@@ -114,6 +114,7 @@ type Service struct {
 	enc                    *encryption.Client
 	authz                  *authz.Engine
 	shadowMCPClient        *shadowmcp.Client
+	auditLogger            *audit.Logger
 	platformExtras         []platformtools.ExternalTool
 	platformFeatureChecker platformtools.FeatureChecker
 	platformToolsets       map[string]platformtools.Toolset
@@ -252,6 +253,7 @@ func NewService(
 		enc:                    enc,
 		authz:                  authzEngine,
 		shadowMCPClient:        shadowMCPClient,
+		auditLogger:            auditLogger,
 		platformExtras:         platformExtras,
 		platformFeatureChecker: platformFeatureChecker,
 		platformToolsets:       platformToolsets,
@@ -1039,7 +1041,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "tools/list":
 		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal, s.shadowMCPClient, s.platformExtras)
 	case "tools/call":
-		return handleToolsCall(ctx, s.logger, s.metrics, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo, s.platformExtras)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo, s.auditLogger, s.platformExtras)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)
 	case "prompts/get":
@@ -1362,6 +1364,7 @@ func (s *Service) HandleToolsCall(
 		s.vectorToolStore,
 		s.temporal,
 		s.mcpMetadataRepo,
+		s.auditLogger,
 		s.platformExtras,
 	)
 	if err != nil {
