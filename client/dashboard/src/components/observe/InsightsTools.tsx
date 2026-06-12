@@ -110,6 +110,7 @@ const COLLAPSED_BAR_CHART_MAX_ROWS = 6;
 const BAR_THICKNESS = { collapsed: 18, expanded: 24 };
 const BAR_ROW_HEIGHT = { collapsed: 18, expanded: 24 };
 const BAR_ROW_SPACER = { collapsed: 8, expanded: 12 };
+const BAR_BORDER_RADIUS = 5;
 const LINE_CHART_HEIGHT = { collapsed: 250, expanded: 600 };
 const HOSTED_SERVER_PREFIX = "hosted:";
 const SHADOW_SERVER_PREFIX = "shadow:";
@@ -719,6 +720,8 @@ type StackedBarDataset = {
   borderColor?: string;
   borderWidth?: number;
   barThickness: number;
+  borderRadius?: number;
+  borderSkipped?: string | boolean;
   hoverBackgroundColor?: string;
   hoverBorderColor?: string;
 };
@@ -773,7 +776,12 @@ function StackedBarChart({
     hiddenCount > 0
       ? datasets.map((ds) => ({ ...ds, data: ds.data.slice(0, maxRows) }))
       : datasets
-  ).map((ds) => ({ ...ds, barThickness: thickness }));
+  ).map((ds) => ({
+    ...ds,
+    barThickness: thickness,
+    borderRadius: BAR_BORDER_RADIUS,
+    borderSkipped: false,
+  }));
 
   const rowH = expanded ? BAR_ROW_HEIGHT.expanded : BAR_ROW_HEIGHT.collapsed;
   const rowS = expanded ? BAR_ROW_SPACER.expanded : BAR_ROW_SPACER.collapsed;
@@ -1073,7 +1081,12 @@ function ServerErrorRateChart({
           data: ds.data.slice(0, COLLAPSED_BAR_CHART_MAX_ROWS),
         }))
       : datasets
-  ).map((ds) => ({ ...ds, barThickness: thickness }));
+  ).map((ds) => ({
+    ...ds,
+    barThickness: thickness,
+    borderRadius: BAR_BORDER_RADIUS,
+    borderSkipped: false,
+  }));
 
   const rowH = expanded ? BAR_ROW_HEIGHT.expanded : BAR_ROW_HEIGHT.collapsed;
   const rowS = expanded ? BAR_ROW_SPACER.expanded : BAR_ROW_SPACER.collapsed;
