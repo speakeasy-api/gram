@@ -232,6 +232,54 @@ def test_publish_awaits_future_on_backend(backend) -> None:
     assert attributes["content-type"] == "application/x-protobuf"
 
 
+class ImmediatePublisherClient:
+    """Returns an already-resolved future, so ``add_done_callback`` fires the
+    completion callback inline on the event-loop thread rather than from a
+    commit thread — exercising the publisher's loop-thread branch."""
+
+    def publish(self, topic_path, data, **attributes):
+        future: cf.Future = cf.Future()
+        future.set_result("immediate-msg-id")
+        return future
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_publish_handles_already_resolved_future(backend) -> None:
+    publisher = Publisher(
+        PublisherHandle(cast(Any, ImmediatePublisherClient()), "topics/test"),
+        TOPIC_PROTO,
+    )
+
+    async def scenario() -> Any:
+        return await publisher.publish(ping_pb2.Message(id="x", type="t"))
+
+    assert anyio.run(scenario, backend=backend) == "immediate-msg-id"
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_publish_raises_publish_error(backend) -> None:
+    # A failed send must surface to the awaiting caller, not vanish.
+    class FailingPublisherClient:
+        def publish(self, topic_path, data, **attributes):
+            future: cf.Future = cf.Future()
+            threading.Thread(
+                target=lambda: future.set_exception(RuntimeError("send failed")),
+                daemon=True,
+            ).start()
+            return future
+
+    publisher = Publisher(
+        PublisherHandle(cast(Any, FailingPublisherClient()), "topics/test"),
+        TOPIC_PROTO,
+    )
+
+    async def scenario() -> Any:
+        return await publisher.publish(ping_pb2.Message(id="x", type="t"))
+
+    with pytest.raises(RuntimeError, match="send failed"):
+        anyio.run(scenario, backend=backend)
+
+
 class FakeMessage:
     """Duck-typed stand-in for a google-cloud-pubsub Message."""
 

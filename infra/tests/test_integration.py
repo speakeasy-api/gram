@@ -53,8 +53,13 @@ async def test_publish_subscribe_roundtrip() -> None:
 
     receive_task = asyncio.create_task(subscriber.receive(callback))
     try:
-        await publisher.publish(
-            ping_pb2.Message(id=unique_id, type="it", payload=payload)
+        # Bounded: a publish whose future never resolves (e.g. a wedged
+        # emulator) must fail the test rather than hang it forever.
+        await asyncio.wait_for(
+            publisher.publish(
+                ping_pb2.Message(id=unique_id, type="it", payload=payload)
+            ),
+            timeout=30,
         )
         await asyncio.wait_for(done.wait(), timeout=30)
     finally:

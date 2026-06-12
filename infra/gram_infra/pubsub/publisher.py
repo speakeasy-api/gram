@@ -8,9 +8,11 @@ attributes the Go layer uses — ``content-type: application/x-protobuf`` and
 
 from __future__ import annotations
 
+import threading
 from typing import Any, Generic, TypeVar
 
-import anyio.to_thread
+import anyio
+import anyio.from_thread
 
 from google.protobuf.message import Message
 
@@ -45,15 +47,45 @@ class Publisher(Generic[M]):
 
         data = message.SerializeToString()
         # The client returns a ``concurrent.futures.Future`` resolved on a
-        # background thread; wait for it on a worker thread so callers can await
-        # without binding to a specific async backend. ``abandon_on_cancel``
-        # lets a cancelled publish stop waiting (the send still proceeds).
+        # background commit thread. Blocking a ``to_thread`` worker on
+        # ``future.result()`` would pin one of the limited anyio thread-pool
+        # slots per in-flight publish, throttling concurrent publishers behind
+        # the pool limiter. Instead — mirroring the subscriber's scheduler
+        # bridge — hop the completion signal back to the event loop through a
+        # BlockingPortal via the future's done callback, so waiting costs no
+        # worker thread at all.
         future = self._handle.client.publish(
             self._handle.topic_path,
             data,
             **{"content-type": CONTENT_TYPE, "schema": self._schema},
         )
-        return await anyio.to_thread.run_sync(future.result, abandon_on_cancel=True)
+
+        done = anyio.Event()
+        loop_thread = threading.get_ident()
+
+        async with anyio.from_thread.BlockingPortal() as portal:
+
+            def _on_done(_future: Any) -> None:
+                if threading.get_ident() == loop_thread:
+                    # ``add_done_callback`` ran the callback inline because the
+                    # future had already resolved — we are synchronously on the
+                    # event-loop thread, so set the event directly (the portal
+                    # rejects calls from its own loop thread).
+                    done.set()
+                    return
+                try:
+                    portal.call(done.set)
+                except BaseException:  # noqa: BLE001 - never raise into the commit thread
+                    # The portal is gone: the publish was cancelled or the loop
+                    # is tearing down, so no waiter remains. The send itself
+                    # still proceeds on the commit thread.
+                    pass
+
+            future.add_done_callback(_on_done)
+            await done.wait()
+
+        # Resolved by now; raises the publish error if the send failed.
+        return future.result()
 
 
 def pubsub_publisher_for_message(
