@@ -13,12 +13,16 @@ export function createDismissedCtaStore(prefix: string): {
 } {
   const listeners = new Set<() => void>();
   const storageKey = (slug: string) => `${prefix}:${slug}`;
+  // Session-scoped fallback for when localStorage is unavailable (storage
+  // disabled, some private-browsing modes): writes land here regardless, so
+  // dismiss/resume still works for the session — it just won't persist.
+  const memory = new Map<string, boolean>();
 
   function read(slug: string): boolean {
     try {
       return localStorage.getItem(storageKey(slug)) === "true";
     } catch {
-      return false;
+      return memory.get(slug) ?? false;
     }
   }
 
@@ -30,6 +34,7 @@ export function createDismissedCtaStore(prefix: string): {
   }
 
   function write(slug: string, value: boolean) {
+    memory.set(slug, value);
     try {
       if (value) {
         localStorage.setItem(storageKey(slug), "true");
@@ -37,8 +42,8 @@ export function createDismissedCtaStore(prefix: string): {
         localStorage.removeItem(storageKey(slug));
       }
     } catch {
-      // localStorage unavailable — listeners still fire so the in-memory UI
-      // updates for the session
+      // localStorage unavailable — `memory` above keeps the value readable
+      // for the session
     }
     listeners.forEach((listener) => listener());
   }

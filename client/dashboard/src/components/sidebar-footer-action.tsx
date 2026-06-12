@@ -15,6 +15,17 @@ const ACTION_CLASS =
  * control (e.g. a restore button) on the card's right edge, outside the main
  * action's click area.
  */
+type SidebarFooterActionProps = {
+  icon: LucideIcon;
+  label: string;
+  className?: string;
+  contentClassName?: string;
+  trailing?: ReactNode;
+} &
+  // Exactly one of `to` (navigation) or `onClick` (in-place action) — both
+  // optional would let a caller render a card that does nothing.
+  ({ to: string; onClick?: never } | { to?: never; onClick: () => void });
+
 export function SidebarFooterAction({
   to,
   onClick,
@@ -23,15 +34,7 @@ export function SidebarFooterAction({
   className,
   contentClassName,
   trailing,
-}: {
-  to?: string;
-  onClick?: () => void;
-  icon: LucideIcon;
-  label: string;
-  className?: string;
-  contentClassName?: string;
-  trailing?: ReactNode;
-}): JSX.Element {
+}: SidebarFooterActionProps): JSX.Element {
   const actionContent = (
     <>
       <Icon className="size-4 shrink-0" strokeWidth={1.75} />
