@@ -99,12 +99,13 @@ function useThinkingVerb(
   const [visible, setVisible] = useState(true);
 
   useEffect(() => {
-    if (!active || reduced) return;
-
-    // A prior cycle may have been torn down mid-fade (active flipped off while
-    // visible was false); restore full visibility so a fresh thinking window
-    // never starts on a hidden word.
+    // Restore visibility on every (de)activation and motion-preference change —
+    // only the cycling path below dims it. This runs before the early return so
+    // that flipping reduced-motion on (or deactivating) during a fade-out can't
+    // latch the verb at opacity-0 forever.
     setVisible(true);
+
+    if (!active || reduced) return;
 
     let outTimer: ReturnType<typeof setTimeout>;
     let inTimer: ReturnType<typeof setTimeout>;
