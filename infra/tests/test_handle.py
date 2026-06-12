@@ -108,7 +108,7 @@ async def test_unmarshal_non_decode_error_is_nacked_and_skips_callback() -> None
 
     assert message.nacked is True
     assert message.acked is False
-    assert called is False
+    assert not called
 
 
 async def test_callback_exception_is_logged_and_nacked(caplog) -> None:

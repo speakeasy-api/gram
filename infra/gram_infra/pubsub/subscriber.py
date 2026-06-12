@@ -35,7 +35,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import (
     Any,
-    AsyncIterator,
+    AsyncGenerator,
     Awaitable,
     Callable,
     Generic,
@@ -321,7 +321,7 @@ class Subscriber(Generic[M]):
     @asynccontextmanager
     async def _session(
         self,
-    ) -> AsyncIterator[tuple[_PortalScheduler, Any, MemoryObjectReceiveStream]]:
+    ) -> AsyncGenerator[tuple[_PortalScheduler, Any, MemoryObjectReceiveStream], None]:
         """Portal + scheduler + streaming-pull plumbing shared by receive/stream.
 
         Teardown is fully synchronous (checkpoint-free), so it runs to completion
@@ -418,7 +418,7 @@ class Subscriber(Generic[M]):
             raise unwrapped from None
 
     @asynccontextmanager
-    async def stream(self) -> AsyncIterator[_MessageIterator[M]]:
+    async def stream(self) -> AsyncGenerator[_MessageIterator[M], None]:
         """Receive messages as an async iterator instead of via a callback.
 
         Use as an async context manager wrapping an ``async for``::
