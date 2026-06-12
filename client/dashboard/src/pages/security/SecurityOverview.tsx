@@ -1,8 +1,7 @@
 import { MetricCard } from "@/components/chart/MetricCard";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { formatChartLabel } from "@/components/chart/chartUtils";
-import { InsightsConfig } from "@/components/insights-dock";
-import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
+import { InsightsConfig } from "@/components/insights-sidebar";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { DashboardCard } from "@/components/ui/dashboard-card";
@@ -356,12 +355,39 @@ function SecurityOverviewContent() {
       ].join(" ")
     : null;
 
+  const insightsSuggestions = [
+    {
+      title: "Top rules this week",
+      label: "which rule_ids fired most",
+      prompt:
+        "Use listRiskResultsForAgent to find the top 5 rule_ids by finding count over the last 7 days. Report by source family and rule_id only — never quote any match_redacted value.",
+    },
+    {
+      title: "Shadow MCP servers",
+      label: "unapproved MCPs in use",
+      prompt:
+        "List all shadow_mcp findings across the project. For each, name the MCP server identifier (match), the chat_id, and when it was first observed. These match values are server URLs/commands and are safe to name.",
+    },
+    {
+      title: "Unique leaked secrets",
+      label: "dedupe by fingerprint",
+      prompt:
+        "Use listRiskResultsForAgent to count distinct leaked secrets by their match_redacted fingerprint (since identical secrets share a sha prefix). Group by rule_id and report counts. Do not print match_redacted values back to me.",
+    },
+    {
+      title: "Analysis backlog",
+      label: "pending messages per policy",
+      prompt:
+        "For each active policy, call getRiskPolicyStatus and report pending vs analyzed message counts and workflow state. Flag any policy whose pending count is non-zero.",
+    },
+  ];
+
   return (
     <>
       {insightsContext && (
         <InsightsConfig
           contextInfo={insightsContext}
-          suggestions={INSIGHTS_SUGGESTIONS["risk-overview"]}
+          suggestions={insightsSuggestions}
           title="Risk insights"
           subtitle="Ask about policies, findings, and shadow MCP activity. Match content is redacted before it reaches the assistant."
         />
