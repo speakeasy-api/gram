@@ -83,3 +83,36 @@ func TestSetThreadStatusTool_DefaultsLoadingMessagesToStatus(t *testing.T) {
 	// tool must pin the indicator to the status text.
 	require.JSONEq(t, `["is ordering pizza..."]`, requestPayload.Get("loading_messages"))
 }
+
+func TestSetThreadStatusTool_ClampsLoadingMessagesToOne(t *testing.T) {
+	t.Parallel()
+
+	var requestPayload url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestPayload = readForm(t, r)
+
+		w.Header().Set("Content-Type", "application/json")
+		_, err := w.Write([]byte(`{"ok":true}`))
+		if err != nil {
+			t.Errorf("write response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	tool := &slackTool{
+		descriptor: NewSetThreadStatusTool(nil).Descriptor(),
+		client:     newAPIClient(server.URL, server.Client()),
+		callFn:     callSetThreadStatus,
+	}
+
+	var out bytes.Buffer
+	err := tool.Call(t.Context(), testSlackEnv(), bytes.NewBufferString(`{
+		"channel_id":"C123",
+		"thread_ts":"123.456",
+		"status":"is ordering pizza...",
+		"loading_messages":["Calling DoorDash...","Tipping the driver...","Waiting at the door..."]
+	}`), &out)
+	require.NoError(t, err)
+
+	require.JSONEq(t, `["Calling DoorDash..."]`, requestPayload.Get("loading_messages"))
+}

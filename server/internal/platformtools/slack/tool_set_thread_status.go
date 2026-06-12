@@ -67,10 +67,14 @@ func callSetThreadStatus(ctx context.Context, client *apiClient, env toolconfig.
 		return err
 	}
 
+	// The indicator must stay a single static phrase: clamp extra messages
+	// (Slack rotates through multiples) and pin it to the status text when
+	// none are given (Slack rotates its own defaults otherwise).
 	loadingMessages := input.LoadingMessages
+	if len(loadingMessages) > 1 {
+		loadingMessages = loadingMessages[:1]
+	}
 	if len(loadingMessages) == 0 {
-		// Slack rotates through its own default loading messages when none
-		// are given; pin the indicator to the status text instead.
 		loadingMessages = []string{status}
 	}
 	// Slack expects the array param as a JSON-encoded string in a
