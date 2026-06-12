@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/Masterminds/squirrel"
@@ -2806,4 +2807,89 @@ func (q *Queries) CountRecentHookEventsForOnboarding(ctx context.Context, projec
 		return 0, err
 	}
 	return cnt, nil
+}
+
+// GetTokensUnderManagementParams contains the parameters for computing tokens
+// under management for a set of projects over a time window.
+type GetTokensUnderManagementParams struct {
+	ProjectIDs    []string
+	StartUnixNano int64
+	EndUnixNano   int64
+}
+
+// TumDayBucket is one UTC day's worth of tokens under management.
+type TumDayBucket struct {
+	Day    time.Time `ch:"time_bucket"`
+	Tokens int64     `ch:"tokens"`
+}
+
+// GetTokensUnderManagementByDay sums token usage per UTC day for the billing
+// window, counting only sessions Gram has stored non-metrics data for (chats,
+// tool calls). OTEL forwarding can report token usage for an entire customer
+// org while Gram is installed for a subset of users, so a chat's tokens only
+// count when at least one non-metrics row (a tool call, a hook event, or any
+// row without a token-usage attribute) was recorded for it inside the window.
+//
+// Reads the chat_token_summaries aggregate, which buckets by day and is
+// retained well beyond the raw telemetry TTL, so historical billing cycles
+// stay computable. Window boundaries are day-granular: the start rounds down
+// to its UTC day and the end is expected to be a UTC day boundary, which
+// billing cycle boundaries always are. Days without usage are omitted.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetTokensUnderManagementByDay(ctx context.Context, arg GetTokensUnderManagementParams) ([]TumDayBucket, error) {
+	if len(arg.ProjectIDs) == 0 {
+		return nil, nil
+	}
+
+	storedChats := sq.Select("DISTINCT chat_id").
+		From("chat_token_summaries").
+		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
+		Where("time_bucket >= toStartOfDay(fromUnixTimestamp64Nano(?))", arg.StartUnixNano).
+		Where("time_bucket < fromUnixTimestamp64Nano(?)", arg.EndUnixNano).
+		Where("chat_id != ''").
+		Where("stored_event_count > 0")
+
+	storedChatsSQL, storedChatsArgs, err := storedChats.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building tum stored chats subquery: %w", err)
+	}
+
+	sb := sq.Select(
+		"time_bucket",
+		"sum(total_tokens) AS tokens",
+	).
+		From("chat_token_summaries").
+		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
+		Where("time_bucket >= toStartOfDay(fromUnixTimestamp64Nano(?))", arg.StartUnixNano).
+		Where("time_bucket < fromUnixTimestamp64Nano(?)", arg.EndUnixNano).
+		Where("chat_id != ''").
+		Where(squirrel.Expr("chat_id IN ("+storedChatsSQL+")", storedChatsArgs...)).
+		GroupBy("time_bucket").
+		OrderBy("time_bucket")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building tokens under management by day query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var buckets []TumDayBucket
+	for rows.Next() {
+		var bucket TumDayBucket
+		if err := rows.ScanStruct(&bucket); err != nil {
+			return nil, fmt.Errorf("scanning tokens under management day row: %w", err)
+		}
+		buckets = append(buckets, bucket)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return buckets, nil
 }

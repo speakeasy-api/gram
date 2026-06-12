@@ -16,6 +16,7 @@ var All = []outbox.EventRegistration{
 	AssetV1,
 	AssistantWakeV1,
 	AuditLogCreated,
+	BillingMetadataV1,
 	CustomDomainV1,
 	DeploymentV1,
 	EnvironmentV1,

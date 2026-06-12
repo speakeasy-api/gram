@@ -15,21 +15,25 @@ import (
 
 // Client is the "usage" service client.
 type Client struct {
-	GetPeriodUsageEndpoint        goa.Endpoint
-	GetUsageTiersEndpoint         goa.Endpoint
-	CreateCustomerSessionEndpoint goa.Endpoint
-	CreateCheckoutEndpoint        goa.Endpoint
-	CreateTopUpCheckoutEndpoint   goa.Endpoint
+	GetPeriodUsageEndpoint           goa.Endpoint
+	GetTokensUnderManagementEndpoint goa.Endpoint
+	SetBillingMetadataEndpoint       goa.Endpoint
+	GetUsageTiersEndpoint            goa.Endpoint
+	CreateCustomerSessionEndpoint    goa.Endpoint
+	CreateCheckoutEndpoint           goa.Endpoint
+	CreateTopUpCheckoutEndpoint      goa.Endpoint
 }
 
 // NewClient initializes a "usage" service client given the endpoints.
-func NewClient(getPeriodUsage, getUsageTiers, createCustomerSession, createCheckout, createTopUpCheckout goa.Endpoint) *Client {
+func NewClient(getPeriodUsage, getTokensUnderManagement, setBillingMetadata, getUsageTiers, createCustomerSession, createCheckout, createTopUpCheckout goa.Endpoint) *Client {
 	return &Client{
-		GetPeriodUsageEndpoint:        getPeriodUsage,
-		GetUsageTiersEndpoint:         getUsageTiers,
-		CreateCustomerSessionEndpoint: createCustomerSession,
-		CreateCheckoutEndpoint:        createCheckout,
-		CreateTopUpCheckoutEndpoint:   createTopUpCheckout,
+		GetPeriodUsageEndpoint:           getPeriodUsage,
+		GetTokensUnderManagementEndpoint: getTokensUnderManagement,
+		SetBillingMetadataEndpoint:       setBillingMetadata,
+		GetUsageTiersEndpoint:            getUsageTiers,
+		CreateCustomerSessionEndpoint:    createCustomerSession,
+		CreateCheckoutEndpoint:           createCheckout,
+		CreateTopUpCheckoutEndpoint:      createTopUpCheckout,
 	}
 }
 
@@ -53,6 +57,52 @@ func (c *Client) GetPeriodUsage(ctx context.Context, p *GetPeriodUsagePayload) (
 		return
 	}
 	return ires.(*PeriodUsage), nil
+}
+
+// GetTokensUnderManagement calls the "getTokensUnderManagement" endpoint of
+// the "usage" service.
+// GetTokensUnderManagement may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetTokensUnderManagement(ctx context.Context, p *GetTokensUnderManagementPayload) (res *TokensUnderManagement, err error) {
+	var ires any
+	ires, err = c.GetTokensUnderManagementEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*TokensUnderManagement), nil
+}
+
+// SetBillingMetadata calls the "setBillingMetadata" endpoint of the "usage"
+// service.
+// SetBillingMetadata may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetBillingMetadata(ctx context.Context, p *SetBillingMetadataPayload) (res *TokensUnderManagement, err error) {
+	var ires any
+	ires, err = c.SetBillingMetadataEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*TokensUnderManagement), nil
 }
 
 // GetUsageTiers calls the "getUsageTiers" endpoint of the "usage" service.

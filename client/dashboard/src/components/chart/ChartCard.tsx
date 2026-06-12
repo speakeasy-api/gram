@@ -8,6 +8,7 @@ export function ChartCard({
   expandedChart,
   onExpand,
   hasData = true,
+  expandable = true,
   children,
 }: {
   title: string;
@@ -15,10 +16,11 @@ export function ChartCard({
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
   hasData?: boolean;
+  expandable?: boolean;
   children: ReactNode;
 }): JSX.Element {
   const isExpanded = expandedChart === chartId;
-  const showExpandButton = hasData || isExpanded;
+  const showExpandButton = expandable && (hasData || isExpanded);
   return (
     <div
       className={cn(
