@@ -1,6 +1,6 @@
 import { type DateRangePreset } from "@gram-ai/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { ChevronDown, Check } from "lucide-react";
 import {
   Command,
@@ -71,6 +71,7 @@ export function ObserveFilterBar({
   projectSlug,
   className,
   serverNameMappings,
+  attributeSearchControl,
 }: {
   serverOptions: string[];
   serverOptionGroups?: MultiSelectGroup[];
@@ -95,6 +96,7 @@ export function ObserveFilterBar({
   projectSlug?: string;
   className?: string;
   serverNameMappings?: ReturnType<typeof useServerNameMappings>;
+  attributeSearchControl?: ReactNode;
 }): JSX.Element {
   const selectedServers = useMemo(
     () =>
@@ -149,68 +151,69 @@ export function ObserveFilterBar({
   );
 
   return (
-    <div
-      className={cn("flex shrink-0 flex-wrap items-center gap-2", className)}
-    >
-      <MultiSelect
-        options={serverOptionsWithDisplayNames}
-        defaultValue={selectedServers}
-        onValueChange={onServerSelectionChange}
-        placeholder="Filter by server name"
-        className="min-w-[200px] flex-1"
-        hideSelectAll
-        singleLine
-      />
-      <MultiSelect
-        options={userEmailOptions.map((e) => ({ label: e, value: e }))}
-        defaultValue={selectedEmails}
-        onValueChange={onUserEmailSelectionChange}
-        placeholder="Filter by user email"
-        className="min-w-[200px] flex-1"
-        hideSelectAll
-        singleLine
-      />
-      <MultiSelect
-        options={roleOptions.map((r) => ({ label: r.name, value: r.id }))}
-        defaultValue={selectedRoleIds}
-        onValueChange={onRoleSelectionChange}
-        placeholder="Filter by role"
-        className="min-w-[160px] flex-1"
-        hideSelectAll
-        singleLine
-      />
-      <MultiSelect
-        options={sourceOptionsWithIcons}
-        defaultValue={selectedSources}
-        onValueChange={onSourceSelectionChange}
-        placeholder="Filter by source"
-        className="min-w-[160px] flex-1"
-        hideSelectAll
-        singleLine
-      />
-      <MultiSelect
-        options={typeOptions}
-        defaultValue={selectedTypes}
-        onValueChange={(values) =>
-          onTypesChange(values as ObserveTypeFilterValue[])
-        }
-        placeholder="Filter by type"
-        className="min-w-[96px]"
-        searchable={false}
-        autoSize
-        hideSelectAll
-        singleLine
-      />
-      <TimeRangePicker
-        preset={customRange ? null : dateRange}
-        customRange={customRange}
-        customRangeLabel={customRangeLabel}
-        onPresetChange={onDateRangeChange}
-        onCustomRangeChange={onCustomRangeChange}
-        onClearCustomRange={onClearCustomRange}
-        projectSlug={projectSlug}
-        className="ml-auto"
-      />
+    <div className={cn("flex flex-col gap-2", className)}>
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <MultiSelect
+          options={serverOptionsWithDisplayNames}
+          defaultValue={selectedServers}
+          onValueChange={onServerSelectionChange}
+          placeholder="Filter by server name"
+          className="min-w-16 flex-1"
+          hideSelectAll
+          singleLine
+        />
+        <MultiSelect
+          options={userEmailOptions.map((e) => ({ label: e, value: e }))}
+          defaultValue={selectedEmails}
+          onValueChange={onUserEmailSelectionChange}
+          placeholder="Filter by user email"
+          className="min-w-16 flex-1"
+          hideSelectAll
+          singleLine
+        />
+        <MultiSelect
+          options={roleOptions.map((r) => ({ label: r.name, value: r.id }))}
+          defaultValue={selectedRoleIds}
+          onValueChange={onRoleSelectionChange}
+          placeholder="Filter by role"
+          className="min-w-16 flex-1"
+          hideSelectAll
+          singleLine
+        />
+        <MultiSelect
+          options={sourceOptionsWithIcons}
+          defaultValue={selectedSources}
+          onValueChange={onSourceSelectionChange}
+          placeholder="Filter by agent"
+          className="min-w-16 flex-1"
+          hideSelectAll
+          singleLine
+        />
+        <MultiSelect
+          options={typeOptions}
+          defaultValue={selectedTypes}
+          onValueChange={(values) =>
+            onTypesChange(values as ObserveTypeFilterValue[])
+          }
+          placeholder="Filter by type"
+          className="min-w-16 flex-1"
+          searchable={false}
+          autoSize
+          hideSelectAll
+          singleLine
+        />
+        <TimeRangePicker
+          preset={customRange ? null : dateRange}
+          customRange={customRange}
+          customRangeLabel={customRangeLabel}
+          onPresetChange={onDateRangeChange}
+          onCustomRangeChange={onCustomRangeChange}
+          onClearCustomRange={onClearCustomRange}
+          projectSlug={projectSlug}
+          className="ml-auto min-w-24 flex-1"
+        />
+      </div>
+      {attributeSearchControl}
     </div>
   );
 }
