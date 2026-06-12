@@ -201,9 +201,10 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	}
 
 	// prompt_based policies are evaluated by the LLM judge rather than the
-	// source-based scanners above. scanPromptJudge hard-scopes to tool-call
-	// messages for M0 (matching realtime enforcement), on top of the policy's
-	// message_types filter already applied by filterMessagesByMessageTypes.
+	// source-based scanners above. The judge runs on every message left after
+	// the policy's message_types filter (already applied by
+	// filterMessagesByMessageTypes), so it covers whatever types the policy
+	// declares.
 	if policy.PolicyType == "prompt_based" {
 		judgeFindings := a.scanPromptJudge(ctx, args, policy, messages)
 		for i := range findings {
@@ -440,10 +441,10 @@ const judgeConcurrency = 8
 // Returns all-empty results when the judge is unavailable or the policy has no
 // prompt.
 //
-// M0: like the realtime enforcement path, batch judging is hard-scoped to
-// tool-call messages regardless of the policy's message_types, so the judge is
-// never run on user/assistant/tool-response content yet. In-scope messages are
-// evaluated concurrently with a bounded worker pool.
+// The judge runs on every message passed in — the caller has already narrowed
+// them to the policy's message_types via filterMessagesByMessageTypes — so it
+// covers whatever types the policy declares. Messages are evaluated
+// concurrently with a bounded worker pool.
 func (a *AnalyzeBatch) scanPromptJudge(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []repo.GetMessageContentBatchRow) [][]Finding {
 	out := make([][]Finding, len(messages))
 	cfg := ParseJudgeConfig(policy.ModelConfig)
@@ -451,9 +452,9 @@ func (a *AnalyzeBatch) scanPromptJudge(ctx context.Context, args AnalyzeBatchArg
 		return out
 	}
 
-	var indices []int
+	indices := make([]int, 0, len(messages))
 	for i, msg := range messages {
-		if mt, ok := messageRowMessageType(msg); ok && mt == message.ToolRequest {
+		if _, ok := messageRowMessageType(msg); ok {
 			indices = append(indices, i)
 		}
 	}
