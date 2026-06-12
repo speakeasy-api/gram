@@ -98,6 +98,69 @@ func TestJudgeRateLimitedFailClosedReturnsVerdict(t *testing.T) {
 	require.Zero(t, client.calls.Load(), "throttled call must not reach the completion client")
 }
 
+func TestJudgeEvaluatesEmptyBodyToolCall(t *testing.T) {
+	t.Parallel()
+
+	client := &countingCompletionClient{}
+	j := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), client)
+
+	// Empty arguments but real MCP attribution: a tool-scoped policy ("flag any
+	// call to the github MCP server") must still get to run, so Evaluate must
+	// reach the client instead of short-circuiting on the empty body.
+	verdict := j.Evaluate(t.Context(), ra.JudgeInput{
+		OrgID:     "org-a",
+		ProjectID: "proj",
+		Prompt:    "flag any call to the github MCP server",
+		Message:   ra.NewJudgeMessage(message.ToolRequest, "mcp__github__delete_repo", ""),
+		Config:    ra.JudgeConfig{Model: "", Temperature: nil, FailOpen: true},
+	})
+
+	require.Nil(t, verdict, "fail-open on the stub client's error")
+	require.Equal(t, int64(1), client.calls.Load(), "empty-body tool call must still reach the judge")
+}
+
+func TestJudgeEvaluatesMultiToolCall(t *testing.T) {
+	t.Parallel()
+
+	client := &countingCompletionClient{}
+	j := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), client)
+
+	// A multi-call message has an empty Body but carries ToolCalls; the empty-body
+	// guard must not skip it.
+	verdict := j.Evaluate(t.Context(), ra.JudgeInput{
+		OrgID:     "org-a",
+		ProjectID: "proj",
+		Prompt:    "block destructive github writes",
+		Message: ra.NewJudgeMessageForToolCalls([]ra.JudgeToolCall{
+			ra.NewJudgeToolCall("mcp__github__delete_repo", `{"repo":"prod"}`),
+			ra.NewJudgeToolCall("Bash", `{"command":"rm -rf /"}`),
+		}),
+		Config: ra.JudgeConfig{Model: "", Temperature: nil, FailOpen: true},
+	})
+
+	require.Nil(t, verdict, "fail-open on the stub client's error")
+	require.Equal(t, int64(1), client.calls.Load(), "multi-call message must still reach the judge")
+}
+
+func TestJudgeSkipsTrulyEmptyMessage(t *testing.T) {
+	t.Parallel()
+
+	client := &countingCompletionClient{}
+	j := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), client)
+
+	// No body, no tool attribution: nothing to judge, so skip before the client.
+	verdict := j.Evaluate(t.Context(), ra.JudgeInput{
+		OrgID:     "org-a",
+		ProjectID: "proj",
+		Prompt:    "flag secrets",
+		Message:   ra.NewJudgeMessage(message.User, "", "   "),
+		Config:    ra.JudgeConfig{Model: "", Temperature: nil, FailOpen: true},
+	})
+
+	require.Nil(t, verdict)
+	require.Zero(t, client.calls.Load(), "a message with no content must not reach the client")
+}
+
 // drainLimiter exhausts the per-org token bucket so the next Evaluate is
 // throttled.
 func drainLimiter(j *Judge, org string) {

@@ -61,6 +61,23 @@ func TestNewJudgeMessage(t *testing.T) {
 	require.Empty(t, native.ToolCalls, "single-tool message carries no ToolCalls")
 }
 
+func TestJudgeMessageHasContent(t *testing.T) {
+	t.Parallel()
+
+	// Non-empty body is content.
+	require.True(t, risk_analysis.NewJudgeMessage(message.User, "", "hi").HasContent())
+	// Empty body but MCP attribution: a tool-scoped policy can still match.
+	require.True(t, risk_analysis.NewJudgeMessage(message.ToolRequest, "mcp__github__delete_repo", "").HasContent())
+	// Empty body but a native tool name.
+	require.True(t, risk_analysis.NewJudgeMessage(message.ToolRequest, "Bash", "").HasContent())
+	// Multi-call message with no bodies still has content.
+	require.True(t, risk_analysis.NewJudgeMessageForToolCalls([]risk_analysis.JudgeToolCall{
+		risk_analysis.NewJudgeToolCall("Bash", ""),
+	}).HasContent())
+	// Nothing to judge: blank body, no tool, no calls.
+	require.False(t, risk_analysis.NewJudgeMessage(message.User, "", "   ").HasContent())
+}
+
 func TestNewJudgeMessageForToolCalls(t *testing.T) {
 	t.Parallel()
 

@@ -48,6 +48,7 @@ import (
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/riskjudge"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -504,6 +505,14 @@ func loadCases(path string) ([]testCase, error) {
 	}
 	if len(cs) == 0 {
 		return nil, fmt.Errorf("no cases in %s", path)
+	}
+	// Fail fast on a bad message_type: an unrecognized value would silently
+	// render as opaque content (changing what the judge sees) instead of the
+	// intended actor/tool framing.
+	for _, c := range cs {
+		if c.MessageType != "" && !message.IsTypeValid(c.MessageType) {
+			return nil, fmt.Errorf("case %q: invalid message_type %q (want one of %v or empty)", c.ID, c.MessageType, message.AllTypes())
+		}
 	}
 	return cs, nil
 }

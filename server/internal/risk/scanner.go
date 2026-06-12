@@ -152,7 +152,10 @@ func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner,
 }
 
 func (s *Scanner) ScanForEnforcement(ctx context.Context, projectID uuid.UUID, text string, messageType message.Type, toolName string) (*ScanResult, error) {
-	if text == "" {
+	// An empty body is only a no-op when there is also no tool attribution: a
+	// no-arg/no-output tool call still names a tool (+ MCP server/function) that
+	// a tool-scoped prompt policy can match, so let those events through.
+	if text == "" && toolName == "" {
 		return nil, nil
 	}
 

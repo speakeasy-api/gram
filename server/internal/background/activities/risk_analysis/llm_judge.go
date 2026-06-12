@@ -84,6 +84,20 @@ func NewJudgeMessage(messageType message.Type, toolName, body string) JudgeMessa
 	}
 }
 
+// HasContent reports whether the message carries anything for the judge to
+// evaluate: a non-empty body, tool attribution (so a tool-scoped policy can
+// match a no-arg/no-output call), or one or more tool calls. An empty body
+// alone is not a reason to skip a tool event.
+func (m JudgeMessage) HasContent() bool {
+	if strings.TrimSpace(m.Body) != "" {
+		return true
+	}
+	if m.ToolName != "" || m.MCPServer != "" || m.MCPFunction != "" {
+		return true
+	}
+	return len(m.ToolCalls) > 0
+}
+
 // NewJudgeToolCall destructures a tool name into its MCP components and pairs it
 // with the call's raw arguments, for one entry of a multi-call message.
 func NewJudgeToolCall(toolName, arguments string) JudgeToolCall {

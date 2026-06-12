@@ -183,7 +183,11 @@ func (j *Judge) Evaluate(ctx context.Context, in ra.JudgeInput) *ra.JudgeVerdict
 	if j == nil || j.client == nil {
 		return nil
 	}
-	if strings.TrimSpace(in.Prompt) == "" || strings.TrimSpace(in.Message.Body) == "" {
+	// Skip only when there is nothing to judge. An empty body is NOT enough:
+	// a no-arg/no-output tool call still carries tool attribution that a
+	// tool-scoped policy ("flag any call to MCP server X") can match, so
+	// HasContent keeps those events in scope.
+	if strings.TrimSpace(in.Prompt) == "" || !in.Message.HasContent() {
 		return nil
 	}
 

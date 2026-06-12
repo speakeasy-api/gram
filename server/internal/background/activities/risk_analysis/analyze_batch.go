@@ -537,7 +537,17 @@ func (a *AnalyzeBatch) judgeMessageForRow(ctx context.Context, msg repo.GetMessa
 		default:
 			judgeCalls := make([]JudgeToolCall, 0, len(calls))
 			for _, c := range calls {
+				// Skip malformed entries carrying neither a name nor arguments —
+				// they'd render as empty calls with no attribution to judge.
+				if c.Function.Name == "" && strings.TrimSpace(c.Function.Arguments) == "" {
+					continue
+				}
 				judgeCalls = append(judgeCalls, NewJudgeToolCall(c.Function.Name, c.Function.Arguments))
+			}
+			// If every entry was malformed, fall back to the raw array rather than
+			// hand the judge an empty tool_calls list.
+			if len(judgeCalls) == 0 {
+				return NewJudgeMessage(messageType, "", string(msg.ToolCalls))
 			}
 			return NewJudgeMessageForToolCalls(judgeCalls)
 		}

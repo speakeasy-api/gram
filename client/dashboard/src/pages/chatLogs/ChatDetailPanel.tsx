@@ -1017,7 +1017,7 @@ function RiskFindingActions({
           key={r.id}
           className="bg-muted/30 flex items-center justify-between gap-2 rounded-md border px-3 py-1.5"
         >
-          <span className="text-muted-foreground truncate font-mono text-xs">
+          <span className="text-muted-foreground min-w-0 truncate font-mono text-xs">
             {[r.ruleId, r.source].filter(Boolean).join(" · ")}
           </span>
           <DropdownMenu>
@@ -1098,7 +1098,7 @@ function RiskBadgePopover({ results }: { results: RiskResult[] }) {
                     {getRiskBadgeLabel(r)}
                   </Badge>
                   {shouldShowRiskRuleId(r) && (
-                    <span className="text-muted-foreground truncate font-mono text-xs">
+                    <span className="text-muted-foreground min-w-0 truncate font-mono text-xs">
                       {r.ruleId}
                     </span>
                   )}
