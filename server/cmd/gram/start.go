@@ -702,7 +702,7 @@ func newStartCommand() *cli.Command {
 				authz.EngineOpts{DevMode: c.String("environment") == "local"},
 			)
 
-			telemLogger, shutdown := newTelemetryLogger(ctx, logger, chDB, logsEnabled, toolIOLogsEnabled)
+			telemLogger, shutdown := newTelemetryLogger(ctx, logger, db, cache.NewRedisCacheAdapter(redisClient), chDB, logsEnabled, toolIOLogsEnabled)
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
 			telemSvc := tm.NewService(logger, tracerProvider, db, chDB, sessionManager, chatSessionsManager, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)

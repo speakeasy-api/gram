@@ -172,3 +172,27 @@ FROM directory_user_group_memberships
 WHERE workos_directory_group_id = @workos_directory_group_id
   AND workos_directory_user_id = @workos_directory_user_id
   AND deleted_at IS NULL;
+
+-- name: ListDirectoryUserAttributesByUserID :many
+SELECT attributes
+FROM directory_users
+WHERE user_id = @user_id
+  AND organization_id = @organization_id
+  AND deleted_at IS NULL
+ORDER BY created_at;
+
+-- name: ListCurrentDirectoryGroupsByUserID :many
+SELECT DISTINCT ON (dg.workos_directory_group_id)
+  dg.workos_directory_group_id,
+  dg.name
+FROM directory_users AS du
+JOIN directory_user_group_memberships AS m
+  ON m.directory_user_id = du.id
+  AND m.deleted_at IS NULL
+JOIN directory_groups AS dg
+  ON dg.id = m.directory_group_id
+  AND dg.deleted_at IS NULL
+WHERE du.user_id = @user_id
+  AND du.organization_id = @organization_id
+  AND du.deleted_at IS NULL
+ORDER BY dg.workos_directory_group_id;

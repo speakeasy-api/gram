@@ -45,6 +45,7 @@ type Logger struct {
 	chConn            clickhouse.Conn
 	logsEnabled       FeatureChecker
 	toolIOLogsEnabled FeatureChecker
+	directory         *DirectorySnapshotResolver
 }
 
 func NewLogger(
@@ -53,6 +54,7 @@ func NewLogger(
 	chConn clickhouse.Conn,
 	logsEnabled FeatureChecker,
 	toolIOLogsEnabled FeatureChecker,
+	directory *DirectorySnapshotResolver,
 ) *Logger {
 	return &Logger{
 		shutdownCtx:       func() context.Context { return shutdownCtx },
@@ -60,6 +62,7 @@ func NewLogger(
 		chConn:            chConn,
 		logsEnabled:       logsEnabled,
 		toolIOLogsEnabled: toolIOLogsEnabled,
+		directory:         directory,
 	}
 }
 
@@ -73,6 +76,7 @@ func NewStub(logger *slog.Logger) *Logger {
 		chConn:            nil,
 		logsEnabled:       disabled,
 		toolIOLogsEnabled: disabled,
+		directory:         nil,
 	}
 }
 
@@ -133,6 +137,8 @@ func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
 			delete(param.Attributes, attr.GenAIToolCallResultKey)
 		}
 
+		l.hydrateDirectorySnapshot(shutdownCtx, param)
+
 		logParam, err := buildTelemetryLogParams(param)
 		if err != nil {
 			l.logger.ErrorContext(ctx, "failed to build telemetry log params", attr.SlogError(err))
@@ -148,6 +154,36 @@ func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
 		return oops.E(oops.CodeUnexpected, err, "insert telemetry logs")
 	}
 	return nil
+}
+
+// hydrateDirectorySnapshot stamps the user's current directory snapshot
+// (WorkOS custom attributes, current groups as id + name, role slugs) onto the log row's
+// attributes when a user was resolved. Telemetry rows are append-only: the
+// snapshot reflects state at write time and is never rewritten. Empty
+// snapshot parts (directory-deleted users, orgs without Directory Sync,
+// lingering API keys) are omitted rather than stamped as empty payloads.
+func (l *Logger) hydrateDirectorySnapshot(ctx context.Context, param LogParams) {
+	if l.directory == nil {
+		return
+	}
+
+	userID, _ := param.Attributes[attr.UserIDKey].(string)
+	organizationID := param.ToolInfo.OrganizationID
+	if userID == "" || organizationID == "" {
+		return
+	}
+
+	snapshot := l.directory.Resolve(ctx, organizationID, userID)
+
+	if _, ok := param.Attributes[attr.UserAttributesKey]; !ok && len(snapshot.Attributes) > 0 {
+		param.Attributes[attr.UserAttributesKey] = snapshot.Attributes
+	}
+	if _, ok := param.Attributes[attr.UserGroupsKey]; !ok && len(snapshot.Groups) > 0 {
+		param.Attributes[attr.UserGroupsKey] = snapshot.Groups
+	}
+	if _, ok := param.Attributes[attr.UserRolesKey]; !ok && len(snapshot.Roles) > 0 {
+		param.Attributes[attr.UserRolesKey] = snapshot.Roles
+	}
 }
 
 // buildTelemetryLogParams constructs InsertTelemetryLogParams from attributes.
