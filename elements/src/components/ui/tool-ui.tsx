@@ -729,6 +729,16 @@ function ToolUIGroup({
   className,
 }: ToolUIGroupProps): React.JSX.Element {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+
+  // A headerless group shows its children unconditionally; when it gains a
+  // header mid-stream, start expanded — collapsing would hide content the
+  // user was already looking at.
+  const [prevHeaderless, setPrevHeaderless] = useState(headerless);
+  if (prevHeaderless !== headerless) {
+    setPrevHeaderless(headerless);
+    if (prevHeaderless) setIsExpanded(true);
+  }
+
   const showChildren = headerless || isExpanded;
 
   return (
@@ -743,6 +753,7 @@ function ToolUIGroup({
       {!headerless && (
         <button
           onClick={() => setIsExpanded(!isExpanded)}
+          aria-expanded={isExpanded}
           className="flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-accent/50"
         >
           {icon || (
