@@ -40,6 +40,7 @@ from .publisher import Publisher, pubsub_publisher_for_message
 from .subscriber import (
     MessageCallback,
     MessageMetadata,
+    ReceivedMessage,
     Subscriber,
     pubsub_subscriber_for_message,
 )
@@ -58,6 +59,7 @@ __all__ = [
     # subscriber
     "Subscriber",
     "MessageMetadata",
+    "ReceivedMessage",
     "MessageCallback",
     "pubsub_subscriber_for_message",
     # discovery / naming

@@ -15,6 +15,7 @@ dependencies = [
 
 [project.scripts]
 pubsub-demo = "gram_infra.demos.pubsub:main"
+pubsub-stream-demo = "gram_infra.demos.pubsub_stream:main"
 
 [project.optional-dependencies]
 dev = [

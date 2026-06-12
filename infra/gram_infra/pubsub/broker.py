@@ -25,6 +25,7 @@ bounds and raises ``ValueError`` at reconcile time.
 from __future__ import annotations
 
 import logging
+import threading
 from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import timedelta
@@ -82,8 +83,27 @@ class SubscriberBroker(Protocol):
     ) -> SubscriberHandle: ...
 
 
+# Name the google-cloud-pubsub library gives every per-batch commit thread.
+_COMMIT_THREAD_NAME = "Thread-CommitBatchPublisher"
+
+# Upper bound on how long teardown waits for one of our in-flight commits. A
+# healthy commit lands in milliseconds; the bound just keeps a wedged commit
+# (e.g. an unreachable server) from blocking teardown forever.
+_DRAIN_JOIN_TIMEOUT_SECONDS = 10.0
+
+
 class PubSubBroker:
-    """Production broker. Resolves names and returns handles; assumes resources exist."""
+    """Production broker. Resolves names and returns handles; assumes resources exist.
+
+    May be used as a context manager. Entering it takes ownership of the publisher
+    and subscriber clients for the duration of the ``with`` block: on exit it
+    flushes and stops the publisher's batching, then closes both clients'
+    transports. Use the ``with`` form when the broker owns the clients (the common
+    case, including the auto-created defaults); skip it and manage lifecycle
+    yourself when a client is shared with other components.
+    """
+
+    _exit_stack: ExitStack | None
 
     def __init__(
         self,
@@ -97,6 +117,84 @@ class PubSubBroker:
         self._publisher = publisher_client or PublisherClient()
         self._subscriber = subscriber_client or SubscriberClient()
         self._logger = logger or logging.getLogger(__name__)
+        self._exit_stack = None
+
+    def __enter__(self) -> Self:
+        if self._exit_stack is not None:
+            raise RuntimeError(f"{type(self).__name__} is already entered")
+
+        stack = ExitStack()
+
+        try:
+            stack.enter_context(self._publisher)
+            stack.enter_context(self._subscriber)
+            # Registered last, so it runs first on exit (LIFO) — before the
+            # publisher's transport.close() — to flush and drain its batching
+            # layer while the channel is still open.
+            stack.callback(self._drain_publisher)
+        except BaseException as exc:
+            stack.__exit__(type(exc), exc, exc.__traceback__)
+            raise
+
+        self._exit_stack = stack
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        if self._exit_stack is None:
+            return None
+
+        try:
+            # Discard the ExitStack's return value: a context manager it wraps
+            # could in principle return truthy from __exit__ and suppress an
+            # exception raised in the ``with`` body that the stack did not
+            # originate. Returning None keeps such exceptions propagating while
+            # still letting the stack run its cleanup above.
+            self._exit_stack.__exit__(exc_type, exc_val, exc_tb)
+            return None
+        finally:
+            self._exit_stack = None
+
+    def _drain_publisher(self) -> None:
+        """Flush batched publishes and wait for those commits before the transport closes.
+
+        ``PublisherClient`` inherits the generated client's ``__exit__``, which
+        only calls ``transport.close()`` — it never stops the batching layer. So a
+        batch whose commit is still in flight (commits run on daemon
+        ``Thread-CommitBatchPublisher`` threads) would otherwise issue its publish
+        RPC on the just-closed channel: that commit thread crashes, and because the
+        error path does not resolve the publish futures, any caller still awaiting
+        one (e.g. a publish cancelled with ``abandon_on_cancel``) blocks forever.
+
+        ``stop()`` flushes outstanding batches and blocks new publishes; joining
+        the commit threads makes those flushed commits land while the channel is
+        still open, so the futures resolve and no RPC hits a closed channel.
+
+        Commit threads are matched by name across the whole process, so with
+        multiple publisher clients in one process this may also wait on another
+        client's in-flight commit. That is harmless — a healthy commit lands in
+        milliseconds, and the join is bounded — and does not arise for the usual
+        one-broker-per-process setup, so it is not worth reaching into the
+        library's batch internals to attribute threads precisely.
+        """
+        stop = getattr(self._publisher, "stop", None)
+        if callable(stop):
+            try:
+                stop()
+            except RuntimeError:
+                # Already stopped, or the publisher was never used — nothing to flush.
+                pass
+
+        current = threading.current_thread()
+        for thread in threading.enumerate():
+            if thread.name == _COMMIT_THREAD_NAME and thread is not current:
+                # Bounded so a wedged commit (e.g. an unreachable server) can't
+                # block teardown indefinitely; a healthy commit returns in millis.
+                thread.join(timeout=_DRAIN_JOIN_TIMEOUT_SECONDS)
 
     def _topic_path(self, topic_id: str) -> str:
         return self._publisher.topic_path(self._project_id, topic_id)
@@ -137,9 +235,12 @@ class PubSubBroker:
 
 
 class EmulatedPubSubBroker(PubSubBroker):
-    """Local broker. Reconciles topics/subscriptions on demand before returning handles."""
+    """Local broker. Reconciles topics/subscriptions on demand before returning handles.
 
-    _exit_stack: ExitStack | None
+    Inherits the context-manager lifecycle from :class:`PubSubBroker` (publisher
+    drain + client close on exit), but requires the clients to be passed in since
+    the emulator client construction is the caller's responsibility.
+    """
 
     def __init__(
         self,
@@ -155,43 +256,6 @@ class EmulatedPubSubBroker(PubSubBroker):
             subscriber_client=subscriber_client,
             logger=logger,
         )
-        self._exit_stack = None
-
-    def __enter__(self) -> Self:
-        if self._exit_stack is not None:
-            raise RuntimeError("EmulatedPubSubBroker is already entered")
-
-        stack = ExitStack()
-
-        try:
-            stack.enter_context(self._publisher)
-            stack.enter_context(self._subscriber)
-        except BaseException as exc:
-            stack.__exit__(type(exc), exc, exc.__traceback__)
-            raise
-
-        self._exit_stack = stack
-        return self
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> bool | None:
-        if self._exit_stack is None:
-            return None
-
-        try:
-            # Discard the ExitStack's return value: a context manager it wraps
-            # could in principle return truthy from __exit__ and suppress an
-            # exception raised in the ``with`` body that the stack did not
-            # originate. Returning None keeps such exceptions propagating while
-            # still letting the stack run its cleanup above.
-            self._exit_stack.__exit__(exc_type, exc_val, exc_tb)
-            return None
-        finally:
-            self._exit_stack = None
 
     def _reconcile_publisher(self, topic_id, options) -> None:
         self._reconcile_topic(topic_id, options)

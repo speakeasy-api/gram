@@ -14,17 +14,25 @@ resources or Config Connector required.
    `madprocs` / `compose.yml`, on the `PUBSUB_EMULATOR_HOST` port — by default
    `localhost:8088`, see `mise.toml`).
 
-2. From the `infra/` directory, run the demo:
+2. From the `infra/` directory, run a demo. Two are provided — they differ only
+   in how they consume messages:
+   - `pubsub-demo` — the **callback** API (`subscriber.receive`), with two
+     competing subscribers.
+   - `pubsub-stream-demo` — the **async-iterator** API (`subscriber.stream`),
+     consuming a single subscription with an `async for` loop and acking each
+     message explicitly.
 
    ```bash
    # asyncio backend (default)
    uv run pubsub-demo
+   uv run pubsub-stream-demo
 
-   # trio backend — the same demo, proving the library is backend-agnostic
+   # trio backend — the same demos, proving the library is backend-agnostic
    PUBSUB_DEMO_BACKEND=trio uv run pubsub-demo
+   PUBSUB_DEMO_BACKEND=trio uv run pubsub-stream-demo
    ```
 
-You should see a message published every second and the subscriber log each one
+You should see a message published every ~200ms and the subscriber log each one
 as it is received. The first log line reports the active backend. Press `Ctrl-C`
 to stop.
 

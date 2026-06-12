@@ -24,6 +24,8 @@ from google.protobuf.duration_pb2 import Duration
 
 from gram.ping.v1 import ping_pb2
 from gram_infra.pubsub import (
+    EmulatedPubSubBroker,
+    PubSubBroker,
     Publisher,
     PublisherHandle,
     Subscriber,
@@ -209,3 +211,101 @@ def test_receive_acks_messages_on_backend(backend) -> None:
     assert sorted(seen) == ["one", "two"]
     assert all(message.acked for message in messages)
     assert not any(message.nacked for message in messages)
+
+
+class _LifecyclePublisher:
+    """Context-manager publisher that records stop()/close, for broker teardown tests.
+
+    ``stop`` is exposed only when ``with_stop`` so the "publisher has no stop()"
+    branch of the broker's drain can be exercised too.
+    """
+
+    def __init__(self, events, *, with_stop=True, stop_error=False) -> None:
+        self._events = events
+        self._stop_error = stop_error
+        if with_stop:
+            self.stop = self._stop
+
+    def _stop(self) -> None:
+        if self._stop_error:
+            raise RuntimeError("publisher already stopped")
+        self._events.append("publisher.stop")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self._events.append("publisher.close")
+        return None
+
+
+class _LifecycleSubscriber:
+    def __init__(self, events) -> None:
+        self._events = events
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self._events.append("subscriber.close")
+        return None
+
+
+def test_emulated_broker_drains_publisher_before_closing_transport() -> None:
+    # The publisher's batching must be stopped/flushed before its transport is
+    # closed, else an in-flight commit hits a closed channel.
+    events: list[str] = []
+    publisher = _LifecyclePublisher(events)
+    subscriber = _LifecycleSubscriber(events)
+
+    with EmulatedPubSubBroker("proj", cast(Any, publisher), cast(Any, subscriber)):
+        pass
+
+    assert "publisher.stop" in events
+    assert events.index("publisher.stop") < events.index("publisher.close")
+
+
+def test_pubsub_broker_is_a_context_manager_and_drains() -> None:
+    # The production broker shares the same lifecycle: usable as a context
+    # manager, draining the publisher before closing the transport.
+    events: list[str] = []
+    publisher = _LifecyclePublisher(events)
+    subscriber = _LifecycleSubscriber(events)
+
+    with PubSubBroker(
+        "proj",
+        publisher_client=cast(Any, publisher),
+        subscriber_client=cast(Any, subscriber),
+    ):
+        pass
+
+    assert events.index("publisher.stop") < events.index("publisher.close")
+    assert "subscriber.close" in events
+
+
+def test_emulated_broker_teardown_tolerates_stop_raising() -> None:
+    # stop() raising (e.g. already stopped) must not prevent the transport close.
+    events: list[str] = []
+    publisher = _LifecyclePublisher(events, stop_error=True)
+
+    with EmulatedPubSubBroker(
+        "proj", cast(Any, publisher), cast(Any, _LifecycleSubscriber(events))
+    ):
+        pass
+
+    assert "publisher.close" in events
+
+
+def test_emulated_broker_teardown_tolerates_publisher_without_stop() -> None:
+    # A publisher exposing no stop() (e.g. a test double) must not break teardown.
+    events: list[str] = []
+    publisher = _LifecyclePublisher(events, with_stop=False)
+
+    with EmulatedPubSubBroker(
+        "proj", cast(Any, publisher), cast(Any, _LifecycleSubscriber(events))
+    ):
+        pass
+
+    # No stop() to call, but teardown still closes the transport cleanly.
+    assert "publisher.stop" not in events
+    assert "publisher.close" in events
