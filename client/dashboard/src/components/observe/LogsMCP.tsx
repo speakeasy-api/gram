@@ -1,5 +1,6 @@
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { InsightsConfig } from "@/components/insights-sidebar";
+import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { Button } from "@/components/ui/button";
 import { MCPServerFilter } from "@/components/observe/ObserveFilterBar";
@@ -340,24 +341,7 @@ export function LogsMCPContent(): JSX.Element {
         title="Explore Logs"
         subtitle="Ask me about your logs! Powered by Elements + platform MCP"
         hideTrigger={isLogsDisabled}
-        suggestions={[
-          {
-            title: "Failing Tool Calls",
-            label: "Summarize failing tool calls",
-            prompt: "Summarize failing tool calls",
-          },
-          {
-            title: "Visualize top tool calls",
-            label: "Plot tool call counts",
-            prompt: "Plot a chart of the top tool calls and their counts",
-          },
-          {
-            title: "Recent Errors",
-            label: "Find recent errors",
-            prompt:
-              "Search for recent error logs and summarize what's happening",
-          },
-        ]}
+        suggestions={INSIGHTS_SUGGESTIONS["logs/mcp"]}
       />
       <LogsInnerContent
         isLogsDisabled={isLogsDisabled}

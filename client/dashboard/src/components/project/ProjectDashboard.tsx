@@ -30,6 +30,7 @@ import {
   type InsightsConfigOptions,
 } from "@/components/insights-sidebar";
 import { useInsightsState } from "@/components/insights-context";
+import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import {
   formatDateRangeLabel,
   useDateRangeFilter,
@@ -446,13 +447,10 @@ export function ProjectDashboard(): JSX.Element {
                             subtitle:
                               "Dig into who is driving the most activity.",
                             contextInfo: `${timeWindowContext} The user clicked "Explore with AI" on the Top Users chart.`,
-                            suggestions: [
-                              {
-                                title: "Top users & usage patterns",
-                                label: rangeLabel,
-                                prompt: `Who are my top 5 end users in the ${rangeLabel}, and what is each user's main usage pattern — tool calls, skill invocations, agent sessions, or a mix?`,
-                              },
-                            ],
+                            suggestions:
+                              INSIGHTS_SUGGESTIONS["home#top-users"](
+                                rangeLabel,
+                              ),
                           })
                         }
                       />
@@ -484,13 +482,10 @@ export function ProjectDashboard(): JSX.Element {
                             subtitle:
                               "See which MCP servers are driving the most traffic.",
                             contextInfo: `${timeWindowContext} The user clicked "Explore with AI" on the Top Servers chart.`,
-                            suggestions: [
-                              {
-                                title: "Top servers & hot tools",
-                                label: rangeLabel,
-                                prompt: `Which servers received the most tool calls in the ${rangeLabel}, and which specific tools on each server are driving that volume? Lets look at data from all logs including hooks telemetry.`,
-                              },
-                            ],
+                            suggestions:
+                              INSIGHTS_SUGGESTIONS["home#top-servers"](
+                                rangeLabel,
+                              ),
                           })
                         }
                       />
@@ -532,13 +527,10 @@ export function ProjectDashboard(): JSX.Element {
                                 subtitle:
                                   "Understand how your power users interact with agents.",
                                 contextInfo: `${timeWindowContext} The user clicked "Explore with AI" on the Most Agent Sessions by User chart.`,
-                                suggestions: [
-                                  {
-                                    title: "Power users & agent behavior",
-                                    label: rangeLabel,
-                                    prompt: `For the users with the most agent sessions in the ${rangeLabel}, what are the common prompts they send and which tools get invoked most often?`,
-                                  },
-                                ],
+                                suggestions:
+                                  INSIGHTS_SUGGESTIONS["home#agent-sessions"](
+                                    rangeLabel,
+                                  ),
                               })
                             }
                           />
@@ -606,13 +598,10 @@ export function ProjectDashboard(): JSX.Element {
                                 subtitle:
                                   "Compare how different LLM clients exercise your tools.",
                                 contextInfo: `${timeWindowContext} The user clicked "Explore with AI" on the Most Used LLM Clients chart.`,
-                                suggestions: [
-                                  {
-                                    title: "LLM clients & reliability",
-                                    label: rangeLabel,
-                                    prompt: `Break down tool-call activity by LLM client in the ${rangeLabel} and highlight any clients with unusually high error rates or latency.`,
-                                  },
-                                ],
+                                suggestions:
+                                  INSIGHTS_SUGGESTIONS["home#llm-clients"](
+                                    rangeLabel,
+                                  ),
                               })
                             }
                           />

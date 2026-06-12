@@ -11,6 +11,7 @@ import { ChartCard } from "@/components/chart/ChartCard";
 import { formatChartLabel } from "@/components/chart/chartUtils";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { InsightsConfig } from "@/components/insights-sidebar";
+import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { useInsightsState } from "@/components/insights-context";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -291,18 +292,11 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
         mcpConfig={mcpConfig}
         title={`What would you like to know about ${displayName}?`}
         subtitle="Ask about token usage, tool activity, and platform breakdown"
-        suggestions={[
-          {
-            title: "Usage Summary",
-            label: "Summarize usage",
-            prompt: `Summarize the token and tool usage for ${displayName} (${displayEmail}) over ${rangeLabel}.`,
-          },
-          {
-            title: "Platform Breakdown",
-            label: "Show platforms",
-            prompt: `What platforms has ${displayName} been using?`,
-          },
-        ]}
+        suggestions={INSIGHTS_SUGGESTIONS["insights/employees/:userSlug"](
+          displayName,
+          displayEmail,
+          rangeLabel,
+        )}
       />
       <div className="min-h-0 w-full flex-1 overflow-y-auto p-8 pb-24">
         <div className="mx-auto flex max-w-7xl flex-col gap-6">

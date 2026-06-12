@@ -15,6 +15,7 @@ import {
 import { GramLogo } from "./gram-logo";
 import { CommandPaletteTrigger } from "./command-palette/CommandPaletteTrigger";
 import { WorkspaceSwitcher } from "./workspace-switcher";
+import { InsightsDockResumeButton } from "./insights-dock-resume-button";
 import { OnboardingResumeButton } from "./onboarding-resume-button";
 import { SidebarFooterAction } from "./sidebar-footer-action";
 import { SidebarUserMenu } from "./sidebar-user-menu";
@@ -287,6 +288,7 @@ export function AppSidebar({
         <FreeTierExceededNotification />
         <div className="mb-2 flex flex-col gap-1.5">
           <OnboardingResumeButton />
+          <InsightsDockResumeButton />
           <SidebarFooterAction
             to={`/${orgSlug}`}
             icon={Settings}

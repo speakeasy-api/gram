@@ -6,6 +6,7 @@ import {
   InsightsConfig,
   InsightsProvider,
 } from "@/components/insights-sidebar";
+import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { Page } from "@/components/page-layout";
 import { Heading } from "@/components/ui/heading";
 import { Button } from "@/components/ui/button";
@@ -556,26 +557,7 @@ function AuditLogsInsightsWrapper({ children }: { children: React.ReactNode }) {
       mcpConfig={mcpConfig}
       title="Audit Log Insights"
       subtitle="Ask about organization activity, changes, and audit events."
-      suggestions={[
-        {
-          title: "Recent changes",
-          label: "What changed recently?",
-          prompt:
-            "Summarize the most significant recent changes across the organization based on the audit logs.",
-        },
-        {
-          title: "Security review",
-          label: "Security-relevant events",
-          prompt:
-            "What security-relevant events have occurred recently? Look for API key changes, permission modifications, or unusual patterns.",
-        },
-        {
-          title: "Active users",
-          label: "Most active team members",
-          prompt:
-            "Who have been the most active users recently and what kinds of changes have they been making?",
-        },
-      ]}
+      suggestions={INSIGHTS_SUGGESTIONS["org/audit-logs"]}
     >
       {children}
     </InsightsProvider>

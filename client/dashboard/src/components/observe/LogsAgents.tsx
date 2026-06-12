@@ -1,4 +1,5 @@
 import { InsightsConfig } from "@/components/insights-sidebar";
+import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
@@ -321,26 +322,7 @@ export function LogsAgentsContent(): JSX.Element {
         subtitle="Search agent sessions, analyze failures, or explore logs"
         contextInfo={dateRangeContext}
         hideTrigger={isLogsDisabled}
-        suggestions={[
-          {
-            title: "Failed Chats",
-            label: "Analyze failed chats",
-            prompt:
-              "Show me recent agent sessions that failed. What patterns do you see in the failures?",
-          },
-          {
-            title: "Search Logs",
-            label: "Search raw logs",
-            prompt:
-              "Search the raw telemetry logs for errors or warnings in the current period",
-          },
-          {
-            title: "Debug Session",
-            label: "Debug a specific chat",
-            prompt:
-              "Help me debug an agent session. Search both the chat data and raw logs to understand what happened.",
-          },
-        ]}
+        suggestions={INSIGHTS_SUGGESTIONS["logs/agents"]}
       />
       <AgentSessionsPageContent
         dateRange={dateRange}

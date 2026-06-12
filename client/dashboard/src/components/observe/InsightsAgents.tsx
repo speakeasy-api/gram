@@ -5,6 +5,7 @@ import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { formatCompact } from "@/lib/format";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { InsightsConfig } from "@/components/insights-sidebar";
+import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { useInsightsState } from "@/components/insights-context";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Dialog } from "@/components/ui/dialog";
@@ -453,32 +454,7 @@ export function InsightsAgentsContent(): JSX.Element {
         title="What would you like to know about AI agent costs?"
         subtitle="Ask about token spend, model costs, and usage by team or client"
         contextInfo={`Agents tab: ${activeUsers} active users, ${formatCompact(totalTokens)} tokens, ${formatCost(totalCost)} total cost in ${rangeLabel}. ${clientBreakdown.length} client types, ${modelBreakdown.length} models.`}
-        suggestions={[
-          {
-            title: "Cost Summary",
-            label: "Summarize costs",
-            prompt:
-              "Summarize AI agent costs across all users, broken down by client type and model.",
-          },
-          {
-            title: "Top Spenders",
-            label: "Who spends most?",
-            prompt:
-              "Which users have the highest token usage and cost? Show a breakdown.",
-          },
-          {
-            title: "Model Costs",
-            label: "Cost by model",
-            prompt:
-              "Break down token usage and cost by model. Which models are most expensive?",
-          },
-          {
-            title: "Client Comparison",
-            label: "Compare clients",
-            prompt:
-              "Compare usage across different AI coding clients (Claude Code, Cursor, etc). Which is most popular?",
-          },
-        ]}
+        suggestions={INSIGHTS_SUGGESTIONS["insights/costs"]}
       />
       <div className="min-h-0 w-full flex-1 overflow-y-auto p-8 pb-24">
         <div className="mx-auto flex max-w-7xl flex-col gap-6">
