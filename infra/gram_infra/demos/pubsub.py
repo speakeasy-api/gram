@@ -6,6 +6,11 @@ from the infra package against the local Pub/Sub emulator:
 
     uv run pubsub-demo
 
+Runs on the asyncio backend by default; set ``PUBSUB_DEMO_BACKEND=trio`` to run
+the same demo under trio, demonstrating the library is backend-agnostic:
+
+    PUBSUB_DEMO_BACKEND=trio uv run pubsub-demo
+
 The `EmulatedPubSubBroker` reconciles the topic, subscription, and dead-letter
 topic on demand, so no Config Connector / GCP resources are needed locally.
 """
@@ -18,6 +23,7 @@ import signal
 import uuid
 
 import anyio
+import sniffio
 from google.protobuf.timestamp_pb2 import Timestamp
 from google.cloud.pubsub_v1 import PublisherClient, SubscriberClient
 from gram.ping.v1 import ping_pb2, processor_pb2
@@ -73,6 +79,7 @@ async def _main() -> None:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s"
     )
+    logger.info("running on %s backend", sniffio.current_async_library())
 
     if not os.environ.get("PUBSUB_EMULATOR_HOST"):
         raise SystemExit(
@@ -112,7 +119,14 @@ async def _main() -> None:
 
 
 def main() -> None:
-    anyio.run(_main)
+    # The library is backend-agnostic; flip PUBSUB_DEMO_BACKEND=trio to run the
+    # same demo under trio instead of asyncio.
+    backend = os.environ.get("PUBSUB_DEMO_BACKEND", "asyncio")
+    if backend not in ("asyncio", "trio"):
+        raise SystemExit(
+            f"PUBSUB_DEMO_BACKEND must be 'asyncio' or 'trio', got {backend!r}"
+        )
+    anyio.run(_main, backend=backend)
 
 
 if __name__ == "__main__":

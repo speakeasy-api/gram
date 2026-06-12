@@ -53,10 +53,8 @@ async def test_publish_subscribe_roundtrip() -> None:
 
     receive_task = asyncio.create_task(subscriber.receive(callback))
     try:
-        await asyncio.to_thread(
-            lambda: publisher.publish(
-                ping_pb2.Message(id=unique_id, type="it", payload=payload)
-            ).result(timeout=30)
+        await publisher.publish(
+            ping_pb2.Message(id=unique_id, type="it", payload=payload)
         )
         await asyncio.wait_for(done.wait(), timeout=30)
     finally:

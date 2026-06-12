@@ -17,12 +17,20 @@ resources or Config Connector required.
 2. From the `infra/` directory, run the demo:
 
    ```bash
-   # synchronous (callback-based streaming pull)
+   # asyncio backend (default)
    uv run pubsub-demo
+
+   # trio backend — the same demo, proving the library is backend-agnostic
+   PUBSUB_DEMO_BACKEND=trio uv run pubsub-demo
    ```
 
 You should see a message published every second and the subscriber log each one
-as it is received. Press `Ctrl-C` to stop.
+as it is received. The first log line reports the active backend. Press `Ctrl-C`
+to stop.
+
+The publisher/subscriber layer is built on [anyio](https://anyio.readthedocs.io),
+so it runs unchanged on either backend; `PUBSUB_DEMO_BACKEND` just selects which
+one `anyio.run` uses (trio is a dev dependency via `anyio[trio]`).
 
 ## What they show
 

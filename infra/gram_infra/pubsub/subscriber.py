@@ -14,13 +14,13 @@ panic recovery — so a bad message surfaces instead of silently looping.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import queue as queue_module
 from dataclasses import dataclass, field
-from collections.abc import Coroutine
-from typing import Any, Awaitable, Callable, Generic, Optional, TypeVar
+from typing import Awaitable, Callable, Generic, Optional, TypeVar
 
+import anyio
+import anyio.to_thread
 from google.cloud.pubsub_v1.subscriber.scheduler import Scheduler
 from google.protobuf.message import DecodeError, Message
 
@@ -56,58 +56,45 @@ class MessageMetadata:
 # A callback returns None to ack; raising any exception nacks the message.
 MessageCallback = Callable[[M, MessageMetadata], Awaitable[None]]
 
+# Sentinel placed on the work queue to unblock the dispatch loop at shutdown.
+_SHUTDOWN = object()
 
-class _AsyncIOScheduler(Scheduler):  # type: ignore[misc]
-    """Pub/Sub callback scheduler backed by a running asyncio loop."""
 
-    def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
-        self._loop = loop
-        self._queue: queue_module.Queue[Any] = queue_module.Queue()
-        self._tasks: set[asyncio.Task[None]] = set()
+class _QueueScheduler(Scheduler):
+    """Pub/Sub scheduler that bridges library threads to the event loop.
+
+    The google-cloud-pubsub library invokes ``schedule`` from its own background
+    threads; the receive loop runs on the event loop. A thread-safe ``Queue`` is
+    the simplest correct bridge between them — it works regardless of which
+    thread calls ``schedule`` and of the async backend in use.
+    """
+
+    def __init__(self) -> None:
+        # Back-channel queue the library's dispatcher consumes; we only own it.
+        self._queue: queue_module.Queue = queue_module.Queue()
+        # Messages awaiting dispatch onto the event loop.
+        self._work: queue_module.Queue = queue_module.Queue()
         self._closed = False
 
     @property
-    def queue(self) -> queue_module.Queue[Any]:
+    def queue(self) -> queue_module.Queue:
         return self._queue
 
     def schedule(self, callback, *args, **kwargs) -> None:
         message = args[0] if args else None
-        if self._closed:
+        if self._closed or message is None:
             if message is not None:
                 message.nack()
             return
+        self._work.put(message)
 
-        def run() -> None:
-            if self._closed:
-                if message is not None:
-                    message.nack()
-                return
-            callback(*args, **kwargs)
-
-        try:
-            self._loop.call_soon_threadsafe(run)
-        except RuntimeError:
-            if message is not None:
-                message.nack()
-            return
-
-    def create_task(
-        self, coroutine: Coroutine[Any, Any, None]
-    ) -> asyncio.Task[None]:
-        task = self._loop.create_task(coroutine)
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
-        return task
-
-    async def wait_for_completion(self) -> None:
-        self._closed = True
-        await asyncio.sleep(0)
-
-        while self._tasks:
-            await asyncio.gather(*self._tasks, return_exceptions=True)
+    def get(self):
+        """Block (on a worker thread) until the next message or the sentinel."""
+        return self._work.get()
 
     def shutdown(self, await_msg_callbacks: bool = True):
         self._closed = True
+        self._work.put(_SHUTDOWN)
         return []
 
 
@@ -134,36 +121,45 @@ class Subscriber(Generic[M]):
     ) -> None:
         """Receive messages, blocking until cancelled or ``timeout`` elapses.
 
-        Pub/Sub uses an asyncio-backed scheduler so message callbacks run on the
-        current event loop and can create normal async tasks.
+        The library schedules messages onto a thread-safe queue; a dispatch loop
+        pulls them off and spawns a handler task per message into an anyio task
+        group, which tracks and drains them on a graceful stop.
         """
-        loop = asyncio.get_running_loop()
-        scheduler = _AsyncIOScheduler(loop)
-
-        def run(message) -> None:
-            scheduler.create_task(self._handle_message(message, callback))
-
+        scheduler = _QueueScheduler()
         future = self._handle.client.subscribe(
             self._handle.subscription_path,
-            callback=run,
-            scheduler=scheduler,
+            callback=lambda message: None,  # dispatch flows through the scheduler
+            # The stub types this as ThreadScheduler, but subscribe accepts any
+            # Scheduler subclass (per its own docstring).
+            scheduler=scheduler,  # pyrefly: ignore[bad-argument-type]
             await_callbacks_on_shutdown=True,
         )
-        result_task = asyncio.create_task(asyncio.to_thread(future.result))
 
         try:
-            await asyncio.wait_for(asyncio.shield(result_task), timeout=timeout)
-        except asyncio.TimeoutError:
-            future.cancel()
-        except asyncio.CancelledError:
-            future.cancel()
-            raise
-        finally:
-            if not future.done():
-                future.cancel()
+            with anyio.move_on_after(timeout):  # None => no deadline
+                async with anyio.create_task_group() as tg:
 
-            await asyncio.gather(result_task, return_exceptions=True)
-            await scheduler.wait_for_completion()
+                    async def watch_stream() -> None:
+                        # The streaming pull blocks until the future is cancelled
+                        # or errors; either way, stop the dispatch loop.
+                        await anyio.to_thread.run_sync(
+                            future.result, abandon_on_cancel=True
+                        )
+                        scheduler.shutdown()
+
+                    tg.start_soon(watch_stream)
+
+                    while True:
+                        message = await anyio.to_thread.run_sync(
+                            scheduler.get, abandon_on_cancel=True
+                        )
+                        if message is _SHUTDOWN:
+                            break
+                        tg.start_soon(self._handle_message, message, callback)
+        finally:
+            future.cancel()
+            # Release any worker thread abandoned mid-``get`` on cancellation.
+            scheduler.shutdown()
 
     async def _handle_message(self, message, callback: MessageCallback[M]) -> None:
         """Process one incoming message: unmarshal, dispatch, ack/nack.

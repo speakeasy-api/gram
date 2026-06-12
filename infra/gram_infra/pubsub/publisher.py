@@ -8,8 +8,9 @@ attributes the Go layer uses — ``content-type: application/x-protobuf`` and
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any, Generic, TypeVar
+
+import anyio.to_thread
 
 from google.protobuf.message import Message
 
@@ -44,13 +45,15 @@ class Publisher(Generic[M]):
 
         data = message.SerializeToString()
         # The client returns a ``concurrent.futures.Future`` resolved on a
-        # background thread; bridge it to asyncio so callers can simply await.
+        # background thread; wait for it on a worker thread so callers can await
+        # without binding to a specific async backend. ``abandon_on_cancel``
+        # lets a cancelled publish stop waiting (the send still proceeds).
         future = self._handle.client.publish(
             self._handle.topic_path,
             data,
             **{"content-type": CONTENT_TYPE, "schema": self._schema},
         )
-        return await asyncio.wrap_future(future)
+        return await anyio.to_thread.run_sync(future.result, abandon_on_cancel=True)
 
 
 def pubsub_publisher_for_message(
