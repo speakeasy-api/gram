@@ -75,7 +75,7 @@ export const INSIGHTS_SUGGESTION_ICONS = {
   zap: Zap,
 } satisfies Record<string, LucideIcon>;
 
-export type InsightsSuggestionIcon = keyof typeof INSIGHTS_SUGGESTION_ICONS;
+type InsightsSuggestionIcon = keyof typeof INSIGHTS_SUGGESTION_ICONS;
 
 export interface InsightsSuggestion {
   /** Chip text — a short question. */
