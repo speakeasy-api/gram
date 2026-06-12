@@ -35,9 +35,12 @@ func TestComposeInstructions_SlackIncludesRespondDecisionGuidance(t *testing.T) 
 	require.True(t, base >= 0 && auth > base && output > auth && decide > output && ctxBlock > decide,
 		"unexpected instruction ordering: base=%d auth=%d output=%d decide=%d ctx=%d", base, auth, output, decide, ctxBlock)
 
-	// The decision guidance must anchor on the envelope's EventType and the
-	// status-clearing tool so a silent turn doesn't strand the indicator.
+	// The decision guidance must anchor on the envelope's EventType, allow
+	// true silence (end the turn posting nothing), and forbid narrating tool
+	// errors — a silent turn must never produce failure chatter.
 	require.Contains(t, instructions, `ALWAYS reply when the turn's EventType is "app_mention"`)
 	require.Contains(t, instructions, "Stay silent")
-	require.Contains(t, instructions, "platform_slack_set_thread_status")
+	require.Contains(t, instructions, "end the turn without posting anything")
+	require.Contains(t, instructions, "Never post a message explaining a tool error")
+	require.NotContains(t, instructions, "calling platform_slack_set_thread_status with status set to an empty string")
 }
