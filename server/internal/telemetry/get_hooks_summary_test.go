@@ -3,6 +3,7 @@ package telemetry_test
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"strings"
 	"testing"
 	"time"
@@ -290,6 +291,7 @@ type hookEventParams struct {
 	mcpMatch       string // gram.mcp.match for matched MCP inventory entries
 	mcpServerURL   string // gram.mcp.server_url for matched MCP server URLs
 	conversationID string // genai.conversation.id for session counting
+	customAttrs    map[string]any
 }
 
 // insertHookEvent inserts a single telemetry log representing a hook event.
@@ -333,6 +335,7 @@ func insertHookEvent(t *testing.T, ctx context.Context, p hookEventParams) {
 	if p.mcpServerURL != "" {
 		attrs["gram.mcp.server_url"] = p.mcpServerURL
 	}
+	maps.Copy(attrs, p.customAttrs)
 
 	attrsJSON, err := json.Marshal(attrs)
 	require.NoError(t, err)
