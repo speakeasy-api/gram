@@ -144,7 +144,7 @@ func TestScanner_FanOutAcrossPoliciesIsConcurrent(t *testing.T) {
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	start := time.Now()
-	result, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", message.User)
+	result, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", message.User, "")
 	elapsed := time.Since(start)
 
 	require.NoError(t, err)
@@ -190,7 +190,7 @@ func TestScanner_FirstMatchCancelsSiblings(t *testing.T) {
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	start := time.Now()
-	result, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", message.User)
+	result, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", message.User, "")
 	elapsed := time.Since(start)
 
 	require.NoError(t, err)
@@ -252,7 +252,7 @@ func TestScanner_CustomDetectionRuleEnforcement(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	result, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "deploy ACME-ABC12345 now", message.User)
+	result, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "deploy ACME-ABC12345 now", message.User, "")
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, "custom block", result.PolicyName)
@@ -281,11 +281,11 @@ func TestScanner_RespectsMessageTypes(t *testing.T) {
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 
-	userResult, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", message.User)
+	userResult, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", message.User, "")
 	require.NoError(t, err)
 	require.Nil(t, userResult)
 
-	toolResult, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", message.ToolRequest)
+	toolResult, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "irrelevant text", message.ToolRequest, "")
 	require.NoError(t, err)
 	require.NotNil(t, toolResult)
 	require.Equal(t, "tool only", toolResult.PolicyName)

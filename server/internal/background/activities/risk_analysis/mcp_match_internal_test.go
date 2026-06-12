@@ -2,7 +2,7 @@ package risk_analysis
 
 import "testing"
 
-// mcpServerPrefixOf feeds the `match` column on shadow_mcp findings from the
+// MCPServerOf feeds the `match` column on shadow_mcp findings from the
 // batch scanner. Cover the format variants the parser actually sees in chat
 // messages so a future tool-name format slip is caught at unit-test time
 // rather than as a malformed Recent Findings row.
@@ -23,8 +23,8 @@ func TestMCPServerPrefixOf(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := mcpServerPrefixOf(tc.in); got != tc.want {
-				t.Fatalf("mcpServerPrefixOf(%q) = %q, want %q", tc.in, got, tc.want)
+			if got := MCPServerOf(tc.in); got != tc.want {
+				t.Fatalf("MCPServerOf(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
 	}
