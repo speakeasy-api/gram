@@ -459,6 +459,7 @@ func (s *ServiceCore) emitAssistantTelemetry(
 			FunctionID:     nil,
 			OrganizationID: assistant.OrganizationID,
 		},
+		UserInfo:   telemetry.UserInfo{UserID: "", Email: "", Attributes: telemetry.UserAttributes{}, Groups: nil, Roles: nil},
 		Attributes: attrs,
 	})
 }

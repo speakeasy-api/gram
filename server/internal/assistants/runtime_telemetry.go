@@ -234,6 +234,7 @@ func (t *telemetryRuntimeBackend) emit(
 			FunctionID:     nil,
 			OrganizationID: lc.OrganizationID,
 		},
+		UserInfo:   telemetry.UserInfo{UserID: "", Email: "", Attributes: telemetry.UserAttributes{}, Groups: nil, Roles: nil},
 		Attributes: attrs,
 	})
 }

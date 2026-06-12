@@ -36,6 +36,7 @@ var ResourceAttributeKeys = map[attribute.Key]struct{}{
 type LogParams struct {
 	Timestamp  time.Time
 	ToolInfo   ToolInfo
+	UserInfo   UserInfo
 	Attributes map[attr.Key]any
 
 	observedTimestamp  time.Time
@@ -54,7 +55,7 @@ type Logger struct {
 	chConn            clickhouse.Conn
 	logsEnabled       FeatureChecker
 	toolIOLogsEnabled FeatureChecker
-	directory         *DirectorySnapshotResolver
+	users             *UserInfoResolver
 }
 
 func NewLogger(
@@ -63,7 +64,7 @@ func NewLogger(
 	chConn clickhouse.Conn,
 	logsEnabled FeatureChecker,
 	toolIOLogsEnabled FeatureChecker,
-	directory *DirectorySnapshotResolver,
+	users *UserInfoResolver,
 ) *Logger {
 	return &Logger{
 		shutdownCtx:       func() context.Context { return shutdownCtx },
@@ -71,7 +72,7 @@ func NewLogger(
 		chConn:            chConn,
 		logsEnabled:       logsEnabled,
 		toolIOLogsEnabled: toolIOLogsEnabled,
-		directory:         directory,
+		users:             users,
 	}
 }
 
@@ -85,7 +86,7 @@ func NewStub(logger *slog.Logger) *Logger {
 		chConn:            nil,
 		logsEnabled:       disabled,
 		toolIOLogsEnabled: disabled,
-		directory:         nil,
+		users:             nil,
 	}
 }
 
@@ -146,7 +147,7 @@ func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
 			delete(param.Attributes, attr.GenAIToolCallResultKey)
 		}
 
-		param = l.hydrateDirectorySnapshot(shutdownCtx, param)
+		param = l.hydrateUserInfo(shutdownCtx, param)
 
 		logParam, err := buildTelemetryLogParams(param)
 		if err != nil {
@@ -165,56 +166,20 @@ func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
 	return nil
 }
 
-// hydrateDirectorySnapshot stamps the user's current directory snapshot
-// (allowlisted WorkOS predefined attributes, current groups as id + name,
-// role slugs) onto the log row's attributes when a user was resolved.
-// Telemetry rows are append-only: the snapshot reflects state at write time
-// and is never rewritten. Empty snapshot parts (directory-deleted users,
-// orgs without Directory Sync, lingering API keys) are omitted rather than
-// stamped as empty payloads.
-//
-// The returned LogParams carries a fresh attributes map when anything was
-// stamped: callers may reuse attribute maps across rows, and mutating the
-// caller's map would make the absence checks below pin a stale snapshot
-// onto every subsequent row. Explicit caller-provided values still win.
-func (l *Logger) hydrateDirectorySnapshot(ctx context.Context, param LogParams) LogParams {
-	if l.directory == nil {
+// hydrateUserInfo fills the directory-derived parts of the row's UserInfo
+// (allowlisted WorkOS predefined attributes, current group names, role
+// slugs) when the caller provided a Gram user ID. Telemetry rows are
+// append-only: the snapshot reflects state at write time and is never
+// rewritten. Empty snapshot parts (directory-deleted users, orgs without
+// Directory Sync, lingering API keys) are omitted rather than stamped as
+// empty payloads. Caller-provided parts win, and the caller's attribute map
+// is never touched.
+func (l *Logger) hydrateUserInfo(ctx context.Context, param LogParams) LogParams {
+	if l.users == nil || param.UserInfo.UserID == "" || param.ToolInfo.OrganizationID == "" {
 		return param
 	}
 
-	userID, _ := param.Attributes[attr.UserIDKey].(string)
-	organizationID := param.ToolInfo.OrganizationID
-	if userID == "" || organizationID == "" {
-		return param
-	}
-
-	_, hasUserAttributes := param.Attributes[attr.UserAttributesKey]
-	_, hasUserGroups := param.Attributes[attr.UserGroupsKey]
-	_, hasUserRoles := param.Attributes[attr.UserRolesKey]
-	if hasUserAttributes && hasUserGroups && hasUserRoles {
-		return param
-	}
-
-	snapshot := l.directory.Resolve(ctx, organizationID, userID)
-
-	additions := make(map[attr.Key]any, 3)
-	if _, ok := param.Attributes[attr.UserAttributesKey]; !ok && len(snapshot.Attributes) > 0 {
-		additions[attr.UserAttributesKey] = snapshot.Attributes
-	}
-	if _, ok := param.Attributes[attr.UserGroupsKey]; !ok && len(snapshot.Groups) > 0 {
-		additions[attr.UserGroupsKey] = snapshot.Groups
-	}
-	if _, ok := param.Attributes[attr.UserRolesKey]; !ok && len(snapshot.Roles) > 0 {
-		additions[attr.UserRolesKey] = snapshot.Roles
-	}
-	if len(additions) == 0 {
-		return param
-	}
-
-	attrs := make(map[attr.Key]any, len(param.Attributes)+len(additions))
-	maps.Copy(attrs, param.Attributes)
-	maps.Copy(attrs, additions)
-	param.Attributes = attrs
+	param.UserInfo = l.users.Hydrate(ctx, param.ToolInfo.OrganizationID, param.UserInfo)
 	return param
 }
 
@@ -225,11 +190,12 @@ func buildTelemetryLogParams(params LogParams) (*repo.InsertTelemetryLogParams, 
 		return nil, oops.E(oops.CodeUnexpected, err, "generate telemetry log id")
 	}
 
-	// we want the core tool info data to also be added as attributes to our
-	// attributes object
+	// we want the core tool info and user info data to also be added as
+	// attributes to our attributes object
 	allAttrs := make(map[attr.Key]any)
 	maps.Copy(allAttrs, params.Attributes)
 	maps.Copy(allAttrs, params.ToolInfo.AsAttributes())
+	maps.Copy(allAttrs, params.UserInfo.AsAttributes())
 
 	observedTimestamp := params.observedTimestamp
 	if observedTimestamp.IsZero() {

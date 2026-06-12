@@ -750,9 +750,9 @@ func newTelemetryLogger(
 		return nil
 	}
 
-	directory := telemetry.NewDirectorySnapshotResolver(logger, db, cacheImpl)
+	users := telemetry.NewUserInfoResolver(logger, db, cacheImpl)
 
-	return telemetry.NewLogger(shutdownCtx, logger, chDB, logsEnabled, toolIOLogsEnabled, directory), shutdown
+	return telemetry.NewLogger(shutdownCtx, logger, chDB, logsEnabled, toolIOLogsEnabled, users), shutdown
 }
 
 func newTriggersApp(
@@ -788,6 +788,7 @@ func newTriggersApp(
 					FunctionID:     nil,
 					OrganizationID: entry.Instance.OrganizationID,
 				},
+				UserInfo:   telemetry.UserInfo{UserID: "", Email: "", Attributes: telemetry.UserAttributes{}, Groups: nil, Roles: nil},
 				Attributes: entry.Attributes,
 			})
 		}),
