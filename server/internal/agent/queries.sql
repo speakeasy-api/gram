@@ -4,9 +4,11 @@
 -- The base is every *published* marketplace in the org (a
 -- plugin_github_connections row with a marketplace_token), so a marketplace —
 -- and its always-required observability plugin, synthesized in the view layer —
--- is returned even when the user has no explicit assignments. Plugins the user
--- is assigned to (via principal_urn) are LEFT JOINed on top; projects with no
--- matching assignment still yield one row with null plugin columns.
+-- is returned for every published project. Every non-deleted plugin in those
+-- projects is LEFT JOINed on top and returned to every org member: per-principal
+-- assignment scoping is intentionally disabled for now (see DNO-239) and will be
+-- reinstated once RBAC-backed assignment management ships. Projects with no
+-- plugins still yield one row with null plugin columns.
 --
 -- Each project resolves to a marketplace name the way the publish path does:
 -- the per-project override (project_marketplace_settings.marketplace_name) when
@@ -56,11 +58,6 @@ LEFT JOIN project_marketplace_settings pms
 LEFT JOIN plugins p
   ON p.project_id = pr.id
   AND p.deleted IS FALSE
-  AND EXISTS (
-    SELECT 1 FROM plugin_assignments pa
-    WHERE pa.plugin_id = p.id
-      AND pa.principal_urn = ANY(@principal_urns::text[])
-  )
 WHERE pr.organization_id = @organization_id
   AND pgc.marketplace_token IS NOT NULL
 ORDER BY pr.id, p.slug;

@@ -43,44 +43,38 @@ func TestGetPlugins_ObservabilityWithoutAssignments(t *testing.T) {
 		"a published marketplace always yields observability, even with no assignments")
 }
 
-func TestGetPlugins_EmailAssignment(t *testing.T) {
+// TestGetPlugins_ReturnsAllPublishedProjectPlugins pins the loosened resolution
+// (DNO-239 interim): every non-deleted plugin in a published project is returned
+// to any org member, regardless of whether — or to whom — it is assigned. When
+// per-principal scoping returns, this expectation tightens back down.
+func TestGetPlugins_ReturnsAllPublishedProjectPlugins(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)
 
 	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
-	pid := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "engineering-tools")
-	assignPlugin(t, ctx, ti.conn, pid, ti.orgID, "email:"+mockidp.MockUserEmail)
+	// A plugin with no assignment at all.
+	seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "unassigned-tool")
+	// A plugin assigned only to a *different* principal — must still come back.
+	other := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "someone-elses-tool")
+	assignPlugin(t, ctx, ti.conn, other, ti.orgID, "email:someone-else@example.com")
 
 	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
 	require.NoError(t, err)
 
 	require.Len(t, res.Marketplaces, 1)
-	require.ElementsMatch(t, []string{wantObservability, "engineering-tools"}, pluginSlugs(res))
-}
-
-func TestGetPlugins_WildcardAssignment(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestAgentService(t)
-
-	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
-	pid := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "org-wide-tool")
-	assignPlugin(t, ctx, ti.conn, pid, ti.orgID, "*")
-
-	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
-	require.NoError(t, err)
-
-	require.ElementsMatch(t, []string{wantObservability, "org-wide-tool"}, pluginSlugs(res),
-		"a `*` assignment resolves for any email")
+	require.ElementsMatch(t,
+		[]string{wantObservability, "unassigned-tool", "someone-elses-tool"},
+		pluginSlugs(res),
+		"every published-project plugin is returned regardless of assignment")
 }
 
 func TestGetPlugins_UnpublishedProjectExcluded(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)
 
-	// Plugin assigned, but the project has no marketplace_token (never
-	// published) — so nothing is installable and the endpoint returns empty.
-	pid := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "unpublished-tool")
-	assignPlugin(t, ctx, ti.conn, pid, ti.orgID, "*")
+	// The project has a plugin but no marketplace_token (never published) — so
+	// nothing is installable and the endpoint returns empty.
+	seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "unpublished-tool")
 
 	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
 	require.NoError(t, err)
@@ -130,14 +124,13 @@ func TestGetPlugins_CollidingNamesPreferDefault(t *testing.T) {
 	publishMarketplace(t, ctx, ti.conn, ti.projectID, "default-token")
 
 	// "adam" sorts before the default project's "test-<hex>" slug, but overrides
-	// its name to collide with the default's bare org name. It also has an
-	// assigned plugin — which must NOT leak onto the winning marketplace, since
-	// adam's repo isn't the one served under that name.
+	// its name to collide with the default's bare org name. Its plugin (returned
+	// by the loosened resolution like any other) must NOT leak onto the winning
+	// marketplace, since adam's repo isn't the one served under that name.
 	adam := seedProject(t, ctx, ti.conn, ti.orgID, "adam")
 	setMarketplaceOverride(t, ctx, ti.conn, adam, wantMarketplace)
 	publishMarketplace(t, ctx, ti.conn, adam, "adam-token")
-	adamPlugin := seedPlugin(t, ctx, ti.conn, ti.orgID, adam, "adam-only-tool")
-	assignPlugin(t, ctx, ti.conn, adamPlugin, ti.orgID, "*")
+	seedPlugin(t, ctx, ti.conn, ti.orgID, adam, "adam-only-tool")
 
 	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
 	require.NoError(t, err)
