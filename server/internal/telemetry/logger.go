@@ -179,6 +179,13 @@ func (l *Logger) hydrateDirectorySnapshot(ctx context.Context, param LogParams) 
 		return param
 	}
 
+	_, hasUserAttributes := param.Attributes[attr.UserAttributesKey]
+	_, hasUserGroups := param.Attributes[attr.UserGroupsKey]
+	_, hasUserRoles := param.Attributes[attr.UserRolesKey]
+	if hasUserAttributes && hasUserGroups && hasUserRoles {
+		return param
+	}
+
 	snapshot := l.directory.Resolve(ctx, organizationID, userID)
 
 	additions := make(map[attr.Key]any, 3)
