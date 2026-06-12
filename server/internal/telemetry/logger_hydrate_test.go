@@ -116,14 +116,16 @@ func TestCreateLog_HydratesDirectorySnapshot(t *testing.T) {
 	attrs := telemetry.HTTPLogAttributes{}
 	attrs.RecordMethod("GET")
 	attrs.RecordStatusCode(200)
-	attrs[attr.UserIDKey] = seed.userID
 
 	toolInfo := newTestToolInfo(seed.orgID)
 	timestamp := time.Now().UTC()
 
 	ti.telemLogger.Log(ctx, telemetry.LogParams{
-		Timestamp:  timestamp,
-		ToolInfo:   toolInfo,
+		Timestamp: timestamp,
+		ToolInfo:  toolInfo,
+		UserInfo: telemetry.UserInfo{
+			UserID: seed.userID,
+		},
 		Attributes: attrs,
 	})
 
@@ -135,9 +137,8 @@ func TestCreateLog_HydratesDirectorySnapshot(t *testing.T) {
 	// Non-allowlisted keys (custom attributes, manager PII) are not stamped.
 	require.NotContains(t, log.Attributes, "not-stamped")
 	require.NotContains(t, log.Attributes, "boss@example.com")
-	// user.groups carries current groups as id + name only.
+	// user.groups carries current group names only.
 	require.Contains(t, log.Attributes, "Developers")
-	require.Contains(t, log.Attributes, "directory_group_"+suffix)
 	// user.roles carries the current role slugs from the role tables.
 	require.Contains(t, log.Attributes, "hydrate-role-"+suffix)
 
@@ -156,14 +157,16 @@ func TestCreateLog_NoDirectorySnapshotWhenNoDirectoryData(t *testing.T) {
 	attrs := telemetry.HTTPLogAttributes{}
 	attrs.RecordMethod("GET")
 	attrs.RecordStatusCode(200)
-	attrs[attr.UserIDKey] = "user_without_directory_data"
 
 	toolInfo := newTestToolInfo(ti.orgID)
 	timestamp := time.Now().UTC()
 
 	ti.telemLogger.Log(ctx, telemetry.LogParams{
-		Timestamp:  timestamp,
-		ToolInfo:   toolInfo,
+		Timestamp: timestamp,
+		ToolInfo:  toolInfo,
+		UserInfo: telemetry.UserInfo{
+			UserID: "user_without_directory_data",
+		},
 		Attributes: attrs,
 	})
 
@@ -175,7 +178,7 @@ func TestCreateLog_NoDirectorySnapshotWhenNoDirectoryData(t *testing.T) {
 	require.Contains(t, log.Attributes, "user_without_directory_data")
 }
 
-func TestDirectorySnapshotResolver_ResolvesAndCachesUntilExpiry(t *testing.T) {
+func TestUserInfoResolver_HydratesAndCachesUntilExpiry(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
@@ -188,14 +191,15 @@ func TestDirectorySnapshotResolver_ResolvesAndCachesUntilExpiry(t *testing.T) {
 	suffix := "cache_" + uuid.New().String()[:8]
 	seed := seedDirectorySnapshotData(t, ctx, conn, suffix)
 
-	resolver := telemetry.NewDirectorySnapshotResolver(logger, conn, cache.NewRedisCacheAdapter(redisClient))
+	resolver := telemetry.NewUserInfoResolver(logger, conn, cache.NewRedisCacheAdapter(redisClient))
 
-	snapshot := resolver.Resolve(ctx, seed.orgID, seed.userID)
-	require.Equal(t, map[string]any{"department_name": "Engineering", "job_title": "Platform Engineer"}, snapshot.Attributes)
-	require.Len(t, snapshot.Groups, 1)
-	require.Equal(t, "directory_group_"+suffix, snapshot.Groups[0].ID)
-	require.Equal(t, "Developers", snapshot.Groups[0].Name)
-	require.Equal(t, []string{"hydrate-role-" + suffix}, snapshot.Roles)
+	info := resolver.Hydrate(ctx, seed.orgID, telemetry.UserInfo{UserID: seed.userID})
+	require.Equal(t, telemetry.UserAttributes{
+		DepartmentName: "Engineering",
+		JobTitle:       "Platform Engineer",
+	}, info.Attributes)
+	require.Equal(t, []string{"Developers"}, info.Groups)
+	require.Equal(t, []string{"hydrate-role-" + suffix}, info.Roles)
 
 	// Change the persisted attributes; within the TTL the cached snapshot
 	// is still served.
@@ -208,17 +212,17 @@ func TestDirectorySnapshotResolver_ResolvesAndCachesUntilExpiry(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	cached := resolver.Resolve(ctx, seed.orgID, seed.userID)
-	require.Equal(t, "Engineering", cached.Attributes["department_name"])
+	cached := resolver.Hydrate(ctx, seed.orgID, telemetry.UserInfo{UserID: seed.userID})
+	require.Equal(t, "Engineering", cached.Attributes.DepartmentName)
 
 	// Once the cache entry expires (simulated by dropping it) the snapshot
 	// is reloaded from Postgres.
 	require.NoError(t, resolver.InvalidateForTest(ctx, seed.orgID, seed.userID))
-	refreshed := resolver.Resolve(ctx, seed.orgID, seed.userID)
-	require.Equal(t, "Sales", refreshed.Attributes["department_name"])
+	refreshed := resolver.Hydrate(ctx, seed.orgID, telemetry.UserInfo{UserID: seed.userID})
+	require.Equal(t, "Sales", refreshed.Attributes.DepartmentName)
 }
 
-func TestDirectorySnapshotResolver_EmptySnapshotForUnknownUser(t *testing.T) {
+func TestUserInfoResolver_EmptySnapshotForUnknownUser(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
@@ -228,10 +232,10 @@ func TestDirectorySnapshotResolver_EmptySnapshotForUnknownUser(t *testing.T) {
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	resolver := telemetry.NewDirectorySnapshotResolver(logger, conn, cache.NewRedisCacheAdapter(redisClient))
+	resolver := telemetry.NewUserInfoResolver(logger, conn, cache.NewRedisCacheAdapter(redisClient))
 
-	snapshot := resolver.Resolve(ctx, "org_unknown", "user_unknown")
-	require.Empty(t, snapshot.Attributes)
-	require.Empty(t, snapshot.Groups)
-	require.Empty(t, snapshot.Roles)
+	info := resolver.Hydrate(ctx, "org_unknown", telemetry.UserInfo{UserID: "user_unknown"})
+	require.True(t, info.Attributes.IsZero())
+	require.Empty(t, info.Groups)
+	require.Empty(t, info.Roles)
 }
