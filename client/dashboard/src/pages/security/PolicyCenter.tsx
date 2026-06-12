@@ -1546,6 +1546,7 @@ function PromptExampleChips({
           <SimpleTooltip key={template.name} tooltip={template.prompt}>
             <button
               type="button"
+              aria-pressed={active}
               onClick={() => onSelect(template)}
               className={cn(
                 "rounded-full border px-2.5 py-1 text-xs transition-colors",
