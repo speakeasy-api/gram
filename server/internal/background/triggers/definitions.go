@@ -1116,7 +1116,7 @@ func validateSlackSignature(body []byte, headers http.Header, signingSecret stri
 // assistant runtime is up to refine it via the set_thread_status platform tool.
 const slackThinkingStatus = "is thinking…"
 
-var slackInitialLoadingMessages = []string{"Routing…", "Calling tools…", "Composing…"}
+var slackInitialLoadingMessages = []string{"Routing…"}
 
 // slackThreadStatusTarget extracts the channel + thread to anchor a loading
 // status on. Returns ok=false for events without a threadable target (e.g.
