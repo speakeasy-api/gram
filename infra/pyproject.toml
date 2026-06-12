@@ -17,7 +17,11 @@ dependencies = [
 pubsub-demo = "gram_infra.demos.pubsub:main"
 pubsub-stream-demo = "gram_infra.demos.pubsub_stream:main"
 
-[project.optional-dependencies]
+# PEP 735 dependency group rather than an optional-dependencies extra: uv
+# auto-installs the dev group on `uv sync` / `uv run`, so the documented
+# commands (`uv run pytest`, `PUBSUB_DEMO_BACKEND=trio uv run pubsub-demo`)
+# work on a fresh checkout without an undocumented --extra flag.
+[dependency-groups]
 dev = [
   "pyrefly>=1.0.0",
   "pytest>=8.0.0",
@@ -25,9 +29,6 @@ dev = [
   # Pulls in trio so the backend-agnostic tests can exercise the library under
   # anyio's trio backend, not just asyncio.
   "anyio[trio]>=4.13.0",
-  # Used by the pubsub demo to report the active async backend. anyio depends on
-  # it internally but doesn't declare it, so pin it here for the demo's import.
-  "sniffio>=1.3.0",
   "ty>=0.0.48",
   "types-protobuf>=7.34.1.20260518",
 ]
@@ -51,6 +52,12 @@ asyncio_mode = "auto"
 [tool.pyrefly]
 project-includes = ["**/*.py*", "**/*.ipynb"]
 project-excludes = ["**/gen_py/**"]
+# Lets the checkers resolve `from conftest import ...` the way pytest's
+# rootdir-based sys.path insertion does at runtime.
+search-path = ["tests", "."]
 
 [tool.ty.src]
 exclude = ["**/gen_py/**"]
+
+[tool.ty.environment]
+extra-paths = ["tests"]

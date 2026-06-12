@@ -9,28 +9,47 @@ styles are available:
   dead-lettering when the subscription declares a ``dead_letter`` policy).
   Handlers run concurrently up to a configurable bound.
 - :meth:`Subscriber.stream` — the async-iterator form. Each item is a
-  :class:`ReceivedMessage` that the caller acks or nacks explicitly.
+  :class:`ReceivedMessage` that the caller acks or nacks explicitly. A terminal
+  subscription failure (subscription deleted, permission revoked, ...) is
+  raised out of the iteration rather than silently ending it.
 
 A message that fails to unmarshal is nacked without reaching the consumer. In
 the callback form, an exception raised by a handler is logged with diagnostic
 context and nacked, so a single bad message surfaces instead of silently looping
 and never tears down the receiver.
+
+Teardown disposition: a message that was delivered by the library but not yet
+dispatched to a handler (or yielded to the stream consumer) when the session
+ends is nacked, so the broker redelivers it immediately instead of waiting for
+its ack deadline to lapse — mirroring how the Go library and the stock
+``ThreadScheduler`` dispose of undispatched messages.
 """
 
 from __future__ import annotations
 
 import logging
 import queue as queue_module
+import threading
+from concurrent.futures import CancelledError as FutureCancelledError
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Awaitable, Callable, Generic, Optional, TypeVar
+from typing import (
+    Any,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Generic,
+    NoReturn,
+    Optional,
+    TypeVar,
+)
 
 import anyio
 import anyio.from_thread
 import anyio.to_thread
 from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
 from google.cloud.pubsub_v1.subscriber.scheduler import Scheduler
-from google.protobuf.message import DecodeError, Message
+from google.protobuf.message import Message
 
 from .broker import SubscriberBroker, SubscriberHandle
 
@@ -45,11 +64,28 @@ __all__ = [
 
 M = TypeVar("M", bound=Message)
 
+def _unwrap_single(eg: BaseExceptionGroup) -> BaseException:
+    """Peel single-member exception groups down to the lone leaf exception.
+
+    Both ``receive``/``stream`` host task groups (their own and the
+    BlockingPortal's), and anyio wraps any exception crossing a task group in a
+    ``BaseExceptionGroup`` — even a lone one. The only expected failure is a
+    terminal subscription error, so surface it directly (the way Go's
+    ``Receive`` returns the error) instead of making every caller match on
+    nested groups. Groups with several members are returned as-is.
+    """
+    exc: BaseException = eg
+    while isinstance(exc, BaseExceptionGroup) and len(exc.exceptions) == 1:
+        exc = exc.exceptions[0]
+    return exc
+
+
 # Default ceiling on concurrently-executing handler tasks. The library's own
 # flow control admits up to ~1000 outstanding messages by default; without an
 # app-level cap a backlog of slow handlers would spawn that many concurrent
 # tasks. A modest default keeps fan-out bounded while leaving plenty of
-# parallelism for typical I/O-bound handlers.
+# parallelism for typical I/O-bound handlers. A value <= 0 disables the bound
+# entirely (handlers limited only by the library's flow control).
 _DEFAULT_MAX_CONCURRENCY = 50
 
 
@@ -114,8 +150,14 @@ class _PortalScheduler(Scheduler):
     thread-pool slot for the lifetime of every subscriber), this scheduler uses
     an :class:`anyio.from_thread.BlockingPortal` to hand each message directly to
     an anyio memory object stream that the receive loop owns. Library threads
-    call into the portal; the event loop drains the stream — no extra worker
-    thread is involved.
+    fire messages through the portal without blocking; the event loop drains the
+    stream — no extra worker thread is involved.
+
+    All mutable scheduling state (``_closed``, the stream, the in-flight handler
+    count) is touched only on the event-loop thread, which runs tasks to
+    completion between checkpoints — so no locks are needed: every loop-side
+    method here is checkpoint-free (no ``await``), making each one atomic with
+    respect to the others.
 
     ``queue`` exposes a plain thread-safe ``Queue`` that the library wires into
     its Dispatcher and stamps onto every ``Message`` as the request queue used by
@@ -127,86 +169,131 @@ class _PortalScheduler(Scheduler):
         self,
         portal: anyio.from_thread.BlockingPortal,
         send_stream: MemoryObjectSendStream,
+        receive_stream: MemoryObjectReceiveStream,
     ) -> None:
         # Back-channel queue the library's Dispatcher consumes to deliver
         # ack/nack RPCs. We only construct it; the library owns its contents.
         self._queue: queue_module.Queue = queue_module.Queue()
         self._portal = portal
         self._send = send_stream
-        # Guards the closed-check + enqueue against the shutdown path so a
-        # message scheduled concurrently with shutdown is never stranded on a
-        # closed stream (it is nacked instead).
-        self._lock = anyio.Lock()
+        self._receive = receive_stream
+        # --- Event-loop-thread-only state below. ---
         self._closed = False
+        # Handler tasks the receive loop currently has in flight. ``shutdown``
+        # blocks on ``_idle`` so the library's Dispatcher is not stopped while
+        # handlers that will still ack/nack are running (their requests would be
+        # enqueued after the Dispatcher's STOP sentinel and silently dropped).
+        self._inflight = 0
+        self._idle = threading.Event()
+        self._idle.set()
 
     @property
     def queue(self) -> queue_module.Queue:
         return self._queue
 
     def schedule(self, callback, *args, **kwargs) -> None:
+        """Hand one message from a library thread to the event loop.
+
+        Fire-and-forget: ``start_task_soon`` does not park the library's single
+        dispatch thread on an event-loop round trip per message (``portal.call``
+        would serialize intake at one loop-latency apiece while the library holds
+        its pause/resume lock). If the enqueue cannot run — the portal is gone or
+        the task is cancelled during teardown — the message is nacked so the
+        broker redelivers it rather than dropping it.
+        """
         message = args[0] if args else None
         if message is None:
             return
-        # ``schedule`` runs on a library thread; route the message onto the
-        # event loop via the portal. ``_enqueue`` performs the closed-check and
-        # the send atomically so there is no TOCTOU window in which a message
-        # gets put onto a stream that shutdown has already closed.
         try:
-            self._portal.call(self._enqueue, message)
+            future = self._portal.start_task_soon(self._enqueue, message)
         except BaseException:  # noqa: BLE001 - never raise back into the library thread
-            # The portal call can fail if the event loop is already gone
-            # (RuntimeError) or being torn down (the scheduled call is cancelled,
-            # surfacing CancelledError). Either way nack so the broker redelivers
-            # rather than dropping the message; raising here would only crash the
-            # library's background dispatch thread.
+            # The portal is already stopped (RuntimeError) or going away. Nack so
+            # the broker redelivers; raising here would only crash the library's
+            # background dispatch thread.
+            message.nack()
+            return
+
+        def _nack_on_failure(f) -> None:
+            try:
+                failed = f.cancelled() or f.exception() is not None
+            except BaseException:  # noqa: BLE001 - runs on arbitrary threads
+                failed = True
+            if failed:
+                message.nack()
+
+        future.add_done_callback(_nack_on_failure)
+
+    def _enqueue(self, message) -> None:
+        # Runs on the event loop via the portal. Checkpoint-free, so the
+        # closed-check and the send are atomic with respect to ``close()`` — no
+        # TOCTOU window in which a message lands on a stream that teardown has
+        # already drained.
+        if self._closed:
+            message.nack()
+            return
+        try:
+            self._send.send_nowait(message)  # unbounded buffer: never blocks
+        except (anyio.ClosedResourceError, anyio.BrokenResourceError):
             message.nack()
 
-    async def _enqueue(self, message) -> None:
-        async with self._lock:
-            if self._closed:
-                message.nack()
-                return
-            await self._send.send(message)
+    def track_handler(self) -> None:
+        """Record one dispatched handler task. Event-loop thread only."""
+        self._inflight += 1
+        self._idle.clear()
 
-    def shutdown(self, await_msg_callbacks: bool = True):
-        """Close the message stream and return any buffered, undispatched messages.
+    def handler_done(self) -> None:
+        """Record one finished (or cancelled) handler task. Event-loop thread only."""
+        self._inflight -= 1
+        if self._inflight == 0:
+            self._idle.set()
 
-        The stock ``ThreadScheduler.shutdown`` returns its queued-but-undispatched
-        messages so the streaming-pull manager can nack them; returning ``[]``
-        would leak any still-buffered message (neither acked nor nacked),
-        delaying redelivery and inflating ``delivery_attempt`` toward the DLQ
-        threshold on every restart. Drain the buffer and hand the messages back
-        so the manager nacks them.
+    def close(self) -> None:
+        """Stop intake and nack every buffered-but-undispatched message.
 
-        ``await_msg_callbacks`` is honored by the receive loop itself: it passes
-        ``await_callbacks_on_shutdown=True`` to ``subscribe`` and only returns
-        from its task group once in-flight handlers have drained.
+        Event-loop thread only; idempotent. Checkpoint-free (no ``await``), so it
+        runs to completion inside a ``finally`` even while the surrounding task
+        is being cancelled — no shield required. Draining through the receive
+        stream's public ``receive_nowait`` (rather than anyio's private buffer
+        state) hands each stranded message a nack so the broker redelivers it
+        immediately instead of waiting out the ack deadline.
+        """
+        if self._closed:
+            return
+        self._closed = True
+        self._send.close()
+        while True:
+            try:
+                message = self._receive.receive_nowait()
+            except (anyio.EndOfStream, anyio.WouldBlock, anyio.ClosedResourceError):
+                break
+            message.nack()
+
+    def shutdown(self, await_msg_callbacks: bool = True) -> list:
+        """Library-initiated shutdown: close intake, then wait for handlers.
+
+        Called by the streaming-pull manager's background shutdown thread. The
+        stock ``ThreadScheduler.shutdown`` returns its queued-but-undispatched
+        messages so the manager can nack them; here ``close()`` already nacks
+        them on the event loop, so this always reports no dropped messages.
+
+        With ``await_msg_callbacks`` the stock scheduler blocks until its
+        executor's callbacks finish — and the manager stops its Dispatcher right
+        after this returns, silently dropping any ack/nack enqueued later. Honor
+        the same contract by blocking until the receive loop's in-flight handler
+        tasks have drained, so their acks are dispatched before the Dispatcher
+        stops.
         """
         try:
-            return self._portal.call(self._drain_and_close)
+            self._portal.call(self.close)
         except BaseException:  # noqa: BLE001 - never raise back into the library thread
-            # The library calls this from a background shutdown thread, which can
-            # race our own teardown: the portal may already be gone (RuntimeError)
-            # or mid-cancellation (CancelledError) when we cancel the streaming
-            # pull from __aexit__. The loop side closes the stream there anyway,
-            # so report no dropped messages rather than letting the exception
-            # escape and crash the library's shutdown thread.
+            # The portal (and with it the event loop side) is already gone: the
+            # loop-side teardown in Subscriber._session closes and nacks on its
+            # own task, so nothing is stranded. Report no dropped messages rather
+            # than crashing the library's shutdown thread.
             return []
-
-    async def _drain_and_close(self):
-        async with self._lock:
-            self._closed = True
-            self._send.close()
-        # The receiver drains whatever it can off its end; anything still sitting
-        # in the stream's buffer is returned here so the manager nacks it.
-        drained: list = []
-        receiver = getattr(self._send, "_state", None)
-        if receiver is not None:
-            buffer = getattr(receiver, "buffer", None)
-            if buffer is not None:
-                while buffer:
-                    drained.append(buffer.popleft())
-        return drained
+        if await_msg_callbacks:
+            self._idle.wait()
+        return []
 
 
 class Subscriber(Generic[M]):
@@ -227,7 +314,42 @@ class Subscriber(Generic[M]):
         self._logger = logger
         self._topic_proto_name = topic_proto_name
         self._subscription_proto_name = subscription_proto_name
+        # Default handler-concurrency bound for ``receive``; a value <= 0
+        # disables the bound. Overridable per call via ``receive(max_concurrency=...)``.
         self._max_concurrency = max_concurrency
+
+    @asynccontextmanager
+    async def _session(
+        self,
+    ) -> AsyncIterator[tuple[_PortalScheduler, Any, MemoryObjectReceiveStream]]:
+        """Portal + scheduler + streaming-pull plumbing shared by receive/stream.
+
+        Teardown is fully synchronous (checkpoint-free), so it runs to completion
+        even when the surrounding task is being cancelled — the Ctrl-C path needs
+        no shield: the streaming pull is cancelled, the scheduler closes intake
+        and nacks everything buffered, and the receive stream is closed (so no
+        unclosed-stream ResourceWarning at GC time).
+        """
+        send_stream, receive_stream = anyio.create_memory_object_stream[object](
+            max_buffer_size=float("inf")
+        )
+
+        async with anyio.from_thread.BlockingPortal() as portal:
+            scheduler = _PortalScheduler(portal, send_stream, receive_stream)
+            future = self._handle.client.subscribe(
+                self._handle.subscription_path,
+                callback=lambda message: None,  # dispatch flows through the scheduler
+                # The stub types this as ThreadScheduler, but subscribe accepts
+                # any Scheduler subclass (per its own docstring).
+                scheduler=scheduler,  # pyrefly: ignore[bad-argument-type]
+                await_callbacks_on_shutdown=True,
+            )
+            try:
+                yield scheduler, future, receive_stream
+            finally:
+                future.cancel()
+                scheduler.close()
+                receive_stream.close()
 
     async def receive(
         self,
@@ -242,50 +364,58 @@ class Subscriber(Generic[M]):
         pushes it onto an anyio memory object stream this loop drains; a handler
         task is spawned per message into an anyio task group that tracks and
         drains them on a graceful stop. A capacity limiter bounds how many
-        handlers run at once.
+        handlers run at once; ``max_concurrency`` overrides the subscriber's
+        default for this call, and a value <= 0 disables the bound.
+
+        A terminal subscription failure (subscription deleted, permission
+        revoked, ...) is raised out of this call, mirroring how the Go library's
+        ``Receive`` returns the error.
 
         The streaming-pull future is the one place we still park a worker thread:
         the synchronous subscriber client exposes only a blocking
         ``future.result()``, so a single ``to_thread`` slot stays parked per
-        subscriber waiting for the stream to end. The previous design parked a
-        *second* thread blocked on ``scheduler.get``; routing messages through
-        the portal removes that one.
+        subscriber waiting for the stream to end.
         """
         limit = max_concurrency if max_concurrency is not None else self._max_concurrency
         limiter = anyio.CapacityLimiter(limit) if limit > 0 else None
 
-        send_stream, receive_stream = anyio.create_memory_object_stream[object](
-            max_buffer_size=float("inf")
-        )
-
-        async with anyio.from_thread.BlockingPortal() as portal:
-            scheduler, future = self._start_subscription(portal, send_stream)
-
-            try:
+        try:
+            async with self._session() as (scheduler, future, receive_stream):
                 with anyio.move_on_after(timeout):  # None => no deadline
                     async with anyio.create_task_group() as tg:
 
                         async def watch_stream() -> None:
-                            # The streaming pull blocks until the future is
-                            # cancelled or errors; either way, stop the loop by
-                            # closing the message stream from the scheduler side.
-                            await anyio.to_thread.run_sync(
-                                future.result, abandon_on_cancel=True
-                            )
-                            await scheduler._drain_and_close()
+                            # Blocks until the streaming pull ends: re-raises a
+                            # terminal subscription error, or returns when the
+                            # pull was cancelled; either way close intake so the
+                            # receive loop below terminates.
+                            try:
+                                await anyio.to_thread.run_sync(
+                                    future.result, abandon_on_cancel=True
+                                )
+                            finally:
+                                scheduler.close()
+
+                        async def run_handler(message) -> None:
+                            try:
+                                await self._handle_message(message, callback, limiter)
+                            finally:
+                                scheduler.handler_done()
 
                         tg.start_soon(watch_stream)
 
                         async for message in receive_stream:
-                            tg.start_soon(
-                                self._handle_message, message, callback, limiter
-                            )
-            finally:
-                future.cancel()
-                # Close the stream so any in-flight ``schedule`` is nacked rather
-                # than stranded, and so the receive loop terminates promptly. Safe
-                # to call repeatedly.
-                await scheduler._drain_and_close()
+                            # Track before spawning: there is no checkpoint
+                            # between the stream pop and this call, so the
+                            # scheduler's in-flight count can never miss a
+                            # popped message.
+                            scheduler.track_handler()
+                            tg.start_soon(run_handler, message)
+        except BaseExceptionGroup as eg:
+            unwrapped = _unwrap_single(eg)
+            if unwrapped is eg:
+                raise
+            raise unwrapped from None
 
     @asynccontextmanager
     async def stream(self) -> AsyncIterator[_MessageIterator[M]]:
@@ -307,32 +437,26 @@ class Subscriber(Generic[M]):
         concurrent, bounded fan-out of ``receive`` keep using that. Apply a
         deadline by wrapping the loop in ``anyio.move_on_after``/``fail_after``.
 
+        If the streaming pull dies with a terminal error (subscription deleted,
+        ``PermissionDenied``, ...), that error is raised out of the ``async
+        for`` rather than ending the iteration silently, so a consumer cannot
+        keep running with a dead subscription.
+
         Implemented with ``@asynccontextmanager`` rather than a hand-written
         ``__aenter__``/``__aexit__`` so the BlockingPortal's scope nests cleanly:
         holding it open across iteration via an ExitStack corrupts trio's nursery
-        stack. There is no background watcher task — when the streaming pull ends
-        the library calls the scheduler's ``shutdown``, which closes the stream
-        and ends the iterator; a subscription error therefore stops the loop
-        rather than surfacing as an exception.
+        stack.
         """
-        send_stream, receive_stream = anyio.create_memory_object_stream[object](
-            max_buffer_size=float("inf")
-        )
-
-        # The portal lets the scheduler hop messages from library threads onto
-        # this loop. It is a properly nested ``async with`` here, so trio sees it
-        # opened and closed on the consumer's own task.
-        async with anyio.from_thread.BlockingPortal() as portal:
-            scheduler, future = self._start_subscription(portal, send_stream)
-            try:
-                yield _MessageIterator(self, receive_stream)
-            finally:
-                # Stop the streaming pull, then close the stream. Shield the close
-                # so it still runs when the loop is being cancelled (Ctrl-C);
-                # it is idempotent with the scheduler's own shutdown-time close.
-                future.cancel()
-                with anyio.CancelScope(shield=True):
-                    await scheduler._drain_and_close()
+        try:
+            async with self._session() as (_, future, receive_stream):
+                yield _MessageIterator(self, receive_stream, future)
+        except BaseExceptionGroup as eg:
+            # The portal's task group wraps exceptions crossing it (including
+            # the consumer's own); unwrap lone leaves for transparency.
+            unwrapped = _unwrap_single(eg)
+            if unwrapped is eg:
+                raise
+            raise unwrapped from None
 
     async def _handle_message(
         self,
@@ -346,47 +470,44 @@ class Subscriber(Generic[M]):
         ``.attributes``, ``.message_id``, ``.delivery_attempt``, ``.ack()``,
         ``.nack()``), which keeps this logic unit-testable without a live broker.
         """
-        if limiter is not None:
-            async with limiter:
-                await self._dispatch(message, callback)
-        else:
+        if limiter is None:
             await self._dispatch(message, callback)
-
-    def _start_subscription(
-        self,
-        portal: anyio.from_thread.BlockingPortal,
-        send_stream: MemoryObjectSendStream,
-    ) -> tuple[_PortalScheduler, Any]:
-        """Wire a ``_PortalScheduler`` into ``client.subscribe`` and return both.
-
-        Shared by ``receive`` and ``stream``: each opens its own portal + memory
-        stream, then routes the library's streaming pull through the scheduler.
-        """
-        scheduler = _PortalScheduler(portal, send_stream)
-        future = self._handle.client.subscribe(
-            self._handle.subscription_path,
-            callback=lambda message: None,  # dispatch flows through the scheduler
-            # The stub types this as ThreadScheduler, but subscribe accepts any
-            # Scheduler subclass (per its own docstring).
-            scheduler=scheduler,  # pyrefly: ignore[bad-argument-type]
-            await_callbacks_on_shutdown=True,
-        )
-        return scheduler, future
+            return
+        try:
+            await limiter.acquire()
+        except anyio.get_cancelled_exc_class():
+            # Cancelled while queued behind the concurrency bound: the message
+            # never reached a handler, so dispose of it like any other
+            # undispatched message — nack for immediate redelivery instead of
+            # leaving it leased until the ack deadline lapses.
+            message.nack()
+            raise
+        try:
+            await self._dispatch(message, callback)
+        finally:
+            limiter.release()
 
     def _parse(self, message) -> tuple[M, MessageMetadata] | None:
         """Unmarshal a raw message into its proto type + metadata.
 
         Returns ``None`` (after nacking) when the payload fails to decode, so a
         malformed message never reaches a callback or the stream consumer.
+        Catches ``Exception`` rather than just ``DecodeError``: under the
+        pure-Python protobuf backend a malformed payload can surface as e.g.
+        ``UnicodeDecodeError``, and letting it escape would tear down the whole
+        receive loop over one poison message (the Go layer likewise nacks on any
+        unmarshal error). Only synchronous code runs in the ``try``, so no
+        cancellation exception can be swallowed here.
         """
         delivery_attempt = getattr(message, "delivery_attempt", None)
 
         instance = self._message_type()
         try:
             instance.ParseFromString(message.data)
-        except DecodeError:
+        except Exception:
             self._logger.warning(
                 "failed to unmarshal pubsub message",
+                exc_info=True,
                 extra={
                     "topic_proto_name": self._topic_proto_name,
                     "subscription_proto_name": self._subscription_proto_name,
@@ -404,8 +525,6 @@ class Subscriber(Generic[M]):
         return instance, metadata
 
     async def _dispatch(self, message, callback: MessageCallback[M]) -> None:
-        delivery_attempt = getattr(message, "delivery_attempt", None)
-
         parsed = self._parse(message)
         if parsed is None:
             return
@@ -433,9 +552,9 @@ class Subscriber(Generic[M]):
                 extra={
                     "topic_proto_name": self._topic_proto_name,
                     "subscription_proto_name": self._subscription_proto_name,
-                    "message_id": message.message_id,
-                    "delivery_attempt": delivery_attempt
-                    if delivery_attempt is not None
+                    "message_id": metadata.id,
+                    "delivery_attempt": metadata.delivery_attempt
+                    if metadata.delivery_attempt is not None
                     else 0,
                 },
             )
@@ -456,9 +575,11 @@ class _MessageIterator(Generic[M]):
         self,
         subscriber: Subscriber[M],
         receive_stream: MemoryObjectReceiveStream,
+        future: Any,
     ) -> None:
         self._subscriber = subscriber
         self._recv = receive_stream
+        self._future = future
 
     def __aiter__(self) -> _MessageIterator[M]:
         return self
@@ -468,13 +589,37 @@ class _MessageIterator(Generic[M]):
             try:
                 raw = await self._recv.receive()
             except anyio.EndOfStream:
-                raise StopAsyncIteration
+                await self._end_of_stream()
             parsed = self._subscriber._parse(raw)
             if parsed is None:
                 # Malformed payload: _parse already nacked it. Skip and pull next.
                 continue
             instance, metadata = parsed
             return ReceivedMessage(instance, metadata, raw)
+
+    async def _end_of_stream(self) -> NoReturn:
+        """The scheduler closed the stream: distinguish a clean stop from a dead
+        subscription.
+
+        The stream closes either because our own teardown closed it (the
+        consumer already left the loop, so it never observes that) or because
+        the library shut the pull down. Wait for the streaming-pull future to
+        settle and re-raise its terminal error, so a dead subscription
+        (deleted, ``PermissionDenied``, ...) surfaces to the consumer instead of
+        ending the iteration as if the backlog were merely drained.
+        """
+        future = self._future
+        if future.cancelled():
+            raise StopAsyncIteration
+        try:
+            await anyio.to_thread.run_sync(future.result, abandon_on_cancel=True)
+        except FutureCancelledError:
+            # On asyncio this exception type doubles as task cancellation;
+            # disambiguate via the future's own state.
+            if future.cancelled():
+                raise StopAsyncIteration from None
+            raise
+        raise StopAsyncIteration
 
 
 def pubsub_subscriber_for_message(

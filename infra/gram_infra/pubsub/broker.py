@@ -24,10 +24,11 @@ bounds and raises ``ValueError`` at reconcile time.
 
 from __future__ import annotations
 
+import concurrent.futures
 import logging
 import threading
 from contextlib import ExitStack
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 from types import TracebackType
 from typing import Protocol, Self, runtime_checkable
@@ -57,12 +58,49 @@ __all__ = [
 ]
 
 
+class _InflightPublishes:
+    """Tracks unresolved publish futures so broker teardown can wait for them.
+
+    ``Publisher.publish`` registers each future the client returns; a done
+    callback drops it again once the commit thread resolves it. At teardown the
+    broker waits on whatever is still pending, so no commit RPC is issued on a
+    just-closed channel. Tracking the futures we created is precise where the
+    previous approach — joining every thread in the process named like the
+    library's commit threads — silently degrades to a no-op if a dependency
+    bump renames them.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._futures: set[concurrent.futures.Future] = set()
+
+    def add(self, future: concurrent.futures.Future) -> None:
+        with self._lock:
+            self._futures.add(future)
+        # Registered after adding so an already-resolved future discards itself.
+        future.add_done_callback(self._discard)
+
+    def _discard(self, future: concurrent.futures.Future) -> None:
+        with self._lock:
+            self._futures.discard(future)
+
+    def drain(self, timeout: float) -> None:
+        """Block until all tracked publishes resolve, bounded by ``timeout``."""
+        with self._lock:
+            pending = list(self._futures)
+        if pending:
+            concurrent.futures.wait(pending, timeout=timeout)
+
+
 @dataclass(frozen=True)
 class PublisherHandle:
     """A publisher client paired with the fully-qualified topic path to publish to."""
 
     client: PublisherClient
     topic_path: str
+    # Registry the owning broker drains at teardown; ``Publisher.publish``
+    # registers every publish future here.
+    inflight: _InflightPublishes = field(default_factory=_InflightPublishes)
 
 
 @dataclass(frozen=True)
@@ -85,10 +123,7 @@ class SubscriberBroker(Protocol):
     ) -> SubscriberHandle: ...
 
 
-# Name the google-cloud-pubsub library gives every per-batch commit thread.
-_COMMIT_THREAD_NAME = "Thread-CommitBatchPublisher"
-
-# Upper bound on how long teardown waits for one of our in-flight commits. A
+# Upper bound on how long teardown waits for our in-flight commits. A
 # healthy commit lands in milliseconds; the bound just keeps a wedged commit
 # (e.g. an unreachable server) from blocking teardown forever.
 _DRAIN_JOIN_TIMEOUT_SECONDS = 10.0
@@ -120,10 +155,21 @@ class PubSubBroker:
         self._subscriber = subscriber_client or SubscriberClient()
         self._logger = logger or logging.getLogger(__name__)
         self._exit_stack = None
+        self._closed = False
+        self._inflight = _InflightPublishes()
 
     def __enter__(self) -> Self:
         if self._exit_stack is not None:
             raise RuntimeError(f"{type(self).__name__} is already entered")
+        if self._closed:
+            # Exiting closed the clients' transports and stopped the publisher's
+            # batching for good; re-entering would hand out handles backed by
+            # dead clients whose failures only surface at publish/subscribe
+            # time, far from the misuse. Fail loudly here instead.
+            raise RuntimeError(
+                f"{type(self).__name__} cannot be re-entered after exit: "
+                "its clients are closed. Construct a new broker instead."
+            )
 
         stack = ExitStack()
 
@@ -160,28 +206,25 @@ class PubSubBroker:
             return None
         finally:
             self._exit_stack = None
+            self._closed = True
 
     def _drain_publisher(self) -> None:
         """Flush batched publishes and wait for those commits before the transport closes.
 
         ``PublisherClient`` inherits the generated client's ``__exit__``, which
         only calls ``transport.close()`` — it never stops the batching layer. So a
-        batch whose commit is still in flight (commits run on daemon
-        ``Thread-CommitBatchPublisher`` threads) would otherwise issue its publish
-        RPC on the just-closed channel: that commit thread crashes, and because the
-        error path does not resolve the publish futures, any caller still awaiting
-        one (e.g. a publish cancelled with ``abandon_on_cancel``) blocks forever.
+        batch whose commit is still in flight (commits run on daemon background
+        threads) would otherwise issue its publish RPC on the just-closed
+        channel: that commit thread crashes, and because the error path does not
+        resolve the publish futures, any caller still awaiting one (e.g. a
+        publish cancelled with ``abandon_on_cancel``) blocks forever.
 
-        ``stop()`` flushes outstanding batches and blocks new publishes; joining
-        the commit threads makes those flushed commits land while the channel is
-        still open, so the futures resolve and no RPC hits a closed channel.
-
-        Commit threads are matched by name across the whole process, so with
-        multiple publisher clients in one process this may also wait on another
-        client's in-flight commit. That is harmless — a healthy commit lands in
-        milliseconds, and the join is bounded — and does not arise for the usual
-        one-broker-per-process setup, so it is not worth reaching into the
-        library's batch internals to attribute threads precisely.
+        ``stop()`` flushes outstanding batches and blocks new publishes; waiting
+        on the publish futures this broker's handles registered makes those
+        flushed commits land while the channel is still open, so the futures
+        resolve and no RPC hits a closed channel. Publishes made directly on the
+        client (bypassing :class:`~gram_infra.pubsub.Publisher`) are not
+        tracked; manage the client's lifecycle yourself in that case.
         """
         stop = getattr(self._publisher, "stop", None)
         if callable(stop):
@@ -191,12 +234,9 @@ class PubSubBroker:
                 # Already stopped, or the publisher was never used — nothing to flush.
                 pass
 
-        current = threading.current_thread()
-        for thread in threading.enumerate():
-            if thread.name == _COMMIT_THREAD_NAME and thread is not current:
-                # Bounded so a wedged commit (e.g. an unreachable server) can't
-                # block teardown indefinitely; a healthy commit returns in millis.
-                thread.join(timeout=_DRAIN_JOIN_TIMEOUT_SECONDS)
+        # Bounded so a wedged commit (e.g. an unreachable server) can't block
+        # teardown indefinitely; a healthy commit returns in millis.
+        self._inflight.drain(timeout=_DRAIN_JOIN_TIMEOUT_SECONDS)
 
     def _topic_path(self, topic_id: str) -> str:
         return self._publisher.topic_path(self._project_id, topic_id)
@@ -222,7 +262,9 @@ class PubSubBroker:
         descriptor, options = require_topic_options(message_type)
         topic_id = resolve_topic_name(descriptor, options)
         self._reconcile_publisher(topic_id, options)
-        return PublisherHandle(self._publisher, self._topic_path(topic_id))
+        return PublisherHandle(
+            self._publisher, self._topic_path(topic_id), self._inflight
+        )
 
     def subscriber_for_message(
         self, message_type: type[Message], subscription_type: type[Message]
@@ -258,6 +300,11 @@ class EmulatedPubSubBroker(PubSubBroker):
             subscriber_client=subscriber_client,
             logger=logger,
         )
+        # Resource IDs already reconciled this session, so repeated handle
+        # resolution doesn't re-issue a create RPC per call. The emulator is
+        # this process's private state, so nothing else deletes them behind us.
+        self._reconciled_topics: set[str] = set()
+        self._reconciled_subscriptions: set[str] = set()
 
     def _reconcile_publisher(self, topic_id, options) -> None:
         self._reconcile_topic(topic_id, options)
@@ -269,6 +316,8 @@ class EmulatedPubSubBroker(PubSubBroker):
         self._reconcile_subscription(sub_id, topic_id, binding.subscription_options)
 
     def _reconcile_topic(self, topic_id: str, options=None) -> None:
+        if topic_id in self._reconciled_topics:
+            return
         topic_path = self._topic_path(topic_id)
         request: dict = {"name": topic_path}
 
@@ -293,8 +342,11 @@ class EmulatedPubSubBroker(PubSubBroker):
             self._logger.info("topic created", extra={"topic": topic_path})
         except AlreadyExists:
             self._logger.info("topic already exists", extra={"topic": topic_path})
+        self._reconciled_topics.add(topic_id)
 
     def _reconcile_subscription(self, sub_id: str, topic_id: str, options) -> None:
+        if sub_id in self._reconciled_subscriptions:
+            return
         sub_path = self._sub_path(sub_id)
         topic_path = self._topic_path(topic_id)
 
@@ -360,6 +412,7 @@ class EmulatedPubSubBroker(PubSubBroker):
             self._logger.info(
                 "subscription already exists", extra={"subscription": sub_path}
             )
+        self._reconciled_subscriptions.add(sub_id)
 
 
 _MAX_INT32 = 2**31 - 1

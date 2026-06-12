@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import socket
 import uuid
 
 from google.cloud.pubsub_v1 import PublisherClient, SubscriberClient
@@ -21,9 +22,30 @@ from gram_infra.pubsub import (
     pubsub_subscriber_for_message,
 )
 
+
+def _emulator_reachable() -> bool:
+    """True when PUBSUB_EMULATOR_HOST is set AND actually accepting connections.
+
+    The env var alone is not enough: mise.toml exports it to every shell in this
+    repo, so it is always set in the standard dev environment even when the
+    emulator container is down — and against a dead endpoint the client's
+    create_topic retries gRPC UNAVAILABLE for up to 10 minutes instead of
+    failing fast. A one-second TCP probe keeps the skip guard honest.
+    """
+    host = os.environ.get("PUBSUB_EMULATOR_HOST", "")
+    hostname, sep, port = host.rpartition(":")
+    if not sep:
+        return False
+    try:
+        with socket.create_connection((hostname or "localhost", int(port)), timeout=1):
+            return True
+    except (OSError, ValueError):
+        return False
+
+
 pytestmark = pytest.mark.skipif(
-    not os.environ.get("PUBSUB_EMULATOR_HOST"),
-    reason="PUBSUB_EMULATOR_HOST not set; emulator integration test skipped",
+    not _emulator_reachable(),
+    reason="Pub/Sub emulator not reachable; emulator integration test skipped",
 )
 
 

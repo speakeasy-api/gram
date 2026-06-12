@@ -149,11 +149,31 @@ def require_subscription_for_message(
     )
 
 
+def _require_ascii(name: str, context: str) -> None:
+    """Reject non-ASCII resource names before kebab-casing.
+
+    ``to_kebab`` mirrors Go's ettle/strcase only over ASCII (fuzz-verified);
+    outside ASCII the two diverge on numeral classes, exotic whitespace, and
+    one-to-many lowercasings (e.g. ``İ``), so a non-ASCII explicit name would
+    make a Python publisher and a Go subscriber silently resolve different
+    resource IDs — and GCP resource IDs may not contain non-ASCII characters
+    anyway. Derived names are proto full names, which are always ASCII, so this
+    only ever fires on an explicit ``name`` declaration.
+    """
+    if not name.isascii():
+        raise ValueError(
+            f"pubsub resource name {name!r} ({context}) must be ASCII: non-ASCII "
+            "names are not valid GCP resource IDs and break naming parity with "
+            "the Go layer"
+        )
+
+
 def _resolve_name(descriptor: MessageDescriptor, explicit: str) -> str:
     """Resolve a resource ID: the explicit name when set, else the kebab-cased proto full name."""
     name = (explicit or "").strip()
     if not name:
         name = descriptor.full_name
+    _require_ascii(name, f"declared on {descriptor.full_name}")
     return to_kebab(name)
 
 
@@ -175,10 +195,11 @@ def resolve_dead_letter_topic_name(
     subscription_name: str, dead_letter: options_pb2.DeadLetterPolicy
 ) -> str:
     """Resolve a DLQ topic ID: the kebab-cased explicit name when set, else ``<sub>-dlq``."""
-    name = to_kebab((dead_letter.name or "").strip())
-    if not name:
-        name = subscription_name + DLQ_SUFFIX
-    return name
+    explicit = (dead_letter.name or "").strip()
+    if not explicit:
+        return subscription_name + DLQ_SUFFIX
+    _require_ascii(explicit, f"dead-letter topic for {subscription_name!r}")
+    return to_kebab(explicit)
 
 
 # Sentinel rune used in place of Go's zero rune for the "no previous / no next

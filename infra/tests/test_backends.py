@@ -22,7 +22,9 @@ from datetime import timedelta
 
 from google.protobuf.duration_pb2 import Duration
 
+from conftest import FakeMessage, FakeSubscriberClient
 from gcp.pubsub.v1 import options_pb2
+from gram.ping.v1 import processor_pb2
 from gram.ping.v1 import ping_pb2
 from gram_infra.pubsub import (
     EmulatedPubSubBroker,
@@ -190,6 +192,22 @@ def test_validate_max_delivery_attempts_bounds() -> None:
     with pytest.raises(ValueError, match="max delivery attempts"):
         _validate_max_delivery_attempts(4, "sub-x")
 
+
+def test_emulated_reconcile_is_memoized() -> None:
+    # Handle resolution is on the hot path (every publisher/subscriber build);
+    # the emulator broker must not re-issue create RPCs for resources it already
+    # reconciled in this session.
+    broker, publisher, subscriber = _recording_broker()
+
+    broker.publisher_for_message(ping_pb2.Message)
+    broker.publisher_for_message(ping_pb2.Message)
+    broker.subscriber_for_message(ping_pb2.Message, processor_pb2.Processor)
+    broker.subscriber_for_message(ping_pb2.Message, processor_pb2.Processor)
+
+    topic_names = [request["name"] for request in publisher.requests]
+    assert len(topic_names) == len(set(topic_names))
+    assert len(subscriber.requests) == 1
+
 # Both anyio backends. trio is a dev dependency (anyio[trio]).
 BACKENDS = ["asyncio", "trio"]
 
@@ -278,55 +296,6 @@ def test_publish_raises_publish_error(backend) -> None:
 
     with pytest.raises(RuntimeError, match="send failed"):
         anyio.run(scenario, backend=backend)
-
-
-class FakeMessage:
-    """Duck-typed stand-in for a google-cloud-pubsub Message."""
-
-    def __init__(self, data, *, message_id="msg-id") -> None:
-        self.data = data
-        self.message_id = message_id
-        self.attributes: dict[str, str] = {}
-        self.delivery_attempt = None
-        self.acked = False
-        self.nacked = False
-
-    def ack(self) -> None:
-        self.acked = True
-
-    def nack(self) -> None:
-        self.nacked = True
-
-
-class FakeStreamingFuture:
-    def __init__(self) -> None:
-        self._cancelled = threading.Event()
-
-    def result(self) -> None:
-        self._cancelled.wait()
-
-    def cancel(self) -> None:
-        self._cancelled.set()
-
-    def done(self) -> bool:
-        return self._cancelled.is_set()
-
-
-class FakeSubscriberClient:
-    """Schedules messages from a background thread, like the real library —
-    so the scheduler's thread-to-loop bridge is genuinely exercised."""
-
-    def __init__(self, messages) -> None:
-        self._messages = messages
-        self.future = FakeStreamingFuture()
-
-    def subscribe(self, subscription_path, callback, *, scheduler, **kwargs):
-        def pump() -> None:
-            for message in self._messages:
-                scheduler.schedule(callback, message)
-
-        threading.Thread(target=pump, daemon=True).start()
-        return self.future
 
 
 @pytest.mark.parametrize("backend", BACKENDS)
@@ -467,3 +436,56 @@ def test_emulated_broker_teardown_tolerates_publisher_without_stop() -> None:
     # No stop() to call, but teardown still closes the transport cleanly.
     assert "publisher.stop" not in events
     assert "publisher.close" in events
+
+
+def test_broker_cannot_be_reentered_after_exit() -> None:
+    # Exiting closes the clients for good; silently re-entering would hand out
+    # handles backed by dead clients whose failures only surface at use time.
+    events: list[str] = []
+    broker = PubSubBroker(
+        "proj",
+        publisher_client=cast(Any, _LifecyclePublisher(events)),
+        subscriber_client=cast(Any, _LifecycleSubscriber(events)),
+    )
+    with broker:
+        pass
+
+    with pytest.raises(RuntimeError, match="re-entered"):
+        broker.__enter__()
+
+
+def test_broker_exit_waits_for_inflight_publishes() -> None:
+    # Teardown must wait for publish futures still being committed so no RPC is
+    # issued on a just-closed channel and no awaiting caller is stranded on a
+    # never-resolved future.
+    events: list[str] = []
+    broker = PubSubBroker(
+        "proj",
+        publisher_client=cast(Any, _LifecyclePublisher(events)),
+        subscriber_client=cast(Any, _LifecycleSubscriber(events)),
+    )
+    with broker:
+        future: cf.Future = cf.Future()
+        broker._inflight.add(future)
+        threading.Timer(0.05, lambda: future.set_result("server-msg-id")).start()
+
+    # The exit drained: the future resolved before the transport was closed.
+    assert future.done()
+    assert events.index("publisher.stop") < events.index("publisher.close")
+
+
+def test_publish_registers_future_with_broker_drain() -> None:
+    # Publisher.publish must register its future so the broker teardown above
+    # actually has something to wait on.
+    client = FakePublisherClient()
+    handle = PublisherHandle(cast(Any, client), "topics/test")
+    publisher = Publisher(handle, TOPIC_PROTO)
+
+    async def scenario() -> None:
+        await publisher.publish(ping_pb2.Message(id="x", type="t"))
+
+    anyio.run(scenario)
+
+    # Resolved futures discard themselves; draining returns immediately.
+    assert handle.inflight._futures == set()
+    handle.inflight.drain(timeout=0.1)

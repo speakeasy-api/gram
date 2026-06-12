@@ -1,9 +1,9 @@
 """Type-safe Pub/Sub publisher over a broker-resolved topic.
 
-Python counterpart of ``infra/pkg/gcp/publisher.py`` (``publisher.go``). A
-publisher marshals a proto message to binary and tags it with the same two
-attributes the Go layer uses — ``content-type: application/x-protobuf`` and
-``schema: <proto full name>`` — so messages are interoperable across languages.
+Python counterpart of ``infra/pkg/gcp/publisher.go``. A publisher marshals a
+proto message to binary and tags it with the same two attributes the Go layer
+uses — ``content-type: application/x-protobuf`` and ``schema: <proto full
+name>`` — so messages are interoperable across languages.
 """
 
 from __future__ import annotations
@@ -59,6 +59,9 @@ class Publisher(Generic[M]):
             data,
             **{"content-type": CONTENT_TYPE, "schema": self._schema},
         )
+        # Let the broker's teardown wait for this commit before it closes the
+        # publisher's transport.
+        self._handle.inflight.add(future)
 
         done = anyio.Event()
         loop_thread = threading.get_ident()
@@ -74,7 +77,11 @@ class Publisher(Generic[M]):
                     done.set()
                     return
                 try:
-                    portal.call(done.set)
+                    # Fire-and-forget: a blocking ``portal.call`` would park the
+                    # library's single commit thread for a full event-loop round
+                    # trip per completion, serializing batch-resolved publishes
+                    # at loop latency apiece.
+                    portal.start_task_soon(done.set)
                 except BaseException:  # noqa: BLE001 - never raise into the commit thread
                     # The portal is gone: the publish was cancelled or the loop
                     # is tearing down, so no waiter remains. The send itself

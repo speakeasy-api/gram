@@ -60,6 +60,28 @@ def test_to_kebab_matches_go(value: str, expected: str) -> None:
     assert to_kebab(value) == expected
 
 
+def test_explicit_non_ascii_names_are_rejected() -> None:
+    # to_kebab mirrors ettle/strcase byte-for-byte over ASCII only; outside it
+    # the two diverge (CJK numerals, exotic whitespace, 'İ'.lower()), so a
+    # non-ASCII explicit name would make Python and Go silently resolve
+    # different resource IDs. Such names are invalid GCP resource IDs anyway,
+    # so resolution rejects them up front. Derived names are proto full names
+    # (always ASCII) and unaffected.
+    with pytest.raises(ValueError, match="must be ASCII"):
+        resolve_topic_name(
+            ping_pb2.Message.DESCRIPTOR, options_pb2.TopicOptions(name="İstanbul")
+        )
+    with pytest.raises(ValueError, match="must be ASCII"):
+        resolve_subscription_name(
+            processor_pb2.Processor.DESCRIPTOR,
+            options_pb2.SubscriptionOptions(name="café"),
+        )
+    with pytest.raises(ValueError, match="must be ASCII"):
+        resolve_dead_letter_topic_name(
+            "some-sub", options_pb2.DeadLetterPolicy(name="1一")
+        )
+
+
 def test_resolve_topic_name_from_descriptor() -> None:
     descriptor = ping_pb2.Message.DESCRIPTOR
     options = topic_options_from_message(descriptor)
