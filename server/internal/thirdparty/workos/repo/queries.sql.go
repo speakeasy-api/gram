@@ -180,6 +180,26 @@ func (q *Queries) GetDirectoryGroupIDByWorkOSID(ctx context.Context, workosDirec
 	return id, err
 }
 
+const getDirectoryUserAttributesByUserID = `-- name: GetDirectoryUserAttributesByUserID :one
+SELECT attributes
+FROM directory_users
+WHERE user_id = $1
+  AND organization_id = $2
+  AND deleted_at IS NULL
+`
+
+type GetDirectoryUserAttributesByUserIDParams struct {
+	UserID         pgtype.Text
+	OrganizationID string
+}
+
+func (q *Queries) GetDirectoryUserAttributesByUserID(ctx context.Context, arg GetDirectoryUserAttributesByUserIDParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getDirectoryUserAttributesByUserID, arg.UserID, arg.OrganizationID)
+	var attributes []byte
+	err := row.Scan(&attributes)
+	return attributes, err
+}
+
 const getDirectoryUserByWorkOSID = `-- name: GetDirectoryUserByWorkOSID :one
 SELECT id, organization_id, user_id, workos_directory_user_id, email, attributes, created_at, updated_at, deleted_at, deleted
 FROM directory_users
@@ -307,40 +327,6 @@ func (q *Queries) ListCurrentDirectoryGroupsByUserID(ctx context.Context, arg Li
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listDirectoryUserAttributesByUserID = `-- name: ListDirectoryUserAttributesByUserID :many
-SELECT attributes
-FROM directory_users
-WHERE user_id = $1
-  AND organization_id = $2
-  AND deleted_at IS NULL
-ORDER BY created_at
-`
-
-type ListDirectoryUserAttributesByUserIDParams struct {
-	UserID         pgtype.Text
-	OrganizationID string
-}
-
-func (q *Queries) ListDirectoryUserAttributesByUserID(ctx context.Context, arg ListDirectoryUserAttributesByUserIDParams) ([][]byte, error) {
-	rows, err := q.db.Query(ctx, listDirectoryUserAttributesByUserID, arg.UserID, arg.OrganizationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items [][]byte
-	for rows.Next() {
-		var attributes []byte
-		if err := rows.Scan(&attributes); err != nil {
-			return nil, err
-		}
-		items = append(items, attributes)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

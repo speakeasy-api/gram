@@ -173,13 +173,12 @@ WHERE workos_directory_group_id = @workos_directory_group_id
   AND workos_directory_user_id = @workos_directory_user_id
   AND deleted_at IS NULL;
 
--- name: ListDirectoryUserAttributesByUserID :many
+-- name: GetDirectoryUserAttributesByUserID :one
 SELECT attributes
 FROM directory_users
 WHERE user_id = @user_id
   AND organization_id = @organization_id
-  AND deleted_at IS NULL
-ORDER BY created_at;
+  AND deleted_at IS NULL;
 
 -- name: ListCurrentDirectoryGroupsByUserID :many
 SELECT DISTINCT ON (dg.workos_directory_group_id)
