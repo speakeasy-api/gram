@@ -137,10 +137,9 @@ func (s *UsagePollService) SyncCursorUsage(ctx context.Context, cfg Config, endT
 			userIDsByEmail[conv.NormalizeEmail(user.Email)] = user.ID
 		}
 
-		for _, logParam := range logParams {
-			userEmail, _ := logParam.Attributes[attr.UserEmailKey].(string)
-			if userID := userIDsByEmail[userEmail]; userID != "" {
-				logParam.Attributes[attr.UserIDKey] = userID
+		for i := range logParams {
+			if userID := userIDsByEmail[logParams[i].UserInfo.Email]; userID != "" {
+				logParams[i].UserInfo.UserID = userID
 			}
 		}
 
@@ -170,6 +169,13 @@ func (s *UsagePollService) buildCursorUsageEvent(cfg Config, event cursorapi.Usa
 			DeploymentID:   "",
 			FunctionID:     nil,
 		},
+		UserInfo: telemetry.UserInfo{
+			UserID:     "",
+			Email:      userEmail,
+			Attributes: telemetry.UserAttributes{},
+			Groups:     nil,
+			Roles:      nil,
+		},
 		Attributes: map[attr.Key]any{
 			attr.EventSourceKey:                        string(telemetry.EventSourceAPI),
 			attr.LogBodyKey:                            "Cursor usage metrics",
@@ -184,7 +190,6 @@ func (s *UsagePollService) buildCursorUsageEvent(cfg Config, event cursorapi.Usa
 			attr.GenAIUsageCacheCreationInputTokensKey: event.TokenUsage.CacheWriteTokens,
 			attr.GenAIUsageCostKey:                     event.TokenUsage.TotalCents / 100,
 			attr.GenAIResponseModelKey:                 event.Model,
-			attr.UserEmailKey:                          userEmail,
 			attr.CursorUsageEventHashKey:               generateCursorUsageEventHash(event),
 			attr.CursorChargedCentsKey:                 event.ChargedCents,
 		},

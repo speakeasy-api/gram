@@ -232,6 +232,9 @@ linters:
         - ifElseChain
     exhaustruct:
       exclude:
+        # Every field is optional directory context; the zero value is the
+        # intended "no attributes" literal.
+        - '^github.com/speakeasy-api/gram/server/internal/telemetry\.UserAttributes$'
         - '^crypto/tls\.Config$'
         - '^net\.Dialer$'
         - '^net/url\.URL$'

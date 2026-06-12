@@ -323,22 +323,15 @@ func handleToolsCall(
 		if payload.chatID != "" {
 			logAttrs[attr.GenAIConversationIDKey] = payload.chatID
 		}
-		if payload.userID != "" {
-			logAttrs[attr.UserIDKey] = payload.userID
+		externalUserID := payload.externalUserID
+		if externalUserID == "" && oauthToken != "" {
+			externalUserID = jwtclaims.UnsafeExtractSubject(oauthToken)
 		}
-		switch {
-		case payload.externalUserID != "":
-			logAttrs[attr.ExternalUserIDKey] = payload.externalUserID
-		case oauthToken != "":
-			if sub := jwtclaims.UnsafeExtractSubject(oauthToken); sub != "" {
-				logAttrs[attr.ExternalUserIDKey] = sub
-			}
+		if externalUserID != "" {
+			logAttrs[attr.ExternalUserIDKey] = externalUserID
 		}
 		if payload.apiKeyID != "" {
 			logAttrs[attr.APIKeyIDKey] = payload.apiKeyID
-		}
-		if gramEmail != "" {
-			logAttrs[attr.UserEmailKey] = gramEmail
 		}
 		logAttrs.RecordToolsetSlug(payload.toolset)
 		logAttrs.RecordMCPURL(mcpURL)
@@ -352,6 +345,13 @@ func handleToolsCall(
 				DeploymentID:   descriptor.DeploymentID,
 				OrganizationID: descriptor.OrganizationID,
 				FunctionID:     nil,
+			},
+			UserInfo: tm.UserInfo{
+				UserID:     payload.userID,
+				Email:      gramEmail,
+				Attributes: tm.UserAttributes{},
+				Groups:     nil,
+				Roles:      nil,
 			},
 			Attributes: logAttrs,
 		}

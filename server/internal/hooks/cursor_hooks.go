@@ -256,7 +256,7 @@ func isCursorConversationEvent(hookEvent HookEvent) bool {
 // Unlike Claude hooks, Cursor payloads are already authenticated and include user_email,
 // so no Redis buffering is needed.
 func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string, userID string, blockReason string) {
-	attrs := s.buildCursorTelemetryAttributes(ctx, payload, orgID, projectID, userID)
+	attrs := s.buildCursorTelemetryAttributes(ctx, payload, orgID, projectID)
 	if blockReason != "" {
 		attrs[attr.HookBlockReasonKey] = blockReason
 	}
@@ -280,8 +280,15 @@ func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.
 
 	if s.telemetryLogger != nil {
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
-			Timestamp:  time.Now(),
-			ToolInfo:   toolInfo,
+			Timestamp: time.Now(),
+			ToolInfo:  toolInfo,
+			UserInfo: telemetry.UserInfo{
+				UserID:     userID,
+				Email:      conv.PtrValOr(payload.UserEmail, ""),
+				Attributes: telemetry.UserAttributes{},
+				Groups:     nil,
+				Roles:      nil,
+			},
 			Attributes: attrs,
 		})
 
@@ -343,12 +350,6 @@ func (s *Service) writeCursorMetricsToClickHouse(ctx context.Context, payload *g
 	if payload.Model != nil && *payload.Model != "" {
 		attrs[attr.GenAIResponseModelKey] = *payload.Model
 	}
-	if payload.UserEmail != nil && *payload.UserEmail != "" {
-		attrs[attr.UserEmailKey] = *payload.UserEmail
-	}
-	if userID != "" {
-		attrs[attr.UserIDKey] = userID
-	}
 	switch {
 	case payload.ConversationID != nil && *payload.ConversationID != "":
 		attrs[attr.GenAIConversationIDKey] = *payload.ConversationID
@@ -367,8 +368,15 @@ func (s *Service) writeCursorMetricsToClickHouse(ctx context.Context, payload *g
 	}
 
 	s.telemetryLogger.Log(ctx, telemetry.LogParams{
-		Timestamp:  time.Now(),
-		ToolInfo:   toolInfo,
+		Timestamp: time.Now(),
+		ToolInfo:  toolInfo,
+		UserInfo: telemetry.UserInfo{
+			UserID:     userID,
+			Email:      conv.PtrValOr(payload.UserEmail, ""),
+			Attributes: telemetry.UserAttributes{},
+			Groups:     nil,
+			Roles:      nil,
+		},
 		Attributes: attrs,
 	})
 
@@ -378,15 +386,10 @@ func (s *Service) writeCursorMetricsToClickHouse(ctx context.Context, payload *g
 }
 
 // buildCursorTelemetryAttributes creates attributes for a Cursor hook event
-func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string, userID string) map[attr.Key]any {
+func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string) map[attr.Key]any {
 	toolName := ""
 	if payload.ToolName != nil {
 		toolName = *payload.ToolName
-	}
-
-	userEmail := ""
-	if payload.UserEmail != nil {
-		userEmail = *payload.UserEmail
 	}
 
 	hookEvent, ok := parseCursorHookEvent(payload.HookEventName)
@@ -402,13 +405,9 @@ func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *g
 		attr.SpanIDKey:         generateSpanID(),
 		attr.TraceIDKey:        generateTraceID(),
 		attr.LogBodyKey:        fmt.Sprintf("Hook: %s", hookEventName),
-		attr.UserEmailKey:      userEmail,
 		attr.ProjectIDKey:      projectID,
 		attr.OrganizationIDKey: orgID,
 		attr.HookSourceKey:     "cursor",
-	}
-	if userID != "" {
-		attrs[attr.UserIDKey] = userID
 	}
 	applyHookHostnameAttr(attrs, payload.HookHostname)
 
