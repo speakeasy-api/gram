@@ -198,23 +198,24 @@ func (q *Queries) GetDirectoryGroupIDByWorkOSID(ctx context.Context, workosDirec
 	return id, err
 }
 
-const getDirectoryGroupSyncStateByWorkOSID = `-- name: GetDirectoryGroupSyncStateByWorkOSID :one
-SELECT id, workos_updated_at, workos_last_event_id
-FROM directory_groups
-WHERE workos_directory_group_id = $1
+const getDirectoryUserAttributesByUserID = `-- name: GetDirectoryUserAttributesByUserID :one
+SELECT attributes
+FROM directory_users
+WHERE user_id = $1
+  AND organization_id = $2
+  AND deleted_at IS NULL
 `
 
-type GetDirectoryGroupSyncStateByWorkOSIDRow struct {
-	ID                uuid.UUID
-	WorkosUpdatedAt   pgtype.Timestamptz
-	WorkosLastEventID pgtype.Text
+type GetDirectoryUserAttributesByUserIDParams struct {
+	UserID         pgtype.Text
+	OrganizationID string
 }
 
-func (q *Queries) GetDirectoryGroupSyncStateByWorkOSID(ctx context.Context, workosDirectoryGroupID string) (GetDirectoryGroupSyncStateByWorkOSIDRow, error) {
-	row := q.db.QueryRow(ctx, getDirectoryGroupSyncStateByWorkOSID, workosDirectoryGroupID)
-	var i GetDirectoryGroupSyncStateByWorkOSIDRow
-	err := row.Scan(&i.ID, &i.WorkosUpdatedAt, &i.WorkosLastEventID)
-	return i, err
+func (q *Queries) GetDirectoryUserAttributesByUserID(ctx context.Context, arg GetDirectoryUserAttributesByUserIDParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getDirectoryUserAttributesByUserID, arg.UserID, arg.OrganizationID)
+	var attributes []byte
+	err := row.Scan(&attributes)
+	return attributes, err
 }
 
 const getDirectoryUserByWorkOSID = `-- name: GetDirectoryUserByWorkOSID :one
@@ -393,40 +394,6 @@ func (q *Queries) ListCurrentDirectoryGroupsByUserID(ctx context.Context, arg Li
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listDirectoryUserAttributesByUserID = `-- name: ListDirectoryUserAttributesByUserID :many
-SELECT attributes
-FROM directory_users
-WHERE user_id = $1
-  AND organization_id = $2
-  AND deleted_at IS NULL
-ORDER BY created_at
-`
-
-type ListDirectoryUserAttributesByUserIDParams struct {
-	UserID         pgtype.Text
-	OrganizationID string
-}
-
-func (q *Queries) ListDirectoryUserAttributesByUserID(ctx context.Context, arg ListDirectoryUserAttributesByUserIDParams) ([][]byte, error) {
-	rows, err := q.db.Query(ctx, listDirectoryUserAttributesByUserID, arg.UserID, arg.OrganizationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items [][]byte
-	for rows.Next() {
-		var attributes []byte
-		if err := rows.Scan(&attributes); err != nil {
-			return nil, err
-		}
-		items = append(items, attributes)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

@@ -166,7 +166,8 @@ func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
 }
 
 // hydrateDirectorySnapshot stamps the user's current directory snapshot
-// (WorkOS custom attributes, current groups as id + name, role slugs) onto the log row's
+// (allowlisted WorkOS predefined attributes, current groups as id + name,
+// role slugs) onto the log row's
 // attributes when a user was resolved. Telemetry rows are append-only: the
 // snapshot reflects state at write time and is never rewritten. Empty
 // snapshot parts (directory-deleted users, orgs without Directory Sync,

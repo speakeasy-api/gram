@@ -58,7 +58,9 @@ func seedDirectorySnapshotData(t *testing.T, ctx context.Context, conn *pgxpool.
 		UserID:                conv.ToPGText(userID),
 		WorkosDirectoryUserID: "directory_user_" + suffix,
 		Email:                 conv.ToPGText(email),
-		Attributes:            []byte(`{"department":"Engineering","team":"Platform"}`),
+		// department_name and job_title are allowlisted predefined
+		// attributes; custom_thing and manager_email must be filtered out.
+		Attributes: []byte(`{"department_name":"Engineering","job_title":"Platform Engineer","custom_thing":"not-stamped","manager_email":"boss@example.com"}`),
 	})
 	require.NoError(t, err)
 
@@ -127,9 +129,12 @@ func TestCreateLog_HydratesDirectorySnapshot(t *testing.T) {
 
 	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
 
-	// user.attributes carries the stored WorkOS custom attributes as-is.
+	// user.attributes carries the allowlisted WorkOS predefined attributes.
 	require.Contains(t, log.Attributes, "Engineering")
-	require.Contains(t, log.Attributes, "Platform")
+	require.Contains(t, log.Attributes, "Platform Engineer")
+	// Non-allowlisted keys (custom attributes, manager PII) are not stamped.
+	require.NotContains(t, log.Attributes, "not-stamped")
+	require.NotContains(t, log.Attributes, "boss@example.com")
 	// user.groups carries current groups as id + name only.
 	require.Contains(t, log.Attributes, "Developers")
 	require.Contains(t, log.Attributes, "directory_group_"+suffix)
@@ -179,7 +184,7 @@ func TestDirectorySnapshotResolver_ResolvesAndCachesUntilExpiry(t *testing.T) {
 	resolver := telemetry.NewDirectorySnapshotResolver(logger, conn, cache.NewRedisCacheAdapter(redisClient))
 
 	snapshot := resolver.Resolve(ctx, seed.orgID, seed.userID)
-	require.Equal(t, map[string]any{"department": "Engineering", "team": "Platform"}, snapshot.Attributes)
+	require.Equal(t, map[string]any{"department_name": "Engineering", "job_title": "Platform Engineer"}, snapshot.Attributes)
 	require.Len(t, snapshot.Groups, 1)
 	require.Equal(t, "directory_group_"+suffix, snapshot.Groups[0].ID)
 	require.Equal(t, "Developers", snapshot.Groups[0].Name)
@@ -192,18 +197,18 @@ func TestDirectorySnapshotResolver_ResolvesAndCachesUntilExpiry(t *testing.T) {
 		UserID:                conv.ToPGText(seed.userID),
 		WorkosDirectoryUserID: "directory_user_" + suffix,
 		Email:                 conv.ToPGText(suffix + "@hydrate.example.com"),
-		Attributes:            []byte(`{"department":"Sales"}`),
+		Attributes:            []byte(`{"department_name":"Sales"}`),
 	})
 	require.NoError(t, err)
 
 	cached := resolver.Resolve(ctx, seed.orgID, seed.userID)
-	require.Equal(t, "Engineering", cached.Attributes["department"])
+	require.Equal(t, "Engineering", cached.Attributes["department_name"])
 
 	// Once the cache entry expires (simulated by dropping it) the snapshot
 	// is reloaded from Postgres.
 	require.NoError(t, resolver.InvalidateForTest(ctx, seed.orgID, seed.userID))
 	refreshed := resolver.Resolve(ctx, seed.orgID, seed.userID)
-	require.Equal(t, "Sales", refreshed.Attributes["department"])
+	require.Equal(t, "Sales", refreshed.Attributes["department_name"])
 }
 
 func TestDirectorySnapshotResolver_EmptySnapshotForUnknownUser(t *testing.T) {
