@@ -13,6 +13,7 @@ import {
   ThemeSwitcher,
 } from "@speakeasy-api/moonshine";
 import {
+  ActivityIcon,
   ArrowRightLeftIcon,
   BookOpenIcon,
   BuildingIcon,
@@ -206,6 +207,16 @@ export function SidebarUserMenu(): JSX.Element {
               >
                 <MapIcon className="mr-2 h-4 w-4" />
                 Roadmap
+              </a>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <a
+                href="https://status.speakeasyapi.dev/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <ActivityIcon className="mr-2 h-4 w-4" />
+                Platform Status
               </a>
             </DropdownMenuItem>
           </DropdownMenuGroup>
