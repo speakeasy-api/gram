@@ -12,9 +12,10 @@ topic on demand, so no Config Connector / GCP resources are needed locally.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
-import time
+import signal
 import uuid
 
 from google.protobuf.timestamp_pb2 import Timestamp
@@ -25,22 +26,83 @@ from gram_infra.pubsub import (
     pubsub_publisher_for_message,
     pubsub_subscriber_for_message,
 )
+from gram_infra.pubsub.publisher import Publisher
+from gram_infra.pubsub.subscriber import Subscriber
 
 logger = logging.getLogger("gram-infra-pubsub-demo")
 
 
-def handle(message: ping_pb2.Message, meta) -> None:
-    logger.info(
-        "received message id=%s type=%s payload=%s (delivery_attempt=%s)",
-        message.id,
-        message.type,
-        message.payload.decode("utf-8", "replace"),
-        meta.delivery_attempt,
-    )
-    # Returning normally acks; raise to nack and trigger redelivery.
+def make_handler(receiver_id: str):
+    async def handle(message: ping_pb2.Message, meta) -> None:
+        logger.info(
+            "%s received message id=%s type=%s payload=%s (delivery_attempt=%s)",
+            receiver_id,
+            message.id,
+            message.type,
+            message.payload.decode("utf-8", "replace"),
+            meta.delivery_attempt,
+        )
+
+    return handle
 
 
-def main() -> None:
+async def _publish_forever(
+    publisher: Publisher[ping_pb2.Message], stop_event: asyncio.Event
+) -> None:
+    while not stop_event.is_set():
+        created_at = Timestamp()
+        created_at.GetCurrentTime()
+        message = ping_pb2.Message(
+            id=str(uuid.uuid4()),
+            type="simulated",
+            created_at=created_at,
+            payload=b'{"msg":"Hello, World!"}',
+        )
+
+        await asyncio.to_thread(lambda: publisher.publish(message).result(timeout=30))
+        await asyncio.sleep(0)
+
+
+async def _run_demo(
+    publisher: Publisher[ping_pb2.Message],
+    subscribers: list[tuple[str, Subscriber[ping_pb2.Message]]],
+) -> None:
+    loop = asyncio.get_running_loop()
+    stop_event = asyncio.Event()
+
+    def request_shutdown() -> None:
+        logger.info("shutting down")
+        stop_event.set()
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, request_shutdown)
+
+    receive_tasks = [
+        asyncio.create_task(subscriber.receive(make_handler(receiver_id)))
+        for receiver_id, subscriber in subscribers
+    ]
+    publish_task = asyncio.create_task(_publish_forever(publisher, stop_event))
+
+    try:
+        logger.info("subscribers started; publishing messages (Ctrl-C to stop)")
+        await stop_event.wait()
+    finally:
+        stop_event.set()
+        try:
+            await asyncio.wait_for(publish_task, timeout=35)
+        except asyncio.TimeoutError:
+            publish_task.cancel()
+
+        for task in receive_tasks:
+            task.cancel()
+
+        await asyncio.gather(publish_task, *receive_tasks, return_exceptions=True)
+
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.remove_signal_handler(sig)
+
+
+async def _main() -> None:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s"
     )
@@ -52,8 +114,12 @@ def main() -> None:
             "PUBSUB_EMULATOR_HOST=localhost:8088 uv run pubsub-demo"
         )
 
-    # For the emulator the project ID is arbitrary; mirror demo.go's default.
-    project_id = os.environ.get("GOOGLE_CLOUD_PROJECT", "my-project-id")
+    # For the emulator the project ID is arbitrary. Use an isolated default so
+    # repeated demo runs don't inherit stale leased/backlogged subscription state.
+    project_id = os.environ.get("GOOGLE_CLOUD_PROJECT") or (
+        f"gram-infra-demo-{uuid.uuid4().hex[:8]}"
+    )
+    logger.info("using emulator project %s", project_id)
     with EmulatedPubSubBroker(
         project_id, PublisherClient(), SubscriberClient(), logger=logger
     ) as broker:
@@ -62,36 +128,19 @@ def main() -> None:
 
         # Subscriber for the Processor subscription, receiving Message payloads.
         # Read as: "a handle on the Processor subscription delivering Message messages."
-        subscriber = pubsub_subscriber_for_message(
+        sub1 = pubsub_subscriber_for_message(
             broker, ping_pb2.Message, processor_pb2.Processor, logger=logger
         )
 
-        # subscribe() is non-blocking; the client delivers messages on its own
-        # threads while we publish on the main thread.
-        streaming_future = subscriber.subscribe(handle)
-        logger.info("subscriber started; publishing every second (Ctrl-C to stop)")
+        sub2 = pubsub_subscriber_for_message(
+            broker, ping_pb2.Message, processor_pb2.Processor, logger=logger
+        )
 
-        try:
-            while True:
-                created_at = Timestamp()
-                created_at.GetCurrentTime()
-                message = ping_pb2.Message(
-                    id=str(uuid.uuid4()),
-                    type="simulated",
-                    created_at=created_at,
-                    payload=b'{"msg":"Hello, World!"}',
-                )
+        await _run_demo(publisher, [("receiver-1", sub1), ("receiver-2", sub2)])
 
-                message_id = publisher.publish(message).result(timeout=30)
-                logger.info(
-                    "published message id=%s (server id=%s)", message.id, message_id
-                )
-                time.sleep(1)
-        except KeyboardInterrupt:
-            logger.info("shutting down")
-        finally:
-            streaming_future.cancel()
-            streaming_future.result()
+
+def main() -> None:
+    asyncio.run(_main())
 
 
 if __name__ == "__main__":

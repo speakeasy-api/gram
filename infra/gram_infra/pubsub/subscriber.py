@@ -14,11 +14,14 @@ panic recovery — so a bad message surfaces instead of silently looping.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import queue as queue_module
 from dataclasses import dataclass, field
-from typing import Callable, Generic, Optional, TypeVar
+from collections.abc import Coroutine
+from typing import Any, Awaitable, Callable, Generic, Optional, TypeVar
 
-from google.cloud.pubsub_v1.subscriber.futures import StreamingPullFuture
+from google.cloud.pubsub_v1.subscriber.scheduler import Scheduler
 from google.protobuf.message import DecodeError, Message
 
 from .broker import SubscriberBroker, SubscriberHandle
@@ -51,7 +54,61 @@ class MessageMetadata:
 
 
 # A callback returns None to ack; raising any exception nacks the message.
-MessageCallback = Callable[[M, MessageMetadata], None]
+MessageCallback = Callable[[M, MessageMetadata], Awaitable[None]]
+
+
+class _AsyncIOScheduler(Scheduler):  # type: ignore[misc]
+    """Pub/Sub callback scheduler backed by a running asyncio loop."""
+
+    def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
+        self._loop = loop
+        self._queue: queue_module.Queue[Any] = queue_module.Queue()
+        self._tasks: set[asyncio.Task[None]] = set()
+        self._closed = False
+
+    @property
+    def queue(self) -> queue_module.Queue[Any]:
+        return self._queue
+
+    def schedule(self, callback, *args, **kwargs) -> None:
+        message = args[0] if args else None
+        if self._closed:
+            if message is not None:
+                message.nack()
+            return
+
+        def run() -> None:
+            if self._closed:
+                if message is not None:
+                    message.nack()
+                return
+            callback(*args, **kwargs)
+
+        try:
+            self._loop.call_soon_threadsafe(run)
+        except RuntimeError:
+            if message is not None:
+                message.nack()
+            return
+
+    def create_task(
+        self, coroutine: Coroutine[Any, Any, None]
+    ) -> asyncio.Task[None]:
+        task = self._loop.create_task(coroutine)
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+        return task
+
+    async def wait_for_completion(self) -> None:
+        self._closed = True
+        await asyncio.sleep(0)
+
+        while self._tasks:
+            await asyncio.gather(*self._tasks, return_exceptions=True)
+
+    def shutdown(self, await_msg_callbacks: bool = True):
+        self._closed = True
+        return []
 
 
 class Subscriber(Generic[M]):
@@ -72,36 +129,43 @@ class Subscriber(Generic[M]):
         self._topic_proto_name = topic_proto_name
         self._subscription_proto_name = subscription_proto_name
 
-    def subscribe(self, callback: MessageCallback[M]) -> StreamingPullFuture:
-        """Start receiving in the background; returns the streaming-pull future.
-
-        Non-blocking: the client dispatches messages to ``callback`` on its own
-        threads. Cancel the returned future to stop. Use ``receive`` to block.
-        """
-        return self._handle.client.subscribe(
-            self._handle.subscription_path,
-            callback=lambda message: self._handle_message(message, callback),
-        )
-
-    def receive(
+    async def receive(
         self, callback: MessageCallback[M], *, timeout: float | None = None
     ) -> None:
         """Receive messages, blocking until cancelled or ``timeout`` elapses.
 
-        Mirrors Go's blocking ``Receive``. A ``timeout`` (seconds) stops the
-        receiver and returns; without one this blocks until interrupted.
+        Pub/Sub uses an asyncio-backed scheduler so message callbacks run on the
+        current event loop and can create normal async tasks.
         """
-        future = self.subscribe(callback)
-        try:
-            future.result(timeout=timeout)
-        except TimeoutError:
-            future.cancel()
-            future.result()
-        except KeyboardInterrupt:
-            future.cancel()
-            future.result()
+        loop = asyncio.get_running_loop()
+        scheduler = _AsyncIOScheduler(loop)
 
-    def _handle_message(self, message, callback: MessageCallback[M]) -> None:
+        def run(message) -> None:
+            scheduler.create_task(self._handle_message(message, callback))
+
+        future = self._handle.client.subscribe(
+            self._handle.subscription_path,
+            callback=run,
+            scheduler=scheduler,
+            await_callbacks_on_shutdown=True,
+        )
+        result_task = asyncio.create_task(asyncio.to_thread(future.result))
+
+        try:
+            await asyncio.wait_for(asyncio.shield(result_task), timeout=timeout)
+        except asyncio.TimeoutError:
+            future.cancel()
+        except asyncio.CancelledError:
+            future.cancel()
+            raise
+        finally:
+            if not future.done():
+                future.cancel()
+
+            await asyncio.gather(result_task, return_exceptions=True)
+            await scheduler.wait_for_completion()
+
+    async def _handle_message(self, message, callback: MessageCallback[M]) -> None:
         """Process one incoming message: unmarshal, dispatch, ack/nack.
 
         ``message`` duck-types the google-cloud-pubsub Message (``.data``,
@@ -132,12 +196,12 @@ class Subscriber(Generic[M]):
         )
 
         try:
-            callback(instance, metadata)
+            await callback(instance, metadata)
         except Exception:
             # The callback raised — either a deliberate nack signal or an
-            # unexpected error. Log with full diagnostic context (the analog of
-            # the Go layer's panic recovery) and nack so the message is
-            # redelivered, and eventually dead-lettered if it keeps failing.
+            # unexpected error. Log with full diagnostic context and nack so the
+            # message is redelivered, and eventually dead-lettered if it keeps
+            # failing.
             self._logger.error(
                 "error processing pubsub message",
                 exc_info=True,
@@ -152,7 +216,6 @@ class Subscriber(Generic[M]):
             )
             message.nack()
             return
-
         message.ack()
 
 

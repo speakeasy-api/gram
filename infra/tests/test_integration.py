@@ -8,8 +8,8 @@ locally with the emulator from compose.yml / the local stack, e.g.::
 
 from __future__ import annotations
 
+import asyncio
 import os
-import threading
 import uuid
 
 from google.cloud.pubsub_v1 import PublisherClient, SubscriberClient
@@ -27,7 +27,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_publish_subscribe_roundtrip() -> None:
+async def test_publish_subscribe_roundtrip() -> None:
     broker = EmulatedPubSubBroker(
         "gram-infra-it",
         publisher_client=PublisherClient(),
@@ -42,23 +42,29 @@ def test_publish_subscribe_roundtrip() -> None:
     unique_id = uuid.uuid4().hex
     payload = b'{"msg":"hello"}'
     received: list = []
-    done = threading.Event()
+    done = asyncio.Event()
 
-    def callback(message: ping_pb2.Message, meta) -> None:
+    async def callback(message: ping_pb2.Message, meta) -> None:
         # Ignore stragglers from previous runs on the shared subscription.
         if message.id != unique_id:
             return
         received.append((message, meta))
         done.set()
 
-    future = subscriber.subscribe(callback)
+    receive_task = asyncio.create_task(subscriber.receive(callback))
     try:
-        publisher.publish(
-            ping_pb2.Message(id=unique_id, type="it", payload=payload)
-        ).result(timeout=30)
-        assert done.wait(timeout=30), "did not receive published message in time"
+        await asyncio.to_thread(
+            lambda: publisher.publish(
+                ping_pb2.Message(id=unique_id, type="it", payload=payload)
+            ).result(timeout=30)
+        )
+        await asyncio.wait_for(done.wait(), timeout=30)
     finally:
-        future.cancel()
+        receive_task.cancel()
+        try:
+            await receive_task
+        except asyncio.CancelledError:
+            pass
 
     message, meta = received[0]
     assert message.payload == payload

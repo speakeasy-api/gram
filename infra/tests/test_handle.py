@@ -1,14 +1,16 @@
 """Subscriber message-handling tests (no live broker).
 
 Ported from infra/pkg/gcp/subscriber_test.go. Exercises the ack/nack and logging
-behavior of Subscriber._handle_message against a fake message, so the core
+behavior of Subscriber._process_message against a fake message, so the core
 delivery logic is covered without an emulator.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from typing import cast
+import threading
+from typing import Any, cast
 
 from gram.ping.v1 import ping_pb2
 from gram_infra.pubsub import MessageMetadata, Subscriber, SubscriberHandle
@@ -38,7 +40,7 @@ class FakeMessage:
 
 
 def make_subscriber(logger=None) -> Subscriber:
-    # _handle_message never touches the handle (only subscribe() does), so a
+    # _handle_message never touches the handle (only receive() does), so a
     # typed-None placeholder is sufficient for these unit tests.
     return Subscriber(
         cast(SubscriberHandle, None),
@@ -49,7 +51,7 @@ def make_subscriber(logger=None) -> Subscriber:
     )
 
 
-def test_success_is_acked_only() -> None:
+async def test_success_is_acked_only() -> None:
     data = ping_pb2.Message(id="abc", type="t").SerializeToString()
     message = FakeMessage(
         data, message_id="msg-ok", attributes={"content-type": "application/x-protobuf"}
@@ -57,11 +59,11 @@ def test_success_is_acked_only() -> None:
 
     seen: dict = {}
 
-    def callback(msg, meta: MessageMetadata) -> None:
+    async def callback(msg, meta: MessageMetadata) -> None:
         seen["msg"] = msg
         seen["meta"] = meta
 
-    make_subscriber()._handle_message(message, callback)
+    await make_subscriber()._handle_message(message, callback)
 
     assert message.acked is True
     assert message.nacked is False
@@ -70,33 +72,33 @@ def test_success_is_acked_only() -> None:
     assert seen["meta"].attributes == {"content-type": "application/x-protobuf"}
 
 
-def test_unmarshal_error_is_nacked_and_skips_callback() -> None:
+async def test_unmarshal_error_is_nacked_and_skips_callback() -> None:
     # Field 1 (string) declares a 5-byte length but supplies 2 bytes -> truncated.
     message = FakeMessage(b"\x0a\x05ab", message_id="msg-bad")
 
     class Receiver:
         called = False
 
-        def callback(self, msg, meta) -> None:
+        async def callback(self, msg, meta) -> None:
             self.called = True
 
     receiver = Receiver()
-    make_subscriber()._handle_message(message, receiver.callback)
+    await make_subscriber()._handle_message(message, receiver.callback)
 
     assert message.nacked is True
     assert message.acked is False
     assert receiver.called is False
 
 
-def test_callback_exception_is_logged_and_nacked(caplog) -> None:
+async def test_callback_exception_is_logged_and_nacked(caplog) -> None:
     data = ping_pb2.Message(id="x").SerializeToString()
     message = FakeMessage(data, message_id="msg-123", delivery_attempt=3)
 
-    def callback(msg, meta) -> None:
+    async def callback(msg, meta) -> None:
         raise RuntimeError("boom")
 
     with caplog.at_level(logging.ERROR, logger="gram_infra.test"):
-        make_subscriber()._handle_message(message, callback)
+        await make_subscriber()._handle_message(message, callback)
 
     assert message.nacked is True
     assert message.acked is False
@@ -111,18 +113,89 @@ def test_callback_exception_is_logged_and_nacked(caplog) -> None:
     assert record.delivery_attempt == 3
 
 
-def test_nil_delivery_attempt_logs_zero(caplog) -> None:
+async def test_nil_delivery_attempt_logs_zero(caplog) -> None:
     data = ping_pb2.Message(id="x").SerializeToString()
     message = FakeMessage(data, message_id="msg-nil", delivery_attempt=None)
 
-    def callback(msg, meta) -> None:
+    async def callback(msg, meta) -> None:
         raise RuntimeError("kaboom")
 
     with caplog.at_level(logging.ERROR, logger="gram_infra.test"):
-        make_subscriber()._handle_message(message, callback)
+        await make_subscriber()._handle_message(message, callback)
 
     assert message.nacked is True
     record = next(
         r for r in caplog.records if r.msg == "error processing pubsub message"
     )
     assert record.delivery_attempt == 0
+
+
+class FakeStreamingFuture:
+    def __init__(self) -> None:
+        self._cancelled = threading.Event()
+
+    def result(self) -> None:
+        self._cancelled.wait()
+
+    def cancel(self) -> None:
+        self._cancelled.set()
+
+    def done(self) -> bool:
+        return self._cancelled.is_set()
+
+
+class FakeSubscriberClient:
+    def __init__(self, messages) -> None:
+        self._messages = messages
+        self.future = FakeStreamingFuture()
+
+    def subscribe(self, subscription_path, callback, *, scheduler, **kwargs):
+        for message in self._messages:
+            scheduler.schedule(callback, message)
+        return self.future
+
+
+async def test_receive_processes_messages_concurrently() -> None:
+    messages = [
+        FakeMessage(ping_pb2.Message(id="one").SerializeToString(), message_id="one"),
+        FakeMessage(ping_pb2.Message(id="two").SerializeToString(), message_id="two"),
+    ]
+    client = FakeSubscriberClient(messages)
+    subscriber = Subscriber(
+        SubscriberHandle(cast(Any, client), "subscriptions/test"),
+        ping_pb2.Message,
+        logger=logging.getLogger("gram_infra.test"),
+        topic_proto_name=TOPIC_PROTO,
+        subscription_proto_name=SUB_PROTO,
+    )
+
+    started = 0
+    all_started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def callback(msg, meta) -> None:
+        nonlocal started
+        started += 1
+        if started == len(messages):
+            all_started.set()
+        await release.wait()
+
+    receive_task = asyncio.create_task(subscriber.receive(callback))
+    try:
+        await asyncio.wait_for(all_started.wait(), timeout=1)
+
+        assert all(not message.acked for message in messages)
+        release.set()
+
+        async def wait_for_acks() -> None:
+            while not all(message.acked for message in messages):
+                await asyncio.sleep(0)
+
+        await asyncio.wait_for(wait_for_acks(), timeout=1)
+        assert all(not message.nacked for message in messages)
+    finally:
+        receive_task.cancel()
+        try:
+            await receive_task
+        except asyncio.CancelledError:
+            pass
