@@ -5,14 +5,19 @@ topic and subscription names from protobuf message options, mirroring the Go
 layer in ``infra/pkg/gcp/``. Two brokers cover production (``PubSubBroker``) and
 local development/testing against the emulator (``EmulatedPubSubBroker``).
 
-Example::
+``Publisher.publish`` is a coroutine that returns the published message id, so
+it must be awaited from inside an async function::
 
+    from google.cloud.pubsub_v1 import PublisherClient, SubscriberClient
     from gram_infra.pubsub import EmulatedPubSubBroker, pubsub_publisher_for_message
-    from gram.ping.v1 import ping_pb2, processor_pb2
+    from gram.ping.v1 import ping_pb2
 
-    broker = EmulatedPubSubBroker("my-project-id")
-    publisher = pubsub_publisher_for_message(broker, ping_pb2.Message)
-    publisher.publish(ping_pb2.Message(id="1")).result()
+    async def example() -> None:
+        with EmulatedPubSubBroker(
+            "my-project-id", PublisherClient(), SubscriberClient()
+        ) as broker:
+            publisher = pubsub_publisher_for_message(broker, ping_pb2.Message)
+            await publisher.publish(ping_pb2.Message(id="1"))
 """
 
 from .broker import (

@@ -145,13 +145,27 @@ class FakeStreamingFuture:
 
 
 class FakeSubscriberClient:
+    """Mimics the real client: it schedules messages from a background thread.
+
+    The production google-cloud-pubsub client invokes ``scheduler.schedule`` from
+    its own background threads, never from the event-loop thread. The scheduler
+    bridges those threads to the loop via a BlockingPortal, so the fake must
+    schedule off-thread too — scheduling synchronously on the loop thread would
+    deadlock the portal.
+    """
+
     def __init__(self, messages) -> None:
         self._messages = messages
         self.future = FakeStreamingFuture()
+        self._thread: threading.Thread | None = None
 
     def subscribe(self, subscription_path, callback, *, scheduler, **kwargs):
-        for message in self._messages:
-            scheduler.schedule(callback, message)
+        def deliver() -> None:
+            for message in self._messages:
+                scheduler.schedule(callback, message)
+
+        self._thread = threading.Thread(target=deliver, daemon=True)
+        self._thread.start()
         return self.future
 
 

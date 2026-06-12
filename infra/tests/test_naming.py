@@ -35,6 +35,25 @@ from gram_infra.pubsub import (
         ("fooBar", "foo-bar"),
         ("HTTPServer", "http-server"),
         ("already-kebab", "already-kebab"),
+        # Number-internal '.'/',' between two digits is preserved, not split:
+        # ettle treats it as part of a version/number, so "events.v2.5" keeps the
+        # ".5" but still splits the "events." delimiter.
+        ("events.v2.5", "events-v2.5"),
+        ("v4.3", "v4.3"),
+        ("x.2.3.y", "x-2.3-y"),
+        ("a.b.2,000.3.c", "a-b-2,000.3-c"),
+        ("v1beta2", "v1beta2"),
+        # Acronym / digit-boundary edges.
+        ("OAuth2", "o-auth2"),
+        ("iOS", "i-os"),
+        ("Foo2Bar", "foo2-bar"),
+        # A trailing separator becomes a trailing delimiter; a leading one is
+        # dropped (no word precedes it).
+        ("trailing_", "trailing-"),
+        ("_leading", "leading"),
+        # Non-ASCII letters are lower-cased and kept, not dropped.
+        ("héllo", "héllo"),
+        ("MixedÜmlautCase", "mixed-ümlaut-case"),
     ],
 )
 def test_to_kebab_matches_go(value: str, expected: str) -> None:

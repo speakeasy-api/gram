@@ -18,6 +18,10 @@ from typing import Any, cast
 import anyio
 import pytest
 
+from datetime import timedelta
+
+from google.protobuf.duration_pb2 import Duration
+
 from gram.ping.v1 import ping_pb2
 from gram_infra.pubsub import (
     Publisher,
@@ -25,6 +29,54 @@ from gram_infra.pubsub import (
     Subscriber,
     SubscriberHandle,
 )
+from gram_infra.pubsub.broker import (
+    _duration_to_seconds,
+    _validate_backoff,
+    _validate_expiration_ttl,
+    _validate_max_delivery_attempts,
+    _validate_retention,
+)
+
+
+def test_negative_duration_rounds_toward_zero() -> None:
+    """``Duration.ToTimedelta`` rounds nanos toward zero, unlike a naive
+    ``nanos // 1000`` floor which biases negative values toward -inf."""
+    d = Duration()
+    d.FromTimedelta(timedelta(microseconds=-500))
+    # microseconds component is -500 (toward zero), not -1000 (floored).
+    assert d.ToTimedelta() == timedelta(microseconds=-500)
+
+
+def test_duration_to_seconds_rounds_half_up_and_clamps() -> None:
+    assert _duration_to_seconds(Duration(seconds=30)) == 30
+    assert _duration_to_seconds(Duration(seconds=0, nanos=500_000_000)) == 1
+    assert _duration_to_seconds(Duration(seconds=-5)) == 0
+    assert _duration_to_seconds(Duration(seconds=2**40)) == 2**31 - 1
+
+
+def test_validate_retention_bounds() -> None:
+    _validate_retention(Duration(seconds=600), "topic-x")  # exactly 10 minutes: ok
+    with pytest.raises(ValueError, match="message retention"):
+        _validate_retention(Duration(seconds=60), "topic-x")
+
+
+def test_validate_expiration_ttl_bounds() -> None:
+    _validate_expiration_ttl(Duration(seconds=86400), "sub-x")  # 1 day: ok
+    with pytest.raises(ValueError, match="expiration TTL"):
+        _validate_expiration_ttl(Duration(seconds=3600), "sub-x")
+
+
+def test_validate_backoff_bounds() -> None:
+    _validate_backoff(Duration(seconds=600), "maximum backoff", "sub-x")  # cap: ok
+    with pytest.raises(ValueError, match="maximum backoff"):
+        _validate_backoff(Duration(seconds=601), "maximum backoff", "sub-x")
+
+
+def test_validate_max_delivery_attempts_bounds() -> None:
+    _validate_max_delivery_attempts(5, "sub-x")
+    _validate_max_delivery_attempts(100, "sub-x")
+    with pytest.raises(ValueError, match="max delivery attempts"):
+        _validate_max_delivery_attempts(4, "sub-x")
 
 # Both anyio backends. trio is a dev dependency (anyio[trio]).
 BACKENDS = ["asyncio", "trio"]

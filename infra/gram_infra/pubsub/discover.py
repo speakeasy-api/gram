@@ -13,7 +13,6 @@ The full topology validation / kcc.yaml generation stays in Go.
 
 from __future__ import annotations
 
-import re
 from typing import TYPE_CHECKING, Any, NamedTuple, Union, cast
 
 from google.protobuf.descriptor import Descriptor
@@ -150,24 +149,26 @@ def require_subscription_for_message(
     )
 
 
+def _resolve_name(descriptor: MessageDescriptor, explicit: str) -> str:
+    """Resolve a resource ID: the explicit name when set, else the kebab-cased proto full name."""
+    name = (explicit or "").strip()
+    if not name:
+        name = descriptor.full_name
+    return to_kebab(name)
+
+
 def resolve_topic_name(
     descriptor: MessageDescriptor, options: options_pb2.TopicOptions
 ) -> str:
     """Resolve a topic ID: the explicit name when set, else the kebab-cased proto full name."""
-    name = (options.name or "").strip()
-    if not name:
-        name = descriptor.full_name
-    return to_kebab(name)
+    return _resolve_name(descriptor, options.name)
 
 
 def resolve_subscription_name(
     descriptor: MessageDescriptor, options: options_pb2.SubscriptionOptions
 ) -> str:
     """Resolve a subscription ID: the explicit name when set, else the kebab-cased proto full name."""
-    name = (options.name or "").strip()
-    if not name:
-        name = descriptor.full_name
-    return to_kebab(name)
+    return _resolve_name(descriptor, options.name)
 
 
 def resolve_dead_letter_topic_name(
@@ -180,11 +181,52 @@ def resolve_dead_letter_topic_name(
     return name
 
 
-# Boundaries used to split an identifier into words before kebab-casing. Matches
-# the word-splitting behavior of github.com/ettle/strcase (used by the Go layer):
-# split on runs of non-alphanumerics, on lower/digit -> Upper transitions, and on
-# acronym -> Title transitions (e.g. "HTTPServer" -> "HTTP", "Server").
-_WORD = re.compile(r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z0-9]+|[A-Z]+|[0-9]+")
+# Sentinel rune used in place of Go's zero rune for the "no previous / no next
+# character" positions at the string boundaries. Empty string makes every
+# is*()/lower() probe below return False / itself, matching how Go's split
+# function treats the 0 rune (not upper, lower, number, space, '.', '_' or '-').
+_NONE = ""
+
+
+def _is_split_skip(prev: str, curr: str, nxt: str) -> tuple[bool, bool]:
+    """Port of ettle/strcase's ``defaultSplitFn`` for the kebab/snake delimiters.
+
+    Returns ``(split, skip)`` for the character ``curr`` given its neighbours:
+    ``split`` means start a new word before ``curr`` (a delimiter is emitted but
+    ``curr`` is kept), ``skip`` means ``curr`` is itself a delimiter and is
+    dropped. Both false means continue the current word. Mirrors the Go function
+    rule-for-rule, including the digit-``.``/``,``-digit number-internal
+    exception (``v4.3`` stays ``v4.3``) and treating ``.`` as a delimiter only
+    once the numeric exceptions have been ruled out.
+    """
+    # Lower-case letters are always part of the current word (the hot path).
+    if curr.islower():
+        return False, False
+    # Default delimiters are '_', '-' and unicode spaces. '.' is handled lower
+    # down so the numeric exceptions get a chance to claim it first.
+    if curr == "_" or curr == "-" or curr.isspace():
+        return False, True
+
+    if curr.isupper():
+        if prev.islower():
+            # fooBar -> foo|Bar
+            return True, False
+        if prev.isupper() and nxt.islower():
+            # FOOBar -> FOO|Bar
+            return True, False
+
+    # Numeric exceptions come last to avoid a perf penalty on the common path.
+    if prev.isnumeric():
+        # v4.3 / 2,000 are not split: a '.' or ',' between two digits is kept.
+        if (curr == "." or curr == ",") and nxt.isnumeric():
+            return False, False
+        if not curr.isnumeric() and curr != ".":
+            return True, False
+    # '.' is a delimiter, but only once it failed to be a number separator.
+    if curr == ".":
+        return False, True
+
+    return False, False
 
 
 def to_kebab(value: str) -> str:
@@ -194,9 +236,41 @@ def to_kebab(value: str) -> str:
     ``gram.ping.v1.Message`` -> ``gram-ping-v1-message``. Must stay byte-for-byte
     compatible with the Go layer or the two languages will resolve different
     names; ``tests/test_naming.py`` guards this against the known proto names.
+
+    This is a direct port of ``convertWithoutInitialisms(s, '-', LowerCase)``
+    streaming over runes, rather than a regex word-splitter, because ettle's
+    boundary rules are inherently contextual (they depend on the previous and
+    next rune, e.g. acronyms and the digit-``.``-digit number exception) and a
+    regex cannot reproduce them faithfully. Non-ASCII letters are lower-cased and
+    kept, matching Go's unicode-aware behavior.
+
+    A leading delimiter is dropped (no word precedes it) while a trailing one is
+    emitted, since the trailing word's delimiter is written before the run ends
+    (``trailing_`` -> ``trailing-``).
     """
-    words: list[str] = []
-    for token in re.split(r"[^A-Za-z0-9]+", value):
-        if token:
-            words.extend(_WORD.findall(token))
-    return "-".join(word.lower() for word in words)
+    runes = value.strip()
+    if not runes:
+        return ""
+
+    out: list[str] = []
+    in_word = False
+    n = len(runes)
+    for i in range(n):
+        curr = runes[i]
+        prev = runes[i - 1] if i > 0 else _NONE
+        nxt = runes[i + 1] if i + 1 < n else _NONE
+
+        split, skip = _is_split_skip(prev, curr, nxt)
+        if skip:
+            if in_word:
+                out.append("-")
+            in_word = False
+            continue
+        if split:
+            if in_word:
+                out.append("-")
+            in_word = False
+        out.append(curr.lower())
+        in_word = True
+
+    return "".join(out)
