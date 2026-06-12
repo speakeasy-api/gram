@@ -9,12 +9,12 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 )
 
@@ -135,7 +135,7 @@ func (r *DirectorySnapshotResolver) load(ctx context.Context, organizationID str
 	workosQueries := workosrepo.New(r.db)
 
 	raw, err := workosQueries.GetDirectoryUserAttributesByUserID(ctx, workosrepo.GetDirectoryUserAttributesByUserIDParams{
-		UserID:         pgtype.Text{String: userID, Valid: true},
+		UserID:         conv.ToPGText(userID),
 		OrganizationID: organizationID,
 	})
 	switch {
@@ -164,7 +164,7 @@ func (r *DirectorySnapshotResolver) load(ctx context.Context, organizationID str
 	}
 
 	groupRows, err := workosQueries.ListCurrentDirectoryGroupsByUserID(ctx, workosrepo.ListCurrentDirectoryGroupsByUserIDParams{
-		UserID:         pgtype.Text{String: userID, Valid: true},
+		UserID:         conv.ToPGText(userID),
 		OrganizationID: organizationID,
 	})
 	if err != nil {

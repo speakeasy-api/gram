@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"time"
 
@@ -42,18 +41,6 @@ type workosDirectoryUserEventPayload struct {
 type workosDirectoryGroupMembershipEventPayload struct {
 	User  workosDirectoryUserEventPayload  `json:"user"`
 	Group workosDirectoryGroupEventPayload `json:"group"`
-}
-
-func (p *workosDirectoryGroupMembershipEventPayload) UnmarshalJSON(data []byte) error {
-	// Alias avoids infinite recursion into this method.
-	type alias workosDirectoryGroupMembershipEventPayload
-	var decoded alias
-	if err := json.Unmarshal(data, &decoded); err != nil {
-		return fmt.Errorf("decode directory group membership JSON: %w", err)
-	}
-
-	*p = workosDirectoryGroupMembershipEventPayload(decoded)
-	return nil
 }
 
 func handleDirectoryUserEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, eventKind workos.EventKind, raw json.RawMessage) error {
