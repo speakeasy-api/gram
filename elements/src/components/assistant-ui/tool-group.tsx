@@ -1,4 +1,3 @@
-import { cn } from "@/lib/utils";
 import { useAssistantState } from "@assistant-ui/react";
 import { useMemo, type FC, type PropsWithChildren } from "react";
 import { useElements } from "@/hooks/useElements";
@@ -44,21 +43,15 @@ export const ToolGroup: FC<
     return children;
   }
 
-  // For single tool calls, render without the group wrapper
-  if (toolCount === 1) {
-    return (
-      <div className={cn("my-4 w-full max-w-xl")}>
-        <div className="overflow-hidden rounded-lg border border-border bg-card">
-          {children}
-        </div>
-      </div>
-    );
-  }
-
-  // For multiple tool calls, use the group component
+  // Single and multiple tool calls share one wrapper type (headerless hides
+  // the group chrome for a lone call): if the branches rendered different
+  // element types, a streaming turn growing a group from one call to two
+  // would remount every card in it, visibly resetting expansion and syntax
+  // highlighting.
   return (
     <div className="my-4 w-full max-w-xl">
       <ToolUIGroup
+        headerless={toolCount === 1}
         title={groupTitle}
         status={anyMessagePartsAreRunning ? "running" : "complete"}
         defaultExpanded={defaultExpanded}
