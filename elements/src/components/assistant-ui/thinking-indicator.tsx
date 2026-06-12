@@ -59,17 +59,52 @@ function shuffled<T>(items: readonly T[]): T[] {
   return copy;
 }
 
+/** Tracks the user's `prefers-reduced-motion` setting, updating if it changes. */
+function usePrefersReducedMotion(): boolean {
+  const query = "(prefers-reduced-motion: reduce)";
+  const [reduced, setReduced] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia(query).matches,
+  );
+
+  useEffect(() => {
+    if (
+      typeof window === "undefined" ||
+      typeof window.matchMedia !== "function"
+    )
+      return;
+    const mql = window.matchMedia(query);
+    const onChange = () => setReduced(mql.matches);
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+
+  return reduced;
+}
+
 /**
  * Cycles through a shuffled copy of {@link THINKING_VERBS} while `active`, with
- * a brief opacity dip between words so they crossfade rather than snap.
+ * a brief opacity dip between words so they crossfade rather than snap. When the
+ * user prefers reduced motion, a single verb is shown statically — no timer, no
+ * fade — so motion-sensitive users don't get text changing under them.
  */
-function useThinkingVerb(active: boolean): { verb: string; visible: boolean } {
+function useThinkingVerb(
+  active: boolean,
+  reduced: boolean,
+): { verb: string; visible: boolean } {
   const order = useMemo(() => shuffled(THINKING_VERBS), []);
   const [index, setIndex] = useState(0);
   const [visible, setVisible] = useState(true);
 
   useEffect(() => {
-    if (!active) return;
+    if (!active || reduced) return;
+
+    // A prior cycle may have been torn down mid-fade (active flipped off while
+    // visible was false); restore full visibility so a fresh thinking window
+    // never starts on a hidden word.
+    setVisible(true);
 
     let outTimer: ReturnType<typeof setTimeout>;
     let inTimer: ReturnType<typeof setTimeout>;
@@ -88,7 +123,7 @@ function useThinkingVerb(active: boolean): { verb: string; visible: boolean } {
       clearTimeout(outTimer);
       clearTimeout(inTimer);
     };
-  }, [active, order.length]);
+  }, [active, reduced, order.length]);
 
   return { verb: order[index]!, visible };
 }
@@ -111,7 +146,8 @@ export const ThinkingIndicator: FC = () => {
     return false;
   });
 
-  const { verb, visible } = useThinkingVerb(active);
+  const reducedMotion = usePrefersReducedMotion();
+  const { verb, visible } = useThinkingVerb(active, reducedMotion);
 
   if (!active) return null;
 
