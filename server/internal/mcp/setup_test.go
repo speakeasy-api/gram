@@ -172,7 +172,7 @@ func newTestMCPServiceWithIdentityResolver(t *testing.T, identityResolver mcp.Id
 
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
-	telemLogger := telemetry.NewLogger(ctx, logger, chConn, logsEnabled, toolIOLogsEnabled)
+	telemLogger := telemetry.NewLogger(ctx, logger, chConn, logsEnabled, toolIOLogsEnabled, telemetry.NewDirectorySnapshotResolver(logger, conn, cacheAdapter))
 	telemService := telemetry.NewService(
 		logger,
 		tracerProvider,
