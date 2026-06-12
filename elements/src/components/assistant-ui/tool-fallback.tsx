@@ -26,10 +26,8 @@ export const ToolFallback: ToolCallMessagePartComponent = ({
 
   // Check if this specific tool call has a pending approval
   const pendingApproval = pendingApprovals.get(toolCallId);
-  // Select the derived boolean, not the message: useAssistantState re-renders
-  // on Object.is of the selected value, and the message object changes on
-  // every streamed chunk — subscribing to it re-renders every tool card per
-  // text delta.
+  // Selecting the whole message would re-render this card on every streamed
+  // chunk; select only the derived value.
   const needsTrailingBorder = useAssistantState(({ message }) => {
     const toolParts = message.parts.filter((part) => part.type === "tool-call");
     const index = toolParts.findIndex((part) => part.toolCallId === toolCallId);

@@ -43,11 +43,9 @@ export const ToolGroup: FC<
     return children;
   }
 
-  // Single and multiple tool calls share one wrapper type (headerless hides
-  // the group chrome for a lone call): if the branches rendered different
-  // element types, a streaming turn growing a group from one call to two
-  // would remount every card in it, visibly resetting expansion and syntax
-  // highlighting.
+  // Single and multiple tool calls must share one wrapper element type —
+  // diverging branches would remount every card when a streaming turn grows
+  // the group.
   return (
     <div className="my-4 w-full max-w-xl">
       <ToolUIGroup
