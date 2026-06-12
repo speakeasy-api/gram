@@ -194,5 +194,6 @@ JOIN directory_groups AS dg
   AND dg.deleted_at IS NULL
 WHERE du.user_id = @user_id
   AND du.organization_id = @organization_id
+  AND dg.organization_id = @organization_id
   AND du.deleted_at IS NULL
 ORDER BY dg.workos_directory_group_id;
