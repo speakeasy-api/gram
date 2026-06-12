@@ -13,6 +13,17 @@ const DEFAULT_POLL_INTERVAL_MS = 1500;
 const DEFAULT_POLL_TIMEOUT_MS = 600_000;
 const MAX_CONSECUTIVE_POLL_FAILURES = 3;
 
+// Client-side streaming emulation. The server reply lands as one blob after
+// polling (there is no SSE endpoint), so we slice it into many `text-delta`
+// events to reproduce the token-by-token feel a real stream would have. Tuned
+// to feel responsive without dragging: short replies get a readable typing
+// cadence; long replies are paced to finish within the time budget instead of
+// crawling. assistant-ui can't tell these deltas apart from a real stream.
+const STREAM_BUDGET_MS = 1400; // target wall-clock to stream a whole reply
+const STREAM_TICK_MS = 22; // upper bound on delay between chunks
+const STREAM_MIN_CHARS = 12; // below this, just emit in one shot
+const STREAM_MAX_TICKS = 350; // cap on delta events per reply (huge messages)
+
 // Adaptive polling: a short turn (a one-line answer, no tool calls) often lands
 // within a couple of seconds, where a flat 1.5s interval adds up to a full
 // poll's worth of dead air. Poll quickly for the first few iterations to catch
@@ -216,9 +227,12 @@ async function pollForReplies(args: {
         lastNewAssistant = m;
         const text = contentText(m.content);
         if (text) {
-          writer.write({ type: "text-start", id: m.id });
-          writer.write({ type: "text-delta", id: m.id, delta: text });
-          writer.write({ type: "text-end", id: m.id });
+          await writeStreamedText({
+            writer,
+            id: m.id,
+            text,
+            abortSignal,
+          });
         }
       }
       if (lastNewAssistant && isTurnTerminal(lastNewAssistant)) {
@@ -237,6 +251,57 @@ async function pollForReplies(args: {
     await sleep(nextPollDelay(attempt, pollIntervalMs), abortSignal);
     attempt++;
   }
+}
+
+// Emits a finished assistant reply as a sequence of `text-delta` events so it
+// types onto the screen like a real stream instead of appearing all at once.
+// Words are kept intact (we split on whitespace) and the pace adapts to length:
+// the whole reply streams within `STREAM_BUDGET_MS`, capped at `STREAM_MAX_TICKS`
+// delta events so very long replies don't flood the writer. Honors
+// `prefers-reduced-motion` and skips emulation for trivially short replies.
+// On abort, `sleep` rejects and the partially-streamed text stays rendered,
+// matching how a real aborted stream behaves.
+async function writeStreamedText(args: {
+  writer: UIMessageStreamWriter<UIMessage>;
+  id: string;
+  text: string;
+  abortSignal?: AbortSignal;
+}): Promise<void> {
+  const { writer, id, text, abortSignal } = args;
+
+  writer.write({ type: "text-start", id });
+
+  if (text.length <= STREAM_MIN_CHARS || prefersReducedMotion()) {
+    writer.write({ type: "text-delta", id, delta: text });
+    writer.write({ type: "text-end", id });
+    return;
+  }
+
+  // Whitespace-preserving tokens keep words (and the spaces between them)
+  // intact, so chunks never split mid-word.
+  const tokens = text.match(/\s+|\S+/g) ?? [text];
+  const ticks = Math.min(tokens.length, STREAM_MAX_TICKS);
+  const groupSize = Math.ceil(tokens.length / ticks);
+  const delayMs = Math.min(STREAM_TICK_MS, STREAM_BUDGET_MS / ticks);
+
+  for (let i = 0; i < tokens.length; i += groupSize) {
+    const delta = tokens.slice(i, i + groupSize).join("");
+    writer.write({ type: "text-delta", id, delta });
+    // Skip the trailing sleep so the final chunk lands without dead air.
+    if (i + groupSize < tokens.length) {
+      await sleep(delayMs, abortSignal);
+    }
+  }
+
+  writer.write({ type: "text-end", id });
+}
+
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
 }
 
 // Returns the assistant message ids and current generation for the chat. Used
