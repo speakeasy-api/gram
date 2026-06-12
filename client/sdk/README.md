@@ -530,6 +530,7 @@ run();
 * [listAttributeKeys](docs/sdks/telemetry/README.md#listattributekeys) - listAttributeKeys telemetry
 * [listFilterOptions](docs/sdks/telemetry/README.md#listfilteroptions) - listFilterOptions telemetry
 * [listHooksTraces](docs/sdks/telemetry/README.md#listhookstraces) - listHooksTraces telemetry
+* [listToolUsageTraces](docs/sdks/telemetry/README.md#listtoolusagetraces) - listToolUsageTraces telemetry
 * [searchChats](docs/sdks/telemetry/README.md#searchchats) - searchChats telemetry
 * [searchLogs](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 * [searchToolCalls](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
@@ -900,6 +901,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`telemetryListAttributeKeys`](docs/sdks/telemetry/README.md#listattributekeys) - listAttributeKeys telemetry
 - [`telemetryListFilterOptions`](docs/sdks/telemetry/README.md#listfilteroptions) - listFilterOptions telemetry
 - [`telemetryListHooksTraces`](docs/sdks/telemetry/README.md#listhookstraces) - listHooksTraces telemetry
+- [`telemetryListToolUsageTraces`](docs/sdks/telemetry/README.md#listtoolusagetraces) - listToolUsageTraces telemetry
 - [`telemetrySearchChats`](docs/sdks/telemetry/README.md#searchchats) - searchChats telemetry
 - [`telemetrySearchLogs`](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 - [`telemetrySearchToolCalls`](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
@@ -1140,6 +1142,7 @@ To learn about this feature and how to get started, check
 - [`useListToolsets`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 - [`useListToolsetsForOrg`](docs/sdks/toolsets/README.md#listfororg) - listToolsetsForOrg toolsets
 - [`useListToolsetToolFilters`](docs/sdks/toolsets/README.md#listtoolfilters) - listToolFilters toolsets
+- [`useListToolUsageTraces`](docs/sdks/telemetry/README.md#listtoolusagetraces) - listToolUsageTraces telemetry
 - [`useListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
 - [`useLoadChat`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth

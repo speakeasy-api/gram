@@ -423,6 +423,35 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetToolUsageSummary", "type": "query"}`)
 	})
 
+	Method("listToolUsageTraces", func() {
+		Description("List target-aware MCP and tool usage traces")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(ListToolUsageTracesPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListToolUsageTracesResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.listToolUsageTraces")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listToolUsageTraces")
+		Meta("openapi:extension:x-speakeasy-name-override", "listToolUsageTraces")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListToolUsageTraces", "type": "query"}`)
+	})
+
 	Method("getToolUsageFilterOptions", func() {
 		Description("Get filter options for target-aware MCP and tool usage metrics")
 		Security(security.ByKey, security.ProjectSlug, func() {
@@ -1530,6 +1559,89 @@ var GetToolUsageSummaryResult = Type("GetToolUsageSummaryResult", func() {
 	Attribute("target_tool_breakdown", ArrayOf(ToolUsageTargetToolBreakdownRow), "Per-tool usage rows grouped by target")
 
 	Required("totals", "targets", "users", "target_time_series", "user_time_series", "users_by_target", "target_tool_breakdown")
+})
+
+var ListToolUsageTracesPayload = Type("ListToolUsageTracesPayload", func() {
+	Description("Payload for listing target-aware MCP and tool usage traces")
+
+	Attribute("from", String, "Start time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T11:00:00Z")
+	})
+	Attribute("target_types", ArrayOf(ToolUsageTargetType), "Target types to include. Empty means all target types.")
+	Attribute("hosted_toolset_slugs", ArrayOf(String), "Hosted MCP toolset slugs to include")
+	Attribute("shadow_server_names", ArrayOf(String), "Shadow MCP server names to include")
+	Attribute("user_filters", ArrayOf(ToolUsageUserFilter), "Typed user identities to include")
+	Attribute("hook_sources", ArrayOf(String), "Hook plugin sources to include. Direct hosted MCP calls have no hook source and are excluded when this filter is set.")
+	Attribute("query", String, "Free-text attribute search string from the q URL param. Matches useful identifier attributes such as Gram URN, conversation ID, and trigger instance ID.")
+	Attribute("filters", ArrayOf(LogFilter), "Arbitrary attribute filter conditions from the af URL param")
+	Attribute("cursor", String, "Cursor for pagination")
+	Attribute("sort", String, "Sort order", func() {
+		Enum("asc", "desc")
+		Default("desc")
+	})
+	Attribute("limit", Int, "Number of traces to return", func() {
+		Minimum(1)
+		Maximum(1000)
+		Default(100)
+	})
+
+	Required("from", "to")
+})
+
+var ListToolUsageTracesResult = Type("ListToolUsageTracesResult", func() {
+	Description("Result of listing target-aware MCP and tool usage traces")
+
+	Attribute("traces", ArrayOf(ToolUsageTraceSummary), "Target-aware tool usage trace rows")
+	Attribute("next_cursor", String, "Cursor for next page")
+
+	Required("traces")
+})
+
+var ToolUsageTraceSummary = Type("ToolUsageTraceSummary", func() {
+	Description("A single target-aware tool usage trace row")
+
+	Attribute("id", String, "Stable row identity for React keys and expansion state")
+	Attribute("trace_id", String, "Real OTel trace ID when the grouped logs have one")
+	Attribute("log_group", ToolUsageTraceLogGroup, "How the frontend should fetch child logs for this row")
+	Attribute("start_time_unix_nano", String, "Earliest log timestamp in Unix nanoseconds as a string for JavaScript integer safety")
+	Attribute("log_count", UInt64, "Number of logs in the trace")
+	Attribute("gram_urn", String, "Gram URN associated with the trace")
+	Attribute("tool_name", String, "Tool name shown in the row")
+	Attribute("target_type", ToolUsageTargetType, "Specific kind of tool usage target")
+	Attribute("target_kind", ToolUsageTargetKind, "Display grouping for the target")
+	Attribute("target_id", String, "Stable target identifier used by filters")
+	Attribute("target_label", String, "User-facing target label")
+	Attribute("user_key", String, "Stable user identity value")
+	Attribute("user_label", String, "User-facing user identity label")
+	Attribute("user_kind", ToolUsageUserKind, "Type of user identity represented by the row")
+	Attribute("hook_source", String, "Hook plugin source when the row came from hook telemetry")
+	Attribute("event_source", String, "Telemetry event source")
+	Attribute("http_status_code", Int32, "HTTP status code when available")
+	Attribute("hook_status", String, "Hook execution status when the row came from hook telemetry", func() {
+		Enum("success", "failure", "blocked", "pending")
+	})
+	Attribute("block_reason", String, "Hook block reason when hook_status is blocked")
+
+	Required("id", "log_group", "start_time_unix_nano", "log_count", "gram_urn", "tool_name", "target_type", "target_kind", "target_id", "target_label", "user_key", "user_label", "user_kind", "event_source")
+})
+
+var ToolUsageTraceLogGroupKind = Type("ToolUsageTraceLogGroupKind", String, func() {
+	Description("Child-log lookup strategy for a tool usage trace row")
+	Enum("trace_id", "correlation_id", "trigger_event_id", "log_id")
+})
+
+var ToolUsageTraceLogGroup = Type("ToolUsageTraceLogGroup", func() {
+	Description("Descriptor used by the dashboard to fetch child logs for a trace row")
+
+	Attribute("kind", ToolUsageTraceLogGroupKind, "Lookup strategy")
+	Attribute("value", String, "Lookup value")
+
+	Required("kind", "value")
 })
 
 var GetToolUsageFilterOptionsPayload = Type("GetToolUsageFilterOptionsPayload", func() {

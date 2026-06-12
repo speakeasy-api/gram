@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 14c090a183c1f384f3a537dc166333ba
+  docChecksum: c1a282f873d537eb44ee4b8e1bafa6ec
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -560,6 +560,14 @@ trackedFiles:
     last_write_checksum: sha1:28e70c3b5b8ccb7af6948dbd5723780f4e6f27e9
   docs/models/components/listtoolsresult.md:
     last_write_checksum: sha1:962086dafa9244f0c8884e6e91da75181e498762
+  docs/models/components/listtoolusagetracespayload.md:
+    last_write_checksum: sha1:1d64379e21a23b5882e1a0a60054c89218f97d44
+  docs/models/components/listtoolusagetracespayloadsort.md:
+    last_write_checksum: sha1:f749513c8e9ab1cdac7d204a7b602921f5ca4aa6
+  docs/models/components/listtoolusagetracespayloadtargettypes.md:
+    last_write_checksum: sha1:7e92308408472275935a519e3a0a2c177b0b63a0
+  docs/models/components/listtoolusagetracesresult.md:
+    last_write_checksum: sha1:4a78e8209cd1b50d37dc4f49e3adcdbcc424ab72
   docs/models/components/listtoolvariationgroupsresult.md:
     last_write_checksum: sha1:314732924f973a4ec4d4484aadea659ba9238747
   docs/models/components/listtriggerdefinitionsresult.md:
@@ -1086,6 +1094,20 @@ trackedFiles:
     last_write_checksum: sha1:bfb201c76d3ab28a88410af84ae04184bde268eb
   docs/models/components/toolusagetotals.md:
     last_write_checksum: sha1:9dbec4f7d13f2e49f9a355cd934b164537bb3701
+  docs/models/components/toolusagetraceloggroup.md:
+    last_write_checksum: sha1:f142efd01f1421d6152907e06af5ffc6a004d576
+  docs/models/components/toolusagetraceloggroupkind.md:
+    last_write_checksum: sha1:13a8886dde160ee3666eba0afea5cecab9ab7cf4
+  docs/models/components/toolusagetracesummary.md:
+    last_write_checksum: sha1:5d53bbda5e3b1920e786c7b746f520cd4a7d0477
+  docs/models/components/toolusagetracesummaryhookstatus.md:
+    last_write_checksum: sha1:8a05845f46db218a0bc18ecfebda3e1c6ae64c24
+  docs/models/components/toolusagetracesummarytargetkind.md:
+    last_write_checksum: sha1:51faeff891fd224a2cc4d9eb3b63e5a2591d4d6a
+  docs/models/components/toolusagetracesummarytargettype.md:
+    last_write_checksum: sha1:a1ec98865da563e02bacb9164a4a3be0e2caaf25
+  docs/models/components/toolusagetracesummaryuserkind.md:
+    last_write_checksum: sha1:5d1fe1be07cb1e9dc54ae3e0ed53da568086e3b3
   docs/models/components/toolusageuserfilter.md:
     last_write_checksum: sha1:337c9ecec888fe0880cb928e7334f02bcdeb545d
   docs/models/components/toolusageuserfilterkind.md:
@@ -2618,6 +2640,14 @@ trackedFiles:
     last_write_checksum: sha1:8acbb1677b65752527bcd2a1bcf5167ecf27ac71
   docs/models/operations/listtoolssecurity.md:
     last_write_checksum: sha1:fe699c3eb51ce60ae161334d3f16bdeddb656597
+  docs/models/operations/listtoolusagetracesrequest.md:
+    last_write_checksum: sha1:6b4ad632195193cf2562e563fdcd8abde942e924
+  docs/models/operations/listtoolusagetracessecurity.md:
+    last_write_checksum: sha1:b67b3345994810ee4faf6c586666ea38a54de6e1
+  docs/models/operations/listtoolusagetracessecurityoption1.md:
+    last_write_checksum: sha1:d1d33fddf11f0612e654c8f6a5b107bf0136a90f
+  docs/models/operations/listtoolusagetracessecurityoption2.md:
+    last_write_checksum: sha1:8858a8ef069c5c00aa7cd690feafd64b081986f6
   docs/models/operations/listtoolvariationgroupsrequest.md:
     last_write_checksum: sha1:1b1b749bf1248f39645a1e66997a0f48b39ec7a7
   docs/models/operations/listtoolvariationgroupssecurity.md:
@@ -3377,7 +3407,7 @@ trackedFiles:
   docs/sdks/rules/README.md:
     last_write_checksum: sha1:835fdf585088a0365eb525dfca783bd2efa5438c
   docs/sdks/telemetry/README.md:
-    last_write_checksum: sha1:c8d199835d11a05521d145b2f0f148e5b9f0ad4e
+    last_write_checksum: sha1:c2a21c26d4a0b46bc55de6e8c8110298c5931498
   docs/sdks/templates/README.md:
     last_write_checksum: sha1:0551bb07610cc1f06705cbd857013befdb5090ca
   docs/sdks/tools/README.md:
@@ -3938,6 +3968,8 @@ trackedFiles:
     last_write_checksum: sha1:a1f32dd67b5b9e8c88888ac58b5e56995d8a4029
   src/funcs/telemetryListHooksTraces.ts:
     last_write_checksum: sha1:269dba5c4d43bc0c3b4adf77fb6c3ea98c4a7215
+  src/funcs/telemetryListToolUsageTraces.ts:
+    last_write_checksum: sha1:e2bf896995df3ff91e726f3336102a3ffc59a71a
   src/funcs/telemetrySearchChats.ts:
     last_write_checksum: sha1:d15118d57522ffe76d8232338077dcc53bc2a060
   src/funcs/telemetrySearchLogs.ts:
@@ -4399,7 +4431,7 @@ trackedFiles:
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:1a983b995debf4d2951a83055ca0fb386b29bdda
+    last_write_checksum: sha1:84c3762ea2822453c90dfa5840e2293e9aec29fa
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     last_write_checksum: sha1:549d388111333748195b4791e63fd64f4a6e7140
@@ -4525,6 +4557,10 @@ trackedFiles:
     last_write_checksum: sha1:b7d3eed91af476dbee74cecef56a4768bb6e1db9
   src/models/components/listtoolsresult.ts:
     last_write_checksum: sha1:bf250ba5854a75781df2885c958bbf0db58021e9
+  src/models/components/listtoolusagetracespayload.ts:
+    last_write_checksum: sha1:16ede98f6d1dd64753b915ebbf3d07336c5af1a0
+  src/models/components/listtoolusagetracesresult.ts:
+    last_write_checksum: sha1:c941090445406af70bf5edb4e0f787ca7422cd47
   src/models/components/listtoolvariationgroupsresult.ts:
     last_write_checksum: sha1:c2d93c000969c6b04c15f9488fcb1a5cad2f2126
   src/models/components/listtriggerdefinitionsresult.ts:
@@ -4934,6 +4970,10 @@ trackedFiles:
     last_write_checksum: sha1:6bb4beee075636f54cbf5c0510f4b5239b61bd2d
   src/models/components/toolusagetotals.ts:
     last_write_checksum: sha1:b91488bcc42f0766e3d09e5b697b11b39cea0494
+  src/models/components/toolusagetraceloggroup.ts:
+    last_write_checksum: sha1:a6959ff4d94c378b75acaf27115f67b3e141ccb4
+  src/models/components/toolusagetracesummary.ts:
+    last_write_checksum: sha1:6d7f33fab4ecf09351bf502063642b7c33b10b17
   src/models/components/toolusageuserfilter.ts:
     last_write_checksum: sha1:a3738caaaf62d90a1867890a412525942978a1d8
   src/models/components/toolusageuserfilteroption.ts:
@@ -5402,7 +5442,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:9d5d0c35cf22b61fa1f9dc8585a4f9513d9a4746
+    last_write_checksum: sha1:8e424657f3bcd14fffeba45512c90c2cda8a467c
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     last_write_checksum: sha1:082b8a2ed705b0b42b924e676b651e9431e8fddc
@@ -5524,6 +5564,8 @@ trackedFiles:
     last_write_checksum: sha1:b4dff6c8e14e7919c9a8b13a1526985571310592
   src/models/operations/listtoolsettoolfilters.ts:
     last_write_checksum: sha1:4597bfc98afcd34ecbedb63a11de9af9dba8d1cb
+  src/models/operations/listtoolusagetraces.ts:
+    last_write_checksum: sha1:b0f300cc736d3cf1ef2e62c5ec62849e2fba4f85
   src/models/operations/listtoolvariationgroups.ts:
     last_write_checksum: sha1:82cb84a35c2e78d8ac906a87f5af40d1f599607a
   src/models/operations/listtriggerdefinitions.ts:
@@ -6066,7 +6108,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:c4ed3e3a13272fc385227d04ec2b6aa92f1174ab
+    last_write_checksum: sha1:f3f75b03bd3a5925f9686fadfd1891930f0dd5e1
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     last_write_checksum: sha1:34d434d40565d270fde497f4cec6bb9befffb505
@@ -6164,6 +6206,10 @@ trackedFiles:
     last_write_checksum: sha1:96a8b21a3b16c1656aede13fd764785c2bb82dc2
   src/react-query/listScopes.ts:
     last_write_checksum: sha1:0649c13469015aaf4e0ceb66e85ea04ec22005cd
+  src/react-query/listToolUsageTraces.core.ts:
+    last_write_checksum: sha1:2d83a382776969adcc161259e22dac143e0a8893
+  src/react-query/listToolUsageTraces.ts:
+    last_write_checksum: sha1:cb8a95eaad4ea13ad40ae2078b02bb45e6dc9c77
   src/react-query/listTools.core.ts:
     last_write_checksum: sha1:e788e0d8b52f7dbc06d26e831872011c9dc79b21
   src/react-query/listTools.ts:
@@ -6759,7 +6805,7 @@ trackedFiles:
   src/sdk/sdk.ts:
     last_write_checksum: sha1:3f49de13ac37f33d758f257f99a2623acaa18af0
   src/sdk/telemetry.ts:
-    last_write_checksum: sha1:76ba189c51feb5815ff3b0637bf47bc801dae082
+    last_write_checksum: sha1:13956ca29b39d5d0000894794d513f6f7e9fe3f4
   src/sdk/templates.ts:
     last_write_checksum: sha1:e87a18ceb93fd904e226390906def204d5487b07
   src/sdk/tools.ts:
@@ -10278,5 +10324,16 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listToolUsageTraces:
+    speakeasy-default-list-tool-usage-traces:
+      requestBody:
+        application/json: {"filters": [{"operator": "eq", "path": "@user.region"}], "from": "2025-12-19T10:00:00Z", "limit": 100, "sort": "desc", "to": "2025-12-19T11:00:00Z"}
+      responses:
+        "200":
+          application/json: {"traces": [{"event_source": "<value>", "gram_urn": "<value>", "id": "<id>", "log_count": 951087, "log_group": {"kind": "trigger_event_id", "value": "<value>"}, "start_time_unix_nano": "<value>", "target_id": "<id>", "target_kind": "server", "target_label": "<value>", "target_type": "hosted_mcp_server", "tool_name": "<value>", "user_key": "<value>", "user_kind": "email", "user_label": "<value>"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}

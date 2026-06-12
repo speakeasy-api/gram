@@ -73,6 +73,10 @@ type Client struct {
 	// getToolUsageSummary endpoint.
 	GetToolUsageSummaryDoer goahttp.Doer
 
+	// ListToolUsageTraces Doer is the HTTP client used to make requests to the
+	// listToolUsageTraces endpoint.
+	ListToolUsageTracesDoer goahttp.Doer
+
 	// GetToolUsageFilterOptions Doer is the HTTP client used to make requests to
 	// the getToolUsageFilterOptions endpoint.
 	GetToolUsageFilterOptionsDoer goahttp.Doer
@@ -115,6 +119,7 @@ func NewClient(
 		ListAttributeKeysDoer:         doer,
 		GetHooksSummaryDoer:           doer,
 		GetToolUsageSummaryDoer:       doer,
+		ListToolUsageTracesDoer:       doer,
 		GetToolUsageFilterOptionsDoer: doer,
 		ListHooksTracesDoer:           doer,
 		RestoreResponseBody:           restoreBody,
@@ -456,6 +461,30 @@ func (c *Client) GetToolUsageSummary() goa.Endpoint {
 		resp, err := c.GetToolUsageSummaryDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("telemetry", "getToolUsageSummary", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListToolUsageTraces returns an endpoint that makes HTTP requests to the
+// telemetry service listToolUsageTraces server.
+func (c *Client) ListToolUsageTraces() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListToolUsageTracesRequest(c.encoder)
+		decodeResponse = DecodeListToolUsageTracesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListToolUsageTracesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListToolUsageTracesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "listToolUsageTraces", err)
 		}
 		return decodeResponse(resp)
 	}

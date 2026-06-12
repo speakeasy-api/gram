@@ -48,6 +48,8 @@ type Service interface {
 	GetHooksSummary(context.Context, *GetHooksSummaryPayload) (res *GetHooksSummaryResult, err error)
 	// Get target-aware MCP and tool usage metrics
 	GetToolUsageSummary(context.Context, *GetToolUsageSummaryPayload) (res *GetToolUsageSummaryResult, err error)
+	// List target-aware MCP and tool usage traces
+	ListToolUsageTraces(context.Context, *ListToolUsageTracesPayload) (res *ListToolUsageTracesResult, err error)
 	// Get filter options for target-aware MCP and tool usage metrics
 	GetToolUsageFilterOptions(context.Context, *GetToolUsageFilterOptionsPayload) (res *GetToolUsageFilterOptionsResult, err error)
 	// List hook traces aggregated by trace_id with user information
@@ -76,7 +78,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [16]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "getToolUsageFilterOptions", "listHooksTraces"}
+var MethodNames = [17]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "listToolUsageTraces", "getToolUsageFilterOptions", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -591,6 +593,50 @@ type ListHooksTracesPayload struct {
 type ListHooksTracesResult struct {
 	// List of hook trace summaries
 	Traces []*HookTraceSummary
+	// Cursor for next page
+	NextCursor *string
+}
+
+// ListToolUsageTracesPayload is the payload type of the telemetry service
+// listToolUsageTraces method.
+type ListToolUsageTracesPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Target types to include. Empty means all target types.
+	TargetTypes []ToolUsageTargetType
+	// Hosted MCP toolset slugs to include
+	HostedToolsetSlugs []string
+	// Shadow MCP server names to include
+	ShadowServerNames []string
+	// Typed user identities to include
+	UserFilters []*ToolUsageUserFilter
+	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
+	// and are excluded when this filter is set.
+	HookSources []string
+	// Free-text attribute search string from the q URL param. Matches useful
+	// identifier attributes such as Gram URN, conversation ID, and trigger
+	// instance ID.
+	Query *string
+	// Arbitrary attribute filter conditions from the af URL param
+	Filters []*LogFilter
+	// Cursor for pagination
+	Cursor *string
+	// Sort order
+	Sort string
+	// Number of traces to return
+	Limit int
+}
+
+// ListToolUsageTracesResult is the result type of the telemetry service
+// listToolUsageTraces method.
+type ListToolUsageTracesResult struct {
+	// Target-aware tool usage trace rows
+	Traces []*ToolUsageTraceSummary
 	// Cursor for next page
 	NextCursor *string
 }
@@ -1202,6 +1248,60 @@ type ToolUsageTotals struct {
 	UniqueUsers int64
 	// Number of distinct usage targets observed
 	UniqueTargets int64
+}
+
+// Descriptor used by the dashboard to fetch child logs for a trace row
+type ToolUsageTraceLogGroup struct {
+	// Lookup strategy
+	Kind ToolUsageTraceLogGroupKind
+	// Lookup value
+	Value string
+}
+
+// Child-log lookup strategy for a tool usage trace row
+type ToolUsageTraceLogGroupKind string
+
+// A single target-aware tool usage trace row
+type ToolUsageTraceSummary struct {
+	// Stable row identity for React keys and expansion state
+	ID string
+	// Real OTel trace ID when the grouped logs have one
+	TraceID *string
+	// How the frontend should fetch child logs for this row
+	LogGroup *ToolUsageTraceLogGroup
+	// Earliest log timestamp in Unix nanoseconds as a string for JavaScript
+	// integer safety
+	StartTimeUnixNano string
+	// Number of logs in the trace
+	LogCount uint64
+	// Gram URN associated with the trace
+	GramUrn string
+	// Tool name shown in the row
+	ToolName string
+	// Specific kind of tool usage target
+	TargetType ToolUsageTargetType
+	// Display grouping for the target
+	TargetKind ToolUsageTargetKind
+	// Stable target identifier used by filters
+	TargetID string
+	// User-facing target label
+	TargetLabel string
+	// Stable user identity value
+	UserKey string
+	// User-facing user identity label
+	UserLabel string
+	// Type of user identity represented by the row
+	UserKind ToolUsageUserKind
+	// Hook plugin source when the row came from hook telemetry
+	HookSource *string
+	// Telemetry event source
+	EventSource string
+	// HTTP status code when available
+	HTTPStatusCode *int32
+	// Hook execution status when the row came from hook telemetry
+	HookStatus *string
+	// Hook block reason when hook_status is blocked
+	BlockReason *string
 }
 
 // Typed user identity filter
