@@ -1,5 +1,4 @@
-import { InsightsConfig } from "@/components/insights-dock";
-import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
+import { InsightsConfig } from "@/components/insights-sidebar";
 import { useInsightsState } from "@/components/insights-context";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
@@ -732,7 +731,20 @@ function InsightsOverviewShell({
         subtitle="Ask about metrics, trends, or performance insights"
         contextInfo={dateRangeContext}
         hideTrigger={isLogsDisabled}
-        suggestions={INSIGHTS_SUGGESTIONS["insights/mcp"]}
+        suggestions={[
+          {
+            title: "Tool Failures",
+            label: "Analyze failing tools",
+            prompt:
+              "Which tools have the highest failure rates? What might be causing the failures?",
+          },
+          {
+            title: "Performance Trends",
+            label: "Analyze trends",
+            prompt:
+              "What trends do you see in the metrics? Are things improving or declining?",
+          },
+        ]}
       />
       <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
         <InsightsPageHeader

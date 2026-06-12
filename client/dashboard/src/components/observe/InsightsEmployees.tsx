@@ -1,6 +1,5 @@
 import { MetricCard } from "@/components/chart/MetricCard";
-import { InsightsConfig } from "@/components/insights-dock";
-import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
+import { InsightsConfig } from "@/components/insights-sidebar";
 import { useInsightsState } from "@/components/insights-context";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { ErrorAlert } from "@/components/ui/alert";
@@ -421,6 +420,8 @@ export function InsightsEmployeesContent(): JSX.Element {
   };
   const enrollmentRate =
     totalEmployees > 0 ? (enrolledEmployees / totalEmployees) * 100 : 0;
+  const prompt =
+    "Using the Employees tab context, summarize who is enrolled in this project based on whether they have any platform token usage.";
 
   const handleFilterDimensionChange = (next: EmployeeFilterDimension) => {
     setFilterDimension(next);
@@ -451,7 +452,31 @@ export function InsightsEmployeesContent(): JSX.Element {
         title="What would you like to know about employee enrollment?"
         subtitle="Ask who is enrolled, who still needs setup, and how platform adoption is tracking across the team"
         contextInfo={`Project-scoped Employees tab: ${enrolledEmployees} of ${totalEmployees} employees have hooks activity in ${rangeLabel} and are enrolled; ${notEnrolledEmployees} employees have no hooks activity and are not enrolled.`}
-        suggestions={INSIGHTS_SUGGESTIONS["insights/employees"]}
+        suggestions={[
+          {
+            title: "Enrollment Coverage",
+            label: "Who is enrolled?",
+            prompt,
+          },
+          {
+            title: "Not Enrolled",
+            label: "Who is not enrolled?",
+            prompt:
+              "Which employees are not enrolled because they have no platform token usage in this project?",
+          },
+          {
+            title: "Enrollment Summary",
+            label: "Summarize enrollment",
+            prompt:
+              "Summarize project employee enrollment based on whether each employee has platform token usage.",
+          },
+          {
+            title: "User Usage",
+            label: "Show user usage",
+            prompt:
+              "Show me a table of organization users' platform usage for the last 30 days, including token counts, last activity, and hook source breakdowns.",
+          },
+        ]}
       />
       <div className="min-h-0 w-full flex-1 overflow-y-auto p-8 pb-24">
         <div className="mx-auto flex max-w-7xl flex-col gap-6">

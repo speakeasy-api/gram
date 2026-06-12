@@ -1,5 +1,4 @@
-import { InsightsConfig } from "@/components/insights-dock";
-import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
+import { InsightsConfig } from "@/components/insights-sidebar";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -729,6 +728,33 @@ function PolicyCenterContent() {
     "Never echo match_redacted values verbatim. Refer to findings by rule_id and source.",
   ].join(" ");
 
+  const insightsSuggestions = [
+    {
+      title: "Policy status snapshot",
+      label: "what's running and what's stuck",
+      prompt:
+        "For each policy returned by listRiskPolicies, call getRiskPolicyStatus and report: enabled flag, action (flag vs block), total messages, pending messages, and workflow state. Flag any policy with non-zero pending messages.",
+    },
+    {
+      title: "Quiet policies",
+      label: "policies with no recent findings",
+      prompt:
+        "Identify policies that have not produced any findings in the last 30 days. Use listRiskResultsForAgent with policy_id to check each policy. Report by name and last-seen finding date.",
+    },
+    {
+      title: "Coverage by source",
+      label: "what's each source catching",
+      prompt:
+        "Group findings by source (gitleaks, presidio, prompt_injection, shadow_mcp, destructive_tool) over the last 7 days using listRiskResultsForAgent. Report counts and the top rule_id per source family.",
+    },
+    {
+      title: "Capabilities check",
+      label: "what detectors are available",
+      prompt:
+        "Call getRiskCapabilities and tell me which detection backends are configured on this server (e.g. prompt-injection ML classifier).",
+    },
+  ];
+
   const dimIfDisabled = (row: PolicyRow) =>
     row.policy.enabled ? "" : "opacity-50";
 
@@ -978,7 +1004,7 @@ function PolicyCenterContent() {
       <Page.Body>
         <InsightsConfig
           contextInfo={insightsContext}
-          suggestions={INSIGHTS_SUGGESTIONS["risk-policies"]}
+          suggestions={insightsSuggestions}
           title="Policy insights"
           subtitle="Ask about policy status, coverage, and detector capabilities. Match content is redacted before it reaches the assistant."
         />
