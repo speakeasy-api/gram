@@ -32,11 +32,15 @@ type parsedClaudeToolName struct {
 // convention; native Claude Code tools (Read, Edit, Bash, ...) return a
 // zero-value result with IsMCP=false.
 func parseClaudeToolName(rawName string) parsedClaudeToolName {
-	// Restrict to the Claude Code "mcp__<server>__<tool>" form with both parts
-	// present; the shared parser also accepts Cursor's "MCP:" prefix (which has
-	// no server) and an empty server, neither of which is a valid Claude entry.
+	// Claude Code uses the "mcp__<server>__<tool>" form. Restrict to that prefix
+	// so Cursor's "MCP:" names — which the shared parser also recognizes — don't
+	// match here. With the prefix present, AttributeTool only reports isMCP when
+	// both the server and tool segments are non-empty.
+	if !strings.HasPrefix(rawName, "mcp__") {
+		return parsedClaudeToolName{Server: "", Tool: "", IsMCP: false}
+	}
 	server, tool, isMCP := mcpname.AttributeTool(rawName)
-	if !isMCP || server == "" || tool == "" {
+	if !isMCP {
 		return parsedClaudeToolName{Server: "", Tool: "", IsMCP: false}
 	}
 	return parsedClaudeToolName{Server: server, Tool: tool, IsMCP: true}

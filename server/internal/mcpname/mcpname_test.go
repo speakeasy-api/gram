@@ -22,6 +22,8 @@ func TestAttributeTool(t *testing.T) {
 		{"cursor MCP prefix", "MCP:slack:send_message", "slack:send_message", "slack:send_message", true},
 		{"native tool", "Bash", "", "", false},
 		{"malformed mcp without function", "mcp__github__", "", "", false},
+		{"malformed mcp without server", "mcp____create_issue", "", "", false},
+		{"bare cursor prefix", "MCP:", "", "", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
