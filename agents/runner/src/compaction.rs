@@ -445,10 +445,7 @@ mod tests {
 
     #[test]
     fn deserialize_on_turn_end() {
-        assert_eq!(
-            parse(r#"{"on_turn_end":{}}"#),
-            CompactionPolicy::OnTurnEnd
-        );
+        assert_eq!(parse(r#"{"on_turn_end":{}}"#), CompactionPolicy::OnTurnEnd);
     }
 
     #[test]
