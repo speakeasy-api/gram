@@ -29,11 +29,11 @@ import (
 )
 
 type recordingPromptJudge struct {
-	texts []string
+	inputs []risk_analysis.JudgeInput
 }
 
 func (j *recordingPromptJudge) Evaluate(_ context.Context, in risk_analysis.JudgeInput) *risk_analysis.JudgeVerdict {
-	j.texts = append(j.texts, in.Text)
+	j.inputs = append(j.inputs, in)
 	return &risk_analysis.JudgeVerdict{Confidence: 0.9, Rationale: "matched tool call"}
 }
 
@@ -307,9 +307,14 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 	require.NoError(t, val.Get(&result))
 	require.Equal(t, 1, result.Processed)
 	require.Equal(t, 1, result.Findings)
-	require.Len(t, judge.texts, 1)
-	require.Contains(t, judge.texts[0], `"name": "Bash"`)
-	require.Contains(t, judge.texts[0], `rm -rf /tmp/data`)
+	require.Len(t, judge.inputs, 1)
+	tc, ok := judge.inputs[0].Message.(risk_analysis.ToolCallMessage)
+	require.True(t, ok, "expected ToolCallMessage, got %T", judge.inputs[0].Message)
+	require.Equal(t, message.ToolRequest, tc.Type())
+	require.Equal(t, "Bash", tc.Name)
+	require.Empty(t, tc.MCPServer, "native tool has no MCP server")
+	require.Empty(t, tc.MCPFunction)
+	require.Contains(t, tc.Arguments, "rm -rf /tmp/data")
 }
 
 func TestAnalyzeBatch_DestructiveToolAnnotationSkipsFalseHint(t *testing.T) {

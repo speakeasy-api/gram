@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -152,7 +153,7 @@ func (j *Judge) Evaluate(ctx context.Context, in ra.JudgeInput) *ra.JudgeVerdict
 	if j == nil || j.client == nil {
 		return nil
 	}
-	if strings.TrimSpace(in.Prompt) == "" || strings.TrimSpace(in.Text) == "" {
+	if strings.TrimSpace(in.Prompt) == "" || in.Message == nil || strings.TrimSpace(in.Message.Body()) == "" {
 		return nil
 	}
 
@@ -246,7 +247,7 @@ func (j *Judge) call(ctx context.Context, in ra.JudgeInput) (matched bool, confi
 		model = defaultJudgeModel
 	}
 
-	userMessage := fmt.Sprintf("Policy:\n%s\n\nMessage to evaluate:\n%s", in.Prompt, in.Text)
+	userMessage := buildJudgeUserMessage(in)
 
 	callCtx, cancel := context.WithTimeout(ctx, judgeTimeout)
 	defer cancel()
@@ -292,4 +293,79 @@ func (j *Judge) call(ctx context.Context, in ra.JudgeInput) (matched bool, confi
 		rationale = string([]rune(rationale)[:maxRationaleLen])
 	}
 	return verdict.Matched, max(0, min(1, verdict.Confidence)), rationale, nil
+}
+
+// buildJudgeUserMessage renders the policy plus the polymorphic message under
+// evaluation. The message contributes an actor/role line, optional tool
+// attribution, and a type-appropriate body block (Content / Arguments / Output).
+func buildJudgeUserMessage(in ra.JudgeInput) string {
+	return strings.Join([]string{
+		fmt.Sprintf("Policy:\n%s", in.Prompt),
+		renderJudgeMessage(in.Message),
+	}, "\n\n")
+}
+
+// renderJudgeMessage formats a JudgeMessage into the labeled block the judge
+// reads: who produced it, which tool it targets (for tool calls/results), and
+// the body under its own heading. Unknown/unset types fall back to a plain
+// "Message to evaluate" block, preserving the original prompt shape.
+func renderJudgeMessage(m ra.JudgeMessage) string {
+	switch msg := m.(type) {
+	case ra.UserMessage:
+		return judgeBlock(messageActorLabel(message.User), "", "Content", msg.Content)
+	case ra.AssistantMessage:
+		return judgeBlock(messageActorLabel(message.Assistant), "", "Content", msg.Content)
+	case ra.ToolCallMessage:
+		return judgeBlock(messageActorLabel(message.ToolRequest),
+			toolLabel(msg.Name, msg.MCPServer, msg.MCPFunction), "Arguments", msg.Arguments)
+	case ra.ToolResultMessage:
+		return judgeBlock(messageActorLabel(message.ToolResponse),
+			toolLabel(msg.Name, msg.MCPServer, msg.MCPFunction), "Output", msg.Output)
+	case ra.OpaqueMessage:
+		return "Message to evaluate:\n" + msg.Content
+	default:
+		return "Message to evaluate:\n"
+	}
+}
+
+// judgeBlock assembles the per-message block: a "Message:" actor line, an
+// optional "Tool:" line, then the body under bodyLabel. Empty lines are omitted.
+func judgeBlock(actor, tool, bodyLabel, body string) string {
+	var lines []string
+	if actor != "" {
+		lines = append(lines, "Message: "+actor)
+	}
+	if tool != "" {
+		lines = append(lines, "Tool: "+tool)
+	}
+	lines = append(lines, fmt.Sprintf("%s:\n%s", bodyLabel, body))
+	return strings.Join(lines, "\n")
+}
+
+// messageActorLabel maps a message type to a plain-language description of who
+// produced it, so the judge can reason about the actor without knowing Gram's
+// internal enum. Returns "" for an unset/unknown type.
+func messageActorLabel(messageType message.Type) string {
+	switch messageType {
+	case message.User:
+		return "a message from the end user"
+	case message.Assistant:
+		return "a message from the AI assistant"
+	case message.ToolRequest:
+		return "a tool call issued by the AI assistant"
+	case message.ToolResponse:
+		return "a tool result returned to the AI assistant"
+	default:
+		return ""
+	}
+}
+
+// toolLabel describes the tool a tool call/result targets: destructured MCP
+// server + function when known, otherwise the raw tool name. Returns "" when
+// there is no tool attribution.
+func toolLabel(name, mcpServer, mcpFunction string) string {
+	if mcpServer != "" || mcpFunction != "" {
+		return fmt.Sprintf("MCP server %q, function %q", mcpServer, mcpFunction)
+	}
+	return name
 }

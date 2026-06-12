@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+
+	"github.com/speakeasy-api/gram/server/internal/message"
 )
 
 const (
@@ -33,9 +35,85 @@ type JudgeInput struct {
 	ProjectID string
 	// Prompt is the policy's operator-authored guardrail.
 	Prompt string
-	// Text is the message content under evaluation.
-	Text   string
-	Config JudgeConfig
+	// Message is the polymorphic message under evaluation. Its concrete type
+	// (user/assistant content, tool call with arguments, tool result with
+	// output) drives how it is rendered for the judge.
+	Message JudgeMessage
+	Config  JudgeConfig
+}
+
+// JudgeMessage is the polymorphic body of the message under evaluation. Each
+// message type has a distinct shape so the judge sees structured fields (tool
+// name, arguments, output) rather than one ambiguous text blob. Implemented by
+// UserMessage, AssistantMessage, ToolCallMessage, ToolResultMessage, and the
+// OpaqueMessage fallback.
+type JudgeMessage interface {
+	// Type reports the message type this payload represents.
+	Type() message.Type
+	// Body returns the primary evaluable content (used for the empty-input
+	// guard). Empty Body means there is nothing to judge.
+	Body() string
+}
+
+// UserMessage is a message authored by the end user.
+type UserMessage struct{ Content string }
+
+// AssistantMessage is a message authored by the AI assistant.
+type AssistantMessage struct{ Content string }
+
+// ToolCallMessage is a tool call issued by the assistant. Name is the raw
+// tool name; MCPServer/MCPFunction are its destructured components for
+// MCP-routed tools (empty for native). Arguments is the raw JSON input.
+type ToolCallMessage struct {
+	Name        string
+	MCPServer   string
+	MCPFunction string
+	Arguments   string
+}
+
+// ToolResultMessage is a tool result returned to the assistant. Name/MCP*
+// identify the originating tool when known; Output is the raw result.
+type ToolResultMessage struct {
+	Name        string
+	MCPServer   string
+	MCPFunction string
+	Output      string
+}
+
+// OpaqueMessage is the fallback for an unknown/unset message type: the body is
+// rendered without actor or tool framing.
+type OpaqueMessage struct{ Content string }
+
+func (UserMessage) Type() message.Type       { return message.User }
+func (m UserMessage) Body() string           { return m.Content }
+func (AssistantMessage) Type() message.Type  { return message.Assistant }
+func (m AssistantMessage) Body() string      { return m.Content }
+func (ToolCallMessage) Type() message.Type   { return message.ToolRequest }
+func (m ToolCallMessage) Body() string       { return m.Arguments }
+func (ToolResultMessage) Type() message.Type { return message.ToolResponse }
+func (m ToolResultMessage) Body() string     { return m.Output }
+func (OpaqueMessage) Type() message.Type     { return "" }
+func (m OpaqueMessage) Body() string         { return m.Content }
+
+// NewJudgeMessage builds the polymorphic message for a message type, optional
+// tool name, and the type-appropriate body: user/assistant content, tool-call
+// arguments JSON, or tool-result output. Tool names are destructured via
+// AttributeTool so MCP server/function are surfaced separately.
+func NewJudgeMessage(messageType message.Type, toolName, body string) JudgeMessage {
+	switch messageType {
+	case message.ToolRequest:
+		server, fn, _ := AttributeTool(toolName)
+		return ToolCallMessage{Name: toolName, MCPServer: server, MCPFunction: fn, Arguments: body}
+	case message.ToolResponse:
+		server, fn, _ := AttributeTool(toolName)
+		return ToolResultMessage{Name: toolName, MCPServer: server, MCPFunction: fn, Output: body}
+	case message.Assistant:
+		return AssistantMessage{Content: body}
+	case message.User:
+		return UserMessage{Content: body}
+	default:
+		return OpaqueMessage{Content: body}
+	}
 }
 
 // JudgeVerdict is the resolved outcome of a judge evaluation.
