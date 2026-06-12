@@ -204,6 +204,8 @@ FROM directory_users
 WHERE user_id = $1
   AND organization_id = $2
   AND deleted_at IS NULL
+ORDER BY updated_at DESC
+LIMIT 1
 `
 
 type GetDirectoryUserAttributesByUserIDParams struct {
@@ -367,6 +369,7 @@ JOIN directory_groups AS dg
   AND dg.deleted_at IS NULL
 WHERE du.user_id = $1
   AND du.organization_id = $2
+  AND dg.organization_id = $2
   AND du.deleted_at IS NULL
 ORDER BY dg.workos_directory_group_id
 `
