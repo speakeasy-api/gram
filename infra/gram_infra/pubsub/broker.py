@@ -16,9 +16,11 @@ The clients auto-detect the emulator via the ``PUBSUB_EMULATOR_HOST`` env var.
 from __future__ import annotations
 
 import logging
+from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Protocol, runtime_checkable
+from types import TracebackType
+from typing import Protocol, Self, runtime_checkable
 
 from google.api_core.exceptions import AlreadyExists
 from google.cloud.pubsub_v1 import PublisherClient, SubscriberClient
@@ -110,6 +112,8 @@ class PubSubBroker:
 class EmulatedPubSubBroker:
     """Local broker. Reconciles topics/subscriptions on demand before returning handles."""
 
+    _exit_stack: ExitStack | None
+
     def __init__(
         self,
         project_id: str,
@@ -122,6 +126,37 @@ class EmulatedPubSubBroker:
         self._publisher = publisher_client
         self._subscriber = subscriber_client
         self._logger = logger or logging.getLogger(__name__)
+        self._exit_stack = None
+
+    def __enter__(self) -> Self:
+        if self._exit_stack is not None:
+            raise RuntimeError("EmulatedPubSubBroker is already entered")
+
+        stack = ExitStack()
+
+        try:
+            stack.enter_context(self._publisher)
+            stack.enter_context(self._subscriber)
+        except BaseException as exc:
+            stack.__exit__(type(exc), exc, exc.__traceback__)
+            raise
+
+        self._exit_stack = stack
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        if self._exit_stack is None:
+            return None
+
+        try:
+            return self._exit_stack.__exit__(exc_type, exc_val, exc_tb)
+        finally:
+            self._exit_stack = None
 
     def publisher_for_message(self, message_type: type[Message]) -> PublisherHandle:
         descriptor, options = require_topic_options(message_type)

@@ -16,14 +16,13 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Callable, Generic, Optional, TypeVar
+from typing import Callable, Generic, Optional, TypeVar
 
+from google.cloud.pubsub_v1.subscriber.futures import StreamingPullFuture
 from google.protobuf.message import DecodeError, Message
 
 from .broker import SubscriberBroker, SubscriberHandle
 
-if TYPE_CHECKING:
-    from google.cloud.pubsub_v1.subscriber.futures import StreamingPullFuture
 
 __all__ = [
     "MessageMetadata",
@@ -73,7 +72,7 @@ class Subscriber(Generic[M]):
         self._topic_proto_name = topic_proto_name
         self._subscription_proto_name = subscription_proto_name
 
-    def subscribe(self, callback: MessageCallback[M]) -> "StreamingPullFuture":
+    def subscribe(self, callback: MessageCallback[M]) -> StreamingPullFuture:
         """Start receiving in the background; returns the streaming-pull future.
 
         Non-blocking: the client dispatches messages to ``callback`` on its own
