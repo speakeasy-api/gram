@@ -37,6 +37,8 @@ from google.cloud.pubsub_v1 import PublisherClient, SubscriberClient
 from google.protobuf.duration_pb2 import Duration
 from google.protobuf.message import Message
 
+from gcp.pubsub.v1 import options_pb2
+
 from .discover import (
     require_subscription_for_message,
     require_topic_options,
@@ -274,9 +276,12 @@ class EmulatedPubSubBroker(PubSubBroker):
             labels = dict(options.labels)
             if labels:
                 request["labels"] = labels
+            # Exactly-zero means unset (the server applies its default), but a
+            # negative duration is malformed and must hit the validator —
+            # mirroring validateRetention in pubsub_discover.go.
             if (
                 options.HasField("retention_hint")
-                and options.retention_hint.ToNanoseconds() > 0
+                and options.retention_hint.ToNanoseconds() != 0
             ):
                 _validate_retention(options.retention_hint, topic_id)
                 request["message_retention_duration"] = (
@@ -301,15 +306,19 @@ class EmulatedPubSubBroker(PubSubBroker):
 
         if options.HasField("ack_deadline"):
             request["ack_deadline_seconds"] = _duration_to_seconds(options.ack_deadline)
-        if options.HasField("retention"):
+        # As with topics: exactly-zero retention means unset (server default),
+        # which the Go generation path accepts; negative values must validate.
+        if options.HasField("retention") and options.retention.ToNanoseconds() != 0:
             _validate_retention(options.retention, sub_id)
             request["message_retention_duration"] = options.retention.ToTimedelta()
         labels = dict(options.labels)
         if labels:
             request["labels"] = labels
+        # Exactly-zero TTL means "never expires" (accepted by GCP and the Go
+        # generation path); negative values must hit the validator.
         if (
             options.HasField("expiration_ttl")
-            and options.expiration_ttl.ToNanoseconds() > 0
+            and options.expiration_ttl.ToNanoseconds() != 0
         ):
             _validate_expiration_ttl(options.expiration_ttl, sub_id)
             request["expiration_policy"] = {
@@ -318,21 +327,16 @@ class EmulatedPubSubBroker(PubSubBroker):
         if options.filter:
             request["filter"] = options.filter
         if options.HasField("retry_policy"):
+            _validate_retry_policy(options.retry_policy, sub_id)
             # Only forward bounds that were explicitly set; leaving an unset
             # field absent lets the server apply its default instead of pinning
             # it to 0s.
             retry_policy: dict = {}
             if options.retry_policy.HasField("minimum_backoff"):
-                _validate_backoff(
-                    options.retry_policy.minimum_backoff, "minimum backoff", sub_id
-                )
                 retry_policy["minimum_backoff"] = (
                     options.retry_policy.minimum_backoff.ToTimedelta()
                 )
             if options.retry_policy.HasField("maximum_backoff"):
-                _validate_backoff(
-                    options.retry_policy.maximum_backoff, "maximum backoff", sub_id
-                )
                 retry_policy["maximum_backoff"] = (
                     options.retry_policy.maximum_backoff.ToTimedelta()
                 )
@@ -370,6 +374,12 @@ _MAX_RETENTION = timedelta(days=31)
 _MIN_EXPIRATION_TTL = timedelta(days=1)
 _MAX_EXPIRATION_TTL = timedelta(days=31)
 _MAX_BACKOFF = timedelta(seconds=600)
+# GCP's server-side defaults, applied when a bound is left unset. The pair
+# check below resolves unset bounds to these before comparing, so an explicit
+# minimum above 600s-default-maximum (or maximum below 10s-default-minimum)
+# fails the same way it would at generation time.
+_DEFAULT_MIN_BACKOFF = timedelta(seconds=10)
+_DEFAULT_MAX_BACKOFF = timedelta(seconds=600)
 _MIN_DELIVERY_ATTEMPTS = 5
 _MAX_DELIVERY_ATTEMPTS = 100
 
@@ -398,6 +408,25 @@ def _validate_backoff(duration: Duration, label: str, sub_id: str) -> None:
         raise ValueError(
             f"retry {label} for subscription {sub_id!r} must be between "
             f"0s and {_MAX_BACKOFF}, got {value}"
+        )
+
+
+def _validate_retry_policy(retry_policy: options_pb2.RetryPolicy, sub_id: str) -> None:
+    """Mirror validateRetryPolicy in pubsub_discover.go: each set bound must be
+    within [0s, 600s], and the resolved minimum (defaulting to 10s) must not
+    exceed the resolved maximum (defaulting to 600s)."""
+    minimum = _DEFAULT_MIN_BACKOFF
+    if retry_policy.HasField("minimum_backoff"):
+        _validate_backoff(retry_policy.minimum_backoff, "minimum backoff", sub_id)
+        minimum = retry_policy.minimum_backoff.ToTimedelta()
+    maximum = _DEFAULT_MAX_BACKOFF
+    if retry_policy.HasField("maximum_backoff"):
+        _validate_backoff(retry_policy.maximum_backoff, "maximum backoff", sub_id)
+        maximum = retry_policy.maximum_backoff.ToTimedelta()
+    if minimum > maximum:
+        raise ValueError(
+            f"retry minimum backoff {minimum} for subscription {sub_id!r} "
+            f"must not exceed maximum backoff {maximum}"
         )
 
 

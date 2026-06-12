@@ -22,6 +22,7 @@ from datetime import timedelta
 
 from google.protobuf.duration_pb2 import Duration
 
+from gcp.pubsub.v1 import options_pb2
 from gram.ping.v1 import ping_pb2
 from gram_infra.pubsub import (
     EmulatedPubSubBroker,
@@ -37,6 +38,7 @@ from gram_infra.pubsub.broker import (
     _validate_expiration_ttl,
     _validate_max_delivery_attempts,
     _validate_retention,
+    _validate_retry_policy,
 )
 
 
@@ -72,6 +74,114 @@ def test_validate_backoff_bounds() -> None:
     _validate_backoff(Duration(seconds=600), "maximum backoff", "sub-x")  # cap: ok
     with pytest.raises(ValueError, match="maximum backoff"):
         _validate_backoff(Duration(seconds=601), "maximum backoff", "sub-x")
+
+
+def test_validate_retry_policy_pair() -> None:
+    # Each bound in range and min <= max: ok.
+    _validate_retry_policy(
+        options_pb2.RetryPolicy(
+            minimum_backoff=Duration(seconds=5), maximum_backoff=Duration(seconds=30)
+        ),
+        "sub-x",
+    )
+    # Explicit minimum above explicit maximum.
+    with pytest.raises(ValueError, match="must not exceed maximum backoff"):
+        _validate_retry_policy(
+            options_pb2.RetryPolicy(
+                minimum_backoff=Duration(seconds=60),
+                maximum_backoff=Duration(seconds=30),
+            ),
+            "sub-x",
+        )
+    # Unset maximum resolves to the 600s server default, so any in-range
+    # explicit minimum is fine on its own.
+    _validate_retry_policy(
+        options_pb2.RetryPolicy(minimum_backoff=Duration(seconds=600)), "sub-x"
+    )
+    # Unset minimum resolves to the 10s server default; an explicit maximum
+    # below that must fail like it would at generation time.
+    with pytest.raises(ValueError, match="must not exceed maximum backoff"):
+        _validate_retry_policy(
+            options_pb2.RetryPolicy(maximum_backoff=Duration(seconds=5)), "sub-x"
+        )
+
+
+class _RecordingPublisherClient:
+    def __init__(self) -> None:
+        self.requests: list[dict] = []
+
+    def topic_path(self, project: str, topic: str) -> str:
+        return f"projects/{project}/topics/{topic}"
+
+    def create_topic(self, request: dict) -> None:
+        self.requests.append(request)
+
+
+class _RecordingSubscriberClient:
+    def __init__(self) -> None:
+        self.requests: list[dict] = []
+
+    def subscription_path(self, project: str, sub: str) -> str:
+        return f"projects/{project}/subscriptions/{sub}"
+
+    def create_subscription(self, request: dict) -> None:
+        self.requests.append(request)
+
+
+def _recording_broker() -> tuple[
+    EmulatedPubSubBroker, _RecordingPublisherClient, _RecordingSubscriberClient
+]:
+    publisher = _RecordingPublisherClient()
+    subscriber = _RecordingSubscriberClient()
+    broker = EmulatedPubSubBroker("proj", cast(Any, publisher), cast(Any, subscriber))
+    return broker, publisher, subscriber
+
+
+def test_reconcile_treats_zero_durations_as_unset() -> None:
+    # The Go generation path treats an explicit 0 retention/TTL as unset, so
+    # the emulator broker must accept it too (and leave the field to the
+    # server's default) instead of failing bounds validation.
+    broker, publisher, subscriber = _recording_broker()
+
+    broker._reconcile_topic(
+        "t", options_pb2.TopicOptions(retention_hint=Duration(seconds=0))
+    )
+    assert "message_retention_duration" not in publisher.requests[0]
+
+    broker._reconcile_subscription(
+        "s",
+        "t",
+        options_pb2.SubscriptionOptions(
+            retention=Duration(seconds=0), expiration_ttl=Duration(seconds=0)
+        ),
+    )
+    request = subscriber.requests[0]
+    assert "message_retention_duration" not in request
+    assert "expiration_policy" not in request
+
+
+def test_reconcile_rejects_negative_durations() -> None:
+    # Negative durations are malformed, not unset: they must hit the bounds
+    # validators rather than silently skipping the field (which would let a
+    # bad declaration work locally and fail at generation time).
+    broker, _, _ = _recording_broker()
+
+    with pytest.raises(ValueError, match="message retention"):
+        broker._reconcile_topic(
+            "t", options_pb2.TopicOptions(retention_hint=Duration(seconds=-60))
+        )
+
+    with pytest.raises(ValueError, match="message retention"):
+        broker._reconcile_subscription(
+            "s", "t", options_pb2.SubscriptionOptions(retention=Duration(seconds=-60))
+        )
+
+    with pytest.raises(ValueError, match="expiration TTL"):
+        broker._reconcile_subscription(
+            "s",
+            "t",
+            options_pb2.SubscriptionOptions(expiration_ttl=Duration(seconds=-60)),
+        )
 
 
 def test_validate_max_delivery_attempts_bounds() -> None:
