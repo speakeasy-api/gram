@@ -227,7 +227,9 @@ SELECT attributes
 FROM directory_users
 WHERE user_id = @user_id
   AND organization_id = @organization_id
-  AND deleted_at IS NULL;
+  AND deleted_at IS NULL
+ORDER BY updated_at DESC
+LIMIT 1;
 
 -- name: ListCurrentDirectoryGroupsByUserID :many
 SELECT DISTINCT ON (dg.workos_directory_group_id)
