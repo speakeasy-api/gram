@@ -64,6 +64,48 @@ func TestService_CreateShadowMCPApprovalRequest_Idempotent(t *testing.T) {
 	require.Equal(t, beforeCount+1, afterCount)
 }
 
+func TestService_CreateShadowMCPApprovalRequest_AcceptsDifferentRequester(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	project := createShadowMCPProject(t, ctx, ti, authCtx.ActiveOrganizationID)
+	fullURL := "https://linear.example.com/mcp"
+
+	// Token minted for a different requester than the authenticated user — the
+	// common real-world case (agent-reported email resolving to another user,
+	// or a shared block link). This must still succeed and record the
+	// authenticated user as the requester.
+	request, err := ti.service.CreateShadowMCPApprovalRequest(ctx, &gen.CreateShadowMCPApprovalRequestPayload{
+		RequestToken: shadowMCPRequestToken(t, authCtx.ActiveOrganizationID, "some-other-user", project.ID.String(), ShadowMCPApprovalRequestTokenInput{
+			ObservedName:    conv.PtrEmpty("Linear"),
+			ObservedFullURL: &fullURL,
+		}),
+	})
+	require.NoError(t, err)
+	require.Equal(t, shadowMCPRequestStatusRequested, request.Status)
+	require.Equal(t, authCtx.UserID, conv.PtrValOr(request.RequesterUserID, ""))
+}
+
+func TestService_CreateShadowMCPApprovalRequest_RejectsDifferentOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	project := createShadowMCPProject(t, ctx, ti, authCtx.ActiveOrganizationID)
+	fullURL := "https://linear.example.com/mcp"
+
+	_, err := ti.service.CreateShadowMCPApprovalRequest(ctx, &gen.CreateShadowMCPApprovalRequestPayload{
+		RequestToken: shadowMCPRequestToken(t, "another-org", authCtx.UserID, project.ID.String(), ShadowMCPApprovalRequestTokenInput{
+			ObservedName:    conv.PtrEmpty("Linear"),
+			ObservedFullURL: &fullURL,
+		}),
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
 func TestService_CreateShadowMCPApprovalRequest_RejectsInvalidToken(t *testing.T) {
 	t.Parallel()
 
