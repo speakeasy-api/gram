@@ -8,6 +8,12 @@ import { DotCard } from "@/components/ui/dot-card";
 import { Action, MoreActions } from "@/components/ui/more-actions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import {
+  PageTabsTrigger,
+  Tabs,
+  TabsContent,
+  TabsList,
+} from "@/components/ui/tabs";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { UpdatedAt } from "@/components/updated-at";
@@ -28,9 +34,12 @@ import {
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Bot, Boxes, Cpu, Info, Plus } from "lucide-react";
+import { useQueryState } from "nuqs";
 import { MouseEvent } from "react";
 import { Outlet } from "react-router";
 import { toast } from "sonner";
+
+import { AssistantsAuditLog } from "./AssistantAuditLog";
 
 function stopLinkNavigation(e: MouseEvent<HTMLDivElement>) {
   e.preventDefault();
@@ -115,6 +124,9 @@ function AssistantsEmptyState({ onCreate }: { onCreate: () => void }) {
 
 export default function AssistantsIndex(): JSX.Element {
   const routes = useRoutes();
+  const [activeTab, setActiveTab] = useQueryState("tab", {
+    defaultValue: "assistants",
+  });
   const { data, isLoading } = useAssistantsList(undefined, undefined, {
     retry: false,
     throwOnError: false,
@@ -175,8 +187,32 @@ export default function AssistantsIndex(): JSX.Element {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        {content}
-        <UsageSection />
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) => {
+            void setActiveTab(value);
+          }}
+          className="flex w-full flex-col"
+        >
+          <div className="border-b">
+            <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
+              <PageTabsTrigger value="assistants">Assistants</PageTabsTrigger>
+              <PageTabsTrigger value="audit">Audit log</PageTabsTrigger>
+            </TabsList>
+          </div>
+          <TabsContent
+            value="assistants"
+            className="mt-6 flex w-full flex-col gap-4"
+          >
+            {content}
+            <UsageSection />
+          </TabsContent>
+          <TabsContent value="audit" className="mt-6 w-full">
+            <RequireScope scope="org:read" level="section">
+              <AssistantsAuditLog />
+            </RequireScope>
+          </TabsContent>
+        </Tabs>
       </Page.Body>
     </Page>
   );
