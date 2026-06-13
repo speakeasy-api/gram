@@ -306,9 +306,10 @@ function AssistantToolsets({ assistant }: { assistant: Assistant }) {
           <Badge
             key={toolset.toolsetSlug}
             variant="outline"
-            className="max-w-[10rem] truncate"
+            className="max-w-[10rem]"
+            title={toolset.toolsetSlug}
           >
-            {toolset.toolsetSlug}
+            <span className="min-w-0 truncate">{toolset.toolsetSlug}</span>
           </Badge>
         ))}
         {overflow > 0 && <Badge variant="outline">+{overflow}</Badge>}
@@ -363,7 +364,7 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
           </div>
 
           {/* Metadata: model + MCP servers */}
-          <div className="flex flex-col gap-2">
+          <div className="mb-3 flex flex-col gap-2">
             <div className="flex items-center gap-1.5">
               <Cpu className="text-muted-foreground/70 size-3.5 shrink-0" />
               <Type muted small className="truncate" title={assistant.model}>
