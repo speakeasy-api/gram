@@ -206,14 +206,15 @@ type RecallResult struct {
 	Similarity float64
 	CreatedAt  time.Time
 
-	// Provenance of the memory write: which source surface it came from
-	// (slack|cron|wake|dashboard), the external user who said it, the channel
-	// it was said in, and when. Nil when unknown (e.g. rows written before
+	// Provenance of the memory write, for tracing which conversation it came
+	// from: the origin thread's source surface (threadsource.Kind*, an open
+	// enum), the external user who said it, the thread's correlation id, and
+	// when it was recorded. Nil when unknown (e.g. rows written before
 	// provenance existed or outside an assistant thread).
-	SourceKind      *string
-	SourceUserID    *string
-	SourceChannel   *string
-	SourceTimestamp *time.Time
+	SourceKind          *string
+	SourceUserID        *string
+	SourceCorrelationID *string
+	SourceTimestamp     *time.Time
 }
 
 type ForgetCandidate struct {
@@ -376,10 +377,10 @@ func (s *MemoryService) Remember(
 		originThread = uuid.NullUUID{UUID: principal.ThreadID, Valid: true}
 	}
 
-	// Resolve provenance from the origin thread's source surface. Best-effort:
-	// a missing or unreadable thread leaves provenance NULL rather than failing
-	// the write, which downstream trust reasoning treats as least-trusted.
-	prov := provenance{Kind: nil, UserID: nil, Channel: nil, Timestamp: nil}
+	// Resolve provenance from the origin thread so the write can be traced
+	// back to the conversation it happened in. Best-effort: a missing or
+	// unreadable thread leaves provenance NULL rather than failing the write.
+	prov := provenance{Kind: nil, UserID: nil, CorrelationID: nil, Timestamp: nil}
 	if originThread.Valid {
 		threadSource, srcErr := txq.GetAssistantThreadSourceForMemory(ctx, repo.GetAssistantThreadSourceForMemoryParams{
 			ID:        originThread.UUID,
@@ -388,7 +389,7 @@ func (s *MemoryService) Remember(
 		if srcErr != nil {
 			s.logger.WarnContext(ctx, "resolve memory provenance from origin thread", attr.SlogError(srcErr))
 		} else {
-			prov = extractProvenance(threadSource.SourceKind, threadSource.SourceRefJson)
+			prov = extractProvenance(threadSource.SourceKind, threadSource.CorrelationID, threadSource.SourceRefJson)
 		}
 	}
 
@@ -407,10 +408,10 @@ func (s *MemoryService) Remember(
 		OriginThreadID:  originThread,
 		OriginChatID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		SupersedesID:    supersedesID,
-		SourceKind:      conv.PtrToPGText(prov.Kind),
-		SourceUserID:    conv.PtrToPGText(prov.UserID),
-		SourceChannel:   conv.PtrToPGText(prov.Channel),
-		SourceTimestamp: conv.PtrToPGTimestamptz(prov.Timestamp),
+		SourceKind:          conv.PtrToPGText(prov.Kind),
+		SourceUserID:        conv.PtrToPGText(prov.UserID),
+		SourceCorrelationID: conv.PtrToPGText(prov.CorrelationID),
+		SourceTimestamp:     conv.PtrToPGTimestamptz(prov.Timestamp),
 	})
 	if err != nil {
 		return zero, oops.E(oops.CodeUnexpected, err, "insert memory").LogError(ctx, s.logger)
@@ -548,16 +549,16 @@ func (s *MemoryService) Recall(
 			sourceTimestamp = &ts
 		}
 		scored = append(scored, RecallResult{
-			ID:              row.ID,
-			Content:         row.Content,
-			Tags:            row.Tags,
-			Similarity:      row.Similarity,
-			Score:           computeScore(row.Similarity, age, s.halfLife),
-			CreatedAt:       row.CreatedAt.Time,
-			SourceKind:      conv.FromPGText[string](row.SourceKind),
-			SourceUserID:    conv.FromPGText[string](row.SourceUserID),
-			SourceChannel:   conv.FromPGText[string](row.SourceChannel),
-			SourceTimestamp: sourceTimestamp,
+			ID:                  row.ID,
+			Content:             row.Content,
+			Tags:                row.Tags,
+			Similarity:          row.Similarity,
+			Score:               computeScore(row.Similarity, age, s.halfLife),
+			CreatedAt:           row.CreatedAt.Time,
+			SourceKind:          conv.FromPGText[string](row.SourceKind),
+			SourceUserID:        conv.FromPGText[string](row.SourceUserID),
+			SourceCorrelationID: conv.FromPGText[string](row.SourceCorrelationID),
+			SourceTimestamp:     sourceTimestamp,
 		})
 	}
 

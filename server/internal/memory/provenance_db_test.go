@@ -14,14 +14,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/threadsource"
 )
 
 const provenanceTestOrgID = "org-test"
 
 // insertMemoryThreadFixture creates the project/assistant/chat/thread rows a
-// Remember call resolves provenance from. sourceKind and sourceRefJSON shape
-// the thread's source surface.
-func insertMemoryThreadFixture(t *testing.T, conn *pgxpool.Pool, sourceKind string, sourceRefJSON []byte) (projectID, assistantID, threadID uuid.UUID) {
+// Remember call resolves provenance from. sourceKind, correlationID and
+// sourceRefJSON shape the thread's source surface.
+func insertMemoryThreadFixture(t *testing.T, conn *pgxpool.Pool, sourceKind string, correlationID string, sourceRefJSON []byte) (projectID, assistantID, threadID uuid.UUID) {
 	t.Helper()
 	ctx := t.Context()
 
@@ -58,7 +59,7 @@ func insertMemoryThreadFixture(t *testing.T, conn *pgxpool.Pool, sourceKind stri
 	threadID, err = assistantsrepo.New(conn).UpsertAssistantThread(ctx, assistantsrepo.UpsertAssistantThreadParams{
 		AssistantID:   assistant.ID,
 		ProjectID:     proj.ID,
-		CorrelationID: "corr-1",
+		CorrelationID: correlationID,
 		ChatID:        chatID,
 		SourceKind:    sourceKind,
 		SourceRefJson: sourceRefJSON,
@@ -121,7 +122,8 @@ func TestRememberStampsSlackProvenanceAndRecallReturnsIt(t *testing.T) {
 	conn, err := memoryInfra.CloneTestDatabase(t, "memory_provenance_slack")
 	require.NoError(t, err)
 
-	projectID, assistantID, threadID := insertMemoryThreadFixture(t, conn, "slack",
+	projectID, assistantID, threadID := insertMemoryThreadFixture(t, conn, threadsource.KindSlack,
+		"slack:T1:C123:171.001",
 		[]byte(`{"team_id":"T1","channel_id":"C123","thread_id":"171.001","user_id":"U456"}`))
 
 	svc := newMemoryServiceForDBTest(t, conn)
@@ -138,11 +140,11 @@ func TestRememberStampsSlackProvenanceAndRecallReturnsIt(t *testing.T) {
 	got := results[0]
 	require.Equal(t, remembered.ID, got.ID)
 	require.NotNil(t, got.SourceKind)
-	require.Equal(t, "slack", *got.SourceKind)
+	require.Equal(t, threadsource.KindSlack, *got.SourceKind)
 	require.NotNil(t, got.SourceUserID)
 	require.Equal(t, "U456", *got.SourceUserID)
-	require.NotNil(t, got.SourceChannel)
-	require.Equal(t, "C123", *got.SourceChannel)
+	require.NotNil(t, got.SourceCorrelationID)
+	require.Equal(t, "slack:T1:C123:171.001", *got.SourceCorrelationID)
 	require.NotNil(t, got.SourceTimestamp, "source_timestamp records the time of write")
 	require.False(t, got.SourceTimestamp.IsZero())
 }
@@ -153,7 +155,8 @@ func TestRememberStampsDashboardProvenance(t *testing.T) {
 	conn, err := memoryInfra.CloneTestDatabase(t, "memory_provenance_dashboard")
 	require.NoError(t, err)
 
-	projectID, assistantID, threadID := insertMemoryThreadFixture(t, conn, "dashboard",
+	projectID, assistantID, threadID := insertMemoryThreadFixture(t, conn, threadsource.KindDashboard,
+		"0d9e0001-aaaa-bbbb-cccc-000000000001",
 		[]byte(`{"user_id":"user_abc"}`))
 
 	svc := newMemoryServiceForDBTest(t, conn)
@@ -168,10 +171,11 @@ func TestRememberStampsDashboardProvenance(t *testing.T) {
 
 	got := results[0]
 	require.NotNil(t, got.SourceKind)
-	require.Equal(t, "dashboard", *got.SourceKind)
+	require.Equal(t, threadsource.KindDashboard, *got.SourceKind)
 	require.NotNil(t, got.SourceUserID)
 	require.Equal(t, "user_abc", *got.SourceUserID)
-	require.Nil(t, got.SourceChannel, "dashboard has no channel concept")
+	require.NotNil(t, got.SourceCorrelationID, "correlation id is recorded for every source kind")
+	require.Equal(t, "0d9e0001-aaaa-bbbb-cccc-000000000001", *got.SourceCorrelationID)
 	require.NotNil(t, got.SourceTimestamp)
 }
 
@@ -181,7 +185,8 @@ func TestRememberWithoutOriginThreadHasNoProvenance(t *testing.T) {
 	conn, err := memoryInfra.CloneTestDatabase(t, "memory_provenance_none")
 	require.NoError(t, err)
 
-	projectID, assistantID, _ := insertMemoryThreadFixture(t, conn, "slack",
+	projectID, assistantID, _ := insertMemoryThreadFixture(t, conn, threadsource.KindSlack,
+		"slack:T1:C123:171.001",
 		[]byte(`{"team_id":"T1","channel_id":"C123","thread_id":"171.001","user_id":"U456"}`))
 
 	svc := newMemoryServiceForDBTest(t, conn)
@@ -199,6 +204,6 @@ func TestRememberWithoutOriginThreadHasNoProvenance(t *testing.T) {
 	got := results[0]
 	require.Nil(t, got.SourceKind)
 	require.Nil(t, got.SourceUserID)
-	require.Nil(t, got.SourceChannel)
+	require.Nil(t, got.SourceCorrelationID)
 	require.Nil(t, got.SourceTimestamp)
 }

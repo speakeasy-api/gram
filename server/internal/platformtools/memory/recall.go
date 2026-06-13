@@ -33,16 +33,20 @@ type recallEntry struct {
 	Score     float64  `json:"score"`
 	Tags      []string `json:"tags"`
 	CreatedAt string   `json:"created_at"`
-	// Source is a compact provenance line, e.g.
-	// "from slack user U123 in C456, 2026-06-12". It identifies who originally
-	// said the remembered fact and where, so the assistant can weigh how much
-	// to trust the memory. Absent when the memory has no recorded provenance.
+	// Source is a compact provenance line for tracing where the memory was
+	// written, e.g. "from slack user U123 (slack:T123:C456:789.012),
+	// 2026-06-12". The parenthesised value is the origin thread's correlation
+	// id, which encodes the source conversation uniformly across surfaces. It
+	// records the conversational context of the write — not necessarily the
+	// true origin of the fact, which the assistant may have picked up
+	// elsewhere mid-turn. Absent when the memory has no recorded provenance.
 	Source *string `json:"source,omitempty"`
 }
 
-// formatSource renders provenance as a compact human-readable attribution.
-// For slack: "from slack user U123 in C456, 2026-06-12". The channel slot
-// carries the trigger instance id for cron/wake sources.
+// formatSource renders provenance as a compact attribution line: the source
+// kind, the speaking user when one exists (slack/dashboard), the origin
+// thread's correlation id in parentheses, and the write date. For automated
+// surfaces: "from cron (cron:0d9e...), 2026-06-12".
 func formatSource(r memory.RecallResult) *string {
 	if r.SourceKind == nil {
 		return nil
@@ -54,9 +58,10 @@ func formatSource(r memory.RecallResult) *string {
 		b.WriteString(" user ")
 		b.WriteString(*r.SourceUserID)
 	}
-	if r.SourceChannel != nil {
-		b.WriteString(" in ")
-		b.WriteString(*r.SourceChannel)
+	if r.SourceCorrelationID != nil {
+		b.WriteString(" (")
+		b.WriteString(*r.SourceCorrelationID)
+		b.WriteString(")")
 	}
 	if r.SourceTimestamp != nil {
 		b.WriteString(", ")

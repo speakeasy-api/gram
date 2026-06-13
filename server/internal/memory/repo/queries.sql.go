@@ -111,7 +111,7 @@ func (q *Queries) GetAssistantMemoryByID(ctx context.Context, arg GetAssistantMe
 }
 
 const getAssistantThreadSourceForMemory = `-- name: GetAssistantThreadSourceForMemory :one
-SELECT source_kind, source_ref_json
+SELECT source_kind, correlation_id, source_ref_json
   FROM assistant_threads
  WHERE id = $1
    AND project_id = $2::uuid
@@ -125,16 +125,17 @@ type GetAssistantThreadSourceForMemoryParams struct {
 
 type GetAssistantThreadSourceForMemoryRow struct {
 	SourceKind    string
+	CorrelationID string
 	SourceRefJson []byte
 }
 
-// Resolve the origin thread's source surface and ref payload so Remember can
-// stamp provenance (which surface, who said it, in what channel) onto the
-// memory row.
+// Resolve the origin thread's source surface, correlation id and ref payload
+// so Remember can stamp provenance (which surface, who said it, in which
+// conversation) onto the memory row for tracing.
 func (q *Queries) GetAssistantThreadSourceForMemory(ctx context.Context, arg GetAssistantThreadSourceForMemoryParams) (GetAssistantThreadSourceForMemoryRow, error) {
 	row := q.db.QueryRow(ctx, getAssistantThreadSourceForMemory, arg.ID, arg.ProjectID)
 	var i GetAssistantThreadSourceForMemoryRow
-	err := row.Scan(&i.SourceKind, &i.SourceRefJson)
+	err := row.Scan(&i.SourceKind, &i.CorrelationID, &i.SourceRefJson)
 	return i, err
 }
 
@@ -184,7 +185,7 @@ INSERT INTO assistant_memories (
   supersedes_id,
   source_kind,
   source_user_id,
-  source_channel,
+  source_correlation_id,
   source_timestamp
 ) VALUES (
   $1::uuid,
@@ -205,19 +206,19 @@ RETURNING id, created_at
 `
 
 type InsertAssistantMemoryParams struct {
-	AssistantID     uuid.UUID
-	ProjectID       uuid.UUID
-	OrganizationID  string
-	Content         string
-	Embedding       pgvector_go.HalfVector
-	Tags            []string
-	OriginThreadID  uuid.NullUUID
-	OriginChatID    uuid.NullUUID
-	SupersedesID    uuid.NullUUID
-	SourceKind      pgtype.Text
-	SourceUserID    pgtype.Text
-	SourceChannel   pgtype.Text
-	SourceTimestamp pgtype.Timestamptz
+	AssistantID         uuid.UUID
+	ProjectID           uuid.UUID
+	OrganizationID      string
+	Content             string
+	Embedding           pgvector_go.HalfVector
+	Tags                []string
+	OriginThreadID      uuid.NullUUID
+	OriginChatID        uuid.NullUUID
+	SupersedesID        uuid.NullUUID
+	SourceKind          pgtype.Text
+	SourceUserID        pgtype.Text
+	SourceCorrelationID pgtype.Text
+	SourceTimestamp     pgtype.Timestamptz
 }
 
 type InsertAssistantMemoryRow struct {
@@ -238,7 +239,7 @@ func (q *Queries) InsertAssistantMemory(ctx context.Context, arg InsertAssistant
 		arg.SupersedesID,
 		arg.SourceKind,
 		arg.SourceUserID,
-		arg.SourceChannel,
+		arg.SourceCorrelationID,
 		arg.SourceTimestamp,
 	)
 	var i InsertAssistantMemoryRow
@@ -368,7 +369,7 @@ SELECT
     last_access,
     source_kind,
     source_user_id,
-    source_channel,
+    source_correlation_id,
     source_timestamp,
     (1 - (embedding <=> $1))::float8 AS similarity
   FROM assistant_memories
@@ -388,16 +389,16 @@ type ListNearestAssistantMemoriesParams struct {
 }
 
 type ListNearestAssistantMemoriesRow struct {
-	ID              uuid.UUID
-	Content         string
-	Tags            []string
-	CreatedAt       pgtype.Timestamptz
-	LastAccess      pgtype.Timestamptz
-	SourceKind      pgtype.Text
-	SourceUserID    pgtype.Text
-	SourceChannel   pgtype.Text
-	SourceTimestamp pgtype.Timestamptz
-	Similarity      float64
+	ID                  uuid.UUID
+	Content             string
+	Tags                []string
+	CreatedAt           pgtype.Timestamptz
+	LastAccess          pgtype.Timestamptz
+	SourceKind          pgtype.Text
+	SourceUserID        pgtype.Text
+	SourceCorrelationID pgtype.Text
+	SourceTimestamp     pgtype.Timestamptz
+	Similarity          float64
 }
 
 // Top-K nearest active memories with an optional tag overlap filter. Caller
@@ -424,7 +425,7 @@ func (q *Queries) ListNearestAssistantMemories(ctx context.Context, arg ListNear
 			&i.LastAccess,
 			&i.SourceKind,
 			&i.SourceUserID,
-			&i.SourceChannel,
+			&i.SourceCorrelationID,
 			&i.SourceTimestamp,
 			&i.Similarity,
 		); err != nil {

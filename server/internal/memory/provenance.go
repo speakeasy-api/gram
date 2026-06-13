@@ -5,83 +5,60 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/threadsource"
 )
 
-// Source kinds mirror the assistant thread source surfaces defined by the
-// assistants package adapters (slack|cron|wake|dashboard). They are duplicated
-// here as plain strings because the assistants constants are unexported and
-// importing that package would invert the dependency direction.
-//
-// The set is an open enum: source_kind is TEXT with no database constraint,
-// and extractProvenance records any kind it is handed verbatim. Adding a new
-// source surface (e.g. email) therefore requires no migration — its memories
-// carry kind-only provenance (NULL user/channel, read as less-trusted) until
-// a case is added to extractProvenance to extract the richer fields.
-const (
-	sourceKindSlack     = "slack"
-	sourceKindCron      = "cron"
-	sourceKindWake      = "wake"
-	sourceKindDashboard = "dashboard"
-)
-
-// provenance captures who said the remembered fact, in what channel, and when
-// it was recorded. All fields are optional: rows written outside an assistant
-// thread (or before provenance existed) carry none, and each source surface
-// only fills the fields it can attest to.
+// provenance captures, for tracing, the conversational context a memory write
+// came from: the origin thread's source surface, the external user who said
+// it, the thread's correlation id, and when it was recorded. It exists to
+// answer "why is the assistant remembering this?" — note that it records the
+// conversation the write happened in, not necessarily the true origin of the
+// fact (the assistant may have learned it from e.g. a web page mid-turn).
+// All fields are optional: writes that happen outside an assistant thread
+// carry none.
 type provenance struct {
-	Kind      *string
-	UserID    *string
-	Channel   *string
-	Timestamp *time.Time
+	Kind          *string
+	UserID        *string
+	CorrelationID *string
+	Timestamp     *time.Time
 }
 
 // extractProvenance maps an origin thread's source surface onto memory
-// provenance. Per source kind:
+// provenance. The thread's correlation id is stored verbatim for every source
+// kind — it uniformly encodes the source conversation (e.g.
+// "slack:T123:C456:789.012") regardless of surface. A speaker is only
+// recorded where one exists: slack and dashboard source refs carry the
+// user_id of the human driving the turn; cron and wake turns are automated
+// and have none.
 //
-//   - slack: user_id is the Slack user who triggered the turn and channel_id
-//     is the Slack channel it happened in.
-//   - dashboard: user_id is the Gram dashboard user driving the conversation;
-//     there is no channel concept.
-//   - cron/wake: no human speaker; the trigger instance id is recorded as the
-//     channel so memories written by automated runs remain attributable to a
-//     specific trigger.
+// The kind set (threadsource.Kind*) is an open enum: source_kind is TEXT with
+// no database constraint, and extractProvenance records any kind it is handed
+// verbatim. Adding a new source surface (e.g. email) therefore requires no
+// migration — its memories carry kind and correlation id only, until a case
+// is added here to extract its speaker.
 //
 // Timestamp is the time of write: the triggering event's own timestamp is not
 // available at Remember() time (the tool call carries only the thread
 // principal), and the write happens within the same turn as the event, so the
 // write time is a faithful proxy.
-func extractProvenance(kind string, sourceRefJSON []byte) provenance {
+func extractProvenance(kind string, correlationID string, sourceRefJSON []byte) provenance {
 	now := time.Now()
 	out := provenance{
-		Kind:      conv.PtrEmpty(kind),
-		UserID:    nil,
-		Channel:   nil,
-		Timestamp: &now,
+		Kind:          conv.PtrEmpty(kind),
+		UserID:        nil,
+		CorrelationID: conv.PtrEmpty(correlationID),
+		Timestamp:     &now,
 	}
 
 	switch kind {
-	case sourceKindSlack:
-		var ref struct {
-			ChannelID string `json:"channel_id"`
-			UserID    string `json:"user_id"`
-		}
-		if err := json.Unmarshal(sourceRefJSON, &ref); err == nil {
-			out.UserID = conv.PtrEmpty(ref.UserID)
-			out.Channel = conv.PtrEmpty(ref.ChannelID)
-		}
-	case sourceKindDashboard:
+	case threadsource.KindSlack, threadsource.KindDashboard:
+		// Both surfaces carry the speaking user under the same key in their
+		// source ref payloads.
 		var ref struct {
 			UserID string `json:"user_id"`
 		}
 		if err := json.Unmarshal(sourceRefJSON, &ref); err == nil {
 			out.UserID = conv.PtrEmpty(ref.UserID)
-		}
-	case sourceKindCron, sourceKindWake:
-		var ref struct {
-			TriggerInstanceID string `json:"trigger_instance_id"`
-		}
-		if err := json.Unmarshal(sourceRefJSON, &ref); err == nil {
-			out.Channel = conv.PtrEmpty(ref.TriggerInstanceID)
 		}
 	}
 

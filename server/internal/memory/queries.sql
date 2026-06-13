@@ -16,7 +16,7 @@ INSERT INTO assistant_memories (
   supersedes_id,
   source_kind,
   source_user_id,
-  source_channel,
+  source_correlation_id,
   source_timestamp
 ) VALUES (
   @assistant_id::uuid,
@@ -30,16 +30,16 @@ INSERT INTO assistant_memories (
   @supersedes_id,
   @source_kind,
   @source_user_id,
-  @source_channel,
+  @source_correlation_id,
   @source_timestamp
 )
 RETURNING id, created_at;
 
 -- name: GetAssistantThreadSourceForMemory :one
--- Resolve the origin thread's source surface and ref payload so Remember can
--- stamp provenance (which surface, who said it, in what channel) onto the
--- memory row.
-SELECT source_kind, source_ref_json
+-- Resolve the origin thread's source surface, correlation id and ref payload
+-- so Remember can stamp provenance (which surface, who said it, in which
+-- conversation) onto the memory row for tracing.
+SELECT source_kind, correlation_id, source_ref_json
   FROM assistant_threads
  WHERE id = @id
    AND project_id = @project_id::uuid
@@ -106,7 +106,7 @@ SELECT
     last_access,
     source_kind,
     source_user_id,
-    source_channel,
+    source_correlation_id,
     source_timestamp,
     (1 - (embedding <=> @query_embedding))::float8 AS similarity
   FROM assistant_memories
