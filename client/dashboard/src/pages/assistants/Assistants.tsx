@@ -2,12 +2,13 @@ import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
 import { Page } from "@/components/page-layout";
 import { getGradientColors } from "@/components/gradient-colors";
 import { RequireScope } from "@/components/require-scope";
+import { AssistantActivitySparkline } from "@/components/assistants/activity-sparkline";
+import { AssistantStatusToggle } from "@/components/assistants/status-toggle";
 import { CardContextMenu } from "@/components/card-context-menu";
 import { Badge } from "@/components/ui/badge";
 import { DotCard } from "@/components/ui/dot-card";
 import { Action, MoreActions } from "@/components/ui/more-actions";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
 import {
   PageTabsTrigger,
   Tabs,
@@ -18,17 +19,12 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { UpdatedAt } from "@/components/updated-at";
 import { useProductTier } from "@/hooks/useProductTier";
-import { useRBAC } from "@/hooks/useRBAC";
 import { useRoutes } from "@/routes";
-import {
-  Assistant,
-  AssistantStatus,
-} from "@gram/client/models/components/assistant.js";
+import { Assistant } from "@gram/client/models/components/assistant.js";
 import {
   invalidateAllAssistantsList,
   useAssistantsDeleteMutation,
   useAssistantsList,
-  useAssistantsUpdateMutation,
   useGetPeriodUsage,
 } from "@gram/client/react-query/index.js";
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
@@ -37,7 +33,6 @@ import { Bot, Boxes, Cpu, Info, Plus } from "lucide-react";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { MouseEvent } from "react";
 import { Outlet } from "react-router";
-import { toast } from "sonner";
 
 import { AssistantsAuditLog } from "./AssistantAuditLog";
 
@@ -48,49 +43,6 @@ function stopLinkNavigation(e: MouseEvent<HTMLDivElement>) {
 
 export function AssistantsRoot(): JSX.Element {
   return <Outlet />;
-}
-
-function StatusToggle({ assistant }: { assistant: Assistant }) {
-  const queryClient = useQueryClient();
-  const { hasScope } = useRBAC();
-  const canWrite = hasScope("project:write");
-  const isActive = assistant.status === AssistantStatus.Active;
-
-  const updateAssistant = useAssistantsUpdateMutation({
-    onSuccess: () => {
-      void invalidateAllAssistantsList(queryClient);
-    },
-    onError: () => {
-      toast.error("Failed to update assistant status");
-    },
-  });
-
-  const handleToggle = () => {
-    updateAssistant.mutate({
-      request: {
-        updateAssistantForm: {
-          id: assistant.id,
-          status: isActive ? AssistantStatus.Paused : AssistantStatus.Active,
-        },
-      },
-    });
-  };
-
-  return (
-    <Stack direction="horizontal" gap={2} align="center">
-      <div onClick={stopLinkNavigation}>
-        <Switch
-          checked={isActive}
-          onCheckedChange={handleToggle}
-          disabled={!canWrite || updateAssistant.isPending}
-          aria-label={`${isActive ? "Pause" : "Activate"} assistant ${assistant.name}`}
-        />
-      </div>
-      <Type small muted>
-        {isActive ? "Active" : "Paused"}
-      </Type>
-    </Stack>
-  );
 }
 
 function AssistantsEmptyState({ onCreate }: { onCreate: () => void }) {
@@ -374,10 +326,13 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
             <AssistantToolsets assistant={assistant} />
           </div>
 
-          {/* Footer row: status toggle + last updated */}
+          {/* Footer row: status toggle + activity sparkline + last updated */}
           <div className="border-border/60 mt-auto flex items-center justify-between gap-2 border-t pt-3">
-            <StatusToggle assistant={assistant} />
-            <UpdatedAt date={new Date(assistant.updatedAt)} />
+            <AssistantStatusToggle assistant={assistant} />
+            <div className="flex items-center gap-2">
+              <AssistantActivitySparkline assistantId={assistant.id} />
+              <UpdatedAt date={new Date(assistant.updatedAt)} />
+            </div>
           </div>
         </DotCard>
       </routes.assistants.detail.Link>
