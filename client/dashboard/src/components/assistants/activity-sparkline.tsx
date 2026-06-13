@@ -1,41 +1,44 @@
-import { useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
-import { useAuditLogsInfinite } from "@gram/client/react-query";
+import { useListChats } from "@gram/client/react-query";
 import { useMemo } from "react";
 
 const WINDOW_DAYS = 14;
 const WIDTH = 56;
 const HEIGHT = 16;
+const SESSION_SAMPLE = 50;
+
+type DayEvent = { date: Date; weight: number };
 
 /**
- * Bucket audit-log timestamps into per-day tool-call counts for the trailing
- * WINDOW_DAYS, oldest day first.
+ * Bucket weighted events into per-day totals for the trailing `days`, oldest
+ * day first.
  */
-function bucketByDay(timestamps: Date[], days: number): number[] {
+function bucketByDay(events: DayEvent[], days: number): number[] {
   const counts = Array.from({ length: days }, () => 0);
   const now = Date.now();
   const dayMs = 24 * 60 * 60 * 1000;
-  for (const ts of timestamps) {
-    const ageDays = Math.floor((now - ts.getTime()) / dayMs);
+  for (const { date, weight } of events) {
+    const ageDays = Math.floor((now - date.getTime()) / dayMs);
     if (ageDays < 0 || ageDays >= days) continue;
     // index 0 = oldest day in the window, days-1 = today
-    counts[days - 1 - ageDays] += 1;
+    counts[days - 1 - ageDays] += weight;
   }
   return counts;
 }
 
 /**
- * A compact inline sparkline of an assistant's recent tool-call activity,
- * derived client-side from the assistant audit trail (the same events behind
- * the Assistants > Audit log tab). Rendered as hand-rolled SVG rather than a
- * chart library so each card carries a near-zero-cost graphic.
+ * A compact inline sparkline of an assistant's recent activity, derived from
+ * its chat sessions. Any chat counts as activity — tool calls happen inside
+ * sessions, so this is the inclusive signal (an assistant that only ever
+ * answers questions still shows a curve). Each session contributes its message
+ * count (min 1) to the day of its last activity. Rendered as hand-rolled SVG
+ * rather than a chart library so each card carries a near-zero-cost graphic.
  *
- * NOTE: this reads the most recent page of audit events per assistant, so it
- * reflects recent activity rather than a guaranteed full WINDOW_DAYS window —
- * adequate for an at-a-glance card. A project with many high-traffic
- * assistants would warrant a server-side bucketed endpoint instead of N
- * per-card audit queries.
+ * NOTE: reads the most recent `SESSION_SAMPLE` sessions per assistant, so it
+ * reflects recent activity rather than a guaranteed full window — adequate for
+ * an at-a-glance card. A high-traffic project would warrant a server-side
+ * bucketed endpoint instead of N per-card session queries.
  */
 export function AssistantActivitySparkline({
   assistantId,
@@ -44,24 +47,30 @@ export function AssistantActivitySparkline({
   assistantId: string;
   className?: string;
 }): JSX.Element | null {
-  const { projectSlug } = useSlugs();
   const { hasScope } = useRBAC();
-  const canRead = hasScope("org:read");
+  const canRead = hasScope("project:read");
 
-  const { data } = useAuditLogsInfinite(
-    { projectSlug, subjectType: "assistant", subjectId: assistantId },
+  const { data } = useListChats(
+    {
+      assistantId,
+      sortBy: "last_message_timestamp",
+      sortOrder: "desc",
+      limit: SESSION_SAMPLE,
+    },
     undefined,
     { enabled: canRead, retry: false, throwOnError: false },
   );
 
   const counts = useMemo(() => {
-    const logs = data?.pages.flatMap((page) => page.result.logs) ?? [];
-    const timestamps = logs.map((log) => new Date(log.createdAt));
-    return bucketByDay(timestamps, WINDOW_DAYS);
+    const events: DayEvent[] = (data?.chats ?? []).map((chat) => ({
+      date: new Date(chat.updatedAt),
+      weight: Math.max(chat.numMessages, 1),
+    }));
+    return bucketByDay(events, WINDOW_DAYS);
   }, [data]);
 
-  // Without org:read we can't fetch activity at all, so render nothing. When we
-  // can read but the assistant has no recent tool calls, still draw a flat
+  // Without project:read we can't fetch sessions, so render nothing. When we
+  // can read but the assistant has no recent sessions, still draw a flat
   // baseline so the metric is visibly present (and populates as activity
   // arrives) rather than mysteriously absent.
   if (!canRead) return null;
