@@ -188,13 +188,13 @@ export function AssistantsAuditLog(): React.JSX.Element {
   return (
     <div className="flex w-full flex-col gap-4">
       <div>
-        <Heading variant="h4" className="mb-2">
+        <Heading variant="h3" className="mb-2">
           Assistant activity
         </Heading>
         <Type muted small className="mt-1">
-          Every tool call your assistants make — the assistant, tool, toolset,
-          and parameters — recorded as it happens. These events are kept out of
-          the organization audit log; filter by assistant below.
+          Every autonomous tool call your assistants make. The assistant, tool,
+          MCP and parameters. These events are kept out of the organization
+          audit log; filter by assistant below.
         </Type>
       </div>
 
