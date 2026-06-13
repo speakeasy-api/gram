@@ -93,7 +93,7 @@ export function AssistantActivitySparkline({
       viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
       className={cn(
         "overflow-visible",
-        hasActivity ? "text-muted-foreground/70" : "text-muted-foreground/30",
+        hasActivity ? "text-primary" : "text-muted-foreground/30",
         className,
       )}
       aria-label={hasActivity ? "Recent activity" : "No recent activity"}
