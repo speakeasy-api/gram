@@ -56,14 +56,17 @@ export function AssistantActivitySparkline({
 
   const counts = useMemo(() => {
     const logs = data?.pages.flatMap((page) => page.result.logs) ?? [];
-    if (logs.length === 0) return null;
     const timestamps = logs.map((log) => new Date(log.createdAt));
-    const buckets = bucketByDay(timestamps, WINDOW_DAYS);
-    return buckets.some((c) => c > 0) ? buckets : null;
+    return bucketByDay(timestamps, WINDOW_DAYS);
   }, [data]);
 
-  if (!canRead || !counts) return null;
+  // Without org:read we can't fetch activity at all, so render nothing. When we
+  // can read but the assistant has no recent tool calls, still draw a flat
+  // baseline so the metric is visibly present (and populates as activity
+  // arrives) rather than mysteriously absent.
+  if (!canRead) return null;
 
+  const hasActivity = counts.some((count) => count > 0);
   const max = Math.max(...counts, 1);
   const stepX = WIDTH / (counts.length - 1);
   const points = counts
@@ -79,15 +82,19 @@ export function AssistantActivitySparkline({
       width={WIDTH}
       height={HEIGHT}
       viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-      className={cn("text-muted-foreground/50 overflow-visible", className)}
-      aria-label="Recent activity"
+      className={cn(
+        "overflow-visible",
+        hasActivity ? "text-muted-foreground/70" : "text-muted-foreground/30",
+        className,
+      )}
+      aria-label={hasActivity ? "Recent activity" : "No recent activity"}
       role="img"
     >
       <polyline
         points={points}
         fill="none"
         stroke="currentColor"
-        strokeWidth={1}
+        strokeWidth={1.25}
         strokeLinejoin="round"
         strokeLinecap="round"
       />
