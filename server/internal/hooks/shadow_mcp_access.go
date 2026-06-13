@@ -2,11 +2,11 @@ package hooks
 
 import (
 	"context"
-	"strings"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpname"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
@@ -90,13 +90,9 @@ func claudeShadowMCPEvidence(rawToolName string) shadowmcp.AccessEvidence {
 	}
 }
 
+// mcpServerIdentityFromToolName extracts the MCP server identity from a Codex
+// or Claude tool name. Both hosts emit the "mcp__<server>__<tool>" form, so the
+// shared parser's Cursor "MCP:" branch never fires here.
 func mcpServerIdentityFromToolName(rawName string) string {
-	if !strings.HasPrefix(rawName, "mcp__") {
-		return ""
-	}
-	parts := strings.SplitN(rawName, "__", 3)
-	if len(parts) != 3 {
-		return ""
-	}
-	return parts[1]
+	return mcpname.MCPServerOf(rawName)
 }
