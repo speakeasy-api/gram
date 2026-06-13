@@ -10,6 +10,7 @@ import {
   groupLogsByDate,
   type TimestampMode,
 } from "@/lib/audit-log-feed";
+import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { useSlugs } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
@@ -186,6 +187,17 @@ export function AssistantsAuditLog(): React.JSX.Element {
 
   return (
     <div className="flex w-full flex-col gap-4">
+      <div>
+        <Heading variant="h4" className="mb-2">
+          Assistant activity
+        </Heading>
+        <Type muted small className="mt-1">
+          Every tool call your assistants make — the assistant, tool, toolset,
+          and parameters — recorded as it happens. These events are kept out of
+          the organization audit log; filter by assistant below.
+        </Type>
+      </div>
+
       <div className="flex flex-wrap items-end gap-3">
         <FacetSelect
           label="Assistant"
