@@ -379,7 +379,7 @@ func (s *Service) serveRemoteBackend(
 		return oops.E(oops.CodeUnexpected, err, "load remote mcp server headers").Log(ctx, logger)
 	}
 
-	p := s.remoteProxyManager.Build(logger, &server, headers, mcpServer.Visibility, endpoint.ProjectID.String(), upstreamAuth)
+	p := s.remoteProxyManager.Build(logger, &server, mcpServer.ID.String(), headers, mcpServer.Visibility, endpoint.ProjectID.String(), upstreamAuth)
 
 	r = r.WithContext(ctx)
 

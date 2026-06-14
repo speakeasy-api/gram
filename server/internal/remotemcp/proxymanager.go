@@ -98,9 +98,17 @@ func NewProxyManager(
 // private servers only since public servers bypass server-level RBAC.
 // projectID is forwarded to the per-tool authz interceptor as a dimension
 // so project-scoped grants can match.
+//
+// mcpServerID is the mcp_servers row id (NOT the remote_mcp_servers id on
+// server). It is the RBAC ResourceID for the per-tool `mcp:connect` checks
+// so they resolve grants against the same mcp_servers row that the handler's
+// upfront server-level `mcp:connect` check uses, keeping per-tool and
+// server-level authorization consistent for the same caller. server.ID still
+// drives telemetry/logging dimensions, which are keyed by remote_mcp_servers.
 func (f *ProxyManager) Build(
 	logger *slog.Logger,
 	server *remotemcprepo.RemoteMcpServer,
+	mcpServerID string,
 	headers []remotemcprepo.RemoteMcpServerHeader,
 	visibility string,
 	projectID string,
@@ -155,7 +163,7 @@ func (f *ProxyManager) Build(
 	}
 	if visibility == mcpservers.VisibilityPrivate {
 		toolsCallReqInterceptors = append(toolsCallReqInterceptors,
-			NewToolsCallAuthzInterceptor(f.authz, serverID, projectID, logger),
+			NewToolsCallAuthzInterceptor(f.authz, mcpServerID, projectID, logger),
 		)
 	}
 
@@ -167,7 +175,7 @@ func (f *ProxyManager) Build(
 	toolsListRespInterceptors := []proxy.ToolsListResponseInterceptor{}
 	if visibility == mcpservers.VisibilityPrivate {
 		toolsListRespInterceptors = append(toolsListRespInterceptors,
-			NewToolsListMCPConnectFilterInterceptor(f.authz, serverID, projectID, logger),
+			NewToolsListMCPConnectFilterInterceptor(f.authz, mcpServerID, projectID, logger),
 		)
 	}
 	toolsListRespInterceptors = append(toolsListRespInterceptors,

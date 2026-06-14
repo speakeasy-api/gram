@@ -522,14 +522,15 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_ResolvesG
 
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
 	endpointSlug := "endpoint-" + uuid.NewString()
-	_, remoteServer := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "private", issuerID)
+	mcpServer, _ := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "private", issuerID)
 
 	// Grant the calling user a server-level mcp:connect grant. PrepareContext
 	// derives the user principal from the JWT subject (an active org member)
 	// and loads this grant; the interceptors then admit the tool. The grant
-	// resource is the remote_mcp_servers id — the resource the proxy's
-	// mcp:connect interceptors check (see ProxyManager.Build).
-	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockidp.MockUserID, remoteServer.ID.String())
+	// resource is the mcp_servers row id (NOT the remote_mcp_servers id) — the
+	// resource the proxy's mcp:connect interceptors check (see ProxyManager.Build,
+	// whose mcpServerID parameter is the RBAC ResourceID).
+	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockidp.MockUserID, mcpServer.ID.String())
 
 	// Mint a user-session JWT for the issuer-gated endpoint. The audience is
 	// the issuer URN (remote-backed endpoints bind the audience to the
