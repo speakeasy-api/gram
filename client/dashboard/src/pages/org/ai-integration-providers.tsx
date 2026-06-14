@@ -65,7 +65,7 @@ export const AI_INTEGRATION_PROVIDERS: AIIntegrationProvider[] = [
           },
         },
         {
-          title: "Paste the key into Gram",
+          title: "Paste the key into Speakeasy",
           description:
             "Copy the generated Cursor Admin API key and paste it below. Gram stores it securely and starts importing usage data.",
           showsForm: true,
