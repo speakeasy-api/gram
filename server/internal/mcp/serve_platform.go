@@ -330,6 +330,22 @@ func (s *Service) callPlatformToolsetTool(
 		}
 	}
 
+	// Platform toolsets are runtime-only, so every call here is assistant-
+	// initiated; record the durable audit trail entry on dispatch, regardless
+	// of how the tool execution turns out.
+	if principal, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
+		recordAssistantToolCallAudit(ctx, logger, s.auditLogger, s.db, assistantToolCallAudit{
+			organizationID: authCtx.ActiveOrganizationID,
+			projectID:      *authCtx.ProjectID,
+			principal:      principal,
+			chatID:         chatID,
+			toolsetSlug:    platformToolsetSlug,
+			toolName:       params.Name,
+			toolURN:        descriptor.URN,
+			params:         params.Arguments,
+		})
+	}
+
 	logAttrs := tm.HTTPLogAttributes{}
 	defer func() {
 		go s.billingTracker.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{

@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 39e5ecf0ba355145bb34d06af21bb754
+  docChecksum: 9d47b9a858b32b5bbe3e56d6f029b169
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -2239,7 +2239,7 @@ trackedFiles:
   docs/models/operations/listauditlogfacetssecurity.md:
     last_write_checksum: sha1:35324014b993181ae434c4b0a044e319667d611e
   docs/models/operations/listauditlogsrequest.md:
-    last_write_checksum: sha1:3d4be4cd8200736732a915214ca5e3ecb936f5d9
+    last_write_checksum: sha1:925685b240a478bce3a499f7fe3a0a9a9423fdf1
   docs/models/operations/listauditlogsresponse.md:
     last_write_checksum: sha1:e9a64bada92a8d11e5f5710ba964614eb4aa70aa
   docs/models/operations/listauditlogssecurity.md:
@@ -3429,7 +3429,7 @@ trackedFiles:
   src/funcs/assistantsUpdate.ts:
     last_write_checksum: sha1:8c6a96b7a83a911923bfd545c892310af8590711
   src/funcs/auditlogsList.ts:
-    last_write_checksum: sha1:ad12cc81ccc3691c9292797746e59753e3bc0182
+    last_write_checksum: sha1:a2ab45a98234f4689ff04baf5635f2b413006787
   src/funcs/auditlogsListFacets.ts:
     last_write_checksum: sha1:5ede11f594962f94ea5723f19c9f1d6752daa3d5
   src/funcs/authCallback.ts:
@@ -5275,7 +5275,7 @@ trackedFiles:
   src/models/operations/listauditlogfacets.ts:
     last_write_checksum: sha1:9b7b05e6c023800198adf00639482dee46fba2cd
   src/models/operations/listauditlogs.ts:
-    last_write_checksum: sha1:be7e5e17186bb5ddde77ab5d0edff8d623eaa3c4
+    last_write_checksum: sha1:59204a132e32ed8be976f0cc9bbff6fcc386d871
   src/models/operations/listchallengebuckets.ts:
     last_write_checksum: sha1:00e55d73077f88cbadd108ceb3552363226dee10
   src/models/operations/listchallenges.ts:
@@ -5615,9 +5615,9 @@ trackedFiles:
   src/react-query/auditLogFacets.ts:
     last_write_checksum: sha1:0663f3071c899f98400ef2510a55c7b13262c08f
   src/react-query/auditLogs.core.ts:
-    last_write_checksum: sha1:17c006329c1f1a121e8384b338f54267bf4da451
+    last_write_checksum: sha1:ded648960333f093dc43999cd2022b4212ba23d2
   src/react-query/auditLogs.ts:
-    last_write_checksum: sha1:d3887c56d7a789561183853d56f545a2f50a7227
+    last_write_checksum: sha1:b8ec0b54f7c96d2d7fee91d97d63865fe2b8cf36
   src/react-query/challengeBuckets.core.ts:
     last_write_checksum: sha1:7dc6c13d4d27b7843444e80a6c277a8b1d876c44
   src/react-query/challengeBuckets.ts:

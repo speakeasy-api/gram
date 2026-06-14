@@ -5708,6 +5708,20 @@ paths:
                     description: Action to filter audit logs to a specific action.
                     type: string
                 - allowEmptyValue: true
+                  description: Subject type to filter audit logs to a specific kind of subject. When omitted, assistant activity events are excluded; pass 'assistant' to list them.
+                  in: query
+                  name: subject_type
+                  schema:
+                    description: Subject type to filter audit logs to a specific kind of subject. When omitted, assistant activity events are excluded; pass 'assistant' to list them.
+                    type: string
+                - allowEmptyValue: true
+                  description: Subject ID to filter audit logs to a specific subject (e.g. a single assistant).
+                  in: query
+                  name: subject_id
+                  schema:
+                    description: Subject ID to filter audit logs to a specific subject (e.g. a single assistant).
+                    type: string
+                - allowEmptyValue: true
                   description: API Key header
                   in: header
                   name: Gram-Key
@@ -37506,6 +37520,12 @@ components:
                 project_slug:
                     type: string
                     description: Project slug to filter audit logs to a specific project.
+                subject_id:
+                    type: string
+                    description: Subject ID to filter audit logs to a specific subject (e.g. a single assistant).
+                subject_type:
+                    type: string
+                    description: Subject type to filter audit logs to a specific kind of subject. When omitted, assistant activity events are excluded; pass 'assistant' to list them.
         ListAuditLogsResult:
             type: object
             properties:

@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -76,6 +77,7 @@ func handleToolsCall(
 	vectorToolStore *rag.ToolsetVectorStore,
 	temporalEnv *temporal.Environment,
 	mcpMetadataRepo *mcpmetadata_repo.Queries,
+	auditLogger *audit.Logger,
 	platformExtras []platformtools.ExternalTool,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
@@ -286,6 +288,22 @@ func handleToolsCall(
 	err = checkToolUsageLimits(ctx, logger, toolset.OrganizationID, toolset.AccountType, billingRepository)
 	if err != nil {
 		return nil, err
+	}
+
+	// Assistant-initiated calls leave a durable audit trail entry on dispatch,
+	// regardless of how the tool execution turns out. Ordinary user MCP
+	// traffic is not audited here.
+	if principal, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
+		recordAssistantToolCallAudit(ctx, logger, auditLogger, db, assistantToolCallAudit{
+			organizationID: toolset.OrganizationID,
+			projectID:      payload.projectID,
+			principal:      principal,
+			chatID:         payload.chatID,
+			toolsetSlug:    payload.toolset,
+			toolName:       params.Name,
+			toolURN:        toolURN,
+			params:         params.Arguments,
+		})
 	}
 
 	logAttrs := tm.HTTPLogAttributes{}

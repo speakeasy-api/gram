@@ -112,6 +112,13 @@ type ListPayload struct {
 	ActorID *string
 	// Action to filter audit logs to a specific action.
 	Action *string
+	// Subject type to filter audit logs to a specific kind of subject. When
+	// omitted, assistant activity events are excluded; pass 'assistant' to list
+	// them.
+	SubjectType *string
+	// Subject ID to filter audit logs to a specific subject (e.g. a single
+	// assistant).
+	SubjectID *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.
