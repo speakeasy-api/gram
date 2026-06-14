@@ -9,7 +9,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/agentevents"
-	"github.com/speakeasy-api/gram/server/internal/agentevents/cursor"
+	"github.com/speakeasy-api/gram/server/internal/agentevents/providers/cursor"
 	agenttypes "github.com/speakeasy-api/gram/server/internal/agentevents/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"

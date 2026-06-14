@@ -8,32 +8,25 @@ const (
 	// FieldEventType resolves the normalized EventType for the native payload.
 	FieldEventType Field = "event.type"
 
-	// Hook fields describe the original hook envelope and framework decisions.
-	FieldHookName     Field = "hook.name"
-	FieldHookSource   Field = "hook.source"
+	// Hook fields describe the original hook envelope.
 	FieldHookHostname Field = "hook.hostname"
-	FieldBlockReason  Field = "block.reason"
 	FieldError        Field = "error"
 
 	// Conversation fields are used to build storage-facing chat messages.
-	FieldConversationID     Field = "conversation.id"
-	FieldConversationChatID Field = "conversation.chat_id"
-	FieldPrompt             Field = "prompt"
-	FieldAssistantText      Field = "assistant.text"
-	FieldModel              Field = "model"
-	FieldFinishReason       Field = "finish_reason"
+	FieldPrompt        Field = "prompt"
+	FieldAssistantText Field = "assistant.text"
+	FieldModel         Field = "model"
 
 	// Scan fields are used by hook handlers for risk enforcement decisions.
 	FieldScannableText   Field = "scan.text"
 	FieldScanMessageType Field = "scan.message_type"
 
 	// Tool fields describe tool call requests and responses.
-	FieldToolName        Field = "tool.name"
-	FieldToolDisplayName Field = "tool.display_name"
-	FieldToolSource      Field = "tool.source"
-	FieldToolInput       Field = "tool.input"
-	FieldToolOutput      Field = "tool.output"
-	FieldToolCallID      Field = "tool.call_id"
+	FieldToolName   Field = "tool.name"
+	FieldToolSource Field = "tool.source"
+	FieldToolInput  Field = "tool.input"
+	FieldToolOutput Field = "tool.output"
+	FieldToolCallID Field = "tool.call_id"
 
 	// Usage fields describe token counters reported by agent runtimes.
 	FieldUsageInputTokens      Field = "usage.input_tokens"

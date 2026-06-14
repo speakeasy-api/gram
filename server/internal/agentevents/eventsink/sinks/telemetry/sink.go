@@ -22,6 +22,12 @@ func New[T any](logger Logger) *Sink[T] {
 	}
 }
 
+func Installer[T any](logger Logger) agentevents.SinkInstaller[T] {
+	return agentevents.SinkInstallerFunc[T](func(agent *agentevents.Agent[T]) error {
+		return agent.Use(New[T](logger))
+	})
+}
+
 func (s *Sink[T]) Write(ctx context.Context, ev agentevents.Event[T]) error {
 	if s == nil || s.Logger == nil {
 		return nil

@@ -65,12 +65,12 @@ func telemetryAttrs[T any](e agentevents.Event[T], eventType types.EventType, so
 	}
 }
 
-func commonAttrs[T any](e agentevents.Event[T], hookSource string) map[attr.Key]any {
+func commonAttrs[T any](e agentevents.Event[T]) map[attr.Key]any {
 	return map[attr.Key]any{
 		attr.EventSourceKey:    string(telemetry.EventSourceHook),
 		attr.ProjectIDKey:      e.Context.ProjectID,
 		attr.OrganizationIDKey: e.Context.OrgID,
-		attr.HookSourceKey:     firstNonEmpty(hookSource, string(e.Provider())),
+		attr.HookSourceKey:     string(e.Provider()),
 		attr.SpanIDKey:         generateSpanID(),
 		attr.TraceIDKey:        generateTraceID(),
 	}
@@ -86,13 +86,9 @@ func addContextAttrs[T any](attrs map[attr.Key]any, e agentevents.Event[T]) {
 // hookBaseAttrs builds the attributes shared by hook-kind telemetry: the common
 // identity attributes, the hook event name/body, hostname, and context.
 func hookBaseAttrs[T any](e agentevents.Event[T], eventType types.EventType) (map[attr.Key]any, error) {
-	hookName := optionalString(e, types.FieldHookName)
-	hookSource := optionalString(e, types.FieldHookSource)
-
-	attrs := commonAttrs(e, hookSource)
-	name := firstNonEmpty(hookName, string(eventType))
-	attrs[attr.HookEventKey] = name
-	attrs[attr.LogBodyKey] = fmt.Sprintf("Hook: %s", name)
+	attrs := commonAttrs(e)
+	attrs[attr.HookEventKey] = string(eventType)
+	attrs[attr.LogBodyKey] = fmt.Sprintf("Hook: %s", eventType)
 	setStringAttr(attrs, e, types.FieldHookHostname, attr.HookHostnameKey)
 	addContextAttrs(attrs, e)
 	return attrs, nil
@@ -150,15 +146,9 @@ func addUsageTokenAttrs[T any](attrs map[attr.Key]any, e agentevents.Event[T]) {
 // usageTelemetryAttrs builds the usage-kind telemetry attributes for assistant
 // responses.
 func usageTelemetryAttrs[T any](e agentevents.Event[T], source string) (map[attr.Key]any, bool, error) {
-	hookName := optionalString(e, types.FieldHookName)
-	hookSource := optionalString(e, types.FieldHookSource)
-
-	attrs := commonAttrs(e, hookSource)
+	attrs := commonAttrs(e)
 	attrs[attr.LogBodyKey] = fmt.Sprintf("%s usage metrics", source)
 	attrs[attr.ResourceURNKey] = fmt.Sprintf("%s:usage:metrics", e.Provider())
-	if hookName != "" {
-		attrs[attr.HookEventKey] = hookName
-	}
 	addContextAttrs(attrs, e)
 
 	addUsageAttrs(attrs, e)

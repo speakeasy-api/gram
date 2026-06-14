@@ -9,7 +9,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/agentevents"
-	cursoragent "github.com/speakeasy-api/gram/server/internal/agentevents/cursor"
+	cursoragent "github.com/speakeasy-api/gram/server/internal/agentevents/providers/cursor"
 	"github.com/speakeasy-api/gram/server/internal/agentevents/types"
 	"github.com/speakeasy-api/gram/server/internal/message"
 )
@@ -84,31 +84,8 @@ func TestCursorProviderResolvesToolFields(t *testing.T) {
 func newCursorAgent(t *testing.T) *agentevents.Agent[*gen.CursorPayload] {
 	t.Helper()
 
-	agent, err := agentevents.NewAgent[*gen.CursorPayload](cursoragent.Agent)
+	agent, err := cursoragent.Spec().Agent()
 	require.NoError(t, err)
-
-	require.NoError(t, agent.Register(
-		agentevents.Resolve[*gen.CursorPayload, types.EventType](types.FieldEventType, cursoragent.GetEventType),
-		agentevents.Resolve[*gen.CursorPayload, string](types.FieldHookSource, cursoragent.GetHookSource),
-		agentevents.Resolve[*gen.CursorPayload, string](types.FieldHookHostname, cursoragent.GetHookHostname),
-		agentevents.Resolve[*gen.CursorPayload, string](types.FieldBlockReason, cursoragent.GetBlockReason),
-		agentevents.Resolve[*gen.CursorPayload, string](types.FieldModel, cursoragent.GetModel),
-		agentevents.Resolve[*gen.CursorPayload, string](types.FieldToolName, cursoragent.GetToolName),
-		agentevents.Resolve[*gen.CursorPayload, string](types.FieldToolDisplayName, cursoragent.GetToolDisplayName),
-		agentevents.Resolve[*gen.CursorPayload, string](types.FieldToolSource, cursoragent.GetToolSource),
-		agentevents.Resolve[*gen.CursorPayload, any](types.FieldToolInput, cursoragent.GetToolInput),
-		agentevents.Resolve[*gen.CursorPayload, any](types.FieldToolOutput, cursoragent.GetToolOutput),
-		agentevents.Resolve[*gen.CursorPayload, string](types.FieldToolCallID, cursoragent.GetToolCallID),
-		agentevents.Resolve[*gen.CursorPayload, any](types.FieldError, cursoragent.GetError),
-		agentevents.Resolve[*gen.CursorPayload, int](types.FieldUsageInputTokens, cursoragent.GetUsageInputTokens),
-		agentevents.Resolve[*gen.CursorPayload, int](types.FieldUsageOutputTokens, cursoragent.GetUsageOutputTokens),
-		agentevents.Resolve[*gen.CursorPayload, int](types.FieldUsageCacheReadTokens, cursoragent.GetUsageCacheReadTokens),
-		agentevents.Resolve[*gen.CursorPayload, int](types.FieldUsageCacheWriteTokens, cursoragent.GetUsageCacheWriteTokens),
-		agentevents.Resolve[*gen.CursorPayload, string](types.FieldScannableText, cursoragent.GetScannableText),
-		agentevents.Resolve[*gen.CursorPayload, any](types.FieldScanMessageType, cursoragent.GetScanMessageType),
-		agentevents.Resolve[*gen.CursorPayload, string](types.FieldPrompt, cursoragent.GetPrompt),
-		agentevents.Resolve[*gen.CursorPayload, string](types.FieldAssistantText, cursoragent.GetAssistantText),
-	))
 	return agent
 }
 

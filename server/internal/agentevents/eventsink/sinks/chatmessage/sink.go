@@ -54,6 +54,12 @@ func New[T any](config Config) *Sink[T] {
 	}
 }
 
+func Installer[T any](config Config) agentevents.SinkInstaller[T] {
+	return agentevents.SinkInstallerFunc[T](func(agent *agentevents.Agent[T]) error {
+		return agent.Use(New[T](config))
+	})
+}
+
 func (s *Sink[T]) Write(ctx context.Context, ev agentevents.Event[T]) error {
 	if s == nil || s.Writer == nil || s.ProductFeatures == nil {
 		return nil

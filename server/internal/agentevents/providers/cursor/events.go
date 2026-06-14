@@ -32,9 +32,7 @@ const (
 
 var (
 	GetEventType             agentevents.FieldResolver[*gen.CursorPayload, types.EventType] = getEventType
-	GetHookSource            agentevents.FieldResolver[*gen.CursorPayload, string]          = getHookSource
 	GetHookHostname          agentevents.FieldResolver[*gen.CursorPayload, string]          = agentevents.GetField[*gen.CursorPayload, string]("HookHostname")
-	GetBlockReason           agentevents.FieldResolver[*gen.CursorPayload, string]          = getBlockReason
 	GetError                 agentevents.FieldResolver[*gen.CursorPayload, any]             = getError
 	GetPrompt                agentevents.FieldResolver[*gen.CursorPayload, string]          = agentevents.GetField[*gen.CursorPayload, string]("Prompt")
 	GetAssistantText         agentevents.FieldResolver[*gen.CursorPayload, string]          = agentevents.GetField[*gen.CursorPayload, string]("Text")
@@ -42,7 +40,6 @@ var (
 	GetScannableText         agentevents.FieldResolver[*gen.CursorPayload, string]          = getScannableText
 	GetScanMessageType       agentevents.FieldResolver[*gen.CursorPayload, any]             = getScanMessageType
 	GetToolName              agentevents.FieldResolver[*gen.CursorPayload, string]          = getToolName
-	GetToolDisplayName       agentevents.FieldResolver[*gen.CursorPayload, string]          = getToolName
 	GetToolSource            agentevents.FieldResolver[*gen.CursorPayload, string]          = getToolSource
 	GetToolInput             agentevents.FieldResolver[*gen.CursorPayload, any]             = agentevents.GetField[*gen.CursorPayload, any]("ToolInput")
 	GetToolOutput            agentevents.FieldResolver[*gen.CursorPayload, any]             = getToolOutput
@@ -62,14 +59,6 @@ func getEventType(ev agentevents.Event[*gen.CursorPayload]) (types.EventType, bo
 		return types.AnyEventType, false, nil
 	}
 	return eventType, true, nil
-}
-
-func getHookSource(ev agentevents.Event[*gen.CursorPayload]) (string, bool, error) {
-	return string(Agent), true, nil
-}
-
-func getBlockReason(ev agentevents.Event[*gen.CursorPayload]) (string, bool, error) {
-	return ev.BlockReason, ev.BlockReason != "", nil
 }
 
 func getError(ev agentevents.Event[*gen.CursorPayload]) (any, bool, error) {

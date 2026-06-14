@@ -42,3 +42,29 @@ func (m *Mux) Register(agent agentHandle, err error) error {
 	m.Agents[agent.ProviderID()] = agent
 	return nil
 }
+
+type SinkInstaller[T any] interface {
+	Install(*Agent[T]) error
+}
+
+type SinkInstallerFunc[T any] func(*Agent[T]) error
+
+func (f SinkInstallerFunc[T]) Install(agent *Agent[T]) error {
+	return f(agent)
+}
+
+type Spec[T any] struct {
+	Provider types.Provider
+	Build    func(*AgentBuilder[T]) *AgentBuilder[T]
+}
+
+func (s Spec[T]) Agent() (*Agent[T], error) {
+	agent, err := NewAgent[T](s.Provider)
+	if err != nil {
+		return nil, err
+	}
+	if s.Build == nil {
+		return agent, nil
+	}
+	return s.Build(agent.Builder()).Build()
+}
