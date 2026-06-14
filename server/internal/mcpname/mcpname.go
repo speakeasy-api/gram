@@ -1,20 +1,25 @@
-package risk_analysis
+// Package mcpname parses the namespaced tool-call names that agent hosts emit.
+//
+// MCP-routed tools use either the "mcp__<server>__<function>" convention
+// (Claude Code) or a "MCP:" prefix (Cursor); native tools are bare (e.g.
+// "bash"). These helpers are the single source of truth for that parsing,
+// shared by the hooks package (shadow_mcp matching, telemetry attribution) and
+// the risk_analysis package (batch analyzer + realtime judge attribution).
+package mcpname
 
 import "strings"
 
-// Tool-call names arrive namespaced by the agent host. MCP-routed tools use
-// either the "mcp__<server>__<function>" convention (Claude Code) or a "MCP:"
-// prefix (Cursor); native tools are bare (e.g. "bash"). These helpers parse
-// those forms and are shared by the batch analyzer (shadow_mcp matching) and
-// the realtime scanner (judge attribution).
-
-// IsMCPToolName reports whether a tool-call name is MCP-routed.
+// IsMCPToolName reports whether a tool-call name is MCP-routed. A well-formed
+// name needs both a server and a function: the "mcp__<server>__<function>" form
+// requires both segments non-empty, and the "MCP:<function>" form requires a
+// non-empty suffix. Malformed names (e.g. "mcp____x", a bare "MCP:") are not
+// MCP-routed, so they don't leak into MCP-only attribution/enforcement paths.
 func IsMCPToolName(name string) bool {
 	if strings.HasPrefix(name, "mcp__") {
 		parts := strings.SplitN(name, "__", 3)
-		return len(parts) == 3 && parts[2] != ""
+		return len(parts) == 3 && parts[1] != "" && parts[2] != ""
 	}
-	return strings.HasPrefix(name, "MCP:")
+	return strings.HasPrefix(name, "MCP:") && len(name) > len("MCP:")
 }
 
 // MCPFunctionOf returns the bare function name with any MCP routing prefix

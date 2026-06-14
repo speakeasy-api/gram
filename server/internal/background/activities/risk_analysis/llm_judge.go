@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/speakeasy-api/gram/server/internal/mcpname"
 	"github.com/speakeasy-api/gram/server/internal/message"
 )
 
@@ -73,7 +74,7 @@ type JudgeToolCall struct {
 // so an MCP server/function is surfaced separately — a no-op for native tools
 // and non-tool messages, where toolName is "".
 func NewJudgeMessage(messageType message.Type, toolName, body string) JudgeMessage {
-	server, fn, _ := AttributeTool(toolName)
+	server, fn, _ := mcpname.AttributeTool(toolName)
 	return JudgeMessage{
 		Type:        messageType,
 		Body:        body,
@@ -101,7 +102,7 @@ func (m JudgeMessage) HasContent() bool {
 // NewJudgeToolCall destructures a tool name into its MCP components and pairs it
 // with the call's raw arguments, for one entry of a multi-call message.
 func NewJudgeToolCall(toolName, arguments string) JudgeToolCall {
-	server, fn, _ := AttributeTool(toolName)
+	server, fn, _ := mcpname.AttributeTool(toolName)
 	return JudgeToolCall{
 		ToolName:    toolName,
 		MCPServer:   server,
