@@ -89,7 +89,7 @@ export const AI_INTEGRATION_PROVIDERS: AIIntegrationProvider[] = [
         {
           title: "Copy your Compliance Access Key",
           description:
-            "Create a Compliance Access Key and copy it. Use a Compliance Access Key, not an Admin API key: Admin API keys only reach the Activity Feed, while Compliance Access Keys can access the broader compliance data Gram imports.",
+            "Create a Compliance Access Key and copy it. Use a Compliance Access Key, not an Admin API key: Admin API keys only reach the Activity Feed, while Compliance Access Keys can access the broader compliance data Speakeasy imports.",
           helpLink: {
             url: "https://platform.claude.com/docs/en/manage-claude/compliance-api-access",
             linkLabel: "Compliance API access guide",
