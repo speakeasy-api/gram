@@ -31,7 +31,8 @@ function bucketByDay(events: DayEvent[], days: number): number[] {
     const ageDays = today - dayIndex(date);
     if (ageDays < 0 || ageDays >= days) continue;
     // index 0 = oldest day in the window, days-1 = today
-    counts[days - 1 - ageDays] += weight;
+    const idx = days - 1 - ageDays;
+    counts[idx] = (counts[idx] ?? 0) + weight;
   }
   return counts;
 }
