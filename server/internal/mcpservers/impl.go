@@ -210,7 +210,7 @@ func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPay
 		if parseErr != nil {
 			return nil, oops.E(oops.CodeBadRequest, parseErr, "invalid mcp server id").LogError(ctx, s.logger)
 		}
-		server, err = r.GetMCPServerByID(ctx, repo.GetMCPServerByIDParams{
+		server, err = r.GetMCPServerByIDAndProjectID(ctx, repo.GetMCPServerByIDAndProjectIDParams{
 			ID:        serverID,
 			ProjectID: *authCtx.ProjectID,
 		})
@@ -258,7 +258,7 @@ func (s *Service) ListToolFilters(ctx context.Context, payload *gen.ListToolFilt
 		if parseErr != nil {
 			return nil, oops.E(oops.CodeBadRequest, parseErr, "invalid mcp server id").LogError(ctx, s.logger)
 		}
-		server, err = r.GetMCPServerByID(ctx, repo.GetMCPServerByIDParams{
+		server, err = r.GetMCPServerByIDAndProjectID(ctx, repo.GetMCPServerByIDAndProjectIDParams{
 			ID:        serverID,
 			ProjectID: *authCtx.ProjectID,
 		})
@@ -398,7 +398,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 
 	txRepo := repo.New(dbtx)
 
-	existing, err := txRepo.GetMCPServerByID(ctx, repo.GetMCPServerByIDParams{
+	existing, err := txRepo.GetMCPServerByIDAndProjectID(ctx, repo.GetMCPServerByIDAndProjectIDParams{
 		ID:        serverID,
 		ProjectID: *authCtx.ProjectID,
 	})

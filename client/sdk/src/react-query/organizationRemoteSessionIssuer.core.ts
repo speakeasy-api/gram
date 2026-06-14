@@ -8,7 +8,7 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { organizationRemoteSessionIssuersGet } from "../funcs/organizationRemoteSessionIssuersGet.js";
+import { organizationRemoteSessionIssuersGetIssuer } from "../funcs/organizationRemoteSessionIssuersGetIssuer.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -65,7 +65,7 @@ export function buildOrganizationRemoteSessionIssuerQuery(
         signal: sig,
       };
 
-      return unwrapAsync(organizationRemoteSessionIssuersGet(
+      return unwrapAsync(organizationRemoteSessionIssuersGetIssuer(
         client$,
         request,
         security,
@@ -85,7 +85,7 @@ export function queryKeyOrganizationRemoteSessionIssuer(
   return [
     "@gram/client",
     "organizationRemoteSessionIssuers",
-    "get",
+    "getIssuer",
     parameters,
   ];
 }

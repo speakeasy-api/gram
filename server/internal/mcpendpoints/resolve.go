@@ -44,7 +44,7 @@ func BySlugAndCustomDomain(ctx context.Context, db *pgxpool.Pool, logger *slog.L
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "load mcp endpoint").LogError(ctx, logger)
 	}
 
-	server, err := mcpservers_repo.New(db).GetMCPServerByID(ctx, mcpservers_repo.GetMCPServerByIDParams{
+	server, err := mcpservers_repo.New(db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
 		ID:        endpoint.McpServerID,
 		ProjectID: endpoint.ProjectID,
 	})

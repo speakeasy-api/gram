@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { dlv } from "../lib/dlv.js";
 import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -26,41 +25,32 @@ import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
-import {
-  createPageIterator,
-  haltIterator,
-  PageIterator,
-  Paginator,
-} from "../types/operations.js";
 
 /**
- * listOrganizationRemoteSessionIssuers organizationRemoteSessionIssuers
+ * deleteIssuer organizationRemoteSessionIssuers
  *
  * @remarks
- * List organization-level remote_session_issuers in the caller's organization.
+ * Soft-delete any remote_session_issuer (organizational or project-specific) in the caller's organization. Blocked when any remote_session_clients still reference it. Requires org:admin.
  */
-export function organizationRemoteSessionIssuersList(
+export function organizationRemoteSessionIssuersDeleteIssuer(
   client: GramCore,
-  request?: operations.ListOrganizationRemoteSessionIssuersRequest | undefined,
+  request: operations.DeleteOrganizationRemoteSessionIssuerRequest,
   security?:
-    | operations.ListOrganizationRemoteSessionIssuersSecurity
+    | operations.DeleteOrganizationRemoteSessionIssuerSecurity
     | undefined,
   options?: RequestOptions,
 ): APIPromise<
-  PageIterator<
-    Result<
-      operations.ListOrganizationRemoteSessionIssuersResponse,
-      | errors.ServiceError
-      | GramError
-      | ResponseValidationError
-      | ConnectionError
-      | RequestAbortedError
-      | RequestTimeoutError
-      | InvalidRequestError
-      | UnexpectedClientError
-      | SDKValidationError
-    >,
-    { cursor: string }
+  Result<
+    void,
+    | errors.ServiceError
+    | GramError
+    | ResponseValidationError
+    | ConnectionError
+    | RequestAbortedError
+    | RequestTimeoutError
+    | InvalidRequestError
+    | UnexpectedClientError
+    | SDKValidationError
   >
 > {
   return new APIPromise($do(
@@ -73,27 +63,24 @@ export function organizationRemoteSessionIssuersList(
 
 async function $do(
   client: GramCore,
-  request?: operations.ListOrganizationRemoteSessionIssuersRequest | undefined,
+  request: operations.DeleteOrganizationRemoteSessionIssuerRequest,
   security?:
-    | operations.ListOrganizationRemoteSessionIssuersSecurity
+    | operations.DeleteOrganizationRemoteSessionIssuerSecurity
     | undefined,
   options?: RequestOptions,
 ): Promise<
   [
-    PageIterator<
-      Result<
-        operations.ListOrganizationRemoteSessionIssuersResponse,
-        | errors.ServiceError
-        | GramError
-        | ResponseValidationError
-        | ConnectionError
-        | RequestAbortedError
-        | RequestTimeoutError
-        | InvalidRequestError
-        | UnexpectedClientError
-        | SDKValidationError
-      >,
-      { cursor: string }
+    Result<
+      void,
+      | errors.ServiceError
+      | GramError
+      | ResponseValidationError
+      | ConnectionError
+      | RequestAbortedError
+      | RequestTimeoutError
+      | InvalidRequestError
+      | UnexpectedClientError
+      | SDKValidationError
     >,
     APICall,
   ]
@@ -102,33 +89,32 @@ async function $do(
     request,
     (value) =>
       z.parse(
-        z.optional(
-          operations.ListOrganizationRemoteSessionIssuersRequest$outboundSchema,
-        ),
+        operations.DeleteOrganizationRemoteSessionIssuerRequest$outboundSchema,
         value,
       ),
     "Input validation failed",
   );
   if (!parsed.ok) {
-    return [haltIterator(parsed), { status: "invalid" }];
+    return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/organizationRemoteSessionIssuers.list")();
+  const path = pathToFunc(
+    "/rpc/organizationRemoteSessionIssuers.deleteIssuer",
+  )();
 
   const query = encodeFormQuery({
-    "cursor": payload?.cursor,
-    "limit": payload?.limit,
+    "id": payload.id,
   });
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
+    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -154,7 +140,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listOrganizationRemoteSessionIssuers",
+    operationID: "deleteOrganizationRemoteSessionIssuer",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -168,7 +154,7 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "GET",
+    method: "DELETE",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
@@ -178,7 +164,7 @@ async function $do(
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
   }, options);
   if (!requestRes.ok) {
-    return [haltIterator(requestRes), { status: "invalid" }];
+    return [requestRes, { status: "invalid" }];
   }
   const req = requestRes.value;
 
@@ -201,7 +187,7 @@ async function $do(
     retryCodes: context.retryCodes,
   });
   if (!doResult.ok) {
-    return [haltIterator(doResult), { status: "request-error", request: req }];
+    return [doResult, { status: "request-error", request: req }];
   }
   const response = doResult.value;
 
@@ -209,8 +195,8 @@ async function $do(
     HttpMeta: { Response: response, Request: req },
   };
 
-  const [result, raw] = await M.match<
-    operations.ListOrganizationRemoteSessionIssuersResponse,
+  const [result] = await M.match<
+    void,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -221,11 +207,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(
-      200,
-      operations.ListOrganizationRemoteSessionIssuersResponse$inboundSchema,
-      { key: "Result" },
-    ),
+    M.nil(200, z.void()),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,
@@ -235,58 +217,8 @@ async function $do(
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });
   if (!result.ok) {
-    return [haltIterator(result), {
-      status: "complete",
-      request: req,
-      response,
-    }];
+    return [result, { status: "complete", request: req, response }];
   }
 
-  const nextFunc = (
-    responseData: unknown,
-  ): {
-    next: Paginator<
-      Result<
-        operations.ListOrganizationRemoteSessionIssuersResponse,
-        | errors.ServiceError
-        | GramError
-        | ResponseValidationError
-        | ConnectionError
-        | RequestAbortedError
-        | RequestTimeoutError
-        | InvalidRequestError
-        | UnexpectedClientError
-        | SDKValidationError
-      >
-    >;
-    "~next"?: { cursor: string };
-  } => {
-    const nextCursor = dlv(responseData, "next_cursor");
-    if (typeof nextCursor !== "string") {
-      return { next: () => null };
-    }
-    if (nextCursor.trim() === "") {
-      return { next: () => null };
-    }
-
-    const nextVal = () =>
-      organizationRemoteSessionIssuersList(
-        client,
-        {
-          ...request!,
-          cursor: nextCursor,
-        },
-        security,
-        options,
-      );
-
-    return { next: nextVal, "~next": { cursor: nextCursor } };
-  };
-
-  const page = { ...result, ...nextFunc(raw) };
-  return [{ ...page, ...createPageIterator(page, (v) => !v.ok) }, {
-    status: "complete",
-    request: req,
-    response,
-  }];
+  return [result, { status: "complete", request: req, response }];
 }

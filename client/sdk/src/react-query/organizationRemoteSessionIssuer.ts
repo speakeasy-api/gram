@@ -53,10 +53,10 @@ export type OrganizationRemoteSessionIssuerQueryError =
   | SDKValidationError;
 
 /**
- * getOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
+ * getIssuer organizationRemoteSessionIssuers
  *
  * @remarks
- * Get an organization-level remote_session_issuer by id.
+ * Get any remote_session_issuer (organizational or project-specific) in the caller's organization by id. Requires org:read.
  */
 export function useOrganizationRemoteSessionIssuer(
   request: operations.GetOrganizationRemoteSessionIssuerRequest,
@@ -82,10 +82,10 @@ export function useOrganizationRemoteSessionIssuer(
 }
 
 /**
- * getOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
+ * getIssuer organizationRemoteSessionIssuers
  *
  * @remarks
- * Get an organization-level remote_session_issuer by id.
+ * Get any remote_session_issuer (organizational or project-specific) in the caller's organization by id. Requires org:read.
  */
 export function useOrganizationRemoteSessionIssuerSuspense(
   request: operations.GetOrganizationRemoteSessionIssuerRequest,
@@ -145,7 +145,7 @@ export function invalidateOrganizationRemoteSessionIssuer(
     queryKey: [
       "@gram/client",
       "organizationRemoteSessionIssuers",
-      "get",
+      "getIssuer",
       ...queryKeyBase,
     ],
   });
@@ -157,6 +157,6 @@ export function invalidateAllOrganizationRemoteSessionIssuer(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "organizationRemoteSessionIssuers", "get"],
+    queryKey: ["@gram/client", "organizationRemoteSessionIssuers", "getIssuer"],
   });
 }

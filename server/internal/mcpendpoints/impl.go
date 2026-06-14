@@ -474,7 +474,7 @@ func verifyEndpointReferenceOwnership(
 	mcpServerID uuid.UUID,
 	customDomainID uuid.NullUUID,
 ) error {
-	if _, err := mcpserversrepo.New(dbtx).GetMCPServerByID(ctx, mcpserversrepo.GetMCPServerByIDParams{
+	if _, err := mcpserversrepo.New(dbtx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
 		ID:        mcpServerID,
 		ProjectID: projectID,
 	}); err != nil {

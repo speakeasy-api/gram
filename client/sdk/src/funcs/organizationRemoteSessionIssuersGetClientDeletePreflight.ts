@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeJSON, encodeSimple } from "../lib/encodings.js";
+import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -28,21 +28,21 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * updateOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
+ * getClientDeletePreflight organizationRemoteSessionIssuers
  *
  * @remarks
- * Update fields on an existing organization-level remote_session_issuer.
+ * Authoritative impact summary for deleting a remote_session_client: associated session count and affected MCP server names. Requires org:read.
  */
-export function organizationRemoteSessionIssuersUpdate(
+export function organizationRemoteSessionIssuersGetClientDeletePreflight(
   client: GramCore,
-  request: operations.UpdateOrganizationRemoteSessionIssuerRequest,
+  request: operations.GetOrganizationRemoteSessionClientDeletePreflightRequest,
   security?:
-    | operations.UpdateOrganizationRemoteSessionIssuerSecurity
+    | operations.GetOrganizationRemoteSessionClientDeletePreflightSecurity
     | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.RemoteSessionIssuer,
+    components.OrganizationClientDeletePreflight,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -64,15 +64,15 @@ export function organizationRemoteSessionIssuersUpdate(
 
 async function $do(
   client: GramCore,
-  request: operations.UpdateOrganizationRemoteSessionIssuerRequest,
+  request: operations.GetOrganizationRemoteSessionClientDeletePreflightRequest,
   security?:
-    | operations.UpdateOrganizationRemoteSessionIssuerSecurity
+    | operations.GetOrganizationRemoteSessionClientDeletePreflightSecurity
     | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.RemoteSessionIssuer,
+      components.OrganizationClientDeletePreflight,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -90,7 +90,8 @@ async function $do(
     request,
     (value) =>
       z.parse(
-        operations.UpdateOrganizationRemoteSessionIssuerRequest$outboundSchema,
+        operations
+          .GetOrganizationRemoteSessionClientDeletePreflightRequest$outboundSchema,
         value,
       ),
     "Input validation failed",
@@ -99,14 +100,17 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.UpdateRemoteSessionIssuerForm, {
-    explode: true,
+  const body = null;
+
+  const path = pathToFunc(
+    "/rpc/organizationRemoteSessionIssuers.getClientDeletePreflight",
+  )();
+
+  const query = encodeFormQuery({
+    "id": payload.id,
   });
 
-  const path = pathToFunc("/rpc/organizationRemoteSessionIssuers.update")();
-
   const headers = new Headers(compactMap({
-    "Content-Type": "application/json",
     Accept: "application/json",
     "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
       explode: false,
@@ -138,7 +142,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "updateOrganizationRemoteSessionIssuer",
+    operationID: "getOrganizationRemoteSessionClientDeletePreflight",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -152,10 +156,11 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "POST",
+    method: "GET",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
+    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
@@ -193,7 +198,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.RemoteSessionIssuer,
+    components.OrganizationClientDeletePreflight,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -204,7 +209,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.RemoteSessionIssuer$inboundSchema),
+    M.json(200, components.OrganizationClientDeletePreflight$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

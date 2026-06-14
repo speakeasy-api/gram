@@ -77,6 +77,7 @@ export function OrgSidebar({
     orgRoutes.apiKeys,
     orgRoutes.domains,
     orgRoutes.logs,
+    orgRoutes.remoteIdentityProviders,
     orgRoutes.webhooks,
     orgRoutes.adminSettings,
   ].some((r) => r.active);
@@ -108,6 +109,7 @@ export function OrgSidebar({
     orgRoutes.identity,
     orgRoutes.deviceAgent,
     orgRoutes.access,
+    orgRoutes.remoteIdentityProviders,
   ];
   const activeRoute = allOrgNavRoutes.find((r) => r.active);
   const activeItem = activeRoute?.title;
@@ -171,6 +173,10 @@ export function OrgSidebar({
                 />
                 <ScopeGatedNavItem
                   item={orgRoutes.logs}
+                  scope={["org:read", "org:admin"]}
+                />
+                <ScopeGatedNavItem
+                  item={orgRoutes.remoteIdentityProviders}
                   scope={["org:read", "org:admin"]}
                 />
                 <ScopeGatedNavItem

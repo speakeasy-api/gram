@@ -119,72 +119,6 @@ SET deleted_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
--- Organization-level remote session issuers — cross-project issuers scoped to
--- an organization (project_id IS NULL). Managed via the
--- organizationRemoteSessionIssuers service and accessed by id.
-
--- name: GetOrganizationRemoteSessionIssuerByID :one
-SELECT *
-FROM remote_session_issuers
-WHERE id = @id
-  AND organization_id = @organization_id
-  AND project_id IS NULL
-  AND deleted IS FALSE;
-
--- name: ListOrganizationRemoteSessionIssuers :many
-SELECT *
-FROM remote_session_issuers
-WHERE organization_id = @organization_id
-  AND project_id IS NULL
-  AND deleted IS FALSE
-  AND (sqlc.narg('cursor')::uuid IS NULL OR id < sqlc.narg('cursor')::uuid)
-ORDER BY id DESC
-LIMIT sqlc.arg('limit_value');
-
--- name: UpdateOrganizationRemoteSessionIssuer :one
--- Same three-state narg semantics on the nullable endpoint columns as
--- UpdateRemoteSessionIssuer; scoped to organization-level rows (project_id IS NULL).
-UPDATE remote_session_issuers
-SET
-    slug = COALESCE(sqlc.narg('slug'), slug),
-    issuer = COALESCE(sqlc.narg('issuer'), issuer),
-    name = CASE
-        WHEN sqlc.narg('name')::text = '' THEN NULL
-        ELSE COALESCE(sqlc.narg('name'), name)
-    END,
-    logo_asset_id = COALESCE(sqlc.narg('logo_asset_id'), logo_asset_id),
-    authorization_endpoint = CASE
-        WHEN sqlc.narg('authorization_endpoint')::text = '' THEN NULL
-        ELSE COALESCE(sqlc.narg('authorization_endpoint'), authorization_endpoint)
-    END,
-    token_endpoint = CASE
-        WHEN sqlc.narg('token_endpoint')::text = '' THEN NULL
-        ELSE COALESCE(sqlc.narg('token_endpoint'), token_endpoint)
-    END,
-    registration_endpoint = CASE
-        WHEN sqlc.narg('registration_endpoint')::text = '' THEN NULL
-        ELSE COALESCE(sqlc.narg('registration_endpoint'), registration_endpoint)
-    END,
-    jwks_uri = CASE
-        WHEN sqlc.narg('jwks_uri')::text = '' THEN NULL
-        ELSE COALESCE(sqlc.narg('jwks_uri'), jwks_uri)
-    END,
-    scopes_supported = COALESCE(sqlc.narg('scopes_supported')::text[], scopes_supported),
-    grant_types_supported = COALESCE(sqlc.narg('grant_types_supported')::text[], grant_types_supported),
-    response_types_supported = COALESCE(sqlc.narg('response_types_supported')::text[], response_types_supported),
-    token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
-    oidc = COALESCE(sqlc.narg('oidc'), oidc),
-    passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
-    updated_at = clock_timestamp()
-WHERE id = @id AND organization_id = @organization_id AND project_id IS NULL AND deleted IS FALSE
-RETURNING *;
-
--- name: DeleteOrganizationRemoteSessionIssuer :one
-UPDATE remote_session_issuers
-SET deleted_at = clock_timestamp()
-WHERE id = @id AND organization_id = @organization_id AND project_id IS NULL AND deleted IS FALSE
-RETURNING *;
-
 -- name: CountRemoteSessionClientsByIssuerID :one
 SELECT COUNT(*)
 FROM remote_session_clients
@@ -525,9 +459,12 @@ WHERE link.user_session_issuer_id = @user_session_issuer_id
 ORDER BY c.id ASC;
 
 -- name: ListRemoteSessionsByProjectID :many
-SELECT s.*
+SELECT sqlc.embed(s),
+  u.display_name AS subject_display_name,
+  u.email AS subject_email
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
 WHERE c.project_id = @project_id
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
@@ -553,3 +490,270 @@ WHERE s.id = @id
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
 RETURNING s.*;
+
+-- Organization administrator surface (AIS-119) — cross-project visibility into
+-- remote_session_issuers, their clients, and sessions for an org. Every query is
+-- scoped by organization_id (issuers carry it for both organizational and
+-- project-specific rows); client/session queries reach the org through their
+-- issuer, the sole cross-tenant guard since these endpoints carry no project
+-- header.
+
+-- name: ListOrganizationRemoteSessionIssuers :many
+-- All issuers in the org (organizational and project-specific), each with its
+-- associated non-deleted client count and, for project-specific issuers, the
+-- owning project name.
+SELECT
+    sqlc.embed(i),
+    COALESCE(p.name, '')::text AS project_name,
+    (
+        SELECT COUNT(*)
+        FROM remote_session_clients AS c
+        WHERE c.remote_session_issuer_id = i.id AND c.deleted IS FALSE
+    )::bigint AS client_count
+FROM remote_session_issuers AS i
+LEFT JOIN projects AS p ON p.id = i.project_id
+WHERE i.organization_id = @organization_id
+  AND i.deleted IS FALSE
+  AND (sqlc.narg('cursor')::uuid IS NULL OR i.id < sqlc.narg('cursor')::uuid)
+ORDER BY i.id DESC
+LIMIT sqlc.arg('limit_value');
+
+-- name: GetOrganizationRemoteSessionIssuerByID :one
+-- Any issuer in the org by id — organizational or project-specific.
+SELECT *
+FROM remote_session_issuers
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE;
+
+-- name: UpdateOrganizationRemoteSessionIssuer :one
+-- Same three-state narg semantics as UpdateRemoteSessionIssuer; scoped to any
+-- issuer in the org (organizational or project-specific).
+UPDATE remote_session_issuers
+SET
+    slug = COALESCE(sqlc.narg('slug'), slug),
+    issuer = COALESCE(sqlc.narg('issuer'), issuer),
+    name = CASE
+        WHEN sqlc.narg('name')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('name'), name)
+    END,
+    logo_asset_id = COALESCE(sqlc.narg('logo_asset_id'), logo_asset_id),
+    authorization_endpoint = CASE
+        WHEN sqlc.narg('authorization_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('authorization_endpoint'), authorization_endpoint)
+    END,
+    token_endpoint = CASE
+        WHEN sqlc.narg('token_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('token_endpoint'), token_endpoint)
+    END,
+    registration_endpoint = CASE
+        WHEN sqlc.narg('registration_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('registration_endpoint'), registration_endpoint)
+    END,
+    jwks_uri = CASE
+        WHEN sqlc.narg('jwks_uri')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('jwks_uri'), jwks_uri)
+    END,
+    scopes_supported = COALESCE(sqlc.narg('scopes_supported')::text[], scopes_supported),
+    grant_types_supported = COALESCE(sqlc.narg('grant_types_supported')::text[], grant_types_supported),
+    response_types_supported = COALESCE(sqlc.narg('response_types_supported')::text[], response_types_supported),
+    token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
+    oidc = COALESCE(sqlc.narg('oidc'), oidc),
+    passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
+    updated_at = clock_timestamp()
+WHERE id = @id AND organization_id = @organization_id AND deleted IS FALSE
+RETURNING *;
+
+-- name: DeleteOrganizationRemoteSessionIssuer :one
+-- Soft-delete any issuer in the org (organizational or project-specific).
+UPDATE remote_session_issuers
+SET deleted_at = clock_timestamp()
+WHERE id = @id AND organization_id = @organization_id AND deleted IS FALSE
+RETURNING *;
+
+-- name: SetOrganizationRemoteSessionIssuerProject :one
+-- Re-scope an issuer by setting (project-specific) or clearing (organizational)
+-- its project_id. A NULL narg clears to organization-level; a value moves it
+-- into that project. Scoped to any issuer in the org. May raise a unique
+-- violation on (project_id, slug) when moving into a project that already has an
+-- issuer with the same slug.
+UPDATE remote_session_issuers
+SET project_id = sqlc.narg('project_id')::uuid,
+    updated_at = clock_timestamp()
+WHERE id = @id AND organization_id = @organization_id AND deleted IS FALSE
+RETURNING *;
+
+-- name: ListOrganizationRemoteSessionClientsByIssuerID :many
+-- Clients registered with a given issuer in the org, each with its count of
+-- attached MCP servers and active remote_sessions. The mcp_server_count counts
+-- DISTINCT mcp_servers so a client whose user_session_issuer is reachable via
+-- both the join table and the legacy column is not double-counted. The
+-- active_session_count counts non-deleted remote_sessions minted against the
+-- client, matching CountActiveRemoteSessionsByClientID and the delete preflight.
+SELECT
+    sqlc.embed(c),
+    (
+        SELECT COUNT(DISTINCT m.id)
+        FROM mcp_servers AS m
+        WHERE m.deleted IS FALSE
+          AND m.user_session_issuer_id IN (
+              SELECT link.user_session_issuer_id
+              FROM remote_session_client_user_session_issuers AS link
+              WHERE link.remote_session_client_id = c.id
+              UNION
+              SELECT c.user_session_issuer_id
+          )
+    )::bigint AS mcp_server_count,
+    (
+        SELECT COUNT(*)
+        FROM remote_sessions AS s
+        WHERE s.remote_session_client_id = c.id
+          AND s.deleted IS FALSE
+    )::bigint AS active_session_count
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+WHERE c.remote_session_issuer_id = @remote_session_issuer_id
+  AND i.organization_id = @organization_id
+  AND c.deleted IS FALSE
+  AND i.deleted IS FALSE
+  AND (sqlc.narg('cursor')::uuid IS NULL OR c.id < sqlc.narg('cursor')::uuid)
+ORDER BY c.id DESC
+LIMIT sqlc.arg('limit_value');
+
+-- name: GetOrganizationRemoteSessionClientByID :one
+-- A client in the org by id, scoped through its issuer's organization_id.
+SELECT c.*
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+WHERE c.id = @id
+  AND i.organization_id = @organization_id
+  AND c.deleted IS FALSE
+  AND i.deleted IS FALSE;
+
+-- name: UpdateOrganizationRemoteSessionClient :one
+-- Patch a client's fields, scoped through its issuer's organization_id. The
+-- handler encrypts a rotated client_secret before passing it as
+-- client_secret_encrypted; an omitted narg keeps the existing secret.
+UPDATE remote_session_clients AS c
+SET
+    client_secret_encrypted = COALESCE(sqlc.narg('client_secret_encrypted'), c.client_secret_encrypted),
+    user_session_issuer_id = COALESCE(sqlc.narg('user_session_issuer_id'), c.user_session_issuer_id),
+    token_endpoint_auth_method = COALESCE(sqlc.narg('token_endpoint_auth_method'), c.token_endpoint_auth_method),
+    scope = COALESCE(sqlc.narg('scope')::text[], c.scope),
+    audience = CASE
+        WHEN sqlc.narg('audience')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('audience'), c.audience)
+    END,
+    updated_at = clock_timestamp()
+FROM remote_session_issuers AS i
+WHERE c.id = @id
+  AND c.remote_session_issuer_id = i.id
+  AND i.organization_id = @organization_id
+  AND c.deleted IS FALSE
+  AND i.deleted IS FALSE
+RETURNING c.*;
+
+-- name: DeleteOrganizationRemoteSessionClient :one
+-- Soft-delete a client, scoped through its issuer's organization_id. The
+-- handler cascades the client's remote_sessions via SoftDeleteRemoteSessionsByClientID.
+UPDATE remote_session_clients AS c
+SET deleted_at = clock_timestamp()
+FROM remote_session_issuers AS i
+WHERE c.id = @id
+  AND c.remote_session_issuer_id = i.id
+  AND i.organization_id = @organization_id
+  AND c.deleted IS FALSE
+  AND i.deleted IS FALSE
+RETURNING c.*;
+
+-- name: ListOrganizationMcpServersForClient :many
+-- MCP servers attached to a client through its user_session_issuer(s) — both the
+-- join-table bindings and the legacy column. Callers establish the client
+-- belongs to the org upstream (GetOrganizationRemoteSessionClientByID).
+SELECT DISTINCT
+    m.id,
+    m.project_id,
+    p.slug AS project_slug,
+    m.name,
+    m.slug,
+    COALESCE(rms.url, '')::text AS url
+FROM mcp_servers AS m
+JOIN projects AS p ON p.id = m.project_id
+LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id
+WHERE m.deleted IS FALSE
+  AND m.user_session_issuer_id IN (
+      SELECT link.user_session_issuer_id
+      FROM remote_session_client_user_session_issuers AS link
+      WHERE link.remote_session_client_id = @remote_session_client_id
+      UNION
+      SELECT c.user_session_issuer_id
+      FROM remote_session_clients AS c
+      WHERE c.id = @remote_session_client_id
+  )
+ORDER BY m.id DESC;
+
+-- name: ListOrganizationMcpServerNamesForIssuer :many
+-- Display names (and URL fallbacks) of MCP servers attached to any client of a
+-- given issuer. Used to populate the issuer delete-confirmation dialog.
+SELECT DISTINCT
+    m.id,
+    m.name,
+    COALESCE(rms.url, '')::text AS url
+FROM mcp_servers AS m
+LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id
+WHERE m.deleted IS FALSE
+  AND m.user_session_issuer_id IN (
+      SELECT link.user_session_issuer_id
+      FROM remote_session_client_user_session_issuers AS link
+      JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
+      WHERE c.remote_session_issuer_id = @remote_session_issuer_id AND c.deleted IS FALSE
+      UNION
+      SELECT c.user_session_issuer_id
+      FROM remote_session_clients AS c
+      WHERE c.remote_session_issuer_id = @remote_session_issuer_id AND c.deleted IS FALSE
+  );
+
+-- name: DetachRemoteSessionClientFromUserSessionIssuer :execrows
+-- Remove the join-table binding between a remote_session_client and a
+-- user_session_issuer. Used by the org-admin "remove client from MCP server"
+-- action, where the user_session_issuer is the one the MCP server uses. Returns
+-- the number of rows removed (0 means the client was not bound to that issuer).
+-- Callers establish org ownership of the client upstream.
+DELETE FROM remote_session_client_user_session_issuers
+WHERE remote_session_client_id = @remote_session_client_id
+  AND user_session_issuer_id = @user_session_issuer_id;
+
+-- name: ListOrganizationRemoteSessionsByClientID :many
+-- Sessions minted against a client, scoped through the client's issuer's
+-- organization_id.
+SELECT sqlc.embed(s),
+  u.display_name AS subject_display_name,
+  u.email AS subject_email
+FROM remote_sessions AS s
+JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
+WHERE s.remote_session_client_id = @remote_session_client_id
+  AND i.organization_id = @organization_id
+  AND s.deleted IS FALSE
+  AND c.deleted IS FALSE
+  AND i.deleted IS FALSE
+  AND (sqlc.narg('cursor')::uuid IS NULL OR s.id < sqlc.narg('cursor')::uuid)
+ORDER BY s.id DESC
+LIMIT sqlc.arg('limit_value');
+
+-- name: RevokeOrganizationRemoteSession :one
+-- Soft-delete a single session, scoped through the client's issuer's
+-- organization_id. Returns the owning client's project_id so the handler can
+-- attribute the audit event to the right project (NULL for org-level issuers).
+UPDATE remote_sessions AS s
+SET deleted_at = clock_timestamp()
+FROM remote_session_clients AS c, remote_session_issuers AS i
+WHERE s.id = @id
+  AND s.remote_session_client_id = c.id
+  AND c.remote_session_issuer_id = i.id
+  AND i.organization_id = @organization_id
+  AND s.deleted IS FALSE
+  AND c.deleted IS FALSE
+  AND i.deleted IS FALSE
+RETURNING s.*, c.project_id AS client_project_id;
