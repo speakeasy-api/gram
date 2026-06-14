@@ -3,61 +3,67 @@ package agentevents
 import (
 	"fmt"
 	"reflect"
+
+	"github.com/speakeasy-api/gram/server/internal/agentevents/types"
 )
 
-func StringField[T any](name string) FieldResolver[T] {
-	return func(ev Event[T]) (any, bool, error) {
-		value, ok, err := rawStructField(ev.Raw, name)
-		if err != nil || !ok {
-			return nil, false, err
-		}
-		value, ok = dereferenceFieldValue(value)
-		if !ok {
-			return nil, false, nil
-		}
-		if value.Kind() != reflect.String {
-			return nil, false, fmt.Errorf("agentevents: field %s resolved to %s, want string", name, value.Type())
-		}
-		str := value.String()
-		if str == "" {
-			return nil, false, nil
-		}
-		return str, true, nil
+type Resolver[T any] struct {
+	Field       types.Field
+	ResolveFunc FieldResolver[T, any]
+}
+
+func Resolve[T any, V any](field types.Field, resolve FieldResolver[T, V]) Resolver[T] {
+	return Resolver[T]{
+		Field: field,
+		ResolveFunc: func(ev Event[T]) (any, bool, error) {
+			value, ok, err := resolve(ev)
+			return value, ok, err
+		},
 	}
 }
 
-func IntField[T any](name string) FieldResolver[T] {
-	return func(ev Event[T]) (any, bool, error) {
-		value, ok, err := rawStructField(ev.Raw, name)
-		if err != nil || !ok {
-			return nil, false, err
-		}
-		value, ok = dereferenceFieldValue(value)
-		if !ok {
-			return nil, false, nil
-		}
-		switch value.Kind() {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			return int(value.Int()), true, nil
-		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			return int(value.Uint()), true, nil
-		default:
-			return nil, false, fmt.Errorf("agentevents: field %s resolved to %s, want int", name, value.Type())
-		}
+type FieldResolver[StructType any, FieldType any] func(ev Event[StructType]) (FieldType, bool, error)
+
+func GetValue[T any, V any](e Event[T], field types.Field) (V, bool, error) {
+	var zero V
+
+	value, ok, err := e.resolve(field)
+	if err != nil || !ok || value == nil {
+		return zero, ok, err
 	}
+
+	typedValue, ok := value.(V)
+	if !ok {
+		return zero, false, fmt.Errorf("agentevents: field %s resolved to %T, want %T", field, value, zero)
+	}
+	return typedValue, true, nil
 }
 
-func AnyField[T any](name string) FieldResolver[T] {
-	return func(ev Event[T]) (any, bool, error) {
+func GetField[StructType any, FieldType any](name string) FieldResolver[StructType, FieldType] {
+	return func(ev Event[StructType]) (FieldType, bool, error) {
+		// 1. Zero value helper for empty returns
+		var zero FieldType
+
 		value, ok, err := rawStructField(ev.Raw, name)
 		if err != nil || !ok {
-			return nil, false, err
+			return zero, false, err
 		}
+
 		value, ok = dereferenceFieldValue(value)
 		if !ok {
-			return nil, false, nil
+			return zero, false, nil
 		}
-		return value.Interface(), true, nil
+
+		// 2. Extract the raw interface value from reflect
+		rawInterface := value.Interface()
+
+		// 3. Perform a Runtime Type Assertion to bridge into Compile-Time Generics
+		typedValue, ok := rawInterface.(FieldType)
+		if !ok {
+			return zero, false, fmt.Errorf("field %s is type %s, cannot cast to requested type", name, value.Type())
+		}
+
+		return typedValue, true, nil
 	}
 }
 
@@ -65,21 +71,27 @@ func rawStructField[T any](raw T, name string) (reflect.Value, bool, error) {
 	if name == "" {
 		return reflect.Value{}, false, fmt.Errorf("agentevents: empty raw field name")
 	}
+
 	value := reflect.ValueOf(raw)
 	value, ok := dereferenceFieldValue(value)
+
 	if !ok {
 		return reflect.Value{}, false, nil
 	}
+
 	if value.Kind() != reflect.Struct {
 		return reflect.Value{}, false, fmt.Errorf("agentevents: raw payload resolved to %s, want struct", value.Type())
 	}
+
 	field := value.FieldByName(name)
 	if !field.IsValid() {
 		return reflect.Value{}, false, fmt.Errorf("agentevents: raw payload has no field %s", name)
 	}
+
 	if !field.CanInterface() {
 		return reflect.Value{}, false, fmt.Errorf("agentevents: raw payload field %s is not exported", name)
 	}
+
 	return field, true, nil
 }
 

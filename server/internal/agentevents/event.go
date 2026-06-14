@@ -1,14 +1,15 @@
 package agentevents
 
 import (
+	"context"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/agentevents/types"
 )
 
 type EventContext struct {
+	Provider  types.Provider
 	OrgID     string
 	ProjectID string
 	UserID    string
@@ -22,10 +23,18 @@ type EventContext struct {
 }
 
 type Event[T any] struct {
-	source      *Source[T]
+	agent       *Agent[T]
 	Context     EventContext
 	Raw         T
 	BlockReason string
+}
+
+func NewEvent[T any](mux *Mux, context EventContext, raw T) (Event[T], error) {
+	agent, err := AgentFor[T](mux, context.Provider)
+	if err != nil {
+		return Event[T]{}, fmt.Errorf("agentevents: %w", err)
+	}
+	return agent.NewEvent(context, raw), nil
 }
 
 func (e Event[T]) WithContext(ctx EventContext) Event[T] {
@@ -38,16 +47,20 @@ func (e Event[T]) WithBlockReason(reason string) Event[T] {
 	return e
 }
 
-func (e Event[T]) Provider() types.Provider {
-	if e.source == nil {
-		return ""
+func (e Event[T]) Write(ctx context.Context) error {
+	if e.agent == nil {
+		return ErrNilAgent
 	}
-	return e.source.Provider
+	return e.agent.Write(ctx, e)
+}
+
+func (e Event[T]) Provider() types.Provider {
+	return e.Context.Provider
 }
 
 func (e Event[T]) resolve(field types.Field) (any, bool, error) {
-	if e.source == nil {
-		return nil, false, fmt.Errorf("agentevents: nil source")
+	if e.agent == nil {
+		return nil, false, ErrNilAgent
 	}
 	if field == types.FieldEventType {
 		return nil, false, fmt.Errorf("agentevents: use EventType to resolve %s", field)
@@ -60,6 +73,9 @@ func (e Event[T]) resolve(field types.Field) (any, bool, error) {
 }
 
 func (e Event[T]) EventType() (types.EventType, bool, error) {
+	if e.agent == nil {
+		return "", false, ErrNilAgent
+	}
 	value, ok, err := e.resolveWithEventType(types.AnyEventType, types.FieldEventType)
 	if err != nil || !ok {
 		return "", false, err
@@ -78,71 +94,28 @@ func (e Event[T]) EventType() (types.EventType, bool, error) {
 }
 
 func (e Event[T]) String(field types.Field) (string, bool, error) {
-	value, ok, err := e.resolve(field)
-	if err != nil || !ok || value == nil {
-		return "", ok, err
-	}
-	switch v := value.(type) {
-	case string:
-		return v, true, nil
-	case fmt.Stringer:
-		return v.String(), true, nil
-	default:
-		return "", false, fmt.Errorf("agentevents: field %s resolved to %T, want string", field, value)
-	}
+	return GetValue[T, string](e, field)
 }
 
 func (e Event[T]) Int(field types.Field) (int, bool, error) {
-	value, ok, err := e.resolve(field)
-	if err != nil || !ok || value == nil {
-		return 0, ok, err
-	}
-	switch v := value.(type) {
-	case int:
-		return v, true, nil
-	case int8:
-		return int(v), true, nil
-	case int16:
-		return int(v), true, nil
-	case int32:
-		return int(v), true, nil
-	case int64:
-		return int(v), true, nil
-	case uint:
-		return int(v), true, nil
-	case uint8:
-		return int(v), true, nil
-	case uint16:
-		return int(v), true, nil
-	case uint32:
-		return int(v), true, nil
-	case uint64:
-		return int(v), true, nil
-	case float64:
-		return int(v), true, nil
-	case string:
-		i, err := strconv.Atoi(v)
-		if err != nil {
-			return 0, false, fmt.Errorf("agentevents: field %s string is not an int: %w", field, err)
-		}
-		return i, true, nil
-	default:
-		return 0, false, fmt.Errorf("agentevents: field %s resolved to %T, want int", field, value)
-	}
+	return GetValue[T, int](e, field)
 }
 
 func (e Event[T]) Any(field types.Field) (any, bool, error) {
-	return e.resolve(field)
+	return GetValue[T, any](e, field)
 }
 
 func (e Event[T]) resolveWithEventType(eventType types.EventType, field types.Field) (any, bool, error) {
-	if resolver := e.source.resolver(eventType, field); resolver != nil {
+	if e.agent == nil {
+		return nil, false, ErrNilAgent
+	}
+	if resolver := e.agent.resolver(eventType, field); resolver != nil {
 		return resolver(e)
 	}
 	if eventType == types.AnyEventType {
 		return nil, false, nil
 	}
-	if resolver := e.source.resolver(types.AnyEventType, field); resolver != nil {
+	if resolver := e.agent.resolver(types.AnyEventType, field); resolver != nil {
 		return resolver(e)
 	}
 	return nil, false, nil

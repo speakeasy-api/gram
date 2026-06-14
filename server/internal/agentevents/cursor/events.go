@@ -30,43 +30,45 @@ const (
 	EventStop               EventType = "stop"
 )
 
-var GetEventType agentevents.FieldResolver[*gen.CursorPayload] = getEventType
-var GetHookSource agentevents.FieldResolver[*gen.CursorPayload] = getHookSource
-var GetHookHostname agentevents.FieldResolver[*gen.CursorPayload] = agentevents.StringField[*gen.CursorPayload]("HookHostname")
-var GetBlockReason agentevents.FieldResolver[*gen.CursorPayload] = getBlockReason
-var GetError agentevents.FieldResolver[*gen.CursorPayload] = getError
-var GetPrompt agentevents.FieldResolver[*gen.CursorPayload] = agentevents.StringField[*gen.CursorPayload]("Prompt")
-var GetAssistantText agentevents.FieldResolver[*gen.CursorPayload] = agentevents.StringField[*gen.CursorPayload]("Text")
-var GetModel agentevents.FieldResolver[*gen.CursorPayload] = agentevents.StringField[*gen.CursorPayload]("Model")
-var GetScannableText agentevents.FieldResolver[*gen.CursorPayload] = getScannableText
-var GetScanMessageType agentevents.FieldResolver[*gen.CursorPayload] = getScanMessageType
-var GetToolName agentevents.FieldResolver[*gen.CursorPayload] = getToolName
-var GetToolDisplayName agentevents.FieldResolver[*gen.CursorPayload] = getToolName
-var GetToolSource agentevents.FieldResolver[*gen.CursorPayload] = getToolSource
-var GetToolInput agentevents.FieldResolver[*gen.CursorPayload] = agentevents.AnyField[*gen.CursorPayload]("ToolInput")
-var GetToolOutput agentevents.FieldResolver[*gen.CursorPayload] = getToolOutput
-var GetToolCallID agentevents.FieldResolver[*gen.CursorPayload] = getToolCallID
-var GetUsageInputTokens agentevents.FieldResolver[*gen.CursorPayload] = agentevents.IntField[*gen.CursorPayload]("InputTokens")
-var GetUsageOutputTokens agentevents.FieldResolver[*gen.CursorPayload] = agentevents.IntField[*gen.CursorPayload]("OutputTokens")
-var GetUsageCacheReadTokens agentevents.FieldResolver[*gen.CursorPayload] = agentevents.IntField[*gen.CursorPayload]("CacheReadTokens")
-var GetUsageCacheWriteTokens agentevents.FieldResolver[*gen.CursorPayload] = agentevents.IntField[*gen.CursorPayload]("CacheWriteTokens")
+var (
+	GetEventType             agentevents.FieldResolver[*gen.CursorPayload, types.EventType] = getEventType
+	GetHookSource            agentevents.FieldResolver[*gen.CursorPayload, string]          = getHookSource
+	GetHookHostname          agentevents.FieldResolver[*gen.CursorPayload, string]          = agentevents.GetField[*gen.CursorPayload, string]("HookHostname")
+	GetBlockReason           agentevents.FieldResolver[*gen.CursorPayload, string]          = getBlockReason
+	GetError                 agentevents.FieldResolver[*gen.CursorPayload, any]             = getError
+	GetPrompt                agentevents.FieldResolver[*gen.CursorPayload, string]          = agentevents.GetField[*gen.CursorPayload, string]("Prompt")
+	GetAssistantText         agentevents.FieldResolver[*gen.CursorPayload, string]          = agentevents.GetField[*gen.CursorPayload, string]("Text")
+	GetModel                 agentevents.FieldResolver[*gen.CursorPayload, string]          = agentevents.GetField[*gen.CursorPayload, string]("Model")
+	GetScannableText         agentevents.FieldResolver[*gen.CursorPayload, string]          = getScannableText
+	GetScanMessageType       agentevents.FieldResolver[*gen.CursorPayload, any]             = getScanMessageType
+	GetToolName              agentevents.FieldResolver[*gen.CursorPayload, string]          = getToolName
+	GetToolDisplayName       agentevents.FieldResolver[*gen.CursorPayload, string]          = getToolName
+	GetToolSource            agentevents.FieldResolver[*gen.CursorPayload, string]          = getToolSource
+	GetToolInput             agentevents.FieldResolver[*gen.CursorPayload, any]             = agentevents.GetField[*gen.CursorPayload, any]("ToolInput")
+	GetToolOutput            agentevents.FieldResolver[*gen.CursorPayload, any]             = getToolOutput
+	GetToolCallID            agentevents.FieldResolver[*gen.CursorPayload, string]          = getToolCallID
+	GetUsageInputTokens      agentevents.FieldResolver[*gen.CursorPayload, int]             = agentevents.GetField[*gen.CursorPayload, int]("InputTokens")
+	GetUsageOutputTokens     agentevents.FieldResolver[*gen.CursorPayload, int]             = agentevents.GetField[*gen.CursorPayload, int]("OutputTokens")
+	GetUsageCacheReadTokens  agentevents.FieldResolver[*gen.CursorPayload, int]             = agentevents.GetField[*gen.CursorPayload, int]("CacheReadTokens")
+	GetUsageCacheWriteTokens agentevents.FieldResolver[*gen.CursorPayload, int]             = agentevents.GetField[*gen.CursorPayload, int]("CacheWriteTokens")
+)
 
-func getEventType(ev agentevents.Event[*gen.CursorPayload]) (any, bool, error) {
+func getEventType(ev agentevents.Event[*gen.CursorPayload]) (types.EventType, bool, error) {
 	if ev.Raw == nil {
-		return nil, false, nil
+		return types.AnyEventType, false, nil
 	}
 	eventType, ok := ParseEventType(ev.Raw.HookEventName)
 	if !ok {
-		return nil, false, nil
+		return types.AnyEventType, false, nil
 	}
 	return eventType, true, nil
 }
 
-func getHookSource(_ agentevents.Event[*gen.CursorPayload]) (any, bool, error) {
+func getHookSource(ev agentevents.Event[*gen.CursorPayload]) (string, bool, error) {
 	return string(Agent), true, nil
 }
 
-func getBlockReason(ev agentevents.Event[*gen.CursorPayload]) (any, bool, error) {
+func getBlockReason(ev agentevents.Event[*gen.CursorPayload]) (string, bool, error) {
 	return ev.BlockReason, ev.BlockReason != "", nil
 }
 
@@ -84,14 +86,14 @@ func getError(ev agentevents.Event[*gen.CursorPayload]) (any, bool, error) {
 	return nil, false, nil
 }
 
-func getScannableText(ev agentevents.Event[*gen.CursorPayload]) (any, bool, error) {
+func getScannableText(ev agentevents.Event[*gen.CursorPayload]) (string, bool, error) {
 	payload := ev.Raw
 	if payload == nil {
-		return nil, false, nil
+		return "", false, nil
 	}
 	eventType, ok := ParseEventType(payload.HookEventName)
 	if !ok {
-		return nil, false, nil
+		return "", false, nil
 	}
 	switch eventType {
 	case types.UserPromptSubmit:
@@ -103,7 +105,7 @@ func getScannableText(ev agentevents.Event[*gen.CursorPayload]) (any, bool, erro
 			return marshalToJSON(payload.ToolInput), true, nil
 		}
 	}
-	return nil, false, nil
+	return "", false, nil
 }
 
 func getScanMessageType(ev agentevents.Event[*gen.CursorPayload]) (any, bool, error) {
@@ -124,18 +126,18 @@ func getScanMessageType(ev agentevents.Event[*gen.CursorPayload]) (any, bool, er
 	}
 }
 
-func getToolName(ev agentevents.Event[*gen.CursorPayload]) (any, bool, error) {
+func getToolName(ev agentevents.Event[*gen.CursorPayload]) (string, bool, error) {
 	if ev.Raw == nil || ev.Raw.ToolName == nil || *ev.Raw.ToolName == "" {
-		return nil, false, nil
+		return "", false, nil
 	}
 	name := normalizeToolName(*ev.Raw.ToolName)
 	return name, name != "", nil
 }
 
-func getToolSource(ev agentevents.Event[*gen.CursorPayload]) (any, bool, error) {
+func getToolSource(ev agentevents.Event[*gen.CursorPayload]) (string, bool, error) {
 	payload := ev.Raw
 	if payload == nil {
-		return nil, false, nil
+		return "", false, nil
 	}
 	eventType, _ := ParseEventType(payload.HookEventName)
 	if eventType == types.MCPToolCallStarted || eventType == types.MCPToolCallCompleted {
@@ -148,7 +150,7 @@ func getToolSource(ev agentevents.Event[*gen.CursorPayload]) (any, bool, error) 
 			return parts[1], true, nil
 		}
 	}
-	return nil, false, nil
+	return "", false, nil
 }
 
 func getToolOutput(ev agentevents.Event[*gen.CursorPayload]) (any, bool, error) {
@@ -165,7 +167,7 @@ func getToolOutput(ev agentevents.Event[*gen.CursorPayload]) (any, bool, error) 
 	return nil, false, nil
 }
 
-func getToolCallID(ev agentevents.Event[*gen.CursorPayload]) (any, bool, error) {
+func getToolCallID(ev agentevents.Event[*gen.CursorPayload]) (string, bool, error) {
 	id := cursorToolCorrelationID(ev.Raw)
 	return id, id != "", nil
 }

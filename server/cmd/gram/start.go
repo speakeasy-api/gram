@@ -978,9 +978,16 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create risk scanner: %w", err)
 			}
-			cursorEvents, err := newCursorAgentEventSource()
+
+			agentEvents, err := newAgentEvents(
+				db,
+				telemLogger,
+				chatWriter,
+				productFeatures,
+				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
+			)
 			if err != nil {
-				return fmt.Errorf("create cursor agent event source: %w", err)
+				return fmt.Errorf("create agent hooks: %w", err)
 			}
 
 			about.Attach(mux, about.NewService(logger, tracerProvider))
@@ -997,7 +1004,7 @@ func newStartCommand() *cli.Command {
 				authzEngine,
 				memorySvc,
 			))
-			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemLogger, sessionManager, hooksCache, chatClient, temporalEnv, authzEngine, productFeatures, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}, riskScanner, shadowMCPClient, chatWriter, cursorEvents, siteURL, c.String("jwt-signing-key")))
+			hooks.Attach(mux, hooks.NewService(logger, db, tracerProvider, telemLogger, sessionManager, hooksCache, chatClient, temporalEnv, authzEngine, productFeatures, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}, riskScanner, shadowMCPClient, chatWriter, agentEvents, siteURL, c.String("jwt-signing-key")))
 			aiintegrations.Attach(mux, aiintegrations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient, &background.TemporalAIUsagePoller{TemporalEnv: temporalEnv}))
 			otelforwarding.Attach(mux, otelforwarding.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, otelForwardClient))
 			auditapi.Attach(mux, auditapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine))

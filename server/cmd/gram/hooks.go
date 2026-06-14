@@ -1,85 +1,103 @@
 package gram
 
 import (
-	"fmt"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/agentevents"
 	cursoragent "github.com/speakeasy-api/gram/server/internal/agentevents/cursor"
+	chatmessagesink "github.com/speakeasy-api/gram/server/internal/agentevents/eventsink/sinks/chatmessage"
+	telemetrysink "github.com/speakeasy-api/gram/server/internal/agentevents/eventsink/sinks/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/agentevents/types"
+	"github.com/speakeasy-api/gram/server/internal/background"
+	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
-func newCursorAgentEventSource() (*agentevents.Source[*gen.CursorPayload], error) {
-	sourceRegistry := agentevents.NewSourceRegistry()
-	source, err := agentevents.RegisterSource[*gen.CursorPayload](sourceRegistry, cursoragent.Agent)
+func newAgentEvents(
+	db *pgxpool.Pool,
+	telemLogger *telemetry.Logger,
+	chatWriter *chat.ChatMessageWriter,
+	productFeatures *productfeatures.Client,
+	chatTitleGenerator *background.TemporalChatTitleGenerator,
+) (*agentevents.Mux, error) {
+	mux := agentevents.NewMux()
+
+	cursorAgent, err := buildCursorAgentHandler()
+	if err != nil {
+		return nil, err
+	}
+	if err := cursorAgent.Use(
+		telemetrysink.New[*gen.CursorPayload](telemLogger),
+		chatmessagesink.New[*gen.CursorPayload](chatmessagesink.Config{
+			Writer:          chatWriter,
+			ProductFeatures: productFeatures,
+			DB:              db,
+			TitleGenerator:  chatTitleGenerator,
+		}),
+	); err != nil {
+		return nil, err
+	}
+
+	if err := mux.Register(cursorAgent, nil); err != nil {
+		return nil, err
+	}
+
+	return mux, nil
+}
+
+func buildCursorAgentHandler() (*agentevents.Agent[*gen.CursorPayload], error) {
+	cursorAgent, err := agentevents.NewAgent[*gen.CursorPayload](cursoragent.Agent)
 	if err != nil {
 		return nil, err
 	}
 
-	usageEventTypes := []types.EventType{
-		types.AssistantResponseComplete,
-		types.SessionEnded,
-	}
-	scanEventTypes := []types.EventType{
-		types.UserPromptSubmit,
-		types.ToolCallStarted,
-		types.MCPToolCallStarted,
-	}
-	toolEventTypes := []types.EventType{
-		types.ToolCallStarted,
-		types.ToolCallCompleted,
-		types.ToolCallFailed,
-		types.MCPToolCallStarted,
-		types.MCPToolCallCompleted,
-	}
-	toolResultEventTypes := []types.EventType{
-		types.ToolCallCompleted,
-		types.ToolCallFailed,
-		types.MCPToolCallCompleted,
-	}
-	resolver := func(field types.Field, resolve agentevents.FieldResolver[*gen.CursorPayload]) agentevents.Resolver[*gen.CursorPayload] {
-		return agentevents.Resolver[*gen.CursorPayload]{Field: field, Resolve: resolve}
-	}
-	commonResolvers := []agentevents.Resolver[*gen.CursorPayload]{
-		resolver(types.FieldEventType, cursoragent.GetEventType),
-		resolver(types.FieldHookSource, cursoragent.GetHookSource),
-		resolver(types.FieldHookHostname, cursoragent.GetHookHostname),
-		resolver(types.FieldBlockReason, cursoragent.GetBlockReason),
-		resolver(types.FieldModel, cursoragent.GetModel),
-	}
-
-	source, err = source.Builder().
-		Register(commonResolvers...).
-		RegisterFor(usageEventTypes,
-			resolver(types.FieldUsageInputTokens, cursoragent.GetUsageInputTokens),
-			resolver(types.FieldUsageOutputTokens, cursoragent.GetUsageOutputTokens),
-			resolver(types.FieldUsageCacheReadTokens, cursoragent.GetUsageCacheReadTokens),
-			resolver(types.FieldUsageCacheWriteTokens, cursoragent.GetUsageCacheWriteTokens),
+	cursorAgent, err = cursorAgent.Builder().
+		Register(
+			agentevents.Resolve(types.FieldEventType, cursoragent.GetEventType),
+			agentevents.Resolve(types.FieldHookSource, cursoragent.GetHookSource),
+			agentevents.Resolve(types.FieldHookHostname, cursoragent.GetHookHostname),
+			agentevents.Resolve(types.FieldBlockReason, cursoragent.GetBlockReason),
+			agentevents.Resolve(types.FieldModel, cursoragent.GetModel),
 		).
-		RegisterFor(scanEventTypes,
-			resolver(types.FieldScannableText, cursoragent.GetScannableText),
-			resolver(types.FieldScanMessageType, cursoragent.GetScanMessageType),
+		RegisterFor([]types.EventType{types.AssistantResponseComplete, types.SessionEnded},
+			agentevents.Resolve(types.FieldUsageInputTokens, cursoragent.GetUsageInputTokens),
+			agentevents.Resolve(types.FieldUsageOutputTokens, cursoragent.GetUsageOutputTokens),
+			agentevents.Resolve(types.FieldUsageCacheReadTokens, cursoragent.GetUsageCacheReadTokens),
+			agentevents.Resolve(types.FieldUsageCacheWriteTokens, cursoragent.GetUsageCacheWriteTokens),
 		).
-		RegisterFor(toolEventTypes,
-			resolver(types.FieldToolName, cursoragent.GetToolName),
-			resolver(types.FieldToolDisplayName, cursoragent.GetToolDisplayName),
-			resolver(types.FieldToolSource, cursoragent.GetToolSource),
-			resolver(types.FieldToolInput, cursoragent.GetToolInput),
-			resolver(types.FieldToolCallID, cursoragent.GetToolCallID),
+		RegisterFor([]types.EventType{types.UserPromptSubmit, types.ToolCallStarted, types.MCPToolCallStarted},
+			agentevents.Resolve(types.FieldScannableText, cursoragent.GetScannableText),
+			agentevents.Resolve(types.FieldScanMessageType, cursoragent.GetScanMessageType),
 		).
-		RegisterFor(toolResultEventTypes,
-			resolver(types.FieldToolOutput, cursoragent.GetToolOutput),
-			resolver(types.FieldError, cursoragent.GetError),
+		RegisterFor([]types.EventType{
+			types.ToolCallStarted,
+			types.ToolCallCompleted,
+			types.ToolCallFailed,
+			types.MCPToolCallStarted,
+			types.MCPToolCallCompleted,
+		},
+			agentevents.Resolve(types.FieldToolName, cursoragent.GetToolName),
+			agentevents.Resolve(types.FieldToolDisplayName, cursoragent.GetToolDisplayName),
+			agentevents.Resolve(types.FieldToolSource, cursoragent.GetToolSource),
+			agentevents.Resolve(types.FieldToolInput, cursoragent.GetToolInput),
+			agentevents.Resolve(types.FieldToolCallID, cursoragent.GetToolCallID),
+		).
+		RegisterFor([]types.EventType{types.ToolCallCompleted, types.ToolCallFailed, types.MCPToolCallCompleted},
+			agentevents.Resolve(types.FieldToolOutput, cursoragent.GetToolOutput),
+			agentevents.Resolve(types.FieldError, cursoragent.GetError),
 		).
 		RegisterFor([]types.EventType{types.UserPromptSubmit},
-			resolver(types.FieldPrompt, cursoragent.GetPrompt),
+			agentevents.Resolve(types.FieldPrompt, cursoragent.GetPrompt),
 		).
 		RegisterFor([]types.EventType{types.AssistantResponseComplete},
-			resolver(types.FieldAssistantText, cursoragent.GetAssistantText),
+			agentevents.Resolve(types.FieldAssistantText, cursoragent.GetAssistantText),
 		).
 		Build()
 	if err != nil {
-		return nil, fmt.Errorf("register cursor agent event resolvers: %w", err)
+		return nil, err
 	}
-	return source, nil
+
+	return cursorAgent, nil
 }

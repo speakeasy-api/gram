@@ -50,8 +50,7 @@ type Service struct {
 	riskScanner        risk.RiskScanner
 	shadowMCPClient    *shadowmcp.Client
 	writer             *chat.ChatMessageWriter
-	agentEventWriter   *AgentEventWriter
-	cursorEvents       *agentevents.Source[*gen.CursorPayload]
+	agentEvents        *agentevents.Mux
 	siteURL            *url.URL
 	jwtSecret          string
 }
@@ -103,7 +102,7 @@ func NewService(
 	riskScanner risk.RiskScanner,
 	shadowMCPClient *shadowmcp.Client,
 	writer *chat.ChatMessageWriter,
-	cursorEvents *agentevents.Source[*gen.CursorPayload],
+	agentEvents *agentevents.Mux,
 	siteURL *url.URL,
 	jwtSecret string,
 ) *Service {
@@ -122,11 +121,10 @@ func NewService(
 		riskScanner:        riskScanner,
 		shadowMCPClient:    shadowMCPClient,
 		writer:             writer,
-		cursorEvents:       cursorEvents,
+		agentEvents:        agentEvents,
 		siteURL:            siteURL,
 		jwtSecret:          jwtSecret,
 	}
-	svc.agentEventWriter = &AgentEventWriter{service: svc}
 	return svc
 }
 

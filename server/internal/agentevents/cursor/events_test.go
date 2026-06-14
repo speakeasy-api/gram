@@ -44,7 +44,7 @@ func TestParseEventType(t *testing.T) {
 func TestCursorProviderResolvesToolFields(t *testing.T) {
 	t.Parallel()
 
-	source := newCursorSource(t)
+	agent := newCursorAgent(t)
 	toolName := "MCP:list_issues"
 	serverURL := "https://mcp.linear.app/sse"
 	payload := &gen.CursorPayload{
@@ -53,7 +53,7 @@ func TestCursorProviderResolvesToolFields(t *testing.T) {
 		URL:           &serverURL,
 		ToolInput:     map[string]any{"limit": 10},
 	}
-	ev := source.NewEvent(testContext(), payload)
+	ev := agent.NewEvent(testContext(), payload)
 
 	eventType, ok, err := ev.EventType()
 	require.NoError(t, err)
@@ -81,39 +81,35 @@ func TestCursorProviderResolvesToolFields(t *testing.T) {
 	assert.Equal(t, message.ToolRequest, scanType)
 }
 
-func newCursorSource(t *testing.T) *agentevents.Source[*gen.CursorPayload] {
+func newCursorAgent(t *testing.T) *agentevents.Agent[*gen.CursorPayload] {
 	t.Helper()
 
-	registry := agentevents.NewSourceRegistry()
-	source, err := agentevents.RegisterSource[*gen.CursorPayload](registry, cursoragent.Agent)
+	agent, err := agentevents.NewAgent[*gen.CursorPayload](cursoragent.Agent)
 	require.NoError(t, err)
 
-	resolver := func(field types.Field, resolve agentevents.FieldResolver[*gen.CursorPayload]) agentevents.Resolver[*gen.CursorPayload] {
-		return agentevents.Resolver[*gen.CursorPayload]{Field: field, Resolve: resolve}
-	}
-	require.NoError(t, source.Register(
-		resolver(types.FieldEventType, cursoragent.GetEventType),
-		resolver(types.FieldHookSource, cursoragent.GetHookSource),
-		resolver(types.FieldHookHostname, cursoragent.GetHookHostname),
-		resolver(types.FieldBlockReason, cursoragent.GetBlockReason),
-		resolver(types.FieldModel, cursoragent.GetModel),
-		resolver(types.FieldToolName, cursoragent.GetToolName),
-		resolver(types.FieldToolDisplayName, cursoragent.GetToolDisplayName),
-		resolver(types.FieldToolSource, cursoragent.GetToolSource),
-		resolver(types.FieldToolInput, cursoragent.GetToolInput),
-		resolver(types.FieldToolOutput, cursoragent.GetToolOutput),
-		resolver(types.FieldToolCallID, cursoragent.GetToolCallID),
-		resolver(types.FieldError, cursoragent.GetError),
-		resolver(types.FieldUsageInputTokens, cursoragent.GetUsageInputTokens),
-		resolver(types.FieldUsageOutputTokens, cursoragent.GetUsageOutputTokens),
-		resolver(types.FieldUsageCacheReadTokens, cursoragent.GetUsageCacheReadTokens),
-		resolver(types.FieldUsageCacheWriteTokens, cursoragent.GetUsageCacheWriteTokens),
-		resolver(types.FieldScannableText, cursoragent.GetScannableText),
-		resolver(types.FieldScanMessageType, cursoragent.GetScanMessageType),
-		resolver(types.FieldPrompt, cursoragent.GetPrompt),
-		resolver(types.FieldAssistantText, cursoragent.GetAssistantText),
+	require.NoError(t, agent.Register(
+		agentevents.Resolve[*gen.CursorPayload, types.EventType](types.FieldEventType, cursoragent.GetEventType),
+		agentevents.Resolve[*gen.CursorPayload, string](types.FieldHookSource, cursoragent.GetHookSource),
+		agentevents.Resolve[*gen.CursorPayload, string](types.FieldHookHostname, cursoragent.GetHookHostname),
+		agentevents.Resolve[*gen.CursorPayload, string](types.FieldBlockReason, cursoragent.GetBlockReason),
+		agentevents.Resolve[*gen.CursorPayload, string](types.FieldModel, cursoragent.GetModel),
+		agentevents.Resolve[*gen.CursorPayload, string](types.FieldToolName, cursoragent.GetToolName),
+		agentevents.Resolve[*gen.CursorPayload, string](types.FieldToolDisplayName, cursoragent.GetToolDisplayName),
+		agentevents.Resolve[*gen.CursorPayload, string](types.FieldToolSource, cursoragent.GetToolSource),
+		agentevents.Resolve[*gen.CursorPayload, any](types.FieldToolInput, cursoragent.GetToolInput),
+		agentevents.Resolve[*gen.CursorPayload, any](types.FieldToolOutput, cursoragent.GetToolOutput),
+		agentevents.Resolve[*gen.CursorPayload, string](types.FieldToolCallID, cursoragent.GetToolCallID),
+		agentevents.Resolve[*gen.CursorPayload, any](types.FieldError, cursoragent.GetError),
+		agentevents.Resolve[*gen.CursorPayload, int](types.FieldUsageInputTokens, cursoragent.GetUsageInputTokens),
+		agentevents.Resolve[*gen.CursorPayload, int](types.FieldUsageOutputTokens, cursoragent.GetUsageOutputTokens),
+		agentevents.Resolve[*gen.CursorPayload, int](types.FieldUsageCacheReadTokens, cursoragent.GetUsageCacheReadTokens),
+		agentevents.Resolve[*gen.CursorPayload, int](types.FieldUsageCacheWriteTokens, cursoragent.GetUsageCacheWriteTokens),
+		agentevents.Resolve[*gen.CursorPayload, string](types.FieldScannableText, cursoragent.GetScannableText),
+		agentevents.Resolve[*gen.CursorPayload, any](types.FieldScanMessageType, cursoragent.GetScanMessageType),
+		agentevents.Resolve[*gen.CursorPayload, string](types.FieldPrompt, cursoragent.GetPrompt),
+		agentevents.Resolve[*gen.CursorPayload, string](types.FieldAssistantText, cursoragent.GetAssistantText),
 	))
-	return source
+	return agent
 }
 
 func testContext() agentevents.EventContext {

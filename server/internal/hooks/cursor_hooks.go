@@ -9,6 +9,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/agentevents"
+	"github.com/speakeasy-api/gram/server/internal/agentevents/cursor"
 	agenttypes "github.com/speakeasy-api/gram/server/internal/agentevents/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -34,17 +35,20 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 	projectID := authCtx.ProjectID.String()
 	userEmail := conv.PtrValOr(payload.UserEmail, "")
 	conversationID := conv.PtrValOr(payload.ConversationID, "")
-	ev := s.cursorEvents.NewEvent(
+	ev, err := agentevents.NewEvent(s.agentEvents,
 		agentevents.EventContext{
+			Provider:       cursor.Agent,
 			OrgID:          orgID,
 			ProjectID:      projectID,
 			UserID:         authCtx.UserID,
 			UserEmail:      userEmail,
 			ConversationID: conversationID,
 			Timestamp:      time.Now(),
-		},
-		payload,
-	)
+		}, payload)
+	if err != nil {
+		return nil, err
+	}
+
 	eventType, ok, err := ev.EventType()
 	if err != nil {
 		return nil, err
@@ -197,13 +201,13 @@ func (s *Service) recordCursorHook(ctx context.Context, ev agentevents.Event[*ge
 	ev.Context.UserEmail = userEmail
 	ev.Context.ConversationID = *payload.ConversationID
 	ev.Context.Timestamp = time.Now()
-	ev.BlockReason = blockReason
-	go s.persistCursorAgentEvent(ctx, ev)
-}
+	ev = ev.WithBlockReason(blockReason)
 
-func (s *Service) persistCursorAgentEvent(ctx context.Context, ev agentevents.Event[*gen.CursorPayload]) {
-	s.writeCursorTelemetry(ctx, ev)
-	s.writeCursorChatMessages(ctx, ev)
+	go func() {
+		if err := ev.Write(ctx); err != nil {
+			s.logger.ErrorContext(ctx, "failed to write cursor agent event", attr.SlogError(err))
+		}
+	}()
 }
 
 // cursorMCPToolSource derives a tool_source string for beforeMCPExecution /

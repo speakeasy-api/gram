@@ -12,21 +12,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
-// ChatMessage is a chat message to persist plus the write-side instruction of
-// whether a chat title should be scheduled for it.
-type ChatMessage struct {
-	Params        chatRepo.CreateChatMessageParams
-	ScheduleTitle bool
-}
-
 // BuildChatMessages converts an agent event into chat messages to persist.
-// chatID and source (the provider display name) are resolved by the caller
-// because they depend on service-side identity derivation.
-func BuildChatMessages[T any](e agentevents.Event[T], chatID uuid.UUID, source string) ([]ChatMessage, error) {
+func BuildChatMessages[T any](e agentevents.Event[T], chatID uuid.UUID) ([]chatRepo.CreateChatMessageParams, error) {
 	eventType, ok, err := e.EventType()
 	if err != nil || !ok {
 		return nil, err
 	}
+	source := string(e.Provider())
 	switch eventType {
 	case types.UserPromptSubmit:
 		return buildPromptChatMessage(e, chatID, source)
@@ -73,7 +65,7 @@ func baseChatParams[T any](e agentevents.Event[T], chatID uuid.UUID, source stri
 	}, nil
 }
 
-func buildPromptChatMessage[T any](e agentevents.Event[T], chatID uuid.UUID, source string) ([]ChatMessage, error) {
+func buildPromptChatMessage[T any](e agentevents.Event[T], chatID uuid.UUID, source string) ([]chatRepo.CreateChatMessageParams, error) {
 	content, ok, err := e.String(types.FieldPrompt)
 	if err != nil || !ok || content == "" {
 		return nil, err
@@ -84,10 +76,10 @@ func buildPromptChatMessage[T any](e agentevents.Event[T], chatID uuid.UUID, sou
 	}
 	params.Role = "user"
 	params.Content = content
-	return []ChatMessage{{Params: params}}, nil
+	return []chatRepo.CreateChatMessageParams{params}, nil
 }
 
-func buildAssistantChatMessage[T any](e agentevents.Event[T], chatID uuid.UUID, source string) ([]ChatMessage, error) {
+func buildAssistantChatMessage[T any](e agentevents.Event[T], chatID uuid.UUID, source string) ([]chatRepo.CreateChatMessageParams, error) {
 	content, ok, err := e.String(types.FieldAssistantText)
 	if err != nil || !ok || content == "" {
 		return nil, err
@@ -100,10 +92,10 @@ func buildAssistantChatMessage[T any](e agentevents.Event[T], chatID uuid.UUID, 
 	params.Role = "assistant"
 	params.Content = content
 	params.Model = conv.ToPGTextEmpty(model)
-	return []ChatMessage{{Params: params, ScheduleTitle: true}}, nil
+	return []chatRepo.CreateChatMessageParams{params}, nil
 }
 
-func buildToolCallChatMessage[T any](e agentevents.Event[T], chatID uuid.UUID, source string) ([]ChatMessage, error) {
+func buildToolCallChatMessage[T any](e agentevents.Event[T], chatID uuid.UUID, source string) ([]chatRepo.CreateChatMessageParams, error) {
 	toolName, ok, err := e.String(types.FieldToolName)
 	if err != nil || !ok || toolName == "" {
 		return nil, err
@@ -128,10 +120,10 @@ func buildToolCallChatMessage[T any](e agentevents.Event[T], chatID uuid.UUID, s
 	params.FinishReason = conv.ToPGTextEmpty("tool_calls")
 	params.Model = conv.ToPGTextEmpty(model)
 	params.ToolCalls = toolCallsJSON
-	return []ChatMessage{{Params: params}}, nil
+	return []chatRepo.CreateChatMessageParams{params}, nil
 }
 
-func buildToolResultChatMessage[T any](e agentevents.Event[T], chatID uuid.UUID, source string, eventType types.EventType) ([]ChatMessage, error) {
+func buildToolResultChatMessage[T any](e agentevents.Event[T], chatID uuid.UUID, source string, eventType types.EventType) ([]chatRepo.CreateChatMessageParams, error) {
 	content, ok, err := toolResultContent(e, eventType)
 	if err != nil || !ok || content == "" {
 		return nil, err
@@ -144,7 +136,7 @@ func buildToolResultChatMessage[T any](e agentevents.Event[T], chatID uuid.UUID,
 	params.Role = "tool"
 	params.Content = content
 	params.ToolCallID = conv.ToPGTextEmpty(toolCallID)
-	return []ChatMessage{{Params: params}}, nil
+	return []chatRepo.CreateChatMessageParams{params}, nil
 }
 
 func toolResultContent[T any](e agentevents.Event[T], eventType types.EventType) (string, bool, error) {
