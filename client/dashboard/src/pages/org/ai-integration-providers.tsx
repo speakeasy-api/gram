@@ -40,7 +40,7 @@ export const AI_INTEGRATION_PROVIDERS: AIIntegrationProvider[] = [
     name: "Cursor",
     description: "Track Cursor usage and spend across your organization.",
     onboardingDescription:
-      "Connect Cursor's Admin API so Gram can import organization-level usage and spend.",
+      "Connect Cursor's Admin API so the platform can import organization-level usage and spend.",
     setupGuide: {
       steps: [
         {
