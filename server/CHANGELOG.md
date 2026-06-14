@@ -1,5 +1,15 @@
 # server
 
+## 0.70.0
+
+### Minor Changes
+
+- 0d51b12: Assistant tool-call audit events no longer appear in the platform audit logs feed or its facets. They are surfaced instead on a new "Audit log" tab on the Assistants page, filterable by assistant, backed by new `subject_type` / `subject_id` filters on `auditlogs.list`.
+
+### Patch Changes
+
+- 0d51b12: Record an audit trail entry (assistant, thread, tool, scrubbed params) for every tool call made by an assistant runtime, covering both MCP toolset calls and platform toolset calls.
+
 ## 0.69.0
 
 ### Minor Changes
