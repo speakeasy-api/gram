@@ -115,7 +115,7 @@ export const AI_INTEGRATION_PROVIDERS: AIIntegrationProvider[] = [
         {
           title: "Paste both values into Gram",
           description:
-            "Copy the Compliance Access API key and your Anthropic Organization ID, then paste both below. Gram stores the key securely and starts importing compliance activity.",
+            "Copy the Compliance Access API key and your Anthropic Organization ID, then paste both below. The platform stores the key securely and starts importing compliance activity.",
           showsForm: true,
         },
       ],
