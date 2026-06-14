@@ -243,6 +243,12 @@ func createIssuerGatedExternalMCPFixture(
 	})
 	require.NoError(t, err)
 
+	err = remoteRepo.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: remoteClient.ID,
+		UserSessionIssuerID:   userIssuer.ID,
+	})
+	require.NoError(t, err)
+
 	return issuerGatedExternalMCPFixture{
 		Toolset:             toolset,
 		UserSessionIssuer:   userIssuer,

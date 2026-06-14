@@ -541,9 +541,6 @@ func (s *Service) ListRemoteSessionClients(ctx context.Context, payload *gen.Lis
 
 	rows, err := s.listRemoteSessionClientsByProjectID(ctx, *authCtx.ProjectID, issuerFilter, userIssuerFilter, cursor, limit)
 	if err != nil {
-		if isRemoteSessionClientIssuerDrift(err) {
-			return nil, oops.E(oops.CodeInvariantViolation, err, "multiple remote session clients found for user session issuer").LogError(ctx, logger)
-		}
 		return nil, oops.E(oops.CodeUnexpected, err, "list remote session clients").LogError(ctx, logger)
 	}
 

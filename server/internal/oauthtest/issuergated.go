@@ -149,6 +149,12 @@ func CreateIssuerGatedToolset(
 	})
 	require.NoError(t, err)
 
+	err = remoteRepo.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: rsc.ID,
+		UserSessionIssuerID:   usi.ID,
+	})
+	require.NoError(t, err)
+
 	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
