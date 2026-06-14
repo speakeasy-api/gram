@@ -10,10 +10,6 @@ const SESSION_SAMPLE = 50;
 
 type DayEvent = { date: Date; weight: number };
 
-/**
- * Bucket weighted events into per-day totals for the trailing `days`, oldest
- * day first.
- */
 /** Local calendar-day index (days since the Unix epoch in local time). */
 function dayIndex(date: Date): number {
   return Math.floor(
@@ -22,6 +18,10 @@ function dayIndex(date: Date): number {
   );
 }
 
+/**
+ * Bucket weighted events into per-day totals for the trailing `days`, oldest
+ * day first.
+ */
 function bucketByDay(events: DayEvent[], days: number): number[] {
   const counts = Array.from({ length: days }, () => 0);
   const today = dayIndex(new Date());
