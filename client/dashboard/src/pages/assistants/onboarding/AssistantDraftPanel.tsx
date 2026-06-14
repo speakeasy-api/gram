@@ -85,6 +85,7 @@ export function AssistantDraftPanel(): JSX.Element {
           variant="ghost"
           size="sm"
           className="shrink-0"
+          aria-label="Delete assistant"
           onClick={() => {
             if (!draft.assistantId) return;
             if (!confirm("Delete this assistant? This cannot be undone."))

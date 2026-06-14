@@ -34,7 +34,7 @@ export function AssistantSessionsList({
   const deleteChat = useChatDeleteMutation();
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
 
-  const { data, isLoading } = useListChats(
+  const { data, isLoading, error } = useListChats(
     {
       assistantId,
       sortBy: "last_message_timestamp",
@@ -52,6 +52,14 @@ export function AssistantSessionsList({
       <Stack align="center" justify="center" className="py-12">
         <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
       </Stack>
+    );
+  }
+
+  if (error) {
+    return (
+      <Type small muted>
+        Couldn't load sessions. {error.message}
+      </Type>
     );
   }
 

@@ -10,7 +10,7 @@ import {
 } from "@gram/client/react-query/index.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 /**
@@ -47,17 +47,22 @@ export function EditInstructionsDialog({
     },
   });
 
-  // Reset the editor to the latest value each time the dialog opens so it never
-  // shows a stale draft from a previous edit that was cancelled.
-  const handleOpenChange = (next: boolean) => {
-    if (next) setDraft(assistant.instructions ?? "");
-    onOpenChange(next);
-  };
+  // Reset the editor to the latest value on the rising edge of `open` so it
+  // never shows a stale draft from a previous cancelled edit. Keyed on the
+  // transition (via the ref) rather than every instructions change so a
+  // background refetch can't wipe an in-progress edit. The dialog is opened by
+  // the parent's `open` prop, which never flows through Radix's onOpenChange,
+  // so this can't live in the open-change handler.
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (open && !wasOpen.current) setDraft(assistant.instructions ?? "");
+    wasOpen.current = open;
+  }, [open, assistant.instructions]);
 
   const dirty = draft !== (assistant.instructions ?? "");
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <Dialog.Content className="flex max-h-[85vh] w-[min(90vw,720px)] flex-col gap-4">
         <Dialog.Title>System instructions</Dialog.Title>
         <Dialog.Description>

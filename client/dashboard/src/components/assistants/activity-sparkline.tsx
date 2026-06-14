@@ -14,12 +14,21 @@ type DayEvent = { date: Date; weight: number };
  * Bucket weighted events into per-day totals for the trailing `days`, oldest
  * day first.
  */
+/** Local calendar-day index (days since the Unix epoch in local time). */
+function dayIndex(date: Date): number {
+  return Math.floor(
+    new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime() /
+      (24 * 60 * 60 * 1000),
+  );
+}
+
 function bucketByDay(events: DayEvent[], days: number): number[] {
   const counts = Array.from({ length: days }, () => 0);
-  const now = Date.now();
-  const dayMs = 24 * 60 * 60 * 1000;
+  const today = dayIndex(new Date());
   for (const { date, weight } of events) {
-    const ageDays = Math.floor((now - date.getTime()) / dayMs);
+    // Bucket by local calendar day so the curve aligns with day boundaries
+    // (a rolling 24h age would smear events across the wrong day).
+    const ageDays = today - dayIndex(date);
     if (ageDays < 0 || ageDays >= days) continue;
     // index 0 = oldest day in the window, days-1 = today
     counts[days - 1 - ageDays] += weight;
@@ -63,7 +72,7 @@ export function AssistantActivitySparkline({
 
   const counts = useMemo(() => {
     const events: DayEvent[] = (data?.chats ?? []).map((chat) => ({
-      date: new Date(chat.updatedAt),
+      date: new Date(chat.lastMessageTimestamp ?? chat.updatedAt),
       weight: Math.max(chat.numMessages, 1),
     }));
     return bucketByDay(events, WINDOW_DAYS);
