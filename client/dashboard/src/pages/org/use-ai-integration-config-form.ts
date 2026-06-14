@@ -5,7 +5,14 @@ import {
 import { useDeleteAIIntegrationConfigMutation } from "@gram/client/react-query/deleteAIIntegrationConfig";
 import { useUpsertAIIntegrationConfigMutation } from "@gram/client/react-query/upsertAIIntegrationConfig";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import {
+  type Dispatch,
+  type SetStateAction,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import type { AIIntegrationProvider } from "./ai-integration-providers";
 
@@ -14,10 +21,27 @@ type UseAIIntegrationConfigFormOptions = {
   onDeleteSuccess?: () => void;
 };
 
+type AIIntegrationConfigForm = {
+  data: ReturnType<typeof useAiIntegrationConfig>["data"];
+  isLoading: boolean;
+  enabled: boolean;
+  setEnabled: Dispatch<SetStateAction<boolean>>;
+  apiKey: string;
+  setApiKey: Dispatch<SetStateAction<string>>;
+  organizationId: string;
+  setOrganizationId: Dispatch<SetStateAction<string>>;
+  isConfigured: boolean;
+  hasSavedKey: boolean;
+  isMutating: boolean;
+  canSave: boolean;
+  save: () => void;
+  remove: () => void;
+};
+
 export function useAIIntegrationConfigForm(
   provider: AIIntegrationProvider,
   options: UseAIIntegrationConfigFormOptions = {},
-) {
+): AIIntegrationConfigForm {
   const { data, isLoading } = useAiIntegrationConfig({
     provider: provider.provider,
   });
@@ -26,6 +50,7 @@ export function useAIIntegrationConfigForm(
   const [enabled, setEnabled] = useState(false);
   const [apiKey, setApiKey] = useState("");
   const [organizationId, setOrganizationId] = useState("");
+  const lastSyncedConfigIdRef = useRef<string | null>(null);
 
   const { mutate: upsert, status: upsertStatus } =
     useUpsertAIIntegrationConfigMutation({
@@ -43,6 +68,10 @@ export function useAIIntegrationConfigForm(
     useDeleteAIIntegrationConfigMutation({
       onSuccess: () => {
         toast.success("AI integration deleted");
+        lastSyncedConfigIdRef.current = null;
+        setEnabled(false);
+        setApiKey("");
+        setOrganizationId("");
         void invalidateAllAiIntegrationConfig(queryClient);
         options.onDeleteSuccess?.();
       },
@@ -54,23 +83,13 @@ export function useAIIntegrationConfigForm(
   const isConfigured = Boolean(data?.id);
   const hasSavedKey = Boolean(data?.hasApiKey);
 
-  // Sync form state from the persisted config. Depend on primitive values
-  // rather than `data` itself: refetches produce new object references even
-  // when nothing changed, and resetting on every refetch would discard
-  // unsaved edits. The config id is included so that loading a *different*
-  // config record (e.g. after the active organization changes) resets the
-  // form even when the saved values happen to match the previous config.
-  const hasData = Boolean(data);
-  const savedId = data?.id ?? "";
-  const savedEnabled = data?.enabled ?? false;
-  const savedOrganizationId = data?.externalOrganizationId ?? "";
-
   useEffect(() => {
-    if (!hasData) return;
-    setEnabled(savedEnabled);
+    if (!data?.id || lastSyncedConfigIdRef.current === data.id) return;
+    lastSyncedConfigIdRef.current = data.id;
+    setEnabled(data.enabled);
     setApiKey("");
-    setOrganizationId(savedOrganizationId);
-  }, [hasData, savedId, savedEnabled, savedOrganizationId]);
+    setOrganizationId(data.externalOrganizationId ?? "");
+  }, [data]);
 
   const isMutating = upsertStatus === "pending" || deleteStatus === "pending";
   const canSave = useMemo(() => {
@@ -112,9 +131,6 @@ export function useAIIntegrationConfigForm(
         },
       },
     });
-    setEnabled(false);
-    setApiKey("");
-    setOrganizationId("");
   };
 
   return {

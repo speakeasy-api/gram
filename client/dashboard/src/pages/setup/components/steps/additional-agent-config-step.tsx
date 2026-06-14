@@ -219,12 +219,13 @@ function ProviderConfigDrawer({
   const currentStep = setupSteps[currentStepIdx];
   const isLastStep = currentStepIdx === setupSteps.length - 1;
   const showForm = currentStep?.showsForm ?? isLastStep;
+  const { isConfigured, setEnabled } = form;
 
   // Onboarding is an opt-in setup path, so a newly saved provider should be
   // enabled by default. Existing configs keep their saved enabled state.
   useEffect(() => {
-    if (!form.isConfigured) form.setEnabled(true);
-  }, [form.isConfigured, form.setEnabled]);
+    if (!isConfigured) setEnabled(true);
+  }, [isConfigured, setEnabled]);
 
   return (
     <>
@@ -238,6 +239,8 @@ function ProviderConfigDrawer({
           <button
             key={idx}
             type="button"
+            aria-current={idx === currentStepIdx ? "step" : undefined}
+            aria-label={`Go to ${provider.name} setup step ${idx + 1}: ${setupSteps[idx]?.title ?? "Untitled step"}`}
             onClick={() => {
               if (idx <= currentStepIdx) setCurrentStepIdx(idx);
             }}
@@ -314,7 +317,7 @@ function ProviderConfigDrawer({
                   })()
                 : null}
 
-              {step.showsForm ? (
+              {(step.showsForm ?? idx === setupSteps.length - 1) ? (
                 <div className="!mt-6 space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor={apiKeyFieldId}>

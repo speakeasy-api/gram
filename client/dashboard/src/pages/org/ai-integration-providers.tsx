@@ -122,7 +122,7 @@ export const AI_INTEGRATION_PROVIDERS: AIIntegrationProvider[] = [
     },
     icon: ClaudeCodeIcon,
     apiKeyLabel: "Compliance Access API Key",
-    apiKeyPlaceholder: "sk-ant-admin...",
+    apiKeyPlaceholder: "Paste your Compliance Access Key",
     requiresOrganizationId: true,
     organizationIdLabel: "Anthropic Organization ID",
     organizationIdPlaceholder: "org_xxx",
