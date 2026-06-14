@@ -83,7 +83,7 @@ export const AI_INTEGRATION_PROVIDERS: AIIntegrationProvider[] = [
     description:
       "Import Claude Chats from claude.ai web and desktop for security review.",
     onboardingDescription:
-      "Connect Anthropic's Compliance API so Gram can import Claude activity for review workflows.",
+      "Connect Anthropic's Compliance API so the platform can import Claude activity for review workflows.",
     setupGuide: {
       steps: [
         {
