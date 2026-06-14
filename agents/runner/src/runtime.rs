@@ -25,10 +25,10 @@ use serde_json::Value;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::sync::{OnceCell, oneshot};
 
-use agentkit_compaction::AgentBuilderCompactorExt;
+use agentkit_compaction::{AgentBuilderCompactorExt, CompactionReason, Compactor};
 
 use crate::clip::ClippedToolSource;
-use crate::compaction::build_compactor;
+use crate::compaction::{PersistingCompactor, build_compactor};
 use crate::errors::RunnerError;
 use crate::gram_client::GramBootstrapClient;
 use crate::http_layer::{McpRotatingClient, TokenRegistry, build_bootstrap_client, build_http};
@@ -351,6 +351,14 @@ async fn spawn_thread(
         host.gram_client.clone(),
         tokens.clone(),
     )?;
+    // An inline agent compactor runs right before the next model request, so
+    // OnTurnEnd's persistence-only output would be sent upstream. Run it
+    // terminally instead (see `run_loop`); Threshold shrinks-to-fit, so inline.
+    let (inline_compactor, turn_end_compactor) = if bootstrap.compaction.runs_at_turn_end() {
+        (None, compactor)
+    } else {
+        (compactor, None)
+    };
 
     let mut transcript = Vec::new();
     if !bootstrap.instructions.is_empty() {
@@ -387,7 +395,7 @@ async fn spawn_thread(
         .observer(TracingReporter::new())
         .transcript(transcript);
 
-    if let Some(compactor) = compactor {
+    if let Some(compactor) = inline_compactor {
         builder = builder.compactor(compactor);
     }
 
@@ -410,7 +418,7 @@ async fn spawn_thread(
     let evict_thread_id = thread_id.clone();
 
     let task_handle = tokio::spawn(async move {
-        let outcome = AssertUnwindSafe(run_loop(driver, inbox_rx, loop_idle))
+        let outcome = AssertUnwindSafe(run_loop(driver, inbox_rx, loop_idle, turn_end_compactor))
             .catch_unwind()
             .await;
         match outcome {
@@ -585,6 +593,7 @@ async fn run_loop<S>(
     mut driver: LoopDriver<S>,
     mut inbox: UnboundedReceiver<String>,
     idle_since: Arc<Mutex<Option<Instant>>>,
+    turn_end_compactor: Option<PersistingCompactor>,
 ) -> Result<&'static str, RunnerError>
 where
     S: ModelSession,
@@ -592,6 +601,9 @@ where
     loop {
         match driver.next().await? {
             LoopStep::Finished(_turn) => {
+                if let Some(compactor) = &turn_end_compactor {
+                    compact_at_turn_end(compactor, &driver).await;
+                }
                 mark_idle(&idle_since);
             }
             LoopStep::Interrupt(LoopInterrupt::AwaitingInput(req)) => {
@@ -621,6 +633,26 @@ where
                 pending.approve(&mut driver)?;
             }
         }
+    }
+}
+
+/// Compacts and persists the finished transcript for the next cold bootstrap,
+/// discarding the result — it is never fed back to the model. Failures are
+/// logged, not propagated, so a persistence hiccup can't kill the thread loop.
+async fn compact_at_turn_end<S: ModelSession>(
+    compactor: &PersistingCompactor,
+    driver: &LoopDriver<S>,
+) {
+    let transcript = driver.snapshot().transcript;
+    if let Err(err) = compactor
+        .compact(
+            &transcript,
+            CompactionReason::Custom("on_turn_end".to_string()),
+            None,
+        )
+        .await
+    {
+        tracing::warn!(error = %err, "turn-end compaction failed; skipping persist for this turn");
     }
 }
 
