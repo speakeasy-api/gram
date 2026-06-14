@@ -84,7 +84,16 @@ export function useAIIntegrationConfigForm(
   const hasSavedKey = Boolean(data?.hasApiKey);
 
   useEffect(() => {
-    if (!data?.id || lastSyncedConfigIdRef.current === data.id) return;
+    if (!data?.id) {
+      if (lastSyncedConfigIdRef.current === null) return;
+      lastSyncedConfigIdRef.current = null;
+      setEnabled(false);
+      setApiKey("");
+      setOrganizationId("");
+      return;
+    }
+
+    if (lastSyncedConfigIdRef.current === data.id) return;
     lastSyncedConfigIdRef.current = data.id;
     setEnabled(data.enabled);
     setApiKey("");
