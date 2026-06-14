@@ -99,7 +99,7 @@ export const AI_INTEGRATION_PROVIDERS: AIIntegrationProvider[] = [
         {
           title: "Copy your Anthropic Organization ID",
           description:
-            "Log in to Claude, open Organization settings, then scroll to the bottom and copy the Organization ID for the Claude organization whose compliance data Gram should import.",
+            "Log in to Claude, open Organization settings, then scroll to the bottom and copy the Organization ID for the Claude organization whose compliance data Speakeasy should import.",
           screenshot: {
             src: "/setup/anthropic-organization-id.png",
             alt: "Claude Organization settings page showing the Organization ID near the bottom of the page.",
