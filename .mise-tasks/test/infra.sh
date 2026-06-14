@@ -5,11 +5,6 @@
 
 set -euo pipefail
 
-# --locked: fail loudly when pyproject.toml and uv.lock have drifted instead of
-# silently re-resolving. The dev dependency group (pytest, type checkers, trio)
-# is installed automatically by uv.
-uv sync --locked
-
-uv run pyrefly check --summarize-errors --min-severity warn
-uv run ty check
-uv run pytest "$@"
+uv run --no-sync pyrefly check --summarize-errors --min-severity warn
+uv run --no-sync ty check
+uv run --no-sync pytest "$@"

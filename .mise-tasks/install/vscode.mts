@@ -52,6 +52,9 @@ function amendSettings(settingsJSON: string): string {
     ...new Set(edited["mise.configureExtensionsAutomaticallyIgnoreList"]),
   ].sort();
 
+  edited["python.defaultInterpreterPath"] ??=
+    "${workspaceFolder}/.venv/bin/python3";
+
   edited["js/ts.tsdk.path"] = "node_modules/typescript/lib";
   edited["go.lintTool"] = "golangci-lint-v2";
   edited["go.lintFlags"] = [
