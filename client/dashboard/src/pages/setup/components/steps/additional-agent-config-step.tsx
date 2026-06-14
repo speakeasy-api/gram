@@ -20,6 +20,7 @@ import {
   AI_INTEGRATION_PROVIDERS,
   type AIIntegrationProvider,
 } from "@/pages/org/ai-integration-providers";
+import { CodexIcon } from "@/pages/hooks/HookSourceIcon";
 import { useAIIntegrationConfigForm } from "@/pages/org/use-ai-integration-config-form";
 import { useAiIntegrationConfig } from "@gram/client/react-query/aiIntegrationConfig";
 import { Badge, Button } from "@speakeasy-api/moonshine";
@@ -32,6 +33,25 @@ interface AdditionalAgentConfigStepProps {
 }
 
 type ProviderStatus = "not_started" | "complete";
+type AdditionalAgentConfigProvider = AIIntegrationProvider & {
+  available?: boolean;
+};
+
+const ADDITIONAL_AGENT_CONFIG_PROVIDERS: AdditionalAgentConfigProvider[] = [
+  ...AI_INTEGRATION_PROVIDERS,
+  {
+    provider: "codex",
+    name: "OpenAI Compliance API",
+    description: "Export Codex activity logs for audit workflows.",
+    onboardingDescription:
+      "Codex compliance exports for audit, monitoring, and investigations are coming soon.",
+    icon: CodexIcon,
+    apiKeyLabel: "OpenAI Compliance API key",
+    apiKeyPlaceholder: "Coming soon",
+    requiresOrganizationId: false,
+    available: false,
+  },
+];
 
 export function AdditionalAgentConfigStep({
   onComplete,
@@ -43,23 +63,37 @@ export function AdditionalAgentConfigStep({
     Record<string, ProviderStatus>
   >(() =>
     Object.fromEntries(
-      AI_INTEGRATION_PROVIDERS.map((provider) => [
+      ADDITIONAL_AGENT_CONFIG_PROVIDERS.map((provider) => [
         provider.provider,
         "not_started",
       ]),
     ),
   );
+  const availableProviders = useMemo(
+    () =>
+      ADDITIONAL_AGENT_CONFIG_PROVIDERS.filter(
+        (provider) => provider.available !== false,
+      ),
+    [],
+  );
+  const comingSoonProviders = useMemo(
+    () =>
+      ADDITIONAL_AGENT_CONFIG_PROVIDERS.filter(
+        (provider) => provider.available === false,
+      ),
+    [],
+  );
 
   const completedCount = useMemo(
     () =>
-      AI_INTEGRATION_PROVIDERS.filter(
+      availableProviders.filter(
         (provider) => providerStatus[provider.provider] === "complete",
       ).length,
-    [providerStatus],
+    [availableProviders, providerStatus],
   );
 
   const activeProvider =
-    AI_INTEGRATION_PROVIDERS.find(
+    availableProviders.find(
       (provider) => provider.provider === drawerProviderId,
     ) ?? null;
 
@@ -88,12 +122,11 @@ export function AdditionalAgentConfigStep({
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <span className="text-muted-foreground text-sm">
-            {completedCount} of {AI_INTEGRATION_PROVIDERS.length} providers
-            configured
+            {completedCount} of {availableProviders.length} providers configured
           </span>
         </div>
 
-        {AI_INTEGRATION_PROVIDERS.map((provider) => (
+        {availableProviders.map((provider) => (
           <ProviderSetupRow
             key={provider.provider}
             provider={provider}
@@ -102,6 +135,22 @@ export function AdditionalAgentConfigStep({
             onOpen={() => setDrawerProviderId(provider.provider)}
           />
         ))}
+
+        {comingSoonProviders.length > 0 ? (
+          <div className="pt-3">
+            <p className="text-muted-foreground mb-2 text-[11px] font-medium tracking-wider uppercase">
+              Coming soon
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {comingSoonProviders.map((provider) => (
+                <ProviderComingSoonCard
+                  key={provider.provider}
+                  provider={provider}
+                />
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <p className="text-muted-foreground pt-2 text-xs leading-relaxed">
           These connections are optional. You can skip this step and add or edit
@@ -129,6 +178,33 @@ export function AdditionalAgentConfigStep({
         </SheetContent>
       </Sheet>
     </StepContainer>
+  );
+}
+
+function ProviderComingSoonCard({
+  provider,
+}: {
+  provider: AdditionalAgentConfigProvider;
+}): JSX.Element {
+  const Icon = provider.icon;
+
+  return (
+    <div
+      aria-disabled
+      className="border-border bg-card flex cursor-not-allowed items-center gap-3 rounded-lg border p-3 opacity-50"
+    >
+      <div className="bg-secondary flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md">
+        <Icon className="text-foreground h-4 w-4" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-foreground truncate text-sm font-medium">
+          {provider.name}
+        </p>
+        <p className="text-muted-foreground truncate text-xs">
+          {provider.onboardingDescription}
+        </p>
+      </div>
+    </div>
   );
 }
 
