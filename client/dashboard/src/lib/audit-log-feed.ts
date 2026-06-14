@@ -20,7 +20,7 @@ export function formatDateHeader(date: Date, mode: TimestampMode): string {
   }).format(date);
 }
 
-export function getDateKey(date: Date, mode: TimestampMode): string {
+function getDateKey(date: Date, mode: TimestampMode): string {
   if (mode === "utc") {
     return date.toISOString().slice(0, 10);
   }
