@@ -1,10 +1,5 @@
 import { useNoToolsetsConfigured } from "@/hooks/useObservabilityMcpConfig";
 import { useServerAssistantTransport } from "@/hooks/useServerAssistantTransport";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { cn, isMacPlatform } from "@/lib/utils";
 import speakeasyIcon from "@/assets/speakeasy-icon.svg";
 import { useAssistantRuntime } from "@assistant-ui/react";
@@ -29,8 +24,8 @@ import {
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import type { UIMessage } from "ai";
 import {
+  ArrowLeft,
   ArrowUp,
-  ChevronDown,
   HistoryIcon,
   Loader2,
   Maximize2,
@@ -170,6 +165,8 @@ interface InsightsDockProps {
   onSubmitPrompt: (text: string) => void;
   /** Genies the dock down into the sidebar-footer resume button. */
   onDismiss: () => void;
+  /** Opens the chat panel straight into the full-window history view. */
+  onOpenHistory: () => void;
   /** Chat panel content, rendered inside the card when `open`. */
   panel: React.ReactNode;
   /** Stretch the open chat panel to fill the content area. */
@@ -211,6 +208,7 @@ function InsightsDock({
   focusKey,
   onSubmitPrompt,
   onDismiss,
+  onOpenHistory,
   panel,
   maximized,
 }: InsightsDockProps): ReactElement {
@@ -504,6 +502,17 @@ function InsightsDock({
                     className="placeholder:text-muted-foreground min-w-0 flex-1 bg-transparent text-sm outline-none"
                   />
                   {value.trim() && <DockSubmitButton />}
+                  {composerExpanded && (
+                    <button
+                      type="button"
+                      onClick={onOpenHistory}
+                      className={PANEL_ICON_BUTTON_CLASS}
+                      aria-label="Conversation history"
+                      title="History"
+                    >
+                      <HistoryIcon className="size-3.5" />
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={onDismiss}
@@ -584,12 +593,24 @@ export function InsightsProvider({
   // calls in a long-lived runtime throw `tapLookupResources: Resource not
   // found for lookup: __LOCALID_…` during render.
   const [sessionKey, setSessionKey] = useState(0);
-  const [historyOpen, setHistoryOpen] = useState(false);
+  // History takes over the whole panel (replacing the chat) rather than
+  // dropping a popover, and is cancellable back to the chat. Reset on close
+  // and on a fresh conversation so reopening always lands on the chat.
+  const [historyView, setHistoryView] = useState(false);
+  // Whether the history view has a live conversation to return to. False when
+  // opened cold from the docked composer (no chat exists behind it yet), so
+  // the back affordance is hidden and only close is offered. True when opened
+  // from inside an active chat via the in-panel history button.
+  const [historyReturnable, setHistoryReturnable] = useState(false);
   // Full-screen chat panel, toggled from the panel header. Reset on close so
   // the next open always starts at the regular panel size.
   const [panelMaximized, setPanelMaximized] = useState(false);
   useEffect(() => {
-    if (!isExpanded) setPanelMaximized(false);
+    if (!isExpanded) {
+      setPanelMaximized(false);
+      setHistoryView(false);
+      setHistoryReturnable(false);
+    }
   }, [isExpanded]);
   const { theme } = useMoonshineConfig();
   const { pathname } = useLocation();
@@ -766,6 +787,8 @@ export function InsightsProvider({
   const handleSendPrompt = useCallback((text: string) => {
     setSessionKey((k) => k + 1);
     setPendingPrompt({ text, nonce: Date.now() });
+    // Sending always drops into the live conversation, never the history list.
+    setHistoryView(false);
   }, []);
 
   const consumePendingPrompt = useCallback(() => setPendingPrompt(null), []);
@@ -809,6 +832,17 @@ export function InsightsProvider({
   // the new thread gets its chat id from the server on the first send.
   const handleStartFresh = useCallback(() => {
     setSessionKey((k) => k + 1);
+    setHistoryView(false);
+  }, []);
+
+  // Opening history from the docked composer: open the panel (which lazily
+  // resolves the assistant transport the history list needs) straight into
+  // the full-window history view. No chat exists behind it yet, so the view
+  // is close-only — no back affordance.
+  const handleOpenHistory = useCallback(() => {
+    setIsExpanded(true);
+    setHistoryView(true);
+    setHistoryReturnable(false);
   }, []);
 
   // Global keyboard shortcut: Cmd+/ (Mac) / Ctrl+/ (PC). With the chat panel
@@ -863,6 +897,19 @@ export function InsightsProvider({
     </button>
   );
 
+  // Cancels the full-window history view back to the chat — reads "← Back".
+  const panelBackButton = (
+    <button
+      onClick={() => setHistoryView(false)}
+      className={cn(PANEL_ICON_BUTTON_CLASS, "flex items-center gap-1")}
+      aria-label="Back to conversation"
+      title="Back to conversation"
+    >
+      <ArrowLeft className="size-4" />
+      <span className="text-sm font-medium">Back</span>
+    </button>
+  );
+
   const panelNotices = (
     <>
       {/* Notice when the Project Assistant failed to connect */}
@@ -901,66 +948,97 @@ export function InsightsProvider({
             onConsume={consumePendingPrompt}
           />
           <div className="flex h-full min-h-0 flex-col">
-            {/* Header */}
-            <div className="flex shrink-0 items-center justify-between px-2 pt-2">
-              <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
-                <PopoverTrigger asChild>
+            {/* History view: the conversation list takes over the whole panel
+                in place of the chat, cancellable via the back button. */}
+            {historyView && (
+              <>
+                <div
+                  className={cn(
+                    "flex shrink-0 items-center px-2 pt-2",
+                    historyReturnable ? "justify-between" : "justify-end",
+                  )}
+                >
+                  {historyReturnable && panelBackButton}
+                  {panelCloseButton}
+                </div>
+                {/* Picking a conversation (or "New Thread") switches the
+                    runtime's active thread; the list lives in a shadow root,
+                    so its click bubbles (composed) out to this wrapper and
+                    returns the user to the chat. */}
+                <div
+                  className="min-h-0 flex-1 overflow-y-auto"
+                  onClick={() => setHistoryView(false)}
+                >
+                  <ChatHistory className="min-h-full" />
+                </div>
+              </>
+            )}
+            {/* Chat view */}
+            {!historyView && (
+              <>
+                <div className="flex shrink-0 items-center justify-between px-2 pt-2">
                   <button
-                    className={cn(
-                      PANEL_ICON_BUTTON_CLASS,
-                      "flex items-center gap-0.5",
-                    )}
+                    onClick={() => {
+                      setHistoryReturnable(true);
+                      setHistoryView(true);
+                    }}
+                    className={PANEL_ICON_BUTTON_CLASS}
                     aria-label="Conversation history"
-                    title="Conversation history"
+                    title="History"
                   >
                     <HistoryIcon className="size-4" />
-                    <ChevronDown className="size-3" />
                   </button>
-                </PopoverTrigger>
-                <PopoverContent
-                  align="start"
-                  className="max-h-96 w-72 overflow-y-auto p-0"
-                >
-                  <ChatHistory className="max-h-96 overflow-y-auto" />
-                </PopoverContent>
-              </Popover>
-              <div className="flex items-center gap-0.5">
-                <button
-                  onClick={handleStartFresh}
-                  className={PANEL_ICON_BUTTON_CLASS}
-                  aria-label="Start a new conversation"
-                  title="Start a new conversation"
-                >
-                  <SquarePen className="size-4" />
-                </button>
-                <button
-                  onClick={() => setPanelMaximized((m) => !m)}
-                  className={PANEL_ICON_BUTTON_CLASS}
-                  aria-label={
-                    panelMaximized ? "Exit full screen" : "Full screen"
-                  }
-                  title={panelMaximized ? "Exit full screen" : "Full screen"}
-                >
-                  {panelMaximized ? (
-                    <Minimize2 className="size-4" />
-                  ) : (
-                    <Maximize2 className="size-4" />
-                  )}
-                </button>
-                {panelCloseButton}
-              </div>
-            </div>
-            {panelNotices}
-            <div className="min-h-0 flex-1 overflow-hidden">
-              <Chat />
-            </div>
+                  <div className="flex items-center gap-0.5">
+                    <button
+                      onClick={handleStartFresh}
+                      className={PANEL_ICON_BUTTON_CLASS}
+                      aria-label="Start a new conversation"
+                      title="Start a new conversation"
+                    >
+                      <SquarePen className="size-4" />
+                    </button>
+                    <button
+                      onClick={() => setPanelMaximized((m) => !m)}
+                      className={PANEL_ICON_BUTTON_CLASS}
+                      aria-label={
+                        panelMaximized ? "Exit full screen" : "Full screen"
+                      }
+                      title={
+                        panelMaximized ? "Exit full screen" : "Full screen"
+                      }
+                    >
+                      {panelMaximized ? (
+                        <Minimize2 className="size-4" />
+                      ) : (
+                        <Maximize2 className="size-4" />
+                      )}
+                    </button>
+                    {panelCloseButton}
+                  </div>
+                </div>
+                {panelNotices}
+                <div className="min-h-0 flex-1 overflow-hidden">
+                  <Chat />
+                </div>
+              </>
+            )}
           </div>
         </GramElementsProvider>
       ) : (
         <>
-          {/* Header (connecting state) — close only; history/new need the
-              chat runtime. */}
-          <div className="flex shrink-0 items-center justify-end px-2 pt-2">
+          {/* Header (connecting state) — close only; the conversation list
+              and new-chat need the chat runtime. The back affordance only
+              applies to history opened from a live chat (not a cold composer
+              open), so it tracks historyReturnable like the ready header. */}
+          <div
+            className={cn(
+              "flex shrink-0 items-center px-2 pt-2",
+              historyView && historyReturnable
+                ? "justify-between"
+                : "justify-end",
+            )}
+          >
+            {historyView && historyReturnable && panelBackButton}
             {panelCloseButton}
           </div>
           {panelNotices}
@@ -1003,6 +1081,7 @@ export function InsightsProvider({
             focusKey={focusComposerKey}
             onSubmitPrompt={handleDockSubmit}
             onDismiss={handleDockDismiss}
+            onOpenHistory={handleOpenHistory}
             panel={panelContent}
             maximized={panelMaximized}
           />
