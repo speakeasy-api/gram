@@ -118,11 +118,11 @@ func (e *PolicyBypassEvaluator) loadGrants(ctx context.Context, input PolicyBypa
 	return grants, true
 }
 
-func policyBypassCheckDimensions(target *PolicyBypassTarget) authz.RiskPolicyBypassDimensions {
+func policyBypassCheckDimensions(target *PolicyBypassTarget) authz.RiskPolicyDimensions {
 	if target == nil {
-		return authz.RiskPolicyBypassDimensions{ServerURL: "", ServerIdentity: ""}
+		return authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}
 	}
-	return authz.RiskPolicyBypassDimensions{
+	return authz.RiskPolicyDimensions{
 		ServerURL:      target.Dimensions[authz.SelectorKeyServerURL],
 		ServerIdentity: target.Dimensions[authz.SelectorKeyServerIdentity],
 	}
