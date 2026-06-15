@@ -42,10 +42,12 @@ export function AssistantDraftPanel(): JSX.Element {
   );
   const [editingInstructions, setEditingInstructions] = useState(false);
 
+  // Only fetch triggers when the Triggers tab is active — they are no longer
+  // surfaced on the Overview tab, so loading the panel shouldn't pay for them.
   const { data: triggersData } = useTriggers(undefined, undefined, {
     retry: false,
     throwOnError: false,
-    enabled: !!draft.assistantId,
+    enabled: !!draft.assistantId && activeTab === "triggers",
   });
 
   const triggers = (triggersData?.triggers ?? []).filter(
