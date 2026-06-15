@@ -133,9 +133,24 @@ const FLAG_ONLY_CATEGORIES: Set<RuleCategory> = new Set([
 /** Steps in the guided standard-policy creation/edit flow. Mirrors the
  *  enterprise onboarding wizard (left rail + paged content). */
 const POLICY_WIZARD_STEPS: Step[] = [
-  { id: "detect", title: "Detect", description: "What to scan for" },
-  { id: "scope", title: "Scope", description: "Where it applies" },
-  { id: "action", title: "Action", description: "What happens on a match" },
+  {
+    id: "detect",
+    title: "Detect",
+    description: "What to scan for",
+    badge: "Required",
+  },
+  {
+    id: "scope",
+    title: "Scope",
+    description: "Where it applies",
+    badge: "Optional",
+  },
+  {
+    id: "action",
+    title: "Action",
+    description: "What happens on a match",
+    badge: "Required",
+  },
   { id: "review", title: "Review", description: "Name & enable" },
 ];
 
@@ -150,6 +165,24 @@ function WizardStepHeading({
     <div>
       <h3 className="text-base font-semibold">{title}</h3>
       <p className="text-muted-foreground text-sm">{description}</p>
+    </div>
+  );
+}
+
+function SummaryRow({ label, chips }: { label: string; chips: string[] }) {
+  return (
+    <div className="flex items-start justify-between gap-3 px-4 py-2.5 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <div className="flex flex-wrap justify-end gap-1">
+        {chips.map((chip) => (
+          <span
+            key={chip}
+            className="bg-muted rounded-full px-2 py-0.5 text-xs"
+          >
+            {chip}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1734,6 +1767,17 @@ function PolicySheetBody({
     selectedCategories.has(c),
   );
 
+  // Review-step summary chips.
+  const summaryDetectors = ALL_CATEGORIES.filter((c) =>
+    selectedCategories.has(c),
+  ).map((c) => RULE_CATEGORY_META[c].label);
+  const summaryScopes =
+    selectedMessageTypes.size === ALL_POLICY_MESSAGE_TYPES.length
+      ? ["All session parts"]
+      : ALL_POLICY_MESSAGE_TYPES.filter((t) =>
+          selectedMessageTypes.has(t as PolicyMessageType),
+        ).map((t) => POLICY_MESSAGE_TYPE_META[t as PolicyMessageType].label);
+
   return (
     <div className="flex gap-8 py-4">
       <div className="w-44 flex-shrink-0">
@@ -2084,6 +2128,32 @@ function PolicySheetBody({
                   placeholder="e.g. Secret Detection"
                 />
               )}
+            </div>
+
+            {/* Summary */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Summary</Label>
+              <div className="border-border divide-border divide-y rounded-lg border">
+                <SummaryRow
+                  label="Detectors"
+                  chips={
+                    summaryDetectors.length > 0 ? summaryDetectors : ["None"]
+                  }
+                />
+                <SummaryRow
+                  label="Custom rules"
+                  chips={[
+                    selectedCustomRuleIds.size > 0
+                      ? `${selectedCustomRuleIds.size} attached`
+                      : "None",
+                  ]}
+                />
+                <SummaryRow label="Scope" chips={summaryScopes} />
+                <SummaryRow
+                  label="Action"
+                  chips={[formAction === "block" ? "Block" : "Flag"]}
+                />
+              </div>
             </div>
 
             {/* Enabled toggle */}

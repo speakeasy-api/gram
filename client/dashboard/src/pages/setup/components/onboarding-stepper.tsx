@@ -5,6 +5,8 @@ export interface Step {
   id: string;
   title: string;
   description: string;
+  /** Optional inline marker after the title, e.g. "Required" / "Optional". */
+  badge?: string;
 }
 
 interface OnboardingStepperProps {
@@ -73,13 +75,18 @@ export function OnboardingStepper({
             <div className="min-w-0 pt-1 pb-8">
               <h3
                 className={cn(
-                  "text-sm leading-tight font-semibold",
+                  "flex items-center gap-2 text-sm leading-tight font-semibold",
                   isCurrent && "text-foreground",
                   isCompleted && "text-foreground",
                   isUpcoming && "text-muted-foreground",
                 )}
               >
                 {step.title}
+                {step.badge && (
+                  <span className="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">
+                    {step.badge}
+                  </span>
+                )}
               </h3>
               <p
                 className={cn(
