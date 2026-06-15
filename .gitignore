@@ -73,3 +73,7 @@ package-lock.json
 **/.claude/scheduled_tasks.lock
 flagged-chats.jsonl
 .superpowers/
+# Stray riskjudgebench build/output artifacts (compiled binary + bench result dumps)
+/server/riskjudgebench
+/results.json
+/finalists.json

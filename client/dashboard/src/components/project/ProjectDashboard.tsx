@@ -28,9 +28,8 @@ import { Wand2 } from "lucide-react";
 import {
   INSIGHTS_AI_RAINBOW_CLASS,
   type InsightsConfigOptions,
-} from "@/components/insights-dock";
+} from "@/components/insights-sidebar";
 import { useInsightsState } from "@/components/insights-context";
-import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import {
   formatDateRangeLabel,
   useDateRangeFilter,
@@ -447,10 +446,13 @@ export function ProjectDashboard(): JSX.Element {
                             subtitle:
                               "Dig into who is driving the most activity.",
                             contextInfo: `${timeWindowContext} The user clicked "Explore with AI" on the Top Users chart.`,
-                            suggestions:
-                              INSIGHTS_SUGGESTIONS["home#top-users"](
-                                rangeLabel,
-                              ),
+                            suggestions: [
+                              {
+                                title: "Top users & usage patterns",
+                                label: rangeLabel,
+                                prompt: `Who are my top 5 end users in the ${rangeLabel}, and what is each user's main usage pattern — tool calls, skill invocations, agent sessions, or a mix?`,
+                              },
+                            ],
                           })
                         }
                       />
@@ -482,14 +484,17 @@ export function ProjectDashboard(): JSX.Element {
                             subtitle:
                               "See which MCP servers are driving the most traffic.",
                             contextInfo: `${timeWindowContext} The user clicked "Explore with AI" on the Top Servers chart.`,
-                            suggestions:
-                              INSIGHTS_SUGGESTIONS["home#top-servers"](
-                                rangeLabel,
-                              ),
+                            suggestions: [
+                              {
+                                title: "Top servers & hot tools",
+                                label: rangeLabel,
+                                prompt: `Which servers received the most tool calls in the ${rangeLabel}, and which specific tools on each server are driving that volume? Lets look at data from all logs including hooks telemetry.`,
+                              },
+                            ],
                           })
                         }
                       />
-                      <ViewAllLink to={routes.insights.tools.href()} />
+                      <ViewAllLink to={routes.insights.href()} />
                     </CardActions>
                   }
                 >
@@ -527,10 +532,13 @@ export function ProjectDashboard(): JSX.Element {
                                 subtitle:
                                   "Understand how your power users interact with agents.",
                                 contextInfo: `${timeWindowContext} The user clicked "Explore with AI" on the Most Agent Sessions by User chart.`,
-                                suggestions:
-                                  INSIGHTS_SUGGESTIONS["home#agent-sessions"](
-                                    rangeLabel,
-                                  ),
+                                suggestions: [
+                                  {
+                                    title: "Power users & agent behavior",
+                                    label: rangeLabel,
+                                    prompt: `For the users with the most agent sessions in the ${rangeLabel}, what are the common prompts they send and which tools get invoked most often?`,
+                                  },
+                                ],
                               })
                             }
                           />
@@ -598,14 +606,17 @@ export function ProjectDashboard(): JSX.Element {
                                 subtitle:
                                   "Compare how different LLM clients exercise your tools.",
                                 contextInfo: `${timeWindowContext} The user clicked "Explore with AI" on the Most Used LLM Clients chart.`,
-                                suggestions:
-                                  INSIGHTS_SUGGESTIONS["home#llm-clients"](
-                                    rangeLabel,
-                                  ),
+                                suggestions: [
+                                  {
+                                    title: "LLM clients & reliability",
+                                    label: rangeLabel,
+                                    prompt: `Break down tool-call activity by LLM client in the ${rangeLabel} and highlight any clients with unusually high error rates or latency.`,
+                                  },
+                                ],
                               })
                             }
                           />
-                          <ViewAllLink to={routes.insights.tools.href()} />
+                          <ViewAllLink to={routes.insights.href()} />
                         </CardActions>
                       }
                     >
@@ -625,7 +636,7 @@ export function ProjectDashboard(): JSX.Element {
                       tooltip="Tools ranked by the number of MCP calls they served in the selected period."
                       action={
                         <CardActions>
-                          <ViewAllLink to={routes.insights.tools.href()} />
+                          <ViewAllLink to={routes.insights.href()} />
                         </CardActions>
                       }
                     >
@@ -643,7 +654,7 @@ export function ProjectDashboard(): JSX.Element {
                       tooltip="Tools with the highest share of failed MCP calls (HTTP 4xx/5xx) in the selected period. Only tools with at least one failure are shown."
                       action={
                         <CardActions>
-                          <ViewAllLink to={routes.insights.tools.href()} />
+                          <ViewAllLink to={routes.insights.href()} />
                         </CardActions>
                       }
                     >

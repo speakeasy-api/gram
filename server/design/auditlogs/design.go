@@ -34,6 +34,8 @@ var _ = Service("auditlogs", func() {
 			Param("project_slug")
 			Param("actor_id")
 			Param("action")
+			Param("subject_type")
+			Param("subject_id")
 		})
 
 		shared.CursorPagination()
@@ -111,6 +113,12 @@ var ListAuditLogsForm = Type("ListAuditLogsForm", func() {
 	})
 	Attribute("action", String, func() {
 		Description("Action to filter audit logs to a specific action.")
+	})
+	Attribute("subject_type", String, func() {
+		Description("Subject type to filter audit logs to a specific kind of subject. When omitted, assistant activity events are excluded; pass 'assistant' to list them.")
+	})
+	Attribute("subject_id", String, func() {
+		Description("Subject ID to filter audit logs to a specific subject (e.g. a single assistant).")
 	})
 })
 

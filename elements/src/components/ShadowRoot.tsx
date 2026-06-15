@@ -68,32 +68,6 @@ export const ShadowRoot = ({
     shadowRoot.prepend(styleElement);
   }, [shadowRoot]);
 
-  // Embedder CSS overrides (theme.customCss) go in a separate style tag
-  // appended after the built-in stylesheet so they win the cascade at equal
-  // specificity.
-  const customCss = config.theme?.customCss;
-  useEffect(() => {
-    if (!shadowRoot) {
-      return;
-    }
-
-    let customStyle = shadowRoot.querySelector<HTMLStyleElement>(
-      "style[data-gram-elements-custom]",
-    );
-
-    if (!customCss) {
-      customStyle?.remove();
-      return;
-    }
-
-    if (!customStyle) {
-      customStyle = document.createElement("style");
-      customStyle.setAttribute("data-gram-elements-custom", "true");
-      shadowRoot.append(customStyle);
-    }
-    customStyle.textContent = customCss;
-  }, [shadowRoot, customCss]);
-
   return (
     <div
       ref={hostRef}

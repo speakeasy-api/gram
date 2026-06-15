@@ -1,7 +1,7 @@
 {
   "name": "dashboard",
   "private": true,
-  "version": "0.70.1",
+  "version": "0.72.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port ${GRAM_SITE_PORT:-5173}",
@@ -74,9 +74,9 @@
     "nuqs": "^2.8.9",
     "posthog-js": "^1.298.0",
     "postprocessing": "^6.38.0",
-    "react": "^19.2.0",
+    "react": "^19.2.7",
     "react-chartjs-2": "^5.3.1",
-    "react-dom": "^19.2.0",
+    "react-dom": "^19.2.7",
     "react-error-boundary": "^6.0.0",
     "react-merge-refs": "^3.0.2",
     "react-router": "^7.12.0",

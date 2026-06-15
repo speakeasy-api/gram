@@ -18,6 +18,7 @@ import (
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpname"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
@@ -420,12 +421,14 @@ func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *g
 		attrs[attr.HookIsInterruptKey] = *payload.IsInterrupt
 	}
 
-	// Parse MCP tool names (same mcp__ prefix convention)
+	// Parse MCP tool names (same mcp__ prefix convention). Match only the
+	// lowercase Claude-style "mcp__<server>__<tool>" form here; Cursor's own
+	// "MCP:" prefix (which AttributeTool also recognizes) is handled separately
+	// below, so guard on the mcp__ prefix to keep that split exclusive.
 	if strings.HasPrefix(toolName, "mcp__") {
-		parts := strings.SplitN(toolName, "__", 3)
-		if len(parts) == 3 {
-			attrs[attr.ToolCallSourceKey] = parts[1]
-			attrs[attr.ToolNameKey] = parts[2]
+		if server, fn, ok := mcpname.AttributeTool(toolName); ok {
+			attrs[attr.ToolCallSourceKey] = server
+			attrs[attr.ToolNameKey] = fn
 		}
 	}
 

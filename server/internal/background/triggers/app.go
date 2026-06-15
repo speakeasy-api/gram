@@ -752,9 +752,15 @@ func (a *App) ProcessWebhook(ctx context.Context, instanceID uuid.UUID, body []b
 // moment a slack-triggered event is dispatched, so the user sees the assistant
 // is working while its (cold-starting) runtime spins up. The assistant refines
 // the status itself once it's running via the set_thread_status platform tool.
+// Only events the assistant always replies to get the indicator: ambient
+// events may end in a silent turn (no reply ever posted), which would strand
+// the indicator until Slack's two-minute timeout.
 // Best-effort: a failure here only costs the indicator.
 func (a *App) ackSlackThreadStatus(ctx context.Context, instance triggerrepo.TriggerInstance, env map[string]string, event EventEnvelope) {
 	if a.slackClient == nil || instance.DefinitionSlug != DefinitionSlugSlack {
+		return
+	}
+	if !slackEventExpectsReply(event) {
 		return
 	}
 	channelID, threadTS, ok := slackThreadStatusTarget(event)

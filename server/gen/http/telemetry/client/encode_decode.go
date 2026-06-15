@@ -3173,6 +3173,492 @@ func DecodeGetHooksSummaryResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// BuildGetToolUsageSummaryRequest instantiates a HTTP request object with
+// method and path set to call the "telemetry" service "getToolUsageSummary"
+// endpoint
+func (c *Client) BuildGetToolUsageSummaryRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetToolUsageSummaryTelemetryPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("telemetry", "getToolUsageSummary", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetToolUsageSummaryRequest returns an encoder for requests sent to the
+// telemetry getToolUsageSummary server.
+func EncodeGetToolUsageSummaryRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*telemetry.GetToolUsageSummaryPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("telemetry", "getToolUsageSummary", "*telemetry.GetToolUsageSummaryPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewGetToolUsageSummaryRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("telemetry", "getToolUsageSummary", err)
+		}
+		return nil
+	}
+}
+
+// DecodeGetToolUsageSummaryResponse returns a decoder for responses returned
+// by the telemetry getToolUsageSummary endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeGetToolUsageSummaryResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetToolUsageSummaryResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetToolUsageSummaryResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageSummary", err)
+			}
+			err = ValidateGetToolUsageSummaryResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getToolUsageSummary", err)
+			}
+			res := NewGetToolUsageSummaryResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetToolUsageSummaryUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageSummary", err)
+			}
+			err = ValidateGetToolUsageSummaryUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getToolUsageSummary", err)
+			}
+			return nil, NewGetToolUsageSummaryUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetToolUsageSummaryForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageSummary", err)
+			}
+			err = ValidateGetToolUsageSummaryForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getToolUsageSummary", err)
+			}
+			return nil, NewGetToolUsageSummaryForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetToolUsageSummaryBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageSummary", err)
+			}
+			err = ValidateGetToolUsageSummaryBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getToolUsageSummary", err)
+			}
+			return nil, NewGetToolUsageSummaryBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetToolUsageSummaryNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageSummary", err)
+			}
+			err = ValidateGetToolUsageSummaryNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getToolUsageSummary", err)
+			}
+			return nil, NewGetToolUsageSummaryNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetToolUsageSummaryConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageSummary", err)
+			}
+			err = ValidateGetToolUsageSummaryConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getToolUsageSummary", err)
+			}
+			return nil, NewGetToolUsageSummaryConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetToolUsageSummaryUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageSummary", err)
+			}
+			err = ValidateGetToolUsageSummaryUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getToolUsageSummary", err)
+			}
+			return nil, NewGetToolUsageSummaryUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetToolUsageSummaryInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageSummary", err)
+			}
+			err = ValidateGetToolUsageSummaryInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getToolUsageSummary", err)
+			}
+			return nil, NewGetToolUsageSummaryInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetToolUsageSummaryInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageSummary", err)
+				}
+				err = ValidateGetToolUsageSummaryInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "getToolUsageSummary", err)
+				}
+				return nil, NewGetToolUsageSummaryInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetToolUsageSummaryUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageSummary", err)
+				}
+				err = ValidateGetToolUsageSummaryUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "getToolUsageSummary", err)
+				}
+				return nil, NewGetToolUsageSummaryUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("telemetry", "getToolUsageSummary", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetToolUsageSummaryGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageSummary", err)
+			}
+			err = ValidateGetToolUsageSummaryGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getToolUsageSummary", err)
+			}
+			return nil, NewGetToolUsageSummaryGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("telemetry", "getToolUsageSummary", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetToolUsageFilterOptionsRequest instantiates a HTTP request object
+// with method and path set to call the "telemetry" service
+// "getToolUsageFilterOptions" endpoint
+func (c *Client) BuildGetToolUsageFilterOptionsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetToolUsageFilterOptionsTelemetryPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("telemetry", "getToolUsageFilterOptions", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetToolUsageFilterOptionsRequest returns an encoder for requests sent
+// to the telemetry getToolUsageFilterOptions server.
+func EncodeGetToolUsageFilterOptionsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*telemetry.GetToolUsageFilterOptionsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("telemetry", "getToolUsageFilterOptions", "*telemetry.GetToolUsageFilterOptionsPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewGetToolUsageFilterOptionsRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("telemetry", "getToolUsageFilterOptions", err)
+		}
+		return nil
+	}
+}
+
+// DecodeGetToolUsageFilterOptionsResponse returns a decoder for responses
+// returned by the telemetry getToolUsageFilterOptions endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeGetToolUsageFilterOptionsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetToolUsageFilterOptionsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetToolUsageFilterOptionsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			err = ValidateGetToolUsageFilterOptionsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			res := NewGetToolUsageFilterOptionsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetToolUsageFilterOptionsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			err = ValidateGetToolUsageFilterOptionsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			return nil, NewGetToolUsageFilterOptionsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetToolUsageFilterOptionsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			err = ValidateGetToolUsageFilterOptionsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			return nil, NewGetToolUsageFilterOptionsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetToolUsageFilterOptionsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			err = ValidateGetToolUsageFilterOptionsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			return nil, NewGetToolUsageFilterOptionsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetToolUsageFilterOptionsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			err = ValidateGetToolUsageFilterOptionsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			return nil, NewGetToolUsageFilterOptionsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetToolUsageFilterOptionsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			err = ValidateGetToolUsageFilterOptionsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			return nil, NewGetToolUsageFilterOptionsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetToolUsageFilterOptionsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			err = ValidateGetToolUsageFilterOptionsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			return nil, NewGetToolUsageFilterOptionsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetToolUsageFilterOptionsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			err = ValidateGetToolUsageFilterOptionsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			return nil, NewGetToolUsageFilterOptionsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetToolUsageFilterOptionsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageFilterOptions", err)
+				}
+				err = ValidateGetToolUsageFilterOptionsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "getToolUsageFilterOptions", err)
+				}
+				return nil, NewGetToolUsageFilterOptionsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetToolUsageFilterOptionsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageFilterOptions", err)
+				}
+				err = ValidateGetToolUsageFilterOptionsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "getToolUsageFilterOptions", err)
+				}
+				return nil, NewGetToolUsageFilterOptionsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("telemetry", "getToolUsageFilterOptions", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetToolUsageFilterOptionsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			err = ValidateGetToolUsageFilterOptionsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getToolUsageFilterOptions", err)
+			}
+			return nil, NewGetToolUsageFilterOptionsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("telemetry", "getToolUsageFilterOptions", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListHooksTracesRequest instantiates a HTTP request object with method
 // and path set to call the "telemetry" service "listHooksTraces" endpoint
 func (c *Client) BuildListHooksTracesRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -4152,6 +4638,199 @@ func unmarshalSkillBreakdownRowResponseBodyToTelemetrySkillBreakdownRow(v *Skill
 		SkillName: *v.SkillName,
 		UserEmail: *v.UserEmail,
 		UseCount:  *v.UseCount,
+	}
+
+	return res
+}
+
+// marshalTelemetryToolUsageUserFilterToToolUsageUserFilterRequestBody builds a
+// value of type *ToolUsageUserFilterRequestBody from a value of type
+// *telemetry.ToolUsageUserFilter.
+func marshalTelemetryToolUsageUserFilterToToolUsageUserFilterRequestBody(v *telemetry.ToolUsageUserFilter) *ToolUsageUserFilterRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &ToolUsageUserFilterRequestBody{
+		Kind: string(v.Kind),
+		Key:  v.Key,
+	}
+
+	return res
+}
+
+// marshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter builds a
+// value of type *telemetry.ToolUsageUserFilter from a value of type
+// *ToolUsageUserFilterRequestBody.
+func marshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(v *ToolUsageUserFilterRequestBody) *telemetry.ToolUsageUserFilter {
+	if v == nil {
+		return nil
+	}
+	res := &telemetry.ToolUsageUserFilter{
+		Kind: telemetry.ToolUsageUserKind(v.Kind),
+		Key:  v.Key,
+	}
+
+	return res
+}
+
+// unmarshalToolUsageTotalsResponseBodyToTelemetryToolUsageTotals builds a
+// value of type *telemetry.ToolUsageTotals from a value of type
+// *ToolUsageTotalsResponseBody.
+func unmarshalToolUsageTotalsResponseBodyToTelemetryToolUsageTotals(v *ToolUsageTotalsResponseBody) *telemetry.ToolUsageTotals {
+	res := &telemetry.ToolUsageTotals{
+		EventCount:    *v.EventCount,
+		SuccessCount:  *v.SuccessCount,
+		FailureCount:  *v.FailureCount,
+		FailureRate:   *v.FailureRate,
+		UniqueTools:   *v.UniqueTools,
+		UniqueUsers:   *v.UniqueUsers,
+		UniqueTargets: *v.UniqueTargets,
+	}
+
+	return res
+}
+
+// unmarshalToolUsageTargetSummaryResponseBodyToTelemetryToolUsageTargetSummary
+// builds a value of type *telemetry.ToolUsageTargetSummary from a value of
+// type *ToolUsageTargetSummaryResponseBody.
+func unmarshalToolUsageTargetSummaryResponseBodyToTelemetryToolUsageTargetSummary(v *ToolUsageTargetSummaryResponseBody) *telemetry.ToolUsageTargetSummary {
+	res := &telemetry.ToolUsageTargetSummary{
+		TargetType:   telemetry.ToolUsageTargetType(*v.TargetType),
+		TargetKind:   telemetry.ToolUsageTargetKind(*v.TargetKind),
+		TargetID:     *v.TargetID,
+		TargetLabel:  *v.TargetLabel,
+		EventCount:   *v.EventCount,
+		UniqueTools:  *v.UniqueTools,
+		SuccessCount: *v.SuccessCount,
+		FailureCount: *v.FailureCount,
+		FailureRate:  *v.FailureRate,
+	}
+
+	return res
+}
+
+// unmarshalToolUsageUserSummaryResponseBodyToTelemetryToolUsageUserSummary
+// builds a value of type *telemetry.ToolUsageUserSummary from a value of type
+// *ToolUsageUserSummaryResponseBody.
+func unmarshalToolUsageUserSummaryResponseBodyToTelemetryToolUsageUserSummary(v *ToolUsageUserSummaryResponseBody) *telemetry.ToolUsageUserSummary {
+	res := &telemetry.ToolUsageUserSummary{
+		UserKey:      *v.UserKey,
+		UserLabel:    *v.UserLabel,
+		UserKind:     telemetry.ToolUsageUserKind(*v.UserKind),
+		EventCount:   *v.EventCount,
+		UniqueTools:  *v.UniqueTools,
+		SuccessCount: *v.SuccessCount,
+		FailureCount: *v.FailureCount,
+		FailureRate:  *v.FailureRate,
+	}
+
+	return res
+}
+
+// unmarshalToolUsageTargetTimeSeriesPointResponseBodyToTelemetryToolUsageTargetTimeSeriesPoint
+// builds a value of type *telemetry.ToolUsageTargetTimeSeriesPoint from a
+// value of type *ToolUsageTargetTimeSeriesPointResponseBody.
+func unmarshalToolUsageTargetTimeSeriesPointResponseBodyToTelemetryToolUsageTargetTimeSeriesPoint(v *ToolUsageTargetTimeSeriesPointResponseBody) *telemetry.ToolUsageTargetTimeSeriesPoint {
+	res := &telemetry.ToolUsageTargetTimeSeriesPoint{
+		BucketStartNs: *v.BucketStartNs,
+		TargetType:    telemetry.ToolUsageTargetType(*v.TargetType),
+		TargetKind:    telemetry.ToolUsageTargetKind(*v.TargetKind),
+		TargetID:      *v.TargetID,
+		TargetLabel:   *v.TargetLabel,
+		EventCount:    *v.EventCount,
+		FailureCount:  *v.FailureCount,
+	}
+
+	return res
+}
+
+// unmarshalToolUsageUserTimeSeriesPointResponseBodyToTelemetryToolUsageUserTimeSeriesPoint
+// builds a value of type *telemetry.ToolUsageUserTimeSeriesPoint from a value
+// of type *ToolUsageUserTimeSeriesPointResponseBody.
+func unmarshalToolUsageUserTimeSeriesPointResponseBodyToTelemetryToolUsageUserTimeSeriesPoint(v *ToolUsageUserTimeSeriesPointResponseBody) *telemetry.ToolUsageUserTimeSeriesPoint {
+	res := &telemetry.ToolUsageUserTimeSeriesPoint{
+		BucketStartNs: *v.BucketStartNs,
+		UserKey:       *v.UserKey,
+		UserLabel:     *v.UserLabel,
+		UserKind:      telemetry.ToolUsageUserKind(*v.UserKind),
+		EventCount:    *v.EventCount,
+		FailureCount:  *v.FailureCount,
+	}
+
+	return res
+}
+
+// unmarshalToolUsageUsersByTargetRowResponseBodyToTelemetryToolUsageUsersByTargetRow
+// builds a value of type *telemetry.ToolUsageUsersByTargetRow from a value of
+// type *ToolUsageUsersByTargetRowResponseBody.
+func unmarshalToolUsageUsersByTargetRowResponseBodyToTelemetryToolUsageUsersByTargetRow(v *ToolUsageUsersByTargetRowResponseBody) *telemetry.ToolUsageUsersByTargetRow {
+	res := &telemetry.ToolUsageUsersByTargetRow{
+		TargetType:   telemetry.ToolUsageTargetType(*v.TargetType),
+		TargetKind:   telemetry.ToolUsageTargetKind(*v.TargetKind),
+		TargetID:     *v.TargetID,
+		TargetLabel:  *v.TargetLabel,
+		UserKey:      *v.UserKey,
+		UserLabel:    *v.UserLabel,
+		UserKind:     telemetry.ToolUsageUserKind(*v.UserKind),
+		EventCount:   *v.EventCount,
+		FailureCount: *v.FailureCount,
+	}
+
+	return res
+}
+
+// unmarshalToolUsageTargetToolBreakdownRowResponseBodyToTelemetryToolUsageTargetToolBreakdownRow
+// builds a value of type *telemetry.ToolUsageTargetToolBreakdownRow from a
+// value of type *ToolUsageTargetToolBreakdownRowResponseBody.
+func unmarshalToolUsageTargetToolBreakdownRowResponseBodyToTelemetryToolUsageTargetToolBreakdownRow(v *ToolUsageTargetToolBreakdownRowResponseBody) *telemetry.ToolUsageTargetToolBreakdownRow {
+	res := &telemetry.ToolUsageTargetToolBreakdownRow{
+		TargetType:   telemetry.ToolUsageTargetType(*v.TargetType),
+		TargetKind:   telemetry.ToolUsageTargetKind(*v.TargetKind),
+		TargetID:     *v.TargetID,
+		TargetLabel:  *v.TargetLabel,
+		ToolName:     *v.ToolName,
+		EventCount:   *v.EventCount,
+		SuccessCount: *v.SuccessCount,
+		FailureCount: *v.FailureCount,
+		FailureRate:  *v.FailureRate,
+	}
+
+	return res
+}
+
+// unmarshalToolUsageHostedServerFilterOptionResponseBodyToTelemetryToolUsageHostedServerFilterOption
+// builds a value of type *telemetry.ToolUsageHostedServerFilterOption from a
+// value of type *ToolUsageHostedServerFilterOptionResponseBody.
+func unmarshalToolUsageHostedServerFilterOptionResponseBodyToTelemetryToolUsageHostedServerFilterOption(v *ToolUsageHostedServerFilterOptionResponseBody) *telemetry.ToolUsageHostedServerFilterOption {
+	res := &telemetry.ToolUsageHostedServerFilterOption{
+		ToolsetSlug: *v.ToolsetSlug,
+		EventCount:  *v.EventCount,
+	}
+
+	return res
+}
+
+// unmarshalToolUsageShadowServerFilterOptionResponseBodyToTelemetryToolUsageShadowServerFilterOption
+// builds a value of type *telemetry.ToolUsageShadowServerFilterOption from a
+// value of type *ToolUsageShadowServerFilterOptionResponseBody.
+func unmarshalToolUsageShadowServerFilterOptionResponseBodyToTelemetryToolUsageShadowServerFilterOption(v *ToolUsageShadowServerFilterOptionResponseBody) *telemetry.ToolUsageShadowServerFilterOption {
+	res := &telemetry.ToolUsageShadowServerFilterOption{
+		ServerName: *v.ServerName,
+		EventCount: *v.EventCount,
+	}
+
+	return res
+}
+
+// unmarshalToolUsageUserFilterOptionResponseBodyToTelemetryToolUsageUserFilterOption
+// builds a value of type *telemetry.ToolUsageUserFilterOption from a value of
+// type *ToolUsageUserFilterOptionResponseBody.
+func unmarshalToolUsageUserFilterOptionResponseBodyToTelemetryToolUsageUserFilterOption(v *ToolUsageUserFilterOptionResponseBody) *telemetry.ToolUsageUserFilterOption {
+	res := &telemetry.ToolUsageUserFilterOption{
+		UserKey:    *v.UserKey,
+		UserLabel:  *v.UserLabel,
+		UserKind:   telemetry.ToolUsageUserKind(*v.UserKind),
+		EventCount: *v.EventCount,
 	}
 
 	return res

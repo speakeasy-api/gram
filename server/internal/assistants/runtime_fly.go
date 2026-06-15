@@ -221,6 +221,10 @@ func (f *FlyRuntimeBackend) ServerURL() *url.URL {
 	return f.config.ServerURL
 }
 
+func (f *FlyRuntimeBackend) ImageRef() string {
+	return f.desiredImageRef()
+}
+
 // Ensure does not auto-recreate the app on ensureExisting errors. Health and
 // configure timeouts must bubble so Temporal retries drive convergence.
 // Destructive app recreation churns Fly's allocated IPs and creates DNS-stale
@@ -631,6 +635,69 @@ func (f *FlyRuntimeBackend) maybeRecycleImage(
 		return nil, fmt.Errorf("wait for assistant fly runtime machine recycle: %w", err)
 	}
 	return updated, nil
+}
+
+// RecycleImage rolls an established runtime's machine onto the configured
+// image outside the admission path, so a deploy-time sweep can absorb the
+// image-pull + reboot cost while the runtime is idle instead of the next
+// turn paying it. Strictly non-creative: a missing app, machine or metadata
+// is a skip — Ensure owns provisioning.
+func (f *FlyRuntimeBackend) RecycleImage(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendRecycleResult, error) {
+	skipped := RuntimeBackendRecycleResult{Recycled: false, BackendMetadataJSON: nil}
+
+	if err := validateRuntimeBackend(f, runtime.Backend); err != nil {
+		return skipped, err
+	}
+
+	metadata, err := decodeFlyRuntimeMetadata(runtime.BackendMetadataJSON)
+	if err != nil {
+		return skipped, err
+	}
+	if metadata.AppName == "" || metadata.MachineID == "" {
+		return skipped, nil
+	}
+
+	flapsClient, err := f.flapsFactory.New(ctx)
+	if err != nil {
+		return skipped, fmt.Errorf("create fly runtime flaps client: %w", err)
+	}
+
+	machine, err := flapsClient.Get(ctx, metadata.AppName, metadata.MachineID)
+	switch {
+	case isFlyNotFound(err):
+		return skipped, nil
+	case err != nil:
+		return skipped, fmt.Errorf("load assistant fly runtime machine for recycle: %w", err)
+	case machine == nil || machine.State != fly.MachineStateStarted:
+		// Only running machines are recycled. A stopped machine is either
+		// mid-expiry (the warm timer raced this sweep and Stop already
+		// landed) or cold — starting it here would resurrect a runtime the
+		// row no longer tracks. Both pick the new image up through Ensure.
+		return skipped, nil
+	}
+
+	appURL := firstNonEmpty(metadata.AppURL, flyRuntimeAppURL(metadata.AppName))
+	recycled, err := f.maybeRecycleImage(ctx, flapsClient, runtime, metadata.AppName, appURL, metadata.AppIP, machine)
+	if err != nil {
+		return skipped, err
+	}
+	if recycled == nil {
+		return skipped, nil
+	}
+
+	target := flyRuntimeTarget{URL: appURL, IP: metadata.AppIP, MachineID: recycled.ID}
+	if err := f.tracedWaitHealth(ctx, target, true); err != nil {
+		return skipped, fmt.Errorf("wait for assistant fly runtime health after recycle: %w", err)
+	}
+
+	metadata.MachineID = recycled.ID
+	metadata.Region = firstNonEmpty(recycled.Region, metadata.Region, f.config.DefaultFlyRegion)
+	metadata.LastBootID = recycled.InstanceID
+	rawMetadata, err := json.Marshal(metadata)
+	if err != nil {
+		return skipped, fmt.Errorf("marshal assistant fly runtime metadata: %w", err)
+	}
+	return RuntimeBackendRecycleResult{Recycled: true, BackendMetadataJSON: rawMetadata}, nil
 }
 
 // desiredImageRef returns the configured runtime image reference in the same

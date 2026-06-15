@@ -75,6 +75,12 @@ impl CompactionPolicy {
             percent: FALLBACK_PERCENT,
         }
     }
+
+    /// Whether compaction runs terminally at turn end (persistence-only)
+    /// rather than inline before the next model turn.
+    pub fn runs_at_turn_end(&self) -> bool {
+        matches!(self, CompactionPolicy::OnTurnEnd)
+    }
 }
 
 impl Default for CompactionPolicy {

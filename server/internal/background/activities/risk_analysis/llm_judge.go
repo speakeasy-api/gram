@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+
+	"github.com/speakeasy-api/gram/server/internal/mcpname"
+	"github.com/speakeasy-api/gram/server/internal/message"
 )
 
 const (
@@ -33,9 +36,94 @@ type JudgeInput struct {
 	ProjectID string
 	// Prompt is the policy's operator-authored guardrail.
 	Prompt string
-	// Text is the message content under evaluation.
-	Text   string
-	Config JudgeConfig
+	// Message is the message under evaluation. Type drives how it's rendered
+	// for the judge; Body holds the type-appropriate content.
+	Message JudgeMessage
+	Config  JudgeConfig
+}
+
+// JudgeMessage is the message under evaluation. Type selects the actor/role and
+// body label the judge sees; Body is the type-appropriate content (user or
+// assistant text, tool-call arguments, or tool-result output). For tool calls
+// and results, ToolName is the raw tool name and MCPServer/MCPFunction are its
+// destructured MCP components (empty for native tools and non-tool messages).
+// When a single assistant message issued more than one tool call, ToolCalls
+// carries each call with its own attribution and takes precedence over the
+// single ToolName/Body fields. An unset/unknown Type renders as opaque content.
+type JudgeMessage struct {
+	Type        message.Type
+	Body        string
+	ToolName    string
+	MCPServer   string
+	MCPFunction string
+	ToolCalls   []JudgeToolCall
+}
+
+// JudgeToolCall is one tool invocation within a multi-call assistant message.
+// ToolName is the raw name; MCPServer/MCPFunction are its destructured MCP
+// components (empty for native tools); Arguments is the call's raw input.
+type JudgeToolCall struct {
+	ToolName    string
+	MCPServer   string
+	MCPFunction string
+	Arguments   string
+}
+
+// NewJudgeMessage builds the message from a message type, optional tool name,
+// and the type-appropriate body. The tool name is destructured via AttributeTool
+// so an MCP server/function is surfaced separately — a no-op for native tools
+// and non-tool messages, where toolName is "".
+func NewJudgeMessage(messageType message.Type, toolName, body string) JudgeMessage {
+	server, fn, _ := mcpname.AttributeTool(toolName)
+	return JudgeMessage{
+		Type:        messageType,
+		Body:        body,
+		ToolName:    toolName,
+		MCPServer:   server,
+		MCPFunction: fn,
+		ToolCalls:   nil,
+	}
+}
+
+// HasContent reports whether the message carries anything for the judge to
+// evaluate: a non-empty body, tool attribution (so a tool-scoped policy can
+// match a no-arg/no-output call), or one or more tool calls. An empty body
+// alone is not a reason to skip a tool event.
+func (m JudgeMessage) HasContent() bool {
+	if strings.TrimSpace(m.Body) != "" {
+		return true
+	}
+	if m.ToolName != "" || m.MCPServer != "" || m.MCPFunction != "" {
+		return true
+	}
+	return len(m.ToolCalls) > 0
+}
+
+// NewJudgeToolCall destructures a tool name into its MCP components and pairs it
+// with the call's raw arguments, for one entry of a multi-call message.
+func NewJudgeToolCall(toolName, arguments string) JudgeToolCall {
+	server, fn, _ := mcpname.AttributeTool(toolName)
+	return JudgeToolCall{
+		ToolName:    toolName,
+		MCPServer:   server,
+		MCPFunction: fn,
+		Arguments:   arguments,
+	}
+}
+
+// NewJudgeMessageForToolCalls builds a tool-request message carrying multiple
+// tool calls, each with its own attribution. Used by the batch analyzer when an
+// assistant message issued more than one tool call, so per-call MCP server and
+// function names reach the judge instead of an opaque tool_calls blob.
+func NewJudgeMessageForToolCalls(calls []JudgeToolCall) JudgeMessage {
+	return JudgeMessage{
+		Type:        message.ToolRequest,
+		Body:        "",
+		ToolName:    "",
+		MCPServer:   "",
+		MCPFunction: "",
+		ToolCalls:   calls,
+	}
 }
 
 // JudgeVerdict is the resolved outcome of a judge evaluation.

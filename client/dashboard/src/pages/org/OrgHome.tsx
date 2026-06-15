@@ -61,7 +61,7 @@ import { Link, useNavigate } from "react-router";
 
 import { getActorLabel, renderVerb } from "@/lib/audit-log-format";
 
-import { ActionBadge, ActionDot } from "./OrgAuditLogs";
+import { ActionBadge, ActionDot } from "@/components/auditlogs/feed";
 
 const PROJECT_LIMIT = 6;
 const AUDIT_PREVIEW_LIMIT = 8;

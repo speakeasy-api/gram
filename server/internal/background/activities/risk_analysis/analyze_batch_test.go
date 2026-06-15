@@ -3,6 +3,7 @@ package risk_analysis_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -29,11 +30,11 @@ import (
 )
 
 type recordingPromptJudge struct {
-	texts []string
+	inputs []risk_analysis.JudgeInput
 }
 
 func (j *recordingPromptJudge) Evaluate(_ context.Context, in risk_analysis.JudgeInput) *risk_analysis.JudgeVerdict {
-	j.texts = append(j.texts, in.Text)
+	j.inputs = append(j.inputs, in)
 	return &risk_analysis.JudgeVerdict{Confidence: 0.9, Rationale: "matched tool call"}
 }
 
@@ -307,9 +308,99 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 	require.NoError(t, val.Get(&result))
 	require.Equal(t, 1, result.Processed)
 	require.Equal(t, 1, result.Findings)
-	require.Len(t, judge.texts, 1)
-	require.Contains(t, judge.texts[0], `"name": "Bash"`)
-	require.Contains(t, judge.texts[0], `rm -rf /tmp/data`)
+	require.Len(t, judge.inputs, 1)
+	msg := judge.inputs[0].Message
+	require.Equal(t, message.ToolRequest, msg.Type)
+	require.Equal(t, "Bash", msg.ToolName)
+	require.Empty(t, msg.MCPServer, "native tool has no MCP server")
+	require.Empty(t, msg.MCPFunction)
+	require.Contains(t, msg.Body, "rm -rf /tmp/data")
+}
+
+func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+
+	policyID, err := uuid.NewV7()
+	require.NoError(t, err)
+	policy, err := riskrepo.New(conn).CreateRiskPolicy(t.Context(), riskrepo.CreateRiskPolicyParams{
+		ID:             policyID,
+		ProjectID:      td.projectID,
+		OrganizationID: td.orgID,
+		Name:           "prompt policy",
+		PolicyType:     "prompt_based",
+		Sources:        []string{},
+		MessageTypes:   []string{message.ToolRequest},
+		Enabled:        true,
+		Action:         "flag",
+		AutoName:       false,
+		Prompt:         pgtype.Text{String: "Block destructive operations", Valid: true},
+	})
+	require.NoError(t, err)
+	td.policyID = policy.ID
+	td.policyVersion = policy.Version
+
+	// An assistant message that issued two tool calls — one MCP, one native.
+	msgID := insertAssistantToolCallsWithArgs(t, conn, td, []struct {
+		name string
+		args map[string]any
+	}{
+		{name: "mcp__github__delete_repo", args: map[string]any{"repo": "prod"}},
+		{name: "Bash", args: map[string]any{"command": "rm -rf /tmp/data"}},
+	})
+
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagPromptPolicies, td.orgID, true)
+	judge := &recordingPromptJudge{}
+	ab := risk_analysis.NewAnalyzeBatch(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		conn,
+		&risk_analysis.StubPIIScanner{},
+		nil,
+		nil,
+		nil,
+		judge,
+		flags,
+	)
+
+	var ts testsuite.WorkflowTestSuite
+	env := ts.NewTestActivityEnvironment()
+	env.RegisterActivity(ab.Do)
+
+	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
+		ProjectID:            td.projectID,
+		OrganizationID:       td.orgID,
+		RiskPolicyID:         td.policyID,
+		PolicyVersion:        td.policyVersion,
+		MessageIDs:           []uuid.UUID{msgID},
+		Sources:              nil,
+		MessageTypes:         []string{message.ToolRequest},
+		PresidioEntities:     nil,
+		PromptInjectionRules: nil,
+		CustomRuleIds:        nil,
+	})
+	require.NoError(t, err)
+
+	var result risk_analysis.AnalyzeBatchResult
+	require.NoError(t, val.Get(&result))
+	require.Len(t, judge.inputs, 1)
+
+	// The judge sees both calls, each with its own attribution — not an opaque blob.
+	msg := judge.inputs[0].Message
+	require.Equal(t, message.ToolRequest, msg.Type)
+	require.Empty(t, msg.ToolName, "multi-call message carries no single tool name")
+	require.Len(t, msg.ToolCalls, 2)
+
+	require.Equal(t, "github", msg.ToolCalls[0].MCPServer)
+	require.Equal(t, "delete_repo", msg.ToolCalls[0].MCPFunction)
+	require.Contains(t, msg.ToolCalls[0].Arguments, "prod")
+
+	require.Equal(t, "Bash", msg.ToolCalls[1].ToolName)
+	require.Empty(t, msg.ToolCalls[1].MCPServer)
+	require.Contains(t, msg.ToolCalls[1].Arguments, "rm -rf /tmp/data")
 }
 
 func TestAnalyzeBatch_DestructiveToolAnnotationSkipsFalseHint(t *testing.T) {
@@ -611,6 +702,75 @@ func insertAssistantToolCallWithArgs(t *testing.T, conn *pgxpool.Pool, td testDa
 		}
 	}
 	require.FailNow(t, "inserted tool-call message not found")
+	return uuid.Nil
+}
+
+// insertAssistantToolCallsWithArgs inserts an assistant message that issued
+// multiple tool calls, mirroring insertAssistantToolCallWithArgs for the
+// multi-call judge path. Each entry is (tool name, arguments map).
+func insertAssistantToolCallsWithArgs(t *testing.T, conn *pgxpool.Pool, td testData, calls []struct {
+	name string
+	args map[string]any
+}) uuid.UUID {
+	t.Helper()
+
+	recorded := make([]map[string]any, 0, len(calls))
+	for i, c := range calls {
+		args, err := json.Marshal(c.args)
+		require.NoError(t, err)
+		recorded = append(recorded, map[string]any{
+			"id":   fmt.Sprintf("call_%d", i+1),
+			"type": "function",
+			"function": map[string]any{
+				"name":      c.name,
+				"arguments": string(args),
+			},
+		})
+	}
+	toolCalls, err := json.Marshal(recorded)
+	require.NoError(t, err)
+
+	messageID := "msg-" + uuid.NewString()
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
+	t.Cleanup(func() { _ = shutdown(t.Context()) })
+	_, err = writer.Write(t.Context(), td.projectID, []chatrepo.CreateChatMessageParams{{
+		ChatID:           td.chatID,
+		Role:             "assistant",
+		ProjectID:        td.projectID,
+		Content:          "",
+		ContentRaw:       nil,
+		ContentAssetUrl:  pgtype.Text{},
+		StorageError:     pgtype.Text{},
+		Model:            pgtype.Text{},
+		MessageID:        pgtype.Text{String: messageID, Valid: true},
+		ToolCallID:       pgtype.Text{},
+		UserID:           pgtype.Text{},
+		ExternalUserID:   pgtype.Text{},
+		FinishReason:     pgtype.Text{String: "tool_calls", Valid: true},
+		ToolCalls:        toolCalls,
+		PromptTokens:     0,
+		CompletionTokens: 0,
+		TotalTokens:      0,
+		Origin:           pgtype.Text{},
+		UserAgent:        pgtype.Text{},
+		IpAddress:        pgtype.Text{},
+		Source:           pgtype.Text{},
+		ContentHash:      nil,
+		Generation:       0,
+	}})
+	require.NoError(t, err)
+
+	messages, err := chatrepo.New(conn).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{
+		ChatID:    td.chatID,
+		ProjectID: td.projectID,
+	})
+	require.NoError(t, err)
+	for _, msg := range messages {
+		if msg.MessageID.String == messageID {
+			return msg.ID
+		}
+	}
+	require.FailNow(t, "inserted multi-tool-call message not found")
 	return uuid.Nil
 }
 

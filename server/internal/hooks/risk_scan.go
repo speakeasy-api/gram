@@ -9,6 +9,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 )
@@ -36,7 +37,11 @@ func (s *Service) scanClaudeForEnforcement(ctx context.Context, payload *gen.Cla
 	}
 
 	text := extractClaudeText(payload, hookEvent)
-	if text == "" {
+	// A no-arg/no-output tool call carries an empty body but still names a tool
+	// (+ MCP server/function) a tool-scoped prompt policy can match, so only skip
+	// when there is neither body nor tool attribution.
+	toolName := conv.PtrValOr(payload.ToolName, "")
+	if text == "" && toolName == "" {
 		return nil
 	}
 
@@ -50,7 +55,7 @@ func (s *Service) scanClaudeForEnforcement(ctx context.Context, payload *gen.Cla
 		return nil
 	}
 
-	result, err := s.riskScanner.ScanForEnforcement(ctx, projectID, text, messageType)
+	result, err := s.riskScanner.ScanForEnforcement(ctx, projectID, text, messageType, toolName)
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for Claude hook",
 			attr.SlogError(err),
@@ -97,7 +102,10 @@ func (s *Service) scanCursorForEnforcement(ctx context.Context, payload *gen.Cur
 	}
 
 	text := extractCursorText(payload, hookEvent)
-	if text == "" {
+	// Empty body + tool attribution still matters for tool-scoped policies; only
+	// skip when there is neither.
+	toolName := conv.PtrValOr(payload.ToolName, "")
+	if text == "" && toolName == "" {
 		return nil
 	}
 
@@ -111,7 +119,7 @@ func (s *Service) scanCursorForEnforcement(ctx context.Context, payload *gen.Cur
 		return nil
 	}
 
-	result, err := s.riskScanner.ScanForEnforcement(ctx, pid, text, messageType)
+	result, err := s.riskScanner.ScanForEnforcement(ctx, pid, text, messageType, toolName)
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for Cursor hook",
 			attr.SlogError(err),
@@ -136,7 +144,10 @@ func (s *Service) scanCodexForEnforcement(ctx context.Context, payload *gen.Code
 	}
 
 	text := extractCodexText(payload, hookEvent)
-	if text == "" {
+	// Empty body + tool attribution still matters for tool-scoped policies; only
+	// skip when there is neither.
+	toolName := conv.PtrValOr(payload.ToolName, "")
+	if text == "" && toolName == "" {
 		return nil
 	}
 
@@ -150,7 +161,7 @@ func (s *Service) scanCodexForEnforcement(ctx context.Context, payload *gen.Code
 		return nil
 	}
 
-	result, err := s.riskScanner.ScanForEnforcement(ctx, pid, text, messageType)
+	result, err := s.riskScanner.ScanForEnforcement(ctx, pid, text, messageType, toolName)
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for Codex hook",
 			attr.SlogError(err),

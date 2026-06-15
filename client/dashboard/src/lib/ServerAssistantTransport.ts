@@ -185,11 +185,13 @@ export function createServerAssistantTransport(
 }
 
 /**
- * Polls chat.load until the assistant's turn ends, emitting text chunks to the
- * writer as soon as each new assistant row appears. A tool-using turn writes
- * multiple assistant rows interleaved with tool rows; we keep polling until the
- * latest assistant row carries finish_reason "stop" with no pending tool_calls.
- * Empty assistant rows (pure tool-call turns with no narrative) are skipped.
+ * Polls chat.load until the assistant's turn ends, emitting text and tool-call
+ * chunks to the writer as soon as each new row appears. A tool-using turn
+ * writes multiple assistant rows interleaved with tool rows; assistant rows
+ * surface their narrative text and tool calls (so Elements renders which tool
+ * is running), tool rows resolve those calls with their output, and we keep
+ * polling until the latest assistant row carries finish_reason "stop" with no
+ * pending tool_calls.
  */
 async function pollForReplies(args: {
   deps: ServerAssistantTransportDeps;
@@ -211,6 +213,14 @@ async function pollForReplies(args: {
   // reply. For new conversations we don't know the generation yet — leave it
   // undefined for the first iteration, then pin to the response's generation.
   let pinnedGeneration: number | undefined = snapshot?.generation;
+  // Tool calls surfaced this turn that still await their tool-row output.
+  // Gating outputs on delete-from-this-set does double duty: prior-turn tool
+  // rows (whose calls were never emitted to this stream) produce no orphan
+  // output chunks, and tool rows re-scanned on later polls — they are not
+  // tracked in `seen` — don't emit twice. Transcript order guarantees an
+  // assistant row precedes its tool rows, so the input chunk always lands
+  // before the matching output.
+  const pendingToolCalls = new Set<string>();
   let consecutiveFailures = 0;
   let attempt = 0;
 
@@ -238,6 +248,16 @@ async function pollForReplies(args: {
         toolCalls?: string;
       } | null = null;
       for (const m of res.value.messages) {
+        if (m.role === "tool") {
+          if (m.toolCallId && pendingToolCalls.delete(m.toolCallId)) {
+            writer.write({
+              type: "tool-output-available",
+              toolCallId: m.toolCallId,
+              output: toolOutputValue(m.content),
+            });
+          }
+          continue;
+        }
         if (m.role !== "assistant") continue;
         if (seen.has(m.id)) continue;
         seen.add(m.id);
@@ -250,6 +270,15 @@ async function pollForReplies(args: {
             text,
             abortSignal,
           });
+        }
+        for (const call of parseToolCalls(m.toolCalls)) {
+          writer.write({
+            type: "tool-input-available",
+            toolCallId: call.id,
+            toolName: call.name,
+            input: call.input,
+          });
+          pendingToolCalls.add(call.id);
         }
       }
       if (lastNewAssistant && isTurnTerminal(lastNewAssistant)) {
@@ -359,6 +388,65 @@ function isTurnTerminal(m: {
   if (!m.toolCalls) return true;
   const trimmed = m.toolCalls.trim();
   return trimmed === "" || trimmed === "[]" || trimmed === "null";
+}
+
+interface ParsedToolCall {
+  id: string;
+  name: string;
+  input: unknown;
+}
+
+// Decodes an assistant row's `tool_calls` JSON blob (OpenAI wire shape:
+// `[{id, function: {name, arguments}}]`, with `arguments` itself a JSON
+// string). Malformed blobs or entries are dropped rather than failing the
+// poll — a reply we can't decorate with tool state is still a reply.
+function parseToolCalls(raw: string | undefined): ParsedToolCall[] {
+  if (!raw) return [];
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(decoded)) return [];
+  const calls: ParsedToolCall[] = [];
+  for (const entry of decoded) {
+    if (!entry || typeof entry !== "object") continue;
+    const { id, function: fn } = entry as {
+      id?: unknown;
+      function?: { name?: unknown; arguments?: unknown };
+    };
+    if (typeof id !== "string" || id === "") continue;
+    if (typeof fn?.name !== "string" || fn.name === "") continue;
+    calls.push({ id, name: fn.name, input: parseToolArguments(fn.arguments) });
+  }
+  return calls;
+}
+
+function parseToolArguments(args: unknown): unknown {
+  if (typeof args !== "string" || args.trim() === "") return {};
+  try {
+    return JSON.parse(args);
+  } catch {
+    return args;
+  }
+}
+
+// Tool rows store their output as a string — plain text for text outputs,
+// JSON for structured/multimodal ones. Decode JSON-looking strings so the
+// tool UI renders structured content instead of a serialized blob.
+function toolOutputValue(content: unknown): unknown {
+  if (typeof content === "string") {
+    const trimmed = content.trim();
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      try {
+        return JSON.parse(trimmed);
+      } catch {
+        // plain text that merely looks like JSON
+      }
+    }
+  }
+  return content;
 }
 
 function contentText(content: unknown): string {
