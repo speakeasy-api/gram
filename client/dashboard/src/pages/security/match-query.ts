@@ -17,7 +17,13 @@ type MatchTarget = RiskMatchCondition["target"];
  * clauses, e.g. `field:*a* OR field:*b*` — there is no field-level union.
  */
 
-export type QueryCategory = "prompt" | "tool";
+export type QueryCategory = "message" | "prompt" | "tool";
+
+const CATEGORY_LABEL: Record<QueryCategory, string> = {
+  message: "Message",
+  prompt: "Prompt",
+  tool: "Tool",
+};
 
 export type QueryTarget = {
   /** Field name as typed in the query, e.g. "tool_call.name". */
@@ -45,8 +51,8 @@ export const QUERY_TARGETS: QueryTarget[] = [
   {
     name: "content",
     backend: "content",
-    category: "prompt",
-    description: "Whole message text (any type)",
+    category: "message",
+    description: "The whole message payload (any message type)",
   },
   {
     name: "tool_call.name",
@@ -449,38 +455,52 @@ function targetSuggestions(
   return QUERY_TARGETS.filter((t) => t.name.startsWith(lower)).map((t) => ({
     label: `${negPrefix}${t.name}`,
     description: t.description,
-    group: t.category === "tool" ? "Tool" : "Prompt",
+    group: CATEGORY_LABEL[t.category],
     insert: t.hasPath && t.name === lower ? `${t.name}.` : `${t.name}:`,
   }));
 }
 
 function valueSuggestions(typed: string): QuerySuggestion[] {
-  // Only offer scaffolds before the user starts typing the value.
+  // Only offer scaffolds before the user starts typing the value. The group
+  // names the operator the value syntax implies (just typing a bare value is
+  // equals). Caret offsets drop the cursor where the operand goes.
   if (typed.trim() !== "") return [];
   return [
-    { label: "value", description: "equals", group: "Value", insert: "" },
     {
       label: "*value*",
-      description: "contains",
-      group: "Value",
+      group: "contains",
+      description: "value is a substring",
       insert: "**",
       caretOffset: 1,
     },
-    { label: "value*", description: "starts with", group: "Value", insert: "" },
+    {
+      label: "value*",
+      group: "starts with",
+      description: "value is a prefix",
+      insert: "*",
+      caretOffset: 0,
+    },
+    {
+      label: "*value",
+      group: "ends with",
+      description: "value is a suffix",
+      insert: "*",
+      caretOffset: 1,
+    },
     {
       label: "/regex/",
-      description: "regex",
-      group: "Value",
+      group: "regex",
+      description: "RE2 regular expression",
       insert: "//",
       caretOffset: 1,
     },
     {
       label: "*",
-      description: "field is present",
-      group: "Value",
+      group: "exists",
+      description: "field is present (any value)",
       insert: "*",
     },
-  ].filter((s) => s.insert !== "");
+  ];
 }
 
 function lastConnectorEnd(before: string): number {
