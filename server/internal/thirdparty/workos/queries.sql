@@ -30,22 +30,39 @@ INSERT INTO directory_groups (
   workos_directory_group_id,
   name,
   attributes,
-  deleted_at
+  deleted_at,
+  workos_created_at,
+  workos_updated_at,
+  workos_deleted_at,
+  workos_last_event_id
 )
 VALUES (
   @organization_id,
   @workos_directory_group_id,
   @name,
   @attributes,
-  NULL
+  NULL,
+  @workos_created_at,
+  @workos_updated_at,
+  NULL,
+  @workos_last_event_id
 )
 ON CONFLICT (workos_directory_group_id) DO UPDATE SET
   organization_id = EXCLUDED.organization_id,
   name = EXCLUDED.name,
   attributes = EXCLUDED.attributes,
   deleted_at = NULL,
+  workos_created_at = EXCLUDED.workos_created_at,
+  workos_updated_at = EXCLUDED.workos_updated_at,
+  workos_deleted_at = NULL,
+  workos_last_event_id = EXCLUDED.workos_last_event_id,
   updated_at = clock_timestamp()
 RETURNING id;
+
+-- name: GetDirectoryGroupSyncStateByWorkOSID :one
+SELECT id, workos_updated_at, workos_last_event_id
+FROM directory_groups
+WHERE workos_directory_group_id = @workos_directory_group_id;
 
 -- name: GetDirectoryGroupIDByWorkOSID :one
 SELECT id
@@ -65,9 +82,11 @@ WHERE workos_directory_group_id = @workos_directory_group_id;
 -- name: DeleteDirectoryGroupByWorkOSID :execrows
 UPDATE directory_groups
 SET deleted_at = COALESCE(deleted_at, clock_timestamp()),
+  workos_deleted_at = @workos_deleted_at,
+  workos_updated_at = @workos_deleted_at,
+  workos_last_event_id = @workos_last_event_id,
   updated_at = clock_timestamp()
-WHERE workos_directory_group_id = @workos_directory_group_id
-  AND deleted_at IS NULL;
+WHERE workos_directory_group_id = @workos_directory_group_id;
 
 -- name: UpsertDirectoryUser :one
 INSERT INTO directory_users (
@@ -76,7 +95,11 @@ INSERT INTO directory_users (
   workos_directory_user_id,
   email,
   attributes,
-  deleted_at
+  deleted_at,
+  workos_created_at,
+  workos_updated_at,
+  workos_deleted_at,
+  workos_last_event_id
 )
 VALUES (
   @organization_id,
@@ -84,7 +107,11 @@ VALUES (
   @workos_directory_user_id,
   @email,
   @attributes,
-  NULL
+  NULL,
+  @workos_created_at,
+  @workos_updated_at,
+  NULL,
+  @workos_last_event_id
 )
 ON CONFLICT (workos_directory_user_id) DO UPDATE SET
   organization_id = EXCLUDED.organization_id,
@@ -92,8 +119,17 @@ ON CONFLICT (workos_directory_user_id) DO UPDATE SET
   email = EXCLUDED.email,
   attributes = EXCLUDED.attributes,
   deleted_at = NULL,
+  workos_created_at = EXCLUDED.workos_created_at,
+  workos_updated_at = EXCLUDED.workos_updated_at,
+  workos_deleted_at = NULL,
+  workos_last_event_id = EXCLUDED.workos_last_event_id,
   updated_at = clock_timestamp()
 RETURNING id;
+
+-- name: GetDirectoryUserSyncStateByWorkOSID :one
+SELECT workos_updated_at, workos_last_event_id
+FROM directory_users
+WHERE workos_directory_user_id = @workos_directory_user_id;
 
 -- name: GetDirectoryUserByWorkOSID :one
 SELECT *
@@ -118,26 +154,31 @@ WHERE email = @email
 -- name: DeleteDirectoryUserByWorkOSID :execrows
 UPDATE directory_users
 SET deleted_at = COALESCE(deleted_at, clock_timestamp()),
+  workos_deleted_at = @workos_deleted_at,
+  workos_updated_at = @workos_deleted_at,
+  workos_last_event_id = @workos_last_event_id,
   updated_at = clock_timestamp()
-WHERE workos_directory_user_id = @workos_directory_user_id
-  AND deleted_at IS NULL;
+WHERE workos_directory_user_id = @workos_directory_user_id;
 
 -- name: OpenDirectoryUserGroupMembership :one
 INSERT INTO directory_user_group_memberships (
   directory_user_id,
   directory_group_id,
   workos_directory_user_id,
-  workos_directory_group_id
+  workos_directory_group_id,
+  workos_created_at
 )
 VALUES (
   @directory_user_id,
   @directory_group_id,
   @workos_directory_user_id,
-  @workos_directory_group_id
+  @workos_directory_group_id,
+  @workos_created_at
 )
 ON CONFLICT (directory_user_id, directory_group_id) WHERE deleted IS FALSE DO UPDATE SET
   workos_directory_user_id = EXCLUDED.workos_directory_user_id,
   workos_directory_group_id = EXCLUDED.workos_directory_group_id,
+  workos_created_at = EXCLUDED.workos_created_at,
   deleted_at = NULL,
   updated_at = clock_timestamp()
 RETURNING id;
@@ -153,10 +194,19 @@ WHERE directory_user_id = @directory_user_id
 -- name: CloseDirectoryUserGroupMembershipByWorkOSIDs :execrows
 UPDATE directory_user_group_memberships
 SET deleted_at = COALESCE(deleted_at, clock_timestamp()),
+  workos_created_at = @workos_created_at,
   updated_at = clock_timestamp()
 WHERE workos_directory_user_id = @workos_directory_user_id
   AND workos_directory_group_id = @workos_directory_group_id
   AND deleted_at IS NULL;
+
+-- name: GetLatestDirectoryUserGroupMembershipByWorkOSIDs :one
+SELECT id, workos_created_at
+FROM directory_user_group_memberships
+WHERE workos_directory_user_id = @workos_directory_user_id
+  AND workos_directory_group_id = @workos_directory_group_id
+ORDER BY workos_created_at DESC, created_at DESC
+LIMIT 1;
 
 -- name: CloseDirectoryUserGroupMembershipsForGroup :execrows
 UPDATE directory_user_group_memberships

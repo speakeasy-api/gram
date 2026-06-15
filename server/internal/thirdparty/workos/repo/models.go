@@ -20,4 +20,9 @@ type DirectoryUser struct {
 	UpdatedAt             pgtype.Timestamptz
 	DeletedAt             pgtype.Timestamptz
 	Deleted               bool
+	WorkosCreatedAt       pgtype.Timestamptz
+	WorkosUpdatedAt       pgtype.Timestamptz
+	WorkosDeletedAt       pgtype.Timestamptz
+	WorkosDeleted         bool
+	WorkosLastEventID     pgtype.Text
 }

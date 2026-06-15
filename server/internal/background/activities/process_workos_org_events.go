@@ -234,11 +234,11 @@ func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx data
 	case string(workos.EventKindDirectorySyncDeleted):
 		return nil, handleDSyncChange(ctx, logger, dbtx, event, false)
 	case string(workos.EventKindDirectorySyncUserCreated), string(workos.EventKindDirectorySyncUserUpdated), string(workos.EventKindDirectorySyncUserDeleted):
-		return nil, handleDirectoryUserEvent(ctx, logger, dbtx, workos.EventKind(event.Event), event.Data)
+		return nil, handleDirectoryUserEvent(ctx, logger, dbtx, event)
 	case string(workos.EventKindDirectorySyncGroupCreated), string(workos.EventKindDirectorySyncGroupUpdated), string(workos.EventKindDirectorySyncGroupDeleted):
-		return nil, handleDirectoryGroupEvent(ctx, logger, dbtx, workos.EventKind(event.Event), event.Data)
+		return nil, handleDirectoryGroupEvent(ctx, logger, dbtx, event)
 	case string(workos.EventKindDirectorySyncGroupUserAdded), string(workos.EventKindDirectorySyncGroupUserRemoved):
-		return nil, handleDirectoryGroupMembershipEvent(ctx, logger, dbtx, workos.EventKind(event.Event), event.Data)
+		return nil, handleDirectoryGroupMembershipEvent(ctx, logger, dbtx, event)
 	}
 
 	return nil, oops.Permanent(fmt.Errorf("unhandled workos organization event type: %s", event.Event))
