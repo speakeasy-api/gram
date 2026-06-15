@@ -178,6 +178,62 @@ jobs:
           examples=$(ls -d elements/examples/*/package.json 2>/dev/null | xargs -I{} dirname {} | xargs -I{} basename {} | jq -R -s -c 'split("\n") | map(select(length > 0))')
           echo "examples=$examples" >> $GITHUB_OUTPUT
 
+  format-check:
+    name: Check formatting with hk
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+        with:
+          # Full history so hk can diff against the PR merge base.
+          fetch-depth: 0
+
+      - name: Setup Mise
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        run: mise run github
+
+      - name: Cache PNPM
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_PNPM_KEY }}
+            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+          path: |
+            ${{ env.PNPM_STORE_PATH }}
+
+      # hk's oxfmt step shells out to `pnpm oxfmt`, so node_modules must exist.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check formatting
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            from_ref=$(git merge-base "$BASE_SHA" HEAD)
+            echo "Checking files changed since merge base $from_ref"
+            args=(--from-ref "$from_ref" --to-ref HEAD)
+          else
+            echo "Checking all files"
+            args=(--all)
+          fi
+          if ! hk check "${args[@]}"; then
+            echo "::error::Formatting check failed. Run 'hk fix --all' locally and commit the result."
+            exit 1
+          fi
+
+      - name: Prune PNPM store
+        if: success()
+        run: pnpm store prune
+
   docker-build-server:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes, server-build-lint]
