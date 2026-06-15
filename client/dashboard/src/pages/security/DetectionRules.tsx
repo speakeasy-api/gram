@@ -64,7 +64,7 @@ import {
   type SeverityLevel,
 } from "./detection-rules-data";
 import { matchQueryFromConditions, parseMatchQuery } from "./match-query";
-import { MatchQueryInput } from "./match-query-input";
+import { MatchQueryMonaco as MatchQueryInput } from "./match-query-monaco";
 import type { RiskMatchConfig } from "@gram/client/models/components";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
 
