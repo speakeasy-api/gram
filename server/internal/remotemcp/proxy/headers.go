@@ -106,7 +106,7 @@ func (p *Proxy) applyRequestHeaders(ctx context.Context, userReq *http.Request, 
 	for _, h := range p.Headers {
 		value, err := h.Resolve(userReq)
 		if err != nil {
-			return oops.E(oops.CodeBadRequest, err, "missing required header for remote mcp server").Log(ctx, p.Logger)
+			return oops.E(oops.CodeBadRequest, err, "missing required header for remote mcp server").LogError(ctx, p.Logger)
 		}
 		if value == "" {
 			remoteReq.Header.Del(h.Name)

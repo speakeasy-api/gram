@@ -99,7 +99,7 @@ func (h *WebhookHandler) ReceiveWorkOSWebhook(ctx context.Context, payload *gen.
 
 	bodyBytes, err := io.ReadAll(body)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, h.logger)
+		return oops.E(oops.CodeBadRequest, err, "failed to read request body").LogError(ctx, h.logger)
 	}
 
 	if _, err := h.webhooksClient.ValidatePayload(*payload.WorkosSignature, string(bodyBytes)); err != nil {
@@ -108,7 +108,7 @@ func (h *WebhookHandler) ReceiveWorkOSWebhook(ctx context.Context, payload *gen.
 
 	var event webhookEvent
 	if err := json.Unmarshal(bodyBytes, &event); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid webhook payload").Log(ctx, h.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid webhook payload").LogError(ctx, h.logger)
 	}
 
 	logger := h.logger.With(attr.SlogWorkOSEventType(event.Event))
@@ -140,7 +140,7 @@ func (h *WebhookHandler) dispatch(ctx context.Context, logger *slog.Logger, even
 		if _, err := background.ExecuteProcessWorkOSOrganizationEventsWorkflowDebounced(ctx, h.temporalEnv, background.ProcessWorkOSEventsParams{
 			WorkOSOrganizationID: orgID,
 		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to enqueue WorkOS organization sync").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to enqueue WorkOS organization sync").LogError(ctx, logger)
 		}
 		return nil
 
@@ -148,7 +148,7 @@ func (h *WebhookHandler) dispatch(ctx context.Context, logger *slog.Logger, even
 		string(workos.EventKindRoleUpdated),
 		string(workos.EventKindRoleDeleted):
 		if _, err := background.ExecuteProcessWorkOSGlobalRoleEventsWorkflowDebounced(ctx, h.temporalEnv); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to enqueue WorkOS global role sync").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to enqueue WorkOS global role sync").LogError(ctx, logger)
 		}
 		return nil
 
@@ -158,7 +158,7 @@ func (h *WebhookHandler) dispatch(ctx context.Context, logger *slog.Logger, even
 		if _, err := background.ExecuteProcessWorkOSUserEventsWorkflowDebounced(ctx, h.temporalEnv, background.ProcessWorkOSUserEventsWorkflowParams{
 			WorkOSUserID: event.Data.ID,
 		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to enqueue WorkOS user sync").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to enqueue WorkOS user sync").LogError(ctx, logger)
 		}
 		return nil
 

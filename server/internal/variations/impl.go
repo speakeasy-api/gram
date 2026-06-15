@@ -91,7 +91,7 @@ func (s *Service) ListGlobal(ctx context.Context, payload *gen.ListGlobalPayload
 
 	rows, err := s.repo.ListGlobalToolVariations(ctx, *authCtx.ProjectID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing global tool variations").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing global tool variations").LogError(ctx, s.logger)
 	}
 
 	variations := make([]*types.ToolVariation, 0, len(rows))
@@ -134,7 +134,7 @@ func (s *Service) ListGroups(ctx context.Context, payload *gen.ListGroupsPayload
 
 	rows, err := s.repo.ListToolVariationsGroups(ctx, *authCtx.ProjectID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing tool variation groups").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing tool variation groups").LogError(ctx, s.logger)
 	}
 
 	groups := make([]*types.ToolVariationGroup, 0, len(rows))
@@ -181,10 +181,10 @@ func (s *Service) CreateGlobal(ctx context.Context, payload *gen.CreateGlobalPay
 			groupID, err = s.repo.PokeGlobalToolVariationsGroup(ctx, projectID)
 		}
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error initializing global tool variations group").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "error initializing global tool variations group").LogError(ctx, logger)
 		}
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "error poking global tool variations group").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error poking global tool variations group").LogError(ctx, logger)
 	}
 
 	group, err := s.repo.GetToolVariationsGroupByID(ctx, repo.GetToolVariationsGroupByIDParams{
@@ -192,7 +192,7 @@ func (s *Service) CreateGlobal(ctx context.Context, payload *gen.CreateGlobalPay
 		ProjectID: projectID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error loading tool variations group").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error loading tool variations group").LogError(ctx, logger)
 	}
 
 	return &gen.ToolVariationGroupResult{Group: toGroup(group)}, nil
@@ -213,7 +213,7 @@ func (s *Service) UpsertGlobal(ctx context.Context, payload *gen.UpsertGlobalPay
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error beginning transaction").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error beginning transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error {
 		return dbtx.Rollback(ctx)
@@ -223,7 +223,7 @@ func (s *Service) UpsertGlobal(ctx context.Context, payload *gen.UpsertGlobalPay
 
 	groupID, err := tx.PokeGlobalToolVariationsGroup(ctx, projectID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return nil, oops.E(oops.CodeUnexpected, err, "error poking global tool variations group").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error poking global tool variations group").LogError(ctx, logger)
 	}
 
 	if errors.Is(err, pgx.ErrNoRows) || groupID == uuid.Nil {
@@ -233,13 +233,13 @@ func (s *Service) UpsertGlobal(ctx context.Context, payload *gen.UpsertGlobalPay
 			Description: conv.ToPGTextEmpty(""),
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error initializing global tool variations group").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "error initializing global tool variations group").LogError(ctx, logger)
 		}
 	}
 
 	srcToolUrn, err := urn.ParseTool(payload.SrcToolUrn)
 	if err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid source tool urn").Log(ctx, logger)
+		return nil, oops.E(oops.CodeInvalid, err, "invalid source tool urn").LogError(ctx, logger)
 	}
 
 	existingVariations, err := tx.FindGlobalVariationsByToolURNs(ctx, repo.FindGlobalVariationsByToolURNsParams{
@@ -247,7 +247,7 @@ func (s *Service) UpsertGlobal(ctx context.Context, payload *gen.UpsertGlobalPay
 		ToolUrns:  []string{srcToolUrn.String()},
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error finding existing global tool variations").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error finding existing global tool variations").LogError(ctx, logger)
 	}
 
 	var existing *types.ToolVariation
@@ -286,7 +286,7 @@ func (s *Service) UpsertGlobal(ctx context.Context, payload *gen.UpsertGlobalPay
 		OpenWorldHint:   conv.PtrToPGBool(payload.OpenWorldHint),
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error upserting global tool variation").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error upserting global tool variation").LogError(ctx, logger)
 	}
 
 	result := toVariation(row)
@@ -302,11 +302,11 @@ func (s *Service) UpsertGlobal(ctx context.Context, payload *gen.UpsertGlobalPay
 		VariationSnapshotBefore: existing,
 		VariationSnapshotAfter:  result,
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error creating global tool variation audit log").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error creating global tool variation audit log").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error committing transaction").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error committing transaction").LogError(ctx, logger)
 	}
 
 	return &gen.UpsertGlobalToolVariationResult{Variation: result}, nil
@@ -324,12 +324,12 @@ func (s *Service) DeleteGlobal(ctx context.Context, payload *gen.DeleteGlobalPay
 
 	variationID, err := uuid.Parse(payload.VariationID)
 	if err != nil || variationID == uuid.Nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid variation ID").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeInvalid, err, "invalid variation ID").LogError(ctx, s.logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error accessing variations").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing variations").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -341,9 +341,9 @@ func (s *Service) DeleteGlobal(ctx context.Context, payload *gen.DeleteGlobalPay
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeNotFound, err, "global tool variation not found").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, err, "global tool variation not found").LogError(ctx, s.logger)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "error deleting global tool variation").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error deleting global tool variation").LogError(ctx, s.logger)
 	}
 
 	if err := s.audit.LogVariationDeleteGlobal(ctx, dbtx, audit.LogVariationDeleteGlobalEvent{
@@ -355,11 +355,11 @@ func (s *Service) DeleteGlobal(ctx context.Context, payload *gen.DeleteGlobalPay
 		VariationURN:     urn.NewVariation(urn.VariationKindGlobal, row.ID),
 		SourceToolURN:    row.SrcToolUrn,
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error creating global tool variation deletion audit log").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error creating global tool variation deletion audit log").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error saving variation deletion").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error saving variation deletion").LogError(ctx, s.logger)
 	}
 
 	return &gen.DeleteGlobalToolVariationResult{

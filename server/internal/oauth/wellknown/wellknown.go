@@ -117,16 +117,16 @@ func ResolveOAuthServerMetadataFromToolset(
 			ProjectID:          toolset.ProjectID,
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to list OAuth proxy providers").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to list OAuth proxy providers").LogError(ctx, logger)
 		}
 		if len(providers) == 0 {
-			return nil, oops.E(oops.CodeNotFound, nil, "no OAuth proxy providers configured for server").Log(ctx, logger)
+			return nil, oops.E(oops.CodeNotFound, nil, "no OAuth proxy providers configured for server").LogError(ctx, logger)
 		}
 		if len(providers) > 1 {
 			logger.ErrorContext(ctx, "multiple OAuth proxy providers per server is not supported",
 				attr.SlogOAuthProxyServerID(toolset.OauthProxyServerID.UUID.String()),
 				attr.SlogOAuthProviderCount(len(providers)))
-			return nil, oops.E(oops.CodeUnexpected, nil, "multiple OAuth proxy providers per server is not supported").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, nil, "multiple OAuth proxy providers per server is not supported").LogError(ctx, logger)
 		}
 		provider := providers[0]
 

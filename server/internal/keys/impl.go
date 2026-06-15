@@ -109,7 +109,7 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 
 	keyHash, err := auth.GetAPIKeyHash(fullKey)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error hashing api key").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error hashing api key").LogError(ctx, s.logger)
 	}
 
 	var projectID uuid.NullUUID
@@ -123,7 +123,7 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 	for _, rawscope := range payload.Scopes {
 		scope, ok := auth.APIKeyScopes[rawscope]
 		if !ok || scope == auth.APIKeyScopeInvalid {
-			return nil, oops.E(oops.CodeBadRequest, nil, "invalid api key scope: %s", scope).Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, nil, "invalid api key scope: %s", scope).LogError(ctx, s.logger)
 		}
 
 		scopes[scope.String()] = struct{}{}
@@ -139,7 +139,7 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error accessing api keys").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing api keys").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -155,7 +155,7 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 		ProjectID:       projectID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error creating api key").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error creating api key").LogError(ctx, s.logger)
 	}
 
 	if err := s.audit.LogKeyCreate(ctx, dbtx, audit.LogKeyCreateEvent{
@@ -168,11 +168,11 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 		KeyName:          payload.Name,
 		Scopes:           finalScopes,
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error adding api key creation audit log").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error adding api key creation audit log").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error saving api key creation").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error saving api key creation").LogError(ctx, s.logger)
 	}
 
 	return &gen.Key{
@@ -201,7 +201,7 @@ func (s *Service) ListKeys(ctx context.Context, payload *gen.ListKeysPayload) (*
 
 	keys, err := s.repo.ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing api keys").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing api keys").LogError(ctx, s.logger)
 	}
 
 	var result []*gen.Key
@@ -241,7 +241,7 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) 
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error accessing api keys").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "error accessing api keys").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -260,7 +260,7 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) 
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil
 	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "error revoking api key").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "error revoking api key").LogError(ctx, s.logger)
 	}
 
 	if err := s.audit.LogKeyRevoke(ctx, dbtx, audit.LogKeyRevokeEvent{
@@ -273,11 +273,11 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) 
 		KeyName:          deleted.Name,
 		Scopes:           deleted.Scopes,
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error adding api key revocation audit log").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "error adding api key revocation audit log").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error saving api key revocation").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "error saving api key revocation").LogError(ctx, s.logger)
 	}
 
 	return nil

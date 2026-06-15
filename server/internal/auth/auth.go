@@ -66,7 +66,7 @@ func (s *Auth) Authorize(ctx context.Context, key string, scheme *security.APIKe
 	}
 	ctx, err = s.authz.PrepareContext(ctx)
 	if err != nil {
-		return ctx, oops.E(oops.CodeUnexpected, err, "load access grants").Log(ctx, s.logger)
+		return ctx, oops.E(oops.CodeUnexpected, err, "load access grants").LogError(ctx, s.logger)
 	}
 
 	return ctx, nil
@@ -83,7 +83,7 @@ func (s *Auth) checkProjectAccess(ctx context.Context, logger *slog.Logger, proj
 	case errors.Is(err, pgx.ErrNoRows):
 		return ctx, oops.E(oops.CodeForbidden, nil, "no projects found")
 	case err != nil:
-		return ctx, oops.E(oops.CodeUnexpected, err, "error checking project access").Log(ctx, logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+		return ctx, oops.E(oops.CodeUnexpected, err, "error checking project access").LogError(ctx, logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
 	if projectSlug == "" && len(projects) == 1 {
@@ -107,7 +107,7 @@ func (s *Auth) checkProjectAccess(ctx context.Context, logger *slog.Logger, proj
 	logger = logger.With(attr.SlogProjectSlug(projectSlug), attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 
 	if !hasProjectAccess {
-		return ctx, oops.C(oops.CodeForbidden).Log(ctx, logger)
+		return ctx, oops.C(oops.CodeForbidden).LogError(ctx, logger)
 	}
 
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
@@ -126,14 +126,14 @@ func (s *Auth) CheckProjectAccess(ctx context.Context, logger *slog.Logger, proj
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return oops.C(oops.CodeForbidden).Log(ctx, logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+		return oops.C(oops.CodeForbidden).LogError(ctx, logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "error checking project access").Log(ctx, logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+		return oops.E(oops.CodeUnexpected, err, "error checking project access").LogError(ctx, logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
 	if id == uuid.Nil {
 		err := errors.New("check project access by id: database returned nil project id")
-		return oops.E(oops.CodeForbidden, err, "%s", oops.CodeForbidden.UserMessage()).Log(ctx, logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+		return oops.E(oops.CodeForbidden, err, "%s", oops.CodeForbidden.UserMessage()).LogError(ctx, logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
 	return nil

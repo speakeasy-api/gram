@@ -58,7 +58,7 @@ func (r *RefreshBillingUsage) Do(ctx context.Context, orgIDs []string) error {
 	}
 
 	if err := workers.Wait(); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to refresh billing usage").Log(ctx, r.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to refresh billing usage").LogError(ctx, r.logger)
 	}
 
 	return nil

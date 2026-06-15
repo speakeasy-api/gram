@@ -39,7 +39,7 @@ func (t *TransitionDeployment) Do(ctx context.Context, projectID uuid.UUID, depl
 		Message:      fmt.Sprintf("Deployment moved to %s state", status),
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error transitioning deployment").Log(ctx, t.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error transitioning deployment").LogError(ctx, t.logger)
 	}
 
 	return &TransitionDeploymentResult{

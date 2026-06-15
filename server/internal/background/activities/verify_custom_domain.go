@@ -78,18 +78,18 @@ var domainRegex = regexp.MustCompile(`^(?i)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(?:
 
 func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs) error {
 	if !domainRegex.MatchString(args.Domain) {
-		return oops.E(oops.CodeBadRequest, errors.New("domain is invalid"), "domain is invalid %s", args.Domain).Log(ctx, d.logger)
+		return oops.E(oops.CodeBadRequest, errors.New("domain is invalid"), "domain is invalid %s", args.Domain).LogError(ctx, d.logger)
 	}
 
 	for _, root := range prohibitedDomainRoots {
 		if strings.Contains(args.Domain, root) && !slices.Contains(specialTestDomains, args.Domain) { // Temporarily allowed test domain
-			return oops.E(oops.CodeBadRequest, errors.New("domain is prohibited"), "domain %s is prohibited", args.Domain).Log(ctx, d.logger)
+			return oops.E(oops.CodeBadRequest, errors.New("domain is prohibited"), "domain %s is prohibited", args.Domain).LogError(ctx, d.logger)
 		}
 	}
 
 	dbtx, err := d.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to access custom domains").Log(ctx, d.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to access custom domains").LogError(ctx, d.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -118,7 +118,7 @@ func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs
 			IpAllowlist:     ipAllowlist,
 		})
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "error creating custom domain").Log(ctx, d.logger)
+			return oops.E(oops.CodeUnexpected, err, "error creating custom domain").LogError(ctx, d.logger)
 		}
 
 		if err := d.audit.LogCustomDomainCreate(ctx, dbtx, audit.LogCustomDomainCreateEvent{
@@ -129,18 +129,18 @@ func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs
 			CustomDomainURN:  urn.NewCustomDomain(domain.ID),
 			DomainName:       domain.Domain,
 		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to create custom domain creation audit log").Log(ctx, d.logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to create custom domain creation audit log").LogError(ctx, d.logger)
 		}
 	default:
-		return oops.E(oops.CodeUnexpected, err, "failed to get custom domain").Log(ctx, d.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to get custom domain").LogError(ctx, d.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to save custom domain creation").Log(ctx, d.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to save custom domain creation").LogError(ctx, d.logger)
 	}
 
 	if domain.OrganizationID != args.OrgID {
-		return oops.E(oops.CodeUnauthorized, errors.New("custom domain does not belong to organization"), "custom domain does not belong to organization").Log(ctx, d.logger)
+		return oops.E(oops.CodeUnauthorized, errors.New("custom domain does not belong to organization"), "custom domain does not belong to organization").LogError(ctx, d.logger)
 	}
 
 	cname, err := d.resolver.LookupCNAME(ctx, domain.Domain)
@@ -156,13 +156,13 @@ func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs
 				d.logger.InfoContext(ctx, "custom domain DNS not found, terminating non-retryable", attr.SlogURLDomain(domain.Domain), attr.SlogError(err))
 				return newDNSNotFoundError(err, domain.Domain)
 			}
-			return oops.E(oops.CodeUnexpected, err, "failed to find custom domain mapping for %s", domain.Domain).Log(ctx, d.logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to find custom domain mapping for %s", domain.Domain).LogError(ctx, d.logger)
 		}
 	} else {
 		actualCNAMEFQDN := strings.TrimSuffix(cname, ".") + "."
 
 		if actualCNAMEFQDN != d.expectedTargetCNAME {
-			return oops.E(oops.CodeUnexpected, errors.New("custom domain is not pointing to expected target"), "custom domain %s is not pointing to %s", domain.Domain, d.expectedTargetCNAME).Log(ctx, d.logger)
+			return oops.E(oops.CodeUnexpected, errors.New("custom domain is not pointing to expected target"), "custom domain %s is not pointing to %s", domain.Domain, d.expectedTargetCNAME).LogError(ctx, d.logger)
 		}
 	}
 
@@ -174,12 +174,12 @@ func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs
 			d.logger.InfoContext(ctx, "custom domain verification TXT record not found, terminating non-retryable", attr.SlogURLDomain(domain.Domain), attr.SlogError(err))
 			return newDNSNotFoundError(err, txtName)
 		}
-		return oops.E(oops.CodeUnexpected, err, "failed to find TXT record for %s", txtName).Log(ctx, d.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to find TXT record for %s", txtName).LogError(ctx, d.logger)
 	}
 	expectedTXT := fmt.Sprintf("gram-domain-verify=%s,%s", domain.Domain, args.OrgID)
 	found := slices.Contains(txts, expectedTXT)
 	if !found {
-		return oops.E(oops.CodeUnexpected, errors.New("TXT record does not match expected value"), "TXT record for %s does not match expected value", txtName).Log(ctx, d.logger)
+		return oops.E(oops.CodeUnexpected, errors.New("TXT record does not match expected value"), "TXT record for %s does not match expected value", txtName).LogError(ctx, d.logger)
 	}
 
 	return nil

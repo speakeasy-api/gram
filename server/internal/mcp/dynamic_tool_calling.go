@@ -159,19 +159,19 @@ func handleSearchToolsCall(
 	temporalEnv *temporal.Environment,
 ) (json.RawMessage, error) {
 	if err := waitForIndexing(ctx, logger, toolset, vectorToolStore, temporalEnv); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to index toolset").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to index toolset").LogError(ctx, logger)
 	}
 
 	var args searchToolsArguments
 	if len(argsRaw) > 0 {
 		if err := json.Unmarshal(argsRaw, &args); err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "failed to parse search_tools arguments").Log(ctx, logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "failed to parse search_tools arguments").LogError(ctx, logger)
 		}
 	}
 
 	query := strings.TrimSpace(args.Query)
 	if query == "" {
-		return nil, oops.E(oops.CodeInvalid, errors.New("missing query"), "query is required").Log(ctx, logger)
+		return nil, oops.E(oops.CodeInvalid, errors.New("missing query"), "query is required").LogError(ctx, logger)
 	}
 
 	searchOptions := rag.SearchToolsOptions{
@@ -183,7 +183,7 @@ func handleSearchToolsCall(
 
 	searchResults, err := vectorToolStore.SearchToolsetTools(ctx, *toolset, searchOptions)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to search tools").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to search tools").LogError(ctx, logger)
 	}
 
 	// Build a map of tools by name for quick lookup
@@ -235,7 +235,7 @@ func handleSearchToolsCall(
 
 	payload, err := json.Marshal(toolsListResultTools{Tools: results})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tool search result").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tool search result").LogError(ctx, logger)
 	}
 
 	chunk, err := json.Marshal(contentChunk[string, json.RawMessage]{
@@ -246,7 +246,7 @@ func handleSearchToolsCall(
 		Meta:     nil,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tool search chunk").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tool search chunk").LogError(ctx, logger)
 	}
 
 	response, err := json.Marshal(result[toolCallResult]{
@@ -257,7 +257,7 @@ func handleSearchToolsCall(
 		},
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize find_tools response").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize find_tools response").LogError(ctx, logger)
 	}
 
 	return response, nil
@@ -307,12 +307,12 @@ func handleDescribeToolsCall(
 	var args describeToolsArguments
 	if len(argsRaw) > 0 {
 		if err := json.Unmarshal(argsRaw, &args); err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "failed to parse describe_tools arguments").Log(ctx, logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "failed to parse describe_tools arguments").LogError(ctx, logger)
 		}
 	}
 
 	if len(args.ToolNames) == 0 {
-		return nil, oops.E(oops.CodeInvalid, errors.New("missing tool_names"), "tool_names are required").Log(ctx, logger)
+		return nil, oops.E(oops.CodeInvalid, errors.New("missing tool_names"), "tool_names are required").LogError(ctx, logger)
 	}
 
 	// Build a map of tools by name for quick lookup
@@ -349,7 +349,7 @@ func handleDescribeToolsCall(
 
 	payload, err := json.Marshal(toolsListResultTools{Tools: entries})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tool description result").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tool description result").LogError(ctx, logger)
 	}
 
 	chunk, err := json.Marshal(contentChunk[string, json.RawMessage]{
@@ -360,7 +360,7 @@ func handleDescribeToolsCall(
 		Meta:     nil,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tool description chunk").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tool description chunk").LogError(ctx, logger)
 	}
 
 	response, err := json.Marshal(result[toolCallResult]{
@@ -371,7 +371,7 @@ func handleDescribeToolsCall(
 		},
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize describe_tools response").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize describe_tools response").LogError(ctx, logger)
 	}
 
 	return response, nil
