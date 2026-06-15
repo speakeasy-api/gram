@@ -603,8 +603,16 @@ export function InsightsProvider({
   // Full-screen chat panel, toggled from the panel header. Reset on close so
   // the next open always starts at the regular panel size.
   const [panelMaximized, setPanelMaximized] = useState(false);
+  // Reset transient panel chrome whenever the panel collapses, so the next
+  // open starts clean: regular size, and no leftover history popover. Without
+  // the historyOpen reset, opening history from the pill and then closing the
+  // panel (close button, backdrop, Cmd+/, dismiss) would leave historyOpen
+  // true, so the popover would reappear on the next, unrelated open.
   useEffect(() => {
-    if (!isExpanded) setPanelMaximized(false);
+    if (!isExpanded) {
+      setPanelMaximized(false);
+      setHistoryOpen(false);
+    }
   }, [isExpanded]);
   const { theme } = useMoonshineConfig();
   const { pathname } = useLocation();
