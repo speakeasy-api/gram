@@ -736,8 +736,6 @@ func newFeatureChecker(logger *slog.Logger, pf *productfeatures.Client, feat pro
 func newTelemetryLogger(
 	ctx context.Context,
 	logger *slog.Logger,
-	db *pgxpool.Pool,
-	cacheImpl cache.Cache,
 	chDB clickhouse.Conn,
 	logsEnabled telemetry.FeatureChecker,
 	toolIOLogsEnabled telemetry.FeatureChecker,
@@ -750,9 +748,7 @@ func newTelemetryLogger(
 		return nil
 	}
 
-	users := telemetry.NewUserInfoResolver(logger, db, cacheImpl)
-
-	return telemetry.NewLogger(shutdownCtx, logger, chDB, logsEnabled, toolIOLogsEnabled, users), shutdown
+	return telemetry.NewLogger(shutdownCtx, logger, chDB, logsEnabled, toolIOLogsEnabled), shutdown
 }
 
 func newTriggersApp(
@@ -788,7 +784,6 @@ func newTriggersApp(
 					FunctionID:     nil,
 					OrganizationID: entry.Instance.OrganizationID,
 				},
-				UserInfo:   telemetry.UserInfo{UserID: "", Email: "", Attributes: telemetry.UserAttributes{}, Groups: nil, Roles: nil},
 				Attributes: entry.Attributes,
 			})
 		}),

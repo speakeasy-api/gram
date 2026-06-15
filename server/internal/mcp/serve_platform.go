@@ -365,6 +365,12 @@ func (s *Service) callPlatformToolsetTool(
 		if chatID != "" {
 			logAttrs[attr.GenAIConversationIDKey] = chatID
 		}
+		if authCtx.UserID != "" {
+			logAttrs[attr.UserIDKey] = authCtx.UserID
+		}
+		if gramEmail != "" {
+			logAttrs[attr.UserEmailKey] = gramEmail
+		}
 		logAttrs.RecordToolsetSlug(platformToolsetSlug)
 		logAttrs.RecordMCPURL(mcpURL)
 		s.telemLogger.Log(ctx, tm.LogParams{
@@ -377,13 +383,6 @@ func (s *Service) callPlatformToolsetTool(
 				DeploymentID:   descriptor.DeploymentID,
 				OrganizationID: descriptor.OrganizationID,
 				FunctionID:     nil,
-			},
-			UserInfo: tm.UserInfo{
-				UserID:     authCtx.UserID,
-				Email:      gramEmail,
-				Attributes: tm.UserAttributes{},
-				Groups:     nil,
-				Roles:      nil,
 			},
 			Attributes: logAttrs,
 		})

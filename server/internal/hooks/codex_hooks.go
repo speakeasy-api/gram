@@ -200,15 +200,8 @@ func (s *Service) writeCodexHookToClickHouse(ctx context.Context, payload *gen.C
 
 	if s.telemetryLogger != nil {
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
-			Timestamp: time.Now(),
-			ToolInfo:  toolInfo,
-			UserInfo: telemetry.UserInfo{
-				UserID:     metadata.UserID,
-				Email:      metadata.UserEmail,
-				Attributes: telemetry.UserAttributes{},
-				Groups:     nil,
-				Roles:      nil,
-			},
+			Timestamp:  time.Now(),
+			ToolInfo:   toolInfo,
 			Attributes: attrs,
 		})
 
@@ -228,9 +221,13 @@ func (s *Service) buildCodexTelemetryAttributes(ctx context.Context, payload *ge
 		attr.SpanIDKey:         generateSpanID(),
 		attr.TraceIDKey:        generateTraceID(),
 		attr.LogBodyKey:        fmt.Sprintf("Hook: %s", payload.HookEventName),
+		attr.UserEmailKey:      metadata.UserEmail,
 		attr.ProjectIDKey:      metadata.ProjectID,
 		attr.OrganizationIDKey: metadata.GramOrgID,
 		attr.HookSourceKey:     "codex",
+	}
+	if metadata.UserID != "" {
+		attrs[attr.UserIDKey] = metadata.UserID
 	}
 
 	if payload.Model != nil && *payload.Model != "" {

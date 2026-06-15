@@ -180,28 +180,6 @@ func (q *Queries) GetDirectoryGroupIDByWorkOSID(ctx context.Context, workosDirec
 	return id, err
 }
 
-const getDirectoryUserAttributesByUserID = `-- name: GetDirectoryUserAttributesByUserID :one
-SELECT attributes
-FROM directory_users
-WHERE user_id = $1
-  AND organization_id = $2
-  AND deleted_at IS NULL
-ORDER BY updated_at DESC
-LIMIT 1
-`
-
-type GetDirectoryUserAttributesByUserIDParams struct {
-	UserID         pgtype.Text
-	OrganizationID string
-}
-
-func (q *Queries) GetDirectoryUserAttributesByUserID(ctx context.Context, arg GetDirectoryUserAttributesByUserIDParams) ([]byte, error) {
-	row := q.db.QueryRow(ctx, getDirectoryUserAttributesByUserID, arg.UserID, arg.OrganizationID)
-	var attributes []byte
-	err := row.Scan(&attributes)
-	return attributes, err
-}
-
 const getDirectoryUserByWorkOSID = `-- name: GetDirectoryUserByWorkOSID :one
 SELECT id, organization_id, user_id, workos_directory_user_id, email, attributes, created_at, updated_at, deleted_at, deleted
 FROM directory_users
@@ -287,54 +265,6 @@ func (q *Queries) LinkDirectoryUsersToUserByEmail(ctx context.Context, arg LinkD
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const listCurrentDirectoryGroupsByUserID = `-- name: ListCurrentDirectoryGroupsByUserID :many
-SELECT DISTINCT ON (dg.workos_directory_group_id)
-  dg.workos_directory_group_id,
-  dg.name
-FROM directory_users AS du
-JOIN directory_user_group_memberships AS m
-  ON m.directory_user_id = du.id
-  AND m.deleted_at IS NULL
-JOIN directory_groups AS dg
-  ON dg.id = m.directory_group_id
-  AND dg.deleted_at IS NULL
-WHERE du.user_id = $1
-  AND du.organization_id = $2
-  AND dg.organization_id = $2
-  AND du.deleted_at IS NULL
-ORDER BY dg.workos_directory_group_id
-`
-
-type ListCurrentDirectoryGroupsByUserIDParams struct {
-	UserID         pgtype.Text
-	OrganizationID string
-}
-
-type ListCurrentDirectoryGroupsByUserIDRow struct {
-	WorkosDirectoryGroupID string
-	Name                   string
-}
-
-func (q *Queries) ListCurrentDirectoryGroupsByUserID(ctx context.Context, arg ListCurrentDirectoryGroupsByUserIDParams) ([]ListCurrentDirectoryGroupsByUserIDRow, error) {
-	rows, err := q.db.Query(ctx, listCurrentDirectoryGroupsByUserID, arg.UserID, arg.OrganizationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListCurrentDirectoryGroupsByUserIDRow
-	for rows.Next() {
-		var i ListCurrentDirectoryGroupsByUserIDRow
-		if err := rows.Scan(&i.WorkosDirectoryGroupID, &i.Name); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const openDirectoryUserGroupMembership = `-- name: OpenDirectoryUserGroupMembership :one

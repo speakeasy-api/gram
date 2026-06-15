@@ -85,15 +85,8 @@ func (s *Service) persistToolCallEvent(ctx context.Context, payload *gen.ClaudeP
 
 	if s.telemetryLogger != nil {
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
-			Timestamp: time.Now(),
-			ToolInfo:  toolInfo,
-			UserInfo: telemetry.UserInfo{
-				UserID:     metadata.UserID,
-				Email:      metadata.UserEmail,
-				Attributes: telemetry.UserAttributes{},
-				Groups:     nil,
-				Roles:      nil,
-			},
+			Timestamp:  time.Now(),
+			ToolInfo:   toolInfo,
 			Attributes: attrs,
 		})
 
@@ -135,12 +128,16 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 		attr.SpanIDKey:         generateSpanID(),
 		attr.TraceIDKey:        generateTraceID(),
 		attr.LogBodyKey:        fmt.Sprintf("Tool: %s, Hook: %s", toolName, payload.HookEventName),
+		attr.UserEmailKey:      metadata.UserEmail,
 		attr.ProjectIDKey:      metadata.ProjectID,
 		attr.OrganizationIDKey: metadata.GramOrgID,
 		attr.HookSourceKey:     hookSource,
 	}
 	if metadata.UserID == "" {
 		metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
+	}
+	if metadata.UserID != "" {
+		attrs[attr.UserIDKey] = metadata.UserID
 	}
 	applyHookHostnameAttr(attrs, payload.HookHostname)
 
@@ -312,6 +309,12 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 		if m.Model != "" {
 			attrs[attr.GenAIResponseModelKey] = m.Model
 		}
+		if m.UserEmail != "" {
+			attrs[attr.UserEmailKey] = m.UserEmail
+			if userID := emailToUserID[conv.NormalizeEmail(m.UserEmail)]; userID != "" {
+				attrs[attr.UserIDKey] = userID
+			}
+		}
 		if m.SessionID != "" {
 			attrs[attr.GenAIConversationIDKey] = m.SessionID
 		}
@@ -327,15 +330,8 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 		}
 
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
-			Timestamp: time.Unix(0, m.TimestampNano),
-			ToolInfo:  toolInfo,
-			UserInfo: telemetry.UserInfo{
-				UserID:     emailToUserID[conv.NormalizeEmail(m.UserEmail)],
-				Email:      m.UserEmail,
-				Attributes: telemetry.UserAttributes{},
-				Groups:     nil,
-				Roles:      nil,
-			},
+			Timestamp:  time.Unix(0, m.TimestampNano),
+			ToolInfo:   toolInfo,
 			Attributes: attrs,
 		})
 	}

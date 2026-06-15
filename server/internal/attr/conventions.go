@@ -51,12 +51,6 @@ const (
 	URLOriginalKey                    = semconv.URLOriginalKey
 	UserIDKey                         = semconv.UserIDKey
 	UserEmailKey                      = semconv.UserEmailKey
-	UserRolesKey                      = semconv.UserRolesKey
-
-	// UserAttributesKey and UserGroupsKey carry the denormalized WorkOS
-	// Directory Sync snapshot stamped onto telemetry logs at write time.
-	UserAttributesKey = attribute.Key("user.attributes")
-	UserGroupsKey     = attribute.Key("user.groups")
 
 	ActualKey   = attribute.Key("actual")
 	EventKey    = attribute.Key("event")

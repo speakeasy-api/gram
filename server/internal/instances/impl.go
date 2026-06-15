@@ -429,17 +429,18 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		if chatID != "" {
 			attrRecorder[attr.GenAIConversationIDKey] = chatID
 		}
-		var userInfo tm.UserInfo
 		if authCtx != nil {
-			userInfo.UserID = authCtx.UserID
-			if authCtx.Email != nil {
-				userInfo.Email = *authCtx.Email
+			if authCtx.UserID != "" {
+				attrRecorder[attr.UserIDKey] = authCtx.UserID
 			}
 			if authCtx.ExternalUserID != "" {
 				attrRecorder[attr.ExternalUserIDKey] = authCtx.ExternalUserID
 			}
 			if authCtx.APIKeyID != "" {
 				attrRecorder[attr.APIKeyIDKey] = authCtx.APIKeyID
+			}
+			if authCtx.Email != nil && *authCtx.Email != "" {
+				attrRecorder[attr.UserEmailKey] = *authCtx.Email
 			}
 		}
 
@@ -455,7 +456,6 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 				OrganizationID: descriptor.OrganizationID,
 				FunctionID:     nil,
 			},
-			UserInfo:   userInfo,
 			Attributes: attrRecorder,
 		}
 		s.telemLogger.Log(ctx, logParams)

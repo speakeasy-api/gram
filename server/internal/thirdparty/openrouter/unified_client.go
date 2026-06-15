@@ -716,6 +716,16 @@ func (c *ChatClient) emitGenAITelemetry(
 		toolCallsJSON, _ := json.Marshal(toolCalls)
 		attrs[attr.GenAIToolCallsKey] = string(toolCallsJSON)
 	}
+	if userID != "" {
+		attrs[attr.UserIDKey] = userID
+	}
+	if externalUserID != "" {
+		attrs[attr.ExternalUserIDKey] = externalUserID
+	}
+	if userEmail != "" {
+		attrs[attr.UserEmailKey] = userEmail
+	}
+
 	// Extract trace context from the request context
 	spanCtx := trace.SpanContextFromContext(ctx)
 	if spanCtx.HasTraceID() {
@@ -723,9 +733,6 @@ func (c *ChatClient) emitGenAITelemetry(
 	}
 	if spanCtx.HasSpanID() {
 		attrs[attr.SpanIDKey] = spanCtx.SpanID().String()
-	}
-	if externalUserID != "" {
-		attrs[attr.ExternalUserIDKey] = externalUserID
 	}
 
 	toolInfo := telemetry.ToolInfo{
@@ -739,15 +746,8 @@ func (c *ChatClient) emitGenAITelemetry(
 	}
 
 	c.telemetryLogger.Log(ctx, telemetry.LogParams{
-		Timestamp: time.Now(),
-		ToolInfo:  toolInfo,
-		UserInfo: telemetry.UserInfo{
-			UserID:     userID,
-			Email:      userEmail,
-			Attributes: telemetry.UserAttributes{},
-			Groups:     nil,
-			Roles:      nil,
-		},
+		Timestamp:  time.Now(),
+		ToolInfo:   toolInfo,
 		Attributes: attrs,
 	})
 }

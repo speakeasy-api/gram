@@ -175,11 +175,17 @@ func handleResourcesRead(
 		logAttrs.RecordRequestBody(requestBytes)
 		logAttrs.RecordResponseBody(outputBytes)
 		logAttrs.RecordTraceContext(ctx)
-		if payload.apiKeyID != "" {
-			logAttrs[attr.APIKeyIDKey] = payload.apiKeyID
+		if payload.userID != "" {
+			logAttrs[attr.UserIDKey] = payload.userID
 		}
 		if payload.externalUserID != "" {
 			logAttrs[attr.ExternalUserIDKey] = payload.externalUserID
+		}
+		if payload.apiKeyID != "" {
+			logAttrs[attr.APIKeyIDKey] = payload.apiKeyID
+		}
+		if resourceEmail != "" {
+			logAttrs[attr.UserEmailKey] = resourceEmail
 		}
 
 		logAttrs.RecordToolsetSlug(payload.toolset)
@@ -194,13 +200,6 @@ func handleResourcesRead(
 				DeploymentID:   descriptor.DeploymentID,
 				OrganizationID: descriptor.OrganizationID,
 				FunctionID:     nil,
-			},
-			UserInfo: tm.UserInfo{
-				UserID:     payload.userID,
-				Email:      resourceEmail,
-				Attributes: tm.UserAttributes{},
-				Groups:     nil,
-				Roles:      nil,
 			},
 			Attributes: logAttrs,
 		}

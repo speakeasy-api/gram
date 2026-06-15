@@ -194,6 +194,12 @@ func (s *Service) writeCodexUsageToClickHouse(ctx context.Context, payload *gen.
 		if p.Model != "" {
 			attrs[attr.GenAIResponseModelKey] = p.Model
 		}
+		if p.UserEmail != "" {
+			attrs[attr.UserEmailKey] = p.UserEmail
+			if userID := emailToUserID[conv.NormalizeEmail(p.UserEmail)]; userID != "" {
+				attrs[attr.UserIDKey] = userID
+			}
+		}
 		if p.ConversationID != "" {
 			attrs[attr.GenAIConversationIDKey] = p.ConversationID
 		}
@@ -214,15 +220,8 @@ func (s *Service) writeCodexUsageToClickHouse(ctx context.Context, payload *gen.
 		}
 
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
-			Timestamp: ts,
-			ToolInfo:  toolInfo,
-			UserInfo: telemetry.UserInfo{
-				UserID:     emailToUserID[conv.NormalizeEmail(p.UserEmail)],
-				Email:      p.UserEmail,
-				Attributes: telemetry.UserAttributes{},
-				Groups:     nil,
-				Roles:      nil,
-			},
+			Timestamp:  ts,
+			ToolInfo:   toolInfo,
 			Attributes: attrs,
 		})
 	}

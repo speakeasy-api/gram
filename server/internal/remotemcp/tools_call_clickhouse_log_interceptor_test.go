@@ -34,7 +34,7 @@ func TestToolsCallClickHouseLogInterceptor_EmitsRow(t *testing.T) {
 
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
-	telemLogger := telemetry.NewLogger(t.Context(), logger, chConn, logsEnabled, toolIOLogsEnabled, nil)
+	telemLogger := telemetry.NewLogger(t.Context(), logger, chConn, logsEnabled, toolIOLogsEnabled)
 
 	projectID := uuid.New()
 	serverID := uuid.New().String()
@@ -109,7 +109,7 @@ func TestToolsCallClickHouseLogInterceptor_DurationMissingSentinel(t *testing.T)
 
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return false, nil }
-	telemLogger := telemetry.NewLogger(t.Context(), logger, chConn, logsEnabled, toolIOLogsEnabled, nil)
+	telemLogger := telemetry.NewLogger(t.Context(), logger, chConn, logsEnabled, toolIOLogsEnabled)
 
 	projectID := uuid.New()
 	serverID := uuid.New().String()
@@ -176,7 +176,7 @@ func TestToolsCallClickHouseLogInterceptor_NoAuthContextSkips(t *testing.T) {
 
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
-	telemLogger := telemetry.NewLogger(t.Context(), logger, chConn, logsEnabled, toolIOLogsEnabled, nil)
+	telemLogger := telemetry.NewLogger(t.Context(), logger, chConn, logsEnabled, toolIOLogsEnabled)
 
 	serverID := uuid.New().String()
 	interceptor := remotemcp.NewToolsCallClickHouseLogInterceptor(telemLogger, serverID, logger)
@@ -308,7 +308,7 @@ func runStatusCodeMappingCase(t *testing.T, tc statusCodeCase) int32 {
 
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
-	telemLogger := telemetry.NewLogger(t.Context(), logger, conn, logsEnabled, toolIOLogsEnabled, nil)
+	telemLogger := telemetry.NewLogger(t.Context(), logger, conn, logsEnabled, toolIOLogsEnabled)
 
 	projectID := uuid.New()
 	serverID := uuid.New().String()
