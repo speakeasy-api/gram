@@ -39,7 +39,20 @@ if (!existsSync(".vscode")) {
 function amendSettings(settingsJSON: string): string {
   const edited = JSON.parse(settingsJSON);
 
-  edited["typescript.tsdk"] = "node_modules/typescript/lib";
+  edited["mise.configureExtensionsAutomaticallyIgnoreList"] = Array.isArray(
+    edited["mise.configureExtensionsAutomaticallyIgnoreList"],
+  )
+    ? edited["mise.configureExtensionsAutomaticallyIgnoreList"]
+    : [];
+  edited["mise.configureExtensionsAutomaticallyIgnoreList"].push(
+    // python is managed by uv virtual environment, not mise.
+    "charliermarsh.ruff",
+  );
+  edited["mise.configureExtensionsAutomaticallyIgnoreList"] = [
+    ...new Set(edited["mise.configureExtensionsAutomaticallyIgnoreList"]),
+  ].sort();
+
+  edited["js/ts.tsdk.path"] = "node_modules/typescript/lib";
   edited["go.lintTool"] = "golangci-lint-v2";
   edited["go.lintFlags"] = [
     "run",
