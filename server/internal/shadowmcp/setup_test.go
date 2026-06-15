@@ -105,6 +105,7 @@ func (f *fixture) createPolicy(t *testing.T, name string, enabled bool, sources 
 		Name:           name,
 		Sources:        sources,
 		Enabled:        enabled,
+		AudienceType:   "everyone",
 	})
 	require.NoError(t, err)
 	return id

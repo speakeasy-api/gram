@@ -285,14 +285,8 @@ func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, organizatio
 }
 
 func (s *Scanner) riskPolicyGrants(ctx context.Context, organizationID string, userID string) ([]authz.Grant, error) {
-	if organizationID == "" || userID == "" {
-		return nil, nil
-	}
 	principals, err := authz.ResolveUserPrincipals(ctx, s.db, organizationID, userID)
 	if err != nil {
-		if errors.Is(err, authz.ErrPrincipalNotFound) || errors.Is(err, authz.ErrPrincipalInvalid) {
-			return nil, nil
-		}
 		return nil, fmt.Errorf("resolve risk policy audience principals: %w", err)
 	}
 	grants, err := authz.LoadGrants(ctx, s.db, organizationID, principals)

@@ -99,7 +99,7 @@ func TestScanner_ScanForEnforcement_RespectsTargetedAudience(t *testing.T) {
 	require.Equal(t, "Targeted Runtime", targetedUserResult.PolicyName)
 }
 
-func TestScanner_ScanForEnforcement_RequiresResolvedAudiencePrincipal(t *testing.T) {
+func TestScanner_ScanForEnforcement_EveryoneAudienceAppliesWithoutResolvedUser(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
@@ -131,16 +131,57 @@ func TestScanner_ScanForEnforcement_RequiresResolvedAudiencePrincipal(t *testing
 
 	emptyUserResult, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "", "irrelevant text", message.User)
 	require.NoError(t, err)
-	require.Nil(t, emptyUserResult)
+	require.NotNil(t, emptyUserResult)
+	require.Equal(t, "Everyone Runtime", emptyUserResult.PolicyName)
 
 	unknownUserResult, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "user_"+uuid.NewString(), "irrelevant text", message.User)
 	require.NoError(t, err)
-	require.Nil(t, unknownUserResult)
+	require.NotNil(t, unknownUserResult)
+	require.Equal(t, "Everyone Runtime", unknownUserResult.PolicyName)
 
 	memberResult, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "irrelevant text", message.User)
 	require.NoError(t, err)
 	require.NotNil(t, memberResult)
 	require.Equal(t, "Everyone Runtime", memberResult.PolicyName)
+}
+
+func TestScanner_LookupShadowMCPBlockingPolicy_EveryoneAudienceAppliesWithoutResolvedUser(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	everyone := "everyone"
+	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:                  new("Everyone Shadow MCP"),
+		Sources:               []string{"shadow_mcp"},
+		AudienceType:          everyone,
+		AudiencePrincipalUrns: nil,
+		Action:                "block",
+	})
+	require.NoError(t, err)
+
+	scanner, err := risk.NewScanner(
+		testenv.NewLogger(t),
+		ti.conn,
+		nil,
+		nil,
+		testenv.NewMeterProvider(t),
+	)
+	require.NoError(t, err)
+
+	emptyUserPolicy, err := scanner.LookupShadowMCPBlockingPolicy(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "")
+	require.NoError(t, err)
+	require.NotNil(t, emptyUserPolicy)
+	require.Equal(t, "Everyone Shadow MCP", emptyUserPolicy.Name)
+
+	unknownUserPolicy, err := scanner.LookupShadowMCPBlockingPolicy(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "user_"+uuid.NewString())
+	require.NoError(t, err)
+	require.NotNil(t, unknownUserPolicy)
+	require.Equal(t, "Everyone Shadow MCP", unknownUserPolicy.Name)
 }
 
 func requirePolicyAudience(t *testing.T, ctx context.Context, ti *testInstance, orgID, policyID string, want []string) {

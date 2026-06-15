@@ -640,48 +640,9 @@ func riskPolicyBypassGrantPrincipals(requesterUserID string, principalURNs []str
 
 func validateRiskPolicyBypassGrantPrincipals(ctx context.Context, db accessrepo.DBTX, organizationID string, principals []urn.Principal) error {
 	for _, principal := range principals {
-		switch principal.Type {
-		case urn.PrincipalTypeUser:
-			if principal.String() == authz.AllUsersPrincipal().String() {
-				continue
-			}
-			if _, err := authz.ResolveUserPrincipals(ctx, db, organizationID, principal.ID); err != nil {
-				return fmt.Errorf("validate user principal %q: %w", principal.String(), err)
-			}
-		case urn.PrincipalTypeRole:
-			if err := validateRiskPolicyBypassRolePrincipal(ctx, db, organizationID, principal); err != nil {
-				return err
-			}
-		default:
-			return fmt.Errorf("unsupported principal type %q", principal.Type)
+		if err := authz.ValidatePrincipal(ctx, db, organizationID, principal); err != nil {
+			return err
 		}
-	}
-
-	return nil
-}
-
-func validateRiskPolicyBypassRolePrincipal(ctx context.Context, db accessrepo.DBTX, organizationID string, principal urn.Principal) error {
-	roleKind, rawRoleID, ok := strings.Cut(principal.ID, ":")
-	if !ok {
-		return fmt.Errorf("invalid role principal %q", principal.String())
-	}
-	if roleKind != "organization" && roleKind != "global" {
-		return fmt.Errorf("invalid role principal %q", principal.String())
-	}
-	roleID, err := uuid.Parse(rawRoleID)
-	if err != nil {
-		return fmt.Errorf("invalid role principal %q: %w", principal.String(), err)
-	}
-
-	row, err := accessrepo.New(db).GetOrganizationRoleByID(ctx, accessrepo.GetOrganizationRoleByIDParams{
-		OrganizationID: organizationID,
-		ID:             roleID,
-	})
-	if err != nil {
-		return fmt.Errorf("validate role principal %q: %w", principal.String(), err)
-	}
-	if row.RoleUrn != principal.String() {
-		return fmt.Errorf("role principal %q does not match active role %q", principal.String(), row.RoleUrn)
 	}
 
 	return nil
