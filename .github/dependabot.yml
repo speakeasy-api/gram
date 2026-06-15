@@ -82,6 +82,11 @@ updates:
           - "@vitejs/*"
           - "vitest"
   - package-ecosystem: "docker"
-    directory: "/server"
+    directories:
+      - "/server"
+      - "/agents/runtime-image"
+      - "/client/dashboard"
+      - "/otel-collector"
+      - "/services/pi-classifier"
     schedule:
       interval: "weekly"

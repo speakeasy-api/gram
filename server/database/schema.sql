@@ -3083,6 +3083,14 @@ CREATE TABLE IF NOT EXISTS risk_results (
   excluded_at timestamptz,
   excluded_exclusion_id uuid,
 
+  -- Set when the offline false-positive sweep determines a Presidio finding is
+  -- noise (e.g. a reserved IP or placeholder email). false_positive_reason is
+  -- the catalog reason recorded for audit. Independent of excluded_at: a row
+  -- can be both. Dashboard reads filter on false_positive_at IS NULL so swept
+  -- rows are hidden, and clearing both columns reverses a bad sweep.
+  false_positive_at timestamptz,
+  false_positive_reason TEXT,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT risk_results_pkey PRIMARY KEY (id),
@@ -3100,7 +3108,7 @@ ON risk_results (project_id, chat_message_id);
 
 CREATE INDEX IF NOT EXISTS risk_results_project_found_idx
 ON risk_results (project_id, created_at DESC)
-WHERE found IS TRUE AND excluded_at IS NULL;
+WHERE found IS TRUE AND excluded_at IS NULL AND false_positive_at IS NULL;
 
 -- Narrows the exclusion sweeps (exact/rule_id/source) by project + policy +
 -- rule. The verbatim match column is intentionally NOT indexed: it can exceed

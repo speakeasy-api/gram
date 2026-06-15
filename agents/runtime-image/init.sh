@@ -2,14 +2,19 @@
 
 set -euo pipefail
 
-# Provision the assistant workdir from the prebuilt ext4 template. The rootfs
-# is per-machine so we can mount the template directly — any mutations stay
-# isolated to this machine and the loop mount enforces the hard size cap baked
-# into the template at image build time.
-workdir_image=/usr/share/gram/workdir-template.ext4
 workdir_mount=/var/lib/gram-assistant/work
+sandbox_src=/usr/share/gram/sandbox
 mkdir -p "$workdir_mount"
-mount -o loop "$workdir_image" "$workdir_mount"
+mount -t tmpfs -o size=256m,mode=0755 tmpfs "$workdir_mount"
+for dep in browser.ts package.json node_modules; do
+  src="$sandbox_src/$dep"
+  dst="$workdir_mount/$dep"
+  [ -e "$src" ] || continue
+  # The bind target must exist inside the tmpfs first.
+  if [ -d "$src" ]; then mkdir -p "$dst"; else : >"$dst"; fi
+  mount --bind "$src" "$dst"
+  mount -o remount,bind,ro "$dst"
+done
 
 /usr/local/bin/lightpanda-supervise &
 

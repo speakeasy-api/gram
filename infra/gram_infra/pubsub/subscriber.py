@@ -27,7 +27,6 @@ its ack deadline to lapse — mirroring how the Go library and the stock
 
 from __future__ import annotations
 
-import logging
 import queue as queue_module
 import threading
 from concurrent.futures import CancelledError as FutureCancelledError
@@ -47,6 +46,7 @@ from typing import (
 import anyio
 import anyio.from_thread
 import anyio.to_thread
+import structlog
 from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
 from google.cloud.pubsub_v1.subscriber.scheduler import Scheduler
 from google.protobuf.message import Message
@@ -63,6 +63,7 @@ __all__ = [
 ]
 
 M = TypeVar("M", bound=Message)
+
 
 def _unwrap_single(eg: BaseExceptionGroup) -> BaseException:
     """Peel single-member exception groups down to the lone leaf exception.
@@ -304,7 +305,7 @@ class Subscriber(Generic[M]):
         handle: SubscriberHandle,
         message_type: type[M],
         *,
-        logger: logging.Logger,
+        logger: structlog.stdlib.BoundLogger,
         topic_proto_name: str,
         subscription_proto_name: str,
         max_concurrency: int = _DEFAULT_MAX_CONCURRENCY,
@@ -376,7 +377,9 @@ class Subscriber(Generic[M]):
         ``future.result()``, so a single ``to_thread`` slot stays parked per
         subscriber waiting for the stream to end.
         """
-        limit = max_concurrency if max_concurrency is not None else self._max_concurrency
+        limit = (
+            max_concurrency if max_concurrency is not None else self._max_concurrency
+        )
         limiter = anyio.CapacityLimiter(limit) if limit > 0 else None
 
         try:
@@ -508,11 +511,9 @@ class Subscriber(Generic[M]):
             self._logger.warning(
                 "failed to unmarshal pubsub message",
                 exc_info=True,
-                extra={
-                    "topic_proto_name": self._topic_proto_name,
-                    "subscription_proto_name": self._subscription_proto_name,
-                    "message_id": message.message_id,
-                },
+                topic_proto_name=self._topic_proto_name,
+                subscription_proto_name=self._subscription_proto_name,
+                message_id=message.message_id,
             )
             message.nack()
             return None
@@ -548,15 +549,13 @@ class Subscriber(Generic[M]):
             # failing.
             self._logger.error(
                 "error processing pubsub message",
-                exc_info=True,
-                extra={
-                    "topic_proto_name": self._topic_proto_name,
-                    "subscription_proto_name": self._subscription_proto_name,
-                    "message_id": metadata.id,
-                    "delivery_attempt": metadata.delivery_attempt
-                    if metadata.delivery_attempt is not None
-                    else 0,
-                },
+                exc_info=exc,
+                topic_proto_name=self._topic_proto_name,
+                subscription_proto_name=self._subscription_proto_name,
+                message_id=metadata.id,
+                delivery_attempt=metadata.delivery_attempt
+                if metadata.delivery_attempt is not None
+                else 0,
             )
             message.nack()
             return
@@ -627,7 +626,7 @@ def pubsub_subscriber_for_message(
     message_type: type[M],
     subscription_type: type[Message],
     *,
-    logger: logging.Logger | None = None,
+    logger: structlog.stdlib.BoundLogger | None = None,
 ) -> Subscriber[M]:
     """Return a subscriber for ``subscription_type`` delivering ``message_type`` messages.
 
@@ -643,7 +642,7 @@ def pubsub_subscriber_for_message(
     return Subscriber(
         handle,
         message_type,
-        logger=logger or logging.getLogger(__name__),
+        logger=logger or structlog.get_logger(__name__),
         topic_proto_name=message_type.DESCRIPTOR.full_name,
         subscription_proto_name=subscription_type.DESCRIPTOR.full_name,
     )

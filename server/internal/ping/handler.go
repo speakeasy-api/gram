@@ -10,19 +10,21 @@ import (
 )
 
 type Handler struct {
-	logger *slog.Logger
+	logger   *slog.Logger
+	logLevel slog.Level
 }
 
-func NewHandler(logger *slog.Logger) *Handler {
+func NewHandler(logger *slog.Logger, level slog.Level) *Handler {
 	return &Handler{
-		logger: logger,
+		logger:   logger,
+		logLevel: level,
 	}
 }
 
 func (h *Handler) Handle(ctx context.Context, m *pingv1.Message, _ gcp.MessageMetadata) error {
 	logger := h.logger
 
-	logger.DebugContext(ctx, "ping subscriber received message", attr.SlogValueAny(map[string]any{
+	logger.LogAttrs(ctx, h.logLevel, "ping subscriber received message", attr.SlogValueAny(map[string]any{
 		"id":      m.GetId(),
 		"type":    m.GetType(),
 		"payload": string(m.GetPayload()),

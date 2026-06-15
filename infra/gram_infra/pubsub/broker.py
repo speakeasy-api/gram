@@ -25,7 +25,6 @@ bounds and raises ``ValueError`` at reconcile time.
 from __future__ import annotations
 
 import concurrent.futures
-import logging
 import threading
 from contextlib import ExitStack
 from dataclasses import dataclass, field
@@ -33,6 +32,7 @@ from datetime import timedelta
 from types import TracebackType
 from typing import Protocol, Self, runtime_checkable
 
+import structlog
 from google.api_core.exceptions import AlreadyExists
 from google.cloud.pubsub_v1 import PublisherClient, SubscriberClient
 from google.protobuf.duration_pb2 import Duration
@@ -148,12 +148,12 @@ class PubSubBroker:
         *,
         publisher_client: PublisherClient | None = None,
         subscriber_client: SubscriberClient | None = None,
-        logger: logging.Logger | None = None,
+        logger: structlog.stdlib.BoundLogger | None = None,
     ) -> None:
         self._project_id = project_id
         self._publisher = publisher_client or PublisherClient()
         self._subscriber = subscriber_client or SubscriberClient()
-        self._logger = logger or logging.getLogger(__name__)
+        self._logger = logger or structlog.get_logger(__name__)
         self._exit_stack = None
         self._closed = False
         self._inflight = _InflightPublishes()
@@ -292,7 +292,7 @@ class EmulatedPubSubBroker(PubSubBroker):
         publisher_client: PublisherClient,
         subscriber_client: SubscriberClient,
         *,
-        logger: logging.Logger | None = None,
+        logger: structlog.stdlib.BoundLogger | None = None,
     ) -> None:
         super().__init__(
             project_id,
@@ -339,9 +339,9 @@ class EmulatedPubSubBroker(PubSubBroker):
 
         try:
             self._publisher.create_topic(request=request)
-            self._logger.info("topic created", extra={"topic": topic_path})
+            self._logger.info("topic created", topic=topic_path)
         except AlreadyExists:
-            self._logger.info("topic already exists", extra={"topic": topic_path})
+            self._logger.info("topic already exists", topic=topic_path)
         self._reconciled_topics.add(topic_id)
 
     def _reconcile_subscription(self, sub_id: str, topic_id: str, options) -> None:
@@ -373,9 +373,7 @@ class EmulatedPubSubBroker(PubSubBroker):
             and options.expiration_ttl.ToNanoseconds() != 0
         ):
             _validate_expiration_ttl(options.expiration_ttl, sub_id)
-            request["expiration_policy"] = {
-                "ttl": options.expiration_ttl.ToTimedelta()
-            }
+            request["expiration_policy"] = {"ttl": options.expiration_ttl.ToTimedelta()}
         if options.filter:
             request["filter"] = options.filter
         if options.HasField("retry_policy"):
@@ -407,11 +405,9 @@ class EmulatedPubSubBroker(PubSubBroker):
 
         try:
             self._subscriber.create_subscription(request=request)
-            self._logger.info("subscription created", extra={"subscription": sub_path})
+            self._logger.info("subscription created", subscription=sub_path)
         except AlreadyExists:
-            self._logger.info(
-                "subscription already exists", extra={"subscription": sub_path}
-            )
+            self._logger.info("subscription already exists", subscription=sub_path)
         self._reconciled_subscriptions.add(sub_id)
 
 
