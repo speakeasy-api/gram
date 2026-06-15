@@ -388,15 +388,16 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 	}
 
 	updatedRoleView := &gen.Role{
-		ID:          updatedRole.ID,
-		Name:        updatedRole.Name,
-		Slug:        updatedRole.Slug,
-		Description: updatedRole.Description,
-		IsSystem:    isSystemRole(updatedRole.Slug),
-		Grants:      existingRole.Grants,
-		MemberCount: updatedRole.MemberCount,
-		CreatedAt:   conv.Default(updatedRole.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
-		UpdatedAt:   conv.Default(updatedRole.UpdatedAt, time.Time{}.UTC().Format(time.RFC3339)),
+		ID:           updatedRole.ID,
+		PrincipalUrn: updatedRole.PrincipalURN,
+		Name:         updatedRole.Name,
+		Slug:         updatedRole.Slug,
+		Description:  updatedRole.Description,
+		IsSystem:     isSystemRole(updatedRole.Slug),
+		Grants:       existingRole.Grants,
+		MemberCount:  updatedRole.MemberCount,
+		CreatedAt:    conv.Default(updatedRole.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
+		UpdatedAt:    conv.Default(updatedRole.UpdatedAt, time.Time{}.UTC().Format(time.RFC3339)),
 	}
 	if updatedGrants != nil {
 		updatedRoleView.Grants = updatedGrants

@@ -641,7 +641,7 @@ func riskPolicyBypassGrantPrincipals(requesterUserID string, principalURNs []str
 func validateRiskPolicyBypassGrantPrincipals(ctx context.Context, db accessrepo.DBTX, organizationID string, principals []urn.Principal) error {
 	for _, principal := range principals {
 		if err := authz.ValidatePrincipal(ctx, db, organizationID, principal); err != nil {
-			return err
+			return fmt.Errorf("validate bypass grant principal %q: %w", principal.String(), err)
 		}
 	}
 

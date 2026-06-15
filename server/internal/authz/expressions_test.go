@@ -1,7 +1,6 @@
 package authz
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -88,7 +87,7 @@ func TestGrantExpressionEvaluate_rejectsWrappedMixedSemanticsError(t *testing.T)
 	}
 
 	_, err := RiskPolicyApplies(policyID, RiskPolicyDimensions{}).Evaluate(grants)
-	require.True(t, errors.Is(err, ErrUnsupportedMixedGrantSemantics))
+	require.ErrorIs(t, err, ErrUnsupportedMixedGrantSemantics)
 }
 
 func TestGrantExpressionEvaluate_differenceWorksForGenericChecks(t *testing.T) {
