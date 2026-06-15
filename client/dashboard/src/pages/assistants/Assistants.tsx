@@ -35,6 +35,16 @@ import { MouseEvent } from "react";
 import { Outlet } from "react-router";
 
 import { AssistantsAuditLog } from "./AssistantAuditLog";
+import { TriggersPanel } from "../triggers/Triggers";
+
+const TOP_LEVEL_TABS = ["assistants", "triggers", "audit"] as const;
+type TopLevelTab = (typeof TOP_LEVEL_TABS)[number];
+
+function toTopLevelTab(value: string): TopLevelTab {
+  return (TOP_LEVEL_TABS as readonly string[]).includes(value)
+    ? (value as TopLevelTab)
+    : "assistants";
+}
 
 function stopLinkNavigation(e: MouseEvent<HTMLDivElement>) {
   e.preventDefault();
@@ -78,7 +88,7 @@ export default function AssistantsIndex(): JSX.Element {
   const routes = useRoutes();
   const [activeTab, setActiveTab] = useQueryState(
     "tab",
-    parseAsStringLiteral(["assistants", "audit"]).withDefault("assistants"),
+    parseAsStringLiteral(TOP_LEVEL_TABS).withDefault("assistants"),
   );
   const { data, isLoading } = useAssistantsList(undefined, undefined, {
     retry: false,
@@ -142,15 +152,14 @@ export default function AssistantsIndex(): JSX.Element {
       <Page.Body>
         <Tabs
           value={activeTab}
-          onValueChange={(value) => {
-            void setActiveTab(value === "audit" ? "audit" : "assistants");
-          }}
+          onValueChange={(value) => void setActiveTab(toTopLevelTab(value))}
           className="flex w-full flex-col"
         >
           <div className="border-b">
             <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
               <PageTabsTrigger value="assistants">Assistants</PageTabsTrigger>
-              <PageTabsTrigger value="audit">Audit log</PageTabsTrigger>
+              <PageTabsTrigger value="triggers">Triggers</PageTabsTrigger>
+              <PageTabsTrigger value="audit">Activity</PageTabsTrigger>
             </TabsList>
           </div>
           <TabsContent
@@ -159,6 +168,9 @@ export default function AssistantsIndex(): JSX.Element {
           >
             {content}
             <UsageSection />
+          </TabsContent>
+          <TabsContent value="triggers" className="mt-6 w-full">
+            <TriggersPanel />
           </TabsContent>
           <TabsContent value="audit" className="mt-6 w-full">
             <RequireScope scope="org:read" level="section">

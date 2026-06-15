@@ -23,20 +23,31 @@ import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { useState } from "react";
 import { useAssistantDraft } from "./useAssistantDraft";
 
+const DETAIL_TABS = ["overview", "sessions", "triggers"] as const;
+type DetailTab = (typeof DETAIL_TABS)[number];
+
+function toDetailTab(value: string): DetailTab {
+  return (DETAIL_TABS as readonly string[]).includes(value)
+    ? (value as DetailTab)
+    : "overview";
+}
+
 export function AssistantDraftPanel(): JSX.Element {
   const draft = useAssistantDraft();
   const routes = useRoutes();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useQueryState(
     "tab",
-    parseAsStringLiteral(["overview", "sessions"]).withDefault("overview"),
+    parseAsStringLiteral(DETAIL_TABS).withDefault("overview"),
   );
   const [editingInstructions, setEditingInstructions] = useState(false);
 
+  // Only fetch triggers when the Triggers tab is active — they are no longer
+  // surfaced on the Overview tab, so loading the panel shouldn't pay for them.
   const { data: triggersData } = useTriggers(undefined, undefined, {
     retry: false,
     throwOnError: false,
-    enabled: !!draft.assistantId,
+    enabled: !!draft.assistantId && activeTab === "triggers",
   });
 
   const triggers = (triggersData?.triggers ?? []).filter(
@@ -109,15 +120,14 @@ export function AssistantDraftPanel(): JSX.Element {
       ) : (
         <Tabs
           value={activeTab}
-          onValueChange={(value) => {
-            void setActiveTab(value === "sessions" ? "sessions" : "overview");
-          }}
+          onValueChange={(value) => void setActiveTab(toDetailTab(value))}
           className="flex min-h-0 flex-1 flex-col"
         >
           <div className="border-border border-b px-4">
             <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
               <PageTabsTrigger value="overview">Overview</PageTabsTrigger>
               <PageTabsTrigger value="sessions">Sessions</PageTabsTrigger>
+              <PageTabsTrigger value="triggers">Triggers</PageTabsTrigger>
             </TabsList>
           </div>
 
@@ -205,46 +215,6 @@ export function AssistantDraftPanel(): JSX.Element {
                   ))}
                 </Stack>
               </Section>
-
-              <Section
-                title={`Triggers (${triggers.length})`}
-                empty="No triggers wired up."
-                isEmpty={triggers.length === 0}
-              >
-                <Stack gap={2}>
-                  {triggers.map((t) => (
-                    <div
-                      key={t.id}
-                      className="border-border flex items-start justify-between gap-2 rounded-md border px-3 py-2"
-                    >
-                      <Stack gap={1} className="min-w-0">
-                        <Stack direction="horizontal" gap={2} align="center">
-                          <Type small className="font-medium">
-                            {t.name}
-                          </Type>
-                          <Badge variant="outline" className="text-[10px]">
-                            {t.definitionSlug}
-                          </Badge>
-                        </Stack>
-                        {t.webhookUrl && (
-                          <code className="text-muted-foreground truncate text-[10px]">
-                            {t.webhookUrl}
-                          </code>
-                        )}
-                      </Stack>
-                      {t.status === "active" ? (
-                        <Badge variant="default" className="text-[10px]">
-                          Active
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary" className="text-[10px]">
-                          Paused
-                        </Badge>
-                      )}
-                    </div>
-                  ))}
-                </Stack>
-              </Section>
             </Stack>
           </TabsContent>
 
@@ -253,6 +223,51 @@ export function AssistantDraftPanel(): JSX.Element {
             className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
           >
             <AssistantSessionsList assistantId={a.id} />
+          </TabsContent>
+
+          <TabsContent
+            value="triggers"
+            className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
+          >
+            {triggers.length === 0 ? (
+              <Type small muted>
+                No triggers wired up.
+              </Type>
+            ) : (
+              <Stack gap={2}>
+                {triggers.map((t) => (
+                  <div
+                    key={t.id}
+                    className="border-border flex items-start justify-between gap-2 rounded-md border px-3 py-2"
+                  >
+                    <Stack gap={1} className="min-w-0">
+                      <Stack direction="horizontal" gap={2} align="center">
+                        <Type small className="font-medium">
+                          {t.name}
+                        </Type>
+                        <Badge variant="outline" className="text-[10px]">
+                          {t.definitionSlug}
+                        </Badge>
+                      </Stack>
+                      {t.webhookUrl && (
+                        <code className="text-muted-foreground truncate text-[10px]">
+                          {t.webhookUrl}
+                        </code>
+                      )}
+                    </Stack>
+                    {t.status === "active" ? (
+                      <Badge variant="default" className="text-[10px]">
+                        Active
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" className="text-[10px]">
+                        Paused
+                      </Badge>
+                    )}
+                  </div>
+                ))}
+              </Stack>
+            )}
           </TabsContent>
         </Tabs>
       )}
