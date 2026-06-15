@@ -2,6 +2,7 @@ package glint
 
 import (
 	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
 )
 
 const (
@@ -15,8 +16,9 @@ type serviceHasAutherAssertionSettings struct {
 
 func newServiceHasAutherAssertionAnalyzer(rule serviceHasAutherAssertionSettings) *analysis.Analyzer {
 	return &analysis.Analyzer{
-		Name: serviceHasAutherAssertionAnalyzer,
-		Doc:  serviceHasAutherAssertionDoc,
+		Name:     serviceHasAutherAssertionAnalyzer,
+		Doc:      serviceHasAutherAssertionDoc,
+		Requires: []*analysis.Analyzer{inspect.Analyzer},
 		Run: func(pass *analysis.Pass) (any, error) {
 			annotated := findAnnotatedStructs(pass)
 			if len(annotated) == 0 {
