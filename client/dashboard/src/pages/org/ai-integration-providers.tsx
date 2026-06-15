@@ -90,10 +90,17 @@ export const AI_INTEGRATION_PROVIDERS: AIIntegrationProvider[] = [
           title: "Copy your Compliance Access Key",
           description:
             "Create a Compliance Access Key and copy it. Use a Compliance Access Key, not an Admin API key: Admin API keys only reach the Activity Feed, while Compliance Access Keys can access the broader compliance data Speakeasy imports.",
+          screenshot: {
+            src: "/setup/anthropic-compliance-api-key.png",
+            alt: "Create API key dialog showing compliance read scopes selected.",
+            caption:
+              "Select the compliance read scopes plus read:analytics and read:spend_limits before creating the key.",
+          },
           helpLink: {
-            url: "https://platform.claude.com/docs/en/manage-claude/compliance-api-access",
-            linkLabel: "Compliance API access guide",
-            sentence: "Follow {LINK} to provision the key",
+            url: "https://claude.ai/admin-settings/api-access",
+            linkLabel: "Claude API access settings",
+            sentence:
+              "Open {LINK}, click Create Key, then select the scopes shown below",
           },
         },
         {

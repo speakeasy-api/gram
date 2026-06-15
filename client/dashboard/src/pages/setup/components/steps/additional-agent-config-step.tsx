@@ -357,21 +357,6 @@ function ProviderConfigDrawer({
                 </p>
               ) : null}
 
-              {step.screenshot ? (
-                <figure className="border-border !my-6 overflow-hidden rounded-md border">
-                  <img
-                    src={step.screenshot.src}
-                    alt={step.screenshot.alt}
-                    className="w-full"
-                  />
-                  {step.screenshot.caption ? (
-                    <figcaption className="border-border bg-secondary/40 text-muted-foreground border-t px-3 py-2 text-xs leading-relaxed">
-                      {step.screenshot.caption}
-                    </figcaption>
-                  ) : null}
-                </figure>
-              ) : null}
-
               {step.helpLink
                 ? (() => {
                     const { url, linkLabel, sentence } = step.helpLink;
@@ -392,6 +377,21 @@ function ProviderConfigDrawer({
                     );
                   })()
                 : null}
+
+              {step.screenshot ? (
+                <figure className="border-border !my-6 overflow-hidden rounded-md border">
+                  <img
+                    src={step.screenshot.src}
+                    alt={step.screenshot.alt}
+                    className="w-full"
+                  />
+                  {step.screenshot.caption ? (
+                    <figcaption className="border-border bg-secondary/40 text-muted-foreground border-t px-3 py-2 text-xs leading-relaxed">
+                      {step.screenshot.caption}
+                    </figcaption>
+                  ) : null}
+                </figure>
+              ) : null}
 
               {(step.showsForm ?? idx === setupSteps.length - 1) ? (
                 <div className="!mt-6 space-y-4">
