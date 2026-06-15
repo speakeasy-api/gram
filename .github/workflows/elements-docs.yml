@@ -21,6 +21,8 @@ jobs:
         with:
           app-id: ${{ vars.GRAM_BOT_APP_ID }}
           private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
+          # Token only checks out this repo and pushes the regenerated TypeDoc.
+          permission-contents: write
 
       - name: Checkout
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1

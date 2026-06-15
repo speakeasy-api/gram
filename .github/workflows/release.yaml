@@ -16,10 +16,7 @@ jobs:
     # https://docs.npmjs.com/trusted-publishers
     runs-on: ubuntu-latest
     permissions:
-      contents: write # to push tags
-      pull-requests: read
-      issues: read
-      id-token: write # to publish to NPM
+      contents: read
     outputs:
       published: ${{ steps.changesets.outputs.published }}
       publishedPackages: ${{ steps.changesets.outputs.publishedPackages }}
@@ -28,6 +25,10 @@ jobs:
     steps:
       - name: Checkout Repo
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          # Credentials are intentionally retained: the changesets step pushes
+          # the version PR / release tags from this checkout.
+          persist-credentials: true
 
       - name: Setup Mise
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
@@ -54,10 +55,17 @@ jobs:
 
       - name: Generate a token
         id: generate-token
+        # Broad installation permissions are intentional: changesets uses this
+        # token to open/update the version PR, push tags, and publish. Scoping it
+        # with permission-* inputs should be validated against a real release run.
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           app-id: ${{ vars.GRAM_BOT_APP_ID }}
           private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
+          permission-contents: write # to push tags
+          permission-pull-requests: read
+          permission-issues: read
+          permission-id-token: write # to publish to NPM
 
       # Configure git to commit as the GitHub App so commits trigger workflows.
       # Commits from github-actions[bot] don't trigger workflows by design.
@@ -89,13 +97,15 @@ jobs:
     name: Release Gram CLI
     runs-on: ubuntu-latest
     permissions:
-      contents: write # to push tags
-      id-token: write # for cosign keyless signing
+      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 0
+          # Credentials are retained for the local release tag/push that
+          # GoReleaser performs from this checkout.
+          persist-credentials: true
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version-file: "go.mod"
@@ -111,6 +121,8 @@ jobs:
           private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
           owner: speakeasy-api
           repositories: gram,homebrew-tap
+          permission-contents: write # to push tags
+          permission-id-token: write # for cosign keyless signing
       - name: Create release tag
         # GoReleaser expects a tag on HEAD before releasing. The newest tag
         # will be on an old commit, specified by `changeset`, so this is a

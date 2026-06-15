@@ -65,6 +65,7 @@ local linters = new Mapping<String, Step> {
   ["ruff-format"] = (Builtins.ruff_format) {
     exclude = List("**/vendor/**", "**/node_modules/**", "**/dist/**", "**/*_pb2.*")
   }
+  ["zizmor"] = Builtins.zizmor
 }
 
 hooks {

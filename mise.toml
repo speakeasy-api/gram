@@ -31,6 +31,7 @@ pkl = "0.31.0"
 "github:gotestyourself/gotestsum" = "1.13.0"
 buf = "1.69.0"
 ruff = "0.15.16"
+"github:zizmorcore/zizmor" = "1.25.2"
 
 # ℹ️ The settings below are sensible defaults for local development. When
 # deploying to production, you will want to configure these more carefully.

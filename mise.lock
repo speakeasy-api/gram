@@ -476,6 +476,52 @@ checksum = "sha256:ea5063e12e1a56fe5603283fee1a085968841d38a44c78004a33e50e6604f
 url = "https://github.com/temporalio/cli/releases/download/v1.6.1/temporal_cli_1.6.1_windows_amd64.zip"
 url_api = "https://api.github.com/repos/temporalio/cli/releases/assets/365703819"
 
+[[tools."github:zizmorcore/zizmor"]]
+version = "1.25.2"
+backend = "github:zizmorcore/zizmor"
+
+[tools."github:zizmorcore/zizmor"."platforms.linux-arm64"]
+checksum = "sha256:4b4b9491112c2a09b318101c0d3349b73af1c4f532e097dd6d0164f2abda760d"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.25.2/zizmor-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/421630939"
+provenance = "github-attestations"
+
+[tools."github:zizmorcore/zizmor"."platforms.linux-arm64-musl"]
+checksum = "sha256:4b4b9491112c2a09b318101c0d3349b73af1c4f532e097dd6d0164f2abda760d"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.25.2/zizmor-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/421630939"
+provenance = "github-attestations"
+
+[tools."github:zizmorcore/zizmor"."platforms.linux-x64"]
+checksum = "sha256:aa1facd105f0d83fe5c55b1adcd9d7417de5d83aa27471f91dc0b66cf3803577"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.25.2/zizmor-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/421630940"
+provenance = "github-attestations"
+
+[tools."github:zizmorcore/zizmor"."platforms.linux-x64-musl"]
+checksum = "sha256:aa1facd105f0d83fe5c55b1adcd9d7417de5d83aa27471f91dc0b66cf3803577"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.25.2/zizmor-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/421630940"
+provenance = "github-attestations"
+
+[tools."github:zizmorcore/zizmor"."platforms.macos-arm64"]
+checksum = "sha256:624ef0e09521aecd862126be0f6d7754669af2646750d68ac48a114be33c3146"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.25.2/zizmor-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/421630938"
+provenance = "github-attestations"
+
+[tools."github:zizmorcore/zizmor"."platforms.macos-x64"]
+checksum = "sha256:353271b9ec301dd4ba158af481323c831c6e9b494d5ac3f5aa58cf4b207699cc"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.25.2/zizmor-x86_64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/421630941"
+provenance = "github-attestations"
+
+[tools."github:zizmorcore/zizmor"."platforms.windows-x64"]
+checksum = "sha256:65d46a8144f701200621b580f632076d80d082d60856de9f88793a95fb5882d7"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.25.2/zizmor-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/421630942"
+provenance = "github-attestations"
+
 [[tools.go]]
 version = "1.26.3"
 backend = "core:go"

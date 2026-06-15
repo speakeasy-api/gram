@@ -21,7 +21,6 @@ on:
         type: string
 
 permissions:
-  id-token: write
   contents: read
 
 env:
@@ -67,7 +66,10 @@ jobs:
           HAS_PREVIEW_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'preview') }}
           HAS_FULL_CI_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'ci:full') }}
           HAS_MANUAL_RISK_L1: ${{ github.event_name == 'workflow_dispatch' && inputs.risk_accuracy_l1 }}
-        run: |
+        # Compares only trusted, non-attacker-controllable contexts (paths-filter
+        # boolean outputs, github.ref/github.event_name — this workflow's triggers
+        # never carry a fork-controlled ref) inside `[[ ]]` tests.
+        run: | # zizmor: ignore[template-injection]
           if [[ "${{ steps.filter.outputs.server }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_PREVIEW_LABEL" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "server=true" >> $GITHUB_OUTPUT
             echo "Server jobs will run."
@@ -238,6 +240,9 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes, server-build-lint]
     if: needs.changes.outputs.server == 'true'
+    permissions:
+      contents: read
+      id-token: write # OIDC auth to Google Cloud
     env:
       GOMAXPROCS: 4
     steps:
@@ -289,7 +294,8 @@ jobs:
           build-args: |
             GIT_USERNAME=speakeasybot
       - name: Pull and Run Image
-        run: |
+        run:
+          | # zizmor: ignore[template-injection] trusted values from prior build/auth steps and github.sha
           echo "Pulling image: ${{ steps.build.outputs.image-tag }}"
           docker pull ${{ steps.build.outputs.image-tag }}
           echo "Running image..."
@@ -299,9 +305,14 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes]
     if: needs.changes.outputs.pi_classifier == 'true'
+    permissions:
+      contents: read
+      id-token: write # OIDC auth to Google Cloud
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - id: "auth"
         name: "Authenticate to Google Cloud"
@@ -349,6 +360,7 @@ jobs:
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
+        # zizmor: ignore[cache-poisoning] mise cache holds dev toolchain keyed on tool versions, not build artifacts; it never feeds the published image. Caching kept for build speed.
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
         with:
           install: true
@@ -479,6 +491,7 @@ jobs:
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - name: Setup Mise
+        # zizmor: ignore[cache-poisoning] mise cache holds dev toolchain keyed on tool versions, not build artifacts; it never feeds the published image. Caching kept for build speed.
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
         with:
           install: true
@@ -545,7 +558,8 @@ jobs:
         shell: bash
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
-        run: |
+        run:
+          | # zizmor: ignore[template-injection] trusted values from prior build/auth steps and github.sha
           fly deploy \
             --app ${{ steps.collectorFlyCreateDev.outputs.flyAppName }} \
             --image ${{ steps.collectorFlyCreateDev.outputs.flyAppRegistry }}:sha-${{ github.sha }} \
@@ -582,7 +596,8 @@ jobs:
         shell: bash
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
-        run: |
+        run:
+          | # zizmor: ignore[template-injection] trusted values from prior build/auth steps and github.sha
           fly deploy \
             --app ${{ steps.collectorFlyCreateProd.outputs.flyAppName }} \
             --image ${{ steps.collectorFlyCreateProd.outputs.flyAppRegistry }}:sha-${{ github.sha }} \
@@ -630,7 +645,7 @@ jobs:
         run: bash .mise-tasks/lint/migrations.sh
 
       - name: Lint PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/lint@v1.14.5
+        uses: ariga/atlas-action/migrate/lint@v1.14.5 # zizmor: ignore[unpinned-uses] atlas-action requires a tag ref, not a SHA
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -641,7 +656,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
 
       - name: Lint ClickHouse migrations
-        uses: ariga/atlas-action/migrate/lint@v1.14.5
+        uses: ariga/atlas-action/migrate/lint@v1.14.5 # zizmor: ignore[unpinned-uses] atlas-action requires a tag ref, not a SHA
         with:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse
@@ -698,7 +713,7 @@ jobs:
           fi
 
       - name: Push PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/push@v1.14.5
+        uses: ariga/atlas-action/migrate/push@v1.14.5 # zizmor: ignore[unpinned-uses] atlas-action requires a tag ref, not a SHA
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -706,7 +721,7 @@ jobs:
           tag: ${{ steps.tag.outputs.tag }}
 
       - name: Push ClickHouse migrations
-        uses: ariga/atlas-action/migrate/push@v1.14.5
+        uses: ariga/atlas-action/migrate/push@v1.14.5 # zizmor: ignore[unpinned-uses] atlas-action requires a tag ref, not a SHA
         with:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse
@@ -1262,6 +1277,9 @@ jobs:
       !cancelled() &&
       needs.sdk-gen-check.result != 'failure' &&
       (needs.changes.outputs.client == 'true' || needs.changes.outputs.server == 'true')
+    permissions:
+      contents: read
+      id-token: write # OIDC auth to Google Cloud
     env:
       GRAM_GIT_SHA: "${{ github.sha }}"
     steps:
@@ -1650,7 +1668,8 @@ jobs:
             --out oci/${{ matrix.runtime }}
 
       - name: Run safety checks
-        run: |
+        run:
+          | # zizmor: ignore[template-injection] trusted values from prior build/auth steps and github.sha
           mise run test:apko-functions \
             --image ${{ steps.apko.outputs.image }} \
             --tarball ${{ steps.apko.outputs.tarball }}
@@ -1703,7 +1722,8 @@ jobs:
       - name: Tag images
         if: github.event.pull_request.user.login != 'dependabot[bot]'
         working-directory: functions
-        run: |
+        run:
+          | # zizmor: ignore[template-injection] trusted values from prior build/auth steps and github.sha
           set -x
 
           echo "Loading image from tarball: ${{ steps.apko.outputs.tarball }}"
@@ -1718,7 +1738,8 @@ jobs:
         if: github.event.pull_request.user.login != 'dependabot[bot]'
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
-        run: |
+        run:
+          | # zizmor: ignore[template-injection] trusted values from prior build/auth steps and github.sha
           set -x
           fly auth docker
           docker push --all-tags "${{ steps.flyCreateDev.outputs.flyAppRegistry }}"
@@ -1727,7 +1748,8 @@ jobs:
         if: github.event.pull_request.user.login != 'dependabot[bot]'
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
-        run: |
+        run:
+          | # zizmor: ignore[template-injection] trusted values from prior build/auth steps and github.sha
           set -x
           fly auth docker
           docker push --all-tags "${{ steps.flyCreateProd.outputs.flyAppRegistry }}"
@@ -2024,6 +2046,8 @@ jobs:
           private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
           owner: speakeasy-api
           repositories: gram-infra
+          # Token only dispatches a workflow in gram-infra (Actions API).
+          permission-actions: write
       - name: Dispatch prepare-release
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}

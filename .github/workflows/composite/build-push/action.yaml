@@ -69,9 +69,11 @@ runs:
 
     - name: Validate and sanitize build arguments
       shell: bash
+      env:
+        BUILD_ARGS: ${{ inputs.build-args }}
       run: |
         set -e
-        ARGS="${{ inputs.build-args }}"
+        ARGS="$BUILD_ARGS"
 
         # Comprehensive validation
         echo "Validating build arguments..."
@@ -125,10 +127,6 @@ runs:
 
         echo "Build arguments validated successfully"
 
-    - name: Set GIT_SHA
-      shell: bash
-      run: echo "GIT_SHA=$(echo $GITHUB_SHA)" >> $GITHUB_ENV
-
     - name: Build and push registry Docker image
       uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
       with:
@@ -139,7 +137,7 @@ runs:
         labels: ${{ steps.meta.outputs.labels }}
         build-args: |
           ${{ inputs.build-args }}
-          GIT_SHA=${{ env.GIT_SHA }}
+          GIT_SHA=${{ github.sha }}
         secrets: |
           git_auth_token=${{ inputs.git-auth-token }}
         cache-from: type=registry,ref=${{ inputs.registry }}/${{ inputs.image }}:latest
@@ -148,6 +146,8 @@ runs:
     - name: Set output image tag
       id: set-tag
       shell: bash
+      env:
+        META_TAGS: ${{ steps.meta.outputs.tags }}
       run: |
-        IMAGE_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n 1)
-        echo "image-tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+        IMAGE_TAG=$(echo "$META_TAGS" | head -n 1)
+        echo "image-tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"

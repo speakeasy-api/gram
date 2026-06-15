@@ -11,6 +11,8 @@ updates:
       - "/.github/workflows/composite/build-push"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     groups:
       artifacts:
         patterns:
@@ -21,6 +23,8 @@ updates:
       - "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     groups:
       otel:
         patterns:
@@ -90,3 +94,5 @@ updates:
       - "/services/pi-classifier"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7

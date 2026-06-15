@@ -10,6 +10,10 @@ jobs:
   lint-pr:
     name: Lint PR Title and Changesets
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    # Only reads the repo (checkout, paths-filter, changeset status); PR metadata
+    # comes from the event payload, not the API.
+    permissions:
+      contents: read
     env:
       PR_TITLE: ${{ github.event.pull_request.title }}
       GIT_REF: ${{ github.ref }}

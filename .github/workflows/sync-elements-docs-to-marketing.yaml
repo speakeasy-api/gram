@@ -1,5 +1,7 @@
 name: Sync Elements Docs → Marketing Site
-on:
+# The workflow_run trigger only fires after the trusted, same-repo docs workflow
+# and is gated on its success below; it checks out no untrusted PR code.
+on: # zizmor: ignore[dangerous-triggers]
   push:
     branches:
       - main
@@ -28,7 +30,10 @@ jobs:
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: Checkout Marketing repo (destination)
+        # SERVICE_BOT_TOKEN is intentionally persisted: the later step commits and
+        # pushes the synced docs back to the marketing repo from this checkout.
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           repository: ${{ env.MARKETING_REPO }}
@@ -36,6 +41,7 @@ jobs:
           token: ${{ secrets.SERVICE_BOT_TOKEN }}
           path: marketing-repo
           fetch-depth: 0
+          persist-credentials: false
       - name: Sync and transform docs
         run: |
           chmod +x .github/scripts/sync-elements-docs.sh
