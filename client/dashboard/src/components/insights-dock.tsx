@@ -44,6 +44,7 @@ import {
 } from "react";
 import type { InsightsConfigOptions } from "./insights-context";
 import { InsightsContext, useInsightsState } from "./insights-context";
+import { InsightsShortcutKeys } from "./insights-dock-shortcut-hint";
 import { useAskAiListener } from "./command-palette/askAiBridge";
 
 // Types-only re-export (erased at compile time, won't break Fast Refresh)
@@ -512,6 +513,11 @@ function InsightsDock({
                     >
                       <HistoryIcon className="size-3.5" />
                     </button>
+                  )}
+                  {/* Greyed shortcut hint on the resting pill; hidden once the
+                      composer is engaged (focused or typing). */}
+                  {!composerExpanded && (
+                    <InsightsShortcutKeys className="opacity-60" />
                   )}
                   <button
                     type="button"
