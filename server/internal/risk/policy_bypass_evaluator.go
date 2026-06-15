@@ -3,7 +3,6 @@ package risk
 import (
 	"cmp"
 	"context"
-	"errors"
 	"log/slog"
 	"net/url"
 	"strings"
@@ -79,7 +78,7 @@ func NewPolicyBypassEvaluator(logger *slog.Logger, db repo.DBTX) *PolicyBypassEv
 
 func (e *PolicyBypassEvaluator) CanBypass(ctx context.Context, input PolicyBypassEvaluation) bool {
 	input.UserID = strings.TrimSpace(input.UserID)
-	if input.UserID == "" || input.UserID == urn.AllUsersPrincipalID || strings.TrimSpace(input.PolicyID) == "" {
+	if input.UserID == urn.AllUsersPrincipalID || strings.TrimSpace(input.PolicyID) == "" {
 		return false
 	}
 
@@ -93,30 +92,17 @@ func (e *PolicyBypassEvaluator) CanBypass(ctx context.Context, input PolicyBypas
 }
 
 func (e *PolicyBypassEvaluator) loadGrants(ctx context.Context, input PolicyBypassEvaluation) ([]authz.Grant, bool) {
-	if err := authz.ValidatePrincipal(ctx, e.db, input.OrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, input.UserID)); err != nil {
-		if !errors.Is(err, authz.ErrPrincipalNotFound) {
-			e.logger.WarnContext(ctx, "failed to validate principal for risk policy bypass",
-				attr.SlogError(err),
-				attr.SlogOrganizationID(input.OrganizationID),
-				attr.SlogUserID(input.UserID),
-				attr.SlogRiskPolicyID(input.PolicyID),
-			)
-		}
+	principals, err := authz.ResolveUserPrincipals(ctx, e.db, input.OrganizationID, input.UserID)
+	if err != nil {
+		e.logger.WarnContext(ctx, "failed to resolve principals for risk policy bypass",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(input.OrganizationID),
+			attr.SlogUserID(input.UserID),
+			attr.SlogRiskPolicyID(input.PolicyID),
+		)
 		return nil, false
 	}
 
-	principals, err := authz.ResolveUserPrincipals(ctx, e.db, input.OrganizationID, input.UserID)
-	if err != nil {
-		if !errors.Is(err, authz.ErrPrincipalNotFound) {
-			e.logger.WarnContext(ctx, "failed to resolve principals for risk policy bypass",
-				attr.SlogError(err),
-				attr.SlogOrganizationID(input.OrganizationID),
-				attr.SlogUserID(input.UserID),
-				attr.SlogRiskPolicyID(input.PolicyID),
-			)
-		}
-		return nil, false
-	}
 	grants, err := authz.LoadGrants(ctx, e.db, input.OrganizationID, principals)
 	if err != nil {
 		e.logger.WarnContext(ctx, "failed to load risk policy bypass grants",

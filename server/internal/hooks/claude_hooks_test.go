@@ -48,11 +48,48 @@ func TestResolveClaudeScanContext_PrefersAuthContextOverCachedMetadata(t *testin
 		ProjectID: cachedProjectID.String(),
 	}, 0))
 
-	got, ok := ti.service.resolveClaudeScanContext(ctx, sessionID)
+	got, ok := ti.service.resolveClaudeScanContext(ctx, &gen.ClaudePayload{
+		SessionID: &sessionID,
+	})
 	require.True(t, ok)
 	assert.Equal(t, authCtx.ActiveOrganizationID, got.organizationID)
 	assert.Equal(t, *authCtx.ProjectID, got.projectID)
 	assert.Equal(t, authCtx.UserID, got.userID)
+}
+
+func TestResolveClaudeScanContext_ResolvesAuthContextActorFromCachedEmail(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	userID := "user_cached_email_scan"
+	userEmail := "cached-email-scan@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, userEmail)
+
+	authCtx.UserID = ""
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	sessionID := uuid.NewString()
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "claude-code",
+		UserEmail:   userEmail,
+		UserID:      "",
+		ClaudeOrgID: "claude_org",
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   uuid.NewString(),
+	}, 0))
+
+	got, ok := ti.service.resolveClaudeScanContext(ctx, &gen.ClaudePayload{
+		SessionID: &sessionID,
+	})
+	require.True(t, ok)
+	assert.Equal(t, authCtx.ActiveOrganizationID, got.organizationID)
+	assert.Equal(t, *authCtx.ProjectID, got.projectID)
+	assert.Equal(t, userID, got.userID)
 }
 
 // When the request authenticated via Gram-Key + Gram-Project, handlePreToolUse

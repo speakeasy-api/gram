@@ -109,6 +109,21 @@ func TestGrantExpressionEvaluate_differenceWorksForGenericChecks(t *testing.T) {
 	require.Equal(t, GrantExpressionReasonExceptionMatched, result.Reason)
 }
 
+func TestGrantExpressionEvaluate_allowsDenyGrantForExpandedScope(t *testing.T) {
+	t.Parallel()
+
+	grants := []Grant{
+		NewGrant(ScopeProjectWrite, "proj_123"),
+		NewDenyGrant(ScopeProjectWrite, "proj_123"),
+	}
+	readCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal, expanded: false}
+
+	result, err := GrantCheck{Check: readCheck, Instance: nil}.Evaluate(grants)
+	require.NoError(t, err)
+	require.True(t, result.Satisfied)
+	require.Equal(t, GrantExpressionReasonMatched, result.Reason)
+}
+
 func TestGrantExpressionEvaluate_differenceKeepsNonMatchingSetKey(t *testing.T) {
 	t.Parallel()
 

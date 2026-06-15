@@ -45,7 +45,7 @@ func (s *Service) scanClaudeForEnforcement(ctx context.Context, payload *gen.Cla
 		return nil
 	}
 
-	scanContext, ok := s.resolveClaudeScanContext(ctx, *payload.SessionID)
+	scanContext, ok := s.resolveClaudeScanContext(ctx, payload)
 	if !ok {
 		return nil
 	}
@@ -77,13 +77,35 @@ type claudeScanContext struct {
 // hook risk scan. The plugin-auth context populated by Gram-Key + Gram-Project
 // wins when present. Session metadata cached by the OTEL Logs endpoint remains
 // the fallback for legacy hooks without plugin auth.
-func (s *Service) resolveClaudeScanContext(ctx context.Context, sessionID string) (claudeScanContext, bool) {
+func (s *Service) resolveClaudeScanContext(ctx context.Context, payload *gen.ClaudePayload) (claudeScanContext, bool) {
+	if payload == nil || payload.SessionID == nil {
+		return claudeScanContext{organizationID: "", projectID: uuid.Nil, userID: ""}, false
+	}
+	sessionID := *payload.SessionID
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if ok && authCtx != nil && authCtx.ProjectID != nil {
+		metadata := SessionMetadata{
+			SessionID:   sessionID,
+			ServiceName: "",
+			UserEmail:   conv.PtrValOr(payload.UserEmail, ""),
+			UserID:      authCtx.UserID,
+			ClaudeOrgID: "",
+			GramOrgID:   authCtx.ActiveOrganizationID,
+			ProjectID:   authCtx.ProjectID.String(),
+		}
+		if metadata.UserID == "" && metadata.UserEmail != "" {
+			metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
+		}
+		if cached, err := s.getSessionMetadata(ctx, sessionID); err == nil {
+			metadata = mergeClaudeAuthContextMetadata(metadata, cached)
+		}
+		if metadata.UserID == "" && metadata.UserEmail != "" {
+			metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
+		}
 		return claudeScanContext{
-			organizationID: authCtx.ActiveOrganizationID,
+			organizationID: metadata.GramOrgID,
 			projectID:      *authCtx.ProjectID,
-			userID:         authCtx.UserID,
+			userID:         metadata.UserID,
 		}, true
 	}
 

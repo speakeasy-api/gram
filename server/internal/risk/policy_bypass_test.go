@@ -189,7 +189,7 @@ func TestApprovePolicyBypassRequest_CanGrantAllUsers(t *testing.T) {
 	assert.False(t, userHasRiskPolicyBypassGrant(t, ti, authCtx.ActiveOrganizationID, otherUserID, policy.ID, fullURL))
 }
 
-func TestPolicyBypassEvaluator_AllUserGrantRequiresConcreteActiveUser(t *testing.T) {
+func TestPolicyBypassEvaluator_AudienceSemantics(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
@@ -197,41 +197,85 @@ func TestPolicyBypassEvaluator_AllUserGrantRequiresConcreteActiveUser(t *testing
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	policyID := "policy_all_user_bypass"
-	fullURL := "https://mcp.example.com/all-users-runtime"
-	selector := authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID)
-	selector[authz.SelectorKeyServerURL] = fullURL
+	allUsersPolicyID := "policy_all_user_bypass"
+	allUsersURL := "https://mcp.example.com/all-users-runtime"
+	selector := authz.NewSelector(authz.ScopeRiskPolicyBypass, allUsersPolicyID)
+	selector[authz.SelectorKeyServerURL] = allUsersURL
 	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
 		Resource: authz.Resource{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			Scope:          authz.ScopeRiskPolicyBypass,
-			ResourceID:     policyID,
+			ResourceID:     allUsersPolicyID,
 		},
 		Effect:     authz.PolicyEffectAllow,
 		Principals: []urn.Principal{authz.AllUsersPrincipal()},
 		Selector:   selector,
 	}))
 
-	target := risk.ShadowMCPServerPolicyBypassTarget(fullURL, "", fullURL)
+	allUsersTarget := risk.ShadowMCPServerPolicyBypassTarget(allUsersURL, "", allUsersURL)
 	evaluator := risk.NewPolicyBypassEvaluator(testenv.NewLogger(t), ti.conn)
 
 	assert.True(t, evaluator.CanBypass(ctx, risk.PolicyBypassEvaluation{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		UserID:         authCtx.UserID,
-		PolicyID:       policyID,
-		Target:         &target,
+		PolicyID:       allUsersPolicyID,
+		Target:         &allUsersTarget,
 	}))
-	assert.False(t, evaluator.CanBypass(ctx, risk.PolicyBypassEvaluation{
+	assert.True(t, evaluator.CanBypass(ctx, risk.PolicyBypassEvaluation{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         "",
+		PolicyID:       allUsersPolicyID,
+		Target:         &allUsersTarget,
+	}))
+	assert.True(t, evaluator.CanBypass(ctx, risk.PolicyBypassEvaluation{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		UserID:         "not_connected_user",
-		PolicyID:       policyID,
-		Target:         &target,
+		PolicyID:       allUsersPolicyID,
+		Target:         &allUsersTarget,
 	}))
 	assert.False(t, evaluator.CanBypass(ctx, risk.PolicyBypassEvaluation{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		UserID:         urn.AllUsersPrincipalID,
-		PolicyID:       policyID,
-		Target:         &target,
+		PolicyID:       allUsersPolicyID,
+		Target:         &allUsersTarget,
+	}))
+
+	rolePolicyID := "policy_role_bypass"
+	roleURL := "https://mcp.example.com/role-runtime"
+	roleSelector := authz.NewSelector(authz.ScopeRiskPolicyBypass, rolePolicyID)
+	roleSelector[authz.SelectorKeyServerURL] = roleURL
+	roleSlug := "risk-policy-bypass-runtime-role"
+	rolePrincipal := seedRiskPolicyBypassOrganizationRole(t, ti, authCtx.ActiveOrganizationID, roleSlug)
+	seedRiskPolicyBypassRoleAssignment(t, ti, authCtx.ActiveOrganizationID, authCtx.UserID, roleSlug)
+	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
+		Resource: authz.Resource{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Scope:          authz.ScopeRiskPolicyBypass,
+			ResourceID:     rolePolicyID,
+		},
+		Effect:     authz.PolicyEffectAllow,
+		Principals: []urn.Principal{rolePrincipal},
+		Selector:   roleSelector,
+	}))
+
+	roleTarget := risk.ShadowMCPServerPolicyBypassTarget(roleURL, "", roleURL)
+	assert.True(t, evaluator.CanBypass(ctx, risk.PolicyBypassEvaluation{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         authCtx.UserID,
+		PolicyID:       rolePolicyID,
+		Target:         &roleTarget,
+	}))
+	assert.False(t, evaluator.CanBypass(ctx, risk.PolicyBypassEvaluation{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         "",
+		PolicyID:       rolePolicyID,
+		Target:         &roleTarget,
+	}))
+	assert.False(t, evaluator.CanBypass(ctx, risk.PolicyBypassEvaluation{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         "not_connected_user",
+		PolicyID:       rolePolicyID,
+		Target:         &roleTarget,
 	}))
 }
 
@@ -613,6 +657,21 @@ func seedRiskPolicyBypassOrganizationRole(t *testing.T, ti *testInstance, organi
 	principal, err := urn.ParsePrincipal(row.RoleUrn)
 	require.NoError(t, err)
 	return principal
+}
+
+func seedRiskPolicyBypassRoleAssignment(t *testing.T, ti *testInstance, organizationID string, userID string, roleSlug string) {
+	t.Helper()
+
+	_, err := accessrepo.New(ti.conn).UpsertOrganizationRoleAssignment(t.Context(), accessrepo.UpsertOrganizationRoleAssignmentParams{
+		OrganizationID:     organizationID,
+		WorkosUserID:       userID,
+		UserID:             conv.ToPGText(userID),
+		WorkosMembershipID: conv.ToPGText("membership_" + userID + "_" + roleSlug),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosLastEventID:  conv.ToPGTextEmpty(""),
+		WorkosRoleSlug:     roleSlug,
+	})
+	require.NoError(t, err)
 }
 
 func userHasRiskPolicyBypassGrant(t *testing.T, ti *testInstance, organizationID, userID, policyID, serverURL string) bool {

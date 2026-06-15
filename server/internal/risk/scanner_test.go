@@ -181,6 +181,28 @@ func TestScanner_FanOutAcrossPoliciesIsConcurrent(t *testing.T) {
 		"wall time %v >= half-of-sequential %v — fan-out not happening", elapsed, maxAllowed)
 }
 
+func TestScanner_ScanForEnforcement_SkipsGrantResolutionWhenNoPolicies(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	require.NotNil(t, authCtx.ProjectID)
+
+	scanner, err := risk.NewScanner(
+		testenv.NewLogger(t),
+		ti.conn,
+		nil,
+		nil,
+		nil,
+		nil,
+		testenv.NewMeterProvider(t),
+	)
+	require.NoError(t, err)
+
+	result, err := scanner.ScanForEnforcement(ctx, "", *authCtx.ProjectID, "missing-user", "irrelevant text", message.User, "")
+	require.NoError(t, err)
+	require.Nil(t, result)
+}
+
 // TestScanner_FirstMatchCancelsSiblings verifies that once a policy returns a
 // match, in-flight scans for sibling policies are cancelled instead of
 // running to completion.

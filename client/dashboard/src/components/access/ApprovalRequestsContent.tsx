@@ -58,14 +58,12 @@ function rolePrincipalUrn(role: Role) {
 function approvalPrincipalUrns({
   audience,
   selectedRoleId,
-  selectedUserId,
-  members,
+  selectedUserPrincipalUrn,
   roles,
 }: {
   audience: ApprovalAudience;
   selectedRoleId: string;
-  selectedUserId: string;
-  members: AccessMember[];
+  selectedUserPrincipalUrn: string;
   roles: Role[];
 }) {
   switch (audience) {
@@ -76,8 +74,7 @@ function approvalPrincipalUrns({
       return role ? [rolePrincipalUrn(role)] : [];
     }
     case "user": {
-      const member = members.find((item) => item.id === selectedUserId);
-      return member ? [member.principalUrn] : [];
+      return selectedUserPrincipalUrn ? [selectedUserPrincipalUrn] : [];
     }
   }
 }
@@ -139,7 +136,7 @@ function approvalAudienceFromPrincipalUrns(
     return {
       audience: "everyone" as const,
       selectedRoleId: "",
-      selectedUserId: request.requesterUserId,
+      selectedUserPrincipalUrn: userPrincipalUrn(request.requesterUserId),
     };
   }
 
@@ -148,7 +145,7 @@ function approvalAudienceFromPrincipalUrns(
     return {
       audience: "role" as const,
       selectedRoleId: role.id,
-      selectedUserId: request.requesterUserId,
+      selectedUserPrincipalUrn: userPrincipalUrn(request.requesterUserId),
     };
   }
 
@@ -157,7 +154,7 @@ function approvalAudienceFromPrincipalUrns(
     return {
       audience: "user" as const,
       selectedRoleId: "",
-      selectedUserId: member.id,
+      selectedUserPrincipalUrn: member.principalUrn,
     };
   }
 
@@ -166,19 +163,29 @@ function approvalAudienceFromPrincipalUrns(
     return {
       audience: "user" as const,
       selectedRoleId: "",
-      selectedUserId: principalUrn.slice(userPrefix.length),
+      selectedUserPrincipalUrn: principalUrn,
     };
   }
 
   return {
     audience: "user" as const,
     selectedRoleId: "",
-    selectedUserId: request.requesterUserId,
+    selectedUserPrincipalUrn: userPrincipalUrn(request.requesterUserId),
   };
 }
 
 function firstRequesterRoleId(requesterRoleIds: string[], roles: Role[]) {
   return roles.find((role) => requesterRoleIds.includes(role.id))?.id ?? "";
+}
+
+function requesterRoleIdsForRequest(
+  request: RiskPolicyBypassRequest,
+  members: AccessMember[],
+) {
+  return (
+    members.find((member) => member.id === request.requesterUserId)?.roleIds ??
+    []
+  );
 }
 
 function reviewRequestSubmitLabel(
@@ -394,13 +401,22 @@ function ReviewRequestSheet({
     useState<ApprovalAudience>("user");
   const [approvalAudienceDirty, setApprovalAudienceDirty] = useState(false);
   const [selectedRoleId, setSelectedRoleId] = useState("");
-  const [selectedUserId, setSelectedUserId] = useState("");
+  const [selectedUserPrincipalUrn, setSelectedUserPrincipalUrn] = useState("");
+  const requestRef = useRef(request);
+  const rolesRef = useRef(roles);
+  const membersRef = useRef(members);
+  useEffect(() => {
+    requestRef.current = request;
+  }, [request]);
+  useEffect(() => {
+    rolesRef.current = roles;
+  }, [roles]);
+  useEffect(() => {
+    membersRef.current = members;
+  }, [members]);
   const requesterRoleIds = useMemo(() => {
     if (!request) return [];
-    return (
-      members.find((member) => member.id === request.requesterUserId)
-        ?.roleIds ?? []
-    );
+    return requesterRoleIdsForRequest(request, members);
   }, [members, request]);
   const requesterRoleIdSet = useMemo(
     () => new Set(requesterRoleIds),
@@ -409,20 +425,27 @@ function ReviewRequestSheet({
   const defaultRequesterRoleId = firstRequesterRoleId(requesterRoleIds, roles);
 
   useEffect(() => {
-    if (!request || !open) return;
+    const initialRequest = requestRef.current;
+    if (!initialRequest || !open) return;
+    const initialRoles = rolesRef.current;
+    const initialMembers = membersRef.current;
 
     const initial = approvalAudienceFromPrincipalUrns(
-      request.grantedPrincipalUrns,
-      request,
-      roles,
-      members,
+      initialRequest.grantedPrincipalUrns,
+      initialRequest,
+      initialRoles,
+      initialMembers,
+    );
+    const initialRequesterRoleId = firstRequesterRoleId(
+      requesterRoleIdsForRequest(initialRequest, initialMembers),
+      initialRoles,
     );
     setAction("approve");
     setApprovalAudienceDirty(false);
     setApprovalAudience(initial.audience);
-    setSelectedRoleId(initial.selectedRoleId || defaultRequesterRoleId);
-    setSelectedUserId(initial.selectedUserId);
-  }, [defaultRequesterRoleId, members, request, roles, open]);
+    setSelectedRoleId(initial.selectedRoleId || initialRequesterRoleId);
+    setSelectedUserPrincipalUrn(initial.selectedUserPrincipalUrn);
+  }, [request?.id, open]);
 
   if (!request) return null;
 
@@ -433,8 +456,7 @@ function ReviewRequestSheet({
       : approvalPrincipalUrns({
           audience: approvalAudience,
           selectedRoleId,
-          selectedUserId,
-          members,
+          selectedUserPrincipalUrn,
           roles,
         });
   const approveReady = action !== "approve" || principalUrns.length > 0;
@@ -451,8 +473,8 @@ function ReviewRequestSheet({
     ) {
       setSelectedRoleId(defaultRequesterRoleId);
     }
-    if (audience === "user" && selectedUserId === "") {
-      setSelectedUserId(request.requesterUserId);
+    if (audience === "user" && selectedUserPrincipalUrn === "") {
+      setSelectedUserPrincipalUrn(userPrincipalUrn(request.requesterUserId));
     }
   };
 
@@ -656,10 +678,10 @@ function ReviewRequestSheet({
                       </Type>
                     </span>
                     <Select
-                      value={selectedUserId}
+                      value={selectedUserPrincipalUrn}
                       onValueChange={(value) => {
                         selectApprovalAudience("user");
-                        setSelectedUserId(value);
+                        setSelectedUserPrincipalUrn(value);
                       }}
                     >
                       <SelectTrigger className="w-full">
@@ -667,7 +689,10 @@ function ReviewRequestSheet({
                       </SelectTrigger>
                       <SelectContent>
                         {members.map((member) => (
-                          <SelectItem key={member.id} value={member.id}>
+                          <SelectItem
+                            key={member.principalUrn}
+                            value={member.principalUrn}
+                          >
                             {memberDisplayName(member)}
                           </SelectItem>
                         ))}

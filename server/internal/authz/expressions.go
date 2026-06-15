@@ -150,7 +150,7 @@ func (g GrantCheck) grantSet(grants []Grant) (grantSet, error) {
 	}
 
 	checks := g.Check.expand()
-	if err := rejectDenyGrantsForExpressionScopes(grants, checks); err != nil {
+	if err := rejectDenyGrantsForExpressionScope(grants, g.Check.Scope); err != nil {
 		return nil, err
 	}
 
@@ -256,22 +256,18 @@ func (s grantSet) subtract(other grantSet) {
 	}
 }
 
-// rejectDenyGrantsForExpressionScopes prevents legacy deny grants from being
+// rejectDenyGrantsForExpressionScope prevents legacy deny grants from being
 // interpreted inside set-expression evaluation. Deny grants have their own
 // deny-wins semantics in Require/RequireAny; grant expressions use explicit
 // set subtraction instead. Mixing both for the same referenced scope would make
 // the result ambiguous, so the expression fails fast even if the deny selector
 // would not match this specific runtime instance.
-func rejectDenyGrantsForExpressionScopes(grants []Grant, checks []Check) error {
-	scopes := make(map[Scope]struct{}, len(checks))
-	for _, check := range checks {
-		scopes[check.Scope] = struct{}{}
-	}
+func rejectDenyGrantsForExpressionScope(grants []Grant, scope Scope) error {
 	for _, grant := range grants {
 		if grant.Effect != PolicyEffectDeny {
 			continue
 		}
-		if _, ok := scopes[grant.Scope]; !ok {
+		if grant.Scope != scope {
 			continue
 		}
 		return fmt.Errorf("%w: deny grant with scope %q cannot be evaluated by grant expressions", ErrUnsupportedMixedGrantSemantics, grant.Scope)

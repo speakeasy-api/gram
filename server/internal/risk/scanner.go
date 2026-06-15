@@ -165,12 +165,6 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, organizationID string,
 
 	start := time.Now()
 
-	grants, err := s.riskPolicyGrants(ctx, organizationID, userID)
-	if err != nil {
-		s.recordScan(ctx, projectID.String(), o11y.OutcomeFailure, time.Since(start))
-		return nil, err
-	}
-
 	policies, err := s.repo.ListEnabledEnforcingPoliciesByProject(ctx, projectID)
 	if err != nil {
 		s.recordScan(ctx, projectID.String(), o11y.OutcomeFailure, time.Since(start))
@@ -180,6 +174,12 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, organizationID string,
 		// No enforcing policies, fast path. Record as "skipped" to track volume.
 		s.recordScan(ctx, projectID.String(), "skipped", time.Since(start))
 		return nil, nil
+	}
+
+	grants, err := s.riskPolicyGrants(ctx, organizationID, userID)
+	if err != nil {
+		s.recordScan(ctx, projectID.String(), o11y.OutcomeFailure, time.Since(start))
+		return nil, err
 	}
 
 	// Resolve the prompt-policy flag once per scan (on the parent ctx, before
