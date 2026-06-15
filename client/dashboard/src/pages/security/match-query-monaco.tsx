@@ -26,11 +26,18 @@ const THEME_DARK = "matchquery-dark";
 function defineThemes(m: typeof Monaco) {
   const transparent = {
     "editor.background": "#00000000",
+    focusBorder: "#00000000",
     "editor.lineHighlightBackground": "#00000000",
     "editor.lineHighlightBorder": "#00000000",
     "editor.selectionHighlightBackground": "#00000000",
+    "editor.selectionHighlightBorder": "#00000000",
     "editor.wordHighlightBackground": "#00000000",
     "editor.wordHighlightStrongBackground": "#00000000",
+    "editor.wordHighlightBorder": "#00000000",
+    "editor.wordHighlightStrongBorder": "#00000000",
+    "editor.rangeHighlightBackground": "#00000000",
+    "editor.rangeHighlightBorder": "#00000000",
+    "editor.findMatchHighlightBackground": "#00000000",
     "editorBracketMatch.background": "#00000000",
     "editorBracketMatch.border": "#00000000",
     "editorIndentGuide.background": "#00000000",
@@ -65,12 +72,13 @@ function defineThemes(m: typeof Monaco) {
 
 const LANGUAGE_ID = "matchquery";
 const MARKER_OWNER = "matchquery";
-let languageRegistered = false;
 
-/** Register the one-line query language (highlighting + completion) once. */
+/** Register the one-line query language (highlighting + completion) once.
+ *  Guarded on Monaco's own registry (not a module flag) so a Vite HMR reload —
+ *  which re-evaluates this module but leaves the prior provider registered —
+ *  doesn't add a second completion provider and duplicate every suggestion. */
 function registerLanguage(m: typeof Monaco) {
-  if (languageRegistered) return;
-  languageRegistered = true;
+  if (m.languages.getLanguages().some((l) => l.id === LANGUAGE_ID)) return;
 
   defineThemes(m);
   m.languages.register({ id: LANGUAGE_ID });
