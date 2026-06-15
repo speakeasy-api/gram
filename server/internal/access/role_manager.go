@@ -155,6 +155,10 @@ func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID str
 	if err != nil {
 		return roleCreateResult{}, err
 	}
+	grants := roleGrantPayloads(payload.Grants)
+	if err := authz.ValidateGrantSurface(authz.GrantSurfaceAccess, grants); err != nil {
+		return roleCreateResult{}, oops.E(oops.CodeBadRequest, err, "invalid access role grant: %s", err).Log(ctx, r.logger)
+	}
 
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
@@ -195,7 +199,7 @@ func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID str
 	}
 	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleID(createdRole.ID))
 
-	if _, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, roleSlug, createdRole.PrincipalURN, roleGrantPayloads(payload.Grants), nil); err != nil {
+	if _, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, roleSlug, createdRole.PrincipalURN, grants, nil); err != nil {
 		return roleCreateResult{}, oops.E(oops.CodeUnexpected, err, "add grants for created role").Log(ctx, r.logger)
 	}
 
@@ -295,6 +299,14 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 			return roleUpdateResult{}, err
 		}
 	}
+	addGrants := roleGrantPayloads(payload.AddGrants)
+	removeGrants := roleGrantPayloads(payload.RemoveGrants)
+	if err := authz.ValidateGrantSurface(authz.GrantSurfaceAccess, addGrants); err != nil {
+		return roleUpdateResult{}, oops.E(oops.CodeBadRequest, err, "invalid access role grant: %s", err).Log(ctx, r.logger)
+	}
+	if err := authz.ValidateGrantSurface(authz.GrantSurfaceAccess, removeGrants); err != nil {
+		return roleUpdateResult{}, oops.E(oops.CodeBadRequest, err, "invalid access role grant: %s", err).Log(ctx, r.logger)
+	}
 
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
@@ -339,7 +351,7 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 		}
 
 		if payload.AddGrants != nil || payload.RemoveGrants != nil {
-			syncedGrants, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, currentRole.Slug, currentRole.PrincipalURN, roleGrantPayloads(payload.AddGrants), roleGrantPayloads(payload.RemoveGrants))
+			syncedGrants, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, currentRole.Slug, currentRole.PrincipalURN, addGrants, removeGrants)
 			if err != nil {
 				return roleUpdateResult{}, oops.E(oops.CodeUnexpected, err, "patch grants for updated role").Log(ctx, r.logger)
 			}
