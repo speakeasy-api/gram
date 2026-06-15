@@ -1279,14 +1279,25 @@ function CreateCustomRuleSheet({
       setIdSuffix(customRuleIDSuffix(next.ruleId));
       setTitle(next.title);
       setDescription(next.description);
-      // The suggester returns a regex; seed it as a content/regex clause the
-      // operator can refine or extend in the query.
-      setQuery(
-        matchQueryFromConditions(
-          [{ target: "content", op: "regex", value: next.regex }],
-          "and",
-        ),
-      );
+      // Prefer the suggested condition matcher (which can target tool calls,
+      // arguments, keywords, …); fall back to a content/regex clause for
+      // older/heuristic suggestions that only return a regex.
+      if (next.matchConfig && next.matchConfig.conditions.length > 0) {
+        setQuery(
+          matchQueryFromConditions(
+            next.matchConfig.conditions,
+            next.matchConfig.combine ?? "and",
+          ),
+        );
+        setAction(next.matchConfig.action ?? "deny");
+      } else {
+        setQuery(
+          matchQueryFromConditions(
+            [{ target: "content", op: "regex", value: next.regex }],
+            "and",
+          ),
+        );
+      }
       setSeverity(
         (SEVERITY_LEVELS as readonly string[]).includes(next.severity)
           ? (next.severity as SeverityLevel)

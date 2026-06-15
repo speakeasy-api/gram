@@ -1059,7 +1059,8 @@ var SuggestCustomDetectionRuleResult = Type("SuggestCustomDetectionRuleResult", 
 	Attribute("rule_id", String, "Suggested stable identifier, prefixed with `custom.`.")
 	Attribute("title", String, "Short, human-friendly title for the rule.")
 	Attribute("description", String, "Description of what the rule detects and why it matters.")
-	Attribute("regex", String, "RE2-compatible regex pattern the rule should match against.")
+	Attribute("regex", String, "Legacy RE2-compatible regex pattern. Empty when match_config is returned; kept for back-compat.")
+	Attribute("match_config", shared.RiskMatchConfig, "Suggested condition-based matcher (targets, ops, action). Preferred over regex when present.")
 	Attribute("severity", String, "Suggested severity level.", func() {
 		Enum("info", "low", "medium", "high", "critical")
 	})

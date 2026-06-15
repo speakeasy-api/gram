@@ -8,6 +8,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  RiskMatchConfig,
+  RiskMatchConfig$inboundSchema,
+} from "./riskmatchconfig.js";
 
 /**
  * Suggested severity level.
@@ -31,8 +35,9 @@ export type SuggestCustomDetectionRuleResult = {
    * Description of what the rule detects and why it matters.
    */
   description: string;
+  matchConfig?: RiskMatchConfig | undefined;
   /**
-   * RE2-compatible regex pattern the rule should match against.
+   * Legacy RE2-compatible regex pattern. Empty when match_config is returned; kept for back-compat.
    */
   regex: string;
   /**
@@ -62,6 +67,7 @@ export const SuggestCustomDetectionRuleResult$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     description: z.string(),
+    match_config: z.optional(RiskMatchConfig$inboundSchema),
     regex: z.string(),
     rule_id: z.string(),
     severity: SuggestCustomDetectionRuleResultSeverity$inboundSchema,
@@ -69,6 +75,7 @@ export const SuggestCustomDetectionRuleResult$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "match_config": "matchConfig",
       "rule_id": "ruleId",
     });
   }),

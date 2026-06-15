@@ -847,8 +847,12 @@ type SuggestCustomDetectionRuleResponseBody struct {
 	Title string `form:"title" json:"title" xml:"title"`
 	// Description of what the rule detects and why it matters.
 	Description string `form:"description" json:"description" xml:"description"`
-	// RE2-compatible regex pattern the rule should match against.
+	// Legacy RE2-compatible regex pattern. Empty when match_config is returned;
+	// kept for back-compat.
 	Regex string `form:"regex" json:"regex" xml:"regex"`
+	// Suggested condition-based matcher (targets, ops, action). Preferred over
+	// regex when present.
+	MatchConfig *RiskMatchConfigResponseBody `form:"match_config,omitempty" json:"match_config,omitempty" xml:"match_config,omitempty"`
 	// Suggested severity level.
 	Severity string `form:"severity" json:"severity" xml:"severity"`
 }
@@ -7801,6 +7805,9 @@ func NewSuggestCustomDetectionRuleResponseBody(res *risk.SuggestCustomDetectionR
 		Description: res.Description,
 		Regex:       res.Regex,
 		Severity:    res.Severity,
+	}
+	if res.MatchConfig != nil {
+		body.MatchConfig = marshalTypesRiskMatchConfigToRiskMatchConfigResponseBody(res.MatchConfig)
 	}
 	return body
 }

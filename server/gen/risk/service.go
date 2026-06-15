@@ -730,8 +730,12 @@ type SuggestCustomDetectionRuleResult struct {
 	Title string
 	// Description of what the rule detects and why it matters.
 	Description string
-	// RE2-compatible regex pattern the rule should match against.
+	// Legacy RE2-compatible regex pattern. Empty when match_config is returned;
+	// kept for back-compat.
 	Regex string
+	// Suggested condition-based matcher (targets, ops, action). Preferred over
+	// regex when present.
+	MatchConfig *types.RiskMatchConfig
 	// Suggested severity level.
 	Severity string
 }

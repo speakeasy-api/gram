@@ -42992,9 +42992,11 @@ components:
                 description:
                     type: string
                     description: Description of what the rule detects and why it matters.
+                match_config:
+                    $ref: '#/components/schemas/RiskMatchConfig'
                 regex:
                     type: string
-                    description: RE2-compatible regex pattern the rule should match against.
+                    description: Legacy RE2-compatible regex pattern. Empty when match_config is returned; kept for back-compat.
                 rule_id:
                     type: string
                     description: Suggested stable identifier, prefixed with `custom.`.

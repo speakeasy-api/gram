@@ -1765,6 +1765,7 @@ func heuristicCustomRuleSuggestion(prompt string, existingIDs []string) *gen.Sug
 		Title:       title,
 		Description: strings.TrimSpace(prompt),
 		Regex:       "",
+		MatchConfig: nil,
 		Severity:    "medium",
 	}
 }
@@ -1860,14 +1861,21 @@ func validateCustomDetectionRuleFields(title, regexPattern, severity string) err
 func (s *Service) suggestCustomRuleViaLLM(ctx context.Context, orgID, projectID, userPrompt string, existingIDs []string) (*gen.SuggestCustomDetectionRuleResult, error) {
 	systemPrompt := `You are a security-rules assistant for a runtime risk detection product.
 
-Given a single natural-language description of what an operator wants to detect, return a JSON object that the dashboard will use to prefill a "create custom detection rule" form.
+Given a single natural-language description of what an operator wants to detect, return a JSON object the dashboard uses to prefill a "create custom detection rule" form. The rule matches an agent message via a "match_config".
 
-Rules:
-- "rule_id" must start with the literal prefix "custom." and contain only [a-z0-9_]. Pick a stable, descriptive slug derived from the subject (e.g. "custom.acme_internal_token", "custom.qa_signing_key"). It must NOT appear in the provided existing_rule_ids list.
-- "title" is 2-6 words, title case.
-- "description" is 1-2 sentences describing what is detected and why it matters. No marketing copy.
-- "regex" is an RE2-compatible pattern that matches the described payload. Prefer anchors and character classes that minimise false positives. Do not include leading/trailing slashes.
-- "severity" is one of "info", "low", "medium", "high", "critical". Pick based on the leakage cost of the data described — credentials, PII, financial, healthcare are typically high or critical; logging IDs and internal references are typically low or medium.
+Fields:
+- "rule_id": starts with the literal prefix "custom." and contains only [a-z0-9_]. A stable, descriptive slug (e.g. "custom.acme_internal_token"). Must NOT appear in existing_rule_ids.
+- "title": 2-6 words, title case.
+- "description": 1-2 sentences on what is detected and why it matters. No marketing copy.
+- "severity": one of "info","low","medium","high","critical" — by leakage/impact cost (credentials, PII, financial, healthcare are typically high/critical).
+- "match_config": { "action", "combine", "conditions": [ {target, op, value|values, path} ] }
+  - "action": "deny" flags a finding — use this almost always. "allow" allowlists/exempts the message and skips the rest of the policy — only when the operator explicitly wants to permit something.
+  - "combine": "and" (all conditions must match) or "or" (any). Default to "and" unless the request clearly means "any of".
+  - Each condition reads a "target":
+    - "content": whole message text. "user_prompt"/"assistant_text"/"tool_result": that message part.
+    - "tool_name": raw tool-call name (e.g. mcp__mise__run_task). "tool_server": MCP server name ("" for native tools like Bash). "tool_function": bare function name (e.g. run_task). "tool_args": a value inside the tool arguments — set "path" to a JSON path like "$.scope".
+  - "op": "regex" (RE2 pattern in value), "equals", "not_equals", "glob" (wildcard value like *secret*), "keyword" (values is a list of substrings), "exists" (no value).
+  - For secrets/PII/text patterns use target "content" with op "regex" or "keyword". For dangerous tool use, target "tool_server"/"tool_function"/"tool_args".
 
 Output ONLY the JSON object. No prose, no markdown fences.`
 
@@ -1877,17 +1885,38 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 	}
 	userMessage := fmt.Sprintf("Operator request: %s\n\nExisting rule ids (avoid colliding): %s", userPrompt, existingList)
 
-	strict := true
+	strict := false
+	conditionSchema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"target": map[string]any{"type": "string", "enum": []string{"content", "user_prompt", "assistant_text", "tool_result", "tool_name", "tool_server", "tool_function", "tool_args"}},
+			"op":     map[string]any{"type": "string", "enum": []string{"regex", "equals", "not_equals", "glob", "keyword", "exists"}},
+			"value":  map[string]any{"type": "string"},
+			"values": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			"path":   map[string]any{"type": "string"},
+		},
+		"required":             []string{"target", "op"},
+		"additionalProperties": false,
+	}
 	schema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"rule_id":     map[string]any{"type": "string", "pattern": "^custom\\.[a-z0-9_]+$"},
 			"title":       map[string]any{"type": "string", "minLength": 1, "maxLength": 80},
 			"description": map[string]any{"type": "string", "minLength": 1, "maxLength": 400},
-			"regex":       map[string]any{"type": "string", "minLength": 1, "maxLength": 400},
 			"severity":    map[string]any{"type": "string", "enum": []string{"info", "low", "medium", "high", "critical"}},
+			"match_config": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"action":     map[string]any{"type": "string", "enum": []string{"deny", "allow"}},
+					"combine":    map[string]any{"type": "string", "enum": []string{"and", "or"}},
+					"conditions": map[string]any{"type": "array", "minItems": 1, "items": conditionSchema},
+				},
+				"required":             []string{"action", "combine", "conditions"},
+				"additionalProperties": false,
+			},
 		},
-		"required":             []string{"rule_id", "title", "description", "regex", "severity"},
+		"required":             []string{"rule_id", "title", "description", "severity", "match_config"},
 		"additionalProperties": false,
 	}
 
@@ -1928,11 +1957,11 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 	}
 
 	var parsed struct {
-		RuleID      string `json:"rule_id"`
-		Title       string `json:"title"`
-		Description string `json:"description"`
-		Regex       string `json:"regex"`
-		Severity    string `json:"severity"`
+		RuleID      string          `json:"rule_id"`
+		Title       string          `json:"title"`
+		Description string          `json:"description"`
+		Severity    string          `json:"severity"`
+		MatchConfig json.RawMessage `json:"match_config"`
 	}
 	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
 		return nil, fmt.Errorf("parse llm response: %w", err)
@@ -1941,14 +1970,17 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 	parsed.RuleID = strings.TrimSpace(parsed.RuleID)
 	parsed.Title = strings.TrimSpace(parsed.Title)
 	parsed.Description = strings.TrimSpace(parsed.Description)
-	parsed.Regex = strings.TrimSpace(parsed.Regex)
 	parsed.Severity = strings.ToLower(strings.TrimSpace(parsed.Severity))
 
 	if !strings.HasPrefix(parsed.RuleID, "custom.") || !customRuleIDPattern.MatchString(parsed.RuleID) {
 		return nil, fmt.Errorf("model returned invalid rule_id %q", parsed.RuleID)
 	}
-	if _, err := regexp.Compile(parsed.Regex); err != nil {
-		return nil, fmt.Errorf("model returned invalid regex: %w", err)
+	if err := ra.ValidateMatchConfig(parsed.MatchConfig); err != nil {
+		return nil, fmt.Errorf("model returned invalid match_config: %w", err)
+	}
+	matchConfig := customRuleMatchConfigFromStorage(parsed.MatchConfig)
+	if matchConfig == nil {
+		return nil, fmt.Errorf("model returned empty match_config")
 	}
 	if !customRuleSeverityAllow[parsed.Severity] {
 		parsed.Severity = "medium"
@@ -1961,7 +1993,8 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 		RuleID:      parsed.RuleID,
 		Title:       parsed.Title,
 		Description: parsed.Description,
-		Regex:       parsed.Regex,
+		Regex:       "",
+		MatchConfig: matchConfig,
 		Severity:    parsed.Severity,
 	}, nil
 }

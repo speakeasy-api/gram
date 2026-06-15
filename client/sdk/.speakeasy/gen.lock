@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: a5ff052765a3685176db76e5100406f1
+  docChecksum: fe72ae2e046ed624a5ba362b8650dbc2
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -989,7 +989,7 @@ trackedFiles:
   docs/models/components/suggestcustomdetectionrulerequestbody.md:
     last_write_checksum: sha1:5c99047a3d68b3f91dbff0e7a67867fd03b96f58
   docs/models/components/suggestcustomdetectionruleresult.md:
-    last_write_checksum: sha1:4ab62f0f10a7f536697a001aab6c5856325bea86
+    last_write_checksum: sha1:57d0d58fbd4e1c22c6960cb736b3d99d82c13a84
   docs/models/components/suggestcustomdetectionruleresultseverity.md:
     last_write_checksum: sha1:776235de0acdc2b3d89d8904b8d233c36d8dc603
   docs/models/components/target.md:
@@ -4759,7 +4759,7 @@ trackedFiles:
   src/models/components/suggestcustomdetectionrulerequestbody.ts:
     last_write_checksum: sha1:761f2e125ecd63f95c31ad2ad445ff5f38507f51
   src/models/components/suggestcustomdetectionruleresult.ts:
-    last_write_checksum: sha1:222541b7ca24085bb6b87c9ceab8d9fae6add71c
+    last_write_checksum: sha1:a68f1c76544ba0ee8e03612845b325813f8aa6e2
   src/models/components/telemetrylogrecord.ts:
     last_write_checksum: sha1:9375c20dea0904d4c03767c1c90d4989d5995099
   src/models/components/testdetectionrulematch.ts:

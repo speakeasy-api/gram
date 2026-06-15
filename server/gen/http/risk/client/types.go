@@ -845,8 +845,12 @@ type SuggestCustomDetectionRuleResponseBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// Description of what the rule detects and why it matters.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// RE2-compatible regex pattern the rule should match against.
+	// Legacy RE2-compatible regex pattern. Empty when match_config is returned;
+	// kept for back-compat.
 	Regex *string `form:"regex,omitempty" json:"regex,omitempty" xml:"regex,omitempty"`
+	// Suggested condition-based matcher (targets, ops, action). Preferred over
+	// regex when present.
+	MatchConfig *RiskMatchConfigResponseBody `form:"match_config,omitempty" json:"match_config,omitempty" xml:"match_config,omitempty"`
 	// Suggested severity level.
 	Severity *string `form:"severity,omitempty" json:"severity,omitempty" xml:"severity,omitempty"`
 }
@@ -12400,6 +12404,9 @@ func NewSuggestCustomDetectionRuleResultOK(body *SuggestCustomDetectionRuleRespo
 		Regex:       *body.Regex,
 		Severity:    *body.Severity,
 	}
+	if body.MatchConfig != nil {
+		v.MatchConfig = unmarshalRiskMatchConfigResponseBodyToTypesRiskMatchConfig(body.MatchConfig)
+	}
 
 	return v
 }
@@ -13720,6 +13727,11 @@ func ValidateSuggestCustomDetectionRuleResponseBody(body *SuggestCustomDetection
 	}
 	if body.Severity == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("severity", "body"))
+	}
+	if body.MatchConfig != nil {
+		if err2 := ValidateRiskMatchConfigResponseBody(body.MatchConfig); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	if body.Severity != nil {
 		if !(*body.Severity == "info" || *body.Severity == "low" || *body.Severity == "medium" || *body.Severity == "high" || *body.Severity == "critical") {
