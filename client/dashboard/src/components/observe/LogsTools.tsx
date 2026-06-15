@@ -666,11 +666,11 @@ function LogsToolsContent({
                 )}
 
                 <div className="bg-muted/30 text-muted-foreground flex shrink-0 items-center gap-3 border-b px-5 py-2.5 text-xs font-medium tracking-wide uppercase">
-                  <div className="w-[150px] shrink-0">Timestamp</div>
+                  <div className="min-w-[150px] shrink-0">Timestamp</div>
                   <div className="w-5 shrink-0" />
-                  <div className="min-w-0 flex-1">Source / Tool</div>
-                  <div className="w-[260px] shrink-0">User</div>
-                  <div className="w-[120px] shrink-0">Agent</div>
+                  <div className="min-w-0 flex-2">Source / Tool</div>
+                  <div className="min-w-[200px] flex-1 text-left">User</div>
+                  <div className="w-24 shrink-0">Agent</div>
                   <div className="w-24 shrink-0 text-right">Status</div>
                 </div>
 
@@ -881,6 +881,7 @@ function LogsToolsTraceRow({
 
   const statusConfig = getStatusConfig(trace);
   const targetConfig = getTargetConfig(trace.targetType);
+  const userLabel = trace.userLabel || "—";
 
   return (
     <div className="border-border/50 border-b last:border-b-0">
@@ -893,7 +894,7 @@ function LogsToolsTraceRow({
         }}
         className="hover:bg-muted/50 flex w-full cursor-pointer items-center gap-3 px-5 py-2.5 text-left transition-colors"
       >
-        <div className="text-muted-foreground w-[150px] shrink-0 font-mono text-sm">
+        <div className="text-muted-foreground min-w-[150px] shrink-0 font-mono text-sm">
           {timeAgo}
         </div>
 
@@ -904,7 +905,7 @@ function LogsToolsTraceRow({
           />
         </div>
 
-        <div className="flex min-w-0 flex-1 items-center gap-2">
+        <div className="flex min-w-0 flex-2 items-center gap-2">
           <div className="group/server relative flex shrink-0 items-center">
             <span
               className={cn(
@@ -940,11 +941,11 @@ function LogsToolsTraceRow({
           </div>
         </div>
 
-        <div className="text-muted-foreground w-[260px] shrink-0 truncate text-sm">
+        <div className="text-muted-foreground min-w-[200px] flex-1 truncate text-sm">
           {trace.userLabel || "—"}
         </div>
 
-        <div className="flex w-[120px] shrink-0 items-center gap-2">
+        <div className="flex w-24 shrink-0 items-center gap-2">
           {trace.hookSource ? (
             <>
               <HookSourceIcon
