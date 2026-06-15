@@ -306,6 +306,11 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid policy audience")
 	}
+	for _, principal := range audiencePrincipals {
+		if err := authz.ValidatePrincipal(ctx, s.db, authCtx.ActiveOrganizationID, principal); err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid policy audience")
+		}
+	}
 	audiencePrincipalURNs := principalStrings(audiencePrincipals)
 
 	enabled := true
@@ -566,6 +571,11 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	audiencePrincipals, err := riskPolicyAudiencePrincipals(audienceType, audiencePrincipalURNs)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid policy audience")
+	}
+	for _, principal := range audiencePrincipals {
+		if err := authz.ValidatePrincipal(ctx, s.db, authCtx.ActiveOrganizationID, principal); err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid policy audience")
+		}
 	}
 	audiencePrincipalURNs = principalStrings(audiencePrincipals)
 
@@ -2191,7 +2201,7 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 
 	audiencePrincipalURNs, err := riskPolicyAudiencePrincipalURNs(ctx, s.db, row.OrganizationID, row.ID.String())
 	if err != nil {
-		audiencePrincipalURNs = []string{}
+		return nil, fmt.Errorf("load risk policy audience: %w", err)
 	}
 
 	return &types.RiskPolicy{

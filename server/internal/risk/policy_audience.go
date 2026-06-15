@@ -3,6 +3,7 @@ package risk
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -76,7 +77,7 @@ func syncRiskPolicyAudienceGrants(ctx context.Context, db repo.DBTX, organizatio
 		return err
 	}
 
-	if err := authz.ReplaceGrantsForResource(ctx, db, authz.ResourceGrant{
+	if err := authz.ReplaceGrantAudience(ctx, db, authz.ResourceGrant{
 		Resource: authz.Resource{
 			OrganizationID: organizationID,
 			Scope:          authz.ScopeRiskPolicyEvaluate,
@@ -84,7 +85,7 @@ func syncRiskPolicyAudienceGrants(ctx context.Context, db repo.DBTX, organizatio
 		},
 		Effect:     authz.PolicyEffectAllow,
 		Principals: principals,
-		Selector:   nil,
+		Selector:   authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policyID),
 	}); err != nil {
 		return fmt.Errorf("replace risk policy audience grants: %w", err)
 	}
@@ -93,7 +94,7 @@ func syncRiskPolicyAudienceGrants(ctx context.Context, db repo.DBTX, organizatio
 }
 
 func clearRiskPolicyAudienceGrants(ctx context.Context, db repo.DBTX, organizationID string, policyID string) error {
-	if err := authz.ReplaceGrantsForResource(ctx, db, authz.ResourceGrant{
+	if err := authz.ReplaceGrantAudience(ctx, db, authz.ResourceGrant{
 		Resource: authz.Resource{
 			OrganizationID: organizationID,
 			Scope:          authz.ScopeRiskPolicyEvaluate,
@@ -101,7 +102,7 @@ func clearRiskPolicyAudienceGrants(ctx context.Context, db repo.DBTX, organizati
 		},
 		Effect:     authz.PolicyEffectAllow,
 		Principals: nil,
-		Selector:   nil,
+		Selector:   authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policyID),
 	}); err != nil {
 		return fmt.Errorf("clear risk policy audience grants: %w", err)
 	}
@@ -122,6 +123,9 @@ func riskPolicyAudiencePrincipalURNs(ctx context.Context, db repo.DBTX, organiza
 	principalURNs := make([]string, 0, len(grants))
 	for _, grant := range grants {
 		if grant.Effect != authz.PolicyEffectAllow {
+			continue
+		}
+		if !maps.Equal(grant.Selector, authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policyID)) {
 			continue
 		}
 		principalURNs = append(principalURNs, grant.PrincipalUrn)

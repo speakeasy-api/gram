@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestRiskPolicyAudience_TargetedUserLifecycle(t *testing.T) {
@@ -57,6 +58,99 @@ func TestRiskPolicyAudience_TargetedUserLifecycle(t *testing.T) {
 	err = ti.service.DeleteRiskPolicy(ctx, &gen.DeleteRiskPolicyPayload{ID: created.ID})
 	require.NoError(t, err)
 	requirePolicyAudience(t, ctx, ti, authCtx.ActiveOrganizationID, created.ID, nil)
+}
+
+func TestRiskPolicyAudience_InvalidTargetedPrincipalRejected(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	targeted := "targeted"
+	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:                  new("Invalid Audience"),
+		Sources:               []string{"gitleaks"},
+		AudienceType:          targeted,
+		AudiencePrincipalUrns: []string{"user:user_" + uuid.NewString()},
+	})
+	require.Error(t, err)
+}
+
+func TestRiskPolicyAudience_UpdatePreservesNonAudienceGrants(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	everyone := "everyone"
+	created, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:                  new("Preserve Grants"),
+		Sources:               []string{"shadow_mcp"},
+		AudienceType:          everyone,
+		AudiencePrincipalUrns: nil,
+		Action:                "block",
+	})
+	require.NoError(t, err)
+
+	denyPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, "user_deny")
+	bypassPrincipal := authz.AllUsersPrincipal()
+	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
+		Resource: authz.Resource{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Scope:          authz.ScopeRiskPolicyEvaluate,
+			ResourceID:     created.ID,
+		},
+		Effect:     authz.PolicyEffectDeny,
+		Principals: []urn.Principal{denyPrincipal},
+		Selector:   authz.NewSelector(authz.ScopeRiskPolicyEvaluate, created.ID),
+	}))
+	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
+		Resource: authz.Resource{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Scope:          authz.ScopeRiskPolicyBypass,
+			ResourceID:     created.ID,
+		},
+		Effect:     authz.PolicyEffectAllow,
+		Principals: []urn.Principal{bypassPrincipal},
+		Selector: authz.Selector{
+			authz.SelectorKeyResourceKind: authz.ResourceKindRiskPolicy,
+			authz.SelectorKeyResourceID:   created.ID,
+			authz.SelectorKeyServerURL:    "https://api.example.com",
+		},
+	}))
+
+	targeted := "targeted"
+	updated, err := ti.service.UpdateRiskPolicy(ctx, &gen.UpdateRiskPolicyPayload{
+		ID:                    created.ID,
+		Name:                  created.Name,
+		AudienceType:          &targeted,
+		AudiencePrincipalUrns: []string{"user:" + authCtx.UserID},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"user:" + authCtx.UserID}, updated.AudiencePrincipalUrns)
+
+	evaluateGrants, err := authz.ListGrantsForResource(ctx, ti.conn, authz.Resource{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Scope:          authz.ScopeRiskPolicyEvaluate,
+		ResourceID:     created.ID,
+	})
+	require.NoError(t, err)
+	require.Contains(t, grantKeys(evaluateGrants), grantKey(authz.PolicyEffectAllow, "user:"+authCtx.UserID))
+	require.Contains(t, grantKeys(evaluateGrants), grantKey(authz.PolicyEffectDeny, denyPrincipal.String()))
+
+	bypassGrants, err := authz.ListGrantsForResource(ctx, ti.conn, authz.Resource{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Scope:          authz.ScopeRiskPolicyBypass,
+		ResourceID:     created.ID,
+	})
+	require.NoError(t, err)
+	require.Contains(t, grantKeys(bypassGrants), grantKey(authz.PolicyEffectAllow, bypassPrincipal.String()))
 }
 
 func TestScanner_ScanForEnforcement_RespectsTargetedAudience(t *testing.T) {
@@ -182,6 +276,18 @@ func TestScanner_LookupShadowMCPBlockingPolicy_EveryoneAudienceAppliesWithoutRes
 	require.NoError(t, err)
 	require.NotNil(t, unknownUserPolicy)
 	require.Equal(t, "Everyone Shadow MCP", unknownUserPolicy.Name)
+}
+
+func grantKey(effect authz.PolicyEffect, principalURN string) string {
+	return string(effect) + ":" + principalURN
+}
+
+func grantKeys(grants []authz.Grant) []string {
+	keys := make([]string, 0, len(grants))
+	for _, grant := range grants {
+		keys = append(keys, grantKey(grant.Effect, grant.PrincipalUrn))
+	}
+	return keys
 }
 
 func requirePolicyAudience(t *testing.T, ctx context.Context, ti *testInstance, orgID, policyID string, want []string) {
