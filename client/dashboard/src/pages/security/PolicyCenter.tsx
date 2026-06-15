@@ -302,10 +302,6 @@ function policyAudienceSummary(row: PolicyRow): string {
   return `${count} targets`;
 }
 
-function promptPolicyMessageTypes(): Set<PolicyMessageType> {
-  return new Set(PROMPT_POLICY_MESSAGE_TYPES);
-}
-
 function hasOnlyToolCallMessageTypes(types: Set<PolicyMessageType>): boolean {
   return (
     types.size === TOOL_CALL_MESSAGE_TYPES.size &&

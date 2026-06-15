@@ -179,15 +179,17 @@ func TestScanner_ScanForEnforcement_RespectsTargetedAudience(t *testing.T) {
 		ti.conn,
 		pii,
 		nil,
+		nil,
+		nil,
 		testenv.NewMeterProvider(t),
 	)
 	require.NoError(t, err)
 
-	otherUserResult, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "user_"+uuid.NewString(), "irrelevant text", message.User)
+	otherUserResult, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "user_"+uuid.NewString(), "irrelevant text", message.User, "")
 	require.NoError(t, err)
 	require.Nil(t, otherUserResult)
 
-	targetedUserResult, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "irrelevant text", message.User)
+	targetedUserResult, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "irrelevant text", message.User, "")
 	require.NoError(t, err)
 	require.NotNil(t, targetedUserResult)
 	require.Equal(t, "Targeted Runtime", targetedUserResult.PolicyName)
@@ -219,21 +221,23 @@ func TestScanner_ScanForEnforcement_EveryoneAudienceAppliesWithoutResolvedUser(t
 		ti.conn,
 		pii,
 		nil,
+		nil,
+		nil,
 		testenv.NewMeterProvider(t),
 	)
 	require.NoError(t, err)
 
-	emptyUserResult, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "", "irrelevant text", message.User)
+	emptyUserResult, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "", "irrelevant text", message.User, "")
 	require.NoError(t, err)
 	require.NotNil(t, emptyUserResult)
 	require.Equal(t, "Everyone Runtime", emptyUserResult.PolicyName)
 
-	unknownUserResult, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "user_"+uuid.NewString(), "irrelevant text", message.User)
+	unknownUserResult, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "user_"+uuid.NewString(), "irrelevant text", message.User, "")
 	require.NoError(t, err)
 	require.NotNil(t, unknownUserResult)
 	require.Equal(t, "Everyone Runtime", unknownUserResult.PolicyName)
 
-	memberResult, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "irrelevant text", message.User)
+	memberResult, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "irrelevant text", message.User, "")
 	require.NoError(t, err)
 	require.NotNil(t, memberResult)
 	require.Equal(t, "Everyone Runtime", memberResult.PolicyName)
@@ -261,6 +265,8 @@ func TestScanner_LookupShadowMCPBlockingPolicy_EveryoneAudienceAppliesWithoutRes
 	scanner, err := risk.NewScanner(
 		testenv.NewLogger(t),
 		ti.conn,
+		nil,
+		nil,
 		nil,
 		nil,
 		testenv.NewMeterProvider(t),
