@@ -18,6 +18,7 @@ function useRecordAssistantRecent(): void {
     enabled: Boolean(assistantId),
     retry: false,
     throwOnError: false,
+    refetchOnWindowFocus: false,
   });
   useRecentLabelOverride(pathname, data?.name);
 }
