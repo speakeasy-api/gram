@@ -22,6 +22,22 @@ import (
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
+// stubWorkflowSignaler satisfies WorkflowSignaler for handler tests that
+// don't run Temporal. It records signalled threads so creation paths can
+// assert the eager runtime boot was kicked off.
+type stubWorkflowSignaler struct {
+	signalledThreads []uuid.UUID
+}
+
+func (s *stubWorkflowSignaler) SignalCoordinator(context.Context, uuid.UUID) error {
+	return nil
+}
+
+func (s *stubWorkflowSignaler) SignalThread(_ context.Context, threadID, _ uuid.UUID) error {
+	s.signalledThreads = append(s.signalledThreads, threadID)
+	return nil
+}
+
 func TestServiceRequiresProjectGrants(t *testing.T) {
 	t.Parallel()
 
@@ -260,7 +276,7 @@ func newRBACServiceWithConn(t *testing.T, dbName string) (*Service, context.Cont
 		auth:     nil,
 		authz:    authzEngine,
 		core:     NewServiceCore(logger, testenv.NewTracerProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger), nil),
-		signaler: nil,
+		signaler: &stubWorkflowSignaler{signalledThreads: nil},
 	}
 
 	sessionID := "session-test"

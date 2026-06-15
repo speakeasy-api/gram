@@ -93,8 +93,10 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 			Int64: 0,
 			Valid: false,
 		},
-		ActorID: conv.PtrToPGTextEmpty(payload.ActorID),
-		Action:  conv.PtrToPGTextEmpty(payload.Action),
+		ActorID:     conv.PtrToPGTextEmpty(payload.ActorID),
+		Action:      conv.PtrToPGTextEmpty(payload.Action),
+		SubjectType: conv.PtrToPGTextEmpty(payload.SubjectType),
+		SubjectID:   conv.PtrToPGTextEmpty(payload.SubjectID),
 	}
 
 	if payload.Cursor != nil && *payload.Cursor != "" {

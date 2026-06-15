@@ -246,6 +246,16 @@ type AuthzChallengeResolution struct {
 	CreatedAt  pgtype.Timestamptz
 }
 
+type BillingMetadatum struct {
+	ID                    uuid.UUID
+	OrganizationID        string
+	TumMonthlyTokenLimit  pgtype.Int8
+	AlertEmail            pgtype.Text
+	BillingCycleAnchorDay int32
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+}
+
 type Chat struct {
 	ID             uuid.UUID
 	ProjectID      uuid.UUID
@@ -1363,6 +1373,8 @@ type RiskResult struct {
 	DeadLetterReason    pgtype.Text
 	ExcludedAt          pgtype.Timestamptz
 	ExcludedExclusionID uuid.NullUUID
+	FalsePositiveAt     pgtype.Timestamptz
+	FalsePositiveReason pgtype.Text
 	CreatedAt           pgtype.Timestamptz
 }
 

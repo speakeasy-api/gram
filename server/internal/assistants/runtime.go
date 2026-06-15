@@ -48,6 +48,7 @@ type threadBootstrap struct {
 	MCPServers     []runtimeMCPServer `json:"mcp_servers"`
 	History        []runtimeMessage   `json:"history,omitempty"`
 	ContextWindow  uint64             `json:"context_window,omitempty"`
+	Compaction     CompactionPolicy   `json:"compaction"`
 	SourceRefJSON  json.RawMessage    `json:"source_ref_json,omitempty"`
 }
 

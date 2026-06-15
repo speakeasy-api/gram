@@ -76,6 +76,33 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
 CREATE UNIQUE INDEX IF NOT EXISTS organization_metadata_workos_id_key
 ON organization_metadata (workos_id);
 
+-- Billing contract metadata for an organization. Currently holds the
+-- "tokens under management" (TUM) contract terms for enterprise accounts.
+CREATE TABLE IF NOT EXISTS billing_metadata (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+
+  -- Contracted monthly "tokens under management" allowance. NULL means no
+  -- contracted limit has been configured.
+  tum_monthly_token_limit BIGINT,
+  -- Email address to notify when TUM approaches or exceeds the contracted
+  -- limit. Alerting is not implemented yet; stored for future use.
+  alert_email TEXT CHECK (alert_email IS NULL OR alert_email <> ''),
+  -- Day of month (1-31) the billing cycle starts at 00:00 UTC. Clamped to the
+  -- last day of shorter months when computing cycle boundaries.
+  billing_cycle_anchor_day INT NOT NULL DEFAULT 1,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT billing_metadata_pkey PRIMARY KEY (id),
+  CONSTRAINT billing_metadata_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT billing_metadata_billing_cycle_anchor_day_check CHECK (billing_cycle_anchor_day >= 1 AND billing_cycle_anchor_day <= 31)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS billing_metadata_organization_id_key
+ON billing_metadata (organization_id);
+
 CREATE UNIQUE INDEX IF NOT EXISTS organization_metadata_slug_key
 ON organization_metadata (slug);
 
@@ -3039,6 +3066,14 @@ CREATE TABLE IF NOT EXISTS risk_results (
   excluded_at timestamptz,
   excluded_exclusion_id uuid,
 
+  -- Set when the offline false-positive sweep determines a Presidio finding is
+  -- noise (e.g. a reserved IP or placeholder email). false_positive_reason is
+  -- the catalog reason recorded for audit. Independent of excluded_at: a row
+  -- can be both. Dashboard reads filter on false_positive_at IS NULL so swept
+  -- rows are hidden, and clearing both columns reverses a bad sweep.
+  false_positive_at timestamptz,
+  false_positive_reason TEXT,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT risk_results_pkey PRIMARY KEY (id),
@@ -3056,7 +3091,7 @@ ON risk_results (project_id, chat_message_id);
 
 CREATE INDEX IF NOT EXISTS risk_results_project_found_idx
 ON risk_results (project_id, created_at DESC)
-WHERE found IS TRUE AND excluded_at IS NULL;
+WHERE found IS TRUE AND excluded_at IS NULL AND false_positive_at IS NULL;
 
 -- Narrows the exclusion sweeps (exact/rule_id/source) by project + policy +
 -- rule. The verbatim match column is intentionally NOT indexed: it can exceed

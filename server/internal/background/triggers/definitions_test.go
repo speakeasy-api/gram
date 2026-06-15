@@ -473,3 +473,25 @@ func signedSlackHeaders(t *testing.T, body []byte, signingSecret string) http.He
 	headers.Set("X-Slack-Signature", "v0="+hex.EncodeToString(mac.Sum(nil)))
 	return headers
 }
+
+func TestSlackEventExpectsReply(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name  string
+		event any
+		want  bool
+	}{
+		{"app mention", slackTriggerEvent{EnvelopeType: "event_callback", EventType: "app_mention", ChannelID: "C123"}, true},
+		{"direct message", slackTriggerEvent{EnvelopeType: "event_callback", EventType: "message", ChannelID: "D123"}, true},
+		{"block kit interaction", slackTriggerEvent{EnvelopeType: "interactive", EventType: "block_actions", ChannelID: "C123"}, true},
+		{"ambient channel message", slackTriggerEvent{EnvelopeType: "event_callback", EventType: "message", ChannelID: "C123"}, false},
+		{"reaction", slackTriggerEvent{EnvelopeType: "event_callback", EventType: "reaction_added", ChannelID: "C123"}, false},
+		{"non-slack event", cronTriggerEvent{Schedule: "* * * * *"}, false},
+	}
+
+	for _, tc := range cases {
+		got := slackEventExpectsReply(EventEnvelope{Event: tc.event})
+		require.Equal(t, tc.want, got, tc.name)
+	}
+}

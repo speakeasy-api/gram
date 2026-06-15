@@ -7,9 +7,9 @@ export const PROMPT_POLICY_TEMPLATES: PromptPolicyTemplate[] = [
       "Any tool call that performs a destructive operation (DELETE, DROP, TRUNCATE) against a production resource.",
   },
   {
-    name: "Data exfiltration",
+    name: "External data transfer",
     prompt:
-      "Tool-call sequences where sensitive data is read and then transmitted to an external destination.",
+      "A tool call that sends data to an external or third-party destination, such as an outbound network request, email, or file upload.",
   },
   {
     name: "PII exposure",

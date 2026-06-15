@@ -23,14 +23,16 @@ export type CreateTriggerInstanceFormStatus = ClosedEnum<
 /**
  * The trigger target kind.
  */
-export const TargetKind = {
+export const CreateTriggerInstanceFormTargetKind = {
   Assistant: "assistant",
   Noop: "noop",
 } as const;
 /**
  * The trigger target kind.
  */
-export type TargetKind = ClosedEnum<typeof TargetKind>;
+export type CreateTriggerInstanceFormTargetKind = ClosedEnum<
+  typeof CreateTriggerInstanceFormTargetKind
+>;
 
 export type CreateTriggerInstanceForm = {
   /**
@@ -60,7 +62,7 @@ export type CreateTriggerInstanceForm = {
   /**
    * The trigger target kind.
    */
-  targetKind: TargetKind;
+  targetKind: CreateTriggerInstanceFormTargetKind;
   /**
    * The opaque target reference.
    */
@@ -73,8 +75,9 @@ export const CreateTriggerInstanceFormStatus$outboundSchema: z.ZodMiniEnum<
 > = z.enum(CreateTriggerInstanceFormStatus);
 
 /** @internal */
-export const TargetKind$outboundSchema: z.ZodMiniEnum<typeof TargetKind> = z
-  .enum(TargetKind);
+export const CreateTriggerInstanceFormTargetKind$outboundSchema: z.ZodMiniEnum<
+  typeof CreateTriggerInstanceFormTargetKind
+> = z.enum(CreateTriggerInstanceFormTargetKind);
 
 /** @internal */
 export type CreateTriggerInstanceForm$Outbound = {
@@ -100,7 +103,7 @@ export const CreateTriggerInstanceForm$outboundSchema: z.ZodMiniType<
     name: z.string(),
     status: z.optional(CreateTriggerInstanceFormStatus$outboundSchema),
     targetDisplay: z.string(),
-    targetKind: TargetKind$outboundSchema,
+    targetKind: CreateTriggerInstanceFormTargetKind$outboundSchema,
     targetRef: z.string(),
   }),
   z.transform((v) => {

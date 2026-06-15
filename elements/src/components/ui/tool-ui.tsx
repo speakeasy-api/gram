@@ -711,6 +711,8 @@ interface ToolUIGroupProps {
   status?: "running" | "complete";
   /** Whether the group starts expanded */
   defaultExpanded?: boolean;
+  /** Render without the group header, showing children directly. */
+  headerless?: boolean;
   /** Child tool UI components */
   children: React.ReactNode;
   /** Additional class names */
@@ -722,10 +724,22 @@ function ToolUIGroup({
   icon,
   status = "complete",
   defaultExpanded = false,
+  headerless = false,
   children,
   className,
 }: ToolUIGroupProps): React.JSX.Element {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+
+  // A headerless group shows its children unconditionally; when it gains a
+  // header mid-stream, start expanded — collapsing would hide content the
+  // user was already looking at.
+  const [prevHeaderless, setPrevHeaderless] = useState(headerless);
+  if (prevHeaderless !== headerless) {
+    setPrevHeaderless(headerless);
+    if (prevHeaderless) setIsExpanded(true);
+  }
+
+  const showChildren = headerless || isExpanded;
 
   return (
     <div
@@ -736,40 +750,45 @@ function ToolUIGroup({
       )}
     >
       {/* Group header */}
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-accent/50"
-      >
-        {icon || (
-          <StatusIndicator
-            status={status === "running" ? "running" : "complete"}
+      {!headerless && (
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          aria-expanded={isExpanded}
+          className="flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-accent/50"
+        >
+          {icon || (
+            <StatusIndicator
+              status={status === "running" ? "running" : "complete"}
+            />
+          )}
+          <span
+            className={cn(
+              "flex-1 text-sm font-medium",
+              status === "running" && "shimmer",
+            )}
+          >
+            {title}
+          </span>
+          <ChevronDownIcon
+            className={cn(
+              "size-4 text-muted-foreground transition-transform duration-200",
+              isExpanded && "rotate-180",
+            )}
           />
-        )}
-        <span
-          className={cn(
-            "flex-1 text-sm font-medium",
-            status === "running" && "shimmer",
-          )}
-        >
-          {title}
-        </span>
-        <ChevronDownIcon
-          className={cn(
-            "size-4 text-muted-foreground transition-transform duration-200",
-            isExpanded && "rotate-180",
-          )}
-        />
-      </button>
-
-      {/* Expandable children */}
-      {isExpanded && (
-        <div
-          data-slot="tool-ui-group-content"
-          className="border-t border-border"
-        >
-          {children}
-        </div>
+        </button>
       )}
+
+      {/* Collapsed children are hidden, not unmounted — unmounting would
+          reset their state (expansion, async syntax highlighting). */}
+      <div
+        data-slot="tool-ui-group-content"
+        className={cn(
+          !headerless && "border-t border-border",
+          !showChildren && "hidden",
+        )}
+      >
+        {children}
+      </div>
     </div>
   );
 }

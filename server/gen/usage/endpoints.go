@@ -16,11 +16,13 @@ import (
 
 // Endpoints wraps the "usage" service endpoints.
 type Endpoints struct {
-	GetPeriodUsage        goa.Endpoint
-	GetUsageTiers         goa.Endpoint
-	CreateCustomerSession goa.Endpoint
-	CreateCheckout        goa.Endpoint
-	CreateTopUpCheckout   goa.Endpoint
+	GetPeriodUsage           goa.Endpoint
+	GetTokensUnderManagement goa.Endpoint
+	SetBillingMetadata       goa.Endpoint
+	GetUsageTiers            goa.Endpoint
+	CreateCustomerSession    goa.Endpoint
+	CreateCheckout           goa.Endpoint
+	CreateTopUpCheckout      goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "usage" service with endpoints.
@@ -28,17 +30,21 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		GetPeriodUsage:        NewGetPeriodUsageEndpoint(s, a.APIKeyAuth),
-		GetUsageTiers:         NewGetUsageTiersEndpoint(s),
-		CreateCustomerSession: NewCreateCustomerSessionEndpoint(s, a.APIKeyAuth),
-		CreateCheckout:        NewCreateCheckoutEndpoint(s, a.APIKeyAuth),
-		CreateTopUpCheckout:   NewCreateTopUpCheckoutEndpoint(s, a.APIKeyAuth),
+		GetPeriodUsage:           NewGetPeriodUsageEndpoint(s, a.APIKeyAuth),
+		GetTokensUnderManagement: NewGetTokensUnderManagementEndpoint(s, a.APIKeyAuth),
+		SetBillingMetadata:       NewSetBillingMetadataEndpoint(s, a.APIKeyAuth),
+		GetUsageTiers:            NewGetUsageTiersEndpoint(s),
+		CreateCustomerSession:    NewCreateCustomerSessionEndpoint(s, a.APIKeyAuth),
+		CreateCheckout:           NewCreateCheckoutEndpoint(s, a.APIKeyAuth),
+		CreateTopUpCheckout:      NewCreateTopUpCheckoutEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "usage" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetPeriodUsage = m(e.GetPeriodUsage)
+	e.GetTokensUnderManagement = m(e.GetTokensUnderManagement)
+	e.SetBillingMetadata = m(e.SetBillingMetadata)
 	e.GetUsageTiers = m(e.GetUsageTiers)
 	e.CreateCustomerSession = m(e.CreateCustomerSession)
 	e.CreateCheckout = m(e.CreateCheckout)
@@ -65,6 +71,52 @@ func NewGetPeriodUsageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 			return nil, err
 		}
 		return s.GetPeriodUsage(ctx, p)
+	}
+}
+
+// NewGetTokensUnderManagementEndpoint returns an endpoint function that calls
+// the method "getTokensUnderManagement" of service "usage".
+func NewGetTokensUnderManagementEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetTokensUnderManagementPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetTokensUnderManagement(ctx, p)
+	}
+}
+
+// NewSetBillingMetadataEndpoint returns an endpoint function that calls the
+// method "setBillingMetadata" of service "usage".
+func NewSetBillingMetadataEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetBillingMetadataPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetBillingMetadata(ctx, p)
 	}
 }
 

@@ -57,8 +57,14 @@ type GenerateConfig struct {
 	// is omitted.
 	HooksAPIKey string
 	// ProjectSlug is the publishing project's slug. The Cursor hooks endpoint
-	// requires it via the Gram-Project header (Claude's does not).
+	// requires it via the Gram-Project header (Claude's does not), and it scopes
+	// the default marketplace name for non-default projects.
 	ProjectSlug string
+	// IsDefaultProject reports whether this is the org's default project (its
+	// oldest, by id ASC). The default project keeps the bare org-derived
+	// marketplace name; non-default projects get a project-scoped one. Must be
+	// resolved identically to the device-agent endpoint (see naming.MarketplaceName).
+	IsDefaultProject bool
 	// Version is stamped into every plugin.json. Callers should bump this on
 	// every publish so platform marketplaces (Claude Code, Cursor, Codex) treat
 	// the manifest as new and refresh installed copies. Empty falls back to
@@ -81,13 +87,15 @@ type GenerateConfig struct {
 // Delegates to naming.MarketplaceName so the publish path and the device-agent
 // endpoint stay on the identical formula — the cross-surface contract that
 // package documents. A per-project override (resolveMarketplaceName) layers on
-// top of this default.
-func DefaultMarketplaceName(orgName string) string {
-	return naming.MarketplaceName(orgName)
+// top of this default. The default project keeps the bare org-derived name;
+// non-default projects are scoped by their slug so an org's projects don't
+// collide on a single marketplace identifier.
+func DefaultMarketplaceName(orgName, projectSlug string, isDefaultProject bool) string {
+	return naming.MarketplaceName(orgName, projectSlug, isDefaultProject)
 }
 
 func resolveMarketplaceName(cfg GenerateConfig) string {
-	return conv.Default(cfg.MarketplaceName, DefaultMarketplaceName(cfg.OrgName))
+	return conv.Default(cfg.MarketplaceName, DefaultMarketplaceName(cfg.OrgName, cfg.ProjectSlug, cfg.IsDefaultProject))
 }
 
 // pluginManifestVersion returns the version to stamp into generated

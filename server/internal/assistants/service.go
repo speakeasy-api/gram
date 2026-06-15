@@ -41,10 +41,15 @@ const (
 	StatusActive = "active"
 	StatusPaused = "paused"
 
-	sourceKindSlack      = bgtriggers.DefinitionSlugSlack
-	sourceKindCron       = bgtriggers.DefinitionSlugCron
-	sourceKindWake       = bgtriggers.DefinitionSlugWake
-	sourceKindDashboard  = bgtriggers.DefinitionSlugDashboard
+	sourceKindSlack     = bgtriggers.DefinitionSlugSlack
+	sourceKindCron      = bgtriggers.DefinitionSlugCron
+	sourceKindWake      = bgtriggers.DefinitionSlugWake
+	sourceKindDashboard = bgtriggers.DefinitionSlugDashboard
+	// sourceKindWarmup marks the event-less thread that eager-boots the
+	// runtime at assistant creation. It has no source adapter — adapters are
+	// only consulted while processing events, and this thread never has any.
+	sourceKindWarmup     = "warmup"
+	warmupCorrelationID  = "runtime-warmup"
 	runtimeStateStarting = "starting"
 	runtimeStateActive   = "active"
 	runtimeStateExpiring = "expiring"
@@ -63,9 +68,7 @@ const (
 	// loop forever.
 	maxEventAttempts = 5
 
-	runtimeStartupReapGrace     = 2 * time.Minute
-	runtimeWarmExpiryReapGrace  = 1 * time.Minute
-	runtimeProcessingLeaseGrace = 2 * time.Minute
+	runtimeStartupReapGrace = 2 * time.Minute
 	// runtimeExpiringReapGrace is the cushion the reaper waits before
 	// reclaiming a row stuck in `expiring`. It must exceed the worst-case
 	// total budget of the ExpireThreadRuntime activity (Temporal
@@ -281,6 +284,15 @@ type ExpireThreadRuntimeResult struct {
 	RemainingSeconds int
 }
 
+// WarmupThreadResult identifies the warmup thread to signal. ShouldSignal is
+// false on every no-op path (assistant gone/paused, organic traffic owns the
+// runtime row).
+type WarmupThreadResult struct {
+	ThreadID     uuid.UUID
+	ProjectID    uuid.UUID
+	ShouldSignal bool
+}
+
 // WakeCanceller cancels every pending wake trigger owned by an assistant on
 // deletion. The trigger app implements this; assistants owns the interface to
 // avoid a dependency back into the triggers package.
@@ -476,24 +488,20 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 	// process is gone or its driving workflow has given up:
 	//   - 'starting' rows that never transitioned to active within the
 	//     startup grace window (usually server crashed mid-boot).
-	//   - 'active' rows whose warm_until passed a grace window ago (usually
-	//     server crashed after a turn; unexpected-exit callback didn't fire
-	//     because the whole process died).
 	//   - 'expiring' rows whose updated_at is older than the activity's full
 	//     retry budget — the ExpireThreadRuntime activity exhausted Temporal
 	//     attempts after CAS active->expiring without reaching Stop or
 	//     Revert. Without this the row blocks the partial unique index
 	//     ReserveAssistantRuntime depends on.
+	// 'active' rows are never reaped: an idle runtime keeps its VM until the
+	// assistant is deleted.
 	queries := assistantrepo.New(s.db)
 	runtimeAssistantIDs, err := queries.ReapStuckAssistantRuntimes(ctx, assistantrepo.ReapStuckAssistantRuntimesParams{
-		StoppedState:    runtimeStateStopped,
-		StartingState:   runtimeStateStarting,
-		StartingCutoff:  conv.ToPGTimestamptz(now.Add(-runtimeStartupReapGrace)),
-		ActiveState:     runtimeStateActive,
-		WarmCutoff:      conv.ToPGTimestamptz(now.Add(-runtimeWarmExpiryReapGrace)),
-		HeartbeatCutoff: conv.ToPGTimestamptz(now.Add(-runtimeProcessingLeaseGrace)),
-		ExpiringState:   runtimeStateExpiring,
-		ExpiringCutoff:  conv.ToPGTimestamptz(now.Add(-runtimeExpiringReapGrace)),
+		StoppedState:   runtimeStateStopped,
+		StartingState:  runtimeStateStarting,
+		StartingCutoff: conv.ToPGTimestamptz(now.Add(-runtimeStartupReapGrace)),
+		ExpiringState:  runtimeStateExpiring,
+		ExpiringCutoff: conv.ToPGTimestamptz(now.Add(-runtimeExpiringReapGrace)),
 	})
 	if err != nil {
 		return out, fmt.Errorf("reap stuck assistant runtimes: %w", err)
@@ -1036,8 +1044,11 @@ type ReapInactiveAssistantRuntimesParams struct {
 }
 
 // ReapInactiveAssistantRuntimes drives the long-inactivity janitor. It picks
-// runtime rows whose owning assistant has had no recorded activity within
-// InactivityThreshold and tears down the corresponding backend resources.
+// runtime rows that are finalized (soft-deleted or ended) or belong to a
+// soft-deleted assistant, whose owning assistant has had no recorded
+// activity within InactivityThreshold, and tears down the backend resources
+// their Stop/Reap left behind. A live row under a live assistant is never a
+// candidate: an idle runtime keeps its VM until the assistant is deleted.
 func (s *ServiceCore) ReapInactiveAssistantRuntimes(ctx context.Context, params ReapInactiveAssistantRuntimesParams) (ReapAssistantRuntimesResult, error) {
 	if params.InactivityThreshold <= 0 {
 		return ReapAssistantRuntimesResult{}, fmt.Errorf("inactivity threshold must be positive")
@@ -1075,6 +1086,135 @@ func (s *ServiceCore) ReapInactiveAssistantRuntimes(ctx context.Context, params 
 		}
 	}
 	return result, nil
+}
+
+// RecycleAssistantRuntimeImagesResult summarises one deploy-time image sweep
+// at the runtime-row level. Skipped covers every expected non-recycle: image
+// already current, machine busy with a turn, or backend resource gone.
+type RecycleAssistantRuntimeImagesResult struct {
+	Recycled int
+	Skipped  int
+	Errors   int
+}
+
+// RecycleAssistantRuntimeImagesParams configures one image recycle sweep.
+type RecycleAssistantRuntimeImagesParams struct {
+	// OnRowProcessed, if set, fires once per row after the recycle attempt
+	// (success, skip or failure).
+	OnRowProcessed func()
+}
+
+// RecycleActiveRuntimeImages best-effort rolls every active v2 runtime onto
+// the currently configured runtime image, so deploys absorb the image-pull +
+// reboot cost while runtimes are idle instead of the next turn paying it.
+// Busy or failed rows are not chased — the per-admission recycle in Ensure
+// catches them lazily.
+func (s *ServiceCore) RecycleActiveRuntimeImages(ctx context.Context, params RecycleAssistantRuntimeImagesParams) (RecycleAssistantRuntimeImagesResult, error) {
+	queries := assistantrepo.New(s.db)
+	rows, err := queries.ListActiveAssistantRuntimesForImageRecycle(ctx, runtimeStateActive)
+	if err != nil {
+		return RecycleAssistantRuntimeImagesResult{}, fmt.Errorf("list active assistant runtimes for image recycle: %w", err)
+	}
+
+	result := RecycleAssistantRuntimeImagesResult{Recycled: 0, Skipped: 0, Errors: 0}
+	for _, row := range rows {
+		record := assistantRuntimeRecord{
+			ID:                  row.ID,
+			AssistantThreadID:   row.AssistantThreadID,
+			AssistantID:         row.AssistantID,
+			ProjectID:           row.ProjectID,
+			Backend:             row.Backend,
+			BackendMetadataJSON: row.BackendMetadataJson,
+			State:               row.State,
+			WarmUntil:           row.WarmUntil,
+		}
+		// In-flight events mean turns are queued for or running on this VM —
+		// the runner's idle clock only clears on /turn enqueue, so the idle
+		// probe alone can miss a turn that admission is about to deliver.
+		// Those admissions recycle the image lazily through Ensure anyway.
+		inFlight, err := queries.CountInFlightAssistantThreadEvents(ctx, assistantrepo.CountInFlightAssistantThreadEventsParams{
+			ProjectID:        row.ProjectID,
+			AssistantID:      row.AssistantID,
+			PendingStatus:    eventStatusPending,
+			ProcessingStatus: eventStatusProcessing,
+		})
+		if err != nil {
+			s.logger.WarnContext(ctx, "count in-flight assistant thread events for image recycle failed",
+				attr.SlogAssistantID(row.AssistantID.String()),
+				attr.SlogProjectID(row.ProjectID.String()),
+				attr.SlogError(err),
+			)
+			result.Errors++
+			if params.OnRowProcessed != nil {
+				params.OnRowProcessed()
+			}
+			continue
+		}
+		if inFlight > 0 {
+			result.Skipped++
+			if params.OnRowProcessed != nil {
+				params.OnRowProcessed()
+			}
+			continue
+		}
+
+		recycled, err := s.runtime.RecycleImage(ctx, record)
+		switch {
+		case err != nil:
+			s.logger.WarnContext(ctx, "assistant runtime image recycle failed",
+				attr.SlogAssistantID(row.AssistantID.String()),
+				attr.SlogProjectID(row.ProjectID.String()),
+				attr.SlogError(err),
+			)
+			result.Errors++
+		case recycled.Recycled:
+			affected, err := queries.UpdateActiveAssistantRuntimeMetadata(ctx, assistantrepo.UpdateActiveAssistantRuntimeMetadataParams{
+				BackendMetadataJson: recycled.BackendMetadataJSON,
+				RuntimeID:           row.ID,
+				ProjectID:           row.ProjectID,
+				ActiveState:         runtimeStateActive,
+			})
+			switch {
+			case err != nil:
+				// A persist failure only costs the next Ensure a cold-start
+				// health budget (LastBootID mismatch) — the machine itself
+				// is already on the new image, so still count the recycle.
+				s.logger.WarnContext(ctx, "persist recycled assistant runtime metadata failed",
+					attr.SlogAssistantID(row.AssistantID.String()),
+					attr.SlogProjectID(row.ProjectID.String()),
+					attr.SlogError(err),
+				)
+				result.Recycled++
+			case affected == 0:
+				// The warm timer expired the row mid-recycle and Stop already
+				// ran against the pre-recycle machine. Undo the restart so the
+				// sweep never leaves a machine running that no live row tracks.
+				if stopErr := s.runtime.Stop(ctx, record); stopErr != nil {
+					s.logger.WarnContext(ctx, "stop assistant runtime after raced image recycle failed",
+						attr.SlogAssistantID(row.AssistantID.String()),
+						attr.SlogProjectID(row.ProjectID.String()),
+						attr.SlogError(stopErr),
+					)
+				}
+				result.Skipped++
+			default:
+				result.Recycled++
+			}
+		default:
+			result.Skipped++
+		}
+		if params.OnRowProcessed != nil {
+			params.OnRowProcessed()
+		}
+	}
+	return result, nil
+}
+
+// RuntimeImageRef returns the runtime image reference the configured backend
+// launches machines with. The deploy-time recycle workflow is keyed on it so
+// each image version triggers exactly one sweep.
+func (s *ServiceCore) RuntimeImageRef() string {
+	return s.runtime.ImageRef()
 }
 
 // reapRuntimeRow tears down the backend resource for one row and records the
@@ -1423,10 +1563,11 @@ func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assis
 	}
 
 	active, err := queries.CountActiveAssistantThreads(ctx, assistantrepo.CountActiveAssistantThreadsParams{
-		ProjectID:     assistant.ProjectID,
-		AssistantID:   assistant.ID,
-		ActiveSince:   conv.ToPGTimestamptz(time.Now().UTC().Add(-time.Duration(assistant.WarmTTLSeconds) * time.Second)),
-		PendingStatus: eventStatusPending,
+		ProjectID:        assistant.ProjectID,
+		AssistantID:      assistant.ID,
+		WarmupSourceKind: sourceKindWarmup,
+		ActiveSince:      conv.ToPGTimestamptz(time.Now().UTC().Add(-time.Duration(assistant.WarmTTLSeconds) * time.Second)),
+		PendingStatus:    eventStatusPending,
 	})
 	if err != nil {
 		return AdmitPendingThreadsResult{}, fmt.Errorf("count active assistant threads: %w", err)
@@ -1458,9 +1599,162 @@ func (s *ServiceCore) admitPendingThreadsV2(ctx context.Context, assistant assis
 	return AdmitPendingThreadsResult{ProjectID: assistant.ProjectID, ThreadIDs: admitted}, nil
 }
 
+// EnsureWarmupThread sets up the assistant's event-less warmup thread and
+// reserves the v2 runtime row against it, so that signalling the standard
+// thread workflow boots the runtime exactly as a turn would — Ensure,
+// coordinator kicks and the warm window all run through the existing
+// machinery; the thread simply never has events to process.
+//
+// Idempotent under the same advisory lock admit uses. ShouldSignal is false
+// when a live runtime row exists that the warmup thread doesn't own —
+// organic traffic got there first and its threads drive the boot.
+func (s *ServiceCore) EnsureWarmupThread(ctx context.Context, assistantID uuid.UUID) (WarmupThreadResult, error) {
+	noop := WarmupThreadResult{ThreadID: uuid.Nil, ProjectID: uuid.Nil, ShouldSignal: false}
+
+	dispatchRow, err := assistantrepo.New(s.db).GetAssistantForDispatch(ctx, assistantID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// Deleted between creation and the warmup running.
+		return noop, nil
+	case err != nil:
+		return noop, fmt.Errorf("select assistant for warmup: %w", err)
+	}
+	// Skip getAssistantForDispatch's toolset hydration — warmup only needs
+	// the scalar fields.
+	assistant := assistantRecordFromDispatchRow(dispatchRow)
+	if assistant.Status != StatusActive {
+		return noop, nil
+	}
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return noop, fmt.Errorf("begin assistant warmup tx: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	queries := assistantrepo.New(tx)
+	if err := queries.AcquireAssistantAdvisoryLock(ctx, assistant.ID.String()); err != nil {
+		return noop, fmt.Errorf("acquire assistant advisory lock: %w", err)
+	}
+
+	chatID := deterministicChatID(assistant.ID, warmupCorrelationID)
+	if err := queries.UpsertAssistantChat(ctx, assistantrepo.UpsertAssistantChatParams{
+		ChatID:         chatID,
+		ProjectID:      assistant.ProjectID,
+		OrganizationID: assistant.OrganizationID,
+		UserID:         pgtype.Text{String: "", Valid: false},
+		Title:          conv.ToPGText(chat.DefaultChatTitle),
+	}); err != nil {
+		return noop, fmt.Errorf("upsert warmup chat: %w", err)
+	}
+	threadID, err := queries.UpsertAssistantThread(ctx, assistantrepo.UpsertAssistantThreadParams{
+		AssistantID:   assistant.ID,
+		ProjectID:     assistant.ProjectID,
+		CorrelationID: warmupCorrelationID,
+		ChatID:        chatID,
+		SourceKind:    sourceKindWarmup,
+		SourceRefJson: []byte("{}"),
+	})
+	if err != nil {
+		return noop, fmt.Errorf("upsert warmup thread: %w", err)
+	}
+
+	row, err := queries.GetAssistantRuntimeV2(ctx, assistantrepo.GetAssistantRuntimeV2Params{
+		ProjectID:   assistant.ProjectID,
+		AssistantID: assistant.ID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		if err := queries.ReserveAssistantRuntimeV2(ctx, assistantrepo.ReserveAssistantRuntimeV2Params{
+			AssistantThreadID: threadID,
+			AssistantID:       assistant.ID,
+			ProjectID:         assistant.ProjectID,
+			Backend:           s.runtime.Backend(),
+			State:             runtimeStateStarting,
+		}); err != nil {
+			return noop, fmt.Errorf("reserve v2 assistant runtime for warmup: %w", err)
+		}
+	case err != nil:
+		return noop, fmt.Errorf("lookup v2 runtime for warmup: %w", err)
+	case row.AssistantThreadID != threadID || row.State == runtimeStateExpiring:
+		// A real thread owns the boot, or the row is mid-teardown — either
+		// way the existing workflows drive the lifecycle from here.
+		return noop, nil
+		// Else: the warmup thread already owns a live row (an earlier signal
+		// was lost or the workflow died mid-boot) — fall through and
+		// re-signal; SignalWithStart and ProcessThreadEvents are idempotent.
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return noop, fmt.Errorf("commit assistant warmup tx: %w", err)
+	}
+	return WarmupThreadResult{ThreadID: threadID, ProjectID: assistant.ProjectID, ShouldSignal: true}, nil
+}
+
+// ReleaseWarmupRuntime best-effort clears a runtime row reserved for the
+// warmup thread whose workflow signal could not be delivered. Only a
+// still-starting row owned by that thread is touched — anything else means a
+// workflow or real traffic took over.
+func (s *ServiceCore) ReleaseWarmupRuntime(ctx context.Context, projectID, assistantID, warmupThreadID uuid.UUID) {
+	// The signal often fails precisely because ctx was canceled or timed
+	// out; detach so the cleanup's own DB writes can still land.
+	ctx = context.WithoutCancel(ctx)
+
+	row, err := assistantrepo.New(s.db).GetAssistantRuntimeV2(ctx, assistantrepo.GetAssistantRuntimeV2Params{
+		ProjectID:   projectID,
+		AssistantID: assistantID,
+	})
+	if err != nil || row.AssistantThreadID != warmupThreadID || row.State != runtimeStateStarting {
+		return
+	}
+	// Re-check `starting` inside the UPDATE (every state slot pinned to it):
+	// if the signal was actually delivered and the workflow advanced the row
+	// between the read above and this write, no-op instead of tearing down a
+	// live runtime.
+	if err := assistantrepo.New(s.db).StopAssistantRuntime(ctx, assistantrepo.StopAssistantRuntimeParams{
+		State:         runtimeStateFailed,
+		ProjectID:     projectID,
+		RuntimeID:     row.ID,
+		StartingState: runtimeStateStarting,
+		ActiveState:   runtimeStateStarting,
+		ExpiringState: runtimeStateStarting,
+	}); err != nil {
+		s.logger.WarnContext(ctx, "release warmup runtime reservation failed",
+			attr.SlogAssistantID(assistantID.String()),
+			attr.SlogError(err),
+		)
+	}
+}
+
 func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, threadID uuid.UUID) (ProcessThreadEventsResult, error) {
 	bootstrappedRuntime := false
 	thread, assistant, runtimeRecord, err := s.loadThreadContext(ctx, projectID, threadID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// The runtime row was retired (reaper, expire, manual stop) between
+		// this thread being admitted and the activity executing. The events
+		// are still pending, so hand back to the coordinator: re-admission
+		// reserves a fresh runtime row and re-dispatches. Failing the
+		// activity here instead would burn its retry budget against a
+		// tombstone and drop the turn.
+		row, rerr := assistantrepo.New(s.db).ResolveThreadCorrelation(ctx, assistantrepo.ResolveThreadCorrelationParams{
+			ThreadID:  threadID,
+			ProjectID: projectID,
+		})
+		if rerr != nil {
+			return ProcessThreadEventsResult{}, fmt.Errorf("resolve thread for retry admission: %w", errors.Join(err, rerr))
+		}
+		return ProcessThreadEventsResult{
+			AssistantID:         row.AssistantID,
+			WarmUntil:           time.Time{},
+			WarmTTLSeconds:      0,
+			RuntimeActive:       false,
+			RetryAdmission:      true,
+			ProcessedAnyEvent:   false,
+			BootstrappedRuntime: false,
+		}, nil
+	}
 	if err != nil {
 		return ProcessThreadEventsResult{}, err
 	}
@@ -1908,6 +2202,11 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	completionsQuery.Set("unstable_normalizeOutboundMessages", "1")
 	completionsEndpoint.RawQuery = completionsQuery.Encode()
 
+	compaction := compactionPolicyFor(thread.SourceKind)
+	if err := compaction.Validate(); err != nil {
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "build compaction policy").Log(ctx, s.logger, logAttrs...)
+	}
+
 	return threadBootstrap{
 		Model:          assistant.Model,
 		Instructions:   instructions,
@@ -1916,6 +2215,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 		MCPServers:     mcpServers,
 		History:        history,
 		ContextWindow:  s.resolveAssistantContextWindow(ctx, assistant.Model),
+		Compaction:     compaction,
 		SourceRefJSON:  thread.SourceRefJSON,
 	}, nil
 }

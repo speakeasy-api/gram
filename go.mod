@@ -334,3 +334,5 @@ require (
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.2 // indirect
 )
+
+replace github.com/hashicorp/terraform-provider-google-beta => github.com/hashicorp/terraform-provider-google-beta v1.20.0

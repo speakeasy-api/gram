@@ -2,6 +2,8 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::compaction::CompactionPolicy;
+
 #[derive(Debug, Deserialize, Serialize, Clone, Hash, PartialEq, Eq)]
 pub struct McpServer {
     pub id: String,
@@ -93,4 +95,6 @@ pub struct ThreadBootstrap {
     pub history: Vec<RunnerMessage>,
     #[serde(default)]
     pub context_window: Option<u64>,
+    #[serde(default)]
+    pub compaction: CompactionPolicy,
 }

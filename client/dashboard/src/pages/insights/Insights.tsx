@@ -1,10 +1,10 @@
+import type { ReactNode } from "react";
 import { useMemo } from "react";
 import { Outlet, useParams } from "react-router";
 import { InsightsAgentsContent } from "@/components/observe/InsightsAgents";
 import { InsightsEmployeeDetailContent } from "@/components/observe/InsightsEmployeeDetail";
 import { InsightsEmployeesContent } from "@/components/observe/InsightsEmployees";
 import { InsightsToolsContent } from "@/components/observe/InsightsTools";
-import { InsightsMCPContent } from "@/components/observe/InsightsMCP";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { ObserveTabNav } from "@/components/observe/ObserveTabNav";
@@ -12,24 +12,39 @@ import { useMembers } from "@gram/client/react-query";
 import { slugify } from "@/lib/constants";
 
 export function InsightsRoot(): JSX.Element {
-  const { userSlug } = useParams<{ userSlug: string }>();
-  const { data: membersData } = useMembers();
-  const substitutions = useMemo(() => {
-    if (!userSlug) return {};
-    const decodedUserSlug = decodeURIComponent(userSlug);
-    if (decodedUserSlug.includes("@")) {
-      return {
-        [userSlug]: decodedUserSlug,
-        [encodeURIComponent(decodedUserSlug)]: decodedUserSlug,
-      };
-    }
-    if (!membersData?.members) return {};
-    const member = membersData.members.find(
-      (m) => slugify(m.name) === userSlug,
-    );
-    return member ? { [userSlug]: member.email } : {};
-  }, [userSlug, membersData]);
+  return (
+    <ObservePageShell>
+      <Outlet />
+    </ObservePageShell>
+  );
+}
 
+function employeeBreadcrumbSubstitutions(
+  userSlug: string | undefined,
+  membersData: ReturnType<typeof useMembers>["data"],
+) {
+  if (!userSlug) return {};
+  const decodedUserSlug = decodeURIComponent(userSlug);
+  if (decodedUserSlug.includes("@")) {
+    return {
+      [userSlug]: decodedUserSlug,
+      [encodeURIComponent(decodedUserSlug)]: decodedUserSlug,
+    };
+  }
+  if (!membersData?.members) return {};
+  const member = membersData.members.find((m) => slugify(m.name) === userSlug);
+  return member ? { [userSlug]: member.email } : {};
+}
+
+function ObservePageShell({
+  children,
+  substitutions,
+  tabsBase,
+}: {
+  children: ReactNode;
+  substitutions?: Record<string, string | undefined>;
+  tabsBase?: "insights" | "logs";
+}) {
   return (
     <div className="flex h-full flex-col">
       {/* ^ Wrapper needed to fill page height, allow inner content scrolls. */}
@@ -37,12 +52,27 @@ export function InsightsRoot(): JSX.Element {
         <Page.Header>
           <Page.Header.Breadcrumbs fullWidth substitutions={substitutions} />
         </Page.Header>
-        <ObserveTabNav base="insights" />
+        {tabsBase && <ObserveTabNav base={tabsBase} />}
         <Page.Body fullWidth overflowHidden noPadding>
-          <Outlet />
+          {children}
         </Page.Body>
       </Page>
     </div>
+  );
+}
+
+export function InsightsEmployeesLayout(): JSX.Element {
+  const { userSlug } = useParams<{ userSlug: string }>();
+  const { data: membersData } = useMembers();
+  const substitutions = useMemo(
+    () => employeeBreadcrumbSubstitutions(userSlug, membersData),
+    [userSlug, membersData],
+  );
+
+  return (
+    <ObservePageShell substitutions={substitutions}>
+      <Outlet />
+    </ObservePageShell>
   );
 }
 
@@ -52,18 +82,6 @@ export function InsightsHooksPage(): JSX.Element {
       <InsightsToolsContent />
     </RequireScope>
   );
-}
-
-export function InsightsMCPPage(): JSX.Element {
-  return (
-    <RequireScope scope="project:read" level="page">
-      <InsightsMCPContent />
-    </RequireScope>
-  );
-}
-
-export function InsightsEmployeesLayout(): JSX.Element {
-  return <Outlet />;
 }
 
 export function InsightsEmployeesPage(): JSX.Element {
@@ -84,8 +102,10 @@ export function InsightsEmployeeDetailPage(): JSX.Element {
 
 export function InsightsAgentsPage(): JSX.Element {
   return (
-    <RequireScope scope="project:read" level="page">
-      <InsightsAgentsContent />
-    </RequireScope>
+    <ObservePageShell>
+      <RequireScope scope="project:read" level="page">
+        <InsightsAgentsContent />
+      </RequireScope>
+    </ObservePageShell>
   );
 }

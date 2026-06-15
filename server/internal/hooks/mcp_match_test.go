@@ -180,6 +180,8 @@ func TestParseClaudeToolName(t *testing.T) {
 		{"Bash", "", "", false},
 		{"mcp__only", "", "", false},
 		{"mcp__server__", "", "", false},
+		{"mcp____do_thing", "", "", false},
+		{"MCP:send_message", "", "", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.raw, func(t *testing.T) {

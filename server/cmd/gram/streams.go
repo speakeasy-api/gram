@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/control"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ping"
@@ -196,9 +197,11 @@ func newStreamsCommand() *cli.Command {
 				broker:     psbroker,
 			}
 
+			pingLogLevel := conv.Ternary(c.String("environment") == "local", slog.LevelInfo, slog.LevelDebug)
+
 			// Start subscription receivers in this block
 			{
-				mustReceive(rg, &pingv1.Message{}, &pingv1.Processor{}, ping.NewHandler(logger))
+				mustReceive(rg, &pingv1.Message{}, &pingv1.Processor{}, ping.NewHandler(logger, pingLogLevel))
 			}
 
 			// This is just a heartbeat publisher that validates the publisher-

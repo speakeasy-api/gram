@@ -61,7 +61,11 @@ export function ExclusionSheet({
 }): JSX.Element {
   const queryClient = useQueryClient();
   const { data: policyData } = useRiskListPolicies();
-  const policies = policyData?.policies ?? [];
+  // Exclusions aren't supported for prompt-based (LLM-judge) policies yet
+  // (AGE-2750), so keep them out of the scope dropdown.
+  const policies = (policyData?.policies ?? []).filter(
+    (p) => p.policyType !== "prompt_based",
+  );
 
   // Saving an exclusion suppresses/restores findings retroactively, so refresh
   // the exclusion list AND every risk-results surface (chat detail, agent,

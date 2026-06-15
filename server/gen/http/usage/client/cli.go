@@ -8,7 +8,11 @@
 package client
 
 import (
+	"encoding/json"
+	"fmt"
+
 	usage "github.com/speakeasy-api/gram/server/gen/usage"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildGetPeriodUsagePayload builds the payload for the usage getPeriodUsage
@@ -21,6 +25,65 @@ func BuildGetPeriodUsagePayload(usageGetPeriodUsageSessionToken string) (*usage.
 		}
 	}
 	v := &usage.GetPeriodUsagePayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildGetTokensUnderManagementPayload builds the payload for the usage
+// getTokensUnderManagement endpoint from CLI flags.
+func BuildGetTokensUnderManagementPayload(usageGetTokensUnderManagementSessionToken string) (*usage.GetTokensUnderManagementPayload, error) {
+	var sessionToken *string
+	{
+		if usageGetTokensUnderManagementSessionToken != "" {
+			sessionToken = &usageGetTokensUnderManagementSessionToken
+		}
+	}
+	v := &usage.GetTokensUnderManagementPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildSetBillingMetadataPayload builds the payload for the usage
+// setBillingMetadata endpoint from CLI flags.
+func BuildSetBillingMetadataPayload(usageSetBillingMetadataBody string, usageSetBillingMetadataSessionToken string) (*usage.SetBillingMetadataPayload, error) {
+	var err error
+	var body SetBillingMetadataRequestBody
+	{
+		err = json.Unmarshal([]byte(usageSetBillingMetadataBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"alert_email\": \"alice@example.com\",\n      \"billing_cycle_anchor_day\": 2,\n      \"monthly_token_limit\": 1\n   }'")
+		}
+		if body.MonthlyTokenLimit != nil {
+			if *body.MonthlyTokenLimit < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("body.monthly_token_limit", *body.MonthlyTokenLimit, 0, true))
+			}
+		}
+		if body.AlertEmail != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.alert_email", *body.AlertEmail, goa.FormatEmail))
+		}
+		if body.BillingCycleAnchorDay < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.billing_cycle_anchor_day", body.BillingCycleAnchorDay, 1, true))
+		}
+		if body.BillingCycleAnchorDay > 31 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.billing_cycle_anchor_day", body.BillingCycleAnchorDay, 31, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if usageSetBillingMetadataSessionToken != "" {
+			sessionToken = &usageSetBillingMetadataSessionToken
+		}
+	}
+	v := &usage.SetBillingMetadataPayload{
+		MonthlyTokenLimit:     body.MonthlyTokenLimit,
+		AlertEmail:            body.AlertEmail,
+		BillingCycleAnchorDay: body.BillingCycleAnchorDay,
+	}
 	v.SessionToken = sessionToken
 
 	return v, nil

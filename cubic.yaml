@@ -31,6 +31,8 @@ reviews:
       - "**/*_gen.yml"
       - "**/*.pb"
       - "**/*.pb.go"
+      - "**/*_pb2.py"
+      - "**/*_pb2.pyi"
     head_branches:
       - changeset-release/main
       - dependabot/*

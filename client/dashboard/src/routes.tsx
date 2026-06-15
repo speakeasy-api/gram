@@ -1,10 +1,7 @@
 import { Icon, IconName, IconProps } from "@speakeasy-api/moonshine";
 import React, { useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
-import {
-  RedirectToInsightsTools,
-  RedirectToLogTools,
-} from "./components/observe/ObserveRedirects";
+import { RedirectToLogTools } from "./components/observe/ObserveRedirects";
 import { ReleaseStage } from "./components/release-stage-badge";
 import { useSlugs } from "./contexts/Sdk";
 import { cn } from "./lib/utils";
@@ -30,12 +27,7 @@ import Home from "./pages/home/Home";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
-import {
-  LogsRoot,
-  LogsMCPPage,
-  LogsRiskEventsPage,
-  LogsToolsPage,
-} from "./pages/logs/Logs";
+import { LogsRoot, LogsMCPPage, LogsToolsPage } from "./pages/logs/Logs";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
@@ -46,7 +38,6 @@ import {
   InsightsEmployeesLayout,
   InsightsEmployeesPage,
   InsightsHooksPage,
-  InsightsMCPPage,
   InsightsRoot,
 } from "./pages/insights/Insights";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
@@ -78,6 +69,7 @@ import TriggersIndex, { TriggersRoot } from "./pages/triggers/Triggers";
 import SecurityOverview, {
   RiskOverviewRoot,
 } from "./pages/security/SecurityOverview";
+import RiskEventsPage from "./pages/security/RiskEventsPage";
 import ApprovalRequests from "./pages/security/ApprovalRequests";
 import RiskOverviewCategoriesIndex from "./pages/security/RiskOverviewCategoriesIndex";
 import RiskOverviewCategoryDetail from "./pages/security/RiskOverviewCategoryDetail";
@@ -347,6 +339,9 @@ const ROUTE_STRUCTURE = {
             title: "MCP Server Overview",
             url: "overview",
           },
+          // Legacy route. MCPServerDetails redirects this to
+          // settings#authentication now that authentication lives under
+          // Settings.
           authentication: {
             title: "MCP Server Authentication",
             url: "authentication",
@@ -391,47 +386,31 @@ const ROUTE_STRUCTURE = {
     indexComponent: TriggersIndex,
   },
   insights: {
-    title: "Insights",
+    title: "MCP & Tools",
     url: "insights",
     icon: "layout-dashboard",
     component: InsightsRoot,
-    indexComponent: RedirectToInsightsTools,
+    indexComponent: InsightsHooksPage,
+  },
+  employees: {
+    title: "Employees",
+    url: "employees",
+    icon: "users",
+    component: InsightsEmployeesLayout,
+    indexComponent: InsightsEmployeesPage,
     subPages: {
-      costs: {
-        title: "Costs",
-        url: "costs",
-        component: InsightsAgentsPage,
-      },
-      tools: {
-        title: "Tools",
-        url: "tools",
-        component: InsightsHooksPage,
-      },
-      mcp: {
-        title: "MCP Servers",
-        url: "mcp",
-        component: InsightsMCPPage,
-      },
-      employees: {
-        title: "Employees",
-        url: "employees",
-        component: InsightsEmployeesLayout,
-        indexComponent: InsightsEmployeesPage,
-        subPages: {
-          detail: {
-            title: "Employee Detail",
-            url: ":userSlug",
-            component: InsightsEmployeeDetailPage,
-          },
-        },
+      detail: {
+        title: "Employee Detail",
+        url: ":userSlug",
+        component: InsightsEmployeeDetailPage,
       },
     },
   },
-  hooks: {
-    // redirect to insights/tools. TODO: remove this in a month
-    title: "Hooks",
-    url: "hooks",
-    component: RedirectToInsightsTools,
+  costs: {
+    title: "Costs",
+    url: "costs",
+    icon: "credit-card",
+    component: InsightsAgentsPage,
   },
   logs: {
     title: "Logs",
@@ -514,7 +493,7 @@ const ROUTE_STRUCTURE = {
     title: "Risk Events",
     url: "risk-events",
     icon: "flag",
-    component: LogsRiskEventsPage,
+    component: RiskEventsPage,
   },
   sdks: {
     title: "SDKs",

@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/mcpname"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/outbox"
@@ -201,9 +202,10 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	}
 
 	// prompt_based policies are evaluated by the LLM judge rather than the
-	// source-based scanners above. scanPromptJudge hard-scopes to tool-call
-	// messages for M0 (matching realtime enforcement), on top of the policy's
-	// message_types filter already applied by filterMessagesByMessageTypes.
+	// source-based scanners above. The judge runs on every message left after
+	// the policy's message_types filter (already applied by
+	// filterMessagesByMessageTypes), so it covers whatever types the policy
+	// declares.
 	if policy.PolicyType == "prompt_based" {
 		judgeFindings := a.scanPromptJudge(ctx, args, policy, messages)
 		for i := range findings {
@@ -440,10 +442,10 @@ const judgeConcurrency = 8
 // Returns all-empty results when the judge is unavailable or the policy has no
 // prompt.
 //
-// M0: like the realtime enforcement path, batch judging is hard-scoped to
-// tool-call messages regardless of the policy's message_types, so the judge is
-// never run on user/assistant/tool-response content yet. In-scope messages are
-// evaluated concurrently with a bounded worker pool.
+// The judge runs on every message passed in — the caller has already narrowed
+// them to the policy's message_types via filterMessagesByMessageTypes — so it
+// covers whatever types the policy declares. Messages are evaluated
+// concurrently with a bounded worker pool.
 func (a *AnalyzeBatch) scanPromptJudge(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []repo.GetMessageContentBatchRow) [][]Finding {
 	out := make([][]Finding, len(messages))
 	cfg := ParseJudgeConfig(policy.ModelConfig)
@@ -451,9 +453,9 @@ func (a *AnalyzeBatch) scanPromptJudge(ctx context.Context, args AnalyzeBatchArg
 		return out
 	}
 
-	var indices []int
+	indices := make([]int, 0, len(messages))
 	for i, msg := range messages {
-		if mt, ok := messageRowMessageType(msg); ok && mt == message.ToolRequest {
+		if _, ok := messageRowMessageType(msg); ok {
 			indices = append(indices, i)
 		}
 	}
@@ -484,7 +486,7 @@ func (a *AnalyzeBatch) scanPromptJudge(ctx context.Context, args AnalyzeBatchArg
 					OrgID:     args.OrganizationID,
 					ProjectID: args.ProjectID.String(),
 					Prompt:    policy.Prompt.String,
-					Text:      promptJudgeText(messages[idx]),
+					Message:   a.judgeMessageForRow(ctx, messages[idx]),
 					Config:    cfg,
 				})
 				if verdict != nil {
@@ -517,11 +519,41 @@ func (a *AnalyzeBatch) promptPoliciesEnabled(ctx context.Context, orgID string, 
 	return on
 }
 
-func promptJudgeText(msg repo.GetMessageContentBatchRow) string {
-	if len(msg.ToolCalls) > 0 {
-		return string(msg.ToolCalls)
+// judgeMessageForRow builds the polymorphic judge payload for a stored message.
+// A single tool-call row surfaces the tool name + raw arguments; a multi-call
+// row surfaces each call with its own attribution so per-call MCP server and
+// function names reach the judge. A row with no parseable calls falls back to
+// the raw tool_calls JSON. Tool results and plain user/assistant messages carry
+// their content.
+func (a *AnalyzeBatch) judgeMessageForRow(ctx context.Context, msg repo.GetMessageContentBatchRow) JudgeMessage {
+	messageType, _ := messageRowMessageType(msg)
+	if messageType == message.ToolRequest {
+		calls := a.parseRecordedToolCalls(ctx, SourceLLMJudge, msg.ToolCalls)
+		switch len(calls) {
+		case 0:
+			// No parseable calls: hand over the raw array as opaque arguments.
+			return NewJudgeMessage(messageType, "", string(msg.ToolCalls))
+		case 1:
+			return NewJudgeMessage(messageType, calls[0].Function.Name, calls[0].Function.Arguments)
+		default:
+			judgeCalls := make([]JudgeToolCall, 0, len(calls))
+			for _, c := range calls {
+				// Skip malformed entries carrying neither a name nor arguments —
+				// they'd render as empty calls with no attribution to judge.
+				if c.Function.Name == "" && strings.TrimSpace(c.Function.Arguments) == "" {
+					continue
+				}
+				judgeCalls = append(judgeCalls, NewJudgeToolCall(c.Function.Name, c.Function.Arguments))
+			}
+			// If every entry was malformed, fall back to the raw array rather than
+			// hand the judge an empty tool_calls list.
+			if len(judgeCalls) == 0 {
+				return NewJudgeMessage(messageType, "", string(msg.ToolCalls))
+			}
+			return NewJudgeMessageForToolCalls(judgeCalls)
+		}
 	}
-	return msg.Content
+	return NewJudgeMessage(messageType, "", msg.Content)
 }
 
 func (a *AnalyzeBatch) customRulesForPolicy(ctx context.Context, projectID uuid.UUID, ruleIDs []string) ([]CompiledCustomDetectionRule, error) {
@@ -659,7 +691,7 @@ func (a *AnalyzeBatch) scanMessageToolCalls(ctx context.Context, orgID string, r
 		}
 		// Native (non-MCP) tools don't carry the x-gram-toolset-id property
 		// and are out of scope for shadow-MCP enforcement.
-		if !isMCPToolName(toolName) {
+		if !mcpname.IsMCPToolName(toolName) {
 			continue
 		}
 		var toolInput any
@@ -669,7 +701,7 @@ func (a *AnalyzeBatch) scanMessageToolCalls(ctx context.Context, orgID string, r
 				toolInput = nil
 			}
 		}
-		bareName := stripMCPToolPrefix(toolName)
+		bareName := mcpname.MCPFunctionOf(toolName)
 		if a.shadowMCPClient == nil {
 			continue
 		}
@@ -683,7 +715,7 @@ func (a *AnalyzeBatch) scanMessageToolCalls(ctx context.Context, orgID string, r
 		// attribute the hook recorded on the corresponding ClickHouse log,
 		// when one exists. The fallback keeps findings useful even if the
 		// CH lookup misses (no hook log yet, ClickHouse outage, ...).
-		match := mcpServerPrefixOf(toolName)
+		match := mcpname.MCPServerOf(toolName)
 		if match == "" {
 			match = toolName
 		}
@@ -730,7 +762,7 @@ func (a *AnalyzeBatch) scanMessageDestructiveToolCalls(ctx context.Context, orgI
 	var findings []Finding
 	for _, call := range calls {
 		toolName := call.Function.Name
-		if toolName == "" || !isMCPToolName(toolName) {
+		if toolName == "" || !mcpname.IsMCPToolName(toolName) {
 			continue
 		}
 
@@ -741,7 +773,7 @@ func (a *AnalyzeBatch) scanMessageDestructiveToolCalls(ctx context.Context, orgI
 			}
 		}
 
-		bareName := stripMCPToolPrefix(toolName)
+		bareName := mcpname.MCPFunctionOf(toolName)
 		resolved, ok := a.shadowMCPClient.ResolveToolsetCall(ctx, toolInput, bareName, orgID)
 		if !ok || resolved.Tool.Annotations == nil || resolved.Tool.Annotations.DestructiveHint == nil || !*resolved.Tool.Annotations.DestructiveHint {
 			continue
@@ -820,61 +852,6 @@ func (a *AnalyzeBatch) scanMessageDestructiveCLICalls(ctx context.Context, raw [
 		})
 	}
 	return findings
-}
-
-// isMCPToolName reports whether a tool-call name follows either the
-// "mcp__<server>__<tool>" convention used by Claude Code or the "MCP:..."
-// prefix used by Cursor for MCP-routed tools.
-func isMCPToolName(name string) bool {
-	if strings.HasPrefix(name, "mcp__") {
-		parts := strings.SplitN(name, "__", 3)
-		return len(parts) == 3 && parts[2] != ""
-	}
-	if len(name) >= 4 && name[:4] == "MCP:" {
-		return true
-	}
-	return false
-}
-
-// stripMCPToolPrefix returns the bare tool name with any MCP routing prefix
-// removed so it can be compared against the toolset's tool list.
-func stripMCPToolPrefix(name string) string {
-	if len(name) >= 5 && name[:5] == "mcp__" {
-		// mcp__<server>__<tool>
-		rest := name[5:]
-		for i := 0; i+1 < len(rest); i++ {
-			if rest[i] == '_' && rest[i+1] == '_' {
-				return rest[i+2:]
-			}
-		}
-		return rest
-	}
-	if len(name) >= 4 && name[:4] == "MCP:" {
-		return name[4:]
-	}
-	return name
-}
-
-// mcpServerPrefixOf returns the <server> portion of an MCP-routed tool
-// name — e.g. "mise" from "mcp__mise__run_task" — for use as a stable,
-// server-level identifier when writing shadow_mcp findings. This is what
-// the hook-time matcher computes from tool names too, so a finding's
-// match column ends up consistent across batch and hook paths.
-// Returns "" for non-MCP tool names.
-func mcpServerPrefixOf(name string) string {
-	if len(name) >= 5 && name[:5] == "mcp__" {
-		rest := name[5:]
-		for i := 0; i+1 < len(rest); i++ {
-			if rest[i] == '_' && rest[i+1] == '_' {
-				return rest[:i]
-			}
-		}
-		return ""
-	}
-	if len(name) >= 4 && name[:4] == "MCP:" {
-		return name[4:]
-	}
-	return ""
 }
 
 // dedup removes findings that overlap the same text region. Earlier entries
@@ -972,6 +949,22 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	txRepo := repo.New(a.db).WithTx(tx)
+
+	if _, err := txRepo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
+		ID:        args.RiskPolicyID,
+		ProjectID: args.ProjectID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Policy was soft-deleted while analysis was running — drop results.
+			writeSpan.SetAttributes(attribute.Bool("risk.policy_deleted", true))
+			a.logger.InfoContext(ctx, "risk policy deleted mid-analysis, dropping results",
+				attr.SlogRiskPolicyID(args.RiskPolicyID.String()),
+			)
+			return nil
+		}
+		writeSpan.SetStatus(codes.Error, err.Error())
+		return fmt.Errorf("re-check risk policy before writing results: %w", err)
+	}
 
 	if err := txRepo.DeleteRiskResultsForMessages(ctx, repo.DeleteRiskResultsForMessagesParams{
 		RiskPolicyID: args.RiskPolicyID,

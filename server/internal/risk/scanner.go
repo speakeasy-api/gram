@@ -30,7 +30,9 @@ import (
 type RiskScanner interface {
 	// ScanForEnforcement scans text against all enabled blocking policies
 	// for the given project. Returns nil if no blocking policy matches.
-	ScanForEnforcement(ctx context.Context, projectID uuid.UUID, text string, messageType message.Type) (*ScanResult, error)
+	// toolName is the tool-call name for tool_request/tool_response messages
+	// ("" otherwise); it is surfaced (destructured) to prompt-based policies.
+	ScanForEnforcement(ctx context.Context, projectID uuid.UUID, text string, messageType message.Type, toolName string) (*ScanResult, error)
 	// LookupShadowMCPBlockingPolicy returns the first enabled shadow-MCP
 	// policy for the project whose action is "block". Returns nil when no
 	// such policy exists. Used by hooks to gate the realtime deny path.
@@ -149,8 +151,11 @@ func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner,
 	}, nil
 }
 
-func (s *Scanner) ScanForEnforcement(ctx context.Context, projectID uuid.UUID, text string, messageType message.Type) (*ScanResult, error) {
-	if text == "" {
+func (s *Scanner) ScanForEnforcement(ctx context.Context, projectID uuid.UUID, text string, messageType message.Type, toolName string) (*ScanResult, error) {
+	// An empty body is only a no-op when there is also no tool attribution: a
+	// no-arg/no-output tool call still names a tool (+ MCP server/function) that
+	// a tool-scoped prompt policy can match, so let those events through.
+	if text == "" && toolName == "" {
 		return nil, nil
 	}
 
@@ -170,15 +175,14 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, projectID uuid.UUID, t
 	// Resolve the prompt-policy flag once per scan (on the parent ctx, before
 	// fan-out) so prompt_based policies don't each repeat the slug lookup and
 	// so the lookup is never cancelled by a sibling match. Gated on the exact
-	// conditions under which the fan-out would run the judge — a tool-request
-	// message and a prompt_based policy whose message_types apply to it — so
-	// the lookup is skipped entirely for scans that can never enforce one.
+	// condition under which the fan-out would run the judge — a prompt_based
+	// policy whose message_types apply to this message — so the lookup is
+	// skipped entirely for scans that can never enforce one.
 	promptPoliciesOn := false
-	if messageType == message.ToolRequest &&
-		slices.ContainsFunc(policies, func(p repo.RiskPolicy) bool {
-			return p.PolicyType == "prompt_based" &&
-				(len(p.MessageTypes) == 0 || slices.Contains(p.MessageTypes, messageType))
-		}) {
+	if slices.ContainsFunc(policies, func(p repo.RiskPolicy) bool {
+		return p.PolicyType == "prompt_based" &&
+			(len(p.MessageTypes) == 0 || slices.Contains(p.MessageTypes, messageType))
+	}) {
 		// All enforcing policies for a project belong to the same org.
 		promptPoliciesOn = s.promptPoliciesEnabled(ctx, policies[0].OrganizationID, projectID)
 	}
@@ -199,7 +203,7 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, projectID uuid.UUID, t
 		}
 
 		g.Go(func() error {
-			result, scanErr := s.scanPolicy(gctx, p, text, messageType, promptPoliciesOn)
+			result, scanErr := s.scanPolicy(gctx, p, text, messageType, toolName, promptPoliciesOn)
 			if scanErr != nil {
 				if errors.Is(scanErr, context.Canceled) {
 					return nil
@@ -282,9 +286,9 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 // text per call — its internal worker pool only fans out when n > 1, so
 // per-policy parallelism over sources buys roughly nothing. The
 // across-policies fan-out in ScanForEnforcement is the real win.
-func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type, promptPoliciesOn bool) (*ScanResult, error) {
+func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type, toolName string, promptPoliciesOn bool) (*ScanResult, error) {
 	if policy.PolicyType == "prompt_based" {
-		return s.scanPromptPolicy(ctx, policy, text, messageType, promptPoliciesOn), nil
+		return s.scanPromptPolicy(ctx, policy, text, messageType, toolName, promptPoliciesOn), nil
 	}
 
 	disabled := ra.NewDisabledRuleSet(policy.DisabledRules)
@@ -386,14 +390,11 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 }
 
 // scanPromptPolicy evaluates text against a prompt_based policy's guardrail
-// prompt via the LLM judge. For the M0 MVP, realtime judge enforcement is
-// hard-scoped to tool-call messages regardless of the policy's message_types,
-// so a misconfigured policy can never judge other message types inline. Returns
-// nil when the judge does not match (including fail-open on judge error).
-func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type, promptPoliciesOn bool) *ScanResult {
-	if messageType != message.ToolRequest {
-		return nil
-	}
+// prompt via the LLM judge. The caller (ScanForEnforcement) has already
+// filtered policies to those whose message_types apply to this message, so the
+// judge runs for whatever message types the policy declares. Returns nil when
+// the judge does not match (including fail-open on judge error).
+func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type, toolName string, promptPoliciesOn bool) *ScanResult {
 	cfg := ra.ParseJudgeConfig(policy.ModelConfig)
 	if !promptPoliciesOn {
 		return nil
@@ -406,8 +407,11 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 		OrgID:     policy.OrganizationID,
 		ProjectID: policy.ProjectID.String(),
 		Prompt:    policy.Prompt.String,
-		Text:      text,
-		Config:    cfg,
+		// text is the type-appropriate body the hook layer already flattened:
+		// the prompt for user messages, tool-input JSON for tool_request,
+		// tool-output JSON for tool_response.
+		Message: ra.NewJudgeMessage(messageType, toolName, text),
+		Config:  cfg,
 	})
 	if verdict == nil {
 		return nil

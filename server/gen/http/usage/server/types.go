@@ -12,6 +12,17 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// SetBillingMetadataRequestBody is the type of the "usage" service
+// "setBillingMetadata" endpoint HTTP request body.
+type SetBillingMetadataRequestBody struct {
+	// The contracted monthly tokens under management limit. Omit to clear.
+	MonthlyTokenLimit *int64 `form:"monthly_token_limit,omitempty" json:"monthly_token_limit,omitempty" xml:"monthly_token_limit,omitempty"`
+	// Email address to notify on TUM threshold events. Omit to clear.
+	AlertEmail *string `form:"alert_email,omitempty" json:"alert_email,omitempty" xml:"alert_email,omitempty"`
+	// Day of month (1-31) the billing cycle starts, at 00:00 UTC
+	BillingCycleAnchorDay *int `form:"billing_cycle_anchor_day,omitempty" json:"billing_cycle_anchor_day,omitempty" xml:"billing_cycle_anchor_day,omitempty"`
+}
+
 // GetPeriodUsageResponseBody is the type of the "usage" service
 // "getPeriodUsage" endpoint HTTP response body.
 type GetPeriodUsageResponseBody struct {
@@ -31,6 +42,50 @@ type GetPeriodUsageResponseBody struct {
 	IncludedCredits int `form:"included_credits" json:"included_credits" xml:"included_credits"`
 	// Whether the project has an active subscription
 	HasActiveSubscription bool `form:"has_active_subscription" json:"has_active_subscription" xml:"has_active_subscription"`
+}
+
+// GetTokensUnderManagementResponseBody is the type of the "usage" service
+// "getTokensUnderManagement" endpoint HTTP response body.
+type GetTokensUnderManagementResponseBody struct {
+	// Start of the active billing cycle
+	PeriodStart string `form:"period_start" json:"period_start" xml:"period_start"`
+	// End of the active billing cycle (exclusive)
+	PeriodEnd string `form:"period_end" json:"period_end" xml:"period_end"`
+	// Tokens under management consumed during the active billing cycle
+	Tokens int64 `form:"tokens" json:"tokens" xml:"tokens"`
+	// The contracted monthly tokens under management limit, if one has been
+	// configured
+	MonthlyTokenLimit *int64 `form:"monthly_token_limit,omitempty" json:"monthly_token_limit,omitempty" xml:"monthly_token_limit,omitempty"`
+	// Day of month (1-31) the billing cycle starts, at 00:00 UTC
+	BillingCycleAnchorDay int `form:"billing_cycle_anchor_day" json:"billing_cycle_anchor_day" xml:"billing_cycle_anchor_day"`
+	// Email address to notify on TUM threshold events. Only populated for platform
+	// admins.
+	AlertEmail *string `form:"alert_email,omitempty" json:"alert_email,omitempty" xml:"alert_email,omitempty"`
+	// TUM usage per billing cycle for the trailing cycles, oldest first. The last
+	// entry is the active cycle.
+	History []*TUMPeriodResponseBody `form:"history" json:"history" xml:"history"`
+}
+
+// SetBillingMetadataResponseBody is the type of the "usage" service
+// "setBillingMetadata" endpoint HTTP response body.
+type SetBillingMetadataResponseBody struct {
+	// Start of the active billing cycle
+	PeriodStart string `form:"period_start" json:"period_start" xml:"period_start"`
+	// End of the active billing cycle (exclusive)
+	PeriodEnd string `form:"period_end" json:"period_end" xml:"period_end"`
+	// Tokens under management consumed during the active billing cycle
+	Tokens int64 `form:"tokens" json:"tokens" xml:"tokens"`
+	// The contracted monthly tokens under management limit, if one has been
+	// configured
+	MonthlyTokenLimit *int64 `form:"monthly_token_limit,omitempty" json:"monthly_token_limit,omitempty" xml:"monthly_token_limit,omitempty"`
+	// Day of month (1-31) the billing cycle starts, at 00:00 UTC
+	BillingCycleAnchorDay int `form:"billing_cycle_anchor_day" json:"billing_cycle_anchor_day" xml:"billing_cycle_anchor_day"`
+	// Email address to notify on TUM threshold events. Only populated for platform
+	// admins.
+	AlertEmail *string `form:"alert_email,omitempty" json:"alert_email,omitempty" xml:"alert_email,omitempty"`
+	// TUM usage per billing cycle for the trailing cycles, oldest first. The last
+	// entry is the active cycle.
+	History []*TUMPeriodResponseBody `form:"history" json:"history" xml:"history"`
 }
 
 // GetUsageTiersResponseBody is the type of the "usage" service "getUsageTiers"
@@ -211,6 +266,380 @@ type GetPeriodUsageUnexpectedResponseBody struct {
 // GetPeriodUsageGatewayErrorResponseBody is the type of the "usage" service
 // "getPeriodUsage" endpoint HTTP response body for the "gateway_error" error.
 type GetPeriodUsageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetTokensUnderManagementUnauthorizedResponseBody is the type of the "usage"
+// service "getTokensUnderManagement" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetTokensUnderManagementUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetTokensUnderManagementForbiddenResponseBody is the type of the "usage"
+// service "getTokensUnderManagement" endpoint HTTP response body for the
+// "forbidden" error.
+type GetTokensUnderManagementForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetTokensUnderManagementBadRequestResponseBody is the type of the "usage"
+// service "getTokensUnderManagement" endpoint HTTP response body for the
+// "bad_request" error.
+type GetTokensUnderManagementBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetTokensUnderManagementNotFoundResponseBody is the type of the "usage"
+// service "getTokensUnderManagement" endpoint HTTP response body for the
+// "not_found" error.
+type GetTokensUnderManagementNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetTokensUnderManagementConflictResponseBody is the type of the "usage"
+// service "getTokensUnderManagement" endpoint HTTP response body for the
+// "conflict" error.
+type GetTokensUnderManagementConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetTokensUnderManagementUnsupportedMediaResponseBody is the type of the
+// "usage" service "getTokensUnderManagement" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetTokensUnderManagementUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetTokensUnderManagementInvalidResponseBody is the type of the "usage"
+// service "getTokensUnderManagement" endpoint HTTP response body for the
+// "invalid" error.
+type GetTokensUnderManagementInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetTokensUnderManagementInvariantViolationResponseBody is the type of the
+// "usage" service "getTokensUnderManagement" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetTokensUnderManagementInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetTokensUnderManagementUnexpectedResponseBody is the type of the "usage"
+// service "getTokensUnderManagement" endpoint HTTP response body for the
+// "unexpected" error.
+type GetTokensUnderManagementUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetTokensUnderManagementGatewayErrorResponseBody is the type of the "usage"
+// service "getTokensUnderManagement" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetTokensUnderManagementGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetBillingMetadataUnauthorizedResponseBody is the type of the "usage"
+// service "setBillingMetadata" endpoint HTTP response body for the
+// "unauthorized" error.
+type SetBillingMetadataUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetBillingMetadataForbiddenResponseBody is the type of the "usage" service
+// "setBillingMetadata" endpoint HTTP response body for the "forbidden" error.
+type SetBillingMetadataForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetBillingMetadataBadRequestResponseBody is the type of the "usage" service
+// "setBillingMetadata" endpoint HTTP response body for the "bad_request" error.
+type SetBillingMetadataBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetBillingMetadataNotFoundResponseBody is the type of the "usage" service
+// "setBillingMetadata" endpoint HTTP response body for the "not_found" error.
+type SetBillingMetadataNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetBillingMetadataConflictResponseBody is the type of the "usage" service
+// "setBillingMetadata" endpoint HTTP response body for the "conflict" error.
+type SetBillingMetadataConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetBillingMetadataUnsupportedMediaResponseBody is the type of the "usage"
+// service "setBillingMetadata" endpoint HTTP response body for the
+// "unsupported_media" error.
+type SetBillingMetadataUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetBillingMetadataInvalidResponseBody is the type of the "usage" service
+// "setBillingMetadata" endpoint HTTP response body for the "invalid" error.
+type SetBillingMetadataInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetBillingMetadataInvariantViolationResponseBody is the type of the "usage"
+// service "setBillingMetadata" endpoint HTTP response body for the
+// "invariant_violation" error.
+type SetBillingMetadataInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetBillingMetadataUnexpectedResponseBody is the type of the "usage" service
+// "setBillingMetadata" endpoint HTTP response body for the "unexpected" error.
+type SetBillingMetadataUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetBillingMetadataGatewayErrorResponseBody is the type of the "usage"
+// service "setBillingMetadata" endpoint HTTP response body for the
+// "gateway_error" error.
+type SetBillingMetadataGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -963,6 +1392,26 @@ type CreateTopUpCheckoutGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// TUMPeriodResponseBody is used to define fields on response body types.
+type TUMPeriodResponseBody struct {
+	// Start of the billing cycle
+	PeriodStart string `form:"period_start" json:"period_start" xml:"period_start"`
+	// End of the billing cycle (exclusive)
+	PeriodEnd string `form:"period_end" json:"period_end" xml:"period_end"`
+	// Tokens under management consumed during the cycle
+	Tokens int64 `form:"tokens" json:"tokens" xml:"tokens"`
+	// Daily breakdown of TUM within the cycle. Days without usage are omitted.
+	Days []*TUMPeriodDayResponseBody `form:"days" json:"days" xml:"days"`
+}
+
+// TUMPeriodDayResponseBody is used to define fields on response body types.
+type TUMPeriodDayResponseBody struct {
+	// The UTC day
+	Date string `form:"date" json:"date" xml:"date"`
+	// Tokens under management consumed on this day
+	Tokens int64 `form:"tokens" json:"tokens" xml:"tokens"`
+}
+
 // TierLimitsResponseBody is used to define fields on response body types.
 type TierLimitsResponseBody struct {
 	// The base price for the tier
@@ -998,6 +1447,58 @@ func NewGetPeriodUsageResponseBody(res *usage.PeriodUsage) *GetPeriodUsageRespon
 		Credits:                  res.Credits,
 		IncludedCredits:          res.IncludedCredits,
 		HasActiveSubscription:    res.HasActiveSubscription,
+	}
+	return body
+}
+
+// NewGetTokensUnderManagementResponseBody builds the HTTP response body from
+// the result of the "getTokensUnderManagement" endpoint of the "usage" service.
+func NewGetTokensUnderManagementResponseBody(res *usage.TokensUnderManagement) *GetTokensUnderManagementResponseBody {
+	body := &GetTokensUnderManagementResponseBody{
+		PeriodStart:           res.PeriodStart,
+		PeriodEnd:             res.PeriodEnd,
+		Tokens:                res.Tokens,
+		MonthlyTokenLimit:     res.MonthlyTokenLimit,
+		BillingCycleAnchorDay: res.BillingCycleAnchorDay,
+		AlertEmail:            res.AlertEmail,
+	}
+	if res.History != nil {
+		body.History = make([]*TUMPeriodResponseBody, len(res.History))
+		for i, val := range res.History {
+			if val == nil {
+				body.History[i] = nil
+				continue
+			}
+			body.History[i] = marshalUsageTUMPeriodToTUMPeriodResponseBody(val)
+		}
+	} else {
+		body.History = []*TUMPeriodResponseBody{}
+	}
+	return body
+}
+
+// NewSetBillingMetadataResponseBody builds the HTTP response body from the
+// result of the "setBillingMetadata" endpoint of the "usage" service.
+func NewSetBillingMetadataResponseBody(res *usage.TokensUnderManagement) *SetBillingMetadataResponseBody {
+	body := &SetBillingMetadataResponseBody{
+		PeriodStart:           res.PeriodStart,
+		PeriodEnd:             res.PeriodEnd,
+		Tokens:                res.Tokens,
+		MonthlyTokenLimit:     res.MonthlyTokenLimit,
+		BillingCycleAnchorDay: res.BillingCycleAnchorDay,
+		AlertEmail:            res.AlertEmail,
+	}
+	if res.History != nil {
+		body.History = make([]*TUMPeriodResponseBody, len(res.History))
+		for i, val := range res.History {
+			if val == nil {
+				body.History[i] = nil
+				continue
+			}
+			body.History[i] = marshalUsageTUMPeriodToTUMPeriodResponseBody(val)
+		}
+	} else {
+		body.History = []*TUMPeriodResponseBody{}
 	}
 	return body
 }
@@ -1148,6 +1649,298 @@ func NewGetPeriodUsageUnexpectedResponseBody(res *goa.ServiceError) *GetPeriodUs
 // the result of the "getPeriodUsage" endpoint of the "usage" service.
 func NewGetPeriodUsageGatewayErrorResponseBody(res *goa.ServiceError) *GetPeriodUsageGatewayErrorResponseBody {
 	body := &GetPeriodUsageGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetTokensUnderManagementUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getTokensUnderManagement" endpoint of the
+// "usage" service.
+func NewGetTokensUnderManagementUnauthorizedResponseBody(res *goa.ServiceError) *GetTokensUnderManagementUnauthorizedResponseBody {
+	body := &GetTokensUnderManagementUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetTokensUnderManagementForbiddenResponseBody builds the HTTP response
+// body from the result of the "getTokensUnderManagement" endpoint of the
+// "usage" service.
+func NewGetTokensUnderManagementForbiddenResponseBody(res *goa.ServiceError) *GetTokensUnderManagementForbiddenResponseBody {
+	body := &GetTokensUnderManagementForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetTokensUnderManagementBadRequestResponseBody builds the HTTP response
+// body from the result of the "getTokensUnderManagement" endpoint of the
+// "usage" service.
+func NewGetTokensUnderManagementBadRequestResponseBody(res *goa.ServiceError) *GetTokensUnderManagementBadRequestResponseBody {
+	body := &GetTokensUnderManagementBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetTokensUnderManagementNotFoundResponseBody builds the HTTP response
+// body from the result of the "getTokensUnderManagement" endpoint of the
+// "usage" service.
+func NewGetTokensUnderManagementNotFoundResponseBody(res *goa.ServiceError) *GetTokensUnderManagementNotFoundResponseBody {
+	body := &GetTokensUnderManagementNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetTokensUnderManagementConflictResponseBody builds the HTTP response
+// body from the result of the "getTokensUnderManagement" endpoint of the
+// "usage" service.
+func NewGetTokensUnderManagementConflictResponseBody(res *goa.ServiceError) *GetTokensUnderManagementConflictResponseBody {
+	body := &GetTokensUnderManagementConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetTokensUnderManagementUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getTokensUnderManagement" endpoint of
+// the "usage" service.
+func NewGetTokensUnderManagementUnsupportedMediaResponseBody(res *goa.ServiceError) *GetTokensUnderManagementUnsupportedMediaResponseBody {
+	body := &GetTokensUnderManagementUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetTokensUnderManagementInvalidResponseBody builds the HTTP response body
+// from the result of the "getTokensUnderManagement" endpoint of the "usage"
+// service.
+func NewGetTokensUnderManagementInvalidResponseBody(res *goa.ServiceError) *GetTokensUnderManagementInvalidResponseBody {
+	body := &GetTokensUnderManagementInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetTokensUnderManagementInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getTokensUnderManagement" endpoint of
+// the "usage" service.
+func NewGetTokensUnderManagementInvariantViolationResponseBody(res *goa.ServiceError) *GetTokensUnderManagementInvariantViolationResponseBody {
+	body := &GetTokensUnderManagementInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetTokensUnderManagementUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getTokensUnderManagement" endpoint of the
+// "usage" service.
+func NewGetTokensUnderManagementUnexpectedResponseBody(res *goa.ServiceError) *GetTokensUnderManagementUnexpectedResponseBody {
+	body := &GetTokensUnderManagementUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetTokensUnderManagementGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getTokensUnderManagement" endpoint of the
+// "usage" service.
+func NewGetTokensUnderManagementGatewayErrorResponseBody(res *goa.ServiceError) *GetTokensUnderManagementGatewayErrorResponseBody {
+	body := &GetTokensUnderManagementGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetBillingMetadataUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "setBillingMetadata" endpoint of the "usage" service.
+func NewSetBillingMetadataUnauthorizedResponseBody(res *goa.ServiceError) *SetBillingMetadataUnauthorizedResponseBody {
+	body := &SetBillingMetadataUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetBillingMetadataForbiddenResponseBody builds the HTTP response body
+// from the result of the "setBillingMetadata" endpoint of the "usage" service.
+func NewSetBillingMetadataForbiddenResponseBody(res *goa.ServiceError) *SetBillingMetadataForbiddenResponseBody {
+	body := &SetBillingMetadataForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetBillingMetadataBadRequestResponseBody builds the HTTP response body
+// from the result of the "setBillingMetadata" endpoint of the "usage" service.
+func NewSetBillingMetadataBadRequestResponseBody(res *goa.ServiceError) *SetBillingMetadataBadRequestResponseBody {
+	body := &SetBillingMetadataBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetBillingMetadataNotFoundResponseBody builds the HTTP response body from
+// the result of the "setBillingMetadata" endpoint of the "usage" service.
+func NewSetBillingMetadataNotFoundResponseBody(res *goa.ServiceError) *SetBillingMetadataNotFoundResponseBody {
+	body := &SetBillingMetadataNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetBillingMetadataConflictResponseBody builds the HTTP response body from
+// the result of the "setBillingMetadata" endpoint of the "usage" service.
+func NewSetBillingMetadataConflictResponseBody(res *goa.ServiceError) *SetBillingMetadataConflictResponseBody {
+	body := &SetBillingMetadataConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetBillingMetadataUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "setBillingMetadata" endpoint of the "usage"
+// service.
+func NewSetBillingMetadataUnsupportedMediaResponseBody(res *goa.ServiceError) *SetBillingMetadataUnsupportedMediaResponseBody {
+	body := &SetBillingMetadataUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetBillingMetadataInvalidResponseBody builds the HTTP response body from
+// the result of the "setBillingMetadata" endpoint of the "usage" service.
+func NewSetBillingMetadataInvalidResponseBody(res *goa.ServiceError) *SetBillingMetadataInvalidResponseBody {
+	body := &SetBillingMetadataInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetBillingMetadataInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "setBillingMetadata" endpoint of the "usage"
+// service.
+func NewSetBillingMetadataInvariantViolationResponseBody(res *goa.ServiceError) *SetBillingMetadataInvariantViolationResponseBody {
+	body := &SetBillingMetadataInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetBillingMetadataUnexpectedResponseBody builds the HTTP response body
+// from the result of the "setBillingMetadata" endpoint of the "usage" service.
+func NewSetBillingMetadataUnexpectedResponseBody(res *goa.ServiceError) *SetBillingMetadataUnexpectedResponseBody {
+	body := &SetBillingMetadataUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetBillingMetadataGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "setBillingMetadata" endpoint of the "usage" service.
+func NewSetBillingMetadataGatewayErrorResponseBody(res *goa.ServiceError) *SetBillingMetadataGatewayErrorResponseBody {
+	body := &SetBillingMetadataGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1739,6 +2532,28 @@ func NewGetPeriodUsagePayload(sessionToken *string) *usage.GetPeriodUsagePayload
 	return v
 }
 
+// NewGetTokensUnderManagementPayload builds a usage service
+// getTokensUnderManagement endpoint payload.
+func NewGetTokensUnderManagementPayload(sessionToken *string) *usage.GetTokensUnderManagementPayload {
+	v := &usage.GetTokensUnderManagementPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewSetBillingMetadataPayload builds a usage service setBillingMetadata
+// endpoint payload.
+func NewSetBillingMetadataPayload(body *SetBillingMetadataRequestBody, sessionToken *string) *usage.SetBillingMetadataPayload {
+	v := &usage.SetBillingMetadataPayload{
+		MonthlyTokenLimit:     body.MonthlyTokenLimit,
+		AlertEmail:            body.AlertEmail,
+		BillingCycleAnchorDay: *body.BillingCycleAnchorDay,
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewCreateCustomerSessionPayload builds a usage service createCustomerSession
 // endpoint payload.
 func NewCreateCustomerSessionPayload(sessionToken *string) *usage.CreateCustomerSessionPayload {
@@ -1764,4 +2579,31 @@ func NewCreateTopUpCheckoutPayload(sessionToken *string) *usage.CreateTopUpCheck
 	v.SessionToken = sessionToken
 
 	return v
+}
+
+// ValidateSetBillingMetadataRequestBody runs the validations defined on
+// SetBillingMetadataRequestBody
+func ValidateSetBillingMetadataRequestBody(body *SetBillingMetadataRequestBody) (err error) {
+	if body.BillingCycleAnchorDay == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("billing_cycle_anchor_day", "body"))
+	}
+	if body.MonthlyTokenLimit != nil {
+		if *body.MonthlyTokenLimit < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.monthly_token_limit", *body.MonthlyTokenLimit, 0, true))
+		}
+	}
+	if body.AlertEmail != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.alert_email", *body.AlertEmail, goa.FormatEmail))
+	}
+	if body.BillingCycleAnchorDay != nil {
+		if *body.BillingCycleAnchorDay < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.billing_cycle_anchor_day", *body.BillingCycleAnchorDay, 1, true))
+		}
+	}
+	if body.BillingCycleAnchorDay != nil {
+		if *body.BillingCycleAnchorDay > 31 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.billing_cycle_anchor_day", *body.BillingCycleAnchorDay, 31, false))
+		}
+	}
+	return
 }

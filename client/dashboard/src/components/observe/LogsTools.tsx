@@ -9,6 +9,7 @@ import { Spinner } from "@/components/ui/spinner";
 import {
   FilterChip,
   ObserveFilterBar,
+  type ObserveTypeFilterValue,
 } from "@/components/observe/ObserveFilterBar";
 import { useSlugs } from "@/contexts/Sdk";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
@@ -61,6 +62,10 @@ ChartJS.register(
   Tooltip,
   Legend,
 );
+
+function isHookType(value: ObserveTypeFilterValue): value is TypesToInclude {
+  return value === "mcp" || value === "local" || value === "skill";
+}
 
 export function LogsTools(): JSX.Element {
   const { projectSlug } = useSlugs();
@@ -361,7 +366,9 @@ function HooksInnerContent({
             onSourceSelectionChange={onSourceSelectionChange}
             activeFilters={activeFilters}
             selectedTypes={selectedHookTypes}
-            onTypesChange={onHookTypesChange}
+            onTypesChange={(types) =>
+              onHookTypesChange(types.filter(isHookType))
+            }
             roleOptions={roleOptions}
             selectedRoleIds={selectedRoleIds}
             onRoleSelectionChange={onRoleSelectionChange}

@@ -394,6 +394,64 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetHooksSummary", "type": "query"}`)
 	})
 
+	Method("getToolUsageSummary", func() {
+		Description("Get target-aware MCP and tool usage metrics")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetToolUsageSummaryPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetToolUsageSummaryResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getToolUsageSummary")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getToolUsageSummary")
+		Meta("openapi:extension:x-speakeasy-name-override", "getToolUsageSummary")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetToolUsageSummary", "type": "query"}`)
+	})
+
+	Method("getToolUsageFilterOptions", func() {
+		Description("Get filter options for target-aware MCP and tool usage metrics")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetToolUsageFilterOptionsPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetToolUsageFilterOptionsResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getToolUsageFilterOptions")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getToolUsageFilterOptions")
+		Meta("openapi:extension:x-speakeasy-name-override", "getToolUsageFilterOptions")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetToolUsageFilterOptions", "type": "query"}`)
+	})
+
 	Method("listHooksTraces", func() {
 		Description("List hook traces aggregated by trace_id with user information")
 		Security(security.ByKey, security.ProjectSlug, func() {
@@ -1412,6 +1470,225 @@ var GetHooksSummaryResult = Type("GetHooksSummaryResult", func() {
 	Attribute("skill_breakdown", ArrayOf(SkillBreakdownRowType), "Per-user skill breakdown")
 
 	Required("servers", "users", "skills", "total_events", "total_sessions", "breakdown", "time_series", "skill_time_series", "skill_breakdown")
+})
+
+var ToolUsageTargetType = Type("ToolUsageTargetType", String, func() {
+	Description("Tool usage target type")
+	Enum("hosted_mcp_server", "shadow_mcp_server", "local_tool", "skill")
+})
+
+var ToolUsageTargetKind = Type("ToolUsageTargetKind", String, func() {
+	Description("Tool usage aggregation target kind")
+	Enum("server", "local_tools", "skill")
+})
+
+var ToolUsageUserKind = Type("ToolUsageUserKind", String, func() {
+	Description("Tool usage user identity kind")
+	Enum("email", "external_user_id", "user_id", "unknown")
+})
+
+var ToolUsageUserFilter = Type("ToolUsageUserFilter", func() {
+	Description("Typed user identity filter")
+	Attribute("kind", ToolUsageUserKind, "Type of user identity represented by the filter key")
+	Attribute("key", String, "User identity value to include")
+	Required("kind", "key")
+})
+
+var ToolUsageFilterOptionType = Type("ToolUsageFilterOptionType", String, func() {
+	Description("Tool usage filter option type")
+	Enum("hosted_servers", "shadow_servers", "users")
+})
+
+var GetToolUsageSummaryPayload = Type("GetToolUsageSummaryPayload", func() {
+	Description("Payload for target-aware MCP and tool usage metrics")
+
+	Attribute("from", String, "Start time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T11:00:00Z")
+	})
+	Attribute("target_types", ArrayOf(ToolUsageTargetType), "Target types to include. Empty means all target types.")
+	Attribute("hosted_toolset_slugs", ArrayOf(String), "Hosted MCP toolset slugs to include")
+	Attribute("shadow_server_names", ArrayOf(String), "Shadow MCP server names to include")
+	Attribute("user_filters", ArrayOf(ToolUsageUserFilter), "Typed user identities to include")
+
+	Required("from", "to")
+})
+
+var GetToolUsageSummaryResult = Type("GetToolUsageSummaryResult", func() {
+	Description("Target-aware MCP and tool usage metrics")
+
+	Attribute("totals", ToolUsageTotals, "Overall usage totals for the selected filters and time range")
+	Attribute("targets", ArrayOf(ToolUsageTargetSummary), "Top usage targets for the selected filters and time range")
+	Attribute("users", ArrayOf(ToolUsageUserSummary), "Top user identities for the selected filters and time range")
+	Attribute("target_time_series", ArrayOf(ToolUsageTargetTimeSeriesPoint), "Time-series usage buckets grouped by target")
+	Attribute("user_time_series", ArrayOf(ToolUsageUserTimeSeriesPoint), "Time-series usage buckets grouped by user identity")
+	Attribute("users_by_target", ArrayOf(ToolUsageUsersByTargetRow), "Cross-dimensional usage rows grouped by target and user identity")
+	Attribute("target_tool_breakdown", ArrayOf(ToolUsageTargetToolBreakdownRow), "Per-tool usage rows grouped by target")
+
+	Required("totals", "targets", "users", "target_time_series", "user_time_series", "users_by_target", "target_tool_breakdown")
+})
+
+var GetToolUsageFilterOptionsPayload = Type("GetToolUsageFilterOptionsPayload", func() {
+	Description("Payload for target-aware MCP and tool usage filter options")
+
+	Attribute("from", String, "Start time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T11:00:00Z")
+	})
+	Attribute("option_types", ArrayOf(ToolUsageFilterOptionType), "Filter option types to include. Empty means all option types.")
+
+	Required("from", "to")
+})
+
+var GetToolUsageFilterOptionsResult = Type("GetToolUsageFilterOptionsResult", func() {
+	Description("Filter options for target-aware MCP and tool usage metrics")
+
+	Attribute("hosted_servers", ArrayOf(ToolUsageHostedServerFilterOption), "Hosted MCP servers with usage in the selected time range")
+	Attribute("shadow_servers", ArrayOf(ToolUsageShadowServerFilterOption), "Shadow MCP servers with usage in the selected time range")
+	Attribute("users", ArrayOf(ToolUsageUserFilterOption), "User identities with usage in the selected time range")
+
+	Required("hosted_servers", "shadow_servers", "users")
+})
+
+var ToolUsageHostedServerFilterOption = Type("ToolUsageHostedServerFilterOption", func() {
+	Description("Hosted MCP server filter option with usage in the selected time window")
+
+	Attribute("toolset_slug", String, "Hosted MCP toolset slug")
+	Attribute("event_count", Int64, "Number of tool usage events observed for the hosted MCP server")
+
+	Required("toolset_slug", "event_count")
+})
+
+var ToolUsageShadowServerFilterOption = Type("ToolUsageShadowServerFilterOption", func() {
+	Description("Shadow MCP server filter option with usage in the selected time window")
+
+	Attribute("server_name", String, "Observed Shadow MCP server name")
+	Attribute("event_count", Int64, "Number of tool usage events observed for the Shadow MCP server")
+
+	Required("server_name", "event_count")
+})
+
+var ToolUsageUserFilterOption = Type("ToolUsageUserFilterOption", func() {
+	Description("Tool usage user filter option with usage in the selected time window")
+
+	Attribute("user_key", String, "Stable user identity value used by filters")
+	Attribute("user_label", String, "User-facing label for the user identity")
+	Attribute("user_kind", ToolUsageUserKind, "Type of user identity represented by the option")
+	Attribute("event_count", Int64, "Number of tool usage events observed for the user identity")
+
+	Required("user_key", "user_label", "user_kind", "event_count")
+})
+
+var ToolUsageTotals = Type("ToolUsageTotals", func() {
+	Description("Target-aware MCP and tool usage totals")
+
+	Attribute("event_count", Int64, "Total number of tool usage events")
+	Attribute("success_count", Int64, "Number of successful tool usage events")
+	Attribute("failure_count", Int64, "Number of failed tool usage events")
+	Attribute("failure_rate", Float64, "Fraction of completed tool usage events that failed")
+	Attribute("unique_tools", Int64, "Number of distinct tools observed")
+	Attribute("unique_users", Int64, "Number of distinct user identities observed")
+	Attribute("unique_targets", Int64, "Number of distinct usage targets observed")
+
+	Required("event_count", "success_count", "failure_count", "failure_rate", "unique_tools", "unique_users", "unique_targets")
+})
+
+var ToolUsageTargetSummary = Type("ToolUsageTargetSummary", func() {
+	Description("Aggregated tool usage metrics for one target")
+
+	Attribute("target_type", ToolUsageTargetType, "Specific kind of tool usage target")
+	Attribute("target_kind", ToolUsageTargetKind, "Display grouping for the target")
+	Attribute("target_id", String, "Stable target identifier used by filters and chart grouping")
+	Attribute("target_label", String, "User-facing label for the target")
+	Attribute("event_count", Int64, "Total number of tool usage events for the target")
+	Attribute("unique_tools", Int64, "Number of distinct tools observed for the target")
+	Attribute("success_count", Int64, "Number of successful tool usage events for the target")
+	Attribute("failure_count", Int64, "Number of failed tool usage events for the target")
+	Attribute("failure_rate", Float64, "Fraction of completed tool usage events for the target that failed")
+
+	Required("target_type", "target_kind", "target_id", "target_label", "event_count", "unique_tools", "success_count", "failure_count", "failure_rate")
+})
+
+var ToolUsageUserSummary = Type("ToolUsageUserSummary", func() {
+	Description("Aggregated tool usage metrics for one user identity")
+
+	Attribute("user_key", String, "Stable user identity value used by filters and chart grouping")
+	Attribute("user_label", String, "User-facing label for the user identity")
+	Attribute("user_kind", ToolUsageUserKind, "Type of user identity represented by the row")
+	Attribute("event_count", Int64, "Total number of tool usage events for the user identity")
+	Attribute("unique_tools", Int64, "Number of distinct tools observed for the user identity")
+	Attribute("success_count", Int64, "Number of successful tool usage events for the user identity")
+	Attribute("failure_count", Int64, "Number of failed tool usage events for the user identity")
+	Attribute("failure_rate", Float64, "Fraction of completed tool usage events for the user identity that failed")
+
+	Required("user_key", "user_label", "user_kind", "event_count", "unique_tools", "success_count", "failure_count", "failure_rate")
+})
+
+var ToolUsageTargetTimeSeriesPoint = Type("ToolUsageTargetTimeSeriesPoint", func() {
+	Description("A time-series bucket for one tool usage target")
+
+	Attribute("bucket_start_ns", String, "Bucket start time in Unix nanoseconds as a string for JavaScript integer safety")
+	Attribute("target_type", ToolUsageTargetType, "Specific kind of tool usage target")
+	Attribute("target_kind", ToolUsageTargetKind, "Display grouping for the target")
+	Attribute("target_id", String, "Stable target identifier used by filters and chart grouping")
+	Attribute("target_label", String, "User-facing label for the target")
+	Attribute("event_count", Int64, "Number of tool usage events in the bucket")
+	Attribute("failure_count", Int64, "Number of failed tool usage events in the bucket")
+
+	Required("bucket_start_ns", "target_type", "target_kind", "target_id", "target_label", "event_count", "failure_count")
+})
+
+var ToolUsageUserTimeSeriesPoint = Type("ToolUsageUserTimeSeriesPoint", func() {
+	Description("A time-series bucket for one tool usage user identity")
+
+	Attribute("bucket_start_ns", String, "Bucket start time in Unix nanoseconds as a string for JavaScript integer safety")
+	Attribute("user_key", String, "Stable user identity value used by filters and chart grouping")
+	Attribute("user_label", String, "User-facing label for the user identity")
+	Attribute("user_kind", ToolUsageUserKind, "Type of user identity represented by the row")
+	Attribute("event_count", Int64, "Number of tool usage events in the bucket")
+	Attribute("failure_count", Int64, "Number of failed tool usage events in the bucket")
+
+	Required("bucket_start_ns", "user_key", "user_label", "user_kind", "event_count", "failure_count")
+})
+
+var ToolUsageUsersByTargetRow = Type("ToolUsageUsersByTargetRow", func() {
+	Description("Aggregated tool usage metrics for one target and user identity")
+
+	Attribute("target_type", ToolUsageTargetType, "Specific kind of tool usage target")
+	Attribute("target_kind", ToolUsageTargetKind, "Display grouping for the target")
+	Attribute("target_id", String, "Stable target identifier used by filters and chart grouping")
+	Attribute("target_label", String, "User-facing label for the target")
+	Attribute("user_key", String, "Stable user identity value used by filters and chart grouping")
+	Attribute("user_label", String, "User-facing label for the user identity")
+	Attribute("user_kind", ToolUsageUserKind, "Type of user identity represented by the row")
+	Attribute("event_count", Int64, "Total number of tool usage events for the target and user identity")
+	Attribute("failure_count", Int64, "Number of failed tool usage events for the target and user identity")
+
+	Required("target_type", "target_kind", "target_id", "target_label", "user_key", "user_label", "user_kind", "event_count", "failure_count")
+})
+
+var ToolUsageTargetToolBreakdownRow = Type("ToolUsageTargetToolBreakdownRow", func() {
+	Description("Aggregated tool usage metrics for one target and tool")
+
+	Attribute("target_type", ToolUsageTargetType, "Specific kind of tool usage target")
+	Attribute("target_kind", ToolUsageTargetKind, "Display grouping for the target")
+	Attribute("target_id", String, "Stable target identifier used by filters and chart grouping")
+	Attribute("target_label", String, "User-facing label for the target")
+	Attribute("tool_name", String, "Observed tool name")
+	Attribute("event_count", Int64, "Total number of tool usage events for the target and tool")
+	Attribute("success_count", Int64, "Number of successful tool usage events for the target and tool")
+	Attribute("failure_count", Int64, "Number of failed tool usage events for the target and tool")
+	Attribute("failure_rate", Float64, "Fraction of completed tool usage events for the target and tool that failed")
+
+	Required("target_type", "target_kind", "target_id", "target_label", "tool_name", "event_count", "success_count", "failure_count", "failure_rate")
 })
 
 var HooksBreakdownRowType = Type("HooksBreakdownRow", func() {

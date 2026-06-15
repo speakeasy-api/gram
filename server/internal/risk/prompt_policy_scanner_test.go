@@ -3,6 +3,7 @@ package risk_test
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -21,15 +22,26 @@ import (
 
 // fakePromptJudge is a stub ra.PromptJudge that returns a fixed verdict and
 // records how many times it was invoked, so tests can assert the scanner only
-// calls the judge for in-scope (tool-call) messages.
+// calls the judge for messages whose type the policy applies to.
 type fakePromptJudge struct {
 	verdict *risk_analysis.JudgeVerdict
 	calls   atomic.Int32
+	mu      sync.Mutex
+	last    risk_analysis.JudgeInput
 }
 
-func (f *fakePromptJudge) Evaluate(_ context.Context, _ risk_analysis.JudgeInput) *risk_analysis.JudgeVerdict {
+func (f *fakePromptJudge) Evaluate(_ context.Context, in risk_analysis.JudgeInput) *risk_analysis.JudgeVerdict {
 	f.calls.Add(1)
+	f.mu.Lock()
+	f.last = in
+	f.mu.Unlock()
 	return f.verdict
+}
+
+func (f *fakePromptJudge) lastInput() risk_analysis.JudgeInput {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.last
 }
 
 func insertPromptBasedBlockPolicy(t *testing.T, ti *testInstance, ctx context.Context, name, prompt string, messageTypes []string) {
@@ -79,7 +91,7 @@ func TestScanner_PromptBasedPolicyBlocksToolRequest(t *testing.T) {
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	res, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "rm -rf /data", message.ToolRequest)
+	res, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "rm -rf /data", message.ToolRequest, "")
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	require.Equal(t, "block", res.Action)
@@ -88,10 +100,35 @@ func TestScanner_PromptBasedPolicyBlocksToolRequest(t *testing.T) {
 	require.Equal(t, "destructive delete", res.Description)
 }
 
-// TestScanner_PromptBasedPolicyScopedToToolRequest verifies the M0 hard scope:
-// even a prompt_based policy with no message-type restriction is never judged
-// inline for non-tool-call messages.
-func TestScanner_PromptBasedPolicyScopedToToolRequest(t *testing.T) {
+// TestScanner_PromptBasedPolicyAttributesMCPTool verifies the judge receives a
+// ToolCallMessage with the MCP server/function destructured from the tool name,
+// and the raw arguments as the body.
+func TestScanner_PromptBasedPolicyAttributesMCPTool(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	insertPromptBasedBlockPolicy(t, ti, ctx, "no-github-writes", "Block writes to the github MCP server", []string{message.ToolRequest})
+	judge := &fakePromptJudge{verdict: &risk_analysis.JudgeVerdict{Confidence: 1, Rationale: "x"}}
+
+	scanner, err := risk.NewScanner(testenv.NewLogger(t), ti.conn, nil, nil, judge, promptPoliciesFlag(ctx), testenv.NewMeterProvider(t))
+	require.NoError(t, err)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	_, err = scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, `{"title":"pwn"}`, message.ToolRequest, "mcp__github__create_issue")
+	require.NoError(t, err)
+
+	msg := judge.lastInput().Message
+	require.Equal(t, message.ToolRequest, msg.Type)
+	require.Equal(t, "mcp__github__create_issue", msg.ToolName)
+	require.Equal(t, "github", msg.MCPServer)
+	require.Equal(t, "create_issue", msg.MCPFunction)
+	require.JSONEq(t, `{"title":"pwn"}`, msg.Body)
+}
+
+// TestScanner_PromptBasedPolicyJudgesNonToolMessages verifies a prompt_based
+// policy with no message-type restriction is judged inline for non-tool-call
+// messages (e.g. a user prompt), not just tool calls.
+func TestScanner_PromptBasedPolicyJudgesNonToolMessages(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
@@ -102,10 +139,29 @@ func TestScanner_PromptBasedPolicyScopedToToolRequest(t *testing.T) {
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	res, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "just a user prompt", message.User)
+	res, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "just a user prompt", message.User, "")
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Equal(t, int32(1), judge.calls.Load(), "judge must run for non-tool-call messages the policy applies to")
+}
+
+// TestScanner_PromptBasedPolicyRespectsMessageTypes verifies a prompt_based
+// policy restricted to tool_request is not judged for other message types.
+func TestScanner_PromptBasedPolicyRespectsMessageTypes(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	insertPromptBasedBlockPolicy(t, ti, ctx, "no-deletes", "Block destructive deletes", []string{message.ToolRequest})
+	judge := &fakePromptJudge{verdict: &risk_analysis.JudgeVerdict{Confidence: 1, Rationale: "x"}}
+
+	scanner, err := risk.NewScanner(testenv.NewLogger(t), ti.conn, nil, nil, judge, promptPoliciesFlag(ctx), testenv.NewMeterProvider(t))
+	require.NoError(t, err)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	res, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "just a user prompt", message.User, "")
 	require.NoError(t, err)
 	require.Nil(t, res)
-	require.Equal(t, int32(0), judge.calls.Load(), "judge must not run for non-tool-call messages in M0")
+	require.Equal(t, int32(0), judge.calls.Load(), "judge must not run for a message type the policy excludes")
 }
 
 // TestScanner_PromptBasedPolicyNoMatch verifies a nil verdict (no match /
@@ -121,7 +177,7 @@ func TestScanner_PromptBasedPolicyNoMatch(t *testing.T) {
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	res, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "ls -la", message.ToolRequest)
+	res, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "ls -la", message.ToolRequest, "")
 	require.NoError(t, err)
 	require.Nil(t, res)
 	require.Equal(t, int32(1), judge.calls.Load())
@@ -138,7 +194,7 @@ func TestScanner_PromptBasedPolicyDisabledWhenFlagOff(t *testing.T) {
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	res, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "rm -rf /data", message.ToolRequest)
+	res, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "rm -rf /data", message.ToolRequest, "")
 	require.NoError(t, err)
 	require.Nil(t, res)
 	require.Equal(t, int32(0), judge.calls.Load(), "judge must not run while gram-prompt-policies is disabled")
@@ -157,7 +213,7 @@ func TestScanner_PromptBasedPolicyFailClosedWhenJudgeUnavailable(t *testing.T) {
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	res, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "rm -rf /data", message.ToolRequest)
+	res, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "rm -rf /data", message.ToolRequest, "")
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	require.Equal(t, risk_analysis.SourceLLMJudge, res.Source)

@@ -10,6 +10,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { TextArea } from "@/components/ui/textarea";
 import { SimpleTooltip } from "@/components/ui/tooltip";
@@ -127,7 +128,6 @@ const TOOL_CALL_MESSAGE_TYPES = new Set<PolicyMessageType>([
   "tool_request",
   "tool_response",
 ]);
-const PROMPT_POLICY_MESSAGE_TYPES: PolicyMessageType[] = ["tool_request"];
 
 const ALL_POLICY_MESSAGE_TYPES = Object.keys(
   POLICY_MESSAGE_TYPE_META,
@@ -282,10 +282,6 @@ function policyMessageTypesForDisplay(
   return [...policyMessageTypesForForm(messageTypes)];
 }
 
-function promptPolicyMessageTypes(): Set<PolicyMessageType> {
-  return new Set(PROMPT_POLICY_MESSAGE_TYPES);
-}
-
 function hasOnlyToolCallMessageTypes(types: Set<PolicyMessageType>): boolean {
   return (
     types.size === TOOL_CALL_MESSAGE_TYPES.size &&
@@ -385,6 +381,15 @@ function PolicyCenterContent() {
   const [formAction, setFormAction] = useState<PolicyAction>("flag");
   const [formAutoName, setFormAutoName] = useState(true);
   const [formUserMessage, setFormUserMessage] = useState("");
+  // Empty string => use the server's default judge model (see JUDGE_MODEL_OPTIONS).
+  const [formModel, setFormModel] = useState("");
+  // Judge sampling temperature. Defaults to the benchmark's deterministic
+  // setting (DEFAULT_JUDGE_TEMPERATURE); only persisted when changed from it.
+  const [formTemperature, setFormTemperature] = useState(
+    DEFAULT_JUDGE_TEMPERATURE,
+  );
+  // Fail-open (true) is the server default: allow the message when the judge errors.
+  const [formFailOpen, setFormFailOpen] = useState(true);
 
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
 
@@ -432,13 +437,6 @@ function PolicyCenterContent() {
 
   const configurePolicyKind = (kind: PolicyKind) => {
     setFormPolicyKind(kind);
-    if (kind === "prompt") {
-      setSelectedMessageTypes(promptPolicyMessageTypes());
-      setFormAction("flag");
-      setFormAutoName(true);
-      return;
-    }
-
     setSelectedMessageTypes(new Set(ALL_POLICY_MESSAGE_TYPES));
     setFormAction("flag");
     setFormAutoName(true);
@@ -455,14 +453,13 @@ function PolicyCenterContent() {
     setSelectedCategories(new Set<RuleCategory>(["secrets", "pii"]));
     setDisabledRules(new Set());
     setSelectedCustomRuleIds(new Set<string>());
-    setSelectedMessageTypes(
-      nextKind === "prompt"
-        ? promptPolicyMessageTypes()
-        : new Set(ALL_POLICY_MESSAGE_TYPES),
-    );
+    setSelectedMessageTypes(new Set(ALL_POLICY_MESSAGE_TYPES));
     setFormAction("flag");
     setFormAutoName(true);
     setFormUserMessage("");
+    setFormModel("");
+    setFormTemperature(DEFAULT_JUDGE_TEMPERATURE);
+    setFormFailOpen(true);
     setSheetOpen(true);
   };
 
@@ -484,10 +481,15 @@ function PolicyCenterContent() {
     setFormEnabled(policy.enabled);
     if (isPrompt) {
       setFormPromptInstruction(policy.prompt ?? "");
-      setSelectedMessageTypes(promptPolicyMessageTypes());
+      setSelectedMessageTypes(policyMessageTypesForForm(policy.messageTypes));
       setFormAction((policy.action as PolicyAction) ?? "flag");
       setFormAutoName(policy.autoName ?? true);
       setFormUserMessage(policy.userMessage ?? "");
+      setFormModel(policy.modelConfig?.model ?? "");
+      setFormTemperature(
+        policy.modelConfig?.temperature ?? DEFAULT_JUDGE_TEMPERATURE,
+      );
+      setFormFailOpen(policy.modelConfig?.failOpen ?? true);
       setSheetOpen(true);
       return;
     }
@@ -530,6 +532,27 @@ function PolicyCenterContent() {
     if (formPolicyKind === "prompt") {
       const prompt = formPromptInstruction.trim();
       const name = formAutoName ? promptPolicyName(prompt) : formName;
+      // Persist model_config only when it diverges from defaults (or already
+      // existed), and include each field only when non-default, so an unset
+      // config stays NULL rather than churning the policy version on every edit.
+      const temperatureIsCustom = formTemperature !== DEFAULT_JUDGE_TEMPERATURE;
+      const hasModelConfig =
+        !!editingPolicy?.modelConfig ||
+        !!formModel ||
+        temperatureIsCustom ||
+        !formFailOpen;
+      const modelConfig = hasModelConfig
+        ? {
+            ...(formModel ? { model: formModel } : {}),
+            ...(temperatureIsCustom ? { temperature: formTemperature } : {}),
+            failOpen: formFailOpen,
+          }
+        : undefined;
+      const userMessagePayload = formUserMessage.trim()
+        ? { userMessage: formUserMessage }
+        : {};
+      const promptMessageTypes =
+        policyMessageTypesForPayload(selectedMessageTypes);
       if (editingPolicy) {
         updateMutation.mutate({
           request: {
@@ -538,12 +561,11 @@ function PolicyCenterContent() {
               name,
               enabled: formEnabled,
               prompt,
-              messageTypes: PROMPT_POLICY_MESSAGE_TYPES,
+              messageTypes: promptMessageTypes,
               action: formAction,
               autoName: formAutoName,
-              ...(formUserMessage.trim()
-                ? { userMessage: formUserMessage }
-                : {}),
+              ...(modelConfig ? { modelConfig } : {}),
+              ...userMessagePayload,
             },
           },
         });
@@ -555,12 +577,11 @@ function PolicyCenterContent() {
               policyType: "prompt_based",
               enabled: formEnabled,
               prompt,
-              messageTypes: PROMPT_POLICY_MESSAGE_TYPES,
+              messageTypes: promptMessageTypes,
               action: formAction,
               autoName: formAutoName,
-              ...(formUserMessage.trim()
-                ? { userMessage: formUserMessage }
-                : {}),
+              ...(modelConfig ? { modelConfig } : {}),
+              ...userMessagePayload,
             },
           },
         });
@@ -819,10 +840,7 @@ function PolicyCenterContent() {
       header: "Applies To",
       width: "2.1fr",
       render: (row) => {
-        const types =
-          row.kind === "prompt"
-            ? PROMPT_POLICY_MESSAGE_TYPES
-            : policyMessageTypesForDisplay(row.policy.messageTypes);
+        const types = policyMessageTypesForDisplay(row.policy.messageTypes);
         const typeSet = new Set(types);
         const tooltip = types
           .map((type) => POLICY_MESSAGE_TYPE_META[type].label)
@@ -1081,6 +1099,14 @@ function PolicyCenterContent() {
                     setFormAutoName={setFormAutoName}
                     formEnabled={formEnabled}
                     setFormEnabled={setFormEnabled}
+                    formModel={formModel}
+                    setFormModel={setFormModel}
+                    formTemperature={formTemperature}
+                    setFormTemperature={setFormTemperature}
+                    formFailOpen={formFailOpen}
+                    setFormFailOpen={setFormFailOpen}
+                    selectedMessageTypes={selectedMessageTypes}
+                    setSelectedMessageTypes={setSelectedMessageTypes}
                   />
                 )}
               </div>
@@ -1187,7 +1213,7 @@ function PolicyKindChoice({
             </Badge>
           </div>
           <Type small muted className="mt-0.5">
-            Describe any behavior you want to detect in plain language — no
+            Describe any behavior you want to detect in plain language. No
             scanner configuration needed.
           </Type>
         </div>
@@ -1213,6 +1239,14 @@ function PromptPolicySheetBody({
   setFormAutoName,
   formEnabled,
   setFormEnabled,
+  formModel,
+  setFormModel,
+  formTemperature,
+  setFormTemperature,
+  formFailOpen,
+  setFormFailOpen,
+  selectedMessageTypes,
+  setSelectedMessageTypes,
 }: {
   isEditing: boolean;
   formName: string;
@@ -1225,6 +1259,14 @@ function PromptPolicySheetBody({
   setFormAutoName: (v: boolean) => void;
   formEnabled: boolean;
   setFormEnabled: (v: boolean) => void;
+  formModel: string;
+  setFormModel: (v: string) => void;
+  formTemperature: number;
+  setFormTemperature: (v: number) => void;
+  formFailOpen: boolean;
+  setFormFailOpen: (v: boolean) => void;
+  selectedMessageTypes: Set<PolicyMessageType>;
+  setSelectedMessageTypes: (v: Set<PolicyMessageType>) => void;
 }) {
   const [selectedExampleName, setSelectedExampleName] = useState(
     () => promptTemplateNameForInstruction(formPromptInstruction) ?? "",
@@ -1269,7 +1311,7 @@ function PromptPolicySheetBody({
           rows={5}
         />
         {!isEditing && (
-          <PromptExamplesRadioGroup
+          <PromptExampleChips
             selectedExampleName={selectedExampleName}
             onSelect={(template) => {
               setSelectedExampleName(template.name);
@@ -1282,7 +1324,19 @@ function PromptPolicySheetBody({
         )}
       </div>
 
-      <PromptPolicyMessageTypesPicker />
+      <JudgeConfigSection
+        formModel={formModel}
+        setFormModel={setFormModel}
+        formTemperature={formTemperature}
+        setFormTemperature={setFormTemperature}
+        formFailOpen={formFailOpen}
+        setFormFailOpen={setFormFailOpen}
+      />
+
+      <MessageTypesPicker
+        selectedMessageTypes={selectedMessageTypes}
+        setSelectedMessageTypes={setSelectedMessageTypes}
+      />
 
       <ActionPicker formAction={formAction} setFormAction={setFormAction} />
 
@@ -1299,7 +1353,184 @@ function PromptPolicySheetBody({
   );
 }
 
-function PromptExamplesRadioGroup({
+/* -------------------------------------------------------------------------- */
+/*  JudgeConfigSection                                                        */
+/* -------------------------------------------------------------------------- */
+
+// DEFAULT_JUDGE_TEMPERATURE mirrors riskjudge.defaultJudgeTemperature: the
+// benchmark ran at 0 (deterministic verdicts), which is the effective default.
+const DEFAULT_JUDGE_TEMPERATURE = 0;
+const TEMPERATURE_MIN = 0;
+const TEMPERATURE_MAX = 1;
+const TEMPERATURE_STEP = 0.1;
+// Discrete stops rendered on the slider track: 0.0, 0.1, … 1.0.
+const TEMPERATURE_TICKS = Array.from(
+  { length: 11 },
+  (_, i) => Math.round(i * TEMPERATURE_STEP * 10) / 10,
+);
+
+// JUDGE_MODEL_OPTIONS lists the models a prompt policy may run its LLM judge on.
+// The recommended option uses the empty value, which follows the server's
+// default judge model. Its label names that model and must stay in sync with
+// riskjudge.defaultJudgeModel. See server/cmd/riskjudgebench for the benchmark
+// behind these picks.
+const JUDGE_MODEL_OPTIONS: {
+  value: string;
+  label: string;
+  description: string;
+  recommended?: boolean;
+}[] = [
+  {
+    value: "",
+    label: "Gemini 3.1 Flash Lite",
+    description:
+      "Fast, low-cost, high-recall classifier. Best fit for most policies.",
+    recommended: true,
+  },
+  {
+    value: "google/gemini-2.5-flash",
+    label: "Gemini 2.5 Flash",
+    description: "Lowest latency. Good for very high-volume policies.",
+  },
+  {
+    value: "anthropic/claude-sonnet-4.6",
+    label: "Claude Sonnet 4.6",
+    description:
+      "Strong quality and the highest ceiling, at higher latency and cost.",
+  },
+  {
+    value: "anthropic/claude-haiku-4.5",
+    label: "Claude Haiku 4.5",
+    description: "Balanced Anthropic option.",
+  },
+];
+
+function JudgeConfigSection({
+  formModel,
+  setFormModel,
+  formTemperature,
+  setFormTemperature,
+  formFailOpen,
+  setFormFailOpen,
+}: {
+  formModel: string;
+  setFormModel: (v: string) => void;
+  formTemperature: number;
+  setFormTemperature: (v: number) => void;
+  formFailOpen: boolean;
+  setFormFailOpen: (v: boolean) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <JudgeModelPicker formModel={formModel} setFormModel={setFormModel} />
+
+      <div className="border-border space-y-4 rounded-lg border p-4">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Label className="text-sm font-medium">Temperature</Label>
+            <span className="text-muted-foreground text-xs tabular-nums">
+              {formTemperature.toFixed(1)}
+              {formTemperature === DEFAULT_JUDGE_TEMPERATURE
+                ? " · default"
+                : ""}
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-foreground text-xs tabular-nums">0</span>
+            <div className="flex-1">
+              <Slider
+                value={formTemperature}
+                onChange={(v) => setFormTemperature(Math.round(v * 10) / 10)}
+                min={TEMPERATURE_MIN}
+                max={TEMPERATURE_MAX}
+                step={TEMPERATURE_STEP}
+                ticks={TEMPERATURE_TICKS}
+              />
+            </div>
+            <span className="text-foreground text-xs tabular-nums">1</span>
+          </div>
+          <p className="text-muted-foreground text-xs">
+            Lower is more consistent and repeatable (0 recommended). Higher adds
+            variation, which can surface borderline or unusual violations a
+            rigid read might miss.
+          </p>
+        </div>
+
+        <div className="border-border flex items-start justify-between gap-4 border-t pt-4">
+          <div className="space-y-2 pr-2">
+            <Label className="text-sm font-medium">Fail open</Label>
+            <p className="text-muted-foreground text-xs">
+              When the judge errors or times out, allow the message instead of
+              blocking it.
+            </p>
+          </div>
+          <Switch checked={formFailOpen} onCheckedChange={setFormFailOpen} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function JudgeModelPicker({
+  formModel,
+  setFormModel,
+}: {
+  formModel: string;
+  setFormModel: (v: string) => void;
+}) {
+  // A model persisted via the API but not in the curated list still needs to
+  // round-trip, so surface it as a selectable option.
+  const knownValues = JUDGE_MODEL_OPTIONS.map((o) => o.value);
+  const options =
+    formModel && !knownValues.includes(formModel)
+      ? [
+          ...JUDGE_MODEL_OPTIONS,
+          {
+            value: formModel,
+            label: formModel,
+            description: "Custom model configured via the API.",
+          },
+        ]
+      : JUDGE_MODEL_OPTIONS;
+
+  return (
+    <div className="space-y-2">
+      <Label className="text-sm font-medium">Model</Label>
+      <RadioGroup value={formModel} onValueChange={setFormModel}>
+        <div className="border-border divide-border divide-y rounded-lg border">
+          {options.map((opt) => (
+            <label
+              key={opt.value || "recommended"}
+              htmlFor={`judge-model-${opt.value || "recommended"}`}
+              className="hover:bg-muted/50 flex cursor-pointer items-start gap-3 p-3"
+            >
+              <RadioGroupItem
+                value={opt.value}
+                id={`judge-model-${opt.value || "recommended"}`}
+                className="mt-0.5"
+              />
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">{opt.label}</span>
+                  {opt.recommended && (
+                    <Badge variant="neutral" className="text-[10px]">
+                      <Badge.Text>Recommended</Badge.Text>
+                    </Badge>
+                  )}
+                </div>
+                <div className="text-muted-foreground mt-1 text-xs">
+                  {opt.description}
+                </div>
+              </div>
+            </label>
+          ))}
+        </div>
+      </RadioGroup>
+    </div>
+  );
+}
+
+function PromptExampleChips({
   selectedExampleName,
   onSelect,
 }: {
@@ -1307,43 +1538,28 @@ function PromptExamplesRadioGroup({
   onSelect: (template: (typeof PROMPT_POLICY_TEMPLATES)[number]) => void;
 }) {
   return (
-    <div className="space-y-2">
-      <Label className="text-sm font-medium">Prompt Examples</Label>
-      <RadioGroup
-        value={selectedExampleName}
-        onValueChange={(name) => {
-          const template = PROMPT_POLICY_TEMPLATES.find((t) => t.name === name);
-          if (template) {
-            onSelect(template);
-          }
-        }}
-      >
-        <div className="border-border divide-border divide-y rounded-lg border">
-          {PROMPT_POLICY_TEMPLATES.map((template, index) => {
-            const exampleId = `prompt-example-${index}`;
-
-            return (
-              <label
-                key={template.name}
-                htmlFor={exampleId}
-                className="hover:bg-muted/40 flex cursor-pointer items-start gap-3 px-4 py-3"
-              >
-                <RadioGroupItem
-                  value={template.name}
-                  id={exampleId}
-                  className="mt-0.5"
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium">{template.name}</div>
-                  <div className="text-muted-foreground text-xs">
-                    {template.prompt}
-                  </div>
-                </div>
-              </label>
-            );
-          })}
-        </div>
-      </RadioGroup>
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-muted-foreground text-xs">Try:</span>
+      {PROMPT_POLICY_TEMPLATES.map((template) => {
+        const active = selectedExampleName === template.name;
+        return (
+          <SimpleTooltip key={template.name} tooltip={template.prompt}>
+            <button
+              type="button"
+              aria-pressed={active}
+              onClick={() => onSelect(template)}
+              className={cn(
+                "rounded-full border px-2.5 py-1 text-xs transition-colors",
+                active
+                  ? "border-foreground/30 bg-muted text-foreground"
+                  : "border-border text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+              )}
+            >
+              {template.name}
+            </button>
+          </SimpleTooltip>
+        );
+      })}
     </div>
   );
 }
@@ -1362,7 +1578,7 @@ function PromptPolicyHowItWorks({ isEditing }: { isEditing: boolean }) {
         <div className="min-w-0 flex-1">
           <div className="text-sm font-medium">How this works</div>
           <div className="text-muted-foreground text-xs">
-            LLM judging evaluates matching tool requests in real time.
+            An LLM judge checks each matching message against your prompt.
           </div>
         </div>
         <ChevronRight
@@ -1374,58 +1590,13 @@ function PromptPolicyHowItWorks({ isEditing }: { isEditing: boolean }) {
       </CollapsibleTrigger>
       <CollapsibleContent className="border-border border-t px-4 py-3">
         <p className="text-muted-foreground text-sm">
-          Prompt-based policies use an LLM judge, so each evaluated tool request
-          can add latency compared with standard detection rules. The judge sees
-          the tool name and inputs.
+          Prompt-based policies use an LLM judge, so each evaluated message adds
+          some latency versus standard detection rules. The judge sees one
+          message at a time (a tool call and its inputs, or message content),
+          never a whole conversation. It runs on the message types you select
+          under Applies To.
         </p>
       </CollapsibleContent>
-    </Collapsible>
-  );
-}
-
-function PromptPolicyMessageTypesPicker() {
-  const selectedMessageTypes = promptPolicyMessageTypes();
-  const [open, setOpen] = useState(true);
-
-  return (
-    <Collapsible open={open} onOpenChange={setOpen} className="space-y-3">
-      <div className="space-y-1">
-        <Label className="text-sm font-medium">Applies To</Label>
-        <p className="text-muted-foreground text-xs">
-          Prompt-based policies currently evaluate tool requests only.
-        </p>
-      </div>
-      <div className="border-border rounded-lg border">
-        <CollapsibleTrigger className="hover:bg-muted/40 flex w-full items-center gap-3 px-4 py-3 text-left transition-colors">
-          <ChevronRight
-            className={cn(
-              "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
-              open && "rotate-90",
-            )}
-          />
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium">
-              {messageTypesSummary(selectedMessageTypes)}
-            </div>
-            <div className="text-muted-foreground text-xs">
-              Evaluated on each Tool Request in real time
-            </div>
-          </div>
-        </CollapsibleTrigger>
-        <CollapsibleContent className="border-border data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down overflow-hidden border-t">
-          <div className="divide-border divide-y">
-            {ALL_POLICY_MESSAGE_TYPES.map((type) => (
-              <MessageTypeOptionRow
-                key={type}
-                type={type}
-                checked={selectedMessageTypes.has(type)}
-                disabled={true}
-                onCheckedChange={() => undefined}
-              />
-            ))}
-          </div>
-        </CollapsibleContent>
-      </div>
     </Collapsible>
   );
 }

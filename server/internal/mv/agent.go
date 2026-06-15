@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/google/uuid"
+
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
@@ -18,26 +20,38 @@ import (
 // For every published marketplace in the org it emits the marketplace and its
 // always-required observability plugin, then layers on the user's assigned
 // plugins (the non-null plugin rows). Rows arrive grouped by project
-// (`ORDER BY pr.slug, p.slug`), one row per project even when the user has no
+// (`ORDER BY pr.id, p.slug`), one row per project even when the user has no
 // assignment there (null plugin columns).
 //
-// The marketplace name and observability slug come from the shared `naming`
-// package so they match exactly what the publish path wrote into the
-// marketplace.json — tools resolve marketplaces by that name, so any mismatch
-// silently fails to enable plugins.
+// Each project's marketplace name is resolved the same way the publish path
+// resolves it: the per-project override (project_marketplace_settings) when set,
+// else the shared `naming` default — the bare org-derived name for the org's
+// default project, project-scoped (`<org>-<project>-speakeasy`) for the rest.
+// Matching the publish path exactly matters because tools resolve marketplaces
+// by that name — any mismatch silently fails to enable plugins. The
+// observability slug stays org-derived; plugin slugs are scoped within a
+// marketplace, so the same slug in two differently-named marketplaces does not
+// collide.
 //
-// Note: gram publishes one marketplace name per *org* (naming.MarketplaceName
-// is org-derived, not project-scoped), and a marketplace.json name is a single
-// identifier. So if an org ever publishes multiple projects, they collapse to a
-// single marketplace here — matching gram's existing publish limitation rather
-// than introducing a new one.
+// Because names are project-scoped, an org's projects now surface as distinct
+// marketplaces instead of collapsing. Projects can still share a name (e.g. two
+// overrides set to the same value), and a marketplace.json name is a single
+// identifier that can't coexist twice on the device — so same-named rows still
+// collapse to one, keeping the first row's token. The query orders by pr.id so
+// that first row is the org's default project (oldest, lowest id) rather than an
+// arbitrary alphabetically-first one.
 //
 // marketplaceURL constructs the public marketplace git URL from a token; the
 // caller owns the URL shape so this builder stays free of server-side config.
 func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func(token string) string) *gen.GetPluginsResult {
 	var marketplaces []*gen.AgentMarketplace
 	var plugins []*gen.AgentPlugin
-	seenMarketplace := make(map[string]struct{})
+	// marketplace name -> the project that owns it (the first/lowest-pr.id row to
+	// claim that name). Used to drop assigned plugins from projects whose name
+	// collided and collapsed: their plugins live in a different repo than the one
+	// served under this name, so emitting them would reference a marketplace that
+	// doesn't contain them.
+	marketplaceOwner := make(map[string]uuid.UUID)
 	etag := sha256.New()
 
 	for _, row := range rows {
@@ -45,9 +59,17 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 			continue
 		}
 
-		name := naming.MarketplaceName(row.OrganizationName)
-		if _, ok := seenMarketplace[name]; !ok {
-			seenMarketplace[name] = struct{}{}
+		// The per-project override, when set, is the name the project actually
+		// published under (UpdateMarketplaceSettings republishes on change), so
+		// prefer it over the org-derived default.
+		name := naming.MarketplaceName(row.OrganizationName, row.ProjectSlug, row.IsDefaultProject)
+		if row.MarketplaceNameOverride.Valid && row.MarketplaceNameOverride.String != "" {
+			name = row.MarketplaceNameOverride.String
+		}
+		owner, seen := marketplaceOwner[name]
+		if !seen {
+			owner = row.ProjectID
+			marketplaceOwner[name] = owner
 			marketplaces = append(marketplaces, &gen.AgentMarketplace{
 				Name: name,
 				URL:  marketplaceURL(row.MarketplaceToken.String),
@@ -70,8 +92,11 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 			writeAgentPluginsETag(etag, "plugin\x00%s\x00%s\x00%d\n", name, observabilitySlug, int64(0))
 		}
 
-		// Assigned plugin for this project, if the LEFT JOIN matched one.
-		if row.PluginID.Valid && row.PluginSlug.Valid {
+		// Assigned plugin for this project, if the LEFT JOIN matched one — but
+		// only when this row's project owns the marketplace under this name. A
+		// collapsed (losing) project's marketplace isn't served, so its plugins
+		// would reference a repo that doesn't contain them.
+		if row.ProjectID == owner && row.PluginID.Valid && row.PluginSlug.Valid {
 			plugins = append(plugins, &gen.AgentPlugin{
 				Slug:            row.PluginSlug.String,
 				MarketplaceName: name,
