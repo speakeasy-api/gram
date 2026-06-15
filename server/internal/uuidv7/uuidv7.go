@@ -1,4 +1,7 @@
-package risk_analysis
+// Package uuidv7 holds helpers for working with time-ordered UUIDv7 values,
+// chiefly deriving id bounds from timestamps so a (project_id, id) index can
+// double as a time-range filter without a separate created_at index.
+package uuidv7
 
 import (
 	"time"
@@ -6,12 +9,10 @@ import (
 	"github.com/google/uuid"
 )
 
-// UUIDv7LowerBound returns the smallest possible UUIDv7 at or after t.
-// All random bits are zeroed so any real UUIDv7 generated at time t sorts
-// >= this value, making it safe to use in WHERE id >= @lower_bound clauses
-// that leverage the (project_id, id) index as a time-range filter without
-// a separate created_at index.
-func UUIDv7LowerBound(t time.Time) uuid.UUID {
+// LowerBound returns the smallest possible UUIDv7 at or after t. All random
+// bits are zeroed so any real UUIDv7 generated at time t sorts >= this value,
+// making it safe to use in WHERE id >= @lower_bound clauses.
+func LowerBound(t time.Time) uuid.UUID {
 	ms := uint64(t.UnixMilli())
 	var u uuid.UUID
 	u[0] = byte(ms >> 40) //nolint:gosec // intentional bit extraction; high bits always zero for valid timestamps

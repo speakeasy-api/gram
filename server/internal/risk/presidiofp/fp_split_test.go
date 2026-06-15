@@ -12,8 +12,8 @@
 //
 //	go test -tags fpsplit -run TestFPSplit -v \
 //	    -fp.input /tmp/risk_unique_ips.txt \
-//	    ./server/internal/background/activities/risk_analysis/
-package risk_analysis
+//	    ./server/internal/risk/presidiofp/
+package presidiofp
 
 import (
 	"bufio"
