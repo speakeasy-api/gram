@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 3855c2a18f31023442e17eda089250e1
+  docChecksum: 6856931419eb1e6224ae3c06f506e187
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -819,7 +819,9 @@ trackedFiles:
   docs/models/components/riskmatchcondition.md:
     last_write_checksum: sha1:600d073f83d94cf5af64c6304f3dae0df03a1e89
   docs/models/components/riskmatchconfig.md:
-    last_write_checksum: sha1:a34b1ce32dd3832ba722761cf86fd80291504ea9
+    last_write_checksum: sha1:7d85cb636eb8c41ab575fa9bfb785143575789e5
+  docs/models/components/riskmatchconfigeffect.md:
+    last_write_checksum: sha1:83b68a98c63192afb76759b556b24e0a6eee3985
   docs/models/components/riskoverviewcategory.md:
     last_write_checksum: sha1:55aedc1ad4b6702d6e8c2a6886d22ecfe7b025a3
   docs/models/components/riskoverviewresult.md:
@@ -4633,7 +4635,7 @@ trackedFiles:
   src/models/components/riskmatchcondition.ts:
     last_write_checksum: sha1:81f8c7c29b3e5e5fb6a62df42b9e132db15e52b7
   src/models/components/riskmatchconfig.ts:
-    last_write_checksum: sha1:15b314e5a747b5c7408796bf6afb2eafdb03cb00
+    last_write_checksum: sha1:bc35dee24688fab1193912bd38167feaaa316fab
   src/models/components/riskoverviewcategory.ts:
     last_write_checksum: sha1:22329e90df9b5ab55672520447c182dfb625e4da
   src/models/components/riskoverviewresult.ts:

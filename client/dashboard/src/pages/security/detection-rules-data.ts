@@ -1,4 +1,8 @@
 import {
+  type RiskMatchCondition,
+  type RiskMatchConfig,
+} from "@gram/client/models/components";
+import {
   invalidateAllRiskListCustomDetectionRules,
   useRiskCreateCustomDetectionRuleMutation,
   useRiskDeleteCustomDetectionRuleMutation,
@@ -6,7 +10,13 @@ import {
   useRiskUpdateCustomDetectionRuleMutation,
 } from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
-import { DETECTION_RULES, type RuleCategory } from "./policy-data";
+import {
+  DETECTION_RULES,
+  type PolicyMessageType,
+  type RuleCategory,
+} from "./policy-data";
+
+export type { RiskMatchCondition, RiskMatchConfig };
 
 /** Severity levels assigned to a detection rule. Drives how findings show
  *  up in dashboards and (eventually) which actions a policy is allowed to

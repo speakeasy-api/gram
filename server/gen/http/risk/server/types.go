@@ -6904,6 +6904,9 @@ type RiskPolicyBypassRequestResponseBody struct {
 
 // RiskMatchConfigResponseBody is used to define fields on response body types.
 type RiskMatchConfigResponseBody struct {
+	// Rule polarity: deny (flag a finding, the default) or allow (an allowlist
+	// that short-circuits the whole policy for a message when matched).
+	Effect *string `form:"effect,omitempty" json:"effect,omitempty" xml:"effect,omitempty"`
 	// How the conditions reduce to a verdict.
 	Combine *string `form:"combine,omitempty" json:"combine,omitempty" xml:"combine,omitempty"`
 	// Conditions evaluated against a message; all (and) or any (or) must match.
@@ -7020,6 +7023,9 @@ type RiskPolicyModelConfigRequestBody struct {
 
 // RiskMatchConfigRequestBody is used to define fields on request body types.
 type RiskMatchConfigRequestBody struct {
+	// Rule polarity: deny (flag a finding, the default) or allow (an allowlist
+	// that short-circuits the whole policy for a message when matched).
+	Effect *string `form:"effect,omitempty" json:"effect,omitempty" xml:"effect,omitempty"`
 	// How the conditions reduce to a verdict.
 	Combine *string `form:"combine,omitempty" json:"combine,omitempty" xml:"combine,omitempty"`
 	// Conditions evaluated against a message; all (and) or any (or) must match.
@@ -13174,6 +13180,11 @@ func ValidateTestDetectionRuleRequestBody(body *TestDetectionRuleRequestBody) (e
 func ValidateRiskMatchConfigRequestBody(body *RiskMatchConfigRequestBody) (err error) {
 	if body.Conditions == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("conditions", "body"))
+	}
+	if body.Effect != nil {
+		if !(*body.Effect == "deny" || *body.Effect == "allow") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.effect", *body.Effect, []any{"deny", "allow"}))
+		}
 	}
 	if body.Combine != nil {
 		if !(*body.Combine == "and" || *body.Combine == "or") {

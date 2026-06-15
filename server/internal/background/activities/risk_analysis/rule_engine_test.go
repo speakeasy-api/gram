@@ -21,11 +21,46 @@ func scan(t *testing.T, rule ra.CustomDetectionRule, view ra.MessageView) []ra.F
 	t.Helper()
 	compiled, err := ra.CompileCustomDetectionRules([]ra.CustomDetectionRule{rule})
 	require.NoError(t, err)
+	return ra.ScanCustomDetectionRules(view, compiled).Findings
+}
+
+func scanRules(t *testing.T, rules []ra.CustomDetectionRule, view ra.MessageView) ra.CustomRuleScan {
+	t.Helper()
+	compiled, err := ra.CompileCustomDetectionRules(rules)
+	require.NoError(t, err)
 	return ra.ScanCustomDetectionRules(view, compiled)
+}
+
+func ruleWithConfigID(t *testing.T, id string, cfg ra.MatchConfig) ra.CustomDetectionRule {
+	t.Helper()
+	raw, err := json.Marshal(cfg)
+	require.NoError(t, err)
+	return ra.CustomDetectionRule{RuleID: id, Title: id, Description: "", MatchConfig: raw}
 }
 
 func toolRequest(tools ...ra.ToolView) ra.MessageView {
 	return ra.MessageView{Content: "", Type: message.ToolRequest, Tools: tools}
+}
+
+// An allow-effect rule that matches sets Allowed so the caller can short-circuit
+// the policy; a non-matching allow rule leaves deny findings intact.
+func TestRuleEngine_AllowRuleShortCircuits(t *testing.T) {
+	t.Parallel()
+	deny := ruleWithConfigID(t, "custom.deny", ra.MatchConfig{Conditions: []ra.Condition{
+		{Target: ra.TargetContent, Op: ra.OpKeyword, Values: []string{"secret"}},
+	}})
+	allow := ruleWithConfigID(t, "custom.allow", ra.MatchConfig{Effect: ra.EffectAllow, Conditions: []ra.Condition{
+		{Target: ra.TargetContent, Op: ra.OpKeyword, Values: []string{"approved"}},
+	}})
+
+	res := scanRules(t, []ra.CustomDetectionRule{deny, allow},
+		ra.MessageView{Content: "this secret is approved", Type: message.User, Tools: nil})
+	require.True(t, res.Allowed)
+
+	res2 := scanRules(t, []ra.CustomDetectionRule{deny, allow},
+		ra.MessageView{Content: "this secret leaks", Type: message.User, Tools: nil})
+	require.False(t, res2.Allowed)
+	require.Len(t, res2.Findings, 1)
 }
 
 // Legacy regex rules (regex column set, match_config empty) must keep emitting

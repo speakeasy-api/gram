@@ -26,6 +26,18 @@ export const Combine = {
  */
 export type Combine = ClosedEnum<typeof Combine>;
 
+/**
+ * Rule polarity: deny (flag a finding, the default) or allow (an allowlist that short-circuits the whole policy for a message when matched).
+ */
+export const RiskMatchConfigEffect = {
+  Deny: "deny",
+  Allow: "allow",
+} as const;
+/**
+ * Rule polarity: deny (flag a finding, the default) or allow (an allowlist that short-circuits the whole policy for a message when matched).
+ */
+export type RiskMatchConfigEffect = ClosedEnum<typeof RiskMatchConfigEffect>;
+
 export type RiskMatchConfig = {
   /**
    * How the conditions reduce to a verdict.
@@ -35,6 +47,10 @@ export type RiskMatchConfig = {
    * Conditions evaluated against a message; all (and) or any (or) must match.
    */
   conditions: Array<RiskMatchCondition>;
+  /**
+   * Rule polarity: deny (flag a finding, the default) or allow (an allowlist that short-circuits the whole policy for a message when matched).
+   */
+  effect?: RiskMatchConfigEffect | undefined;
 };
 
 /** @internal */
@@ -46,17 +62,28 @@ export const Combine$outboundSchema: z.ZodMiniEnum<typeof Combine> =
   Combine$inboundSchema;
 
 /** @internal */
+export const RiskMatchConfigEffect$inboundSchema: z.ZodMiniEnum<
+  typeof RiskMatchConfigEffect
+> = z.enum(RiskMatchConfigEffect);
+/** @internal */
+export const RiskMatchConfigEffect$outboundSchema: z.ZodMiniEnum<
+  typeof RiskMatchConfigEffect
+> = RiskMatchConfigEffect$inboundSchema;
+
+/** @internal */
 export const RiskMatchConfig$inboundSchema: z.ZodMiniType<
   RiskMatchConfig,
   unknown
 > = z.object({
   combine: z.optional(Combine$inboundSchema),
   conditions: z.array(RiskMatchCondition$inboundSchema),
+  effect: z.optional(RiskMatchConfigEffect$inboundSchema),
 });
 /** @internal */
 export type RiskMatchConfig$Outbound = {
   combine?: string | undefined;
   conditions: Array<RiskMatchCondition$Outbound>;
+  effect?: string | undefined;
 };
 
 /** @internal */
@@ -66,6 +93,7 @@ export const RiskMatchConfig$outboundSchema: z.ZodMiniType<
 > = z.object({
   combine: z.optional(Combine$outboundSchema),
   conditions: z.array(RiskMatchCondition$outboundSchema),
+  effect: z.optional(RiskMatchConfigEffect$outboundSchema),
 });
 
 export function riskMatchConfigToJSON(

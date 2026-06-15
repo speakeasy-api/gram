@@ -122,6 +122,9 @@ var RiskMatchCondition = Type("RiskMatchCondition", func() {
 var RiskMatchConfig = Type("RiskMatchConfig", func() {
 	Meta("struct:pkg:path", "types")
 
+	Attribute("effect", String, "Rule polarity: deny (flag a finding, the default) or allow (an allowlist that short-circuits the whole policy for a message when matched).", func() {
+		Enum("deny", "allow")
+	})
 	Attribute("combine", String, "How the conditions reduce to a verdict.", func() {
 		Enum("and", "or")
 	})

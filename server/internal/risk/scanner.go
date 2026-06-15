@@ -307,6 +307,27 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 		return exclusions.FilterFindings(disabled.FilterFindings(findings))
 	}
 
+	// Evaluate custom rules up front: an allow-effect rule that matches
+	// allowlists the message and short-circuits the whole policy (no block from
+	// any source). Deny findings are held for the block check after the
+	// built-in sources.
+	var customScan ra.CustomRuleScan
+	if len(policy.CustomRuleIds) > 0 {
+		view := ra.MessageView{Content: text, Type: messageType, Tools: nil}
+		if messageType == message.ToolRequest && toolName != "" {
+			// In realtime, a tool-request's text carries the call arguments (the
+			// same body the judge sees), so it doubles as the tool_args source.
+			view.Tools = []ra.ToolView{ra.NewToolView(toolName, text)}
+		}
+		customScan, err = s.scanCustomRules(ctx, policy, view)
+		if err != nil {
+			return nil, err
+		}
+		if customScan.Allowed {
+			return nil, nil
+		}
+	}
+
 	for _, source := range policy.Sources {
 		switch source {
 		case "gitleaks":
@@ -367,30 +388,17 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 			}
 		}
 	}
-	if len(policy.CustomRuleIds) > 0 {
-		view := ra.MessageView{Content: text, Type: messageType, Tools: nil}
-		if messageType == message.ToolRequest && toolName != "" {
-			// In realtime, a tool-request's text carries the call arguments (the
-			// same body the judge sees), so it doubles as the tool_args source.
-			view.Tools = []ra.ToolView{ra.NewToolView(toolName, text)}
-		}
-		findings, err := s.scanCustomRules(ctx, policy, view)
-		if err != nil {
-			return nil, err
-		}
-		findings = filter(findings)
-		if len(findings) > 0 {
-			return &ScanResult{
-				Action:      policy.Action,
-				PolicyID:    policy.ID.String(),
-				PolicyName:  policy.Name,
-				Source:      ra.SourceCustom,
-				MessageType: messageType,
-				RuleID:      findings[0].RuleID,
-				Description: findings[0].Description,
-				UserMessage: conv.FromPGText[string](policy.UserMessage),
-			}, nil
-		}
+	if denyFindings := filter(customScan.Findings); len(denyFindings) > 0 {
+		return &ScanResult{
+			Action:      policy.Action,
+			PolicyID:    policy.ID.String(),
+			PolicyName:  policy.Name,
+			Source:      ra.SourceCustom,
+			MessageType: messageType,
+			RuleID:      denyFindings[0].RuleID,
+			Description: denyFindings[0].Description,
+			UserMessage: conv.FromPGText[string](policy.UserMessage),
+		}, nil
 	}
 	return nil, nil
 }
@@ -471,10 +479,10 @@ func promptPolicyUnavailableResult(policy repo.RiskPolicy, messageType message.T
 	}
 }
 
-func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, view ra.MessageView) ([]ra.Finding, error) {
+func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, view ra.MessageView) (ra.CustomRuleScan, error) {
 	rules, err := s.repo.ListCustomDetectionRules(ctx, policy.ProjectID)
 	if err != nil {
-		return nil, fmt.Errorf("list custom detection rules: %w", err)
+		return ra.CustomRuleScan{}, fmt.Errorf("list custom detection rules: %w", err)
 	}
 
 	selected := make(map[string]struct{}, len(policy.CustomRuleIds))
@@ -497,7 +505,7 @@ func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, v
 
 	compiled, err := ra.CompileCustomDetectionRules(customRules)
 	if err != nil {
-		return nil, fmt.Errorf("compile custom detection rules: %w", err)
+		return ra.CustomRuleScan{}, fmt.Errorf("compile custom detection rules: %w", err)
 	}
 	return ra.ScanCustomDetectionRules(view, compiled), nil
 }

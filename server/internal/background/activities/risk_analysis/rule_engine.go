@@ -54,6 +54,17 @@ const (
 	CombineOr  MatchCombine = "or"
 )
 
+// Effect is a rule's polarity. A deny rule produces a finding when it matches
+// (the default). An allow rule is an inline allowlist: when it matches a
+// message it short-circuits the whole policy, dropping every finding for that
+// message — even ones other detectors (gitleaks, presidio, the judge) produced.
+type Effect string
+
+const (
+	EffectDeny  Effect = "deny"
+	EffectAllow Effect = "allow"
+)
+
 // Condition is one target/op/value test, decoded from a rule's match_config.
 type Condition struct {
 	Target Target `json:"target"`
@@ -74,6 +85,9 @@ type Condition struct {
 // MatchConfig is the sparse, self-describing matcher stored in the
 // risk_custom_detection_rules.match_config JSONB column.
 type MatchConfig struct {
+	// Effect is the rule's polarity: deny (detect, the default) or allow
+	// (allowlist that short-circuits the policy when matched).
+	Effect     Effect       `json:"effect,omitempty"`
 	Combine    MatchCombine `json:"combine,omitempty"`
 	Conditions []Condition  `json:"conditions"`
 }
@@ -83,6 +97,13 @@ func (m MatchConfig) combineOrDefault() MatchCombine {
 		return CombineOr
 	}
 	return CombineAnd
+}
+
+func (m MatchConfig) effectOrDefault() Effect {
+	if m.Effect == EffectAllow {
+		return EffectAllow
+	}
+	return EffectDeny
 }
 
 // CustomDetectionRule is a policy-selected custom rule as loaded from the
@@ -100,6 +121,7 @@ type CustomDetectionRule struct {
 // globs, normalised gjson paths) ready for repeated evaluation.
 type CompiledCustomDetectionRule struct {
 	CustomDetectionRule
+	effect     Effect
 	combine    MatchCombine
 	conditions []compiledCondition
 }
@@ -169,6 +191,7 @@ func CompileCustomDetectionRules(rules []CustomDetectionRule) ([]CompiledCustomD
 		rule.RuleID = guard(rule.RuleID)
 		compiled = append(compiled, CompiledCustomDetectionRule{
 			CustomDetectionRule: rule,
+			effect:              cfg.effectOrDefault(),
 			combine:             cfg.combineOrDefault(),
 			conditions:          conditions,
 		})
@@ -186,6 +209,9 @@ func ValidateMatchConfig(raw []byte) error {
 	cfg, err := parseMatchConfig(raw)
 	if err != nil {
 		return err
+	}
+	if cfg.Effect != "" && cfg.Effect != EffectDeny && cfg.Effect != EffectAllow {
+		return fmt.Errorf("unknown effect %q", cfg.Effect)
 	}
 	if len(cfg.Conditions) == 0 {
 		return fmt.Errorf("match_config must declare at least one condition")
@@ -210,6 +236,7 @@ func EffectiveMatchConfig(matchConfig []byte, legacyRegex string) []byte {
 		return nil
 	}
 	raw, err := json.Marshal(MatchConfig{
+		Effect:  EffectDeny,
 		Combine: CombineAnd,
 		Conditions: []Condition{{
 			Target:          TargetContent,
@@ -321,14 +348,39 @@ func compileCondition(cond Condition) (compiledCondition, error) {
 	return cc, nil
 }
 
+// CustomRuleScan is the outcome of evaluating a message against a policy's
+// compiled custom rules.
+type CustomRuleScan struct {
+	// Findings are matches from deny-effect rules.
+	Findings []Finding
+	// Allowed is true when an allow-effect rule matched the message. The caller
+	// short-circuits the policy: every finding for this message is dropped,
+	// including ones produced by other detectors.
+	Allowed bool
+}
+
 // ScanCustomDetectionRules evaluates every compiled rule against a single
-// message view and returns the resulting findings.
-func ScanCustomDetectionRules(view MessageView, rules []CompiledCustomDetectionRule) []Finding {
-	var findings []Finding
+// message view. Deny rules contribute findings; an allow rule that matches sets
+// Allowed so the caller can short-circuit the policy.
+func ScanCustomDetectionRules(view MessageView, rules []CompiledCustomDetectionRule) CustomRuleScan {
+	out := CustomRuleScan{Findings: nil, Allowed: false}
 	for _, rule := range rules {
-		findings = append(findings, rule.scan(view)...)
+		if rule.effect == EffectAllow {
+			if rule.matches(view) {
+				out.Allowed = true
+			}
+			continue
+		}
+		out.Findings = append(out.Findings, rule.scan(view)...)
 	}
-	return findings
+	return out
+}
+
+// matches reports whether the rule's conditions are satisfied by the view,
+// without expanding per-occurrence findings — used for the allowlist check.
+func (r CompiledCustomDetectionRule) matches(view MessageView) bool {
+	ok, _ := r.evaluate(view)
+	return ok
 }
 
 func (r CompiledCustomDetectionRule) scan(view MessageView) []Finding {

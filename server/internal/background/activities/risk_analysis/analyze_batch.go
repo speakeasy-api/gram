@@ -313,6 +313,9 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 	cliDestructiveFindings := make([][]Finding, n)
 	promptInjectionFindings := make([][]Finding, n)
 	customFindings := make([][]Finding, n)
+	// allowlisted[i] is set when an allow-effect custom rule matches message i;
+	// every finding for that message is then dropped at merge time.
+	allowlisted := make([]bool, n)
 
 	var wg sync.WaitGroup
 	var gitleaksErr error
@@ -365,7 +368,9 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 	if len(customRules) > 0 {
 		wg.Go(func() {
 			for i, msg := range messages {
-				customFindings[i] = ScanCustomDetectionRules(a.customRuleMessageView(ctx, msg), customRules)
+				res := ScanCustomDetectionRules(a.customRuleMessageView(ctx, msg), customRules)
+				customFindings[i] = res.Findings
+				allowlisted[i] = res.Allowed
 			}
 			activity.RecordHeartbeat(ctx, "custom")
 		})
@@ -415,6 +420,13 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 
 	merged := make([][]Finding, n)
 	for i := range n {
+		// An allow-effect custom rule matched: the message is allowlisted, so
+		// the whole policy is short-circuited and no findings are recorded for
+		// it — including ones the other detectors produced.
+		if allowlisted[i] {
+			merged[i] = nil
+			continue
+		}
 		// Gitleaks findings come first so they take priority over presidio
 		// when both scanners match the same text region. Tool-call findings are
 		// non-overlapping with content scanners, so they pass through dedup.
