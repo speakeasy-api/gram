@@ -19,6 +19,11 @@ export const Op = {
   Glob: "glob",
   Keyword: "keyword",
   Exists: "exists",
+  Contains: "contains",
+  NotContains: "not_contains",
+  StartsWith: "starts_with",
+  EndsWith: "ends_with",
+  In: "in",
 } as const;
 /**
  * Comparison applied to the resolved target value.

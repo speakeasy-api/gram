@@ -1874,7 +1874,7 @@ Fields:
   - Each condition reads a "target":
     - "content": whole message text. "user_prompt"/"assistant_text"/"tool_result": that message part.
     - "tool_name": raw tool-call name (e.g. mcp__mise__run_task). "tool_server": MCP server name ("" for native tools like Bash). "tool_function": bare function name (e.g. run_task). "tool_args": a value inside the tool arguments — set "path" to a JSON path like "$.scope".
-  - "op": "regex" (RE2 pattern in value), "equals", "not_equals", "glob" (wildcard value like *secret*), "keyword" (values is a list of substrings), "exists" (no value).
+  - "op": "equals", "contains"/"not_contains" (substring; "values" may list several to match any), "in" (exact match of any of "values"), "starts_with", "ends_with", "regex" (RE2 pattern in value), "exists" (no value, e.g. a tool_args path is present).
   - For secrets/PII/text patterns use target "content" with op "regex" or "keyword". For dangerous tool use, target "tool_server"/"tool_function"/"tool_args".
 
 Output ONLY the JSON object. No prose, no markdown fences.`

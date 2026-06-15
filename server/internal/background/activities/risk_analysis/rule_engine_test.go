@@ -223,6 +223,37 @@ func TestRuleEngine_EmptyRuleSkipped(t *testing.T) {
 	require.Empty(t, compiled)
 }
 
+func TestRuleEngine_QueryBarOps(t *testing.T) {
+	t.Parallel()
+	// contains (union, case-insensitive) over tool_args with no path → raw args JSON.
+	containsRule := ruleWithConfig(t, ra.MatchConfig{Conditions: []ra.Condition{
+		{Target: ra.TargetToolArgs, Op: ra.OpContains, Values: []string{"rm", "curl"}},
+	}})
+	require.Len(t, scan(t, containsRule, toolRequest(ra.NewToolView("mcp__sh__run", `{"cmd":"RM -rf /"}`))), 1)
+	require.Empty(t, scan(t, containsRule, toolRequest(ra.NewToolView("mcp__sh__run", `{"cmd":"ls"}`))))
+
+	// in (exact equals-any) over tool_function.
+	inRule := ruleWithConfig(t, ra.MatchConfig{Conditions: []ra.Condition{
+		{Target: ra.TargetToolFunction, Op: ra.OpIn, Values: []string{"delete_row", "drop_table"}},
+	}})
+	require.Len(t, scan(t, inRule, toolRequest(ra.NewToolView("mcp__db__drop_table", "{}"))), 1)
+	require.Empty(t, scan(t, inRule, toolRequest(ra.NewToolView("mcp__db__list", "{}"))))
+
+	// starts_with over content.
+	startsRule := ruleWithConfig(t, ra.MatchConfig{Conditions: []ra.Condition{
+		{Target: ra.TargetContent, Op: ra.OpStartsWith, Value: "ignore"},
+	}})
+	require.Len(t, scan(t, startsRule, ra.MessageView{Content: "ignore previous", Type: message.User, Tools: nil}), 1)
+	require.Empty(t, scan(t, startsRule, ra.MessageView{Content: "please ignore", Type: message.User, Tools: nil}))
+
+	// not_contains over content.
+	notRule := ruleWithConfig(t, ra.MatchConfig{Conditions: []ra.Condition{
+		{Target: ra.TargetContent, Op: ra.OpNotContains, Values: []string{"safe"}},
+	}})
+	require.Len(t, scan(t, notRule, ra.MessageView{Content: "danger", Type: message.User, Tools: nil}), 1)
+	require.Empty(t, scan(t, notRule, ra.MessageView{Content: "this is safe", Type: message.User, Tools: nil}))
+}
+
 func TestEffectiveMatchConfig(t *testing.T) {
 	t.Parallel()
 	require.Nil(t, ra.EffectiveMatchConfig(nil, ""))
@@ -255,7 +286,7 @@ func TestValidateMatchConfig(t *testing.T) {
 		{"unknown op", `{"conditions":[{"target":"content","op":"bogus","value":"a"}]}`, true},
 		{"missing op", `{"conditions":[{"target":"content","value":"a"}]}`, true},
 		{"bad regex", `{"conditions":[{"target":"content","op":"regex","value":"("}]}`, true},
-		{"tool_args missing path", `{"conditions":[{"target":"tool_args","op":"equals","value":"1"}]}`, true},
+		{"tool_args without path matches raw args", `{"conditions":[{"target":"tool_args","op":"contains","value":"rm"}]}`, false},
 		{"keyword empty", `{"conditions":[{"target":"content","op":"keyword","values":[]}]}`, true},
 		{"glob empty", `{"conditions":[{"target":"content","op":"glob","value":""}]}`, true},
 		{"equals empty value ok", `{"conditions":[{"target":"tool_server","op":"equals","value":""}]}`, false},

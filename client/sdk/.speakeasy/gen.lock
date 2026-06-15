@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: fe72ae2e046ed624a5ba362b8650dbc2
+  docChecksum: 49ef185409852469b792e6c1dcaf56b5
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -635,7 +635,7 @@ trackedFiles:
   docs/models/components/onboardingstatusresult.md:
     last_write_checksum: sha1:fd24447a91723363f53d7f26556cbf098bf3773f
   docs/models/components/op.md:
-    last_write_checksum: sha1:db87a8a8a72f4fdf95b708377e9b8cc54a43f4d7
+    last_write_checksum: sha1:ea85cd490906e5b7e466d4c56c25cbc0d56922bf
   docs/models/components/openapiv3deploymentasset.md:
     last_write_checksum: sha1:938e951d04a4facf0b57f6524cdfb31a028d24cb
   docs/models/components/operation.md:
@@ -819,9 +819,9 @@ trackedFiles:
   docs/models/components/riskidrequestbody.md:
     last_write_checksum: sha1:74c0c03022a5ba6da6501ed1676fc9d16b932b8b
   docs/models/components/riskmatchcondition.md:
-    last_write_checksum: sha1:600d073f83d94cf5af64c6304f3dae0df03a1e89
+    last_write_checksum: sha1:2a006b1023ef5ca0f2bd9c0e6257832a6cdab2da
   docs/models/components/riskmatchconfig.md:
-    last_write_checksum: sha1:45dfdfe607151c34233149ed006551174ec7c7aa
+    last_write_checksum: sha1:3ccf18c924aa20567e44793d99008b2afcb56087
   docs/models/components/riskoverviewcategory.md:
     last_write_checksum: sha1:55aedc1ad4b6702d6e8c2a6886d22ecfe7b025a3
   docs/models/components/riskoverviewresult.md:
@@ -4633,7 +4633,7 @@ trackedFiles:
   src/models/components/riskidrequestbody.ts:
     last_write_checksum: sha1:15e1c1e3031853c016e610a80cd439a278455abd
   src/models/components/riskmatchcondition.ts:
-    last_write_checksum: sha1:81f8c7c29b3e5e5fb6a62df42b9e132db15e52b7
+    last_write_checksum: sha1:4321c7f4da26824d4bb4fd1a74ba0468a3009603
   src/models/components/riskmatchconfig.ts:
     last_write_checksum: sha1:bd8de7096b29ccfeab3a833039347693b64d1118
   src/models/components/riskoverviewcategory.ts:

@@ -99,7 +99,7 @@ func RiskMatchConditionTargetEnum() {
 
 // RiskMatchConditionOpEnum constrains the comparison a condition applies.
 func RiskMatchConditionOpEnum() {
-	Enum("regex", "equals", "not_equals", "glob", "keyword", "exists")
+	Enum("regex", "equals", "not_equals", "glob", "keyword", "exists", "contains", "not_contains", "starts_with", "ends_with", "in")
 }
 
 var RiskMatchCondition = Type("RiskMatchCondition", func() {

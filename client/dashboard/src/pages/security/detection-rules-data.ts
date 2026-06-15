@@ -377,9 +377,14 @@ export const TARGET_LABELS: Record<MatchTarget, string> = {
 };
 
 export const OP_LABELS: Record<MatchOp, string> = {
-  regex: "matches regex",
   equals: "equals",
   not_equals: "does not equal",
+  contains: "contains",
+  not_contains: "does not contain",
+  in: "is one of",
+  starts_with: "starts with",
+  ends_with: "ends with",
+  regex: "matches regex",
   glob: "matches glob",
   keyword: "contains keyword",
   exists: "is present",
@@ -399,9 +404,14 @@ export const TARGET_DESCRIPTIONS: Record<MatchTarget, string> = {
 };
 
 export const OP_DESCRIPTIONS: Record<MatchOp, string> = {
-  regex: "RE2 regular expression",
-  equals: "exact value (use empty for native tools)",
+  equals: "exact value (empty matches native tools)",
   not_equals: "any value except this",
+  contains: "substring; union: (a OR b) matches any",
+  not_contains: "matches none of the substrings",
+  in: "exactly one of (a OR b)",
+  starts_with: "value is a prefix",
+  ends_with: "value is a suffix",
+  regex: "/RE2 regular expression/",
   glob: "wildcard pattern, e.g. *secret*",
   keyword: "contains any of these comma-separated terms",
   exists: "the field is present (no value)",
@@ -472,18 +482,21 @@ export function ruleRequiredMessageTypes(
 }
 
 export function validateCondition(c: RiskMatchCondition): string | null {
-  if (c.target === "tool_args" && !(c.path ?? "").trim()) {
-    return "Tool argument conditions need a JSON path";
-  }
+  const hasValue = (c.value ?? "").trim() !== "";
+  const hasValues = (c.values ?? []).some((v) => v.trim());
   switch (c.op) {
     case "regex":
       return validateRegex(c.value ?? "");
     case "glob":
-      return (c.value ?? "").trim() ? null : "Glob pattern is required";
+      return hasValue ? null : "Pattern is required";
     case "keyword":
-      return (c.values ?? []).some((v) => v.trim())
-        ? null
-        : "Add at least one keyword";
+    case "contains":
+    case "not_contains":
+    case "in":
+      return hasValue || hasValues ? null : "Add at least one value";
+    case "starts_with":
+    case "ends_with":
+      return hasValue ? null : "Value is required";
     // equals / not_equals / exists — empty value is allowed.
     case "equals":
     case "not_equals":
@@ -503,21 +516,34 @@ export function validateConditions(
   return null;
 }
 
-const OP_SYMBOL: Record<MatchOp, string> = {
-  regex: "~",
-  equals: "=",
-  not_equals: "≠",
+/** Operator keyword used in the colon-syntax summary. Empty => the
+ *  `field:value` equals shorthand. */
+const OP_TOKEN: Record<MatchOp, string> = {
+  equals: "",
+  not_equals: "not_equals",
+  contains: "contains",
+  not_contains: "not_contains",
+  in: "in",
+  starts_with: "starts_with",
+  ends_with: "ends_with",
+  regex: "matches",
   glob: "glob",
-  keyword: "∋",
+  keyword: "contains",
   exists: "exists",
 };
 
 function summarizeCondition(c: RiskMatchCondition): string {
-  const target =
-    c.target === "tool_args" && c.path ? `tool_args(${c.path})` : c.target;
-  if (c.op === "exists") return `${target} present`;
-  if (c.op === "keyword") return `${target} ∋ ${(c.values ?? []).join("/")}`;
-  return `${target} ${OP_SYMBOL[c.op]} ${JSON.stringify(c.value ?? "")}`;
+  const field =
+    c.target === "tool_args" && c.path ? `tool_args.${c.path}` : c.target;
+  if (c.op === "exists") return `${field}:exists`;
+  const values = (c.values ?? []).filter((v) => v.trim());
+  if (values.length > 0) {
+    return `${field}:${OP_TOKEN[c.op] || "in"}:(${values.join(" OR ")})`;
+  }
+  const token = OP_TOKEN[c.op];
+  return token
+    ? `${field}:${token}:${c.value ?? ""}`
+    : `${field}:${c.value ?? ""}`;
 }
 
 /** Human-readable one-liner summarizing a rule's conditions, for list rows. */

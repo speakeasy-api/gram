@@ -21578,8 +21578,8 @@ func ValidateRiskMatchConditionRequestBody(body *RiskMatchConditionRequestBody) 
 	if !(body.Target == "content" || body.Target == "user_prompt" || body.Target == "assistant_text" || body.Target == "tool_result" || body.Target == "tool_name" || body.Target == "tool_server" || body.Target == "tool_function" || body.Target == "tool_args") {
 		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target", body.Target, []any{"content", "user_prompt", "assistant_text", "tool_result", "tool_name", "tool_server", "tool_function", "tool_args"}))
 	}
-	if !(body.Op == "regex" || body.Op == "equals" || body.Op == "not_equals" || body.Op == "glob" || body.Op == "keyword" || body.Op == "exists") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.op", body.Op, []any{"regex", "equals", "not_equals", "glob", "keyword", "exists"}))
+	if !(body.Op == "regex" || body.Op == "equals" || body.Op == "not_equals" || body.Op == "glob" || body.Op == "keyword" || body.Op == "exists" || body.Op == "contains" || body.Op == "not_contains" || body.Op == "starts_with" || body.Op == "ends_with" || body.Op == "in") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.op", body.Op, []any{"regex", "equals", "not_equals", "glob", "keyword", "exists", "contains", "not_contains", "starts_with", "ends_with", "in"}))
 	}
 	return
 }
@@ -21625,8 +21625,8 @@ func ValidateRiskMatchConditionResponseBody(body *RiskMatchConditionResponseBody
 		}
 	}
 	if body.Op != nil {
-		if !(*body.Op == "regex" || *body.Op == "equals" || *body.Op == "not_equals" || *body.Op == "glob" || *body.Op == "keyword" || *body.Op == "exists") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.op", *body.Op, []any{"regex", "equals", "not_equals", "glob", "keyword", "exists"}))
+		if !(*body.Op == "regex" || *body.Op == "equals" || *body.Op == "not_equals" || *body.Op == "glob" || *body.Op == "keyword" || *body.Op == "exists" || *body.Op == "contains" || *body.Op == "not_contains" || *body.Op == "starts_with" || *body.Op == "ends_with" || *body.Op == "in") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.op", *body.Op, []any{"regex", "equals", "not_equals", "glob", "keyword", "exists", "contains", "not_contains", "starts_with", "ends_with", "in"}))
 		}
 	}
 	return

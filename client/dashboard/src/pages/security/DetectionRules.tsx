@@ -1486,8 +1486,10 @@ function CreateCustomRuleSheet({
                 />
                 <p className="text-muted-foreground text-xs">
                   Phrase a query like{" "}
-                  <code className="font-mono">content matches secret-\d+</code>.
-                  Conditions join with a single AND or OR.
+                  <code className="font-mono">
+                    content:matches:/secret-\d+/
+                  </code>
+                  . Conditions join with a single AND or OR.
                 </p>
               </div>
 

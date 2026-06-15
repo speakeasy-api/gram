@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/gobwas/glob"
@@ -44,6 +45,15 @@ const (
 	OpGlob      Op = "glob"
 	OpKeyword   Op = "keyword"
 	OpExists    Op = "exists"
+	// Query-bar operators. contains/not_contains/in are union-capable (match any
+	// of Values, falling back to Value). contains/not_contains are
+	// case-insensitive substring; in is exact equality; starts_with/ends_with are
+	// prefix/suffix.
+	OpContains    Op = "contains"
+	OpNotContains Op = "not_contains"
+	OpStartsWith  Op = "starts_with"
+	OpEndsWith    Op = "ends_with"
+	OpIn          Op = "in"
 )
 
 // MatchCombine controls how a rule's conditions are reduced to a verdict.
@@ -131,6 +141,7 @@ type compiledCondition struct {
 	op              Op
 	value           string
 	keywords        []string
+	operands        []string // contains/not_contains/in: match any of these
 	path            string
 	caseInsensitive bool
 	re              *regexp.Regexp
@@ -292,16 +303,16 @@ func compileCondition(cond Condition) (compiledCondition, error) {
 		op:              op,
 		value:           cond.Value,
 		keywords:        nil,
+		operands:        nil,
 		path:            "",
 		caseInsensitive: cond.CaseInsensitive,
 		re:              nil,
 		glob:            nil,
 	}
 
-	if target == TargetToolArgs {
-		if strings.TrimSpace(cond.Path) == "" {
-			return compiledCondition{}, fmt.Errorf("tool_args condition requires a path")
-		}
+	// tool_args may carry a gjson path (match the extracted value) or omit it
+	// (match the raw arguments JSON).
+	if target == TargetToolArgs && strings.TrimSpace(cond.Path) != "" {
 		cc.path = normalizeJSONPath(cond.Path)
 	}
 
@@ -337,6 +348,25 @@ func compileCondition(cond Condition) (compiledCondition, error) {
 			return compiledCondition{}, fmt.Errorf("keyword condition requires at least one keyword in values")
 		}
 		cc.keywords = cleaned
+	case OpContains, OpNotContains:
+		operands := conditionOperands(cond)
+		if len(operands) == 0 {
+			return compiledCondition{}, fmt.Errorf("%s requires a value", op)
+		}
+		for i := range operands {
+			operands[i] = strings.ToLower(operands[i])
+		}
+		cc.operands = operands
+	case OpIn:
+		operands := conditionOperands(cond)
+		if len(operands) == 0 {
+			return compiledCondition{}, fmt.Errorf("in requires a value")
+		}
+		cc.operands = operands
+	case OpStartsWith, OpEndsWith:
+		if strings.TrimSpace(cond.Value) == "" {
+			return compiledCondition{}, fmt.Errorf("%s requires a value", op)
+		}
 	case OpEquals, OpNotEquals:
 		// Empty value is intentional (e.g. tool_server == "" matches native tools).
 	case OpExists:
@@ -504,6 +534,16 @@ func (c compiledCondition) matchAnyTool(tools []ToolView, pick func(ToolView) st
 }
 
 func (c compiledCondition) matchArgs(argsJSON string) (bool, string) {
+	// No path: match against the raw arguments JSON (e.g. tool_call.args:contains:rm).
+	if c.path == "" {
+		if c.op == OpExists {
+			if strings.TrimSpace(argsJSON) != "" {
+				return true, argsJSON
+			}
+			return false, ""
+		}
+		return c.match(argsJSON)
+	}
 	res := gjson.Get(argsJSON, c.path)
 	if c.op == OpExists {
 		if res.Exists() {
@@ -550,6 +590,37 @@ func (c compiledCondition) match(s string) (bool, string) {
 			}
 		}
 		return false, ""
+	case OpContains:
+		hay := strings.ToLower(s)
+		for _, op := range c.operands {
+			if strings.Contains(hay, op) {
+				return true, op
+			}
+		}
+		return false, ""
+	case OpNotContains:
+		hay := strings.ToLower(s)
+		for _, op := range c.operands {
+			if strings.Contains(hay, op) {
+				return false, ""
+			}
+		}
+		return true, s
+	case OpIn:
+		if slices.Contains(c.operands, s) {
+			return true, s
+		}
+		return false, ""
+	case OpStartsWith:
+		if strings.HasPrefix(s, c.value) {
+			return true, s
+		}
+		return false, ""
+	case OpEndsWith:
+		if strings.HasSuffix(s, c.value) {
+			return true, s
+		}
+		return false, ""
 	case OpExists:
 		if s != "" {
 			return true, s
@@ -558,6 +629,22 @@ func (c compiledCondition) match(s string) (bool, string) {
 	default:
 		return false, ""
 	}
+}
+
+// conditionOperands collects a condition's operand list: Values if present,
+// else a single-element list of Value. Blank entries are dropped.
+func conditionOperands(cond Condition) []string {
+	vals := cond.Values
+	if len(vals) == 0 && cond.Value != "" {
+		vals = []string{cond.Value}
+	}
+	cleaned := make([]string, 0, len(vals))
+	for _, v := range vals {
+		if v = strings.TrimSpace(v); v != "" {
+			cleaned = append(cleaned, v)
+		}
+	}
+	return cleaned
 }
 
 func foldEqual(a, b string, caseInsensitive bool) bool {

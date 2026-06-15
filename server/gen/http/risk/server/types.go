@@ -13223,8 +13223,8 @@ func ValidateRiskMatchConditionRequestBody(body *RiskMatchConditionRequestBody) 
 		}
 	}
 	if body.Op != nil {
-		if !(*body.Op == "regex" || *body.Op == "equals" || *body.Op == "not_equals" || *body.Op == "glob" || *body.Op == "keyword" || *body.Op == "exists") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.op", *body.Op, []any{"regex", "equals", "not_equals", "glob", "keyword", "exists"}))
+		if !(*body.Op == "regex" || *body.Op == "equals" || *body.Op == "not_equals" || *body.Op == "glob" || *body.Op == "keyword" || *body.Op == "exists" || *body.Op == "contains" || *body.Op == "not_contains" || *body.Op == "starts_with" || *body.Op == "ends_with" || *body.Op == "in") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.op", *body.Op, []any{"regex", "equals", "not_equals", "glob", "keyword", "exists", "contains", "not_contains", "starts_with", "ends_with", "in"}))
 		}
 	}
 	return

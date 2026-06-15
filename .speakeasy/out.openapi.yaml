@@ -40554,6 +40554,11 @@ components:
             - glob
             - keyword
             - exists
+            - contains
+            - not_contains
+            - starts_with
+            - ends_with
+            - in
         path:
           type: string
           description: gjson/JSONPath into the tool_args JSON (tool_args target only).
