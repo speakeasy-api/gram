@@ -42,6 +42,18 @@ func RiskPolicyEvaluateCheck(policyID string) Check {
 	return Check{Scope: ScopeRiskPolicyEvaluate, ResourceKind: "", ResourceID: policyID, Dimensions: nil, selectorMatch: selectorMatchNormal, expanded: false}
 }
 
+// RiskPolicyApplies builds the runtime authorization rule for applying a risk
+// policy to a request.
+//
+// The rule is:
+//
+//	user can evaluate the policy for this request
+//	  unless user can bypass the same policy for this request
+//
+// The evaluate check is intentionally broad because audience grants may only
+// name the policy. The expression Instance is built from the bypass check so
+// both sides talk about the same concrete request dimensions, such as
+// server_url or server_identity.
 func RiskPolicyApplies(policyID string, bypassDims RiskPolicyDimensions) GrantExpression {
 	bypass := RiskPolicyBypassCheck(policyID, bypassDims)
 	instance := bypass.selector()

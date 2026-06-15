@@ -9,43 +9,57 @@ import (
 	"strings"
 )
 
-// Grant expressions evaluate permissions that cannot be answered by one
-// standalone Check.
+// Grant expressions are reusable authorization rules built from normal Checks.
 //
-// A Check is still the unit of grant matching: it says which scope, resource,
-// and selector dimensions a grant must satisfy. The expression layer adds set
-// algebra on top of those checks. Each matching check proves a concrete
-// permission instance, represented by a selector key. Difference expressions
-// remove exception instances from base instances.
+// Use a Check when one grant is enough to answer the question:
 //
-// Example:
+//	"does this user have mcp:connect for this server?"
 //
-//	risk_policy applies =
-//	  instances proven by risk_policy:evaluate
-//	  minus instances proven by matching risk_policy:bypass
+// Use a GrantExpression when the rule also has exceptions or other grant-based
+// conditions:
 //
-// If a user has a broad evaluate grant for policy_123 and a bypass grant only
-// for server_url=abc, evaluating policy_123 for server_url=cde keeps the
-// evaluate instance. Evaluating policy_123 for server_url=abc removes it. This
-// is why GrantCheck separates Check, the grant-matching rule, from Instance,
-// the permission instance that participates in set difference.
+//	"does this user have mcp:connect for this server, unless they also have
+//	 a matching mcp:block grant?"
 //
-// Selectors remain the source of truth for matching behavior. Grant expressions
-// deliberately reuse Check expansion and selector matching so resource
-// matching, wildcards, strict matching, and runtime dimensions keep the same
-// semantics as normal RBAC checks.
+//	"does this risk policy apply to this request, unless the user also has
+//	 a matching risk_policy:bypass grant?"
+//
+// The expression still uses Check for matching grants. That keeps scope
+// expansion, selector matching, wildcards, strict matching, and dimensions in
+// the same code path as Require/RequireAny. The expression layer only decides
+// how matching grants combine.
+//
+// The main operation today is difference:
+//
+//	base permission - exception permission
+//
+// For risk policy evaluation this means:
+//
+//	risk_policy:evaluate(policy_123, server_url=abc)
+//	  - risk_policy:bypass(policy_123, server_url=abc)
+//
+// A broad evaluate grant can prove that policy_123 applies to server_url=abc.
+// A bypass grant removes that decision only when it proves the same policy and
+// runtime dimensions. A bypass for server_url=abc does not remove policy
+// evaluation for server_url=cde.
 
 // GrantExpression evaluates whether a loaded grant set satisfies a domain
-// permission. Operands are grounded in Check values so selector matching,
-// dimensions, wildcards, strict matching, and scope expansion remain centralized
-// in the existing authz primitives.
+// permission.
+//
+// Callers should normally use Evaluate. The unexported grantSet method exists
+// so expressions can compose with each other without exposing the internal set
+// representation outside this package.
 type GrantExpression interface {
-	// Evaluate is the public API for callers. It hides set details and reports
-	// whether the final expression result is non-empty.
+	// Evaluate answers the user-facing authorization question: did the loaded
+	// grants satisfy this expression?
+	//
+	// Implementations may build intermediate sets, but callers only need the
+	// boolean result and the high-level reason.
 	Evaluate(grants []Grant) (GrantExpressionResult, error)
 
-	// grantSet is intentionally unexported. It lets authz expression types
-	// compose internally without exposing set-key mechanics as public API.
+	// grantSet returns the concrete permission instances proven by this
+	// expression. It is deliberately private because the set shape is an
+	// implementation detail of expression composition, not public API.
 	grantSet(grants []Grant) (grantSet, error)
 }
 
@@ -64,33 +78,56 @@ type GrantExpressionResult struct {
 	Reason    GrantExpressionReason
 }
 
-// grantSet is the set of permission instances proven by a grant expression.
-// Keys are canonical selector encodings; values are kept for debugging or
-// future proof details.
+// grantSet is the internal result of evaluating an expression as "which concrete
+// permission instances did these grants prove?".
+//
+// A permission instance is represented by a Selector, for example:
+//
+//	{resource_kind:"risk_policy", resource_id:"policy_123", server_url:"abc"}
+//
+// The map key is a stable encoding of that selector so difference can delete
+// matching instances quickly and exactly. The selector is kept as the value so
+// future diagnostics can explain which instance survived or was removed.
 type grantSet map[string]grantSetMember
 
 type grantSetMember struct {
 	Selector Selector
 }
 
-// GrantCheck is the primitive grant expression.
+// GrantCheck turns one Check into a GrantExpression.
 //
-// Check defines what grant must match. Instance identifies the domain
-// permission instance that matching grant proves. If Instance is empty, the
-// check selector is used as the set member key.
+// Check is the grant-matching rule. It answers "does any loaded grant satisfy
+// this scope/resource/dimensions?" using the same matching behavior as normal
+// RBAC checks.
 //
-// This distinction matters when the matching grant is broader than the runtime
-// permission instance. For risk policy application, a generic
-// risk_policy:evaluate grant can prove "policy_123 applies to server_url=abc".
-// A bypass grant subtracts only if it proves that same instance.
+// Instance is the concrete permission instance that a matching grant proves. If
+// Instance is empty, the check selector is used.
+//
+// The two are separate because the grant that matches can be broader than the
+// runtime decision being made. Example: a user may have a generic
+// risk_policy:evaluate grant for policy_123, but the runtime decision is
+// "policy_123 applies to server_url=abc". In that case Check is generic, while
+// Instance includes server_url=abc so a bypass can subtract only that exact
+// runtime decision.
 type GrantCheck struct {
 	Check    Check
 	Instance Selector
 }
 
-// GrantDifference evaluates both operands as sets and returns Base - Exception.
-// It is satisfied when at least one base instance remains after removing all
-// matching exception instances.
+// GrantDifference represents "Base is allowed unless Exception also applies".
+//
+// It evaluates Base and Exception into sets of concrete permission instances,
+// removes every exception instance from the base set, and is satisfied when at
+// least one base instance remains.
+//
+// Examples:
+//
+//	risk_policy:evaluate - risk_policy:bypass
+//	mcp:connect - mcp:block
+//
+// The scopes on the two sides do not have to be the same. What matters is that
+// both sides produce the same Instance selector when the exception should
+// remove the base permission.
 type GrantDifference struct {
 	Base      GrantExpression
 	Exception GrantExpression
@@ -149,6 +186,9 @@ func (g GrantDifference) Evaluate(grants []Grant) (GrantExpressionResult, error)
 		return baseResult, nil
 	}
 
+	// Evaluate above gives us the best reason to return when the base is not
+	// satisfied. From here on we need the actual base and exception sets so the
+	// exception removes only matching permission instances.
 	base, err := g.Base.grantSet(grants)
 	if err != nil {
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, fmt.Errorf("evaluate base expression set: %w", err)
@@ -190,11 +230,21 @@ func (s grantSet) add(member grantSetMember) {
 	s[grantSetKey(member.Selector)] = member
 }
 
-// subtract removes every instance from s that is also present in other.
-// This is the actual set-difference operation: exception instances remove only
-// base instances with the same canonical selector key. Other base instances
-// stay in the set, so an exception does not automatically make the whole
-// expression false.
+// subtract removes every permission instance from s that is also present in
+// other.
+//
+// This is the "unless" part of a GrantDifference. If the base set contains:
+//
+//	{risk_policy policy_123 server_url=abc}
+//	{risk_policy policy_123 server_url=cde}
+//
+// and the exception set contains:
+//
+//	{risk_policy policy_123 server_url=abc}
+//
+// then only the abc instance is removed. The cde instance remains, so the
+// expression is still satisfied for cde. We delete by canonical selector key
+// instead of comparing maps directly because Go maps are not comparable.
 func (s grantSet) subtract(other grantSet) {
 	for key := range other {
 		delete(s, key)
