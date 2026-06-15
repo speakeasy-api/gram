@@ -68,3 +68,15 @@ Determines the overall roundness of the UI.
 ```ts
 'soft'
 ```
+
+***
+
+### customCss?
+
+> `optional` **customCss**: `string`
+
+Extra CSS injected into the Elements shadow root after the built-in
+stylesheet. Elements renders inside a shadow DOM, so host-page styles
+cannot reach its internals — this is the supported escape hatch for
+embedders that need to restyle specific components (targeting the
+stable `aui-*` class hooks).
