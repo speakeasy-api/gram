@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -186,6 +187,52 @@ func TestApprovePolicyBypassRequest_CanGrantAllUsers(t *testing.T) {
 	assert.Equal(t, "revoked", revoked.Status)
 	assert.False(t, userHasRiskPolicyBypassGrant(t, ti, authCtx.ActiveOrganizationID, authCtx.UserID, policy.ID, fullURL))
 	assert.False(t, userHasRiskPolicyBypassGrant(t, ti, authCtx.ActiveOrganizationID, otherUserID, policy.ID, fullURL))
+}
+
+func TestPolicyBypassEvaluator_AllUserGrantRequiresConcreteActiveUser(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	policyID := "policy_all_user_bypass"
+	fullURL := "https://mcp.example.com/all-users-runtime"
+	selector := authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID)
+	selector[authz.SelectorKeyServerURL] = fullURL
+	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
+		Resource: authz.Resource{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Scope:          authz.ScopeRiskPolicyBypass,
+			ResourceID:     policyID,
+		},
+		Effect:     authz.PolicyEffectAllow,
+		Principals: []urn.Principal{authz.AllUsersPrincipal()},
+		Selector:   selector,
+	}))
+
+	target := risk.ShadowMCPServerPolicyBypassTarget(fullURL, "", fullURL)
+	evaluator := risk.NewPolicyBypassEvaluator(testenv.NewLogger(t), ti.conn)
+
+	assert.True(t, evaluator.CanBypass(ctx, risk.PolicyBypassEvaluation{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         authCtx.UserID,
+		PolicyID:       policyID,
+		Target:         &target,
+	}))
+	assert.False(t, evaluator.CanBypass(ctx, risk.PolicyBypassEvaluation{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         "not_connected_user",
+		PolicyID:       policyID,
+		Target:         &target,
+	}))
+	assert.False(t, evaluator.CanBypass(ctx, risk.PolicyBypassEvaluation{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         urn.AllUsersPrincipalID,
+		PolicyID:       policyID,
+		Target:         &target,
+	}))
 }
 
 func TestApprovePolicyBypassRequest_CanGrantRole(t *testing.T) {

@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type PolicyBypassEvaluation struct {
@@ -77,7 +78,8 @@ func NewPolicyBypassEvaluator(logger *slog.Logger, db repo.DBTX) *PolicyBypassEv
 }
 
 func (e *PolicyBypassEvaluator) CanBypass(ctx context.Context, input PolicyBypassEvaluation) bool {
-	if strings.TrimSpace(input.UserID) == "" || strings.TrimSpace(input.PolicyID) == "" {
+	input.UserID = strings.TrimSpace(input.UserID)
+	if input.UserID == "" || input.UserID == urn.AllUsersPrincipalID || strings.TrimSpace(input.PolicyID) == "" {
 		return false
 	}
 
@@ -91,6 +93,18 @@ func (e *PolicyBypassEvaluator) CanBypass(ctx context.Context, input PolicyBypas
 }
 
 func (e *PolicyBypassEvaluator) loadGrants(ctx context.Context, input PolicyBypassEvaluation) ([]authz.Grant, bool) {
+	if err := authz.ValidatePrincipal(ctx, e.db, input.OrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, input.UserID)); err != nil {
+		if !errors.Is(err, authz.ErrPrincipalNotFound) {
+			e.logger.WarnContext(ctx, "failed to validate principal for risk policy bypass",
+				attr.SlogError(err),
+				attr.SlogOrganizationID(input.OrganizationID),
+				attr.SlogUserID(input.UserID),
+				attr.SlogRiskPolicyID(input.PolicyID),
+			)
+		}
+		return nil, false
+	}
+
 	principals, err := authz.ResolveUserPrincipals(ctx, e.db, input.OrganizationID, input.UserID)
 	if err != nil {
 		if !errors.Is(err, authz.ErrPrincipalNotFound) {
