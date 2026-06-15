@@ -521,9 +521,13 @@ function valueSuggestions(typed: string): QuerySuggestion[] {
 function lastConnectorEnd(before: string): number {
   let last = 0;
   let inQuotes = false;
+  let depth = 0;
   for (let i = 0; i < before.length; i++) {
-    if (before.charAt(i) === '"') inQuotes = !inQuotes;
-    if (!inQuotes && /\s/.test(before.charAt(i))) {
+    const ch = before.charAt(i);
+    if (ch === '"') inQuotes = !inQuotes;
+    else if (!inQuotes && ch === "(") depth++;
+    else if (!inQuotes && ch === ")") depth--;
+    else if (!inQuotes && depth === 0 && /\s/.test(ch)) {
       const conn = connectorAt(before, i + 1);
       if (conn) last = conn.end;
     }
