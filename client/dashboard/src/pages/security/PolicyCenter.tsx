@@ -1755,10 +1755,15 @@ function PolicySheetBody({
                 const nextDisabled = new Set(disabledRules);
                 const nextCats = new Set(selectedCategories);
                 if (enabled) {
+                  // Enabling the first rule in a not-yet-selected category must
+                  // turn on ONLY that rule. Selecting the category alone would
+                  // enable every rule (enabled = category selected && not in
+                  // disabled_rules), so seed the rest as disabled first.
+                  if (!nextCats.has(cat)) {
+                    for (const r of rules) nextDisabled.add(r.id);
+                    nextCats.add(cat);
+                  }
                   nextDisabled.delete(ruleId);
-                  // Enabling any rule inside a category implies the category is
-                  // selected. Otherwise the rule wouldn't actually run.
-                  nextCats.add(cat);
                 } else {
                   nextDisabled.add(ruleId);
                 }
