@@ -858,6 +858,7 @@ function LogsToolsTraceRow({
       ? (serverNameMappings.rawToDisplay.get(trace.targetId) ??
         trace.targetLabel)
       : trace.targetLabel;
+  const showTargetLabel = trace.targetType !== "local_tool";
 
   const editDialogProps = useMemo(() => {
     if (trace.targetType !== "shadow_mcp_server") return null;
@@ -928,9 +929,11 @@ function LogsToolsTraceRow({
             )}
           </div>
           <div className="flex min-w-0 items-baseline gap-2">
-            <span className="text-muted-foreground min-w-0 truncate text-xs">
-              {targetLabel}
-            </span>
+            {showTargetLabel && (
+              <span className="text-muted-foreground min-w-0 truncate text-xs">
+                {targetLabel}
+              </span>
+            )}
             <span className="truncate font-mono text-sm">
               {trace.toolName || "unknown"}
             </span>
