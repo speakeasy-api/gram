@@ -30,7 +30,7 @@ repo=os.environ['MODEL_REPO']; rev=os.environ['MODEL_REVISION']; \
 ORTModelForSequenceClassification.from_pretrained(repo, subfolder='onnx', revision=rev); \
 AutoTokenizer.from_pretrained(repo, revision=rev)"
 
-FROM python:3.12-slim@sha256:ec948fa5f90f4f8907e89f4800cfd2d2e91e391a4bce4a6afa77ba265bc3a2fe AS runtime
+FROM python:3.14-slim@sha256:44dd04494ee8f3b538294360e7c4b3acb87c8268e4d0a4828a6500b1eff50061 AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
