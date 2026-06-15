@@ -20,8 +20,6 @@ reviews:
   auto_approve: disabled
   ignore:
     files:
-      - "**/uv.lock"
-      - "**/pnpm-lock.yaml"
       - client/sdk/**/*
       - server/gen/**/*
       - "**/repo/*.go"
