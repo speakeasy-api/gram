@@ -89,12 +89,12 @@ export const AI_INTEGRATION_PROVIDERS: AIIntegrationProvider[] = [
         {
           title: "Copy your Compliance Access Key",
           description:
-            "Create a Compliance Access Key and copy it. Use a Compliance Access Key, not an Admin API key: Admin API keys only reach the Activity Feed, while Compliance Access Keys can access the broader compliance data Speakeasy imports.",
+            "Create a Compliance Access Key and copy it. Select the read scopes shown below: compliance activities, org data, org settings, user data, analytics, and spend limits. Leave the delete and write scopes unchecked.",
           screenshot: {
             src: "/setup/anthropic-compliance-api-key.png",
-            alt: "Create API key dialog showing compliance read scopes selected.",
+            alt: "Create API key dialog showing compliance, analytics, and spend limit read scopes selected.",
             caption:
-              "Select the compliance read scopes plus read:analytics and read:spend_limits before creating the key.",
+              "Select read:compliance_activities, read:compliance_org_data, read:compliance_org_settings, read:compliance_user_data, read:analytics, and read:spend_limits.",
           },
           helpLink: {
             url: "https://claude.ai/admin-settings/api-access",
@@ -122,7 +122,7 @@ export const AI_INTEGRATION_PROVIDERS: AIIntegrationProvider[] = [
         {
           title: "Paste both values into Speakeasy",
           description:
-            "Copy the Compliance Access API key and your Anthropic Organization ID, then paste both below. The platform stores the key securely and starts importing compliance activity.",
+            "Copy the scoped Compliance Access API key and your Anthropic Organization ID, then paste both below. The platform stores the key securely and starts importing compliance activity, analytics, and spend limit data.",
           showsForm: true,
         },
       ],
@@ -135,10 +135,15 @@ export const AI_INTEGRATION_PROVIDERS: AIIntegrationProvider[] = [
     organizationIdPlaceholder: "org_xxx",
     helpText: (
       <>
-        The API key must include the{" "}
-        <code className="text-foreground">read:compliance_activities</code> and{" "}
-        <code className="text-foreground">read:compliance_user_data</code>{" "}
-        scopes.{" "}
+        The API key must include{" "}
+        <code className="text-foreground">read:compliance_activities</code>,{" "}
+        <code className="text-foreground">read:compliance_org_data</code>,{" "}
+        <code className="text-foreground">read:compliance_org_settings</code>,{" "}
+        <code className="text-foreground">read:compliance_user_data</code>,{" "}
+        <code className="text-foreground">read:analytics</code>, and{" "}
+        <code className="text-foreground">read:spend_limits</code>. Leave{" "}
+        <code className="text-foreground">delete:compliance_user_data</code> and{" "}
+        <code className="text-foreground">write:spend_limits</code> unchecked.{" "}
         <a
           href="https://platform.claude.com/docs/en/manage-claude/compliance-api-access"
           target="_blank"
