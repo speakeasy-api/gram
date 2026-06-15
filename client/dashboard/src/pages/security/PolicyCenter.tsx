@@ -25,8 +25,8 @@ import {
   SheetHeader,
   SheetTitle,
   SheetDescription,
-  SheetFooter,
 } from "@/components/ui/sheet";
+import { Dialog } from "@/components/ui/dialog";
 import { Type } from "@/components/ui/type";
 import {
   PageTabsTrigger,
@@ -1093,28 +1093,27 @@ function PolicyCenterContent() {
         </Page.Section>
 
         {/* Edit/Create Sheet */}
-        <Sheet
+        <Dialog
           open={sheetOpen}
           onOpenChange={(open) => {
             setSheetOpen(open);
-            // Drop the deep-link param so the sheet doesn't reopen and the same
+            // Drop the deep-link param so the dialog doesn't reopen and the same
             // id can be deep-linked again later.
             if (!open) clearPolicyDeepLink();
           }}
         >
-          <SheetContent
+          <Dialog.Content
             className={cn(
-              "flex flex-col overflow-y-auto",
-              // The guided standard-policy flow needs room for the step rail.
-              !isChoosingPolicyKind && formPolicyKind === "risk"
-                ? "sm:max-w-3xl"
-                : "sm:max-w-lg",
+              "flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0",
+              // The guided standard-policy flow is a centered wizard that needs
+              // room for the step rail; other surfaces stay compact.
+              isRiskWizard ? "sm:max-w-5xl" : "sm:max-w-lg",
             )}
           >
-            <SheetHeader className="px-6 pt-6">
-              <SheetTitle>{sheetTitle}</SheetTitle>
-              <SheetDescription>{sheetDescription}</SheetDescription>
-            </SheetHeader>
+            <Dialog.Header className="px-6 pt-6">
+              <Dialog.Title>{sheetTitle}</Dialog.Title>
+              <Dialog.Description>{sheetDescription}</Dialog.Description>
+            </Dialog.Header>
             <div className="flex-1 overflow-y-auto px-6">
               <div className="space-y-6 py-4">
                 {isChoosingPolicyKind ? (
@@ -1172,7 +1171,7 @@ function PolicyCenterContent() {
               </div>
             </div>
             {!isChoosingPolicyKind && (
-              <SheetFooter className="flex-row items-center justify-between px-6 pb-6">
+              <Dialog.Footer className="border-border flex-row items-center justify-between border-t px-6 py-4">
                 {isRiskWizard ? (
                   <span className="text-muted-foreground text-xs">
                     Step {wizardStep + 1} of {POLICY_WIZARD_STEPS.length} ·{" "}
@@ -1214,10 +1213,10 @@ function PolicyCenterContent() {
                     </Button>
                   )}
                 </div>
-              </SheetFooter>
+              </Dialog.Footer>
             )}
-          </SheetContent>
-        </Sheet>
+          </Dialog.Content>
+        </Dialog>
 
         {/* View Run Panel */}
         <Sheet
