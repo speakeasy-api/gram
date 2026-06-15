@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -38,6 +39,8 @@ type instrumentedPIIScanner struct {
 	inflight      atomic.Int32
 	maxInflight   atomic.Int32
 	cancellations atomic.Int32
+	slowStarted   chan struct{}
+	slowStartOnce sync.Once
 }
 
 func (l *instrumentedPIIScanner) AnalyzeBatch(ctx context.Context, texts []string, entities []string, _ func()) ([][]risk_analysis.Finding, error) {
@@ -56,6 +59,12 @@ func (l *instrumentedPIIScanner) AnalyzeBatch(ctx context.Context, texts []strin
 	// trigger, return a finding without sleeping.
 	if l.findOnEntity != "" {
 		if slices.Contains(entities, l.findOnEntity) {
+			if l.slowStarted != nil {
+				select {
+				case <-l.slowStarted:
+				case <-time.After(500 * time.Millisecond):
+				}
+			}
 			out := make([][]risk_analysis.Finding, len(texts))
 			for i := range texts {
 				out[i] = []risk_analysis.Finding{{
@@ -66,6 +75,12 @@ func (l *instrumentedPIIScanner) AnalyzeBatch(ctx context.Context, texts []strin
 			}
 			return out, nil
 		}
+	}
+
+	if l.slowStarted != nil {
+		l.slowStartOnce.Do(func() {
+			close(l.slowStarted)
+		})
 	}
 
 	select {
@@ -220,6 +235,7 @@ func TestScanner_FirstMatchCancelsSiblings(t *testing.T) {
 	pii := &instrumentedPIIScanner{
 		delay:        2 * time.Second, // long enough that any non-cancellation would dominate
 		findOnEntity: "FAST",
+		slowStarted:  make(chan struct{}),
 	}
 	scanner, err := risk.NewScanner(
 		testenv.NewLogger(t),
