@@ -1013,6 +1013,16 @@ export function InsightsProvider({
 }
 
 /**
+ * assistant-ui's EMPTY_THREAD_CORE placeholder throws a single shared sentinel
+ * Error on append (and other actions) until the real thread core binds. It's
+ * not exported, so we match its message to tell "thread not ready yet, retry"
+ * apart from a genuine send failure.
+ */
+function isEmptyThreadError(err: unknown): boolean {
+  return err instanceof Error && err.message.includes("empty thread");
+}
+
+/**
  * Lives inside GramElementsProvider so it can access useThreadRuntime().
  * When a pending prompt is queued via InsightsContext.sendPrompt, this bridge
  * appends it to the current thread as a user message, triggering the
@@ -1050,19 +1060,32 @@ function PendingPromptBridge({
     let done = false;
     let unsubscribe: (() => void) | null = null;
 
+    const finish = () => {
+      done = true;
+      unsubscribe?.();
+      unsubscribe = null;
+      onConsume();
+    };
+
     const attempt = () => {
       if (done) return;
       const state = assistantRuntime.thread.getState();
       if (state.isLoading || state.isDisabled) return;
       try {
         assistantRuntime.thread.append(text);
-      } catch {
+      } catch (err) {
+        // The cold-open placeholder (EMPTY_THREAD_CORE) throws its sentinel
+        // error until the real thread core binds — the expected "not ready"
+        // signal, so leave the prompt queued and retry on the next runtime
+        // event. Any other error is a genuine send failure: surface it and
+        // stop, rather than swallowing it and retrying forever.
+        if (!isEmptyThreadError(err)) {
+          console.error("Failed to send queued assistant prompt:", err);
+          finish();
+        }
         return;
       }
-      done = true;
-      unsubscribe?.();
-      unsubscribe = null;
-      onConsume();
+      finish();
     };
 
     attempt();

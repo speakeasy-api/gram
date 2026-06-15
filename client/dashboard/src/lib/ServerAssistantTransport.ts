@@ -109,10 +109,17 @@ export function createServerAssistantTransport(
       return createUIMessageStream<UIMessage>({
         originalMessages: messages,
         execute: async ({ writer }) => {
+          // Reap the previous turn's poll loop (see `activePoll` above), then
+          // arm a fresh controller for THIS turn. `pollSignal` guards ONLY the
+          // poll loop — never the send or snapshot. The reaper fires when the
+          // next send starts; if it also guarded `assistantsSendMessage`, a
+          // rapid follow-up send (or a remount) would abort the earlier send's
+          // in-flight POST and silently drop that user turn. Send + snapshot
+          // use the per-turn `abortSignal` alone (turn-cancel only).
           activePoll?.abort();
           const poll = new AbortController();
           activePoll = poll;
-          const signal = abortSignal
+          const pollSignal = abortSignal
             ? AbortSignal.any([abortSignal, poll.signal])
             : poll.signal;
 
@@ -138,7 +145,7 @@ export function createServerAssistantTransport(
           // "already seen". New conversations skip the snapshot — there's
           // nothing to baseline against.
           const snapshot = chatId
-            ? await snapshotAssistantIds(deps.client, chatId, signal)
+            ? await snapshotAssistantIds(deps.client, chatId, abortSignal)
             : null;
           const sent = await assistantsSendMessage(
             deps.client,
@@ -152,7 +159,7 @@ export function createServerAssistantTransport(
               },
             },
             undefined,
-            { fetchOptions: { signal } },
+            { fetchOptions: { signal: abortSignal } },
           );
           if (!sent.ok) {
             throw sent.error;
@@ -169,7 +176,7 @@ export function createServerAssistantTransport(
             chatId,
             snapshot,
             writer,
-            abortSignal: signal,
+            abortSignal: pollSignal,
           });
 
           writer.write({ type: "finish" });
