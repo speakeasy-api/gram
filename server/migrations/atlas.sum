@@ -1,4 +1,4 @@
-h1:RXZAG2UrT3wdDP2FVxhuhmnqmtYp/ywjCExPDAwNvGs=
+h1:fH191uqqcu4M+brsmSnKQA4LinXt80vHcu20C0t14lU=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -219,3 +219,4 @@ h1:RXZAG2UrT3wdDP2FVxhuhmnqmtYp/ywjCExPDAwNvGs=
 20260615104135_false_positive_sweep.sql h1:1jocVB88SQg/3BOArQIAbPECNrLXOIVDCI9VFpplmbY=
 20260615113504_workos-metadata-for-directory-attributes-sync.sql h1:sZiNf5tqa+2mqki7Xr4sUuF126gZBup1Kg92bX7AtkM=
 20260615163140_add_custom_rule_match_config.sql h1:2ghQ9pCI2axgWdd/LJHH2FKfdhnSs4ZlfpY+FkiZjzU=
+20260615212624_add_policy_rules.sql h1:JBc9QdafREswiTCAbFa97OGzDYa1qnUKpMOgXCUzJk4=
