@@ -9,25 +9,31 @@ import (
 	"strings"
 )
 
-// Grant expressions model derived permissions over the grants already loaded
-// for a request.
+// Grant expressions evaluate permissions that cannot be answered by one
+// standalone Check.
 //
-// A plain Check answers "does any grant match this scope/resource/dimensions?".
-// A GrantExpression answers the richer question "which permission instances are
-// proven by those matching grants, and which of those instances are removed by
-// exceptions?". This is the piece we need for rules such as:
+// A Check is still the unit of grant matching: it says which scope, resource,
+// and selector dimensions a grant must satisfy. The expression layer adds set
+// algebra on top of those checks. Each matching check proves a concrete
+// permission instance, represented by a selector key. Difference expressions
+// remove exception instances from base instances.
 //
-//	risk_policy applies = risk_policy:evaluate - risk_policy:bypass
+// Example:
 //
-// The expression layer deliberately reuses Check for all grant matching. That
-// keeps selector semantics in one place: resource_kind/resource_id, wildcards,
-// strict versus normal selector matching, scope expansion, and runtime
-// dimensions such as server_url, server_identity, tool, disposition, and
-// project_id.
+//	risk_policy applies =
+//	  instances proven by risk_policy:evaluate
+//	  minus instances proven by matching risk_policy:bypass
 //
-// The only new concept here is the expression "instance": the set member a
-// matched check proves. Base and exception expressions subtract only when they
-// prove the same instance key.
+// If a user has a broad evaluate grant for policy_123 and a bypass grant only
+// for server_url=abc, evaluating policy_123 for server_url=cde keeps the
+// evaluate instance. Evaluating policy_123 for server_url=abc removes it. This
+// is why GrantCheck separates Check, the grant-matching rule, from Instance,
+// the permission instance that participates in set difference.
+//
+// Selectors remain the source of truth for matching behavior. Grant expressions
+// deliberately reuse Check expansion and selector matching so resource
+// matching, wildcards, strict matching, and runtime dimensions keep the same
+// semantics as normal RBAC checks.
 
 // GrantExpression evaluates whether a loaded grant set satisfies a domain
 // permission. Operands are grounded in Check values so selector matching,
