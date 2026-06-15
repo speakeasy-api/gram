@@ -161,15 +161,32 @@ const BUILTIN_RULE_IDS = new Set<string>([
   ...Object.values(DETECTION_RULES).flatMap((rules) => rules.map((r) => r.id)),
 ]);
 
+/** Rule polarity. `deny` flags a finding when matched (the default); `allow`
+ *  is an inline allowlist that short-circuits the whole policy for a message. */
+export type CustomRuleEffect = "deny" | "allow";
+
 export type CustomDetectionRule = {
   id: string;
   dbId: string;
   title: string;
   description: string;
+  /** Legacy single pattern. Surfaced as a content/regex condition by
+   *  ruleConditions when matchConfig is absent. */
   regex: string;
+  matchConfig: RiskMatchConfig | null;
   severity: SeverityLevel;
   createdAt: string;
   updatedAt: string;
+};
+
+/** Fields needed to create or fully edit a custom rule's matcher. */
+export type CustomRuleDraft = {
+  id: string;
+  title: string;
+  description: string;
+  conditions: RiskMatchCondition[];
+  effect: CustomRuleEffect;
+  severity: SeverityLevel;
 };
 
 function mapCustomDetectionRule(rule: {
@@ -178,6 +195,7 @@ function mapCustomDetectionRule(rule: {
   title: string;
   description: string;
   regex: string;
+  matchConfig?: RiskMatchConfig | null;
   severity: string;
   createdAt: Date;
   updatedAt: Date;
@@ -188,6 +206,7 @@ function mapCustomDetectionRule(rule: {
     title: rule.title,
     description: rule.description,
     regex: rule.regex,
+    matchConfig: rule.matchConfig ?? null,
     severity: rule.severity as SeverityLevel,
     createdAt: rule.createdAt.toISOString(),
     updatedAt: rule.updatedAt.toISOString(),
@@ -219,28 +238,28 @@ function useDetectionRulesStoreImpl() {
     customRules,
     isLoading: rulesQuery.isLoading,
     error: rulesQuery.error,
-    addCustomRule: (
-      rule: Omit<CustomDetectionRule, "dbId" | "createdAt" | "updatedAt">,
-    ) =>
+    addCustomRule: (rule: CustomRuleDraft) =>
       createMutation.mutate({
         request: {
           createCustomDetectionRuleRequestBody: {
             ruleId: rule.id,
             title: rule.title,
             description: rule.description,
-            regex: rule.regex,
+            matchConfig: buildMatchConfig(rule.conditions, rule.effect),
             severity: rule.severity,
           },
         },
       }),
     updateCustomRule: (
       id: string,
-      patch: Partial<Omit<CustomDetectionRule, "id" | "dbId" | "createdAt">>,
+      patch: Partial<Omit<CustomRuleDraft, "id">>,
     ) => {
       const rule = customRules.find((r) => r.id === id);
       if (!rule) {
         return Promise.reject(new Error("Custom detection rule not found"));
       }
+      const conditions = patch.conditions ?? ruleConditions(rule);
+      const effect = patch.effect ?? ruleEffect(rule);
       return updateMutation
         .mutateAsync({
           request: {
@@ -248,7 +267,7 @@ function useDetectionRulesStoreImpl() {
               id: rule.dbId,
               title: patch.title ?? rule.title,
               description: patch.description ?? rule.description,
-              regex: patch.regex ?? rule.regex,
+              matchConfig: buildMatchConfig(conditions, effect),
               severity: patch.severity ?? rule.severity,
             },
           },
@@ -306,4 +325,171 @@ export function validateRegex(pattern: string): string | null {
   } catch (err) {
     return err instanceof Error ? err.message : "Invalid regex";
   }
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Condition (match_config) helpers — shared by the query-builder UI         */
+/* -------------------------------------------------------------------------- */
+
+type MatchTarget = RiskMatchCondition["target"];
+type MatchOp = RiskMatchCondition["op"];
+
+export const MATCH_TARGETS = [
+  "content",
+  "user_prompt",
+  "assistant_text",
+  "tool_result",
+  "tool_name",
+  "tool_server",
+  "tool_function",
+  "tool_args",
+] as const satisfies readonly MatchTarget[];
+
+export const MATCH_OPS = [
+  "regex",
+  "equals",
+  "not_equals",
+  "glob",
+  "keyword",
+  "exists",
+] as const satisfies readonly MatchOp[];
+
+export const TARGET_LABELS: Record<MatchTarget, string> = {
+  content: "Message content",
+  user_prompt: "User prompt",
+  assistant_text: "Assistant text",
+  tool_result: "Tool result",
+  tool_name: "Tool name",
+  tool_server: "Tool server (MCP)",
+  tool_function: "Tool function",
+  tool_args: "Tool argument",
+};
+
+export const OP_LABELS: Record<MatchOp, string> = {
+  regex: "matches regex",
+  equals: "equals",
+  not_equals: "does not equal",
+  glob: "matches glob",
+  keyword: "contains keyword",
+  exists: "is present",
+};
+
+/** Message type each target is scoped to (a tool_server condition only matches
+ *  tool-request messages, etc). `null` means the target applies to any type.
+ *  Drives the PolicyCenter coverage warning. */
+export const TARGET_MESSAGE_TYPE: Record<
+  MatchTarget,
+  PolicyMessageType | null
+> = {
+  content: null,
+  user_prompt: "user_message",
+  assistant_text: "assistant_message",
+  tool_result: "tool_response",
+  tool_name: "tool_request",
+  tool_server: "tool_request",
+  tool_function: "tool_request",
+  tool_args: "tool_request",
+};
+
+export function defaultCondition(): RiskMatchCondition {
+  return { target: "content", op: "regex", value: "" };
+}
+
+export function buildMatchConfig(
+  conditions: RiskMatchCondition[],
+  effect: CustomRuleEffect,
+): RiskMatchConfig {
+  return { effect, combine: "and", conditions };
+}
+
+/** Effective conditions for a rule — its match_config, or the legacy regex
+ *  surfaced as a single content/regex condition. */
+export function ruleConditions(
+  rule: CustomDetectionRule,
+): RiskMatchCondition[] {
+  if (rule.matchConfig && rule.matchConfig.conditions.length > 0) {
+    return rule.matchConfig.conditions;
+  }
+  if (rule.regex) {
+    return [{ target: "content", op: "regex", value: rule.regex }];
+  }
+  return [];
+}
+
+export function ruleEffect(rule: CustomDetectionRule): CustomRuleEffect {
+  return (rule.matchConfig?.effect as CustomRuleEffect) ?? "deny";
+}
+
+/** Message types a rule can ever match, inferred from its condition targets.
+ *  Empty means "any" (a content-only rule). */
+export function ruleRequiredMessageTypes(
+  conditions: RiskMatchCondition[],
+): PolicyMessageType[] {
+  const types = new Set<PolicyMessageType>();
+  for (const c of conditions) {
+    const t = TARGET_MESSAGE_TYPE[c.target];
+    if (t) types.add(t);
+  }
+  return [...types];
+}
+
+export function validateCondition(c: RiskMatchCondition): string | null {
+  if (c.target === "tool_args" && !(c.path ?? "").trim()) {
+    return "Tool argument conditions need a JSON path";
+  }
+  switch (c.op) {
+    case "regex":
+      return validateRegex(c.value ?? "");
+    case "glob":
+      return (c.value ?? "").trim() ? null : "Glob pattern is required";
+    case "keyword":
+      return (c.values ?? []).some((v) => v.trim())
+        ? null
+        : "Add at least one keyword";
+    // equals / not_equals / exists — empty value is allowed.
+    case "equals":
+    case "not_equals":
+    case "exists":
+      return null;
+  }
+}
+
+export function validateConditions(
+  conditions: RiskMatchCondition[],
+): string | null {
+  if (conditions.length === 0) return "Add at least one condition";
+  for (const c of conditions) {
+    const err = validateCondition(c);
+    if (err) return err;
+  }
+  return null;
+}
+
+const OP_SYMBOL: Record<MatchOp, string> = {
+  regex: "~",
+  equals: "=",
+  not_equals: "≠",
+  glob: "glob",
+  keyword: "∋",
+  exists: "exists",
+};
+
+function summarizeCondition(c: RiskMatchCondition): string {
+  const target =
+    c.target === "tool_args" && c.path ? `tool_args(${c.path})` : c.target;
+  if (c.op === "exists") return `${target} present`;
+  if (c.op === "keyword") return `${target} ∋ ${(c.values ?? []).join("/")}`;
+  return `${target} ${OP_SYMBOL[c.op]} ${JSON.stringify(c.value ?? "")}`;
+}
+
+/** Human-readable one-liner summarizing a rule's conditions, for list rows. */
+export function summarizeConditions(conditions: RiskMatchCondition[]): string {
+  if (conditions.length === 0) return "No matcher configured";
+  return conditions.map(summarizeCondition).join(" AND ");
+}
+
+/** List-row summary: an allow prefix plus the condition summary. */
+export function ruleSummary(rule: CustomDetectionRule): string {
+  const prefix = ruleEffect(rule) === "allow" ? "allow · " : "";
+  return prefix + summarizeConditions(ruleConditions(rule));
 }

@@ -41,15 +41,34 @@ import { unwrapAsync } from "@gram/client/types/fp.js";
 import { useSdkClient } from "@/contexts/Sdk";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   BUILTIN_RULES_BY_CATEGORY,
   SEVERITY_LEVELS,
+  buildMatchConfig,
+  defaultCondition,
+  ruleConditions,
+  ruleEffect,
+  ruleSummary,
   useDetectionRulesStore,
+  validateConditions,
   validateCustomRuleId,
-  validateRegex,
   type BuiltinRule,
   type CustomDetectionRule,
+  type CustomRuleDraft,
+  type CustomRuleEffect,
   type SeverityLevel,
 } from "./detection-rules-data";
+import { MatchConfigBuilder } from "./match-config-builder";
+import type {
+  RiskMatchConfig,
+  RiskMatchCondition,
+} from "@gram/client/models/components";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
 
 /** Presidio-backed categories: kept in the same order the policy form uses
@@ -253,7 +272,7 @@ function CustomRulesSection({
               <RuleRow
                 key={rule.id}
                 title={rule.title || rule.id}
-                subtitle={rule.id}
+                subtitle={ruleSummary(rule)}
                 onClick={() => onSelect(rule)}
               />
             ))}
@@ -455,9 +474,34 @@ function BuiltinRuleDetail({ rule }: { rule: BuiltinRule }) {
           <p className="text-sm leading-relaxed">{rule.description}</p>
         </DetailField>
 
-        <RulePlayground ruleId={rule.id} regex={null} />
+        <RulePlayground ruleId={rule.id} matchConfig={null} />
       </div>
     </>
+  );
+}
+
+function EffectSelect({
+  value,
+  onChange,
+}: {
+  value: CustomRuleEffect;
+  onChange: (v: CustomRuleEffect) => void;
+}) {
+  return (
+    <Select
+      value={value}
+      onValueChange={(v) => onChange(v as CustomRuleEffect)}
+    >
+      <SelectTrigger className="h-9 w-full">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="deny">Deny — flag a finding when matched</SelectItem>
+        <SelectItem value="allow">
+          Allow — exempt the message (short-circuits the policy)
+        </SelectItem>
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -467,29 +511,37 @@ function CustomRuleDetail({
   onDelete,
 }: {
   rule: CustomDetectionRule;
-  onUpdate: (
-    patch: Partial<Omit<CustomDetectionRule, "id" | "dbId" | "createdAt">>,
-  ) => Promise<void>;
+  onUpdate: (patch: Partial<Omit<CustomRuleDraft, "id">>) => Promise<void>;
   onDelete: () => void;
 }) {
   const [title, setTitle] = useState(rule.title);
   const [description, setDescription] = useState(rule.description);
-  const [regex, setRegex] = useState(rule.regex);
+  const [conditions, setConditions] = useState<RiskMatchCondition[]>(() =>
+    ruleConditions(rule),
+  );
+  const [effect, setEffect] = useState<CustomRuleEffect>(() =>
+    ruleEffect(rule),
+  );
   const [saveState, setSaveState] = useState<
     "idle" | "saving" | "saved" | "error"
   >("idle");
   const savedTimerRef = useRef<number | undefined>(undefined);
-  const savedValuesRef = useRef({
+  const savedRef = useRef({
     title: rule.title,
     description: rule.description,
-    regex: rule.regex,
+    conditions: JSON.stringify(ruleConditions(rule)),
+    effect: ruleEffect(rule),
   });
 
-  const regexError = useMemo(() => validateRegex(regex), [regex]);
+  const conditionsError = useMemo(
+    () => validateConditions(conditions),
+    [conditions],
+  );
   const dirty =
-    title !== savedValuesRef.current.title ||
-    description !== savedValuesRef.current.description ||
-    regex !== savedValuesRef.current.regex;
+    title !== savedRef.current.title ||
+    description !== savedRef.current.description ||
+    JSON.stringify(conditions) !== savedRef.current.conditions ||
+    effect !== savedRef.current.effect;
 
   useEffect(() => {
     if (dirty && saveState === "error") {
@@ -509,8 +561,13 @@ function CustomRuleDetail({
   const handleSave = async () => {
     setSaveState("saving");
     try {
-      await onUpdate({ title, description, regex });
-      savedValuesRef.current = { title, description, regex };
+      await onUpdate({ title, description, conditions, effect });
+      savedRef.current = {
+        title,
+        description,
+        conditions: JSON.stringify(conditions),
+        effect,
+      };
       setSaveState("saved");
       if (savedTimerRef.current !== undefined) {
         window.clearTimeout(savedTimerRef.current);
@@ -555,19 +612,22 @@ function CustomRuleDetail({
         </div>
 
         <div className="space-y-2">
-          <Label className="text-sm font-medium">Regex</Label>
-          <TextArea
-            value={regex}
-            onChange={setRegex}
-            rows={3}
-            className="font-mono text-xs"
-          />
-          {regexError && (
-            <p className="text-destructive text-xs">{regexError}</p>
-          )}
+          <Label className="text-sm font-medium">Effect</Label>
+          <EffectSelect value={effect} onChange={setEffect} />
         </div>
 
-        <RulePlayground ruleId={rule.id} regex={regex} />
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">Match conditions</Label>
+          <MatchConfigBuilder
+            conditions={conditions}
+            onChange={setConditions}
+          />
+        </div>
+
+        <RulePlayground
+          ruleId={rule.id}
+          matchConfig={buildMatchConfig(conditions, effect)}
+        />
       </div>
       <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">
         <Button
@@ -585,7 +645,10 @@ function CustomRuleDetail({
           )}
           <Button
             disabled={
-              !dirty || !!regexError || !title.trim() || saveState === "saving"
+              !dirty ||
+              !!conditionsError ||
+              !title.trim() ||
+              saveState === "saving"
             }
             onClick={() => void handleSave()}
           >
@@ -607,10 +670,10 @@ function CustomRuleDetail({
 
 function RulePlayground({
   ruleId,
-  regex,
+  matchConfig,
 }: {
   ruleId: string;
-  regex: string | null;
+  matchConfig: RiskMatchConfig | null;
 }) {
   const [mode, setMode] = useState<"sample" | "chat">("sample");
 
@@ -642,9 +705,9 @@ function RulePlayground({
       </RadioGroup>
 
       {mode === "sample" ? (
-        <SamplePlayground ruleId={ruleId} regex={regex} />
+        <SamplePlayground ruleId={ruleId} matchConfig={matchConfig} />
       ) : (
-        <ChatPlayground ruleId={ruleId} regex={regex} />
+        <ChatPlayground ruleId={ruleId} matchConfig={matchConfig} />
       )}
     </DetailField>
   );
@@ -652,10 +715,10 @@ function RulePlayground({
 
 function SamplePlayground({
   ruleId,
-  regex,
+  matchConfig,
 }: {
   ruleId: string;
-  regex: string | null;
+  matchConfig: RiskMatchConfig | null;
 }) {
   const [sample, setSample] = useState("");
   const [matches, setMatches] = useState<TestDetectionRuleMatch[] | null>(null);
@@ -680,7 +743,7 @@ function SamplePlayground({
         testDetectionRuleRequestBody: {
           ruleId,
           text: sample,
-          ...(regex ? { regex } : {}),
+          ...(matchConfig ? { matchConfig } : {}),
         },
       },
     });
@@ -775,10 +838,10 @@ type ChatMessageResult = {
 
 function ChatPlayground({
   ruleId,
-  regex,
+  matchConfig,
 }: {
   ruleId: string;
-  regex: string | null;
+  matchConfig: RiskMatchConfig | null;
 }) {
   const client = useSdkClient();
   const chatsQuery = useListChats(undefined, undefined, {
@@ -874,7 +937,7 @@ function ChatPlayground({
             testDetectionRuleRequestBody: {
               ruleId,
               text: item.fullText,
-              ...(regex ? { regex } : {}),
+              ...(matchConfig ? { matchConfig } : {}),
             },
           });
           setResults((prev) =>
@@ -1175,20 +1238,17 @@ function CreateCustomRuleSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   existingCustomIds: string[];
-  onCreate: (rule: {
-    id: string;
-    title: string;
-    description: string;
-    regex: string;
-    severity: SeverityLevel;
-  }) => void;
+  onCreate: (rule: CustomRuleDraft) => void;
 }) {
   const [step, setStep] = useState<CreateStep>("prompt");
   const [askPrompt, setAskPrompt] = useState("");
   const [idSuffix, setIdSuffix] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [regex, setRegex] = useState("");
+  const [conditions, setConditions] = useState<RiskMatchCondition[]>(() => [
+    defaultCondition(),
+  ]);
+  const [effect, setEffect] = useState<CustomRuleEffect>("deny");
   const [severity, setSeverity] = useState<SeverityLevel>("medium");
 
   const reset = () => {
@@ -1197,7 +1257,8 @@ function CreateCustomRuleSheet({
     setIdSuffix("");
     setTitle("");
     setDescription("");
-    setRegex("");
+    setConditions([defaultCondition()]);
+    setEffect("deny");
     setSeverity("medium");
   };
 
@@ -1207,7 +1268,9 @@ function CreateCustomRuleSheet({
       setIdSuffix(customRuleIDSuffix(next.ruleId));
       setTitle(next.title);
       setDescription(next.description);
-      setRegex(next.regex);
+      // The suggester returns a regex; seed it as a content/regex condition the
+      // operator can refine or extend in the builder.
+      setConditions([{ target: "content", op: "regex", value: next.regex }]);
       setSeverity(
         (SEVERITY_LEVELS as readonly string[]).includes(next.severity)
           ? (next.severity as SeverityLevel)
@@ -1242,7 +1305,8 @@ function CreateCustomRuleSheet({
     setIdSuffix("");
     setTitle("");
     setDescription("");
-    setRegex("");
+    setConditions([defaultCondition()]);
+    setEffect("deny");
     setSeverity("medium");
     setStep("review");
   };
@@ -1257,13 +1321,13 @@ function CreateCustomRuleSheet({
         : null,
     [idSuffix, existingCustomIds],
   );
-  const regexError = useMemo(
-    () => (regex ? validateRegex(regex) : null),
-    [regex],
+  const conditionsError = useMemo(
+    () => validateConditions(conditions),
+    [conditions],
   );
 
   const canSubmit =
-    idSuffix.trim() && title.trim() && regex.trim() && !idError && !regexError;
+    idSuffix.trim() && title.trim() && !idError && !conditionsError;
 
   const handleSubmit = () => {
     const finalRuleId = customRuleIDFromSuffix(idSuffix);
@@ -1272,16 +1336,17 @@ function CreateCustomRuleSheet({
       toast.error(finalIdError);
       return;
     }
-    const finalRegexError = validateRegex(regex);
-    if (finalRegexError) {
-      toast.error(finalRegexError);
+    const finalConditionsError = validateConditions(conditions);
+    if (finalConditionsError) {
+      toast.error(finalConditionsError);
       return;
     }
     onCreate({
       id: finalRuleId,
       title: title.trim(),
       description: description.trim(),
-      regex: regex.trim(),
+      conditions,
+      effect,
       severity,
     });
     reset();
@@ -1389,22 +1454,20 @@ function CreateCustomRuleSheet({
               </div>
 
               <div className="space-y-2">
-                <Label className="text-sm font-medium">Regex</Label>
-                <TextArea
-                  value={regex}
-                  onChange={setRegex}
-                  rows={3}
-                  className="font-mono text-xs"
-                  placeholder="e.g. acme_[a-z0-9]{32}"
+                <Label className="text-sm font-medium">Effect</Label>
+                <EffectSelect value={effect} onChange={setEffect} />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Match conditions</Label>
+                <p className="text-muted-foreground text-xs">
+                  All conditions must match. A regex on Message content behaves
+                  like a classic pattern rule.
+                </p>
+                <MatchConfigBuilder
+                  conditions={conditions}
+                  onChange={setConditions}
                 />
-                {regexError ? (
-                  <p className="text-destructive text-xs">{regexError}</p>
-                ) : (
-                  <p className="text-muted-foreground text-xs">
-                    Anchors are not required, the pattern is matched against the
-                    full scanned payload.
-                  </p>
-                )}
               </div>
             </div>
             <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">
