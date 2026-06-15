@@ -463,6 +463,7 @@ func hasMatchingDenyGrant(grants []Grant, checks []Check) bool {
 			}
 		}
 	}
+
 	return false
 }
 
