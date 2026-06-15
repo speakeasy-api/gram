@@ -153,9 +153,12 @@ function DetectionRulesContent() {
       <Page.Section>
         <Page.Section.Title stage="beta">Detection Rules</Page.Section.Title>
         <Page.Section.Description>
-          Built-in detection rules grouped by category. Click a rule to view its
-          description and try it against pasted text, or add your own custom
-          regex rule.
+          Built-in detection rules grouped by category, plus your organization's
+          custom rules. A custom rule defines what to match — across message
+          content, tool calls, and arguments — and each policy decides whether a
+          match flags a finding or exempts the message from the policy (an
+          allowlist). Click a rule to view its description and try it against
+          pasted text.
         </Page.Section.Description>
         <Page.Section.CTA>
           <Button onClick={() => setCreateOpen(true)}>

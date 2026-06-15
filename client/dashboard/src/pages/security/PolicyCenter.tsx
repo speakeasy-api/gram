@@ -376,7 +376,7 @@ function PolicyCenterContent() {
   const [formPromptInstruction, setFormPromptInstruction] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<
     Set<RuleCategory>
-  >(new Set<RuleCategory>(["secrets", "pii"]));
+  >(new Set<RuleCategory>());
   const [disabledRules, setDisabledRules] = useState<Set<string>>(new Set());
   const [selectedCustomRuleIds, setSelectedCustomRuleIds] = useState<
     Set<string>
@@ -462,7 +462,7 @@ function PolicyCenterContent() {
     setFormName("");
     setFormEnabled(true);
     setFormPromptInstruction("");
-    setSelectedCategories(new Set<RuleCategory>(["secrets", "pii"]));
+    setSelectedCategories(new Set<RuleCategory>());
     setDisabledRules(new Set());
     setSelectedCustomRuleIds(new Set<string>());
     setCustomRuleActions(new Map());
@@ -1644,6 +1644,15 @@ function PolicySheetBody({
   const [expandedCategory, setExpandedCategory] = useState<
     RuleCategory | "custom" | null
   >(null);
+  // Built-in categories collapse into one accordion so the (long) list doesn't
+  // crowd out custom rules and message types. Open it by default when the
+  // policy already has built-in categories selected (i.e. on edit).
+  const [builtinExpanded, setBuiltinExpanded] = useState(() =>
+    ALL_CATEGORIES.some((c) => selectedCategories.has(c)),
+  );
+  const selectedBuiltinCount = ALL_CATEGORIES.filter((c) =>
+    selectedCategories.has(c),
+  ).length;
   const flagOnlySelected = [...FLAG_ONLY_CATEGORIES].some((c) =>
     selectedCategories.has(c),
   );
@@ -1673,204 +1682,230 @@ function PolicySheetBody({
         )}
       </div>
 
-      {/* Detection Rules */}
+      {/* Built-in rules */}
       <div className="space-y-3">
-        <Label className="text-sm font-medium">Detection Rules</Label>
-        <div className="border-border divide-border divide-y rounded-lg border">
-          {ALL_CATEGORIES.map((cat) => {
-            const meta = RULE_CATEGORY_META[cat];
-            const isAvailable = AVAILABLE_CATEGORIES.has(cat);
-            const isExpanded = expandedCategory === cat;
-            // Hidden rules stay in the catalog so legacy risk_results keep
-            // resolving their title via risk-utils, but they are scrubbed
-            // from the form's display, counts, and bulk toggles. The
-            // underlying disabledRules/selectedCategories state is left
-            // untouched so existing policies that pin a hidden rule round-
-            // trip cleanly through edit.
-            const rules = DETECTION_RULES[cat].filter((r) => !r.hidden);
-            const isExpandable = isAvailable && rules.length > 0;
-            const categorySelected = selectedCategories.has(cat);
-            const enabledRuleCount = categorySelected
-              ? rules.filter((r) => !disabledRules.has(r.id)).length
-              : 0;
-            const hasPartialSelection =
-              categorySelected &&
-              rules.length > 0 &&
-              enabledRuleCount > 0 &&
-              enabledRuleCount < rules.length;
-            const headerChecked: boolean | "indeterminate" = hasPartialSelection
-              ? "indeterminate"
-              : categorySelected &&
-                (rules.length === 0 || enabledRuleCount > 0);
+        <button
+          type="button"
+          onClick={() => setBuiltinExpanded((v) => !v)}
+          className="flex w-full items-center gap-2"
+        >
+          <ChevronRight
+            className={cn(
+              "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
+              builtinExpanded && "rotate-90",
+            )}
+          />
+          <Label className="cursor-pointer text-sm font-medium">
+            Built-in rules
+          </Label>
+          {selectedBuiltinCount > 0 && (
+            <Badge variant="neutral">
+              <Badge.Text>{selectedBuiltinCount} selected</Badge.Text>
+            </Badge>
+          )}
+        </button>
+        {builtinExpanded && (
+          <div className="border-border divide-border divide-y rounded-lg border">
+            {ALL_CATEGORIES.map((cat) => {
+              const meta = RULE_CATEGORY_META[cat];
+              const isAvailable = AVAILABLE_CATEGORIES.has(cat);
+              const isExpanded = expandedCategory === cat;
+              // Hidden rules stay in the catalog so legacy risk_results keep
+              // resolving their title via risk-utils, but they are scrubbed
+              // from the form's display, counts, and bulk toggles. The
+              // underlying disabledRules/selectedCategories state is left
+              // untouched so existing policies that pin a hidden rule round-
+              // trip cleanly through edit.
+              const rules = DETECTION_RULES[cat].filter((r) => !r.hidden);
+              const isExpandable = isAvailable && rules.length > 0;
+              const categorySelected = selectedCategories.has(cat);
+              const enabledRuleCount = categorySelected
+                ? rules.filter((r) => !disabledRules.has(r.id)).length
+                : 0;
+              const hasPartialSelection =
+                categorySelected &&
+                rules.length > 0 &&
+                enabledRuleCount > 0 &&
+                enabledRuleCount < rules.length;
+              const headerChecked: boolean | "indeterminate" =
+                hasPartialSelection
+                  ? "indeterminate"
+                  : categorySelected &&
+                    (rules.length === 0 || enabledRuleCount > 0);
 
-            const toggleCategory = (checked: boolean) => {
-              const nextCats = new Set(selectedCategories);
-              const nextDisabled = new Set(disabledRules);
-              if (checked) {
-                nextCats.add(cat);
-                for (const rule of rules) nextDisabled.delete(rule.id);
-              } else {
-                nextCats.delete(cat);
-                for (const rule of rules) nextDisabled.delete(rule.id);
-              }
-              setSelectedCategories(nextCats);
-              setDisabledRules(nextDisabled);
-              if (
-                checked &&
-                cat === "destructive_tool" &&
-                formAction === "block"
-              ) {
-                setFormAction("flag");
-              }
-            };
+              const toggleCategory = (checked: boolean) => {
+                const nextCats = new Set(selectedCategories);
+                const nextDisabled = new Set(disabledRules);
+                if (checked) {
+                  nextCats.add(cat);
+                  for (const rule of rules) nextDisabled.delete(rule.id);
+                } else {
+                  nextCats.delete(cat);
+                  for (const rule of rules) nextDisabled.delete(rule.id);
+                }
+                setSelectedCategories(nextCats);
+                setDisabledRules(nextDisabled);
+                if (
+                  checked &&
+                  cat === "destructive_tool" &&
+                  formAction === "block"
+                ) {
+                  setFormAction("flag");
+                }
+              };
 
-            const toggleRule = (ruleId: string, enabled: boolean) => {
-              const nextDisabled = new Set(disabledRules);
-              const nextCats = new Set(selectedCategories);
-              if (enabled) {
-                nextDisabled.delete(ruleId);
-                // Enabling any rule inside a category implies the category is
-                // selected. Otherwise the rule wouldn't actually run.
-                nextCats.add(cat);
-              } else {
-                nextDisabled.add(ruleId);
-              }
-              setSelectedCategories(nextCats);
-              setDisabledRules(nextDisabled);
-            };
+              const toggleRule = (ruleId: string, enabled: boolean) => {
+                const nextDisabled = new Set(disabledRules);
+                const nextCats = new Set(selectedCategories);
+                if (enabled) {
+                  nextDisabled.delete(ruleId);
+                  // Enabling any rule inside a category implies the category is
+                  // selected. Otherwise the rule wouldn't actually run.
+                  nextCats.add(cat);
+                } else {
+                  nextDisabled.add(ruleId);
+                }
+                setSelectedCategories(nextCats);
+                setDisabledRules(nextDisabled);
+              };
 
-            return (
-              <div key={cat}>
-                {/* Category header */}
-                <div
-                  className={cn(
-                    "flex items-center gap-3 px-4 py-3",
-                    isExpandable && "cursor-pointer",
-                  )}
-                  onClick={() => {
-                    if (isExpandable) {
-                      setExpandedCategory(isExpanded ? null : cat);
-                    }
-                  }}
-                >
-                  {/* Expand chevron (only for categories with rules to expand) */}
-                  {isExpandable ? (
-                    <ChevronRight
-                      className={cn(
-                        "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
-                        isExpanded && "rotate-90",
-                      )}
+              return (
+                <div key={cat}>
+                  {/* Category header */}
+                  <div
+                    className={cn(
+                      "flex items-center gap-3 px-4 py-3",
+                      isExpandable && "cursor-pointer",
+                    )}
+                    onClick={() => {
+                      if (isExpandable) {
+                        setExpandedCategory(isExpanded ? null : cat);
+                      }
+                    }}
+                  >
+                    {/* Expand chevron (only for categories with rules to expand) */}
+                    {isExpandable ? (
+                      <ChevronRight
+                        className={cn(
+                          "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
+                          isExpanded && "rotate-90",
+                        )}
+                      />
+                    ) : (
+                      <div className="w-4 shrink-0" />
+                    )}
+
+                    {/* Category icon */}
+                    <Icon
+                      name={meta.icon as IconName}
+                      className="text-muted-foreground size-4 shrink-0"
                     />
-                  ) : (
-                    <div className="w-4 shrink-0" />
-                  )}
 
-                  {/* Category icon */}
-                  <Icon
-                    name={meta.icon as IconName}
-                    className="text-muted-foreground size-4 shrink-0"
-                  />
-
-                  {/* Label & description */}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">{meta.label}</span>
-                      {!isAvailable && (
-                        <Badge variant="neutral">
-                          <Badge.Text>Coming Soon</Badge.Text>
-                        </Badge>
-                      )}
-                      {isExpandable && categorySelected && (
-                        <Badge variant="neutral">
-                          <Badge.Text>
-                            {enabledRuleCount}/{rules.length}
-                          </Badge.Text>
-                        </Badge>
-                      )}
+                    {/* Label & description */}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">
+                          {meta.label}
+                        </span>
+                        {!isAvailable && (
+                          <Badge variant="neutral">
+                            <Badge.Text>Coming Soon</Badge.Text>
+                          </Badge>
+                        )}
+                        {isExpandable && categorySelected && (
+                          <Badge variant="neutral">
+                            <Badge.Text>
+                              {enabledRuleCount}/{rules.length}
+                            </Badge.Text>
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-muted-foreground text-xs">
+                        {meta.description}
+                      </p>
                     </div>
-                    <p className="text-muted-foreground text-xs">
-                      {meta.description}
-                    </p>
+
+                    {/* Category checkbox */}
+                    <Checkbox
+                      checked={headerChecked}
+                      disabled={!isAvailable}
+                      onCheckedChange={(checked) => toggleCategory(!!checked)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
                   </div>
 
-                  {/* Category checkbox */}
-                  <Checkbox
-                    checked={headerChecked}
-                    disabled={!isAvailable}
-                    onCheckedChange={(checked) => toggleCategory(!!checked)}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                </div>
-
-                {/* Expanded per-rule toggles. Each rule is independently
+                  {/* Expanded per-rule toggles. Each rule is independently
                     toggleable; unchecking adds the canonical rule_id to the
                     policy's disabled_rules list and the scanner drops matching
                     findings. */}
-                {isAvailable && isExpanded && rules.length > 0 && (
-                  <div className="bg-muted/30 border-border border-t px-4 py-2">
-                    <div className="flex items-center justify-between py-1">
-                      <span className="text-muted-foreground text-xs">
-                        {enabledRuleCount} of {rules.length} rules enabled
-                      </span>
-                      <div className="flex gap-3">
-                        <button
-                          type="button"
-                          className="text-primary text-xs underline-offset-2 hover:underline disabled:opacity-50"
-                          disabled={enabledRuleCount === rules.length}
-                          onClick={() => {
-                            const nextDisabled = new Set(disabledRules);
-                            for (const r of rules) nextDisabled.delete(r.id);
-                            setDisabledRules(nextDisabled);
-                            const nextCats = new Set(selectedCategories);
-                            nextCats.add(cat);
-                            setSelectedCategories(nextCats);
-                          }}
-                        >
-                          Enable all
-                        </button>
-                        <button
-                          type="button"
-                          className="text-primary text-xs underline-offset-2 hover:underline disabled:opacity-50"
-                          disabled={!categorySelected || enabledRuleCount === 0}
-                          onClick={() => {
-                            const nextDisabled = new Set(disabledRules);
-                            for (const r of rules) nextDisabled.add(r.id);
-                            setDisabledRules(nextDisabled);
-                          }}
-                        >
-                          Disable all
-                        </button>
+                  {isAvailable && isExpanded && rules.length > 0 && (
+                    <div className="bg-muted/30 border-border border-t px-4 py-2">
+                      <div className="flex items-center justify-between py-1">
+                        <span className="text-muted-foreground text-xs">
+                          {enabledRuleCount} of {rules.length} rules enabled
+                        </span>
+                        <div className="flex gap-3">
+                          <button
+                            type="button"
+                            className="text-primary text-xs underline-offset-2 hover:underline disabled:opacity-50"
+                            disabled={enabledRuleCount === rules.length}
+                            onClick={() => {
+                              const nextDisabled = new Set(disabledRules);
+                              for (const r of rules) nextDisabled.delete(r.id);
+                              setDisabledRules(nextDisabled);
+                              const nextCats = new Set(selectedCategories);
+                              nextCats.add(cat);
+                              setSelectedCategories(nextCats);
+                            }}
+                          >
+                            Enable all
+                          </button>
+                          <button
+                            type="button"
+                            className="text-primary text-xs underline-offset-2 hover:underline disabled:opacity-50"
+                            disabled={
+                              !categorySelected || enabledRuleCount === 0
+                            }
+                            onClick={() => {
+                              const nextDisabled = new Set(disabledRules);
+                              for (const r of rules) nextDisabled.add(r.id);
+                              setDisabledRules(nextDisabled);
+                            }}
+                          >
+                            Disable all
+                          </button>
+                        </div>
+                      </div>
+                      <div className="space-y-2 py-1">
+                        {rules.map((rule) => {
+                          const ruleEnabled =
+                            categorySelected && !disabledRules.has(rule.id);
+                          return (
+                            <div
+                              key={rule.id}
+                              className="flex items-center gap-3 py-1 pl-8"
+                            >
+                              <Checkbox
+                                id={rule.id}
+                                checked={ruleEnabled}
+                                onCheckedChange={(checked) =>
+                                  toggleRule(rule.id, !!checked)
+                                }
+                              />
+                              <label htmlFor={rule.id} className="text-xs">
+                                {rule.title}
+                              </label>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
-                    <div className="space-y-2 py-1">
-                      {rules.map((rule) => {
-                        const ruleEnabled =
-                          categorySelected && !disabledRules.has(rule.id);
-                        return (
-                          <div
-                            key={rule.id}
-                            className="flex items-center gap-3 py-1 pl-8"
-                          >
-                            <Checkbox
-                              id={rule.id}
-                              checked={ruleEnabled}
-                              onCheckedChange={(checked) =>
-                                toggleRule(rule.id, !!checked)
-                              }
-                            />
-                            <label htmlFor={rule.id} className="text-xs">
-                              {rule.title}
-                            </label>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {customRules.length > 0 && (
@@ -2304,7 +2339,15 @@ function CustomRulesPicker({
     !allSelected && customRules.some((r) => selectedCustomRuleIds.has(r.id));
   return (
     <div className="space-y-3">
-      <Label className="text-sm font-medium">Detection Rules</Label>
+      <div className="space-y-1">
+        <Label className="text-sm font-medium">Detection Rules</Label>
+        <p className="text-muted-foreground text-xs">
+          Your organization's custom rules. For each one you attach, choose
+          whether a match <span className="font-medium">Detects</span> (records
+          a finding) or <span className="font-medium">Exempts</span> the message
+          from this entire policy (an allowlist).
+        </p>
+      </div>
       <div className="border-border divide-border divide-y rounded-lg border">
         <div
           className="flex cursor-pointer items-center gap-3 px-4 py-3"
@@ -2430,20 +2473,20 @@ function RuleActionToggle({
   return (
     <div className="border-border inline-flex shrink-0 overflow-hidden rounded-md border">
       {options.map((opt) => (
-        <button
-          key={opt.key}
-          type="button"
-          title={opt.title}
-          onClick={() => onChange(opt.key)}
-          className={cn(
-            "px-2 py-0.5 text-[10px] font-medium transition-colors",
-            value === opt.key
-              ? "bg-foreground text-background"
-              : "text-muted-foreground hover:bg-muted",
-          )}
-        >
-          {opt.label}
-        </button>
+        <SimpleTooltip key={opt.key} tooltip={opt.title}>
+          <button
+            type="button"
+            onClick={() => onChange(opt.key)}
+            className={cn(
+              "px-2 py-0.5 text-[10px] font-medium transition-colors",
+              value === opt.key
+                ? "bg-foreground text-background"
+                : "text-muted-foreground hover:bg-muted",
+            )}
+          >
+            {opt.label}
+          </button>
+        </SimpleTooltip>
       ))}
     </div>
   );
