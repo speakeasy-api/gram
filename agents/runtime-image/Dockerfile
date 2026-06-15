@@ -67,11 +67,7 @@ COPY --from=lightpanda /lightpanda /usr/local/bin/lightpanda
 COPY agents/runtime-image/lightpanda-supervise.sh /usr/local/bin/lightpanda-supervise
 COPY agents/runtime-image/init.sh /init
 
-# Read-only sandbox helpers (playwright-core + browser.ts) baked onto the
-# rootfs. init.sh bind-mounts them read-only into the tmpfs workdir at the
-# paths the runner expects. Keeping them on the rootfs (not in a loop-mounted
-# ext4 image) avoids a slow cold-disk mount at boot — they fault in lazily
-# only when a tool actually uses them.
+# Read-only sandbox helpers (playwright-core + browser.ts) used by `bun_run` tool
 COPY agents/runtime-image/sandbox/package.json /usr/share/gram/sandbox/package.json
 COPY agents/runtime-image/sandbox/browser.ts /usr/share/gram/sandbox/browser.ts
 COPY --from=sandbox-deps /sandbox/node_modules /usr/share/gram/sandbox/node_modules
