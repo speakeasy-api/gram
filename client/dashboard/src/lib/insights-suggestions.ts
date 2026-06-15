@@ -632,7 +632,7 @@ export const INSIGHTS_SUGGESTIONS = {
     },
   ],
 
-  "logs/agents": [
+  "agent-sessions": [
     {
       title: "Which chats failed?",
       label: "Analyze failed chats",
@@ -662,7 +662,7 @@ export const INSIGHTS_SUGGESTIONS = {
       label: "which rule_ids fired most",
       icon: "shield",
       prompt:
-        "Use listRiskResultsForAgent to find the top 5 rule_ids by finding count over the last 7 days. Report by source family and rule_id only — never quote any match_redacted value.",
+        "What are the top 5 rules by finding count over the last 7 days? Report by source family and rule only, and never quote any redacted match content.",
     },
     {
       title: "Any shadow MCPs?",
@@ -676,14 +676,14 @@ export const INSIGHTS_SUGGESTIONS = {
       label: "dedupe by fingerprint",
       icon: "key",
       prompt:
-        "Use listRiskResultsForAgent to count distinct leaked secrets by their match_redacted fingerprint (since identical secrets share a sha prefix). Group by rule_id and report counts. Do not print match_redacted values back to me.",
+        "How many distinct leaked secrets are there? Identical secrets share a redacted fingerprint, so dedupe by that. Group the counts by rule, and do not print any redacted match content back to me.",
     },
     {
       title: "Any analysis backlog?",
       label: "pending messages per policy",
       icon: "history",
       prompt:
-        "For each active policy, call getRiskPolicyStatus and report pending vs analyzed message counts and workflow state. Flag any policy whose pending count is non-zero.",
+        "Is there an analysis backlog? For each active policy, report pending vs analyzed message counts and workflow state, and flag any policy whose pending count is non-zero.",
     },
   ],
 
@@ -739,28 +739,28 @@ export const INSIGHTS_SUGGESTIONS = {
       label: "what's running and what's stuck",
       icon: "shield",
       prompt:
-        "For each policy returned by listRiskPolicies, call getRiskPolicyStatus and report: enabled flag, action (flag vs block), total messages, pending messages, and workflow state. Flag any policy with non-zero pending messages.",
+        "Are the risk policies healthy? For each one, report whether it's enabled, its action (flag vs block), total and pending message counts, and workflow state. Flag any policy with non-zero pending messages.",
     },
     {
       title: "Any quiet policies?",
       label: "policies with no recent findings",
       icon: "search",
       prompt:
-        "Identify policies that have not produced any findings in the last 30 days. Use listRiskResultsForAgent with policy_id to check each policy. Report by name and last-seen finding date.",
+        "Which policies have not produced any findings in the last 30 days? Report them by name with their last-seen finding date.",
     },
     {
       title: "What's each source catching?",
       label: "what's each source catching",
       icon: "trend",
       prompt:
-        "Group findings by source (gitleaks, presidio, prompt_injection, shadow_mcp, destructive_tool) over the last 7 days using listRiskResultsForAgent. Report counts and the top rule_id per source family.",
+        "What is each detection source catching? Group findings by source (gitleaks, presidio, prompt_injection, shadow_mcp, destructive_tool) over the last 7 days, and report counts with the top rule per source family.",
     },
     {
       title: "What detectors exist?",
       label: "what detectors are available",
       icon: "sparkles",
       prompt:
-        "Call getRiskCapabilities and tell me which detection backends are configured on this server (e.g. prompt-injection ML classifier).",
+        "Which detection backends are configured on this server (e.g. the prompt-injection ML classifier)?",
     },
   ],
 

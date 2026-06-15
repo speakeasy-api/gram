@@ -322,7 +322,7 @@ export function LogsAgentsContent(): JSX.Element {
         subtitle="Search agent sessions, analyze failures, or explore logs"
         contextInfo={dateRangeContext}
         hideTrigger={isLogsDisabled}
-        suggestions={INSIGHTS_SUGGESTIONS["logs/agents"]}
+        suggestions={INSIGHTS_SUGGESTIONS["agent-sessions"]}
       />
       <AgentSessionsPageContent
         dateRange={dateRange}

@@ -19,10 +19,17 @@ export function createDismissedCtaStore(prefix: string): {
   const memory = new Map<string, boolean>();
 
   function read(slug: string): boolean {
+    // `write()` always lands the value in `memory`, so once this session has
+    // touched a slug, `memory` is the freshest source of truth — prefer it.
+    // localStorage may be stale (its write threw on quota/disabled) or simply
+    // unreadable here, and we must not let either case mask a just-applied
+    // dismiss/resume.
+    const cached = memory.get(slug);
+    if (cached !== undefined) return cached;
     try {
       return localStorage.getItem(storageKey(slug)) === "true";
     } catch {
-      return memory.get(slug) ?? false;
+      return false;
     }
   }
 

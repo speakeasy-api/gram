@@ -45,7 +45,7 @@ export function SidebarFooterAction({
   );
 
   let action: ReactNode;
-  if (to) {
+  if (to !== undefined) {
     action = (
       <Link to={to} title={label} className={ACTION_CLASS}>
         {actionContent}
