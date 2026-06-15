@@ -96,8 +96,9 @@ export const RULE_CATEGORY_META: Record<
     icon: "terminal",
   },
   custom: {
-    label: "Custom Patterns",
-    description: "Organization-specific data patterns (regex)",
+    label: "Custom Rules",
+    description:
+      "Organization-defined detection rules over message content, tool calls, and arguments",
     icon: "regex",
   },
 };

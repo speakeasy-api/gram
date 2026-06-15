@@ -248,7 +248,7 @@ function CustomRulesSection({
       <div className="border-border divide-border divide-y rounded-lg border">
         <CategoryHeader
           icon={meta.icon as IconName}
-          label="Custom Patterns"
+          label={meta.label}
           description={`${rules.length} organization-defined rule${rules.length === 1 ? "" : "s"}`}
           expanded={expanded}
           onClick={onToggle}

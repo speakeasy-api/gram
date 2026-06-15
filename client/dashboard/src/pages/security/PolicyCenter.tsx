@@ -2304,7 +2304,7 @@ function CustomRulesPicker({
     !allSelected && customRules.some((r) => selectedCustomRuleIds.has(r.id));
   return (
     <div className="space-y-3">
-      <Label className="text-sm font-medium">Custom Rules</Label>
+      <Label className="text-sm font-medium">Detection Rules</Label>
       <div className="border-border divide-border divide-y rounded-lg border">
         <div
           className="flex cursor-pointer items-center gap-3 px-4 py-3"
