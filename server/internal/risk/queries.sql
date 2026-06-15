@@ -249,6 +249,7 @@ INSERT INTO risk_custom_detection_rules (
   , title
   , description
   , regex
+  , match_config
   , severity
 )
 VALUES (
@@ -258,6 +259,7 @@ VALUES (
   , @title
   , @description
   , @regex
+  , @match_config
   , @severity
 )
 RETURNING *;
@@ -281,6 +283,7 @@ UPDATE risk_custom_detection_rules
 SET title = @title
   , description = @description
   , regex = @regex
+  , match_config = @match_config
   , severity = @severity
   , updated_at = clock_timestamp()
 WHERE id = @id

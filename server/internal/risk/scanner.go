@@ -368,7 +368,13 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 		}
 	}
 	if len(policy.CustomRuleIds) > 0 {
-		findings, err := s.scanCustomRules(ctx, policy, text)
+		view := ra.MessageView{Content: text, Type: messageType, Tools: nil}
+		if messageType == message.ToolRequest && toolName != "" {
+			// In realtime, a tool-request's text carries the call arguments (the
+			// same body the judge sees), so it doubles as the tool_args source.
+			view.Tools = []ra.ToolView{ra.NewToolView(toolName, text)}
+		}
+		findings, err := s.scanCustomRules(ctx, policy, view)
 		if err != nil {
 			return nil, err
 		}
@@ -465,7 +471,7 @@ func promptPolicyUnavailableResult(policy repo.RiskPolicy, messageType message.T
 	}
 }
 
-func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, text string) ([]ra.Finding, error) {
+func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, view ra.MessageView) ([]ra.Finding, error) {
 	rules, err := s.repo.ListCustomDetectionRules(ctx, policy.ProjectID)
 	if err != nil {
 		return nil, fmt.Errorf("list custom detection rules: %w", err)
@@ -485,7 +491,7 @@ func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, t
 			RuleID:      rule.RuleID,
 			Title:       rule.Title,
 			Description: rule.Description,
-			Regex:       conv.PtrValOr(conv.FromPGText[string](rule.Regex), ""),
+			MatchConfig: ra.EffectiveMatchConfig(rule.MatchConfig, conv.PtrValOr(conv.FromPGText[string](rule.Regex), "")),
 		})
 	}
 
@@ -493,7 +499,7 @@ func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, t
 	if err != nil {
 		return nil, fmt.Errorf("compile custom detection rules: %w", err)
 	}
-	return ra.ScanCustomDetectionRules(text, compiled), nil
+	return ra.ScanCustomDetectionRules(view, compiled), nil
 }
 
 // scanGitleaks runs DetectString on the pre-created detector under

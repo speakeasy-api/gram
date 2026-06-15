@@ -364,8 +364,8 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 
 	if len(customRules) > 0 {
 		wg.Go(func() {
-			for i, content := range contents {
-				customFindings[i] = ScanCustomDetectionRules(content, customRules)
+			for i, msg := range messages {
+				customFindings[i] = ScanCustomDetectionRules(a.customRuleMessageView(ctx, msg), customRules)
 			}
 			activity.RecordHeartbeat(ctx, "custom")
 		})
@@ -556,6 +556,26 @@ func (a *AnalyzeBatch) judgeMessageForRow(ctx context.Context, msg repo.GetMessa
 	return NewJudgeMessage(messageType, "", msg.Content)
 }
 
+// customRuleMessageView builds the structured view the custom-rule engine
+// evaluates against: the message's text content, its type, and — for
+// tool-request messages — each recorded tool call with its MCP attribution.
+// Mirrors judgeMessageForRow so a rule sees the same per-call server/function
+// the judge does.
+func (a *AnalyzeBatch) customRuleMessageView(ctx context.Context, msg repo.GetMessageContentBatchRow) MessageView {
+	messageType, _ := messageRowMessageType(msg)
+	view := MessageView{Content: msg.Content, Type: messageType, Tools: nil}
+	if messageType != message.ToolRequest {
+		return view
+	}
+	for _, c := range a.parseRecordedToolCalls(ctx, SourceCustom, msg.ToolCalls) {
+		if c.Function.Name == "" && strings.TrimSpace(c.Function.Arguments) == "" {
+			continue
+		}
+		view.Tools = append(view.Tools, NewToolView(c.Function.Name, c.Function.Arguments))
+	}
+	return view
+}
+
 func (a *AnalyzeBatch) customRulesForPolicy(ctx context.Context, projectID uuid.UUID, ruleIDs []string) ([]CompiledCustomDetectionRule, error) {
 	if len(ruleIDs) == 0 {
 		return nil, nil
@@ -580,7 +600,7 @@ func (a *AnalyzeBatch) customRulesForPolicy(ctx context.Context, projectID uuid.
 			RuleID:      rule.RuleID,
 			Title:       rule.Title,
 			Description: rule.Description,
-			Regex:       conv.PtrValOr(conv.FromPGText[string](rule.Regex), ""),
+			MatchConfig: EffectiveMatchConfig(rule.MatchConfig, conv.PtrValOr(conv.FromPGText[string](rule.Regex), "")),
 		})
 	}
 

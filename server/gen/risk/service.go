@@ -151,8 +151,10 @@ type CreateCustomDetectionRulePayload struct {
 	Title string
 	// Description of what the rule detects.
 	Description *string
-	// RE2-compatible regex pattern.
-	Regex string
+	// Legacy RE2-compatible regex pattern. Prefer match_config for new rules.
+	Regex *string
+	// Sparse condition-based matcher. When set, supersedes regex.
+	MatchConfig *types.RiskMatchConfig
 	// Severity level for findings produced by this rule.
 	Severity string
 }
@@ -765,9 +767,13 @@ type TestDetectionRulePayload struct {
 	RuleID string
 	// Sample text to scan.
 	Text string
-	// Regex pattern. Required for `custom.*` rule ids since the server doesn't
-	// persist custom rules yet; ignored for built-in rules.
+	// Legacy regex pattern for `custom.*` rule ids; ignored for built-in rules and
+	// when match_config is set.
 	Regex *string
+	// Condition-based matcher for `custom.*` rule ids. Content-targeted conditions
+	// are evaluated against the sample text; tool-targeted rules cannot be
+	// simulated from text.
+	MatchConfig *types.RiskMatchConfig
 }
 
 // TestDetectionRuleResult is the result type of the risk service
@@ -808,8 +814,10 @@ type UpdateCustomDetectionRulePayload struct {
 	Title string
 	// Description of what the rule detects.
 	Description *string
-	// RE2-compatible regex pattern.
-	Regex string
+	// Legacy RE2-compatible regex pattern. Prefer match_config for new rules.
+	Regex *string
+	// Sparse condition-based matcher. When set, supersedes regex.
+	MatchConfig *types.RiskMatchConfig
 	// Severity level for findings produced by this rule.
 	Severity string
 }

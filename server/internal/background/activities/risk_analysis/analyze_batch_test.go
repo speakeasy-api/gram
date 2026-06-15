@@ -581,7 +581,7 @@ func TestAnalyzeBatch_CustomDetectionRuleFinding(t *testing.T) {
 	conn := cloneDB(t)
 	td := seedTestData(t, conn, true)
 
-	td = seedCustomRulePolicySelection(t, conn, td, "custom.acme_token", `ACME-[A-Z0-9]{8}`)
+	td = seedCustomRulePolicySelection(t, conn, td, "custom.acme_token", `ACME-[A-Z0-9]{8}`, nil)
 
 	msgID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
 		ChatID:    td.chatID,
@@ -615,7 +615,7 @@ func TestAnalyzeBatch_CustomDetectionRuleSkipsNilRegex(t *testing.T) {
 	conn := cloneDB(t)
 	td := seedTestData(t, conn, true)
 
-	td = seedCustomRulePolicySelection(t, conn, td, "custom.future_rule", "")
+	td = seedCustomRulePolicySelection(t, conn, td, "custom.future_rule", "", nil)
 
 	msgID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
 		ChatID:    td.chatID,
@@ -637,6 +637,36 @@ func TestAnalyzeBatch_CustomDetectionRuleSkipsNilRegex(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Empty(t, rows)
+}
+
+// A match_config rule targeting tool_server flags a tool-request message whose
+// MCP server matches, exercising the DB → customRuleMessageView → engine path.
+func TestAnalyzeBatch_CustomDetectionRuleMatchConfigToolServer(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+
+	cfg := []byte(`{"conditions":[{"target":"tool_server","op":"equals","value":"mise"}]}`)
+	td = seedCustomRulePolicySelection(t, conn, td, "custom.mise_tool", "", cfg)
+
+	msgID := insertAssistantToolCallWithArgs(t, conn, td, "mcp__mise__run_task", map[string]any{"task": "build"})
+
+	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, nil)
+	require.Equal(t, 1, result.Processed)
+	require.Equal(t, 1, result.Findings)
+
+	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+		CursorID:     uuid.NullUUID{},
+		PageLimit:    10,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.True(t, rows[0].Found)
+	assert.Equal(t, risk_analysis.SourceCustom, rows[0].Source)
+	assert.Equal(t, "custom.mise_tool", rows[0].RuleID.String)
+	assert.Equal(t, "mise", rows[0].Match.String)
 }
 
 // insertAssistantToolCallWithArgs is a sibling of insertAssistantToolCall for
@@ -814,7 +844,7 @@ func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageI
 	return result
 }
 
-func seedCustomRulePolicySelection(t *testing.T, conn *pgxpool.Pool, td testData, ruleID string, regex string) testData {
+func seedCustomRulePolicySelection(t *testing.T, conn *pgxpool.Pool, td testData, ruleID string, regex string, matchConfig []byte) testData {
 	t.Helper()
 
 	regexValue := pgtype.Text{}
@@ -828,6 +858,7 @@ func seedCustomRulePolicySelection(t *testing.T, conn *pgxpool.Pool, td testData
 		Title:          "ACME token",
 		Description:    "ACME token",
 		Regex:          regexValue,
+		MatchConfig:    matchConfig,
 		Severity:       "high",
 	})
 	require.NoError(t, err)
