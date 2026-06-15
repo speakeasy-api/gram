@@ -15,8 +15,8 @@ import (
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/mcpname"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
 
 func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.CodexHookResult, error) {
@@ -261,7 +261,7 @@ func (s *Service) buildCodexTelemetryAttributes(ctx context.Context, payload *ge
 	}
 
 	// Parse MCP tool names using the mcp__<server>__<tool> convention.
-	if server, fn, ok := mcpname.AttributeTool(toolName); ok {
+	if server, fn, ok := toolref.AttributeTool(toolName); ok {
 		attrs[attr.ToolCallSourceKey] = server
 		attrs[attr.ToolNameKey] = fn
 	}
