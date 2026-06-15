@@ -1,6 +1,17 @@
 import { cn } from "@/lib/utils";
-import { useRef, useState, type JSX, type KeyboardEvent } from "react";
-import { matchQuerySuggestions, type QuerySuggestion } from "./match-query";
+import { ChevronRight } from "lucide-react";
+import {
+  Fragment,
+  useRef,
+  useState,
+  type JSX,
+  type KeyboardEvent,
+} from "react";
+import {
+  MATCH_QUERY_EXAMPLES,
+  matchQuerySuggestions,
+  type QuerySuggestion,
+} from "./match-query";
 
 /** A Datadog-style single-line query input for a rule's match_config, with a
  *  context-aware autocomplete popover. Controlled on the raw query string; the
@@ -104,7 +115,7 @@ export function MatchQueryInput({
           error && "border-destructive",
         )}
       />
-      {open && (
+      {open && suggestions.length > 0 && (
         <div className="border-border bg-popover absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-md border py-1 shadow-md">
           {suggestions.map((s, i) => (
             <button
@@ -131,15 +142,34 @@ export function MatchQueryInput({
               )}
             </button>
           ))}
-          <div className="text-muted-foreground/70 border-border mt-1 border-t px-3 pt-1 text-[10px] leading-relaxed">
-            <code>field:val</code> is · <code>*val*</code> contains ·{" "}
-            <code>val*</code> starts · <code>/re/</code> regex ·{" "}
-            <code>(a OR b)</code> any · <code>-field:</code> not ·{" "}
-            <code>field:*</code> exists
-          </div>
         </div>
       )}
       {error && <p className="text-destructive mt-1 text-xs">{error}</p>}
+      <MatchQueryHelp />
     </div>
+  );
+}
+
+/** Worked-example syntax reference, collapsed by default. */
+function MatchQueryHelp(): JSX.Element {
+  return (
+    <details className="group mt-2">
+      <summary className="text-muted-foreground hover:text-foreground flex cursor-pointer list-none items-center gap-1 text-xs">
+        <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90" />
+        Query syntax & examples
+      </summary>
+      <div className="border-border bg-muted/30 mt-1.5 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 rounded-md border p-3">
+        {MATCH_QUERY_EXAMPLES.map((ex) => (
+          <Fragment key={ex.query}>
+            <code className="text-foreground font-mono text-[11px]">
+              {ex.query}
+            </code>
+            <span className="text-muted-foreground text-[11px]">
+              {ex.meaning}
+            </span>
+          </Fragment>
+        ))}
+      </div>
+    </details>
   );
 }

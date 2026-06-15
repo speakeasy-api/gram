@@ -85,6 +85,22 @@ const BACKEND_TO_TARGET = new Map<MatchTarget, QueryTarget>(
   QUERY_TARGETS.map((t) => [t.backend, t]),
 );
 
+/** Worked examples shown under the editor as the syntax affordance. */
+export const MATCH_QUERY_EXAMPLES: { query: string; meaning: string }[] = [
+  { query: "content:*ssn*", meaning: "content contains “ssn”" },
+  { query: "tool_call.name:bash", meaning: "the tool is exactly bash" },
+  {
+    query: '-tool_call.server:""',
+    meaning: "an MCP tool (server is not empty)",
+  },
+  {
+    query: "tool_call.args:(*rm* OR *curl*)",
+    meaning: "arguments contain rm or curl",
+  },
+  { query: "content:/secret-\\d+/", meaning: "content matches a regex" },
+  { query: "tool_call.name:bash AND content:sudo", meaning: "both must match" },
+];
+
 export type ParsedQuery = {
   conditions: RiskMatchCondition[];
   combine: MatchCombine;
@@ -384,27 +400,77 @@ export function matchQuerySuggestions(
   const before = input.slice(0, caret);
   const clauseStart = lastConnectorEnd(before);
   const clause = before.slice(clauseStart);
-  const partial = /(\S*)$/.exec(before)?.[1] ?? "";
-  const from = caret - partial.length;
-
-  const fieldPart = partial.startsWith("-") ? partial.slice(1) : partial;
   const colon = clause.indexOf(":");
 
-  // Still typing the field (no committed colon yet) → suggest fields.
-  if (colon === -1 || clause.length - partial.length < colon + 1) {
-    return { from, suggestions: targetSuggestions(fieldPart, partial) };
+  // No colon yet → typing the field.
+  if (colon === -1) {
+    const dash = clause.startsWith("-") ? 1 : 0;
+    return {
+      from: clauseStart + dash,
+      suggestions: targetSuggestions(
+        clause.slice(dash),
+        clause.startsWith("-"),
+      ),
+    };
   }
-  // After `field:` → value templates (no operator words).
-  const typedValue = clause.slice(colon + 1);
-  return { from, suggestions: valueSuggestions(typedValue) };
+
+  const valuePart = clause.slice(colon + 1);
+  const ws = lastTopLevelSpace(valuePart);
+  if (ws === -1) {
+    // Still inside the value (no top-level space after the colon).
+    return {
+      from: clauseStart + colon + 1,
+      suggestions: valueSuggestions(valuePart),
+    };
+  }
+  // Past the value (a top-level space) → chain with AND/OR.
+  const connectorPartial = valuePart.slice(ws + 1);
+  return {
+    from: clauseStart + colon + 1 + ws + 1,
+    suggestions: connectorSuggestions(connectorPartial),
+  };
+}
+
+/** Index of the last whitespace at quote/paren depth 0, or -1. Spaces inside a
+ *  quoted value or a (a OR b) union don't separate the value from a connector. */
+function lastTopLevelSpace(s: string): number {
+  let inQuotes = false;
+  let depth = 0;
+  let last = -1;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s.charAt(i);
+    if (ch === '"') inQuotes = !inQuotes;
+    else if (!inQuotes && ch === "(") depth++;
+    else if (!inQuotes && ch === ")") depth--;
+    else if (!inQuotes && depth === 0 && /\s/.test(ch)) last = i;
+  }
+  return last;
+}
+
+function connectorSuggestions(partial: string): QuerySuggestion[] {
+  const lower = partial.toLowerCase();
+  return [
+    {
+      label: "AND",
+      description: "all conditions must match",
+      group: "Chain",
+      insert: "AND ",
+    },
+    {
+      label: "OR",
+      description: "any condition may match",
+      group: "Chain",
+      insert: "OR ",
+    },
+  ].filter((s) => s.label.toLowerCase().startsWith(lower));
 }
 
 function targetSuggestions(
   fieldPart: string,
-  partial: string,
+  negated: boolean,
 ): QuerySuggestion[] {
   const lower = fieldPart.toLowerCase();
-  const negPrefix = partial.startsWith("-") ? "-" : "";
+  const negPrefix = negated ? "-" : "";
   return QUERY_TARGETS.filter((t) => t.name.startsWith(lower)).map((t) => ({
     label: `${negPrefix}${t.name}`,
     description: t.description,

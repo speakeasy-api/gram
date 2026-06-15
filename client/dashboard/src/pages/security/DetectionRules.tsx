@@ -1484,11 +1484,6 @@ function CreateCustomRuleSheet({
                   onChange={setQuery}
                   error={query.trim() ? parsed.error : null}
                 />
-                <p className="text-muted-foreground text-xs">
-                  Phrase a query like{" "}
-                  <code className="font-mono">content:/secret-\d+/</code>.
-                  Conditions join with a single AND or OR.
-                </p>
               </div>
 
               <div className="space-y-2">
