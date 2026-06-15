@@ -49,9 +49,11 @@ func TestRuleEngine_AllowRuleShortCircuits(t *testing.T) {
 	deny := ruleWithConfigID(t, "custom.deny", ra.MatchConfig{Conditions: []ra.Condition{
 		{Target: ra.TargetContent, Op: ra.OpKeyword, Values: []string{"secret"}},
 	}})
-	allow := ruleWithConfigID(t, "custom.allow", ra.MatchConfig{Action: ra.ActionAllow, Conditions: []ra.Condition{
+	allow := ruleWithConfigID(t, "custom.allow", ra.MatchConfig{Conditions: []ra.Condition{
 		{Target: ra.TargetContent, Op: ra.OpKeyword, Values: []string{"approved"}},
 	}})
+	// The allow polarity now comes from the policy, not the match_config.
+	allow.Action = ra.ActionAllow
 
 	res := scanRules(t, []ra.CustomDetectionRule{deny, allow},
 		ra.MessageView{Content: "this secret is approved", Type: message.User, Tools: nil})
@@ -61,6 +63,33 @@ func TestRuleEngine_AllowRuleShortCircuits(t *testing.T) {
 		ra.MessageView{Content: "this secret leaks", Type: message.User, Tools: nil})
 	require.False(t, res2.Allowed)
 	require.Len(t, res2.Findings, 1)
+}
+
+// The policy's rules map decides each rule's polarity: a rule listed as allow
+// short-circuits the policy, an unlisted rule defaults to deny.
+func TestRuleEngine_PolicyRulesAction(t *testing.T) {
+	t.Parallel()
+	pr, err := ra.ParsePolicyRules([]byte(`{"custom.allow":{"action":"allow"},"custom.explicit_deny":{"action":"deny"}}`))
+	require.NoError(t, err)
+	require.Equal(t, ra.ActionAllow, pr.ActionFor("custom.allow"))
+	require.Equal(t, ra.ActionDeny, pr.ActionFor("custom.explicit_deny"))
+	// Absent rule defaults to deny.
+	require.Equal(t, ra.ActionDeny, pr.ActionFor("custom.unlisted"))
+
+	// A nil/empty column yields an all-deny map.
+	empty, err := ra.ParsePolicyRules(nil)
+	require.NoError(t, err)
+	require.Equal(t, ra.ActionDeny, empty.ActionFor("custom.anything"))
+
+	// The same rule allow-lists or denies purely by its policy config.
+	deny := ruleWithConfigID(t, "custom.rule", ra.MatchConfig{Conditions: []ra.Condition{
+		{Target: ra.TargetContent, Op: ra.OpKeyword, Values: []string{"secret"}},
+	}})
+	allow := deny
+	allow.Action = pr.ActionFor("custom.allow")
+	view := ra.MessageView{Content: "a secret", Type: message.User, Tools: nil}
+	require.Len(t, scanRules(t, []ra.CustomDetectionRule{deny}, view).Findings, 1)
+	require.True(t, scanRules(t, []ra.CustomDetectionRule{allow}, view).Allowed)
 }
 
 // Legacy regex rules (regex column set, match_config empty) must keep emitting

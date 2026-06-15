@@ -211,6 +211,9 @@ type CreateRiskPolicyPayload struct {
 	DisabledRules []string
 	// Custom detection rule ids to enable for this policy.
 	CustomRuleIds []string
+	// Per-rule configuration keyed by canonical rule_id (built-in + custom). Maps
+	// a rule to {action: deny|allow}; rules absent from the map default to deny.
+	Rules map[string]*types.RiskPolicyRuleConfig
 	// Message types this policy applies to. When empty or omitted, the policy
 	// scans all supported types.
 	MessageTypes []string
@@ -733,7 +736,7 @@ type SuggestCustomDetectionRuleResult struct {
 	// Legacy RE2-compatible regex pattern. Empty when match_config is returned;
 	// kept for back-compat.
 	Regex string
-	// Suggested condition-based matcher (targets, ops, action). Preferred over
+	// Suggested condition-based matcher (targets, ops, conditions). Preferred over
 	// regex when present.
 	MatchConfig *types.RiskMatchConfig
 	// Suggested severity level.
@@ -872,6 +875,9 @@ type UpdateRiskPolicyPayload struct {
 	// Custom detection rule ids to enable for this policy. Omit to preserve the
 	// current selection.
 	CustomRuleIds []string
+	// Per-rule configuration keyed by canonical rule_id (built-in + custom). Maps
+	// a rule to {action: deny|allow}; rules absent from the map default to deny.
+	Rules map[string]*types.RiskPolicyRuleConfig
 	// Message types this policy applies to. Omit to preserve the current
 	// selection; send an empty array to apply to all types.
 	MessageTypes []string

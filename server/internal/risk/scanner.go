@@ -480,6 +480,11 @@ func promptPolicyUnavailableResult(policy repo.RiskPolicy, messageType message.T
 }
 
 func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, view ra.MessageView) (ra.CustomRuleScan, error) {
+	policyRules, err := ra.ParsePolicyRules(policy.Rules)
+	if err != nil {
+		return ra.CustomRuleScan{}, fmt.Errorf("parse policy rules: %w", err)
+	}
+
 	rules, err := s.repo.ListCustomDetectionRules(ctx, policy.ProjectID)
 	if err != nil {
 		return ra.CustomRuleScan{}, fmt.Errorf("list custom detection rules: %w", err)
@@ -500,6 +505,7 @@ func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, v
 			Title:       rule.Title,
 			Description: rule.Description,
 			MatchConfig: ra.EffectiveMatchConfig(rule.MatchConfig, conv.PtrValOr(conv.FromPGText[string](rule.Regex), "")),
+			Action:      policyRules.ActionFor(rule.RuleID),
 		})
 	}
 

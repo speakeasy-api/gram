@@ -329,6 +329,11 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		return nil, oops.E(oops.CodeUnexpected, err, "generate policy id").Log(ctx, s.logger)
 	}
 
+	rulesJSON, err := policyRulesToStorage(payload.Rules)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid rules")
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
@@ -346,6 +351,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		PromptInjectionRules: createPolicyDetectionField(policyType, payload.PromptInjectionRules),
 		DisabledRules:        createPolicyDetectionField(policyType, payload.DisabledRules),
 		CustomRuleIds:        createPolicyDetectionField(policyType, payload.CustomRuleIds),
+		Rules:                rulesJSON,
 		MessageTypes:         payload.MessageTypes,
 		Enabled:              enabled,
 		Action:               action,
@@ -567,6 +573,17 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		modelConfig = mc
 	}
 
+	// Per-rule policy config. Omit to preserve the current map; send an explicit
+	// (possibly empty) map to replace it. An empty map clears the column, so
+	// every rule reverts to deny.
+	rulesJSON := current.Rules
+	if payload.Rules != nil {
+		rulesJSON, err = policyRulesToStorage(payload.Rules)
+		if err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid rules")
+		}
+	}
+
 	// Regenerate the name only when the caller explicitly opts in on this
 	// update via auto_name=true. Toggling unrelated fields (e.g. enabled)
 	// should not silently rename the policy.
@@ -607,6 +624,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		PromptInjectionRules: promptInjectionRules,
 		DisabledRules:        disabledRules,
 		CustomRuleIds:        customRuleIds,
+		Rules:                rulesJSON,
 		MessageTypes:         messageTypes,
 		Enabled:              enabled,
 		Action:               action,
@@ -1868,8 +1886,7 @@ Fields:
 - "title": 2-6 words, title case.
 - "description": 1-2 sentences on what is detected and why it matters. No marketing copy.
 - "severity": one of "info","low","medium","high","critical" — by leakage/impact cost (credentials, PII, financial, healthcare are typically high/critical).
-- "match_config": { "action", "combine", "conditions": [ {target, op, value|values, path} ] }
-  - "action": "deny" flags a finding — use this almost always. "allow" allowlists/exempts the message and skips the rest of the policy — only when the operator explicitly wants to permit something.
+- "match_config": { "combine", "conditions": [ {target, op, value|values, path} ] }
   - "combine": "and" (all conditions must match) or "or" (any). Default to "and" unless the request clearly means "any of".
   - Each condition reads a "target":
     - "content": whole message text. "user_prompt"/"assistant_text"/"tool_result": that message part.
@@ -1908,11 +1925,10 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 			"match_config": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"action":     map[string]any{"type": "string", "enum": []string{"deny", "allow"}},
 					"combine":    map[string]any{"type": "string", "enum": []string{"and", "or"}},
 					"conditions": map[string]any{"type": "array", "minItems": 1, "items": conditionSchema},
 				},
-				"required":             []string{"action", "combine", "conditions"},
+				"required":             []string{"combine", "conditions"},
 				"additionalProperties": false,
 			},
 		},
@@ -2138,21 +2154,19 @@ func (s *Service) testCustomRule(ruleID, pattern string, cfg *types.RiskMatchCon
 		}, nil
 	}
 
-	if cfg != nil {
-		// The playground reports whether the conditions match the sample text,
-		// independent of allow/deny action, so evaluate it as a detection rule.
-		cfg.Action = nil
-	}
-
 	raw, err := customRuleMatchConfigToStorage(cfg)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid match_config")
 	}
+	// The playground reports whether the conditions match the sample text, so
+	// evaluate it as a plain detection (deny) rule regardless of how a policy
+	// would configure its action.
 	compiled, err := ra.CompileCustomDetectionRules([]ra.CustomDetectionRule{{
 		RuleID:      ruleID,
 		Title:       "",
 		Description: "Custom rule match",
 		MatchConfig: ra.EffectiveMatchConfig(raw, pattern),
+		Action:      ra.ActionDeny,
 	}})
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid custom rule")
@@ -2228,6 +2242,7 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		PromptInjectionRules: row.PromptInjectionRules,
 		DisabledRules:        row.DisabledRules,
 		CustomRuleIds:        row.CustomRuleIds,
+		Rules:                policyRulesFromStorage(row.Rules),
 		MessageTypes:         row.MessageTypes,
 		Enabled:              row.Enabled,
 		Action:               row.Action,
@@ -2258,6 +2273,7 @@ func policyRowSnapshot(row repo.RiskPolicy) *types.RiskPolicy {
 		PromptInjectionRules: row.PromptInjectionRules,
 		DisabledRules:        row.DisabledRules,
 		CustomRuleIds:        row.CustomRuleIds,
+		Rules:                policyRulesFromStorage(row.Rules),
 		MessageTypes:         row.MessageTypes,
 		Enabled:              row.Enabled,
 		Action:               row.Action,
@@ -2297,7 +2313,6 @@ func customRuleMatchConfigToStorage(in *types.RiskMatchConfig) ([]byte, error) {
 		return nil, nil
 	}
 	cfg := ra.MatchConfig{
-		Action:     ra.Action(conv.PtrValOr(in.Action, "")),
 		Combine:    ra.MatchCombine(conv.PtrValOr(in.Combine, "")),
 		Conditions: make([]ra.Condition, 0, len(in.Conditions)),
 	}
@@ -2336,7 +2351,6 @@ func customRuleMatchConfigFromStorage(raw []byte) *types.RiskMatchConfig {
 		return nil
 	}
 	out := &types.RiskMatchConfig{
-		Action:     conv.PtrEmpty(string(cfg.Action)),
 		Combine:    conv.PtrEmpty(string(cfg.Combine)),
 		Conditions: make([]*types.RiskMatchCondition, 0, len(cfg.Conditions)),
 	}
@@ -2349,6 +2363,45 @@ func customRuleMatchConfigFromStorage(raw []byte) *types.RiskMatchConfig {
 			Path:            conv.PtrEmpty(c.Path),
 			CaseInsensitive: conv.PtrEmpty(c.CaseInsensitive),
 		})
+	}
+	return out
+}
+
+// policyRulesToStorage converts the API per-rule policy config map into the
+// risk_policies.rules JSONB. Returns nil for an empty map so the column stays
+// NULL (every rule defaults to deny).
+func policyRulesToStorage(in map[string]*types.RiskPolicyRuleConfig) ([]byte, error) {
+	if len(in) == 0 {
+		return nil, nil
+	}
+	out := make(ra.PolicyRules, len(in))
+	for ruleID, cfg := range in {
+		if cfg == nil {
+			continue
+		}
+		out[ruleID] = ra.PolicyRuleConfig{Action: ra.Action(cfg.Action)}
+	}
+	if len(out) == 0 {
+		return nil, nil
+	}
+	raw, err := json.Marshal(out)
+	if err != nil {
+		return nil, fmt.Errorf("marshal policy rules: %w", err)
+	}
+	return raw, nil
+}
+
+// policyRulesFromStorage maps the stored risk_policies.rules JSONB back into the
+// API map, normalising each rule's action to deny when blank. Returns nil for an
+// empty/NULL column.
+func policyRulesFromStorage(raw []byte) map[string]*types.RiskPolicyRuleConfig {
+	pr, err := ra.ParsePolicyRules(raw)
+	if err != nil || len(pr) == 0 {
+		return nil
+	}
+	out := make(map[string]*types.RiskPolicyRuleConfig, len(pr))
+	for ruleID := range pr {
+		out[ruleID] = &types.RiskPolicyRuleConfig{Action: string(pr.ActionFor(ruleID))}
 	}
 	return out
 }

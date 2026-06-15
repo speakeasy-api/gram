@@ -31,6 +31,7 @@ var _ = Service("risk", func() {
 			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline (e.g. 'deberta-v3-classifier').")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to enable for this policy.")
+			Attribute("rules", MapOf(String, shared.RiskPolicyRuleConfig), "Per-rule configuration keyed by canonical rule_id (built-in + custom). Maps a rule to {action: deny|allow}; rules absent from the map default to deny.")
 			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. When empty or omitted, the policy scans all supported types.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
 			Attribute("action", String, "Policy action: flag or block.", func() {
@@ -154,6 +155,7 @@ var _ = Service("risk", func() {
 			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline (e.g. 'deberta-v3-classifier').")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to enable for this policy. Omit to preserve the current selection.")
+			Attribute("rules", MapOf(String, shared.RiskPolicyRuleConfig), "Per-rule configuration keyed by canonical rule_id (built-in + custom). Maps a rule to {action: deny|allow}; rules absent from the map default to deny.")
 			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. Omit to preserve the current selection; send an empty array to apply to all types.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
 			Attribute("action", String, "Policy action: flag or block.", func() {
@@ -1060,7 +1062,7 @@ var SuggestCustomDetectionRuleResult = Type("SuggestCustomDetectionRuleResult", 
 	Attribute("title", String, "Short, human-friendly title for the rule.")
 	Attribute("description", String, "Description of what the rule detects and why it matters.")
 	Attribute("regex", String, "Legacy RE2-compatible regex pattern. Empty when match_config is returned; kept for back-compat.")
-	Attribute("match_config", shared.RiskMatchConfig, "Suggested condition-based matcher (targets, ops, action). Preferred over regex when present.")
+	Attribute("match_config", shared.RiskMatchConfig, "Suggested condition-based matcher (targets, ops, conditions). Preferred over regex when present.")
 	Attribute("severity", String, "Suggested severity level.", func() {
 		Enum("info", "low", "medium", "high", "critical")
 	})

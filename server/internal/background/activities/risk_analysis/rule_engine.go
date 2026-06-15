@@ -64,16 +64,55 @@ const (
 	CombineOr  MatchCombine = "or"
 )
 
-// Action is a rule's polarity. A deny rule produces a finding when it matches
-// (the default). An allow rule is an inline allowlist: when it matches a
-// message it short-circuits the whole policy, dropping every finding for that
-// message — even ones other detectors (gitleaks, presidio, the judge) produced.
+// Action is a rule's polarity within a policy. A deny rule produces a finding
+// when it matches (the default). An allow rule is an inline allowlist: when it
+// matches a message it short-circuits the whole policy, dropping every finding
+// for that message — even ones other detectors (gitleaks, presidio, the judge)
+// produced. The action is configured per policy (risk_policies.rules), not on
+// the rule itself, so the same rule can deny in one policy and allow in another.
 type Action string
 
 const (
 	ActionDeny  Action = "deny"
 	ActionAllow Action = "allow"
 )
+
+// effectiveAction defaults a blank/unknown action to deny.
+func effectiveAction(a Action) Action {
+	if a == ActionAllow {
+		return ActionAllow
+	}
+	return ActionDeny
+}
+
+// PolicyRuleConfig is the per-rule configuration a policy attaches to a rule_id
+// (built-in or custom). Only Action is meaningful today.
+type PolicyRuleConfig struct {
+	Action Action `json:"action,omitempty"`
+}
+
+// PolicyRules is the normalised risk_policies.rules JSONB: a map from canonical
+// rule_id to its per-policy config. Absent rules default to deny.
+type PolicyRules map[string]PolicyRuleConfig
+
+// ParsePolicyRules decodes the risk_policies.rules JSONB. A nil/empty column
+// yields an empty (all-deny) map.
+func ParsePolicyRules(raw []byte) (PolicyRules, error) {
+	if isEmptyJSON(raw) {
+		return PolicyRules{}, nil
+	}
+	var pr PolicyRules
+	if err := json.Unmarshal(raw, &pr); err != nil {
+		return nil, fmt.Errorf("parse policy rules: %w", err)
+	}
+	return pr, nil
+}
+
+// ActionFor returns the configured action for a rule_id, defaulting to deny
+// when the rule is absent or unset.
+func (pr PolicyRules) ActionFor(ruleID string) Action {
+	return effectiveAction(pr[ruleID].Action)
+}
 
 // Condition is one target/op/value test, decoded from a rule's match_config.
 type Condition struct {
@@ -93,11 +132,10 @@ type Condition struct {
 }
 
 // MatchConfig is the sparse, self-describing matcher stored in the
-// risk_custom_detection_rules.match_config JSONB column.
+// risk_custom_detection_rules.match_config JSONB column. The rule's polarity
+// (deny/allow) is no longer part of the matcher — it is configured per policy
+// via risk_policies.rules and supplied on CustomDetectionRule.
 type MatchConfig struct {
-	// Action is the rule's polarity: deny (detect, the default) or allow
-	// (allowlist that short-circuits the policy when matched).
-	Action     Action       `json:"action,omitempty"`
 	Combine    MatchCombine `json:"combine,omitempty"`
 	Conditions []Condition  `json:"conditions"`
 }
@@ -109,22 +147,18 @@ func (m MatchConfig) combineOrDefault() MatchCombine {
 	return CombineAnd
 }
 
-func (m MatchConfig) actionOrDefault() Action {
-	if m.Action == ActionAllow {
-		return ActionAllow
-	}
-	return ActionDeny
-}
-
 // CustomDetectionRule is a policy-selected custom rule as loaded from the
-// database. MatchConfig is the raw match_config JSONB. Callers translate a
-// legacy regex-column rule into match_config via EffectiveMatchConfig before
+// database. MatchConfig is the raw match_config JSONB. Action is the rule's
+// polarity within the owning policy (deny by default); the caller resolves it
+// from the policy's rules map before compiling. Callers translate a legacy
+// regex-column rule into match_config via EffectiveMatchConfig before
 // compiling, so the engine is purely condition-driven.
 type CustomDetectionRule struct {
 	RuleID      string
 	Title       string
 	Description string
 	MatchConfig []byte
+	Action      Action
 }
 
 // CompiledCustomDetectionRule is a rule with its conditions compiled (regexes,
@@ -202,7 +236,7 @@ func CompileCustomDetectionRules(rules []CustomDetectionRule) ([]CompiledCustomD
 		rule.RuleID = guard(rule.RuleID)
 		compiled = append(compiled, CompiledCustomDetectionRule{
 			CustomDetectionRule: rule,
-			action:              cfg.actionOrDefault(),
+			action:              effectiveAction(rule.Action),
 			combine:             cfg.combineOrDefault(),
 			conditions:          conditions,
 		})
@@ -220,9 +254,6 @@ func ValidateMatchConfig(raw []byte) error {
 	cfg, err := parseMatchConfig(raw)
 	if err != nil {
 		return err
-	}
-	if cfg.Action != "" && cfg.Action != ActionDeny && cfg.Action != ActionAllow {
-		return fmt.Errorf("unknown action %q", cfg.Action)
 	}
 	if len(cfg.Conditions) == 0 {
 		return fmt.Errorf("match_config must declare at least one condition")
@@ -247,7 +278,6 @@ func EffectiveMatchConfig(matchConfig []byte, legacyRegex string) []byte {
 		return nil
 	}
 	raw, err := json.Marshal(MatchConfig{
-		Action:  ActionDeny,
 		Combine: CombineAnd,
 		Conditions: []Condition{{
 			Target:          TargetContent,

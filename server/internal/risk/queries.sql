@@ -10,6 +10,7 @@ INSERT INTO risk_policies (
   , prompt_injection_rules
   , disabled_rules
   , custom_rule_ids
+  , rules
   , message_types
   , enabled
   , action
@@ -30,6 +31,7 @@ VALUES (
   , @prompt_injection_rules
   , @disabled_rules
   , COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
+  , sqlc.narg(rules)::jsonb
   , sqlc.arg(message_types)::text[]
   , @enabled
   , @action
@@ -84,6 +86,7 @@ SET name = @name
   , prompt_injection_rules = @prompt_injection_rules
   , disabled_rules = @disabled_rules
   , custom_rule_ids = COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
+  , rules = sqlc.narg(rules)::jsonb
   , message_types = sqlc.arg(message_types)::text[]
   , enabled = @enabled
   , action = @action
@@ -97,6 +100,7 @@ SET name = @name
         OR prompt_injection_rules IS DISTINCT FROM @prompt_injection_rules
         OR disabled_rules IS DISTINCT FROM @disabled_rules
         OR custom_rule_ids IS DISTINCT FROM COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
+        OR rules IS DISTINCT FROM sqlc.narg(rules)::jsonb
         OR message_types IS DISTINCT FROM sqlc.arg(message_types)::text[]
         OR enabled IS DISTINCT FROM @enabled
         OR action IS DISTINCT FROM @action

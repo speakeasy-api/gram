@@ -32,6 +32,10 @@ type RiskPolicy struct {
 	DisabledRules []string
 	// Custom detection rule ids enabled for this policy.
 	CustomRuleIds []string
+	// Per-rule configuration keyed by canonical rule_id (built-in + custom). Maps
+	// a rule to {action: deny|allow}; rules absent from the map default to deny.
+	// An allow rule short-circuits the policy for a message it matches.
+	Rules map[string]*RiskPolicyRuleConfig
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.

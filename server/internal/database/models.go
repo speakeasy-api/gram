@@ -1326,6 +1326,7 @@ type RiskPolicy struct {
 	PromptInjectionRules []string
 	DisabledRules        []string
 	CustomRuleIds        []string
+	Rules                []byte
 	MessageTypes         []string
 	Action               string
 	AudienceType         string

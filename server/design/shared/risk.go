@@ -66,6 +66,7 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids enabled in addition to the heuristic baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.")
 	Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the policy author has unchecked within an otherwise-enabled category. Empty means every rule in the selected categories runs; matching findings are dropped at scan time.")
 	Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids enabled for this policy.")
+	Attribute("rules", MapOf(String, RiskPolicyRuleConfig), "Per-rule configuration keyed by canonical rule_id (built-in + custom). Maps a rule to {action: deny|allow}; rules absent from the map default to deny. An allow rule short-circuits the policy for a message it matches.")
 	Attribute("message_types", ArrayOf(String), "Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message.")
 	Attribute("enabled", Boolean, "Whether the policy is active.")
 	Attribute("action", String, "Policy action: flag (log only) or block (deny in real-time).", func() {
@@ -122,15 +123,26 @@ var RiskMatchCondition = Type("RiskMatchCondition", func() {
 var RiskMatchConfig = Type("RiskMatchConfig", func() {
 	Meta("struct:pkg:path", "types")
 
-	Attribute("action", String, "What the rule does when it matches: deny (flag a finding, the default) or allow (an allowlist that short-circuits the whole policy for that message).", func() {
-		Enum("deny", "allow")
-	})
 	Attribute("combine", String, "How the conditions reduce to a verdict.", func() {
 		Enum("and", "or")
 	})
 	Attribute("conditions", ArrayOf(RiskMatchCondition), "Conditions evaluated against a message; all (and) or any (or) must match.")
 
 	Required("conditions")
+})
+
+// RiskPolicyRuleConfig is a policy's per-rule configuration, keyed by canonical
+// rule_id (built-in or custom) in RiskPolicy.rules. Only action is configurable
+// today: deny (the default) flags/blocks on a match; allow makes the rule an
+// allowlist that short-circuits the whole policy for a matched message.
+var RiskPolicyRuleConfig = Type("RiskPolicyRuleConfig", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("action", String, "What the policy does when this rule matches: deny (flag/block, the default) or allow (an allowlist that short-circuits the policy for that message).", func() {
+		Enum("deny", "allow")
+	})
+
+	Required("action")
 })
 
 var RiskCustomDetectionRule = Type("RiskCustomDetectionRule", func() {

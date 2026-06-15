@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	risk "github.com/speakeasy-api/gram/server/gen/risk"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -25,7 +26,7 @@ func BuildCreateRiskPolicyPayload(riskCreateRiskPolicyBody string, riskCreateRis
 	{
 		err = json.Unmarshal([]byte(riskCreateRiskPolicyBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"policy_type\": \"prompt_based\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"policy_type\": \"prompt_based\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"rules\": {\n         \"abc123\": {\n            \"action\": \"allow\"\n         }\n      },\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -89,6 +90,17 @@ func BuildCreateRiskPolicyPayload(riskCreateRiskPolicyBody string, riskCreateRis
 		v.CustomRuleIds = make([]string, len(body.CustomRuleIds))
 		for i, val := range body.CustomRuleIds {
 			v.CustomRuleIds[i] = val
+		}
+	}
+	if body.Rules != nil {
+		v.Rules = make(map[string]*types.RiskPolicyRuleConfig, len(body.Rules))
+		for key, val := range body.Rules {
+			tk := key
+			if val == nil {
+				v.Rules[tk] = nil
+				continue
+			}
+			v.Rules[tk] = marshalRiskPolicyRuleConfigRequestBodyToTypesRiskPolicyRuleConfig(val)
 		}
 	}
 	if body.MessageTypes != nil {
@@ -218,9 +230,16 @@ func BuildUpdateRiskPolicyPayload(riskUpdateRiskPolicyBody string, riskUpdateRis
 	{
 		err = json.Unmarshal([]byte(riskUpdateRiskPolicyBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"rules\": {\n         \"abc123\": {\n            \"action\": \"allow\"\n         }\n      },\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		for _, v := range body.Rules {
+			if v != nil {
+				if err2 := ValidateRiskPolicyRuleConfigRequestBody(v); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
 		if body.Action != nil {
 			if !(*body.Action == "flag" || *body.Action == "block") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block"}))
@@ -285,6 +304,17 @@ func BuildUpdateRiskPolicyPayload(riskUpdateRiskPolicyBody string, riskUpdateRis
 		v.CustomRuleIds = make([]string, len(body.CustomRuleIds))
 		for i, val := range body.CustomRuleIds {
 			v.CustomRuleIds[i] = val
+		}
+	}
+	if body.Rules != nil {
+		v.Rules = make(map[string]*types.RiskPolicyRuleConfig, len(body.Rules))
+		for key, val := range body.Rules {
+			tk := key
+			if val == nil {
+				v.Rules[tk] = nil
+				continue
+			}
+			v.Rules[tk] = marshalRiskPolicyRuleConfigRequestBodyToTypesRiskPolicyRuleConfig(val)
 		}
 	}
 	if body.MessageTypes != nil {
@@ -1182,7 +1212,7 @@ func BuildCreateCustomDetectionRulePayload(riskCreateCustomDetectionRuleBody str
 	{
 		err = json.Unmarshal([]byte(riskCreateCustomDetectionRuleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"match_config\": {\n         \"action\": \"allow\",\n         \"combine\": \"or\",\n         \"conditions\": [\n            {\n               \"case_insensitive\": false,\n               \"op\": \"equals\",\n               \"path\": \"abc123\",\n               \"target\": \"user_prompt\",\n               \"value\": \"abc123\",\n               \"values\": [\n                  \"abc123\"\n               ]\n            }\n         ]\n      },\n      \"regex\": \"abc123\",\n      \"rule_id\": \"abc123\",\n      \"severity\": \"low\",\n      \"title\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"match_config\": {\n         \"combine\": \"or\",\n         \"conditions\": [\n            {\n               \"case_insensitive\": false,\n               \"op\": \"equals\",\n               \"path\": \"abc123\",\n               \"target\": \"user_prompt\",\n               \"value\": \"abc123\",\n               \"values\": [\n                  \"abc123\"\n               ]\n            }\n         ]\n      },\n      \"regex\": \"abc123\",\n      \"rule_id\": \"abc123\",\n      \"severity\": \"low\",\n      \"title\": \"abc123\"\n   }'")
 		}
 		if body.MatchConfig != nil {
 			if err2 := ValidateRiskMatchConfigRequestBody(body.MatchConfig); err2 != nil {
@@ -1313,7 +1343,7 @@ func BuildUpdateCustomDetectionRulePayload(riskUpdateCustomDetectionRuleBody str
 	{
 		err = json.Unmarshal([]byte(riskUpdateCustomDetectionRuleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"match_config\": {\n         \"action\": \"allow\",\n         \"combine\": \"or\",\n         \"conditions\": [\n            {\n               \"case_insensitive\": false,\n               \"op\": \"equals\",\n               \"path\": \"abc123\",\n               \"target\": \"user_prompt\",\n               \"value\": \"abc123\",\n               \"values\": [\n                  \"abc123\"\n               ]\n            }\n         ]\n      },\n      \"regex\": \"abc123\",\n      \"severity\": \"low\",\n      \"title\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"match_config\": {\n         \"combine\": \"or\",\n         \"conditions\": [\n            {\n               \"case_insensitive\": false,\n               \"op\": \"equals\",\n               \"path\": \"abc123\",\n               \"target\": \"user_prompt\",\n               \"value\": \"abc123\",\n               \"values\": [\n                  \"abc123\"\n               ]\n            }\n         ]\n      },\n      \"regex\": \"abc123\",\n      \"severity\": \"low\",\n      \"title\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.MatchConfig != nil {
@@ -1686,7 +1716,7 @@ func BuildTestDetectionRulePayload(riskTestDetectionRuleBody string, riskTestDet
 	{
 		err = json.Unmarshal([]byte(riskTestDetectionRuleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"match_config\": {\n         \"action\": \"allow\",\n         \"combine\": \"or\",\n         \"conditions\": [\n            {\n               \"case_insensitive\": false,\n               \"op\": \"equals\",\n               \"path\": \"abc123\",\n               \"target\": \"user_prompt\",\n               \"value\": \"abc123\",\n               \"values\": [\n                  \"abc123\"\n               ]\n            }\n         ]\n      },\n      \"regex\": \"abc123\",\n      \"rule_id\": \"aa\",\n      \"text\": \"aa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"match_config\": {\n         \"combine\": \"or\",\n         \"conditions\": [\n            {\n               \"case_insensitive\": false,\n               \"op\": \"equals\",\n               \"path\": \"abc123\",\n               \"target\": \"user_prompt\",\n               \"value\": \"abc123\",\n               \"values\": [\n                  \"abc123\"\n               ]\n            }\n         ]\n      },\n      \"regex\": \"abc123\",\n      \"rule_id\": \"aa\",\n      \"text\": \"aa\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.RuleID) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.rule_id", body.RuleID, utf8.RuneCountInString(body.RuleID), 1, true))

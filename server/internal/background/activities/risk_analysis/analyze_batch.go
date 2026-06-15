@@ -178,7 +178,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
 	}
 
-	customRules, err := a.customRulesForPolicy(ctx, args.ProjectID, policy.CustomRuleIds)
+	customRules, err := a.customRulesForPolicy(ctx, args.ProjectID, policy.CustomRuleIds, policy.Rules)
 	if err != nil {
 		return nil, err
 	}
@@ -588,9 +588,14 @@ func (a *AnalyzeBatch) customRuleMessageView(ctx context.Context, msg repo.GetMe
 	return view
 }
 
-func (a *AnalyzeBatch) customRulesForPolicy(ctx context.Context, projectID uuid.UUID, ruleIDs []string) ([]CompiledCustomDetectionRule, error) {
+func (a *AnalyzeBatch) customRulesForPolicy(ctx context.Context, projectID uuid.UUID, ruleIDs []string, policyRulesJSON []byte) ([]CompiledCustomDetectionRule, error) {
 	if len(ruleIDs) == 0 {
 		return nil, nil
+	}
+
+	policyRules, err := ParsePolicyRules(policyRulesJSON)
+	if err != nil {
+		return nil, fmt.Errorf("parse policy rules: %w", err)
 	}
 
 	rules, err := repo.New(a.db).ListCustomDetectionRules(ctx, projectID)
@@ -613,6 +618,7 @@ func (a *AnalyzeBatch) customRulesForPolicy(ctx context.Context, projectID uuid.
 			Title:       rule.Title,
 			Description: rule.Description,
 			MatchConfig: EffectiveMatchConfig(rule.MatchConfig, conv.PtrValOr(conv.FromPGText[string](rule.Regex), "")),
+			Action:      policyRules.ActionFor(rule.RuleID),
 		})
 	}
 
