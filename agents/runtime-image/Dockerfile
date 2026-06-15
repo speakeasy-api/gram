@@ -5,9 +5,9 @@ COPY agents/runner/Cargo.toml agents/runner/Cargo.lock ./agents/runner/
 COPY agents/runner/src ./agents/runner/src
 RUN cargo build --manifest-path ./agents/runner/Cargo.toml --release --bin gram-assistant-runner
 
-FROM oven/bun:1.2.15@sha256:8b5e8d3b6a734ae438c7c6f1bdc23e54eb9c35a0e2e3099ea2ca0ef781aca23b AS bun
+FROM oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS bun
 
-FROM oven/bun:1.2.15@sha256:8b5e8d3b6a734ae438c7c6f1bdc23e54eb9c35a0e2e3099ea2ca0ef781aca23b AS sandbox-deps
+FROM oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS sandbox-deps
 WORKDIR /sandbox
 COPY agents/runtime-image/sandbox/package.json ./
 RUN bun install --production
