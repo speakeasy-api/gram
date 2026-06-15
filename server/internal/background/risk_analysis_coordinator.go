@@ -16,6 +16,7 @@ import (
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/throttle"
+	"github.com/speakeasy-api/gram/server/internal/uuidv7"
 )
 
 const (
@@ -70,7 +71,7 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 	analyzeBatchOpts.HeartbeatTimeout = 60 * time.Second
 	analyzeBatchCtx := workflow.WithActivityOptions(ctx, analyzeBatchOpts)
 
-	idLowerBound := risk_analysis.UUIDv7LowerBound(workflow.Now(ctx).Add(-riskAnalysisLookback))
+	idLowerBound := uuidv7.LowerBound(workflow.Now(ctx).Add(-riskAnalysisLookback))
 
 	var a *Activities
 	var fetchResult risk_analysis.FetchUnanalyzedResult

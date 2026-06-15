@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"net/netip"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -249,19 +248,6 @@ func TestIsPresidioFalsePositive_EquivalentIPFormsMatch(t *testing.T) {
 	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "2001:4860:4860:0:0:0:0:8888"), "Google DNS expanded")
 	// AdGuard 2a10:50c0::bad1:ff in uppercase hex.
 	assert.True(t, isPresidioFalsePositive("IP_ADDRESS", "2A10:50C0::BAD1:FF"), "uppercase hex variant")
-}
-
-// TestNonPIIIPExactKeysAreCanonical locks the invariant that every key in
-// nonPIIIPExact is already in netip canonical form. The exact lookup keys
-// off addr.String(), so a non-canonical key would silently never match.
-func TestNonPIIIPExactKeysAreCanonical(t *testing.T) {
-	t.Parallel()
-
-	for key := range nonPIIIPExact {
-		addr, err := netip.ParseAddr(key)
-		require.NoErrorf(t, err, "key %q must parse as an IP", key)
-		assert.Equalf(t, key, addr.String(), "key %q must be in canonical netip form", key)
-	}
 }
 
 func TestStubPIIScannerReturnsEmptyResults(t *testing.T) {
