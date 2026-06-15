@@ -516,34 +516,40 @@ export function validateConditions(
   return null;
 }
 
-/** Operator keyword used in the colon-syntax summary. Empty => the
- *  `field:value` equals shorthand. */
-const OP_TOKEN: Record<MatchOp, string> = {
-  equals: "",
-  not_equals: "not_equals",
-  contains: "contains",
-  not_contains: "not_contains",
-  in: "in",
-  starts_with: "starts_with",
-  ends_with: "ends_with",
-  regex: "matches",
-  glob: "glob",
-  keyword: "contains",
-  exists: "exists",
-};
-
+/** A compact value-syntax summary of a condition, matching the query bar. */
 function summarizeCondition(c: RiskMatchCondition): string {
   const field =
     c.target === "tool_args" && c.path ? `tool_args.${c.path}` : c.target;
-  if (c.op === "exists") return `${field}:exists`;
-  const values = (c.values ?? []).filter((v) => v.trim());
-  if (values.length > 0) {
-    return `${field}:${OP_TOKEN[c.op] || "in"}:(${values.join(" OR ")})`;
+  const list = (c.values ?? []).filter((v) => v.trim());
+  const operands = list.length > 0 ? list : c.value ? [c.value] : [];
+  switch (c.op) {
+    case "exists":
+      return `${field}:*`;
+    case "regex":
+      return `${field}:/${c.value ?? ""}/`;
+    case "equals":
+      return `${field}:${c.value ?? ""}`;
+    case "not_equals":
+      return `-${field}:${c.value ?? ""}`;
+    case "starts_with":
+      return `${field}:${c.value ?? ""}*`;
+    case "ends_with":
+      return `${field}:*${c.value ?? ""}`;
+    case "contains":
+    case "not_contains": {
+      const prefix = c.op === "not_contains" ? "-" : "";
+      const body =
+        operands.length === 1
+          ? `*${operands[0]}*`
+          : `(${operands.map((v) => `*${v}*`).join(" OR ")})`;
+      return `${prefix}${field}:${body}`;
+    }
+    case "in":
+    case "keyword":
+      return `${field}:(${operands.join(" OR ")})`;
+    case "glob":
+      return `${field}:${c.value ?? ""}`;
   }
-  const token = OP_TOKEN[c.op];
-  return token
-    ? `${field}:${token}:${c.value ?? ""}`
-    : `${field}:${c.value ?? ""}`;
 }
 
 /** Human-readable one-liner summarizing a rule's conditions, for list rows. */

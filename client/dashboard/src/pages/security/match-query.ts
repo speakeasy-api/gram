@@ -2,18 +2,19 @@ import type { RiskMatchCondition } from "@gram/client/models/components";
 import type { MatchCombine } from "./detection-rules-data";
 
 type MatchTarget = RiskMatchCondition["target"];
-type MatchOp = RiskMatchCondition["op"];
 
 /**
- * A Datadog-style colon query language for a rule's match_config. Conditions
- * read `field:value` (equals shorthand) or `field:op:value`, joined by a single
- * `AND` or `OR` (the backend stores a flat list with one combine — nesting,
- * NOT, and parentheses are rejected pending a backend grammar change).
+ * A Datadog-style query language for a rule's match_config. The operator is
+ * inferred from the value syntax (no operator words):
  *
- *   tool_call.name:bash AND tool_call.args:contains:(rm OR curl OR wget)
- *   content:matches:/secret-\d+/
- *   tool_call.server:""              (empty value matches native tools)
- *   tool_call.args.$.scope:in:(all OR everything)
+ *   field:value          equals            field:*value*   contains
+ *   -field:value         not equals        field:value*    starts with
+ *   field:/regex/        regex             field:*value    ends with
+ *   field:(a OR b)       any of (in)       field:*         field present
+ *   field:(*a* OR *b*)   contains any      -field:*value*  not contains
+ *
+ * Conditions join with a single AND or OR (the backend stores a flat list — NOT
+ * and grouping parens are rejected; value unions still use balanced ( )).
  */
 
 export type QueryCategory = "prompt" | "tool";
@@ -80,46 +81,9 @@ export const QUERY_TARGETS: QueryTarget[] = [
   },
 ];
 
-export type QueryOp = { token: string; op: MatchOp; description: string };
-
-export const QUERY_OPS: QueryOp[] = [
-  {
-    token: "equals",
-    op: "equals",
-    description: "exact value (empty matches native)",
-  },
-  {
-    token: "not_equals",
-    op: "not_equals",
-    description: "any value except this",
-  },
-  {
-    token: "contains",
-    op: "contains",
-    description: "substring; (a OR b) matches any",
-  },
-  {
-    token: "not_contains",
-    op: "not_contains",
-    description: "matches none of the substrings",
-  },
-  { token: "in", op: "in", description: "exactly one of (a OR b)" },
-  { token: "starts_with", op: "starts_with", description: "value is a prefix" },
-  { token: "ends_with", op: "ends_with", description: "value is a suffix" },
-  { token: "matches", op: "regex", description: "/RE2 regex/" },
-  { token: "exists", op: "exists", description: "field is present (no value)" },
-];
-
-const TOKEN_BY_OP = new Map<MatchOp, string>(
-  QUERY_OPS.map((o) => [o.op, o.token]),
-);
-const OP_BY_TOKEN = new Map<string, MatchOp>(
-  QUERY_OPS.map((o) => [o.token, o.op]),
-);
 const BACKEND_TO_TARGET = new Map<MatchTarget, QueryTarget>(
   QUERY_TARGETS.map((t) => [t.backend, t]),
 );
-const UNION_OPS = new Set<MatchOp>(["contains", "not_contains", "in"]);
 
 export type ParsedQuery = {
   conditions: RiskMatchCondition[];
@@ -136,8 +100,6 @@ export function parseMatchQuery(input: string): ParsedQuery {
       error: "Add at least one condition",
     };
   }
-  // NOT and grouping parens aren't supported yet (the backend stores a flat
-  // list); value unions still use balanced ( ).
   if (/\bNOT\b/i.test(trimmed)) {
     return {
       conditions: [],
@@ -147,8 +109,9 @@ export function parseMatchQuery(input: string): ParsedQuery {
   }
 
   const split = splitClauses(trimmed);
-  if (split.error)
+  if (split.error) {
     return { conditions: [], combine: split.combine, error: split.error };
+  }
 
   const conditions: RiskMatchCondition[] = [];
   for (const clause of split.clauses) {
@@ -171,24 +134,50 @@ export function matchQueryFromConditions(
 }
 
 function fieldName(c: RiskMatchCondition): string {
-  const target = BACKEND_TO_TARGET.get(c.target);
-  const base = target?.name ?? c.target;
+  const base = BACKEND_TO_TARGET.get(c.target)?.name ?? c.target;
   if (c.target === "tool_args" && c.path) return `${base}.${c.path}`;
   return base;
 }
 
-function serializeClause(c: RiskMatchCondition): string {
-  const field = fieldName(c);
-  if (c.op === "exists") return `${field}:exists`;
-
+function operandList(c: RiskMatchCondition): string[] {
   const values = (c.values ?? []).filter((v) => v.trim());
-  if (UNION_OPS.has(c.op) && values.length > 0) {
-    const body = values.length === 1 ? values[0] : `(${values.join(" OR ")})`;
-    return `${field}:${TOKEN_BY_OP.get(c.op)}:${body}`;
+  if (values.length > 0) return values;
+  return c.value ? [c.value] : [];
+}
+
+export function serializeClause(c: RiskMatchCondition): string {
+  const field = fieldName(c);
+  switch (c.op) {
+    case "exists":
+      return `${field}:*`;
+    case "regex":
+      return `${field}:/${c.value ?? ""}/`;
+    case "equals":
+      return `${field}:${quoteValue(c.value ?? "")}`;
+    case "not_equals":
+      return `-${field}:${quoteValue(c.value ?? "")}`;
+    case "starts_with":
+      return `${field}:${quoteValue(c.value ?? "")}*`;
+    case "ends_with":
+      return `${field}:*${quoteValue(c.value ?? "")}`;
+    case "contains":
+    case "not_contains": {
+      const prefix = c.op === "not_contains" ? "-" : "";
+      const vals = operandList(c);
+      const body =
+        vals.length === 1
+          ? `*${vals[0]}*`
+          : `(${vals.map((v) => `*${v}*`).join(" OR ")})`;
+      return `${prefix}${field}:${body}`;
+    }
+    case "in":
+    case "keyword": {
+      const vals = operandList(c);
+      return `${field}:(${vals.join(" OR ")})`;
+    }
+    case "glob":
+      return `${field}:${c.value ?? ""}`;
   }
-  if (c.op === "regex") return `${field}:matches:/${c.value ?? ""}/`;
-  if (c.op === "equals") return `${field}:${quoteValue(c.value ?? "")}`;
-  return `${field}:${TOKEN_BY_OP.get(c.op)}:${quoteValue(c.value ?? "")}`;
 }
 
 function quoteValue(v: string): string {
@@ -261,39 +250,24 @@ function connectorAt(
 }
 
 function parseClause(clause: string): RiskMatchCondition | string {
-  const trimmed = clause.trim();
-  const colon = trimmed.indexOf(":");
-  if (colon === -1) {
-    return `Use field:value in "${trimmed}"`;
+  let s = clause.trim();
+  let negate = false;
+  if (s.startsWith("-")) {
+    negate = true;
+    s = s.slice(1);
   }
-  const fieldRaw = trimmed.slice(0, colon);
-  const resolved = resolveField(fieldRaw);
-  if (!resolved) return `Unknown field "${fieldRaw}"`;
+  const colon = s.indexOf(":");
+  if (colon === -1) return `Use field:value in "${clause.trim()}"`;
+  const resolved = resolveField(s.slice(0, colon));
+  if (!resolved) return `Unknown field "${s.slice(0, colon)}"`;
 
-  const rest = trimmed.slice(colon + 1);
-
-  // field:exists
-  if (rest.toLowerCase() === "exists") {
-    return makeCondition(resolved, "exists", "");
-  }
-
-  // Does `rest` start with an explicit operator token (`op:...`)?
-  const opColon = rest.indexOf(":");
-  if (opColon !== -1) {
-    const maybeOp = rest.slice(0, opColon);
-    const op = OP_BY_TOKEN.get(maybeOp.toLowerCase());
-    if (op) {
-      return makeCondition(resolved, op, rest.slice(opColon + 1));
-    }
-  }
-  // Otherwise treat the whole remainder as an equals value (Datadog shorthand).
-  return makeCondition(resolved, "equals", rest);
+  const val = s.slice(colon + 1).trim();
+  return makeCondition(resolved, val, negate);
 }
 
 function resolveField(
   raw: string,
 ): { target: QueryTarget; path: string } | null {
-  // Longest-prefix match so tool_call.args.$.x resolves to tool_call.args.
   let best: QueryTarget | null = null;
   for (const t of QUERY_TARGETS) {
     if (raw === t.name || (t.hasPath && raw.startsWith(`${t.name}.`))) {
@@ -310,38 +284,76 @@ function resolveField(
 
 function makeCondition(
   resolved: { target: QueryTarget; path: string },
-  op: MatchOp,
-  rawValue: string,
-): RiskMatchCondition {
-  const condition: RiskMatchCondition = { target: resolved.target.backend, op };
-  if (resolved.path) condition.path = resolved.path;
-  if (op === "exists") return condition;
+  rawVal: string,
+  negate: boolean,
+): RiskMatchCondition | string {
+  const base: RiskMatchCondition = {
+    target: resolved.target.backend,
+    op: "equals",
+  };
+  if (resolved.path) base.path = resolved.path;
 
-  if (op === "regex") {
-    condition.value = stripRegexSlashes(rawValue.trim());
-    return condition;
+  // field:*  → exists
+  if (rawVal === "*") {
+    if (negate) return "Use -field:value to negate, not -field:*";
+    return { ...base, op: "exists" };
   }
-  if (UNION_OPS.has(op)) {
-    condition.values = parseUnion(rawValue);
-    return condition;
+  // field:/regex/
+  if (rawVal.length >= 2 && rawVal.startsWith("/") && rawVal.endsWith("/")) {
+    if (negate) return "Negation isn't supported with /regex/";
+    return { ...base, op: "regex", value: rawVal.slice(1, -1) };
   }
-  condition.value = unquote(rawValue.trim());
-  return condition;
+  // field:(a OR b)  → union
+  if (rawVal.startsWith("(") && rawVal.endsWith(")")) {
+    const terms = parseUnionTerms(rawVal);
+    if (terms.every((t) => isWrappedStar(t))) {
+      return {
+        ...base,
+        op: negate ? "not_contains" : "contains",
+        values: terms.map(stripStars),
+      };
+    }
+    if (negate) return "Negation isn't supported with (a OR b)";
+    return { ...base, op: "in", values: terms.map(unquote) };
+  }
+  // single value with wildcards
+  if (isWrappedStar(rawVal)) {
+    return {
+      ...base,
+      op: negate ? "not_contains" : "contains",
+      value: stripStars(rawVal),
+    };
+  }
+  if (rawVal.endsWith("*") && !rawVal.startsWith("*")) {
+    if (negate) return "Negation isn't supported with starts-with (value*)";
+    return { ...base, op: "starts_with", value: unquote(rawVal.slice(0, -1)) };
+  }
+  if (rawVal.startsWith("*") && !rawVal.endsWith("*")) {
+    if (negate) return "Negation isn't supported with ends-with (*value)";
+    return { ...base, op: "ends_with", value: unquote(rawVal.slice(1)) };
+  }
+  return {
+    ...base,
+    op: negate ? "not_equals" : "equals",
+    value: unquote(rawVal),
+  };
 }
 
-function parseUnion(raw: string): string[] {
+function parseUnionTerms(raw: string): string[] {
   let s = raw.trim();
   if (s.startsWith("(") && s.endsWith(")")) s = s.slice(1, -1);
   return s
     .split(/\s+OR\s+|,/i)
-    .map((v) => unquote(v.trim()))
+    .map((v) => v.trim())
     .filter(Boolean);
 }
 
-function stripRegexSlashes(v: string): string {
-  if (v.length >= 2 && v.startsWith("/") && v.endsWith("/"))
-    return v.slice(1, -1);
-  return v;
+function isWrappedStar(v: string): boolean {
+  return v.length >= 2 && v.startsWith("*") && v.endsWith("*");
+}
+
+function stripStars(v: string): string {
+  return unquote(v.replace(/^\*+/, "").replace(/\*+$/, ""));
 }
 
 function unquote(s: string): string {
@@ -357,10 +369,12 @@ function unquote(s: string): string {
 export type QuerySuggestion = {
   label: string;
   description: string;
-  /** right-aligned category/group label (Datadog facet style). */
+  /** right-aligned group label (Datadog facet style). */
   group?: string;
   /** Text inserted in place of the current partial token. */
   insert: string;
+  /** Caret position relative to the inserted text (defaults to its end). */
+  caretOffset?: number;
 };
 
 export function matchQuerySuggestions(
@@ -370,85 +384,72 @@ export function matchQuerySuggestions(
   const before = input.slice(0, caret);
   const clauseStart = lastConnectorEnd(before);
   const clause = before.slice(clauseStart);
-  // The token currently under edit (no whitespace, respecting an open union paren).
   const partial = /(\S*)$/.exec(before)?.[1] ?? "";
   const from = caret - partial.length;
 
+  const fieldPart = partial.startsWith("-") ? partial.slice(1) : partial;
   const colon = clause.indexOf(":");
+
+  // Still typing the field (no committed colon yet) → suggest fields.
   if (colon === -1 || clause.length - partial.length < colon + 1) {
-    // Still typing the field (no committed colon yet).
-    return { from, suggestions: targetSuggestions(partial) };
+    return { from, suggestions: targetSuggestions(fieldPart, partial) };
   }
-
-  const fieldRaw = clause.slice(0, colon);
-  const afterField = clause.slice(colon + 1);
-  const opColon = afterField.indexOf(":");
-  if (opColon === -1 || afterField.length - partial.length < opColon + 1) {
-    // After `field:` — suggest operators (or type a value for equals).
-    return { from, suggestions: opSuggestions(partial) };
-  }
-  // After `field:op:` — value hints.
-  return {
-    from,
-    suggestions: valueSuggestions(
-      fieldRaw,
-      afterField.slice(0, opColon),
-      partial,
-    ),
-  };
+  // After `field:` → value templates (no operator words).
+  const typedValue = clause.slice(colon + 1);
+  return { from, suggestions: valueSuggestions(typedValue) };
 }
 
-function targetSuggestions(partial: string): QuerySuggestion[] {
-  const lower = partial.toLowerCase();
-  return QUERY_TARGETS.filter((t) => t.name.startsWith(lower)).map((t) => ({
-    label: t.name,
-    description: t.description,
-    group: t.category === "tool" ? "Tool" : "Prompt",
-    insert: t.hasPath && t.name === lower ? `${t.name}.` : `${t.name}:`,
-  }));
-}
-
-function opSuggestions(partial: string): QuerySuggestion[] {
-  const lower = partial.toLowerCase();
-  return QUERY_OPS.filter((o) => o.token.startsWith(lower)).map((o) => ({
-    label: o.token,
-    description: o.description,
-    group: "Operator",
-    insert: o.op === "exists" ? `${o.token} ` : `${o.token}:`,
-  }));
-}
-
-function valueSuggestions(
-  _field: string,
-  opToken: string,
+function targetSuggestions(
+  fieldPart: string,
   partial: string,
 ): QuerySuggestion[] {
-  const op = OP_BY_TOKEN.get(opToken.toLowerCase());
-  const hints: QuerySuggestion[] = [];
-  if (op && UNION_OPS.has(op)) {
-    hints.push({
-      label: "(a OR b)",
-      description: "match any of a list",
+  const lower = fieldPart.toLowerCase();
+  const negPrefix = partial.startsWith("-") ? "-" : "";
+  return QUERY_TARGETS.filter((t) => t.name.startsWith(lower)).map((t) => ({
+    label: `${negPrefix}${t.name}`,
+    description: t.description,
+    group: t.category === "tool" ? "Tool" : "Prompt",
+    insert:
+      t.hasPath && t.name === lower
+        ? `${negPrefix}${t.name}.`
+        : `${negPrefix}${t.name}:`,
+  }));
+}
+
+function valueSuggestions(typed: string): QuerySuggestion[] {
+  // Only offer scaffolds before the user starts typing the value.
+  if (typed.trim() !== "") return [];
+  return [
+    { label: "value", description: "equals", group: "Value", insert: "" },
+    {
+      label: "*value*",
+      description: "contains",
       group: "Value",
-      insert: "(",
-    });
-  }
-  if (op === "regex") {
-    hints.push({
+      insert: "**",
+      caretOffset: 1,
+    },
+    { label: "value*", description: "starts with", group: "Value", insert: "" },
+    {
       label: "/regex/",
-      description: "RE2 pattern between slashes",
+      description: "regex",
       group: "Value",
-      insert: "/",
-    });
-  }
-  if (!partial)
-    hints.push({
-      label: "…",
-      description: "type a value",
+      insert: "//",
+      caretOffset: 1,
+    },
+    {
+      label: "(a OR b)",
+      description: "any of",
       group: "Value",
-      insert: "",
-    });
-  return hints;
+      insert: "()",
+      caretOffset: 1,
+    },
+    {
+      label: "*",
+      description: "field is present",
+      group: "Value",
+      insert: "*",
+    },
+  ].filter((s) => s.insert !== "");
 }
 
 function lastConnectorEnd(before: string): number {

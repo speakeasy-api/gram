@@ -25,7 +25,7 @@ export function MatchQueryInput({
   const applySuggestion = (s: QuerySuggestion) => {
     const next = value.slice(0, from) + s.insert + value.slice(caret);
     onChange(next);
-    const newCaret = from + s.insert.length;
+    const newCaret = from + (s.caretOffset ?? s.insert.length);
     setActive(-1);
     requestAnimationFrame(() => {
       const el = inputRef.current;
@@ -78,7 +78,7 @@ export function MatchQueryInput({
         value={value}
         spellCheck={false}
         autoComplete="off"
-        placeholder="tool_call.name:bash AND tool_call.args:contains:(rm OR curl)"
+        placeholder="tool_call.name:bash AND tool_call.args:(*rm* OR *curl*)"
         onChange={(e) => {
           onChange(e.target.value);
           syncCaret(e.target);
@@ -104,7 +104,7 @@ export function MatchQueryInput({
           error && "border-destructive",
         )}
       />
-      {open && suggestions.length > 0 && (
+      {open && (
         <div className="border-border bg-popover absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-md border py-1 shadow-md">
           {suggestions.map((s, i) => (
             <button
@@ -131,11 +131,11 @@ export function MatchQueryInput({
               )}
             </button>
           ))}
-          <div className="text-muted-foreground/70 border-border mt-1 flex justify-between gap-3 border-t px-3 pt-1 text-[10px]">
-            <span>
-              List <code>target:in:(a OR b)</code> · Regex{" "}
-              <code>target:matches:/.../</code>
-            </span>
+          <div className="text-muted-foreground/70 border-border mt-1 border-t px-3 pt-1 text-[10px] leading-relaxed">
+            <code>field:val</code> is · <code>*val*</code> contains ·{" "}
+            <code>val*</code> starts · <code>/re/</code> regex ·{" "}
+            <code>(a OR b)</code> any · <code>-field:</code> not ·{" "}
+            <code>field:*</code> exists
           </div>
         </div>
       )}
