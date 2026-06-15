@@ -20,7 +20,7 @@ melange = "0.40.4"
 nodejs = "24.16.0"
 "github:pnpm/pnpm" = "11.3.0"
 watchexec = "2.5.0"
-uv = "0.10.9"
+uv = "0.11.21"
 yq = "4.52.4"
 hk = "1.46.0"
 pkl = "0.31.0"
@@ -30,6 +30,7 @@ pkl = "0.31.0"
 "github:sqlc-dev/sqlc" = "1.31.1"
 "github:gotestyourself/gotestsum" = "1.13.0"
 buf = "1.69.0"
+ruff = "0.15.16"
 
 # ℹ️ The settings below are sensible defaults for local development. When
 # deploying to production, you will want to configure these more carefully.
