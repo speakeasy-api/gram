@@ -22,6 +22,47 @@ export interface RecentEntry {
 const MAX_RECENTS = 6;
 const UPDATED_EVENT = "gram:recents-updated";
 
+// --- Human label overrides for opaque-id detail pages ----------------------
+//
+// Visits are recorded centrally in App from the active route, which can only
+// derive a label from the URL. For pages keyed by an opaque id — e.g. the
+// assistant detail page at /assistants/<uuid> — that yields "Assistant · <id>"
+// instead of the assistant's name. Such pages register a readable label here
+// once their data resolves; App consults it when recording the visit and
+// re-records when an override arrives asynchronously.
+const labelOverrides = new Map<string, string>();
+export const RECENTS_LABEL_OVERRIDE_EVENT = "gram:recents-label-override";
+
+/** Register a human label for a visited href (keyed by pathname). */
+export function setRecentLabelOverride(href: string, label: string): void {
+  if (labelOverrides.get(href) === label) return;
+  labelOverrides.set(href, label);
+  window.dispatchEvent(
+    new CustomEvent(RECENTS_LABEL_OVERRIDE_EVENT, { detail: { href } }),
+  );
+}
+
+/** Read a previously-registered label override for an href, if any. */
+export function getRecentLabelOverride(href: string): string | undefined {
+  return labelOverrides.get(href);
+}
+
+/**
+ * Register a readable Recents label for the current detail page. Pages keyed by
+ * an opaque id call this once their record loads so the command palette's
+ * "Recently Visited" list shows the resource name rather than a raw id. No-ops
+ * until `label` is available.
+ */
+export function useRecentLabelOverride(
+  href: string,
+  label: string | undefined,
+): void {
+  useEffect(() => {
+    if (!label) return;
+    setRecentLabelOverride(href, label);
+  }, [href, label]);
+}
+
 /**
  * The current user's id, used to scope recents per authenticated user. Derived
  * from the SDK session hook so it works outside the `AuthProvider` (the command

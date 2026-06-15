@@ -19,7 +19,11 @@ import {
 } from "react-router";
 import { AppLayout, LoginCheck, OrgLayout } from "./components/app-layout.tsx";
 import { CommandPalette } from "./components/command-palette";
-import { recordVisit } from "./components/command-palette/recentlyVisited";
+import {
+  getRecentLabelOverride,
+  recordVisit,
+  RECENTS_LABEL_OVERRIDE_EVENT,
+} from "./components/command-palette/recentlyVisited";
 import { useUser } from "./contexts/Auth";
 import { useProjectNavRoutes } from "./hooks/useProjectNavRoutes";
 import { useRBAC } from "./hooks/useRBAC";
@@ -181,14 +185,37 @@ const RouteProvider = () => {
       Object.values(orgRoutes).find((r) => r.active && !r.external);
     if (!active) return;
     const iconName = (active as unknown as { icon?: string }).icon;
-    recordVisit(recentsUserId, orgSlug, projectSlug, {
-      label: pageLabel(active.title, active.href(), location.pathname),
-      // Recents are page-level: record the pathname without query params so a
-      // page and its deep-linked item state (e.g. ?policy=<id>) collapse into a
-      // single entry instead of appearing as duplicates with the same label.
-      href: location.pathname,
-      icon: typeof iconName === "string" ? iconName : undefined,
-    });
+    // Recents are page-level: record the pathname without query params so a
+    // page and its deep-linked item state (e.g. ?policy=<id>) collapse into a
+    // single entry instead of appearing as duplicates with the same label.
+    const href = location.pathname;
+    const record = (label: string) =>
+      recordVisit(recentsUserId, orgSlug, projectSlug, {
+        label,
+        href,
+        icon: typeof iconName === "string" ? iconName : undefined,
+      });
+
+    // Prefer a label a detail page registered for this href (e.g. the assistant
+    // name) over the URL-derived fallback, which for id-keyed pages is an opaque
+    // id like "Assistant · 0190abcd".
+    record(
+      getRecentLabelOverride(href) ??
+        pageLabel(active.title, active.href(), location.pathname),
+    );
+
+    // A detail page may register its label *after* this first record (its data
+    // loads async). Re-record when that happens so the entry upgrades from the
+    // id fallback to the resource name.
+    const onOverride = (event: Event) => {
+      const detail = (event as CustomEvent<{ href: string }>).detail;
+      if (detail?.href !== href) return;
+      const label = getRecentLabelOverride(href);
+      if (label) record(label);
+    };
+    window.addEventListener(RECENTS_LABEL_OVERRIDE_EVENT, onOverride);
+    return () =>
+      window.removeEventListener(RECENTS_LABEL_OVERRIDE_EVENT, onOverride);
   }, [
     location.pathname,
     routes,
