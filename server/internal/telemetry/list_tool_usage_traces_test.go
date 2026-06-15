@@ -1,6 +1,8 @@
 package telemetry_test
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -8,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -229,4 +232,135 @@ func TestListToolUsageTraces_PaginatesWithOpaqueCursor(t *testing.T) {
 		require.False(t, seen[trace.ID])
 		seen[trace.ID] = true
 	}
+}
+
+func TestListToolUsageTraces_PrefersWorstStatusInGroupedTrace(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+	traceID := uuid.New().String()
+
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      projectID,
+		deploymentID:   uuid.New().String(),
+		timestamp:      now.Add(-2 * time.Minute),
+		traceID:        traceID,
+		userEmail:      "alice@example.com",
+		hookSource:     "cursor",
+		toolSource:     "shadow-db",
+		toolName:       "query",
+		result:         `"ok"`,
+		conversationID: "conv-status",
+	})
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      projectID,
+		deploymentID:   uuid.New().String(),
+		timestamp:      now.Add(-1 * time.Minute),
+		traceID:        traceID,
+		userEmail:      "alice@example.com",
+		hookSource:     "cursor",
+		toolSource:     "shadow-db",
+		toolName:       "query",
+		conversationID: "conv-status",
+		customAttrs: map[string]any{
+			"gram.hook.block_reason": "policy denied",
+		},
+	})
+
+	time.Sleep(200 * time.Millisecond)
+
+	result, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{
+		From:  now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:    now.Add(1 * time.Hour).Format(time.RFC3339),
+		Limit: 10,
+	})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Len(t, result.Traces, 1)
+	require.NotNil(t, result.Traces[0].HookStatus)
+	require.Equal(t, "blocked", *result.Traces[0].HookStatus)
+	require.NotNil(t, result.Traces[0].BlockReason)
+	require.Equal(t, "policy denied", *result.Traces[0].BlockReason)
+}
+
+func TestListToolUsageTraces_IncludesTriggerOnlyRowsForTriggerFilter(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	insertTriggerOnlyLog(t, ctx, ti, triggerOnlyLogParams{
+		projectID:         projectID,
+		timestamp:         now.Add(-1 * time.Minute),
+		triggerInstanceID: "trigger_123",
+		triggerEventID:    "event_123",
+		body:              "trigger delivered",
+	})
+
+	time.Sleep(200 * time.Millisecond)
+
+	result, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{
+		From: now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:   now.Add(1 * time.Hour).Format(time.RFC3339),
+		Filters: []*gen.LogFilter{
+			{
+				Path:     "gram.trigger.instance_id",
+				Operator: "eq",
+				Values:   []string{"trigger_123"},
+			},
+		},
+		Limit: 10,
+	})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Len(t, result.Traces, 1)
+	require.Equal(t, gen.ToolUsageTargetType("local_tool"), result.Traces[0].TargetType)
+	require.Equal(t, "local", result.Traces[0].TargetID)
+	require.NotNil(t, result.Traces[0].LogGroup)
+	require.Equal(t, gen.ToolUsageTraceLogGroupKind("trigger_event_id"), result.Traces[0].LogGroup.Kind)
+	require.Equal(t, "event_123", result.Traces[0].LogGroup.Value)
+}
+
+type triggerOnlyLogParams struct {
+	projectID         string
+	timestamp         time.Time
+	triggerInstanceID string
+	triggerEventID    string
+	body              string
+}
+
+func insertTriggerOnlyLog(t *testing.T, ctx context.Context, ti *testInstance, p triggerOnlyLogParams) {
+	t.Helper()
+
+	attrs := map[string]any{
+		"gram.event.source":            "trigger",
+		"gram.trigger.instance_id":     p.triggerInstanceID,
+		"gram.trigger.event_id":        p.triggerEventID,
+		"gram.trigger.delivery_status": "sent",
+	}
+	attrsJSON, err := json.Marshal(attrs)
+	require.NoError(t, err)
+
+	err = ti.chClient.InsertTelemetryLog(ctx, telemetryRepo.InsertTelemetryLogParams{
+		ID:                   uuid.New().String(),
+		TimeUnixNano:         p.timestamp.UnixNano(),
+		ObservedTimeUnixNano: p.timestamp.UnixNano(),
+		SeverityText:         nil,
+		Body:                 p.body,
+		TraceID:              nil,
+		SpanID:               nil,
+		Attributes:           string(attrsJSON),
+		ResourceAttributes:   "{}",
+		GramProjectID:        p.projectID,
+		GramDeploymentID:     nil,
+		GramFunctionID:       nil,
+		GramURN:              "triggers:" + p.triggerEventID,
+		ServiceName:          "gram-triggers",
+		ServiceVersion:       nil,
+		GramChatID:           nil,
+	})
+	require.NoError(t, err)
 }

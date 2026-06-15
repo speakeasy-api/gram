@@ -2681,8 +2681,20 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd).
-		Where("((startsWith(gram_urn, 'tools:') AND toolset_slug != '') OR (event_source = 'hook' AND tool_name != ''))")
+		Where("time_unix_nano <= ?", arg.TimeEnd)
+
+	sourceCondition := "((startsWith(gram_urn, 'tools:') AND toolset_slug != '') OR (event_source = 'hook' AND tool_name != ''))"
+	includeTriggerRows := arg.Query != ""
+	for _, filter := range arg.Filters {
+		if strings.HasPrefix(filter.Path, "gram.trigger.") {
+			includeTriggerRows = true
+			break
+		}
+	}
+	if includeTriggerRows {
+		sourceCondition = "(" + sourceCondition + " OR event_source = 'trigger')"
+	}
+	rawSB = rawSB.Where(sourceCondition)
 
 	if arg.Query != "" {
 		rawSB = rawSB.Where(
@@ -2813,6 +2825,7 @@ SELECT
 	event_source,
 	toInt32OrNull(http_status_code_raw) AS http_status_code,
 	if(event_source = 'hook', CAST(multiIf(block_reason != '', 'blocked', hook_error != '', 'failure', tool_result != '', 'success', 'pending') AS Nullable(String)), CAST(NULL AS Nullable(String))) AS hook_status,
+	if(event_source = 'hook', CAST(multiIf(block_reason != '', 3, hook_error != '', 2, tool_result != '', 1, 0) AS Nullable(UInt8)), CAST(NULL AS Nullable(UInt8))) AS hook_status_rank,
 	nullIf(block_reason, '') AS block_reason
 FROM (%s)`, logGroupKind, logGroupValue, chMultiIf(skillName+" != ''", skillName, "tool_name"), targetType, targetKind, targetID, targetLabel, userKey, userKey, userKind, sourceSQL)
 
@@ -2843,9 +2856,15 @@ normalized_traces AS (
 		user_kind,
 		any(hook_source) AS hook_source,
 		any(event_source) AS event_source,
-		any(http_status_code) AS http_status_code,
-		any(hook_status) AS hook_status,
-		any(block_reason) AS block_reason
+		max(http_status_code) AS http_status_code,
+		multiIf(
+			ifNull(max(hook_status_rank), toUInt8(255)) = 3, CAST('blocked' AS Nullable(String)),
+			ifNull(max(hook_status_rank), toUInt8(255)) = 2, CAST('failure' AS Nullable(String)),
+			ifNull(max(hook_status_rank), toUInt8(255)) = 1, CAST('success' AS Nullable(String)),
+			ifNull(max(hook_status_rank), toUInt8(255)) = 0, CAST('pending' AS Nullable(String)),
+			CAST(NULL AS Nullable(String))
+		) AS hook_status,
+		nullIf(anyIf(ifNull(block_reason, ''), ifNull(hook_status_rank, toUInt8(0)) = 3 AND ifNull(block_reason, '') != ''), '') AS block_reason
 	FROM raw_normalized_events
 	GROUP BY log_group_kind, log_group_value, target_type, target_kind, target_id, target_label, tool_name, user_kind, user_key, user_label
 )`
