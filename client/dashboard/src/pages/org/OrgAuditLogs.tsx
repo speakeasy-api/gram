@@ -2,18 +2,13 @@ import { useQueryState } from "nuqs";
 import type { MCPServerEntry } from "@gram-ai/elements";
 import { recommended } from "@gram-ai/elements/plugins";
 import { RequireScope } from "@/components/require-scope";
-import { InsightsConfig, InsightsProvider } from "@/components/insights-dock";
-import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
+import {
+  InsightsConfig,
+  InsightsProvider,
+} from "@/components/insights-sidebar";
 import { Page } from "@/components/page-layout";
 import { Heading } from "@/components/ui/heading";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { Switch } from "@/components/ui/switch";
@@ -41,50 +36,25 @@ import React, {
 } from "react";
 import { Link } from "react-router";
 import {
-  getActionCategory,
-  getActionColorConfig,
-} from "@/lib/audit-log-colors";
-import {
   formatAuditAction,
   getActorLabel,
   renderVerb,
 } from "@/lib/audit-log-format";
 import { StructuredDiff } from "@/components/auditlogs/structured-diff";
+import {
+  ActionBadge,
+  ActionDot,
+  AuditFeedFooter,
+  DateGroupHeader,
+  FacetSelect,
+} from "@/components/auditlogs/feed";
+import {
+  formatDateHeader,
+  formatTimeOnly,
+  groupLogsByDate,
+  type FacetOption,
+} from "@/lib/audit-log-feed";
 import { cn, getServerURL } from "@/lib/utils";
-
-type FacetOption = {
-  count?: number;
-  displayName: string;
-  value: string;
-};
-
-function formatTimeOnly(date: Date, mode: "utc" | "local") {
-  return new Intl.DateTimeFormat(undefined, {
-    ...(mode === "utc" ? { timeZone: "UTC" } : {}),
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  }).format(date);
-}
-
-function formatDateHeader(date: Date, mode: "utc" | "local") {
-  return new Intl.DateTimeFormat(undefined, {
-    ...(mode === "utc" ? { timeZone: "UTC" } : {}),
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  }).format(date);
-}
-
-function getDateKey(date: Date, mode: "utc" | "local") {
-  if (mode === "utc") {
-    return date.toISOString().slice(0, 10);
-  }
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
 
 function StrongName({ children }: { children: ReactNode }) {
   return <strong className="text-foreground font-semibold">{children}</strong>;
@@ -259,35 +229,6 @@ function hasDiff(log: AuditLog): boolean {
   return log.beforeSnapshot != null || log.afterSnapshot != null;
 }
 
-export function ActionBadge({ action }: { action: string }): React.JSX.Element {
-  const category = getActionCategory(action);
-  const colors = getActionColorConfig(category);
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[11px] font-medium",
-        colors.bg,
-        colors.text,
-      )}
-    >
-      {formatAuditAction(action)}
-    </span>
-  );
-}
-
-export function ActionDot({ action }: { action: string }): React.JSX.Element {
-  const category = getActionCategory(action);
-  const colors = getActionColorConfig(category);
-  return (
-    <span
-      className={cn(
-        "mt-[3px] inline-block size-2 shrink-0 rounded-full",
-        colors.dot,
-      )}
-    />
-  );
-}
-
 function AuditLogRow({
   log,
   orgSlug,
@@ -372,96 +313,6 @@ function AuditLogRow({
       )}
     >
       {rowContent}
-    </div>
-  );
-}
-
-function DateGroupHeader({
-  date,
-  mode,
-}: {
-  date: Date;
-  mode: "utc" | "local";
-}) {
-  return (
-    <div className="flex items-center gap-3 px-4 py-2">
-      <span className="text-muted-foreground shrink-0 text-[11px] font-semibold tracking-wide uppercase">
-        {formatDateHeader(date, mode)}
-      </span>
-      <div className="bg-border h-px flex-1" />
-    </div>
-  );
-}
-
-type DateGroup = {
-  key: string;
-  date: Date;
-  logs: AuditLog[];
-};
-
-function groupLogsByDate(logs: AuditLog[], mode: "utc" | "local"): DateGroup[] {
-  const groups: DateGroup[] = [];
-  const keyMap = new Map<string, DateGroup>();
-
-  for (const log of logs) {
-    const key = getDateKey(log.createdAt, mode);
-    let group = keyMap.get(key);
-    if (!group) {
-      group = { key, date: log.createdAt, logs: [] };
-      groups.push(group);
-      keyMap.set(key, group);
-    }
-    group.logs.push(log);
-  }
-
-  return groups;
-}
-
-function FacetSelect({
-  label,
-  value,
-  onValueChange,
-  placeholder,
-  allLabel,
-  options,
-}: {
-  label: string;
-  value: string;
-  onValueChange: (value: string) => void;
-  placeholder: string;
-  allLabel: string;
-  options: Array<
-    Pick<FacetOption, "displayName" | "value"> & {
-      count?: number;
-    }
-  >;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <Type small muted>
-        {label}
-      </Type>
-      <Select value={value} onValueChange={onValueChange}>
-        <SelectTrigger size="sm" className="bg-background min-w-[220px]">
-          <SelectValue placeholder={placeholder} />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">{allLabel}</SelectItem>
-          {options.map((option) => (
-            <SelectItem
-              key={option.value}
-              value={option.value}
-              description={
-                option.count == null
-                  ? undefined
-                  : `${option.count.toLocaleString()} audit log${option.count === 1 ? "" : "s"}`
-              }
-            >
-              {option.displayName}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
     </div>
   );
 }
@@ -554,7 +405,26 @@ function AuditLogsInsightsWrapper({ children }: { children: React.ReactNode }) {
       mcpConfig={mcpConfig}
       title="Audit Log Insights"
       subtitle="Ask about organization activity, changes, and audit events."
-      suggestions={INSIGHTS_SUGGESTIONS["org/audit-logs"]}
+      suggestions={[
+        {
+          title: "Recent changes",
+          label: "What changed recently?",
+          prompt:
+            "Summarize the most significant recent changes across the organization based on the audit logs.",
+        },
+        {
+          title: "Security review",
+          label: "Security-relevant events",
+          prompt:
+            "What security-relevant events have occurred recently? Look for API key changes, permission modifications, or unusual patterns.",
+        },
+        {
+          title: "Active users",
+          label: "Most active team members",
+          prompt:
+            "Who have been the most active users recently and what kinds of changes have they been making?",
+        },
+      ]}
     >
       {children}
     </InsightsProvider>
@@ -1205,41 +1075,15 @@ function OrgAuditLogsInner() {
           )}
         </div>
 
-        {(logs.length > 0 || isFetchingNextPage) && (
-          <div className="bg-muted/20 flex items-center justify-between border-t px-4 py-3">
-            <Type muted small>
-              {logs.length.toLocaleString()} audit log
-              {logs.length === 1 ? "" : "s"}
-            </Type>
-
-            {hasNextPage ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  void fetchNextPage();
-                }}
-                disabled={isFetchingNextPage}
-              >
-                {isFetchingNextPage ? (
-                  <>
-                    <Icon
-                      name="loader-circle"
-                      className="size-4 animate-spin"
-                    />
-                    Loading...
-                  </>
-                ) : (
-                  "Load more"
-                )}
-              </Button>
-            ) : (
-              <Type muted small>
-                {isFetching ? "Refreshing..." : "End of audit log history"}
-              </Type>
-            )}
-          </div>
-        )}
+        <AuditFeedFooter
+          count={logs.length}
+          hasNextPage={hasNextPage ?? false}
+          isFetching={isFetching}
+          isFetchingNextPage={isFetchingNextPage}
+          onLoadMore={() => {
+            void fetchNextPage();
+          }}
+        />
       </div>
     </div>
   );

@@ -176,3 +176,35 @@ func TestAuditService_ListFacets_OrganizationScopeIncludesAllProjects(t *testing
 	require.Equal(t, "project:delete", result.Actions[1].Value)
 	require.EqualValues(t, 1, result.Actions[1].Count)
 }
+
+func TestAuditService_ListFacets_ExcludesAssistantEvents(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAuditService(t)
+	authCtx := testAuthContext(t, ctx)
+
+	seedAssistantToolCallLog(t, ctx, ti, authCtx, uuid.New(), "send_message")
+
+	insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID:   authCtx.ActiveOrganizationID,
+		projectID:        uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		actorID:          "user:alice",
+		actorType:        "user",
+		actorDisplayName: new("Alice"),
+		action:           "project:update",
+		subjectID:        uuid.NewString(),
+		subjectType:      "project",
+	})
+
+	result, err := ti.service.ListFacets(ctx, &gen.ListFacetsPayload{
+		ApikeyToken:  nil,
+		SessionToken: nil,
+		ProjectSlug:  nil,
+	})
+	require.NoError(t, err)
+
+	require.Len(t, result.Actors, 1, "assistant tool call actors must not appear in facets")
+	require.Equal(t, "user:alice", result.Actors[0].Value)
+	require.Len(t, result.Actions, 1, "assistant tool call actions must not appear in facets")
+	require.Equal(t, "project:update", result.Actions[0].Value)
+}

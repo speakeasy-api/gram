@@ -792,6 +792,56 @@ WHERE r.backend_metadata_json <> '{}'::jsonb
 ORDER BY r.updated_at ASC
 LIMIT @limit_count;
 
+-- name: CountInFlightAssistantThreadEvents :one
+-- Counts events that are queued for or currently using the assistant's
+-- runtime. The image recycle sweep skips assistants with any in-flight
+-- events: their turns are about to hit the VM (the runner's idle clock
+-- only clears on /turn enqueue) and their admissions recycle the image
+-- lazily anyway.
+SELECT COUNT(*)
+FROM assistant_thread_events
+WHERE project_id = @project_id
+  AND assistant_id = @assistant_id
+  AND deleted IS FALSE
+  AND status IN (@pending_status, @processing_status);
+
+-- name: UpdateActiveAssistantRuntimeMetadata :execrows
+-- Persists post-recycle backend metadata only while the row is still live.
+-- Zero rows affected means the warm timer expired the runtime mid-recycle;
+-- the caller must undo the machine restart instead of recording it.
+UPDATE assistant_runtimes
+SET
+  backend_metadata_json = @backend_metadata_json,
+  updated_at = clock_timestamp()
+WHERE id = @runtime_id
+  AND project_id = @project_id
+  AND state = @active_state
+  AND deleted IS FALSE;
+
+-- name: ListActiveAssistantRuntimesForImageRecycle :many
+-- Returns live v2 runtime rows that carry backend metadata so a deploy-time
+-- sweep can roll their machines onto the current runtime image. Only `active`
+-- rows qualify: `starting` rows are mid-boot and already pull the current
+-- image, while expiring/stopped rows are torn down or recycled lazily on the
+-- next admission. Rows orphaned by a deleted assistant are excluded: they
+-- belong to the deleted-assistant janitor, and recycling them would bump
+-- updated_at and postpone the inactivity-based reap.
+SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
+FROM assistant_runtimes r
+WHERE r.state = @active_state
+  AND r.runtime_version = 2
+  AND r.deleted IS FALSE
+  AND r.ended IS FALSE
+  AND r.backend_metadata_json <> '{}'::jsonb
+  AND NOT EXISTS (
+    SELECT 1
+    FROM assistants a
+    WHERE a.id = r.assistant_id
+      AND a.project_id = r.project_id
+      AND a.deleted IS TRUE
+  )
+ORDER BY r.updated_at ASC;
+
 -- name: MarkAssistantRuntimeReaped :exec
 -- Records that the backend resource (e.g. Fly app) for this runtime has
 -- been torn down. Clearing backend_metadata_json removes it from the reap

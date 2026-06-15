@@ -62,6 +62,12 @@ func EncodeListRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.R
 		if p.Action != nil {
 			values.Add("action", *p.Action)
 		}
+		if p.SubjectType != nil {
+			values.Add("subject_type", *p.SubjectType)
+		}
+		if p.SubjectID != nil {
+			values.Add("subject_id", *p.SubjectID)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

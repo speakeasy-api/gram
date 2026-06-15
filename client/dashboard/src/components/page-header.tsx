@@ -1,4 +1,5 @@
 // oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
+import { InsightsTrigger } from "@/components/insights-sidebar";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useOrganization, useProject } from "@/contexts/Auth.tsx";
@@ -8,7 +9,6 @@ import { cn, titleCaseSlug } from "@/lib/utils.ts";
 import React from "react";
 import { Link, useLocation, useParams } from "react-router";
 import { BrandGradientLine } from "./brand-gradient-line.tsx";
-import { InsightsDockShortcutHint } from "./insights-dock-shortcut-hint.tsx";
 import { OnboardingBanner } from "./onboarding-banner.tsx";
 import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge.tsx";
 import { Heading } from "./ui/heading.tsx";
@@ -35,6 +35,11 @@ function PageHeaderComponent({
             className="data-[orientation=vertical]:h-4"
           />
           {children}
+          {/* Insights trigger is pinned to the far right of the bar,
+              outside the breadcrumb's max-width container so it lands at
+              the true right edge on wide viewports. Self-hides when no
+              InsightsSidebar ancestor exists. */}
+          <InsightsTrigger className="ml-auto shrink-0" />
         </div>
       </header>
       {/* Brand gradient signature, relocated here from the old top bar — it now
@@ -221,9 +226,6 @@ function PageHeaderBreadcrumbs({
           </React.Fragment>
         ))}
         {stage && <ReleaseStageBadge stage={stage} />}
-        {/* Cmd+/ hint for the docked Project Assistant composer — lives here
-            (rather than inside the dock's input) so the pill stays clean. */}
-        <InsightsDockShortcutHint className="ml-auto" />
       </div>
     </PageHeader.Title>
   );

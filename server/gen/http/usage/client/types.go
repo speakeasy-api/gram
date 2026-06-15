@@ -12,6 +12,17 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// SetBillingMetadataRequestBody is the type of the "usage" service
+// "setBillingMetadata" endpoint HTTP request body.
+type SetBillingMetadataRequestBody struct {
+	// The contracted monthly tokens under management limit. Omit to clear.
+	MonthlyTokenLimit *int64 `form:"monthly_token_limit,omitempty" json:"monthly_token_limit,omitempty" xml:"monthly_token_limit,omitempty"`
+	// Email address to notify on TUM threshold events. Omit to clear.
+	AlertEmail *string `form:"alert_email,omitempty" json:"alert_email,omitempty" xml:"alert_email,omitempty"`
+	// Day of month (1-31) the billing cycle starts, at 00:00 UTC
+	BillingCycleAnchorDay int `form:"billing_cycle_anchor_day" json:"billing_cycle_anchor_day" xml:"billing_cycle_anchor_day"`
+}
+
 // GetPeriodUsageResponseBody is the type of the "usage" service
 // "getPeriodUsage" endpoint HTTP response body.
 type GetPeriodUsageResponseBody struct {
@@ -31,6 +42,50 @@ type GetPeriodUsageResponseBody struct {
 	IncludedCredits *int `form:"included_credits,omitempty" json:"included_credits,omitempty" xml:"included_credits,omitempty"`
 	// Whether the project has an active subscription
 	HasActiveSubscription *bool `form:"has_active_subscription,omitempty" json:"has_active_subscription,omitempty" xml:"has_active_subscription,omitempty"`
+}
+
+// GetTokensUnderManagementResponseBody is the type of the "usage" service
+// "getTokensUnderManagement" endpoint HTTP response body.
+type GetTokensUnderManagementResponseBody struct {
+	// Start of the active billing cycle
+	PeriodStart *string `form:"period_start,omitempty" json:"period_start,omitempty" xml:"period_start,omitempty"`
+	// End of the active billing cycle (exclusive)
+	PeriodEnd *string `form:"period_end,omitempty" json:"period_end,omitempty" xml:"period_end,omitempty"`
+	// Tokens under management consumed during the active billing cycle
+	Tokens *int64 `form:"tokens,omitempty" json:"tokens,omitempty" xml:"tokens,omitempty"`
+	// The contracted monthly tokens under management limit, if one has been
+	// configured
+	MonthlyTokenLimit *int64 `form:"monthly_token_limit,omitempty" json:"monthly_token_limit,omitempty" xml:"monthly_token_limit,omitempty"`
+	// Day of month (1-31) the billing cycle starts, at 00:00 UTC
+	BillingCycleAnchorDay *int `form:"billing_cycle_anchor_day,omitempty" json:"billing_cycle_anchor_day,omitempty" xml:"billing_cycle_anchor_day,omitempty"`
+	// Email address to notify on TUM threshold events. Only populated for platform
+	// admins.
+	AlertEmail *string `form:"alert_email,omitempty" json:"alert_email,omitempty" xml:"alert_email,omitempty"`
+	// TUM usage per billing cycle for the trailing cycles, oldest first. The last
+	// entry is the active cycle.
+	History []*TUMPeriodResponseBody `form:"history,omitempty" json:"history,omitempty" xml:"history,omitempty"`
+}
+
+// SetBillingMetadataResponseBody is the type of the "usage" service
+// "setBillingMetadata" endpoint HTTP response body.
+type SetBillingMetadataResponseBody struct {
+	// Start of the active billing cycle
+	PeriodStart *string `form:"period_start,omitempty" json:"period_start,omitempty" xml:"period_start,omitempty"`
+	// End of the active billing cycle (exclusive)
+	PeriodEnd *string `form:"period_end,omitempty" json:"period_end,omitempty" xml:"period_end,omitempty"`
+	// Tokens under management consumed during the active billing cycle
+	Tokens *int64 `form:"tokens,omitempty" json:"tokens,omitempty" xml:"tokens,omitempty"`
+	// The contracted monthly tokens under management limit, if one has been
+	// configured
+	MonthlyTokenLimit *int64 `form:"monthly_token_limit,omitempty" json:"monthly_token_limit,omitempty" xml:"monthly_token_limit,omitempty"`
+	// Day of month (1-31) the billing cycle starts, at 00:00 UTC
+	BillingCycleAnchorDay *int `form:"billing_cycle_anchor_day,omitempty" json:"billing_cycle_anchor_day,omitempty" xml:"billing_cycle_anchor_day,omitempty"`
+	// Email address to notify on TUM threshold events. Only populated for platform
+	// admins.
+	AlertEmail *string `form:"alert_email,omitempty" json:"alert_email,omitempty" xml:"alert_email,omitempty"`
+	// TUM usage per billing cycle for the trailing cycles, oldest first. The last
+	// entry is the active cycle.
+	History []*TUMPeriodResponseBody `form:"history,omitempty" json:"history,omitempty" xml:"history,omitempty"`
 }
 
 // GetUsageTiersResponseBody is the type of the "usage" service "getUsageTiers"
@@ -211,6 +266,380 @@ type GetPeriodUsageUnexpectedResponseBody struct {
 // GetPeriodUsageGatewayErrorResponseBody is the type of the "usage" service
 // "getPeriodUsage" endpoint HTTP response body for the "gateway_error" error.
 type GetPeriodUsageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetTokensUnderManagementUnauthorizedResponseBody is the type of the "usage"
+// service "getTokensUnderManagement" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetTokensUnderManagementUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetTokensUnderManagementForbiddenResponseBody is the type of the "usage"
+// service "getTokensUnderManagement" endpoint HTTP response body for the
+// "forbidden" error.
+type GetTokensUnderManagementForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetTokensUnderManagementBadRequestResponseBody is the type of the "usage"
+// service "getTokensUnderManagement" endpoint HTTP response body for the
+// "bad_request" error.
+type GetTokensUnderManagementBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetTokensUnderManagementNotFoundResponseBody is the type of the "usage"
+// service "getTokensUnderManagement" endpoint HTTP response body for the
+// "not_found" error.
+type GetTokensUnderManagementNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetTokensUnderManagementConflictResponseBody is the type of the "usage"
+// service "getTokensUnderManagement" endpoint HTTP response body for the
+// "conflict" error.
+type GetTokensUnderManagementConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetTokensUnderManagementUnsupportedMediaResponseBody is the type of the
+// "usage" service "getTokensUnderManagement" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetTokensUnderManagementUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetTokensUnderManagementInvalidResponseBody is the type of the "usage"
+// service "getTokensUnderManagement" endpoint HTTP response body for the
+// "invalid" error.
+type GetTokensUnderManagementInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetTokensUnderManagementInvariantViolationResponseBody is the type of the
+// "usage" service "getTokensUnderManagement" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetTokensUnderManagementInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetTokensUnderManagementUnexpectedResponseBody is the type of the "usage"
+// service "getTokensUnderManagement" endpoint HTTP response body for the
+// "unexpected" error.
+type GetTokensUnderManagementUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetTokensUnderManagementGatewayErrorResponseBody is the type of the "usage"
+// service "getTokensUnderManagement" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetTokensUnderManagementGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetBillingMetadataUnauthorizedResponseBody is the type of the "usage"
+// service "setBillingMetadata" endpoint HTTP response body for the
+// "unauthorized" error.
+type SetBillingMetadataUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetBillingMetadataForbiddenResponseBody is the type of the "usage" service
+// "setBillingMetadata" endpoint HTTP response body for the "forbidden" error.
+type SetBillingMetadataForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetBillingMetadataBadRequestResponseBody is the type of the "usage" service
+// "setBillingMetadata" endpoint HTTP response body for the "bad_request" error.
+type SetBillingMetadataBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetBillingMetadataNotFoundResponseBody is the type of the "usage" service
+// "setBillingMetadata" endpoint HTTP response body for the "not_found" error.
+type SetBillingMetadataNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetBillingMetadataConflictResponseBody is the type of the "usage" service
+// "setBillingMetadata" endpoint HTTP response body for the "conflict" error.
+type SetBillingMetadataConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetBillingMetadataUnsupportedMediaResponseBody is the type of the "usage"
+// service "setBillingMetadata" endpoint HTTP response body for the
+// "unsupported_media" error.
+type SetBillingMetadataUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetBillingMetadataInvalidResponseBody is the type of the "usage" service
+// "setBillingMetadata" endpoint HTTP response body for the "invalid" error.
+type SetBillingMetadataInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetBillingMetadataInvariantViolationResponseBody is the type of the "usage"
+// service "setBillingMetadata" endpoint HTTP response body for the
+// "invariant_violation" error.
+type SetBillingMetadataInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetBillingMetadataUnexpectedResponseBody is the type of the "usage" service
+// "setBillingMetadata" endpoint HTTP response body for the "unexpected" error.
+type SetBillingMetadataUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetBillingMetadataGatewayErrorResponseBody is the type of the "usage"
+// service "setBillingMetadata" endpoint HTTP response body for the
+// "gateway_error" error.
+type SetBillingMetadataGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -963,6 +1392,26 @@ type CreateTopUpCheckoutGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// TUMPeriodResponseBody is used to define fields on response body types.
+type TUMPeriodResponseBody struct {
+	// Start of the billing cycle
+	PeriodStart *string `form:"period_start,omitempty" json:"period_start,omitempty" xml:"period_start,omitempty"`
+	// End of the billing cycle (exclusive)
+	PeriodEnd *string `form:"period_end,omitempty" json:"period_end,omitempty" xml:"period_end,omitempty"`
+	// Tokens under management consumed during the cycle
+	Tokens *int64 `form:"tokens,omitempty" json:"tokens,omitempty" xml:"tokens,omitempty"`
+	// Daily breakdown of TUM within the cycle. Days without usage are omitted.
+	Days []*TUMPeriodDayResponseBody `form:"days,omitempty" json:"days,omitempty" xml:"days,omitempty"`
+}
+
+// TUMPeriodDayResponseBody is used to define fields on response body types.
+type TUMPeriodDayResponseBody struct {
+	// The UTC day
+	Date *string `form:"date,omitempty" json:"date,omitempty" xml:"date,omitempty"`
+	// Tokens under management consumed on this day
+	Tokens *int64 `form:"tokens,omitempty" json:"tokens,omitempty" xml:"tokens,omitempty"`
+}
+
 // TierLimitsResponseBody is used to define fields on response body types.
 type TierLimitsResponseBody struct {
 	// The base price for the tier
@@ -984,6 +1433,17 @@ type TierLimitsResponseBody struct {
 	IncludedBullets []string `form:"included_bullets,omitempty" json:"included_bullets,omitempty" xml:"included_bullets,omitempty"`
 	// Add-on items bullets of the tier (optional)
 	AddOnBullets []string `form:"add_on_bullets,omitempty" json:"add_on_bullets,omitempty" xml:"add_on_bullets,omitempty"`
+}
+
+// NewSetBillingMetadataRequestBody builds the HTTP request body from the
+// payload of the "setBillingMetadata" endpoint of the "usage" service.
+func NewSetBillingMetadataRequestBody(p *usage.SetBillingMetadataPayload) *SetBillingMetadataRequestBody {
+	body := &SetBillingMetadataRequestBody{
+		MonthlyTokenLimit:     p.MonthlyTokenLimit,
+		AlertEmail:            p.AlertEmail,
+		BillingCycleAnchorDay: p.BillingCycleAnchorDay,
+	}
+	return body
 }
 
 // NewGetPeriodUsagePeriodUsageOK builds a "usage" service "getPeriodUsage"
@@ -1141,6 +1601,352 @@ func NewGetPeriodUsageUnexpected(body *GetPeriodUsageUnexpectedResponseBody) *go
 // NewGetPeriodUsageGatewayError builds a usage service getPeriodUsage endpoint
 // gateway_error error.
 func NewGetPeriodUsageGatewayError(body *GetPeriodUsageGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetTokensUnderManagementTokensUnderManagementOK builds a "usage" service
+// "getTokensUnderManagement" endpoint result from a HTTP "OK" response.
+func NewGetTokensUnderManagementTokensUnderManagementOK(body *GetTokensUnderManagementResponseBody) *usage.TokensUnderManagement {
+	v := &usage.TokensUnderManagement{
+		PeriodStart:           *body.PeriodStart,
+		PeriodEnd:             *body.PeriodEnd,
+		Tokens:                *body.Tokens,
+		MonthlyTokenLimit:     body.MonthlyTokenLimit,
+		BillingCycleAnchorDay: *body.BillingCycleAnchorDay,
+		AlertEmail:            body.AlertEmail,
+	}
+	v.History = make([]*usage.TUMPeriod, len(body.History))
+	for i, val := range body.History {
+		if val == nil {
+			v.History[i] = nil
+			continue
+		}
+		v.History[i] = unmarshalTUMPeriodResponseBodyToUsageTUMPeriod(val)
+	}
+
+	return v
+}
+
+// NewGetTokensUnderManagementUnauthorized builds a usage service
+// getTokensUnderManagement endpoint unauthorized error.
+func NewGetTokensUnderManagementUnauthorized(body *GetTokensUnderManagementUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetTokensUnderManagementForbidden builds a usage service
+// getTokensUnderManagement endpoint forbidden error.
+func NewGetTokensUnderManagementForbidden(body *GetTokensUnderManagementForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetTokensUnderManagementBadRequest builds a usage service
+// getTokensUnderManagement endpoint bad_request error.
+func NewGetTokensUnderManagementBadRequest(body *GetTokensUnderManagementBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetTokensUnderManagementNotFound builds a usage service
+// getTokensUnderManagement endpoint not_found error.
+func NewGetTokensUnderManagementNotFound(body *GetTokensUnderManagementNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetTokensUnderManagementConflict builds a usage service
+// getTokensUnderManagement endpoint conflict error.
+func NewGetTokensUnderManagementConflict(body *GetTokensUnderManagementConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetTokensUnderManagementUnsupportedMedia builds a usage service
+// getTokensUnderManagement endpoint unsupported_media error.
+func NewGetTokensUnderManagementUnsupportedMedia(body *GetTokensUnderManagementUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetTokensUnderManagementInvalid builds a usage service
+// getTokensUnderManagement endpoint invalid error.
+func NewGetTokensUnderManagementInvalid(body *GetTokensUnderManagementInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetTokensUnderManagementInvariantViolation builds a usage service
+// getTokensUnderManagement endpoint invariant_violation error.
+func NewGetTokensUnderManagementInvariantViolation(body *GetTokensUnderManagementInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetTokensUnderManagementUnexpected builds a usage service
+// getTokensUnderManagement endpoint unexpected error.
+func NewGetTokensUnderManagementUnexpected(body *GetTokensUnderManagementUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetTokensUnderManagementGatewayError builds a usage service
+// getTokensUnderManagement endpoint gateway_error error.
+func NewGetTokensUnderManagementGatewayError(body *GetTokensUnderManagementGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetBillingMetadataTokensUnderManagementOK builds a "usage" service
+// "setBillingMetadata" endpoint result from a HTTP "OK" response.
+func NewSetBillingMetadataTokensUnderManagementOK(body *SetBillingMetadataResponseBody) *usage.TokensUnderManagement {
+	v := &usage.TokensUnderManagement{
+		PeriodStart:           *body.PeriodStart,
+		PeriodEnd:             *body.PeriodEnd,
+		Tokens:                *body.Tokens,
+		MonthlyTokenLimit:     body.MonthlyTokenLimit,
+		BillingCycleAnchorDay: *body.BillingCycleAnchorDay,
+		AlertEmail:            body.AlertEmail,
+	}
+	v.History = make([]*usage.TUMPeriod, len(body.History))
+	for i, val := range body.History {
+		if val == nil {
+			v.History[i] = nil
+			continue
+		}
+		v.History[i] = unmarshalTUMPeriodResponseBodyToUsageTUMPeriod(val)
+	}
+
+	return v
+}
+
+// NewSetBillingMetadataUnauthorized builds a usage service setBillingMetadata
+// endpoint unauthorized error.
+func NewSetBillingMetadataUnauthorized(body *SetBillingMetadataUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetBillingMetadataForbidden builds a usage service setBillingMetadata
+// endpoint forbidden error.
+func NewSetBillingMetadataForbidden(body *SetBillingMetadataForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetBillingMetadataBadRequest builds a usage service setBillingMetadata
+// endpoint bad_request error.
+func NewSetBillingMetadataBadRequest(body *SetBillingMetadataBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetBillingMetadataNotFound builds a usage service setBillingMetadata
+// endpoint not_found error.
+func NewSetBillingMetadataNotFound(body *SetBillingMetadataNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetBillingMetadataConflict builds a usage service setBillingMetadata
+// endpoint conflict error.
+func NewSetBillingMetadataConflict(body *SetBillingMetadataConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetBillingMetadataUnsupportedMedia builds a usage service
+// setBillingMetadata endpoint unsupported_media error.
+func NewSetBillingMetadataUnsupportedMedia(body *SetBillingMetadataUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetBillingMetadataInvalid builds a usage service setBillingMetadata
+// endpoint invalid error.
+func NewSetBillingMetadataInvalid(body *SetBillingMetadataInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetBillingMetadataInvariantViolation builds a usage service
+// setBillingMetadata endpoint invariant_violation error.
+func NewSetBillingMetadataInvariantViolation(body *SetBillingMetadataInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetBillingMetadataUnexpected builds a usage service setBillingMetadata
+// endpoint unexpected error.
+func NewSetBillingMetadataUnexpected(body *SetBillingMetadataUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetBillingMetadataGatewayError builds a usage service setBillingMetadata
+// endpoint gateway_error error.
+func NewSetBillingMetadataGatewayError(body *SetBillingMetadataGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1794,6 +2600,74 @@ func ValidateGetPeriodUsageResponseBody(body *GetPeriodUsageResponseBody) (err e
 	return
 }
 
+// ValidateGetTokensUnderManagementResponseBody runs the validations defined on
+// GetTokensUnderManagementResponseBody
+func ValidateGetTokensUnderManagementResponseBody(body *GetTokensUnderManagementResponseBody) (err error) {
+	if body.PeriodStart == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("period_start", "body"))
+	}
+	if body.PeriodEnd == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("period_end", "body"))
+	}
+	if body.Tokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tokens", "body"))
+	}
+	if body.BillingCycleAnchorDay == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("billing_cycle_anchor_day", "body"))
+	}
+	if body.History == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("history", "body"))
+	}
+	if body.PeriodStart != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.period_start", *body.PeriodStart, goa.FormatDateTime))
+	}
+	if body.PeriodEnd != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.period_end", *body.PeriodEnd, goa.FormatDateTime))
+	}
+	for _, e := range body.History {
+		if e != nil {
+			if err2 := ValidateTUMPeriodResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateSetBillingMetadataResponseBody runs the validations defined on
+// SetBillingMetadataResponseBody
+func ValidateSetBillingMetadataResponseBody(body *SetBillingMetadataResponseBody) (err error) {
+	if body.PeriodStart == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("period_start", "body"))
+	}
+	if body.PeriodEnd == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("period_end", "body"))
+	}
+	if body.Tokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tokens", "body"))
+	}
+	if body.BillingCycleAnchorDay == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("billing_cycle_anchor_day", "body"))
+	}
+	if body.History == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("history", "body"))
+	}
+	if body.PeriodStart != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.period_start", *body.PeriodStart, goa.FormatDateTime))
+	}
+	if body.PeriodEnd != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.period_end", *body.PeriodEnd, goa.FormatDateTime))
+	}
+	for _, e := range body.History {
+		if e != nil {
+			if err2 := ValidateTUMPeriodResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateGetUsageTiersResponseBody runs the validations defined on
 // GetUsageTiersResponseBody
 func ValidateGetUsageTiersResponseBody(body *GetUsageTiersResponseBody) (err error) {
@@ -2043,6 +2917,488 @@ func ValidateGetPeriodUsageUnexpectedResponseBody(body *GetPeriodUsageUnexpected
 // ValidateGetPeriodUsageGatewayErrorResponseBody runs the validations defined
 // on getPeriodUsage_gateway_error_response_body
 func ValidateGetPeriodUsageGatewayErrorResponseBody(body *GetPeriodUsageGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetTokensUnderManagementUnauthorizedResponseBody runs the
+// validations defined on getTokensUnderManagement_unauthorized_response_body
+func ValidateGetTokensUnderManagementUnauthorizedResponseBody(body *GetTokensUnderManagementUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetTokensUnderManagementForbiddenResponseBody runs the validations
+// defined on getTokensUnderManagement_forbidden_response_body
+func ValidateGetTokensUnderManagementForbiddenResponseBody(body *GetTokensUnderManagementForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetTokensUnderManagementBadRequestResponseBody runs the validations
+// defined on getTokensUnderManagement_bad_request_response_body
+func ValidateGetTokensUnderManagementBadRequestResponseBody(body *GetTokensUnderManagementBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetTokensUnderManagementNotFoundResponseBody runs the validations
+// defined on getTokensUnderManagement_not_found_response_body
+func ValidateGetTokensUnderManagementNotFoundResponseBody(body *GetTokensUnderManagementNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetTokensUnderManagementConflictResponseBody runs the validations
+// defined on getTokensUnderManagement_conflict_response_body
+func ValidateGetTokensUnderManagementConflictResponseBody(body *GetTokensUnderManagementConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetTokensUnderManagementUnsupportedMediaResponseBody runs the
+// validations defined on
+// getTokensUnderManagement_unsupported_media_response_body
+func ValidateGetTokensUnderManagementUnsupportedMediaResponseBody(body *GetTokensUnderManagementUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetTokensUnderManagementInvalidResponseBody runs the validations
+// defined on getTokensUnderManagement_invalid_response_body
+func ValidateGetTokensUnderManagementInvalidResponseBody(body *GetTokensUnderManagementInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetTokensUnderManagementInvariantViolationResponseBody runs the
+// validations defined on
+// getTokensUnderManagement_invariant_violation_response_body
+func ValidateGetTokensUnderManagementInvariantViolationResponseBody(body *GetTokensUnderManagementInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetTokensUnderManagementUnexpectedResponseBody runs the validations
+// defined on getTokensUnderManagement_unexpected_response_body
+func ValidateGetTokensUnderManagementUnexpectedResponseBody(body *GetTokensUnderManagementUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetTokensUnderManagementGatewayErrorResponseBody runs the
+// validations defined on getTokensUnderManagement_gateway_error_response_body
+func ValidateGetTokensUnderManagementGatewayErrorResponseBody(body *GetTokensUnderManagementGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetBillingMetadataUnauthorizedResponseBody runs the validations
+// defined on setBillingMetadata_unauthorized_response_body
+func ValidateSetBillingMetadataUnauthorizedResponseBody(body *SetBillingMetadataUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetBillingMetadataForbiddenResponseBody runs the validations defined
+// on setBillingMetadata_forbidden_response_body
+func ValidateSetBillingMetadataForbiddenResponseBody(body *SetBillingMetadataForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetBillingMetadataBadRequestResponseBody runs the validations
+// defined on setBillingMetadata_bad_request_response_body
+func ValidateSetBillingMetadataBadRequestResponseBody(body *SetBillingMetadataBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetBillingMetadataNotFoundResponseBody runs the validations defined
+// on setBillingMetadata_not_found_response_body
+func ValidateSetBillingMetadataNotFoundResponseBody(body *SetBillingMetadataNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetBillingMetadataConflictResponseBody runs the validations defined
+// on setBillingMetadata_conflict_response_body
+func ValidateSetBillingMetadataConflictResponseBody(body *SetBillingMetadataConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetBillingMetadataUnsupportedMediaResponseBody runs the validations
+// defined on setBillingMetadata_unsupported_media_response_body
+func ValidateSetBillingMetadataUnsupportedMediaResponseBody(body *SetBillingMetadataUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetBillingMetadataInvalidResponseBody runs the validations defined
+// on setBillingMetadata_invalid_response_body
+func ValidateSetBillingMetadataInvalidResponseBody(body *SetBillingMetadataInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetBillingMetadataInvariantViolationResponseBody runs the
+// validations defined on setBillingMetadata_invariant_violation_response_body
+func ValidateSetBillingMetadataInvariantViolationResponseBody(body *SetBillingMetadataInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetBillingMetadataUnexpectedResponseBody runs the validations
+// defined on setBillingMetadata_unexpected_response_body
+func ValidateSetBillingMetadataUnexpectedResponseBody(body *SetBillingMetadataUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetBillingMetadataGatewayErrorResponseBody runs the validations
+// defined on setBillingMetadata_gateway_error_response_body
+func ValidateSetBillingMetadataGatewayErrorResponseBody(body *SetBillingMetadataGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3021,6 +4377,52 @@ func ValidateCreateTopUpCheckoutGatewayErrorResponseBody(body *CreateTopUpChecko
 	}
 	if body.Fault == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTUMPeriodResponseBody runs the validations defined on
+// TUMPeriodResponseBody
+func ValidateTUMPeriodResponseBody(body *TUMPeriodResponseBody) (err error) {
+	if body.PeriodStart == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("period_start", "body"))
+	}
+	if body.PeriodEnd == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("period_end", "body"))
+	}
+	if body.Tokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tokens", "body"))
+	}
+	if body.Days == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("days", "body"))
+	}
+	if body.PeriodStart != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.period_start", *body.PeriodStart, goa.FormatDateTime))
+	}
+	if body.PeriodEnd != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.period_end", *body.PeriodEnd, goa.FormatDateTime))
+	}
+	for _, e := range body.Days {
+		if e != nil {
+			if err2 := ValidateTUMPeriodDayResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateTUMPeriodDayResponseBody runs the validations defined on
+// TUMPeriodDayResponseBody
+func ValidateTUMPeriodDayResponseBody(body *TUMPeriodDayResponseBody) (err error) {
+	if body.Date == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("date", "body"))
+	}
+	if body.Tokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tokens", "body"))
+	}
+	if body.Date != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.date", *body.Date, goa.FormatDate))
 	}
 	return
 }

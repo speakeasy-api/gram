@@ -23,6 +23,10 @@ import { Info } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { RequireScope } from "@/components/require-scope";
 import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
+import {
+  TumAdminSection,
+  TumUsageSection,
+} from "@/components/billing/tum-section";
 
 export default function Billing(): JSX.Element {
   return (
@@ -41,6 +45,18 @@ export default function Billing(): JSX.Element {
 
 function BillingInner() {
   const productTier = useProductTier();
+  const isAdmin = useIsAdmin();
+
+  // Enterprise contracts bill on tokens under management, so enterprise orgs
+  // see the TUM view instead of the self-serve usage meters.
+  if (productTier === "enterprise") {
+    return (
+      <>
+        <TumUsageSection />
+        {isAdmin && <TumAdminSection />}
+      </>
+    );
+  }
 
   return (
     <>

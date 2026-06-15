@@ -512,6 +512,8 @@ run();
 * [getObservabilityOverview](docs/sdks/telemetry/README.md#getobservabilityoverview) - getObservabilityOverview telemetry
 * [getProjectMetricsSummary](docs/sdks/telemetry/README.md#getprojectmetricssummary) - getProjectMetricsSummary telemetry
 * [getProjectOverview](docs/sdks/telemetry/README.md#getprojectoverview) - getProjectOverview telemetry
+* [getToolUsageFilterOptions](docs/sdks/telemetry/README.md#gettoolusagefilteroptions) - getToolUsageFilterOptions telemetry
+* [getToolUsageSummary](docs/sdks/telemetry/README.md#gettoolusagesummary) - getToolUsageSummary telemetry
 * [getUserMetricsSummary](docs/sdks/telemetry/README.md#getusermetricssummary) - getUserMetricsSummary telemetry
 * [listAttributeKeys](docs/sdks/telemetry/README.md#listattributekeys) - listAttributeKeys telemetry
 * [listFilterOptions](docs/sdks/telemetry/README.md#listfilteroptions) - listFilterOptions telemetry
@@ -570,7 +572,9 @@ run();
 * [createCustomerSession](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
 * [createTopUpCheckout](docs/sdks/usage/README.md#createtopupcheckout) - createTopUpCheckout usage
 * [getPeriodUsage](docs/sdks/usage/README.md#getperiodusage) - getPeriodUsage usage
+* [getTokensUnderManagement](docs/sdks/usage/README.md#gettokensundermanagement) - getTokensUnderManagement usage
 * [getUsageTiers](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
+* [setBillingMetadata](docs/sdks/usage/README.md#setbillingmetadata) - setBillingMetadata usage
 
 ### [UserSessionClients](docs/sdks/usersessionclients/README.md)
 
@@ -866,6 +870,8 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`telemetryGetObservabilityOverview`](docs/sdks/telemetry/README.md#getobservabilityoverview) - getObservabilityOverview telemetry
 - [`telemetryGetProjectMetricsSummary`](docs/sdks/telemetry/README.md#getprojectmetricssummary) - getProjectMetricsSummary telemetry
 - [`telemetryGetProjectOverview`](docs/sdks/telemetry/README.md#getprojectoverview) - getProjectOverview telemetry
+- [`telemetryGetToolUsageFilterOptions`](docs/sdks/telemetry/README.md#gettoolusagefilteroptions) - getToolUsageFilterOptions telemetry
+- [`telemetryGetToolUsageSummary`](docs/sdks/telemetry/README.md#gettoolusagesummary) - getToolUsageSummary telemetry
 - [`telemetryGetUserMetricsSummary`](docs/sdks/telemetry/README.md#getusermetricssummary) - getUserMetricsSummary telemetry
 - [`telemetryListAttributeKeys`](docs/sdks/telemetry/README.md#listattributekeys) - listAttributeKeys telemetry
 - [`telemetryListFilterOptions`](docs/sdks/telemetry/README.md#listfilteroptions) - listFilterOptions telemetry
@@ -909,7 +915,9 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`usageCreateCustomerSession`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
 - [`usageCreateTopUpCheckout`](docs/sdks/usage/README.md#createtopupcheckout) - createTopUpCheckout usage
 - [`usageGetPeriodUsage`](docs/sdks/usage/README.md#getperiodusage) - getPeriodUsage usage
+- [`usageGetTokensUnderManagement`](docs/sdks/usage/README.md#gettokensundermanagement) - getTokensUnderManagement usage
 - [`usageGetUsageTiers`](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
+- [`usageSetBillingMetadata`](docs/sdks/usage/README.md#setbillingmetadata) - setBillingMetadata usage
 - [`userSessionClientsGet`](docs/sdks/usersessionclients/README.md#get) - getUserSessionClient userSessionClients
 - [`userSessionClientsList`](docs/sdks/usersessionclients/README.md#list) - listUserSessionClients userSessionClients
 - [`userSessionClientsRevoke`](docs/sdks/usersessionclients/README.md#revoke) - revokeUserSessionClient userSessionClients
@@ -1063,7 +1071,10 @@ To learn about this feature and how to get started, check
 - [`useGetProjectOverview`](docs/sdks/telemetry/README.md#getprojectoverview) - getProjectOverview telemetry
 - [`useGetRemoteMcpServer`](docs/sdks/remotemcp/README.md#getserver) - getServer remoteMcp
 - [`useGetSourceEnvironment`](docs/sdks/environments/README.md#getbysource) - getSourceEnvironment environments
+- [`useGetTokensUnderManagement`](docs/sdks/usage/README.md#gettokensundermanagement) - getTokensUnderManagement usage
 - [`useGetToolsetEnvironment`](docs/sdks/environments/README.md#getbytoolset) - getToolsetEnvironment environments
+- [`useGetToolUsageFilterOptions`](docs/sdks/telemetry/README.md#gettoolusagefilteroptions) - getToolUsageFilterOptions telemetry
+- [`useGetToolUsageSummary`](docs/sdks/telemetry/README.md#gettoolusagesummary) - getToolUsageSummary telemetry
 - [`useGetUsageTiers`](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
 - [`useGetUserMetricsSummary`](docs/sdks/telemetry/README.md#getusermetricssummary) - getUserMetricsSummary telemetry
 - [`useGlobalVariations`](docs/sdks/variations/README.md#listglobal) - listGlobal variations
@@ -1201,6 +1212,7 @@ To learn about this feature and how to get started, check
 - [`useServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
 - [`useServeOpenAPIv3`](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
 - [`useSessionInfo`](docs/sdks/auth/README.md#info) - info auth
+- [`useSetBillingMetadataMutation`](docs/sdks/usage/README.md#setbillingmetadata) - setBillingMetadata usage
 - [`useSetPluginAssignmentsMutation`](docs/sdks/plugins/README.md#setpluginassignments) - setPluginAssignments plugins
 - [`useSetProjectLogoMutation`](docs/sdks/projects/README.md#setlogo) - setLogo projects
 - [`useSetSourceEnvironmentLinkMutation`](docs/sdks/environments/README.md#setsourcelink) - setSourceEnvironmentLink environments

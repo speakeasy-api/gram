@@ -51,20 +51,10 @@ LEFT JOIN project_marketplace_settings pms
 LEFT JOIN plugins p
   ON p.project_id = pr.id
   AND p.deleted IS FALSE
-  AND EXISTS (
-    SELECT 1 FROM plugin_assignments pa
-    WHERE pa.plugin_id = p.id
-      AND pa.principal_urn = ANY($2::text[])
-  )
 WHERE pr.organization_id = $1
   AND pgc.marketplace_token IS NOT NULL
 ORDER BY pr.id, p.slug
 `
-
-type GetAgentPluginSetParams struct {
-	OrganizationID string
-	PrincipalUrns  []string
-}
 
 type GetAgentPluginSetRow struct {
 	ProjectID               uuid.UUID
@@ -85,9 +75,11 @@ type GetAgentPluginSetRow struct {
 // The base is every *published* marketplace in the org (a
 // plugin_github_connections row with a marketplace_token), so a marketplace —
 // and its always-required observability plugin, synthesized in the view layer —
-// is returned even when the user has no explicit assignments. Plugins the user
-// is assigned to (via principal_urn) are LEFT JOINed on top; projects with no
-// matching assignment still yield one row with null plugin columns.
+// is returned for every published project. Every non-deleted plugin in those
+// projects is LEFT JOINed on top and returned to every org member: per-principal
+// assignment scoping is intentionally disabled for now (see DNO-239) and will be
+// reinstated once RBAC-backed assignment management ships. Projects with no
+// plugins still yield one row with null plugin columns.
 //
 // Each project resolves to a marketplace name the way the publish path does:
 // the per-project override (project_marketplace_settings.marketplace_name) when
@@ -99,8 +91,8 @@ type GetAgentPluginSetRow struct {
 // one created at org setup) sorts first. When projects share a name and the view
 // collapses them, keeping the first row's token makes that collapse resolve to
 // the default project rather than the arbitrary alphabetically-first one.
-func (q *Queries) GetAgentPluginSet(ctx context.Context, arg GetAgentPluginSetParams) ([]GetAgentPluginSetRow, error) {
-	rows, err := q.db.Query(ctx, getAgentPluginSet, arg.OrganizationID, arg.PrincipalUrns)
+func (q *Queries) GetAgentPluginSet(ctx context.Context, organizationID string) ([]GetAgentPluginSetRow, error) {
+	rows, err := q.db.Query(ctx, getAgentPluginSet, organizationID)
 	if err != nil {
 		return nil, err
 	}

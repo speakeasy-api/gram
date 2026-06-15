@@ -1,6 +1,9 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/components/insights-sidebar", () => ({
+  InsightsTrigger: () => <div data-testid="insights-trigger" />,
+}));
 vi.mock("@/components/ui/sidebar", () => ({
   SidebarTrigger: () => <button data-testid="sidebar-trigger" />,
 }));

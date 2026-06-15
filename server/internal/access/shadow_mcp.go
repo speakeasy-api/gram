@@ -102,9 +102,15 @@ func (s *Service) CreateShadowMCPApprovalRequest(ctx context.Context, payload *g
 	if claims.OrganizationID != ac.ActiveOrganizationID {
 		return nil, oops.E(oops.CodeForbidden, nil, "shadow mcp approval request token is for a different organization").Log(ctx, s.logger)
 	}
-	if claims.RequesterUserID != "" && claims.RequesterUserID != ac.UserID {
-		return nil, oops.E(oops.CodeForbidden, nil, "shadow mcp approval request token is for a different requester").Log(ctx, s.logger)
-	}
+	// Intentionally not gated on claims.RequesterUserID. The token's requester
+	// is minted from an agent-reported identity (e.g. the email Claude Code
+	// reports, resolved via resolveUserByEmail), which legitimately differs
+	// from the authenticated dashboard user under multi-domain orgs, duplicate
+	// accounts, or a shared block link. Filing a request is low-stakes — the
+	// stored requester is always the authenticated user (RequesterUserID below),
+	// and approval is org-admin gated — so binding the token to a single
+	// requester only blocked legitimate members. Org membership is enforced via
+	// the org-match check above and requireProjectInOrganization below.
 	projectID, err := uuid.Parse(claims.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid project id").Log(ctx, s.logger)

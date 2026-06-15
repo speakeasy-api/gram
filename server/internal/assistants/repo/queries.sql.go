@@ -346,6 +346,39 @@ func (q *Queries) CountActiveAssistantThreads(ctx context.Context, arg CountActi
 	return active_threads, err
 }
 
+const countInFlightAssistantThreadEvents = `-- name: CountInFlightAssistantThreadEvents :one
+SELECT COUNT(*)
+FROM assistant_thread_events
+WHERE project_id = $1
+  AND assistant_id = $2
+  AND deleted IS FALSE
+  AND status IN ($3, $4)
+`
+
+type CountInFlightAssistantThreadEventsParams struct {
+	ProjectID        uuid.UUID
+	AssistantID      uuid.UUID
+	PendingStatus    string
+	ProcessingStatus string
+}
+
+// Counts events that are queued for or currently using the assistant's
+// runtime. The image recycle sweep skips assistants with any in-flight
+// events: their turns are about to hit the VM (the runner's idle clock
+// only clears on /turn enqueue) and their admissions recycle the image
+// lazily anyway.
+func (q *Queries) CountInFlightAssistantThreadEvents(ctx context.Context, arg CountInFlightAssistantThreadEventsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countInFlightAssistantThreadEvents,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.PendingStatus,
+		arg.ProcessingStatus,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createAssistant = `-- name: CreateAssistant :one
 INSERT INTO assistants (
   project_id,
@@ -1083,6 +1116,71 @@ func (q *Queries) InsertAssistantThreadEvent(ctx context.Context, arg InsertAssi
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const listActiveAssistantRuntimesForImageRecycle = `-- name: ListActiveAssistantRuntimesForImageRecycle :many
+SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
+FROM assistant_runtimes r
+WHERE r.state = $1
+  AND r.runtime_version = 2
+  AND r.deleted IS FALSE
+  AND r.ended IS FALSE
+  AND r.backend_metadata_json <> '{}'::jsonb
+  AND NOT EXISTS (
+    SELECT 1
+    FROM assistants a
+    WHERE a.id = r.assistant_id
+      AND a.project_id = r.project_id
+      AND a.deleted IS TRUE
+  )
+ORDER BY r.updated_at ASC
+`
+
+type ListActiveAssistantRuntimesForImageRecycleRow struct {
+	ID                  uuid.UUID
+	AssistantThreadID   uuid.UUID
+	AssistantID         uuid.UUID
+	ProjectID           uuid.UUID
+	Backend             string
+	BackendMetadataJson []byte
+	State               string
+	WarmUntil           pgtype.Timestamptz
+}
+
+// Returns live v2 runtime rows that carry backend metadata so a deploy-time
+// sweep can roll their machines onto the current runtime image. Only `active`
+// rows qualify: `starting` rows are mid-boot and already pull the current
+// image, while expiring/stopped rows are torn down or recycled lazily on the
+// next admission. Rows orphaned by a deleted assistant are excluded: they
+// belong to the deleted-assistant janitor, and recycling them would bump
+// updated_at and postpone the inactivity-based reap.
+func (q *Queries) ListActiveAssistantRuntimesForImageRecycle(ctx context.Context, activeState string) ([]ListActiveAssistantRuntimesForImageRecycleRow, error) {
+	rows, err := q.db.Query(ctx, listActiveAssistantRuntimesForImageRecycle, activeState)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActiveAssistantRuntimesForImageRecycleRow
+	for rows.Next() {
+		var i ListActiveAssistantRuntimesForImageRecycleRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AssistantThreadID,
+			&i.AssistantID,
+			&i.ProjectID,
+			&i.Backend,
+			&i.BackendMetadataJson,
+			&i.State,
+			&i.WarmUntil,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listAssistantPendingThreads = `-- name: ListAssistantPendingThreads :many
@@ -2483,6 +2581,40 @@ func (q *Queries) TouchProcessingLease(ctx context.Context, arg TouchProcessingL
 		arg.ActiveState,
 	)
 	return err
+}
+
+const updateActiveAssistantRuntimeMetadata = `-- name: UpdateActiveAssistantRuntimeMetadata :execrows
+UPDATE assistant_runtimes
+SET
+  backend_metadata_json = $1,
+  updated_at = clock_timestamp()
+WHERE id = $2
+  AND project_id = $3
+  AND state = $4
+  AND deleted IS FALSE
+`
+
+type UpdateActiveAssistantRuntimeMetadataParams struct {
+	BackendMetadataJson []byte
+	RuntimeID           uuid.UUID
+	ProjectID           uuid.UUID
+	ActiveState         string
+}
+
+// Persists post-recycle backend metadata only while the row is still live.
+// Zero rows affected means the warm timer expired the runtime mid-recycle;
+// the caller must undo the machine restart instead of recording it.
+func (q *Queries) UpdateActiveAssistantRuntimeMetadata(ctx context.Context, arg UpdateActiveAssistantRuntimeMetadataParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateActiveAssistantRuntimeMetadata,
+		arg.BackendMetadataJson,
+		arg.RuntimeID,
+		arg.ProjectID,
+		arg.ActiveState,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateAssistant = `-- name: UpdateAssistant :one

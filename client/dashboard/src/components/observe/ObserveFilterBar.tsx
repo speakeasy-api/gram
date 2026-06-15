@@ -1,6 +1,5 @@
 import { type DateRangePreset } from "@gram-ai/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
-import type { TypesToInclude } from "@gram/client/models/components";
 import { useMemo, useState } from "react";
 import { ChevronDown, Check } from "lucide-react";
 import {
@@ -21,6 +20,10 @@ import {
 import { cn } from "@/lib/utils";
 import type { useServerNameMappings } from "@/hooks/useServerNameMappings";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
+import type {
+  MultiSelectGroup,
+  MultiSelectOption,
+} from "@/components/ui/multi-select";
 
 const HOOK_SOURCE_FILTER_PATH = "gram.hook.source";
 
@@ -30,14 +33,23 @@ export interface FilterChip {
   path: string;
 }
 
-const SERVER_TYPES: Array<{ label: string; value: TypesToInclude }> = [
-  { label: "MCP Servers", value: "mcp" },
+export type ObserveTypeFilterValue =
+  | "mcp"
+  | "local"
+  | "skill"
+  | "hosted_mcp_server"
+  | "shadow_mcp_server"
+  | "local_tool";
+
+const SERVER_TYPES: Array<{ label: string; value: ObserveTypeFilterValue }> = [
+  { label: "Shadow MCP Servers", value: "mcp" },
   { label: "Local Tools", value: "local" },
   { label: "Skills", value: "skill" },
 ];
 
 export function ObserveFilterBar({
   serverOptions,
+  serverOptionGroups,
   onServerSelectionChange,
   userEmailOptions,
   onUserEmailSelectionChange,
@@ -49,6 +61,7 @@ export function ObserveFilterBar({
   activeFilters,
   selectedTypes,
   onTypesChange,
+  typeOptions = SERVER_TYPES,
   dateRange,
   customRange,
   customRangeLabel,
@@ -60,6 +73,7 @@ export function ObserveFilterBar({
   serverNameMappings,
 }: {
   serverOptions: string[];
+  serverOptionGroups?: MultiSelectGroup[];
   onServerSelectionChange: (values: string[]) => void;
   userEmailOptions: string[];
   onUserEmailSelectionChange: (values: string[]) => void;
@@ -69,8 +83,9 @@ export function ObserveFilterBar({
   selectedRoleIds: string[];
   onRoleSelectionChange: (values: string[]) => void;
   activeFilters: FilterChip[];
-  selectedTypes: TypesToInclude[];
-  onTypesChange: (types: TypesToInclude[]) => void;
+  selectedTypes: ObserveTypeFilterValue[];
+  onTypesChange: (types: ObserveTypeFilterValue[]) => void;
+  typeOptions?: MultiSelectOption[];
   dateRange: DateRangePreset;
   customRange: { from: Date; to: Date } | null;
   customRangeLabel: string | null;
@@ -109,12 +124,13 @@ export function ObserveFilterBar({
   );
 
   const serverOptionsWithDisplayNames = useMemo(() => {
+    if (serverOptionGroups) return serverOptionGroups;
     const rawToDisplay = serverNameMappings?.rawToDisplay;
     return serverOptions.map((rawName) => ({
       label: rawToDisplay?.get(rawName) ?? rawName,
       value: rawName,
     }));
-  }, [serverOptions, serverNameMappings?.rawToDisplay]);
+  }, [serverOptionGroups, serverOptions, serverNameMappings?.rawToDisplay]);
 
   // The raw hook_source value (e.g. "claude-code") is shown verbatim — matching
   // the table row — and paired with its brand icon. HookSourceIcon needs a
@@ -173,9 +189,11 @@ export function ObserveFilterBar({
         singleLine
       />
       <MultiSelect
-        options={SERVER_TYPES}
+        options={typeOptions}
         defaultValue={selectedTypes}
-        onValueChange={(values) => onTypesChange(values as TypesToInclude[])}
+        onValueChange={(values) =>
+          onTypesChange(values as ObserveTypeFilterValue[])
+        }
         placeholder="Filter by type"
         className="min-w-[96px]"
         searchable={false}

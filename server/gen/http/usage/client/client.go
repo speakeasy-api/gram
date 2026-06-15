@@ -21,6 +21,14 @@ type Client struct {
 	// getPeriodUsage endpoint.
 	GetPeriodUsageDoer goahttp.Doer
 
+	// GetTokensUnderManagement Doer is the HTTP client used to make requests to
+	// the getTokensUnderManagement endpoint.
+	GetTokensUnderManagementDoer goahttp.Doer
+
+	// SetBillingMetadata Doer is the HTTP client used to make requests to the
+	// setBillingMetadata endpoint.
+	SetBillingMetadataDoer goahttp.Doer
+
 	// GetUsageTiers Doer is the HTTP client used to make requests to the
 	// getUsageTiers endpoint.
 	GetUsageTiersDoer goahttp.Doer
@@ -57,16 +65,18 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		GetPeriodUsageDoer:        doer,
-		GetUsageTiersDoer:         doer,
-		CreateCustomerSessionDoer: doer,
-		CreateCheckoutDoer:        doer,
-		CreateTopUpCheckoutDoer:   doer,
-		RestoreResponseBody:       restoreBody,
-		scheme:                    scheme,
-		host:                      host,
-		decoder:                   dec,
-		encoder:                   enc,
+		GetPeriodUsageDoer:           doer,
+		GetTokensUnderManagementDoer: doer,
+		SetBillingMetadataDoer:       doer,
+		GetUsageTiersDoer:            doer,
+		CreateCustomerSessionDoer:    doer,
+		CreateCheckoutDoer:           doer,
+		CreateTopUpCheckoutDoer:      doer,
+		RestoreResponseBody:          restoreBody,
+		scheme:                       scheme,
+		host:                         host,
+		decoder:                      dec,
+		encoder:                      enc,
 	}
 }
 
@@ -89,6 +99,54 @@ func (c *Client) GetPeriodUsage() goa.Endpoint {
 		resp, err := c.GetPeriodUsageDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("usage", "getPeriodUsage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetTokensUnderManagement returns an endpoint that makes HTTP requests to the
+// usage service getTokensUnderManagement server.
+func (c *Client) GetTokensUnderManagement() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetTokensUnderManagementRequest(c.encoder)
+		decodeResponse = DecodeGetTokensUnderManagementResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetTokensUnderManagementRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetTokensUnderManagementDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("usage", "getTokensUnderManagement", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetBillingMetadata returns an endpoint that makes HTTP requests to the usage
+// service setBillingMetadata server.
+func (c *Client) SetBillingMetadata() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetBillingMetadataRequest(c.encoder)
+		decodeResponse = DecodeSetBillingMetadataResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetBillingMetadataRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetBillingMetadataDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("usage", "setBillingMetadata", err)
 		}
 		return decodeResponse(resp)
 	}

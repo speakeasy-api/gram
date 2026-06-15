@@ -18,6 +18,11 @@ import (
 type Service interface {
 	// Get the usage for an organization for a given period
 	GetPeriodUsage(context.Context, *GetPeriodUsagePayload) (res *PeriodUsage, err error)
+	// Get tokens under management for the active billing cycle alongside the
+	// contracted terms
+	GetTokensUnderManagement(context.Context, *GetTokensUnderManagementPayload) (res *TokensUnderManagement, err error)
+	// Set an organization's billing contract terms. Restricted to platform admins.
+	SetBillingMetadata(context.Context, *SetBillingMetadataPayload) (res *TokensUnderManagement, err error)
 	// Get the usage tiers
 	GetUsageTiers(context.Context) (res *UsageTiers, err error)
 	// Create a customer session for the user
@@ -48,7 +53,7 @@ const ServiceName = "usage"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"getPeriodUsage", "getUsageTiers", "createCustomerSession", "createCheckout", "createTopUpCheckout"}
+var MethodNames = [7]string{"getPeriodUsage", "getTokensUnderManagement", "setBillingMetadata", "getUsageTiers", "createCustomerSession", "createCheckout", "createTopUpCheckout"}
 
 // CreateCheckoutPayload is the payload type of the usage service
 // createCheckout method.
@@ -74,6 +79,12 @@ type GetPeriodUsagePayload struct {
 	SessionToken *string
 }
 
+// GetTokensUnderManagementPayload is the payload type of the usage service
+// getTokensUnderManagement method.
+type GetTokensUnderManagementPayload struct {
+	SessionToken *string
+}
+
 // PeriodUsage is the result type of the usage service getPeriodUsage method.
 type PeriodUsage struct {
 	// The number of tool calls used
@@ -92,6 +103,36 @@ type PeriodUsage struct {
 	IncludedCredits int
 	// Whether the project has an active subscription
 	HasActiveSubscription bool
+}
+
+// SetBillingMetadataPayload is the payload type of the usage service
+// setBillingMetadata method.
+type SetBillingMetadataPayload struct {
+	SessionToken *string
+	// The contracted monthly tokens under management limit. Omit to clear.
+	MonthlyTokenLimit *int64
+	// Email address to notify on TUM threshold events. Omit to clear.
+	AlertEmail *string
+	// Day of month (1-31) the billing cycle starts, at 00:00 UTC
+	BillingCycleAnchorDay int
+}
+
+type TUMPeriod struct {
+	// Start of the billing cycle
+	PeriodStart string
+	// End of the billing cycle (exclusive)
+	PeriodEnd string
+	// Tokens under management consumed during the cycle
+	Tokens int64
+	// Daily breakdown of TUM within the cycle. Days without usage are omitted.
+	Days []*TUMPeriodDay
+}
+
+type TUMPeriodDay struct {
+	// The UTC day
+	Date string
+	// Tokens under management consumed on this day
+	Tokens int64
 }
 
 type TierLimits struct {
@@ -114,6 +155,28 @@ type TierLimits struct {
 	IncludedBullets []string
 	// Add-on items bullets of the tier (optional)
 	AddOnBullets []string
+}
+
+// TokensUnderManagement is the result type of the usage service
+// getTokensUnderManagement method.
+type TokensUnderManagement struct {
+	// Start of the active billing cycle
+	PeriodStart string
+	// End of the active billing cycle (exclusive)
+	PeriodEnd string
+	// Tokens under management consumed during the active billing cycle
+	Tokens int64
+	// The contracted monthly tokens under management limit, if one has been
+	// configured
+	MonthlyTokenLimit *int64
+	// Day of month (1-31) the billing cycle starts, at 00:00 UTC
+	BillingCycleAnchorDay int
+	// Email address to notify on TUM threshold events. Only populated for platform
+	// admins.
+	AlertEmail *string
+	// TUM usage per billing cycle for the trailing cycles, oldest first. The last
+	// entry is the active cycle.
+	History []*TUMPeriod
 }
 
 // UsageTiers is the result type of the usage service getUsageTiers method.

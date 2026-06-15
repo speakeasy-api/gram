@@ -86,15 +86,12 @@
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Dismissable CTA "genie": each CTA pairs a dismissable surface with a sidebar
-   resume button sharing a view-transition-name (`onboarding-cta` for the setup
-   banner — see `useOnboardingCta` — and `insights-dock` for the Project
-   Assistant dock — see `useInsightsDockCta`), so dismissing/resuming morphs
-   one box into the other. The UA keeps the position/size morph on the group;
-   the snapshots get squash-and-stretch keyframes so the swap reads like the
-   macOS genie rather than a flat slide. */
-::view-transition-group(onboarding-cta),
-::view-transition-group(insights-dock) {
+/* Onboarding CTA "genie": the dismissable banner and the sidebar resume button
+   share the `onboarding-cta` view-transition-name, so dismissing/resuming morphs
+   one box into the other (see `useOnboardingCta`). The UA keeps the position/size
+   morph on the group; the snapshots get squash-and-stretch keyframes so the swap
+   reads like the macOS genie rather than a flat slide. */
+::view-transition-group(onboarding-cta) {
   animation-duration: 500ms;
   animation-timing-function: cubic-bezier(0.65, 0, 0.25, 1);
 }
@@ -102,8 +99,7 @@
 /* Mid-flight sag on the snapshot pair — the whole thing droops while being
    sucked toward the dock slot, instead of flying a straight line. Composes
    with the UA's position/size morph on the parent group. */
-::view-transition-image-pair(onboarding-cta),
-::view-transition-image-pair(insights-dock) {
+::view-transition-image-pair(onboarding-cta) {
   animation: 500ms ease-in-out both onboarding-cta-genie-sag;
 }
 
@@ -123,8 +119,7 @@
    painting every frame and visibly stutters the skew, while transforms stay on
    the compositor. Replaces the default cross-fade, so opacity must be animated
    here too. */
-::view-transition-old(onboarding-cta),
-::view-transition-old(insights-dock) {
+::view-transition-old(onboarding-cta) {
   transform-origin: 50% 0%;
   animation: 500ms cubic-bezier(0.65, 0, 0.25, 1) both onboarding-cta-genie-out;
 }
@@ -151,8 +146,7 @@
    the slot. Uniform scale only — non-uniform scale visibly stretches the
    banner's text when resuming from the docked button; the rotateX taper
    supplies the genie warp without distorting glyph proportions. */
-::view-transition-new(onboarding-cta),
-::view-transition-new(insights-dock) {
+::view-transition-new(onboarding-cta) {
   transform-origin: 50% 0%;
   animation: 500ms cubic-bezier(0.05, 0.7, 0.1, 1) both onboarding-cta-genie-in;
 }
@@ -179,19 +173,16 @@
    its group snaps to the destination geometry immediately (near-zero
    duration), the outgoing text vanishes on click, and the incoming text
    fades in at its final, static position — never scaled, never stretched. */
-::view-transition-group(onboarding-cta-content),
-::view-transition-group(insights-dock-content) {
+::view-transition-group(onboarding-cta-content) {
   animation-duration: 0.001s;
 }
 
-::view-transition-old(onboarding-cta-content),
-::view-transition-old(insights-dock-content) {
+::view-transition-old(onboarding-cta-content) {
   animation: none;
   opacity: 0;
 }
 
-::view-transition-new(onboarding-cta-content),
-::view-transition-new(insights-dock-content) {
+::view-transition-new(onboarding-cta-content) {
   animation: 500ms linear both onboarding-cta-content-in;
 }
 
@@ -212,14 +203,7 @@
   ::view-transition-new(onboarding-cta),
   ::view-transition-group(onboarding-cta-content),
   ::view-transition-old(onboarding-cta-content),
-  ::view-transition-new(onboarding-cta-content),
-  ::view-transition-group(insights-dock),
-  ::view-transition-image-pair(insights-dock),
-  ::view-transition-old(insights-dock),
-  ::view-transition-new(insights-dock),
-  ::view-transition-group(insights-dock-content),
-  ::view-transition-old(insights-dock-content),
-  ::view-transition-new(insights-dock-content) {
+  ::view-transition-new(onboarding-cta-content) {
     animation: none;
   }
 }

@@ -1,5 +1,64 @@
 # dashboard
 
+## 0.72.0
+
+### Minor Changes
+
+- 0d51b12: Assistants UX: the detail panel is wider and split into Overview and Sessions tabs, system instructions open in an editable modal, the active/paused status toggle is available on the detail panel (shared with the index cards), and index cards show a mini activity sparkline derived from chat session activity.
+- 0d51b12: Assistant tool-call audit events no longer appear in the platform audit logs feed or its facets. They are surfaced instead on a new "Audit log" tab on the Assistants page, filterable by assistant, backed by new `subject_type` / `subject_id` filters on `auditlogs.list`.
+
+## 0.71.0
+
+### Minor Changes
+
+- 87cb734: The Project Assistant now cycles a set of whimsical "thinking" verbs while it works and types replies onto the screen token-by-token, emulating an SSE stream over the poll-based transport.
+- 430deac: Add tokens under management (TUM) billing for enterprise organizations. The billing page now shows enterprise orgs their TUM consumption for the active billing cycle against the contracted monthly allowance, replacing the self-serve usage meters. TUM counts token usage only from agent sessions Gram has stored non-metrics data for (chats, tool calls), excluding OTEL-forwarded token metrics from uninstalled users. Platform admins get an admin-only section on the billing page to set the contracted monthly token limit, an alert email (alerting to follow), and the billing cycle anchor day, backed by the new `usage.getTokensUnderManagement` and `usage.setBillingMetadata` endpoints and a `billing_metadata` table. Contract changes emit `audit_log.billing_metadata_event_v1` audit events.
+- 430deac: The tokens under management endpoint now returns usage history: the trailing 12 billing cycles, each with a per-UTC-day breakdown. Chat qualification is evaluated per cycle, so daily points sum exactly to each cycle's TUM. The enterprise billing page renders this as a bar chart with day and billing-cycle granularity toggles, including a contracted-limit line in the cycle view.
+
+### Patch Changes
+
+- 8759477: Auto-configure remote identity providers for custom remote MCP servers when OAuth
+  metadata can be discovered, including reusing existing issuers and deriving a
+  display name from the issuer URL.
+- 2e738a7: Attribute message type + destructured tool name to LLM-judge evaluation.
+
+  The judge now receives structured context — the message type (as an actor/role
+  label), and for tool calls the destructured MCP server + function — instead of
+  one ambiguous text field, so prompt-based policies can target message types,
+  actors, and specific MCP servers/functions. Also: the chat-session risk view
+  renders the judge rationale (instead of "llm_judge · llm_judge"), shows a
+  tooltip when the annotation truncates, and drops the no-op "Create exclusion"
+  action for judge findings.
+
+  Hardens the judge against adversarial input: the policy and message are now sent
+  as a single structured JSON payload framed as untrusted data, so a hostile body
+  can't spoof prompt headings or steer the verdict via embedded instructions;
+  oversized bodies are head+tail truncated before the call so a padded payload
+  can't blow the model's context window into a fail-open allow; and multi-tool-call
+  messages render each call with its own MCP attribution instead of an opaque blob.
+
+- 850b430: Add a Distribute MCP servers step to onboarding. Teams can search the MCP catalog and distribute selected servers to their organization during setup, running the deploy → bundle → publish flow inline. Servers that require OAuth are auto-configured with Speakeasy OAuth, matching the catalog add-server flow. The onboarding list shows only servers Gram can fully auto-configure (OAuth with dynamic client registration); servers needing manual setup (OAuth without DCR, API keys) remain available in the catalog.
+- 657f61c: Add a "Platform Status" link to the profile menu, pointing to the Speakeasy status page.
+- 46374b8: Show which tool the Project Assistant is calling while it works. Tool calls
+  and their results now render in the side panel as they happen, instead of the
+  conversation sitting silent until the final reply lands.
+- b5fc99c: Promoted Agent Sessions to top-level Observe navigation.
+- b4e32a6: Promoted Employees and Costs to top-level navigation.
+- d857151: Open prompt-based ("LLM-judge") risk policies to all message types.
+
+  Previously the judge was hard-scoped to `tool_request` in both the realtime
+  scanner and the batch analyzer, regardless of the policy's `message_types`. The
+  judge now runs on whatever types a policy declares (`user_message`,
+  `tool_request`, `tool_response`, `assistant_message`), and the policy form lets
+  you choose them instead of locking to tool requests.
+
+- 4207390: Moved Risk Events into the Secure section.
+- 30cefe6: Add a "Source" filter to the Tools logs/insights pages so tool traces can be narrowed by originating agent (Claude Code, Cursor, Codex, …).
+- 0c7373d: Added unified Tools insights for hosted MCP servers, shadow MCP servers, local tools, and skills.
+- Updated dependencies [87cb734]
+- Updated dependencies [9bc9a1d]
+  - @gram-ai/elements@1.36.0
+
 ## 0.70.1
 
 ### Patch Changes

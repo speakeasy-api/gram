@@ -1,10 +1,7 @@
 import { Icon, IconName, IconProps } from "@speakeasy-api/moonshine";
 import React, { useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
-import {
-  RedirectToInsightsTools,
-  RedirectToLogTools,
-} from "./components/observe/ObserveRedirects";
+import { RedirectToLogTools } from "./components/observe/ObserveRedirects";
 import { ReleaseStage } from "./components/release-stage-badge";
 import { useSlugs } from "./contexts/Sdk";
 import { cn } from "./lib/utils";
@@ -41,7 +38,6 @@ import {
   InsightsEmployeesLayout,
   InsightsEmployeesPage,
   InsightsHooksPage,
-  InsightsMCPPage,
   InsightsRoot,
 } from "./pages/insights/Insights";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
@@ -390,23 +386,11 @@ const ROUTE_STRUCTURE = {
     indexComponent: TriggersIndex,
   },
   insights: {
-    title: "Insights",
+    title: "MCP & Tools",
     url: "insights",
     icon: "layout-dashboard",
     component: InsightsRoot,
-    indexComponent: RedirectToInsightsTools,
-    subPages: {
-      tools: {
-        title: "Tools",
-        url: "tools",
-        component: InsightsHooksPage,
-      },
-      mcp: {
-        title: "MCP Servers",
-        url: "mcp",
-        component: InsightsMCPPage,
-      },
-    },
+    indexComponent: InsightsHooksPage,
   },
   employees: {
     title: "Employees",
@@ -427,12 +411,6 @@ const ROUTE_STRUCTURE = {
     url: "costs",
     icon: "credit-card",
     component: InsightsAgentsPage,
-  },
-  hooks: {
-    // redirect to insights/tools. TODO: remove this in a month
-    title: "Hooks",
-    url: "hooks",
-    component: RedirectToInsightsTools,
   },
   logs: {
     title: "Logs",

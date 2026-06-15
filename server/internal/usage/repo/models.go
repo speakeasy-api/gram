@@ -3,3 +3,18 @@
 //   sqlc v1.31.1
 
 package repo
+
+import (
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+type BillingMetadatum struct {
+	ID                    uuid.UUID
+	OrganizationID        string
+	TumMonthlyTokenLimit  pgtype.Int8
+	AlertEmail            pgtype.Text
+	BillingCycleAnchorDay int32
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+}

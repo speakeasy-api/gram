@@ -992,25 +992,32 @@ function RiskFindingActions({
   onHide: () => void;
 }) {
   const openCreateExclusion = useContext(CreateExclusionContext);
-  if (!openCreateExclusion && !canHide) return null;
 
+  // Each row is purely an action affordance. Exclusions are never applied to
+  // llm_judge findings (the batch path appends them after the exclusion pass,
+  // and there's no real rule with id "llm_judge"), so there's no CTA for them —
+  // and without one the row would be a bare, redundant annotation, so drop it.
   const seen = new Set<string>();
-  const unique: RiskResult[] = [];
+  const actionable: { result: RiskResult; canExclude: boolean }[] = [];
   for (const r of results) {
     const key = `${r.source}|${r.ruleId ?? ""}|${r.match ?? ""}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    unique.push(r);
+    const canExclude = Boolean(openCreateExclusion) && r.ruleId !== "llm_judge";
+    if (canExclude || canHide) {
+      actionable.push({ result: r, canExclude });
+    }
   }
+  if (actionable.length === 0) return null;
 
   return (
     <div className="mt-2 space-y-1">
-      {unique.map((r) => (
+      {actionable.map(({ result: r, canExclude }) => (
         <div
           key={r.id}
           className="bg-muted/30 flex items-center justify-between gap-2 rounded-md border px-3 py-1.5"
         >
-          <span className="text-muted-foreground truncate font-mono text-xs">
+          <span className="text-muted-foreground min-w-0 truncate font-mono text-xs">
             {[r.ruleId, r.source].filter(Boolean).join(" · ")}
           </span>
           <DropdownMenu>
@@ -1022,10 +1029,10 @@ function RiskFindingActions({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {openCreateExclusion && (
+              {canExclude && (
                 <DropdownMenuItem
                   className="cursor-pointer"
-                  onSelect={() => openCreateExclusion(r)}
+                  onSelect={() => openCreateExclusion?.(r)}
                 >
                   Create exclusion
                 </DropdownMenuItem>
@@ -1091,7 +1098,7 @@ function RiskBadgePopover({ results }: { results: RiskResult[] }) {
                     {getRiskBadgeLabel(r)}
                   </Badge>
                   {shouldShowRiskRuleId(r) && (
-                    <span className="text-muted-foreground truncate font-mono text-xs">
+                    <span className="text-muted-foreground min-w-0 truncate font-mono text-xs">
                       {r.ruleId}
                     </span>
                   )}
