@@ -5189,11 +5189,12 @@ func marshalAccessScopeDefinitionToScopeDefinitionResponseBody(v *access.ScopeDe
 // *AccessMemberResponseBody from a value of type *access.AccessMember.
 func marshalAccessAccessMemberToAccessMemberResponseBody(v *access.AccessMember) *AccessMemberResponseBody {
 	res := &AccessMemberResponseBody{
-		ID:       v.ID,
-		Name:     v.Name,
-		Email:    v.Email,
-		PhotoURL: v.PhotoURL,
-		JoinedAt: v.JoinedAt,
+		ID:           v.ID,
+		PrincipalUrn: v.PrincipalUrn,
+		Name:         v.Name,
+		Email:        v.Email,
+		PhotoURL:     v.PhotoURL,
+		JoinedAt:     v.JoinedAt,
 	}
 	if v.RoleIds != nil {
 		res.RoleIds = make([]string, len(v.RoleIds))

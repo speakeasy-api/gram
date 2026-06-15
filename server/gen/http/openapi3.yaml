@@ -32103,6 +32103,9 @@ components:
                 photo_url:
                     type: string
                     description: Avatar URL.
+                principal_urn:
+                    type: string
+                    description: Canonical principal URN for this member.
                 role_ids:
                     type: array
                     items:
@@ -32110,6 +32113,7 @@ components:
                     description: All role IDs assigned to this member.
             required:
                 - id
+                - principal_urn
                 - name
                 - email
                 - role_ids

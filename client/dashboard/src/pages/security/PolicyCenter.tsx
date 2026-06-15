@@ -2059,7 +2059,7 @@ function PolicyAudiencePicker({
               </p>
             ) : (
               members.map((member) => {
-                const principalUrn = `user:${member.id}`;
+                const principalUrn = member.principalUrn;
                 return (
                   <AudiencePrincipalRow
                     key={principalUrn}

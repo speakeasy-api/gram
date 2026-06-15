@@ -248,6 +248,8 @@ type ListGrantsResponseBody struct {
 type UpdateMemberRolesResponseBody struct {
 	// User ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Canonical principal URN for this member.
+	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
 	// Display name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Email address.
@@ -4717,6 +4719,8 @@ type ScopeDefinitionResponseBody struct {
 type AccessMemberResponseBody struct {
 	// User ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Canonical principal URN for this member.
+	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
 	// Display name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Email address.
@@ -6461,11 +6465,12 @@ func NewListGrantsGatewayError(body *ListGrantsGatewayErrorResponseBody) *goa.Se
 // "updateMemberRoles" endpoint result from a HTTP "OK" response.
 func NewUpdateMemberRolesAccessMemberOK(body *UpdateMemberRolesResponseBody) *access.AccessMember {
 	v := &access.AccessMember{
-		ID:       *body.ID,
-		Name:     *body.Name,
-		Email:    *body.Email,
-		PhotoURL: body.PhotoURL,
-		JoinedAt: *body.JoinedAt,
+		ID:           *body.ID,
+		PrincipalUrn: *body.PrincipalUrn,
+		Name:         *body.Name,
+		Email:        *body.Email,
+		PhotoURL:     body.PhotoURL,
+		JoinedAt:     *body.JoinedAt,
 	}
 	v.RoleIds = make([]string, len(body.RoleIds))
 	for i, val := range body.RoleIds {
@@ -9160,6 +9165,9 @@ func ValidateListGrantsResponseBody(body *ListGrantsResponseBody) (err error) {
 func ValidateUpdateMemberRolesResponseBody(body *UpdateMemberRolesResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.PrincipalUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
@@ -15198,6 +15206,9 @@ func ValidateScopeDefinitionResponseBody(body *ScopeDefinitionResponseBody) (err
 func ValidateAccessMemberResponseBody(body *AccessMemberResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.PrincipalUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))

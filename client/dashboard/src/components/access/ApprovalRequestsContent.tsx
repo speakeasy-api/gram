@@ -52,19 +52,20 @@ function userPrincipalUrn(userId: string) {
 }
 
 function rolePrincipalUrn(role: Role) {
-  const roleKind = role.isSystem ? "global" : "organization";
-  return `role:${roleKind}:${role.id}`;
+  return role.principalUrn;
 }
 
 function approvalPrincipalUrns({
   audience,
   selectedRoleId,
   selectedUserId,
+  members,
   roles,
 }: {
   audience: ApprovalAudience;
   selectedRoleId: string;
   selectedUserId: string;
+  members: AccessMember[];
   roles: Role[];
 }) {
   switch (audience) {
@@ -74,8 +75,10 @@ function approvalPrincipalUrns({
       const role = roles.find((item) => item.id === selectedRoleId);
       return role ? [rolePrincipalUrn(role)] : [];
     }
-    case "user":
-      return selectedUserId ? [userPrincipalUrn(selectedUserId)] : [];
+    case "user": {
+      const member = members.find((item) => item.id === selectedUserId);
+      return member ? [member.principalUrn] : [];
+    }
   }
 }
 
@@ -97,8 +100,7 @@ function principalDisplayName(
 
   const userPrefix = "user:";
   if (principalUrn.startsWith(userPrefix)) {
-    const userId = principalUrn.slice(userPrefix.length);
-    const member = members.find((item) => item.id === userId);
+    const member = members.find((item) => item.principalUrn === principalUrn);
     return member ? memberDisplayName(member) : principalUrn;
   }
 
@@ -129,6 +131,7 @@ function approvalAudienceFromPrincipalUrns(
   principalUrns: string[],
   request: RiskPolicyBypassRequest,
   roles: Role[],
+  members: AccessMember[],
 ) {
   const principalUrn =
     principalUrns[0] ?? userPrincipalUrn(request.requesterUserId);
@@ -146,6 +149,15 @@ function approvalAudienceFromPrincipalUrns(
       audience: "role" as const,
       selectedRoleId: role.id,
       selectedUserId: request.requesterUserId,
+    };
+  }
+
+  const member = members.find((item) => item.principalUrn === principalUrn);
+  if (member) {
+    return {
+      audience: "user" as const,
+      selectedRoleId: "",
+      selectedUserId: member.id,
     };
   }
 
@@ -403,13 +415,14 @@ function ReviewRequestSheet({
       request.grantedPrincipalUrns,
       request,
       roles,
+      members,
     );
     setAction("approve");
     setApprovalAudienceDirty(false);
     setApprovalAudience(initial.audience);
     setSelectedRoleId(initial.selectedRoleId || defaultRequesterRoleId);
     setSelectedUserId(initial.selectedUserId);
-  }, [defaultRequesterRoleId, request, roles, open]);
+  }, [defaultRequesterRoleId, members, request, roles, open]);
 
   if (!request) return null;
 
@@ -421,6 +434,7 @@ function ReviewRequestSheet({
           audience: approvalAudience,
           selectedRoleId,
           selectedUserId,
+          members,
           roles,
         });
   const approveReady = action !== "approve" || principalUrns.length > 0;

@@ -120,6 +120,7 @@ describe("resolveRoleEmails", () => {
   const members: AccessMember[] = [
     {
       id: "m1",
+      principalUrn: "user:m1",
       email: "alice@example.com",
       name: "Alice",
       roleIds: ["role-admin"],
@@ -128,6 +129,7 @@ describe("resolveRoleEmails", () => {
     },
     {
       id: "m2",
+      principalUrn: "user:m2",
       email: "bob@example.com",
       name: "Bob",
       roleIds: ["role-member"],
@@ -136,6 +138,7 @@ describe("resolveRoleEmails", () => {
     },
     {
       id: "m3",
+      principalUrn: "user:m3",
       email: "carol@example.com",
       name: "Carol",
       roleIds: ["role-admin"],

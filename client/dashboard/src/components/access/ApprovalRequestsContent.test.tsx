@@ -306,6 +306,7 @@ function accessMember({
     id,
     joinedAt: new Date("2026-01-01"),
     name,
+    principalUrn: `user:${id}`,
     roleIds,
   };
 }

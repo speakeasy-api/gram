@@ -114,12 +114,13 @@ func (r *RoleManager) ListMembers(ctx context.Context, gramOrgID string) (*gen.L
 		m, exists := memberMap[row.ID]
 		if !exists {
 			m = &gen.AccessMember{
-				ID:       row.ID,
-				Name:     conv.Default(row.DisplayName, row.Email),
-				Email:    row.Email,
-				PhotoURL: conv.FromPGText[string](row.PhotoUrl),
-				RoleIds:  nil,
-				JoinedAt: conv.FromPGTimestamptz(row.JoinedAt),
+				ID:           row.ID,
+				PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, row.ID).String(),
+				Name:         conv.Default(row.DisplayName, row.Email),
+				Email:        row.Email,
+				PhotoURL:     conv.FromPGText[string](row.PhotoUrl),
+				RoleIds:      nil,
+				JoinedAt:     conv.FromPGTimestamptz(row.JoinedAt),
 			}
 			memberMap[row.ID] = m
 			order = append(order, row.ID)
@@ -664,26 +665,29 @@ func (r *RoleManager) UpdateMemberRoles(ctx context.Context, gramOrgID, userID s
 	}
 
 	memberName := conv.Default(connectedUser.DisplayName, connectedUser.Email)
+	memberPrincipalURN := urn.NewPrincipal(urn.PrincipalTypeUser, connectedUser.ID).String()
 	result := memberRoleUpdateContext{
 		RoleSlugs:    roleSlugs,
 		MembershipID: membershipID,
 		WorkosUserID: connectedUser.WorkosID.String,
 		UserID:       connectedUser.ID,
 		Before: &gen.AccessMember{
-			ID:       connectedUser.ID,
-			Name:     memberName,
-			Email:    connectedUser.Email,
-			PhotoURL: conv.FromPGText[string](connectedUser.PhotoUrl),
-			RoleIds:  existingRoleIDs,
-			JoinedAt: conv.FromPGTimestamptz(existing.CreatedAt),
+			ID:           connectedUser.ID,
+			PrincipalUrn: memberPrincipalURN,
+			Name:         memberName,
+			Email:        connectedUser.Email,
+			PhotoURL:     conv.FromPGText[string](connectedUser.PhotoUrl),
+			RoleIds:      existingRoleIDs,
+			JoinedAt:     conv.FromPGTimestamptz(existing.CreatedAt),
 		},
 		After: &gen.AccessMember{
-			ID:       connectedUser.ID,
-			Name:     memberName,
-			Email:    connectedUser.Email,
-			PhotoURL: conv.FromPGText[string](connectedUser.PhotoUrl),
-			RoleIds:  afterRoleIDs,
-			JoinedAt: conv.FromPGTimestamptz(existing.CreatedAt),
+			ID:           connectedUser.ID,
+			PrincipalUrn: memberPrincipalURN,
+			Name:         memberName,
+			Email:        connectedUser.Email,
+			PhotoURL:     conv.FromPGText[string](connectedUser.PhotoUrl),
+			RoleIds:      afterRoleIDs,
+			JoinedAt:     conv.FromPGTimestamptz(existing.CreatedAt),
 		},
 	}
 

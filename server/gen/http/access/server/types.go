@@ -248,6 +248,8 @@ type ListGrantsResponseBody struct {
 type UpdateMemberRolesResponseBody struct {
 	// User ID.
 	ID string `form:"id" json:"id" xml:"id"`
+	// Canonical principal URN for this member.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 	// Display name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// Email address.
@@ -4688,6 +4690,8 @@ type ScopeDefinitionResponseBody struct {
 type AccessMemberResponseBody struct {
 	// User ID.
 	ID string `form:"id" json:"id" xml:"id"`
+	// Canonical principal URN for this member.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 	// Display name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// Email address.
@@ -5080,11 +5084,12 @@ func NewListGrantsResponseBody(res *access.ListUserGrantsResult) *ListGrantsResp
 // result of the "updateMemberRoles" endpoint of the "access" service.
 func NewUpdateMemberRolesResponseBody(res *access.AccessMember) *UpdateMemberRolesResponseBody {
 	body := &UpdateMemberRolesResponseBody{
-		ID:       res.ID,
-		Name:     res.Name,
-		Email:    res.Email,
-		PhotoURL: res.PhotoURL,
-		JoinedAt: res.JoinedAt,
+		ID:           res.ID,
+		PrincipalUrn: res.PrincipalUrn,
+		Name:         res.Name,
+		Email:        res.Email,
+		PhotoURL:     res.PhotoURL,
+		JoinedAt:     res.JoinedAt,
 	}
 	if res.RoleIds != nil {
 		body.RoleIds = make([]string, len(res.RoleIds))
