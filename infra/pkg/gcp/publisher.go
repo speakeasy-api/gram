@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"cloud.google.com/go/pubsub/v2"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -44,7 +46,14 @@ type Publisher[M any] interface {
 }
 
 type psPublisherOptions struct {
+	propagation     propagation.TextMapPropagator
 	publishSettings *pubsub.PublishSettings
+}
+
+func WithPropagator(prop propagation.TextMapPropagator) func(*psPublisherOptions) {
+	return func(o *psPublisherOptions) {
+		o.propagation = prop
+	}
 }
 
 func WithPubSubPublishSettings(settings *pubsub.PublishSettings) func(*psPublisherOptions) {
@@ -56,7 +65,8 @@ func WithPubSubPublishSettings(settings *pubsub.PublishSettings) func(*psPublish
 }
 
 type psPublisher[M proto.Message] struct {
-	pub *pubsub.Publisher
+	pub  *pubsub.Publisher
+	prop propagation.TextMapPropagator
 }
 
 // PubSubPublisherForMessage returns a publisher for the topic declared by a
@@ -73,6 +83,7 @@ func PubSubPublisherForMessage[M proto.Message](ctx context.Context, broker Publ
 	}
 
 	var o psPublisherOptions
+	o.propagation = otel.GetTextMapPropagator()
 	for _, opt := range opts {
 		opt(&o)
 	}
@@ -80,7 +91,24 @@ func PubSubPublisherForMessage[M proto.Message](ctx context.Context, broker Publ
 		publisher.PublishSettings = *o.publishSettings
 	}
 
-	return &psPublisher[M]{pub: publisher}, nil
+	return &psPublisher[M]{pub: publisher, prop: o.propagation}, nil
+}
+
+// messageAttributes builds the attribute set carried with an outgoing message:
+// the content-type and schema markers the subscriber uses to decode the
+// payload, plus any trace context propagated from ctx so the subscriber can
+// continue the producer's trace. The propagator is passed in so the behaviour
+// is testable without mutating global state; when ctx carries no active span
+// injection is a no-op and no propagation attributes are added.
+func messageAttributes(ctx context.Context, prop propagation.TextMapPropagator, msg proto.Message) map[string]string {
+	attributes := map[string]string{
+		"content-type": "application/x-protobuf",
+		"schema":       string(proto.MessageName(msg)),
+	}
+	if prop != nil {
+		prop.Inject(ctx, propagation.MapCarrier(attributes))
+	}
+	return attributes
 }
 
 func (p *psPublisher[M]) Publish(ctx context.Context, msg M) PublishResult {
@@ -90,11 +118,8 @@ func (p *psPublisher[M]) Publish(ctx context.Context, msg M) PublishResult {
 	}
 
 	res := p.pub.Publish(ctx, &pubsub.Message{
-		Data: bs,
-		Attributes: map[string]string{
-			"content-type": "application/x-protobuf",
-			"schema":       string(proto.MessageName(msg)),
-		},
+		Data:       bs,
+		Attributes: messageAttributes(ctx, p.prop, msg),
 	})
 
 	return res

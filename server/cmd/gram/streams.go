@@ -12,6 +12,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/client"
 	"golang.org/x/sync/errgroup"
@@ -269,6 +270,15 @@ func receive[M proto.Message](
 
 	g.group.Go(func() error {
 		if err := sub.Receive(ctx, func(ctx context.Context, m M, meta gcp.MessageMetadata) (err error) {
+			// Continue the producer's trace: extract any trace context the
+			// publisher propagated through the message attributes so this span
+			// is a child of the publishing span instead of the root of a fresh
+			// trace. Extract uses the globally configured propagator (W3C
+			// tracecontext + baggage) and leaves ctx unchanged when no trace
+			// headers are present, so unpropagated messages still start a new
+			// trace.
+			ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.MapCarrier(meta.Attributes))
+
 			ctx, span := g.tracer.Start(ctx, "stream.handleMessage", trace.WithAttributes(
 				attr.TopicProtoName(msgName),
 				attr.SubscriptionProtoName(subName),
