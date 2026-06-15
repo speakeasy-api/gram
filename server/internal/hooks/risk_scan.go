@@ -111,7 +111,7 @@ func (s *Service) resolveClaudeScanContext(ctx context.Context, sessionID string
 
 // scanCursorForEnforcement runs the risk scanner for a Cursor hook payload.
 // Unlike Claude, Cursor hooks are authenticated so the project ID is known.
-func (s *Service) scanCursorForEnforcement(ctx context.Context, payload *gen.CursorPayload, orgID, projectID string) *risk.ScanResult {
+func (s *Service) scanCursorForEnforcement(ctx context.Context, payload *gen.CursorPayload, orgID, projectID, userID string) *risk.ScanResult {
 	if s.riskScanner == nil {
 		return nil
 	}
@@ -153,7 +153,7 @@ func (s *Service) scanCursorForEnforcement(ctx context.Context, payload *gen.Cur
 
 // scanCodexForEnforcement runs the risk scanner for a Codex hook payload.
 // Like Cursor, Codex hooks are authenticated so the project ID is known.
-func (s *Service) scanCodexForEnforcement(ctx context.Context, payload *gen.CodexPayload, orgID, projectID string) *risk.ScanResult {
+func (s *Service) scanCodexForEnforcement(ctx context.Context, payload *gen.CodexPayload, orgID, projectID, userID string) *risk.ScanResult {
 	if s.riskScanner == nil {
 		return nil
 	}
@@ -181,8 +181,7 @@ func (s *Service) scanCodexForEnforcement(ctx context.Context, payload *gen.Code
 		return nil
 	}
 
-	metadata := s.codexSessionMetadata(ctx, payload, orgID, projectID)
-	result, err := s.riskScanner.ScanForEnforcement(ctx, orgID, pid, metadata.UserID, text, messageType, toolName)
+	result, err := s.riskScanner.ScanForEnforcement(ctx, orgID, pid, userID, text, messageType, toolName)
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for Codex hook",
 			attr.SlogError(err),

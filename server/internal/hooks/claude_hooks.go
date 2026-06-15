@@ -773,6 +773,9 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 			)
 			return denyUnverifiedMCP()
 		}
+		if metadata.UserID == "" {
+			metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
+		}
 	}
 
 	policy := s.lookupShadowMCPBlockingPolicy(ctx, metadata.GramOrgID, metadata.ProjectID, metadata.UserID)
@@ -924,7 +927,7 @@ func mergeClaudeAuthContextMetadata(metadata SessionMetadata, cached SessionMeta
 	if cached.UserEmail != "" {
 		metadata.UserEmail = cached.UserEmail
 	}
-	if cached.UserID != "" {
+	if metadata.UserID == "" && cached.UserID != "" {
 		metadata.UserID = cached.UserID
 	}
 	metadata.ClaudeOrgID = cached.ClaudeOrgID
