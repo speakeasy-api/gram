@@ -72,6 +72,14 @@ export type ChatMessageTransform = (
 export interface ThreadListAdapterOptions {
   apiUrl: string;
   headers: Record<string, string>;
+  /**
+   * Async header resolution that waits for auth to settle (e.g. the session
+   * token fetch) before returning. When provided, every adapter request uses
+   * this instead of the `headers` snapshot — which lets the runtime mount
+   * before auth resolves: the initial `list()` fires immediately on bind and
+   * would otherwise go out with incomplete headers.
+   */
+  getHeaders?: () => Promise<Record<string, string>>;
   /** Map to translate local thread IDs to UUIDs (shared with transport) */
   localIdToUuidMap?: Map<string, string>;
   /**
@@ -101,13 +109,24 @@ interface ListChatsResponse {
 }
 
 /**
+ * Resolves request headers from the live adapter options: the async
+ * `getHeaders` (which waits for auth to settle) when provided, otherwise the
+ * static `headers` snapshot.
+ */
+async function resolveAdapterHeaders(
+  options: ThreadListAdapterOptions,
+): Promise<Record<string, string>> {
+  return options.getHeaders ? options.getHeaders() : options.headers;
+}
+
+/**
  * Thread history adapter that loads messages from Gram API.
  * Note: We use `as ThreadHistoryAdapter` cast because the withFormat generic
  * signature doesn't match our concrete implementation, but it works at runtime.
  */
 class GramThreadHistoryAdapter {
   private apiUrl: string;
-  private headers: Record<string, string>;
+  private getHeaders: () => Promise<Record<string, string>>;
   private store: AssistantApi;
   // Read lazily rather than captured: the adapter is constructed once, but the
   // consumer may swap `transformChatMessage` across renders, so resolve it from
@@ -116,12 +135,12 @@ class GramThreadHistoryAdapter {
 
   constructor(
     apiUrl: string,
-    headers: Record<string, string>,
+    getHeaders: () => Promise<Record<string, string>>,
     store: AssistantApi,
     getTransformChatMessage?: () => ChatMessageTransform | undefined,
   ) {
     this.apiUrl = apiUrl;
-    this.headers = headers;
+    this.getHeaders = getHeaders;
     this.store = store;
     this.getTransformChatMessage = getTransformChatMessage;
   }
@@ -155,7 +174,7 @@ class GramThreadHistoryAdapter {
     try {
       const response = await fetch(
         `${this.apiUrl}/rpc/chat.load?id=${encodeURIComponent(remoteId)}`,
-        { headers: this.headers },
+        { headers: await this.getHeaders() },
       );
 
       if (!response.ok) {
@@ -189,7 +208,7 @@ class GramThreadHistoryAdapter {
 
         const response = await fetch(
           `${this.apiUrl}/rpc/chat.load?id=${encodeURIComponent(remoteId)}`,
-          { headers: this.headers },
+          { headers: await this.getHeaders() },
         );
 
         if (!response.ok) {
@@ -253,7 +272,7 @@ function useGramThreadHistoryAdapter(
     () =>
       new GramThreadHistoryAdapter(
         optionsRef.current.apiUrl,
-        optionsRef.current.headers,
+        () => resolveAdapterHeaders(optionsRef.current),
         store,
         () => optionsRef.current.transformChatMessage,
       ),
@@ -294,7 +313,8 @@ export function useGramThreadListAdapter(
 
       async list() {
         try {
-          const { apiUrl, headers, threadListFilters } = optionsRef.current;
+          const { apiUrl, threadListFilters } = optionsRef.current;
+          const headers = await resolveAdapterHeaders(optionsRef.current);
           const qs = threadListFilters
             ? new URLSearchParams(threadListFilters).toString()
             : "";
@@ -416,7 +436,7 @@ export function useGramThreadListAdapter(
             {
               method: "POST",
               headers: {
-                ...optionsRef.current.headers,
+                ...(await resolveAdapterHeaders(optionsRef.current)),
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({ id: remoteId }),
@@ -457,7 +477,7 @@ export function useGramThreadListAdapter(
           const response = await fetch(
             `${optionsRef.current.apiUrl}/rpc/chat.load?id=${encodeURIComponent(threadId)}`,
             {
-              headers: optionsRef.current.headers,
+              headers: await resolveAdapterHeaders(optionsRef.current),
             },
           );
 

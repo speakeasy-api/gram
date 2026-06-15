@@ -603,6 +603,15 @@ export interface ThemeConfig {
    * @default 'soft'
    */
   radius?: Radius;
+
+  /**
+   * Extra CSS injected into the Elements shadow root after the built-in
+   * stylesheet. Elements renders inside a shadow DOM, so host-page styles
+   * cannot reach its internals — this is the supported escape hatch for
+   * embedders that need to restyle specific components (targeting the
+   * stable `aui-*` class hooks).
+   */
+  customCss?: string;
 }
 
 export interface ComponentOverrides {
