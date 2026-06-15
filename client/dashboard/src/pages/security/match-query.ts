@@ -10,11 +10,11 @@ type MatchTarget = RiskMatchCondition["target"];
  *   field:value          equals            field:*value*   contains
  *   -field:value         not equals        field:value*    starts with
  *   field:/regex/        regex             field:*value    ends with
- *   field:(a OR b)       any of (in)       field:*         field present
- *   field:(*a* OR *b*)   contains any      -field:*value*  not contains
+ *   field:*              field present     -field:*value*  not contains
  *
  * Conditions join with a single AND or OR (the backend stores a flat list — NOT
- * and grouping parens are rejected; value unions still use balanced ( )).
+ * and grouping parens are rejected). "Any of" is a top-level OR of separate
+ * clauses, e.g. `field:*a* OR field:*b*` — there is no field-level union.
  */
 
 export type QueryCategory = "prompt" | "tool";
@@ -94,7 +94,7 @@ export const MATCH_QUERY_EXAMPLES: { query: string; meaning: string }[] = [
     meaning: "an MCP tool (server is not empty)",
   },
   {
-    query: "tool_call.args:(*rm* OR *curl*)",
+    query: "tool_call.args:*rm* OR tool_call.args:*curl*",
     meaning: "arguments contain rm or curl",
   },
   { query: "content:/secret-\\d+/", meaning: "content matches a regex" },
@@ -179,18 +179,13 @@ export function serializeClause(c: RiskMatchCondition): string {
     case "contains":
     case "not_contains": {
       const prefix = c.op === "not_contains" ? "-" : "";
-      const vals = operandList(c);
-      const body =
-        vals.length === 1
-          ? `*${vals[0]}*`
-          : `(${vals.map((v) => `*${v}*`).join(" OR ")})`;
-      return `${prefix}${field}:${body}`;
+      return `${prefix}${field}:*${operandList(c)[0] ?? ""}*`;
     }
+    // Legacy multi-value ops (the editor no longer authors these — "any of" is a
+    // top-level OR of separate clauses); show the first value.
     case "in":
-    case "keyword": {
-      const vals = operandList(c);
-      return `${field}:(${vals.join(" OR ")})`;
-    }
+    case "keyword":
+      return `${field}:${quoteValue(operandList(c)[0] ?? "")}`;
     case "glob":
       return `${field}:${c.value ?? ""}`;
   }
@@ -319,19 +314,6 @@ function makeCondition(
     if (negate) return "Negation isn't supported with /regex/";
     return { ...base, op: "regex", value: rawVal.slice(1, -1) };
   }
-  // field:(a OR b)  → union
-  if (rawVal.startsWith("(") && rawVal.endsWith(")")) {
-    const terms = parseUnionTerms(rawVal);
-    if (terms.every((t) => isWrappedStar(t))) {
-      return {
-        ...base,
-        op: negate ? "not_contains" : "contains",
-        values: terms.map(stripStars),
-      };
-    }
-    if (negate) return "Negation isn't supported with (a OR b)";
-    return { ...base, op: "in", values: terms.map(unquote) };
-  }
   // single value with wildcards
   if (isWrappedStar(rawVal)) {
     return {
@@ -353,15 +335,6 @@ function makeCondition(
     op: negate ? "not_equals" : "equals",
     value: unquote(rawVal),
   };
-}
-
-function parseUnionTerms(raw: string): string[] {
-  let s = raw.trim();
-  if (s.startsWith("(") && s.endsWith(")")) s = s.slice(1, -1);
-  return s
-    .split(/\s+OR\s+|,/i)
-    .map((v) => v.trim())
-    .filter(Boolean);
 }
 
 function isWrappedStar(v: string): boolean {
@@ -500,13 +473,6 @@ function valueSuggestions(typed: string): QuerySuggestion[] {
       description: "regex",
       group: "Value",
       insert: "//",
-      caretOffset: 1,
-    },
-    {
-      label: "(a OR b)",
-      description: "any of",
-      group: "Value",
-      insert: "()",
       caretOffset: 1,
     },
     {

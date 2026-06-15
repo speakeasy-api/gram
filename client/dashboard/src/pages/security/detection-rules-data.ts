@@ -536,17 +536,11 @@ function summarizeCondition(c: RiskMatchCondition): string {
     case "ends_with":
       return `${field}:*${c.value ?? ""}`;
     case "contains":
-    case "not_contains": {
-      const prefix = c.op === "not_contains" ? "-" : "";
-      const body =
-        operands.length === 1
-          ? `*${operands[0]}*`
-          : `(${operands.map((v) => `*${v}*`).join(" OR ")})`;
-      return `${prefix}${field}:${body}`;
-    }
+    case "not_contains":
+      return `${c.op === "not_contains" ? "-" : ""}${field}:*${operands[0] ?? ""}*`;
     case "in":
     case "keyword":
-      return `${field}:(${operands.join(" OR ")})`;
+      return `${field}:${operands[0] ?? ""}`;
     case "glob":
       return `${field}:${c.value ?? ""}`;
   }

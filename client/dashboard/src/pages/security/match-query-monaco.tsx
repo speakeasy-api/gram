@@ -89,7 +89,7 @@ function registerLanguage(m: typeof Monaco) {
   });
 
   m.languages.registerCompletionItemProvider(LANGUAGE_ID, {
-    triggerCharacters: [":", ".", " ", "-", "("],
+    triggerCharacters: [":", ".", " ", "-"],
     provideCompletionItems(model, position) {
       const value = model.getValue();
       const offset = model.getOffsetAt(position);
@@ -105,8 +105,11 @@ function registerLanguage(m: typeof Monaco) {
         suggestions: suggestions.map((s) => {
           const snippet = s.caretOffset !== undefined;
           return {
-            label: s.label,
-            detail: s.description,
+            // Group rides in the label's right-aligned slot (never truncated);
+            // the full description goes to documentation (wrapping flyout) so it
+            // isn't clipped like `detail` is in the narrow suggest widget.
+            label: { label: s.label, description: s.group },
+            documentation: { value: s.description },
             kind: m.languages.CompletionItemKind.Value,
             sortText: String.fromCharCode(97), // keep our ordering
             insertText: snippet
