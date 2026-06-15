@@ -34,7 +34,7 @@ const labelOverrides = new Map<string, string>();
 export const RECENTS_LABEL_OVERRIDE_EVENT = "gram:recents-label-override";
 
 /** Register a human label for a visited href (keyed by pathname). */
-export function setRecentLabelOverride(href: string, label: string): void {
+function setRecentLabelOverride(href: string, label: string): void {
   if (labelOverrides.get(href) === label) return;
   labelOverrides.set(href, label);
   window.dispatchEvent(
