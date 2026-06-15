@@ -15,6 +15,18 @@ import {
 } from "./riskmatchcondition.js";
 
 /**
+ * What the rule does when it matches: deny (flag a finding, the default) or allow (an allowlist that short-circuits the whole policy for that message).
+ */
+export const Action = {
+  Deny: "deny",
+  Allow: "allow",
+} as const;
+/**
+ * What the rule does when it matches: deny (flag a finding, the default) or allow (an allowlist that short-circuits the whole policy for that message).
+ */
+export type Action = ClosedEnum<typeof Action>;
+
+/**
  * How the conditions reduce to a verdict.
  */
 export const Combine = {
@@ -26,19 +38,11 @@ export const Combine = {
  */
 export type Combine = ClosedEnum<typeof Combine>;
 
-/**
- * Rule polarity: deny (flag a finding, the default) or allow (an allowlist that short-circuits the whole policy for a message when matched).
- */
-export const RiskMatchConfigEffect = {
-  Deny: "deny",
-  Allow: "allow",
-} as const;
-/**
- * Rule polarity: deny (flag a finding, the default) or allow (an allowlist that short-circuits the whole policy for a message when matched).
- */
-export type RiskMatchConfigEffect = ClosedEnum<typeof RiskMatchConfigEffect>;
-
 export type RiskMatchConfig = {
+  /**
+   * What the rule does when it matches: deny (flag a finding, the default) or allow (an allowlist that short-circuits the whole policy for that message).
+   */
+  action?: Action | undefined;
   /**
    * How the conditions reduce to a verdict.
    */
@@ -47,11 +51,15 @@ export type RiskMatchConfig = {
    * Conditions evaluated against a message; all (and) or any (or) must match.
    */
   conditions: Array<RiskMatchCondition>;
-  /**
-   * Rule polarity: deny (flag a finding, the default) or allow (an allowlist that short-circuits the whole policy for a message when matched).
-   */
-  effect?: RiskMatchConfigEffect | undefined;
 };
+
+/** @internal */
+export const Action$inboundSchema: z.ZodMiniEnum<typeof Action> = z.enum(
+  Action,
+);
+/** @internal */
+export const Action$outboundSchema: z.ZodMiniEnum<typeof Action> =
+  Action$inboundSchema;
 
 /** @internal */
 export const Combine$inboundSchema: z.ZodMiniEnum<typeof Combine> = z.enum(
@@ -62,28 +70,19 @@ export const Combine$outboundSchema: z.ZodMiniEnum<typeof Combine> =
   Combine$inboundSchema;
 
 /** @internal */
-export const RiskMatchConfigEffect$inboundSchema: z.ZodMiniEnum<
-  typeof RiskMatchConfigEffect
-> = z.enum(RiskMatchConfigEffect);
-/** @internal */
-export const RiskMatchConfigEffect$outboundSchema: z.ZodMiniEnum<
-  typeof RiskMatchConfigEffect
-> = RiskMatchConfigEffect$inboundSchema;
-
-/** @internal */
 export const RiskMatchConfig$inboundSchema: z.ZodMiniType<
   RiskMatchConfig,
   unknown
 > = z.object({
+  action: z.optional(Action$inboundSchema),
   combine: z.optional(Combine$inboundSchema),
   conditions: z.array(RiskMatchCondition$inboundSchema),
-  effect: z.optional(RiskMatchConfigEffect$inboundSchema),
 });
 /** @internal */
 export type RiskMatchConfig$Outbound = {
+  action?: string | undefined;
   combine?: string | undefined;
   conditions: Array<RiskMatchCondition$Outbound>;
-  effect?: string | undefined;
 };
 
 /** @internal */
@@ -91,9 +90,9 @@ export const RiskMatchConfig$outboundSchema: z.ZodMiniType<
   RiskMatchConfig$Outbound,
   RiskMatchConfig
 > = z.object({
+  action: z.optional(Action$outboundSchema),
   combine: z.optional(Combine$outboundSchema),
   conditions: z.array(RiskMatchCondition$outboundSchema),
-  effect: z.optional(RiskMatchConfigEffect$outboundSchema),
 });
 
 export function riskMatchConfigToJSON(

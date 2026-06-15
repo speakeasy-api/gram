@@ -8,9 +8,9 @@
 package types
 
 type RiskMatchConfig struct {
-	// Rule polarity: deny (flag a finding, the default) or allow (an allowlist
-	// that short-circuits the whole policy for a message when matched).
-	Effect *string
+	// What the rule does when it matches: deny (flag a finding, the default) or
+	// allow (an allowlist that short-circuits the whole policy for that message).
+	Action *string
 	// How the conditions reduce to a verdict.
 	Combine *string
 	// Conditions evaluated against a message; all (and) or any (or) must match.

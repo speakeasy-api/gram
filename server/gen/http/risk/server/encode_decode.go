@@ -7654,7 +7654,7 @@ func unmarshalRiskMatchConfigRequestBodyToTypesRiskMatchConfig(v *RiskMatchConfi
 		return nil
 	}
 	res := &types.RiskMatchConfig{
-		Effect:  v.Effect,
+		Action:  v.Action,
 		Combine: v.Combine,
 	}
 	res.Conditions = make([]*types.RiskMatchCondition, len(v.Conditions))
@@ -7698,7 +7698,7 @@ func marshalTypesRiskMatchConfigToRiskMatchConfigResponseBody(v *types.RiskMatch
 		return nil
 	}
 	res := &RiskMatchConfigResponseBody{
-		Effect:  v.Effect,
+		Action:  v.Action,
 		Combine: v.Combine,
 	}
 	if v.Conditions != nil {

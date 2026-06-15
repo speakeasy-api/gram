@@ -11016,7 +11016,7 @@ func riskCreateCustomDetectionRuleUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-custom-detection-rule --body '{\n      \"description\": \"abc123\",\n      \"match_config\": {\n         \"combine\": \"or\",\n         \"conditions\": [\n            {\n               \"case_insensitive\": false,\n               \"op\": \"equals\",\n               \"path\": \"abc123\",\n               \"target\": \"user_prompt\",\n               \"value\": \"abc123\",\n               \"values\": [\n                  \"abc123\"\n               ]\n            }\n         ],\n         \"effect\": \"allow\"\n      },\n      \"regex\": \"abc123\",\n      \"rule_id\": \"abc123\",\n      \"severity\": \"low\",\n      \"title\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-custom-detection-rule --body '{\n      \"description\": \"abc123\",\n      \"match_config\": {\n         \"action\": \"allow\",\n         \"combine\": \"or\",\n         \"conditions\": [\n            {\n               \"case_insensitive\": false,\n               \"op\": \"equals\",\n               \"path\": \"abc123\",\n               \"target\": \"user_prompt\",\n               \"value\": \"abc123\",\n               \"values\": [\n                  \"abc123\"\n               ]\n            }\n         ]\n      },\n      \"regex\": \"abc123\",\n      \"rule_id\": \"abc123\",\n      \"severity\": \"low\",\n      \"title\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskListCustomDetectionRulesUsage() {
@@ -11086,7 +11086,7 @@ func riskUpdateCustomDetectionRuleUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk update-custom-detection-rule --body '{\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"match_config\": {\n         \"combine\": \"or\",\n         \"conditions\": [\n            {\n               \"case_insensitive\": false,\n               \"op\": \"equals\",\n               \"path\": \"abc123\",\n               \"target\": \"user_prompt\",\n               \"value\": \"abc123\",\n               \"values\": [\n                  \"abc123\"\n               ]\n            }\n         ],\n         \"effect\": \"allow\"\n      },\n      \"regex\": \"abc123\",\n      \"severity\": \"low\",\n      \"title\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk update-custom-detection-rule --body '{\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"match_config\": {\n         \"action\": \"allow\",\n         \"combine\": \"or\",\n         \"conditions\": [\n            {\n               \"case_insensitive\": false,\n               \"op\": \"equals\",\n               \"path\": \"abc123\",\n               \"target\": \"user_prompt\",\n               \"value\": \"abc123\",\n               \"values\": [\n                  \"abc123\"\n               ]\n            }\n         ]\n      },\n      \"regex\": \"abc123\",\n      \"severity\": \"low\",\n      \"title\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskDeleteCustomDetectionRuleUsage() {
@@ -11254,7 +11254,7 @@ func riskTestDetectionRuleUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk test-detection-rule --body '{\n      \"match_config\": {\n         \"combine\": \"or\",\n         \"conditions\": [\n            {\n               \"case_insensitive\": false,\n               \"op\": \"equals\",\n               \"path\": \"abc123\",\n               \"target\": \"user_prompt\",\n               \"value\": \"abc123\",\n               \"values\": [\n                  \"abc123\"\n               ]\n            }\n         ],\n         \"effect\": \"allow\"\n      },\n      \"regex\": \"abc123\",\n      \"rule_id\": \"aa\",\n      \"text\": \"aa\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk test-detection-rule --body '{\n      \"match_config\": {\n         \"action\": \"allow\",\n         \"combine\": \"or\",\n         \"conditions\": [\n            {\n               \"case_insensitive\": false,\n               \"op\": \"equals\",\n               \"path\": \"abc123\",\n               \"target\": \"user_prompt\",\n               \"value\": \"abc123\",\n               \"values\": [\n                  \"abc123\"\n               ]\n            }\n         ]\n      },\n      \"regex\": \"abc123\",\n      \"rule_id\": \"aa\",\n      \"text\": \"aa\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // telemetryUsage displays the usage of the telemetry command and its

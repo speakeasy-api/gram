@@ -2107,8 +2107,8 @@ func (s *Service) testCustomRule(ruleID, pattern string, cfg *types.RiskMatchCon
 
 	if cfg != nil {
 		// The playground reports whether the conditions match the sample text,
-		// independent of allow/deny effect, so evaluate it as a detection rule.
-		cfg.Effect = nil
+		// independent of allow/deny action, so evaluate it as a detection rule.
+		cfg.Action = nil
 	}
 
 	raw, err := customRuleMatchConfigToStorage(cfg)
@@ -2264,7 +2264,7 @@ func customRuleMatchConfigToStorage(in *types.RiskMatchConfig) ([]byte, error) {
 		return nil, nil
 	}
 	cfg := ra.MatchConfig{
-		Effect:     ra.Effect(conv.PtrValOr(in.Effect, "")),
+		Action:     ra.Action(conv.PtrValOr(in.Action, "")),
 		Combine:    ra.MatchCombine(conv.PtrValOr(in.Combine, "")),
 		Conditions: make([]ra.Condition, 0, len(in.Conditions)),
 	}
@@ -2303,7 +2303,7 @@ func customRuleMatchConfigFromStorage(raw []byte) *types.RiskMatchConfig {
 		return nil
 	}
 	out := &types.RiskMatchConfig{
-		Effect:     conv.PtrEmpty(string(cfg.Effect)),
+		Action:     conv.PtrEmpty(string(cfg.Action)),
 		Combine:    conv.PtrEmpty(string(cfg.Combine)),
 		Conditions: make([]*types.RiskMatchCondition, 0, len(cfg.Conditions)),
 	}

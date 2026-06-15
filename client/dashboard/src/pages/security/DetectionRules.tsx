@@ -51,24 +51,21 @@ import {
   BUILTIN_RULES_BY_CATEGORY,
   SEVERITY_LEVELS,
   buildMatchConfig,
-  defaultCondition,
+  ruleAction,
+  ruleCombine,
   ruleConditions,
-  ruleEffect,
   ruleSummary,
   useDetectionRulesStore,
-  validateConditions,
   validateCustomRuleId,
   type BuiltinRule,
   type CustomDetectionRule,
+  type CustomRuleAction,
   type CustomRuleDraft,
-  type CustomRuleEffect,
   type SeverityLevel,
 } from "./detection-rules-data";
-import { MatchConfigBuilder } from "./match-config-builder";
-import type {
-  RiskMatchConfig,
-  RiskMatchCondition,
-} from "@gram/client/models/components";
+import { matchQueryFromConditions, parseMatchQuery } from "./match-query";
+import { MatchQueryInput } from "./match-query-input";
+import type { RiskMatchConfig } from "@gram/client/models/components";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
 
 /** Presidio-backed categories: kept in the same order the policy form uses
@@ -480,28 +477,37 @@ function BuiltinRuleDetail({ rule }: { rule: BuiltinRule }) {
   );
 }
 
-function EffectSelect({
+function ActionSelect({
   value,
   onChange,
 }: {
-  value: CustomRuleEffect;
-  onChange: (v: CustomRuleEffect) => void;
+  value: CustomRuleAction;
+  onChange: (v: CustomRuleAction) => void;
 }) {
   return (
-    <Select
-      value={value}
-      onValueChange={(v) => onChange(v as CustomRuleEffect)}
-    >
-      <SelectTrigger className="h-9 w-full">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="deny">Deny — flag a finding when matched</SelectItem>
-        <SelectItem value="allow">
-          Allow — exempt the message (short-circuits the policy)
-        </SelectItem>
-      </SelectContent>
-    </Select>
+    <div className="space-y-1">
+      <Select
+        value={value}
+        onValueChange={(v) => onChange(v as CustomRuleAction)}
+      >
+        <SelectTrigger className="h-9 w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="deny">
+            Deny — flag a finding when it matches
+          </SelectItem>
+          <SelectItem value="allow">
+            Allow — let the message through, skipping the rest of the policy
+          </SelectItem>
+        </SelectContent>
+      </Select>
+      <p className="text-muted-foreground text-xs">
+        {value === "allow"
+          ? "An allowlist: when this matches, the whole policy is short-circuited and nothing is flagged for that message."
+          : "A detection rule: when this matches, the policy records a finding."}
+      </p>
+    </div>
   );
 }
 
@@ -516,11 +522,11 @@ function CustomRuleDetail({
 }) {
   const [title, setTitle] = useState(rule.title);
   const [description, setDescription] = useState(rule.description);
-  const [conditions, setConditions] = useState<RiskMatchCondition[]>(() =>
-    ruleConditions(rule),
+  const [query, setQuery] = useState(() =>
+    matchQueryFromConditions(ruleConditions(rule), ruleCombine(rule)),
   );
-  const [effect, setEffect] = useState<CustomRuleEffect>(() =>
-    ruleEffect(rule),
+  const [action, setAction] = useState<CustomRuleAction>(() =>
+    ruleAction(rule),
   );
   const [saveState, setSaveState] = useState<
     "idle" | "saving" | "saved" | "error"
@@ -529,19 +535,16 @@ function CustomRuleDetail({
   const savedRef = useRef({
     title: rule.title,
     description: rule.description,
-    conditions: JSON.stringify(ruleConditions(rule)),
-    effect: ruleEffect(rule),
+    query: matchQueryFromConditions(ruleConditions(rule), ruleCombine(rule)),
+    action: ruleAction(rule),
   });
 
-  const conditionsError = useMemo(
-    () => validateConditions(conditions),
-    [conditions],
-  );
+  const parsed = useMemo(() => parseMatchQuery(query), [query]);
   const dirty =
     title !== savedRef.current.title ||
     description !== savedRef.current.description ||
-    JSON.stringify(conditions) !== savedRef.current.conditions ||
-    effect !== savedRef.current.effect;
+    query !== savedRef.current.query ||
+    action !== savedRef.current.action;
 
   useEffect(() => {
     if (dirty && saveState === "error") {
@@ -559,15 +562,20 @@ function CustomRuleDetail({
   );
 
   const handleSave = async () => {
+    if (parsed.error) {
+      toast.error(parsed.error);
+      return;
+    }
     setSaveState("saving");
     try {
-      await onUpdate({ title, description, conditions, effect });
-      savedRef.current = {
+      await onUpdate({
         title,
         description,
-        conditions: JSON.stringify(conditions),
-        effect,
-      };
+        conditions: parsed.conditions,
+        combine: parsed.combine,
+        action,
+      });
+      savedRef.current = { title, description, query, action };
       setSaveState("saved");
       if (savedTimerRef.current !== undefined) {
         window.clearTimeout(savedTimerRef.current);
@@ -612,22 +620,27 @@ function CustomRuleDetail({
         </div>
 
         <div className="space-y-2">
-          <Label className="text-sm font-medium">Effect</Label>
-          <EffectSelect value={effect} onChange={setEffect} />
-        </div>
-
-        <div className="space-y-2">
           <Label className="text-sm font-medium">Match conditions</Label>
-          <MatchConfigBuilder
-            conditions={conditions}
-            onChange={setConditions}
+          <MatchQueryInput
+            value={query}
+            onChange={setQuery}
+            error={query.trim() ? parsed.error : null}
           />
         </div>
 
         <RulePlayground
           ruleId={rule.id}
-          matchConfig={buildMatchConfig(conditions, effect)}
+          matchConfig={
+            parsed.error
+              ? null
+              : buildMatchConfig(parsed.conditions, action, parsed.combine)
+          }
         />
+
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">Action</Label>
+          <ActionSelect value={action} onChange={setAction} />
+        </div>
       </div>
       <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">
         <Button
@@ -646,7 +659,7 @@ function CustomRuleDetail({
           <Button
             disabled={
               !dirty ||
-              !!conditionsError ||
+              !!parsed.error ||
               !title.trim() ||
               saveState === "saving"
             }
@@ -1245,10 +1258,8 @@ function CreateCustomRuleSheet({
   const [idSuffix, setIdSuffix] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [conditions, setConditions] = useState<RiskMatchCondition[]>(() => [
-    defaultCondition(),
-  ]);
-  const [effect, setEffect] = useState<CustomRuleEffect>("deny");
+  const [query, setQuery] = useState("");
+  const [action, setAction] = useState<CustomRuleAction>("deny");
   const [severity, setSeverity] = useState<SeverityLevel>("medium");
 
   const reset = () => {
@@ -1257,8 +1268,8 @@ function CreateCustomRuleSheet({
     setIdSuffix("");
     setTitle("");
     setDescription("");
-    setConditions([defaultCondition()]);
-    setEffect("deny");
+    setQuery("");
+    setAction("deny");
     setSeverity("medium");
   };
 
@@ -1268,9 +1279,14 @@ function CreateCustomRuleSheet({
       setIdSuffix(customRuleIDSuffix(next.ruleId));
       setTitle(next.title);
       setDescription(next.description);
-      // The suggester returns a regex; seed it as a content/regex condition the
-      // operator can refine or extend in the builder.
-      setConditions([{ target: "content", op: "regex", value: next.regex }]);
+      // The suggester returns a regex; seed it as a content/regex clause the
+      // operator can refine or extend in the query.
+      setQuery(
+        matchQueryFromConditions(
+          [{ target: "content", op: "regex", value: next.regex }],
+          "and",
+        ),
+      );
       setSeverity(
         (SEVERITY_LEVELS as readonly string[]).includes(next.severity)
           ? (next.severity as SeverityLevel)
@@ -1305,8 +1321,8 @@ function CreateCustomRuleSheet({
     setIdSuffix("");
     setTitle("");
     setDescription("");
-    setConditions([defaultCondition()]);
-    setEffect("deny");
+    setQuery("");
+    setAction("deny");
     setSeverity("medium");
     setStep("review");
   };
@@ -1321,13 +1337,10 @@ function CreateCustomRuleSheet({
         : null,
     [idSuffix, existingCustomIds],
   );
-  const conditionsError = useMemo(
-    () => validateConditions(conditions),
-    [conditions],
-  );
+  const parsed = useMemo(() => parseMatchQuery(query), [query]);
 
   const canSubmit =
-    idSuffix.trim() && title.trim() && !idError && !conditionsError;
+    idSuffix.trim() && title.trim() && !idError && !parsed.error;
 
   const handleSubmit = () => {
     const finalRuleId = customRuleIDFromSuffix(idSuffix);
@@ -1336,17 +1349,17 @@ function CreateCustomRuleSheet({
       toast.error(finalIdError);
       return;
     }
-    const finalConditionsError = validateConditions(conditions);
-    if (finalConditionsError) {
-      toast.error(finalConditionsError);
+    if (parsed.error) {
+      toast.error(parsed.error);
       return;
     }
     onCreate({
       id: finalRuleId,
       title: title.trim(),
       description: description.trim(),
-      conditions,
-      effect,
+      conditions: parsed.conditions,
+      combine: parsed.combine,
+      action,
       severity,
     });
     reset();
@@ -1454,20 +1467,22 @@ function CreateCustomRuleSheet({
               </div>
 
               <div className="space-y-2">
-                <Label className="text-sm font-medium">Effect</Label>
-                <EffectSelect value={effect} onChange={setEffect} />
+                <Label className="text-sm font-medium">Match conditions</Label>
+                <MatchQueryInput
+                  value={query}
+                  onChange={setQuery}
+                  error={query.trim() ? parsed.error : null}
+                />
+                <p className="text-muted-foreground text-xs">
+                  Phrase a query like{" "}
+                  <code className="font-mono">content matches secret-\d+</code>.
+                  Conditions join with a single AND or OR.
+                </p>
               </div>
 
               <div className="space-y-2">
-                <Label className="text-sm font-medium">Match conditions</Label>
-                <p className="text-muted-foreground text-xs">
-                  All conditions must match. A regex on Message content behaves
-                  like a classic pattern rule.
-                </p>
-                <MatchConfigBuilder
-                  conditions={conditions}
-                  onChange={setConditions}
-                />
+                <Label className="text-sm font-medium">Action</Label>
+                <ActionSelect value={action} onChange={setAction} />
               </div>
             </div>
             <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">

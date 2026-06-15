@@ -161,9 +161,14 @@ const BUILTIN_RULE_IDS = new Set<string>([
   ...Object.values(DETECTION_RULES).flatMap((rules) => rules.map((r) => r.id)),
 ]);
 
-/** Rule polarity. `deny` flags a finding when matched (the default); `allow`
- *  is an inline allowlist that short-circuits the whole policy for a message. */
-export type CustomRuleEffect = "deny" | "allow";
+/** What a rule does when it matches. `deny` flags a finding (the default);
+ *  `allow` is an inline allowlist that short-circuits the whole policy for that
+ *  message. Named to mirror the policy-level action. */
+export type CustomRuleAction = "deny" | "allow";
+
+/** How a rule's conditions reduce to a verdict. The backend stores a single,
+ *  flat combine (no nested grouping). */
+export type MatchCombine = "and" | "or";
 
 export type CustomDetectionRule = {
   id: string;
@@ -185,7 +190,8 @@ export type CustomRuleDraft = {
   title: string;
   description: string;
   conditions: RiskMatchCondition[];
-  effect: CustomRuleEffect;
+  combine: MatchCombine;
+  action: CustomRuleAction;
   severity: SeverityLevel;
 };
 
@@ -245,7 +251,11 @@ function useDetectionRulesStoreImpl() {
             ruleId: rule.id,
             title: rule.title,
             description: rule.description,
-            matchConfig: buildMatchConfig(rule.conditions, rule.effect),
+            matchConfig: buildMatchConfig(
+              rule.conditions,
+              rule.action,
+              rule.combine,
+            ),
             severity: rule.severity,
           },
         },
@@ -259,7 +269,8 @@ function useDetectionRulesStoreImpl() {
         return Promise.reject(new Error("Custom detection rule not found"));
       }
       const conditions = patch.conditions ?? ruleConditions(rule);
-      const effect = patch.effect ?? ruleEffect(rule);
+      const action = patch.action ?? ruleAction(rule);
+      const combine = patch.combine ?? ruleCombine(rule);
       return updateMutation
         .mutateAsync({
           request: {
@@ -267,7 +278,7 @@ function useDetectionRulesStoreImpl() {
               id: rule.dbId,
               title: patch.title ?? rule.title,
               description: patch.description ?? rule.description,
-              matchConfig: buildMatchConfig(conditions, effect),
+              matchConfig: buildMatchConfig(conditions, action, combine),
               severity: patch.severity ?? rule.severity,
             },
           },
@@ -374,6 +385,28 @@ export const OP_LABELS: Record<MatchOp, string> = {
   exists: "is present",
 };
 
+/** Affordance copy for each target, shown in the query-bar suggestions so the
+ *  distinctions (esp. tool_name vs tool_server vs tool_function) are clear. */
+export const TARGET_DESCRIPTIONS: Record<MatchTarget, string> = {
+  content: "Whole message text (any message type)",
+  user_prompt: "The user's prompt text",
+  assistant_text: "The assistant's reply text",
+  tool_result: "A tool call's result output",
+  tool_name: "Raw tool-call name, e.g. mcp__mise__run_task",
+  tool_server: "MCP server name; empty for native tools (Bash, Read, …)",
+  tool_function: "Bare function name, harness-agnostic, e.g. run_task",
+  tool_args: "A value inside the tool arguments (JSON path)",
+};
+
+export const OP_DESCRIPTIONS: Record<MatchOp, string> = {
+  regex: "RE2 regular expression",
+  equals: "exact value (use empty for native tools)",
+  not_equals: "any value except this",
+  glob: "wildcard pattern, e.g. *secret*",
+  keyword: "contains any of these comma-separated terms",
+  exists: "the field is present (no value)",
+};
+
 /** Message type each target is scoped to (a tool_server condition only matches
  *  tool-request messages, etc). `null` means the target applies to any type.
  *  Drives the PolicyCenter coverage warning. */
@@ -397,9 +430,10 @@ export function defaultCondition(): RiskMatchCondition {
 
 export function buildMatchConfig(
   conditions: RiskMatchCondition[],
-  effect: CustomRuleEffect,
+  action: CustomRuleAction,
+  combine: MatchCombine,
 ): RiskMatchConfig {
-  return { effect, combine: "and", conditions };
+  return { action, combine, conditions };
 }
 
 /** Effective conditions for a rule — its match_config, or the legacy regex
@@ -416,8 +450,12 @@ export function ruleConditions(
   return [];
 }
 
-export function ruleEffect(rule: CustomDetectionRule): CustomRuleEffect {
-  return (rule.matchConfig?.effect as CustomRuleEffect) ?? "deny";
+export function ruleAction(rule: CustomDetectionRule): CustomRuleAction {
+  return (rule.matchConfig?.action as CustomRuleAction) ?? "deny";
+}
+
+export function ruleCombine(rule: CustomDetectionRule): MatchCombine {
+  return (rule.matchConfig?.combine as MatchCombine) ?? "and";
 }
 
 /** Message types a rule can ever match, inferred from its condition targets.
@@ -483,13 +521,17 @@ function summarizeCondition(c: RiskMatchCondition): string {
 }
 
 /** Human-readable one-liner summarizing a rule's conditions, for list rows. */
-export function summarizeConditions(conditions: RiskMatchCondition[]): string {
+export function summarizeConditions(
+  conditions: RiskMatchCondition[],
+  combine: MatchCombine = "and",
+): string {
   if (conditions.length === 0) return "No matcher configured";
-  return conditions.map(summarizeCondition).join(" AND ");
+  const joiner = combine === "or" ? " OR " : " AND ";
+  return conditions.map(summarizeCondition).join(joiner);
 }
 
 /** List-row summary: an allow prefix plus the condition summary. */
 export function ruleSummary(rule: CustomDetectionRule): string {
-  const prefix = ruleEffect(rule) === "allow" ? "allow · " : "";
-  return prefix + summarizeConditions(ruleConditions(rule));
+  const prefix = ruleAction(rule) === "allow" ? "allow · " : "";
+  return prefix + summarizeConditions(ruleConditions(rule), ruleCombine(rule));
 }

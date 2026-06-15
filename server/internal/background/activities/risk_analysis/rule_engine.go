@@ -54,15 +54,15 @@ const (
 	CombineOr  MatchCombine = "or"
 )
 
-// Effect is a rule's polarity. A deny rule produces a finding when it matches
+// Action is a rule's polarity. A deny rule produces a finding when it matches
 // (the default). An allow rule is an inline allowlist: when it matches a
 // message it short-circuits the whole policy, dropping every finding for that
 // message — even ones other detectors (gitleaks, presidio, the judge) produced.
-type Effect string
+type Action string
 
 const (
-	EffectDeny  Effect = "deny"
-	EffectAllow Effect = "allow"
+	ActionDeny  Action = "deny"
+	ActionAllow Action = "allow"
 )
 
 // Condition is one target/op/value test, decoded from a rule's match_config.
@@ -85,9 +85,9 @@ type Condition struct {
 // MatchConfig is the sparse, self-describing matcher stored in the
 // risk_custom_detection_rules.match_config JSONB column.
 type MatchConfig struct {
-	// Effect is the rule's polarity: deny (detect, the default) or allow
+	// Action is the rule's polarity: deny (detect, the default) or allow
 	// (allowlist that short-circuits the policy when matched).
-	Effect     Effect       `json:"effect,omitempty"`
+	Action     Action       `json:"action,omitempty"`
 	Combine    MatchCombine `json:"combine,omitempty"`
 	Conditions []Condition  `json:"conditions"`
 }
@@ -99,11 +99,11 @@ func (m MatchConfig) combineOrDefault() MatchCombine {
 	return CombineAnd
 }
 
-func (m MatchConfig) effectOrDefault() Effect {
-	if m.Effect == EffectAllow {
-		return EffectAllow
+func (m MatchConfig) actionOrDefault() Action {
+	if m.Action == ActionAllow {
+		return ActionAllow
 	}
-	return EffectDeny
+	return ActionDeny
 }
 
 // CustomDetectionRule is a policy-selected custom rule as loaded from the
@@ -121,7 +121,7 @@ type CustomDetectionRule struct {
 // globs, normalised gjson paths) ready for repeated evaluation.
 type CompiledCustomDetectionRule struct {
 	CustomDetectionRule
-	effect     Effect
+	action     Action
 	combine    MatchCombine
 	conditions []compiledCondition
 }
@@ -191,7 +191,7 @@ func CompileCustomDetectionRules(rules []CustomDetectionRule) ([]CompiledCustomD
 		rule.RuleID = guard(rule.RuleID)
 		compiled = append(compiled, CompiledCustomDetectionRule{
 			CustomDetectionRule: rule,
-			effect:              cfg.effectOrDefault(),
+			action:              cfg.actionOrDefault(),
 			combine:             cfg.combineOrDefault(),
 			conditions:          conditions,
 		})
@@ -210,8 +210,8 @@ func ValidateMatchConfig(raw []byte) error {
 	if err != nil {
 		return err
 	}
-	if cfg.Effect != "" && cfg.Effect != EffectDeny && cfg.Effect != EffectAllow {
-		return fmt.Errorf("unknown effect %q", cfg.Effect)
+	if cfg.Action != "" && cfg.Action != ActionDeny && cfg.Action != ActionAllow {
+		return fmt.Errorf("unknown action %q", cfg.Action)
 	}
 	if len(cfg.Conditions) == 0 {
 		return fmt.Errorf("match_config must declare at least one condition")
@@ -236,7 +236,7 @@ func EffectiveMatchConfig(matchConfig []byte, legacyRegex string) []byte {
 		return nil
 	}
 	raw, err := json.Marshal(MatchConfig{
-		Effect:  EffectDeny,
+		Action:  ActionDeny,
 		Combine: CombineAnd,
 		Conditions: []Condition{{
 			Target:          TargetContent,
@@ -351,9 +351,9 @@ func compileCondition(cond Condition) (compiledCondition, error) {
 // CustomRuleScan is the outcome of evaluating a message against a policy's
 // compiled custom rules.
 type CustomRuleScan struct {
-	// Findings are matches from deny-effect rules.
+	// Findings are matches from deny-action rules.
 	Findings []Finding
-	// Allowed is true when an allow-effect rule matched the message. The caller
+	// Allowed is true when an allow-action rule matched the message. The caller
 	// short-circuits the policy: every finding for this message is dropped,
 	// including ones produced by other detectors.
 	Allowed bool
@@ -365,7 +365,7 @@ type CustomRuleScan struct {
 func ScanCustomDetectionRules(view MessageView, rules []CompiledCustomDetectionRule) CustomRuleScan {
 	out := CustomRuleScan{Findings: nil, Allowed: false}
 	for _, rule := range rules {
-		if rule.effect == EffectAllow {
+		if rule.action == ActionAllow {
 			if rule.matches(view) {
 				out.Allowed = true
 			}

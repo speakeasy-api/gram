@@ -1182,7 +1182,7 @@ func BuildCreateCustomDetectionRulePayload(riskCreateCustomDetectionRuleBody str
 	{
 		err = json.Unmarshal([]byte(riskCreateCustomDetectionRuleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"match_config\": {\n         \"combine\": \"or\",\n         \"conditions\": [\n            {\n               \"case_insensitive\": false,\n               \"op\": \"equals\",\n               \"path\": \"abc123\",\n               \"target\": \"user_prompt\",\n               \"value\": \"abc123\",\n               \"values\": [\n                  \"abc123\"\n               ]\n            }\n         ],\n         \"effect\": \"allow\"\n      },\n      \"regex\": \"abc123\",\n      \"rule_id\": \"abc123\",\n      \"severity\": \"low\",\n      \"title\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"match_config\": {\n         \"action\": \"allow\",\n         \"combine\": \"or\",\n         \"conditions\": [\n            {\n               \"case_insensitive\": false,\n               \"op\": \"equals\",\n               \"path\": \"abc123\",\n               \"target\": \"user_prompt\",\n               \"value\": \"abc123\",\n               \"values\": [\n                  \"abc123\"\n               ]\n            }\n         ]\n      },\n      \"regex\": \"abc123\",\n      \"rule_id\": \"abc123\",\n      \"severity\": \"low\",\n      \"title\": \"abc123\"\n   }'")
 		}
 		if body.MatchConfig != nil {
 			if err2 := ValidateRiskMatchConfigRequestBody(body.MatchConfig); err2 != nil {
@@ -1313,7 +1313,7 @@ func BuildUpdateCustomDetectionRulePayload(riskUpdateCustomDetectionRuleBody str
 	{
 		err = json.Unmarshal([]byte(riskUpdateCustomDetectionRuleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"match_config\": {\n         \"combine\": \"or\",\n         \"conditions\": [\n            {\n               \"case_insensitive\": false,\n               \"op\": \"equals\",\n               \"path\": \"abc123\",\n               \"target\": \"user_prompt\",\n               \"value\": \"abc123\",\n               \"values\": [\n                  \"abc123\"\n               ]\n            }\n         ],\n         \"effect\": \"allow\"\n      },\n      \"regex\": \"abc123\",\n      \"severity\": \"low\",\n      \"title\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"match_config\": {\n         \"action\": \"allow\",\n         \"combine\": \"or\",\n         \"conditions\": [\n            {\n               \"case_insensitive\": false,\n               \"op\": \"equals\",\n               \"path\": \"abc123\",\n               \"target\": \"user_prompt\",\n               \"value\": \"abc123\",\n               \"values\": [\n                  \"abc123\"\n               ]\n            }\n         ]\n      },\n      \"regex\": \"abc123\",\n      \"severity\": \"low\",\n      \"title\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.MatchConfig != nil {
@@ -1686,7 +1686,7 @@ func BuildTestDetectionRulePayload(riskTestDetectionRuleBody string, riskTestDet
 	{
 		err = json.Unmarshal([]byte(riskTestDetectionRuleBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"match_config\": {\n         \"combine\": \"or\",\n         \"conditions\": [\n            {\n               \"case_insensitive\": false,\n               \"op\": \"equals\",\n               \"path\": \"abc123\",\n               \"target\": \"user_prompt\",\n               \"value\": \"abc123\",\n               \"values\": [\n                  \"abc123\"\n               ]\n            }\n         ],\n         \"effect\": \"allow\"\n      },\n      \"regex\": \"abc123\",\n      \"rule_id\": \"aa\",\n      \"text\": \"aa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"match_config\": {\n         \"action\": \"allow\",\n         \"combine\": \"or\",\n         \"conditions\": [\n            {\n               \"case_insensitive\": false,\n               \"op\": \"equals\",\n               \"path\": \"abc123\",\n               \"target\": \"user_prompt\",\n               \"value\": \"abc123\",\n               \"values\": [\n                  \"abc123\"\n               ]\n            }\n         ]\n      },\n      \"regex\": \"abc123\",\n      \"rule_id\": \"aa\",\n      \"text\": \"aa\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.RuleID) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.rule_id", body.RuleID, utf8.RuneCountInString(body.RuleID), 1, true))

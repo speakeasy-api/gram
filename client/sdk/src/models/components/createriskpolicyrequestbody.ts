@@ -14,14 +14,16 @@ import {
 /**
  * Policy action: flag or block.
  */
-export const Action = {
+export const CreateRiskPolicyRequestBodyAction = {
   Flag: "flag",
   Block: "block",
 } as const;
 /**
  * Policy action: flag or block.
  */
-export type Action = ClosedEnum<typeof Action>;
+export type CreateRiskPolicyRequestBodyAction = ClosedEnum<
+  typeof CreateRiskPolicyRequestBodyAction
+>;
 
 /**
  * Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge). Defaults to standard.
@@ -39,7 +41,7 @@ export type CreateRiskPolicyRequestBody = {
   /**
    * Policy action: flag or block.
    */
-  action?: Action | undefined;
+  action?: CreateRiskPolicyRequestBodyAction | undefined;
   /**
    * Whether the policy name should be auto-generated.
    */
@@ -92,9 +94,9 @@ export type CreateRiskPolicyRequestBody = {
 };
 
 /** @internal */
-export const Action$outboundSchema: z.ZodMiniEnum<typeof Action> = z.enum(
-  Action,
-);
+export const CreateRiskPolicyRequestBodyAction$outboundSchema: z.ZodMiniEnum<
+  typeof CreateRiskPolicyRequestBodyAction
+> = z.enum(CreateRiskPolicyRequestBodyAction);
 
 /** @internal */
 export const PolicyType$outboundSchema: z.ZodMiniEnum<typeof PolicyType> = z
@@ -124,7 +126,10 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
   CreateRiskPolicyRequestBody
 > = z.pipe(
   z.object({
-    action: z._default(Action$outboundSchema, "flag"),
+    action: z._default(
+      CreateRiskPolicyRequestBodyAction$outboundSchema,
+      "flag",
+    ),
     autoName: z.optional(z.boolean()),
     customRuleIds: z.optional(z.array(z.string())),
     disabledRules: z.optional(z.array(z.string())),

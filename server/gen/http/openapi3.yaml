@@ -41037,6 +41037,12 @@ components:
         RiskMatchConfig:
             type: object
             properties:
+                action:
+                    type: string
+                    description: 'What the rule does when it matches: deny (flag a finding, the default) or allow (an allowlist that short-circuits the whole policy for that message).'
+                    enum:
+                        - deny
+                        - allow
                 combine:
                     type: string
                     description: How the conditions reduce to a verdict.
@@ -41048,12 +41054,6 @@ components:
                     items:
                         $ref: '#/components/schemas/RiskMatchCondition'
                     description: Conditions evaluated against a message; all (and) or any (or) must match.
-                effect:
-                    type: string
-                    description: 'Rule polarity: deny (flag a finding, the default) or allow (an allowlist that short-circuits the whole policy for a message when matched).'
-                    enum:
-                        - deny
-                        - allow
             required:
                 - conditions
         RiskOverviewCategory:

@@ -42,14 +42,14 @@ func toolRequest(tools ...ra.ToolView) ra.MessageView {
 	return ra.MessageView{Content: "", Type: message.ToolRequest, Tools: tools}
 }
 
-// An allow-effect rule that matches sets Allowed so the caller can short-circuit
+// An allow-action rule that matches sets Allowed so the caller can short-circuit
 // the policy; a non-matching allow rule leaves deny findings intact.
 func TestRuleEngine_AllowRuleShortCircuits(t *testing.T) {
 	t.Parallel()
 	deny := ruleWithConfigID(t, "custom.deny", ra.MatchConfig{Conditions: []ra.Condition{
 		{Target: ra.TargetContent, Op: ra.OpKeyword, Values: []string{"secret"}},
 	}})
-	allow := ruleWithConfigID(t, "custom.allow", ra.MatchConfig{Effect: ra.EffectAllow, Conditions: []ra.Condition{
+	allow := ruleWithConfigID(t, "custom.allow", ra.MatchConfig{Action: ra.ActionAllow, Conditions: []ra.Condition{
 		{Target: ra.TargetContent, Op: ra.OpKeyword, Values: []string{"approved"}},
 	}})
 

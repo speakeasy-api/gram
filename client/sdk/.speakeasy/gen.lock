@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 6856931419eb1e6224ae3c06f506e187
+  docChecksum: a5ff052765a3685176db76e5100406f1
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -53,7 +53,7 @@ trackedFiles:
   docs/models/components/accessscope.md:
     last_write_checksum: sha1:d54d8a99ae755fffe1dcbf9318351407184fc74d
   docs/models/components/action.md:
-    last_write_checksum: sha1:66ce1fb4ea555bc6494786b035454529d311d883
+    last_write_checksum: sha1:779b5fc72756da538027d98b753ceb4089db33c4
   docs/models/components/adddeploymentpackageform.md:
     last_write_checksum: sha1:893ed1c5b9fd0c952d99e696e197096e4219b740
   docs/models/components/addexternalmcpform.md:
@@ -211,7 +211,9 @@ trackedFiles:
   docs/models/components/createriskexclusionrequestbody.md:
     last_write_checksum: sha1:d8987530cafa6706a32d252da413c1d4448c935e
   docs/models/components/createriskpolicyrequestbody.md:
-    last_write_checksum: sha1:9fe340dc955d0a716be10417bf81a1bbc623c3b1
+    last_write_checksum: sha1:6ec56b42636dd34c55df6f50e75dd71bc302573d
+  docs/models/components/createriskpolicyrequestbodyaction.md:
+    last_write_checksum: sha1:74703695a3e26a72d60b09c31542fbd3cbfb9568
   docs/models/components/createroleform.md:
     last_write_checksum: sha1:2862fd945c42babf0cce10ca510a35cc00b91201
   docs/models/components/createserverform.md:
@@ -819,9 +821,7 @@ trackedFiles:
   docs/models/components/riskmatchcondition.md:
     last_write_checksum: sha1:600d073f83d94cf5af64c6304f3dae0df03a1e89
   docs/models/components/riskmatchconfig.md:
-    last_write_checksum: sha1:7d85cb636eb8c41ab575fa9bfb785143575789e5
-  docs/models/components/riskmatchconfigeffect.md:
-    last_write_checksum: sha1:83b68a98c63192afb76759b556b24e0a6eee3985
+    last_write_checksum: sha1:45dfdfe607151c34233149ed006551174ec7c7aa
   docs/models/components/riskoverviewcategory.md:
     last_write_checksum: sha1:55aedc1ad4b6702d6e8c2a6886d22ecfe7b025a3
   docs/models/components/riskoverviewresult.md:
@@ -4121,7 +4121,7 @@ trackedFiles:
   src/models/components/createriskexclusionrequestbody.ts:
     last_write_checksum: sha1:6dafc15fd69b59c7aeb7dedc1060612c7882efcc
   src/models/components/createriskpolicyrequestbody.ts:
-    last_write_checksum: sha1:d794e6c1a544a2740d9a9b113bfbd302be05c3c5
+    last_write_checksum: sha1:2ce466163c8f53dc0a3ef1ca7a55844da57f5889
   src/models/components/createroleform.ts:
     last_write_checksum: sha1:85aeb0cf9b2bcc28284e482e51fc8b2d97ca4a1e
   src/models/components/createserverform.ts:
@@ -4635,7 +4635,7 @@ trackedFiles:
   src/models/components/riskmatchcondition.ts:
     last_write_checksum: sha1:81f8c7c29b3e5e5fb6a62df42b9e132db15e52b7
   src/models/components/riskmatchconfig.ts:
-    last_write_checksum: sha1:bc35dee24688fab1193912bd38167feaaa316fab
+    last_write_checksum: sha1:bd8de7096b29ccfeab3a833039347693b64d1118
   src/models/components/riskoverviewcategory.ts:
     last_write_checksum: sha1:22329e90df9b5ab55672520447c182dfb625e4da
   src/models/components/riskoverviewresult.ts:
