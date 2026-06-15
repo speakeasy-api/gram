@@ -219,6 +219,12 @@ export function MatchQueryMonaco({
     editor.addCommand(m.KeyCode.Enter, () => {
       editor.trigger("keyboard", "acceptSelectedSuggestion", {});
     });
+    // Open the field suggestions immediately when focusing an empty query.
+    editor.onDidFocusEditorText(() => {
+      if (!editor.getValue().trim()) {
+        editor.trigger("focus", "editor.action.triggerSuggest", {});
+      }
+    });
     updateMarkers(m, editor.getModel(), value);
   };
 
