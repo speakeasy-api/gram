@@ -158,6 +158,8 @@ type ListRolesResponseBody struct {
 type GetRoleResponseBody struct {
 	// Unique role identifier.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Canonical principal URN for this role.
+	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
 	// Display name of the role.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Stable WorkOS role slug.
@@ -179,6 +181,8 @@ type GetRoleResponseBody struct {
 type CreateRoleResponseBody struct {
 	// Unique role identifier.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Canonical principal URN for this role.
+	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
 	// Display name of the role.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Stable WorkOS role slug.
@@ -200,6 +204,8 @@ type CreateRoleResponseBody struct {
 type UpdateRoleResponseBody struct {
 	// Unique role identifier.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Canonical principal URN for this role.
+	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
 	// Display name of the role.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Stable WorkOS role slug.
@@ -4621,6 +4627,8 @@ type ResolveChallengeGatewayErrorResponseBody struct {
 type RoleResponseBody struct {
 	// Unique role identifier.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Canonical principal URN for this role.
+	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
 	// Display name of the role.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Stable WorkOS role slug.
@@ -5281,14 +5289,15 @@ func NewListRolesGatewayError(body *ListRolesGatewayErrorResponseBody) *goa.Serv
 // HTTP "OK" response.
 func NewGetRoleRoleOK(body *GetRoleResponseBody) *access.Role {
 	v := &access.Role{
-		ID:          *body.ID,
-		Name:        *body.Name,
-		Slug:        *body.Slug,
-		Description: *body.Description,
-		IsSystem:    *body.IsSystem,
-		MemberCount: *body.MemberCount,
-		CreatedAt:   *body.CreatedAt,
-		UpdatedAt:   *body.UpdatedAt,
+		ID:           *body.ID,
+		PrincipalUrn: *body.PrincipalUrn,
+		Name:         *body.Name,
+		Slug:         *body.Slug,
+		Description:  *body.Description,
+		IsSystem:     *body.IsSystem,
+		MemberCount:  *body.MemberCount,
+		CreatedAt:    *body.CreatedAt,
+		UpdatedAt:    *body.UpdatedAt,
 	}
 	v.Grants = make([]*access.RoleGrant, len(body.Grants))
 	for i, val := range body.Grants {
@@ -5452,14 +5461,15 @@ func NewGetRoleGatewayError(body *GetRoleGatewayErrorResponseBody) *goa.ServiceE
 // result from a HTTP "Created" response.
 func NewCreateRoleRoleCreated(body *CreateRoleResponseBody) *access.Role {
 	v := &access.Role{
-		ID:          *body.ID,
-		Name:        *body.Name,
-		Slug:        *body.Slug,
-		Description: *body.Description,
-		IsSystem:    *body.IsSystem,
-		MemberCount: *body.MemberCount,
-		CreatedAt:   *body.CreatedAt,
-		UpdatedAt:   *body.UpdatedAt,
+		ID:           *body.ID,
+		PrincipalUrn: *body.PrincipalUrn,
+		Name:         *body.Name,
+		Slug:         *body.Slug,
+		Description:  *body.Description,
+		IsSystem:     *body.IsSystem,
+		MemberCount:  *body.MemberCount,
+		CreatedAt:    *body.CreatedAt,
+		UpdatedAt:    *body.UpdatedAt,
 	}
 	v.Grants = make([]*access.RoleGrant, len(body.Grants))
 	for i, val := range body.Grants {
@@ -5627,14 +5637,15 @@ func NewCreateRoleGatewayError(body *CreateRoleGatewayErrorResponseBody) *goa.Se
 // from a HTTP "OK" response.
 func NewUpdateRoleRoleOK(body *UpdateRoleResponseBody) *access.Role {
 	v := &access.Role{
-		ID:          *body.ID,
-		Name:        *body.Name,
-		Slug:        *body.Slug,
-		Description: *body.Description,
-		IsSystem:    *body.IsSystem,
-		MemberCount: *body.MemberCount,
-		CreatedAt:   *body.CreatedAt,
-		UpdatedAt:   *body.UpdatedAt,
+		ID:           *body.ID,
+		PrincipalUrn: *body.PrincipalUrn,
+		Name:         *body.Name,
+		Slug:         *body.Slug,
+		Description:  *body.Description,
+		IsSystem:     *body.IsSystem,
+		MemberCount:  *body.MemberCount,
+		CreatedAt:    *body.CreatedAt,
+		UpdatedAt:    *body.UpdatedAt,
 	}
 	v.Grants = make([]*access.RoleGrant, len(body.Grants))
 	for i, val := range body.Grants {
@@ -8955,6 +8966,9 @@ func ValidateGetRoleResponseBody(body *GetRoleResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
+	if body.PrincipalUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
+	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -9001,6 +9015,9 @@ func ValidateCreateRoleResponseBody(body *CreateRoleResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
+	if body.PrincipalUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
+	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -9046,6 +9063,9 @@ func ValidateCreateRoleResponseBody(body *CreateRoleResponseBody) (err error) {
 func ValidateUpdateRoleResponseBody(body *UpdateRoleResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.PrincipalUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
@@ -15017,6 +15037,9 @@ func ValidateResolveChallengeGatewayErrorResponseBody(body *ResolveChallengeGate
 func ValidateRoleResponseBody(body *RoleResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.PrincipalUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))

@@ -56,6 +56,7 @@ describe("useObserveFilters", () => {
   const mockRoles: Role[] = [
     {
       id: "role-admin",
+      principalUrn: "role:organization:role-admin",
       name: "Admin",
       slug: "admin",
       description: "",
@@ -67,6 +68,7 @@ describe("useObserveFilters", () => {
     },
     {
       id: "role-member",
+      principalUrn: "role:organization:role-member",
       name: "Member",
       slug: "member",
       description: "",

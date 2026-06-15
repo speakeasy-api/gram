@@ -327,6 +327,7 @@ function accessRole({
     isSystem,
     memberCount: 0,
     name,
+    principalUrn: `role:organization:${id}`,
     slug: name.toLowerCase(),
     updatedAt: new Date("2026-01-01"),
   };

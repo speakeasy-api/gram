@@ -733,9 +733,10 @@ var ListRoleGrantModel = Type("ListRoleGrant", func() {
 })
 
 var RoleModel = Type("Role", func() {
-	Required("id", "name", "slug", "description", "is_system", "grants", "member_count", "created_at", "updated_at")
+	Required("id", "principal_urn", "name", "slug", "description", "is_system", "grants", "member_count", "created_at", "updated_at")
 
 	Attribute("id", String, "Unique role identifier.")
+	Attribute("principal_urn", String, "Canonical principal URN for this role.")
 	Attribute("name", String, "Display name of the role.")
 	Attribute("slug", String, "Stable WorkOS role slug.")
 	Attribute("description", String, "Human-readable description.")

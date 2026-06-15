@@ -41610,6 +41610,9 @@ components:
                 name:
                     type: string
                     description: Display name of the role.
+                principal_urn:
+                    type: string
+                    description: Canonical principal URN for this role.
                 slug:
                     type: string
                     description: Stable WorkOS role slug.
@@ -41618,6 +41621,7 @@ components:
                     format: date-time
             required:
                 - id
+                - principal_urn
                 - name
                 - slug
                 - description

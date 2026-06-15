@@ -5057,14 +5057,15 @@ func EncodeResolveChallengeError(encoder func(context.Context, http.ResponseWrit
 // from a value of type *access.Role.
 func marshalAccessRoleToRoleResponseBody(v *access.Role) *RoleResponseBody {
 	res := &RoleResponseBody{
-		ID:          v.ID,
-		Name:        v.Name,
-		Slug:        v.Slug,
-		Description: v.Description,
-		IsSystem:    v.IsSystem,
-		MemberCount: v.MemberCount,
-		CreatedAt:   v.CreatedAt,
-		UpdatedAt:   v.UpdatedAt,
+		ID:           v.ID,
+		PrincipalUrn: v.PrincipalUrn,
+		Name:         v.Name,
+		Slug:         v.Slug,
+		Description:  v.Description,
+		IsSystem:     v.IsSystem,
+		MemberCount:  v.MemberCount,
+		CreatedAt:    v.CreatedAt,
+		UpdatedAt:    v.UpdatedAt,
 	}
 	if v.Grants != nil {
 		res.Grants = make([]*RoleGrantResponseBody, len(v.Grants))

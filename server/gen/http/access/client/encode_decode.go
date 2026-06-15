@@ -5433,14 +5433,15 @@ func DecodeResolveChallengeResponse(decoder func(*http.Response) goahttp.Decoder
 // from a value of type *RoleResponseBody.
 func unmarshalRoleResponseBodyToAccessRole(v *RoleResponseBody) *access.Role {
 	res := &access.Role{
-		ID:          *v.ID,
-		Name:        *v.Name,
-		Slug:        *v.Slug,
-		Description: *v.Description,
-		IsSystem:    *v.IsSystem,
-		MemberCount: *v.MemberCount,
-		CreatedAt:   *v.CreatedAt,
-		UpdatedAt:   *v.UpdatedAt,
+		ID:           *v.ID,
+		PrincipalUrn: *v.PrincipalUrn,
+		Name:         *v.Name,
+		Slug:         *v.Slug,
+		Description:  *v.Description,
+		IsSystem:     *v.IsSystem,
+		MemberCount:  *v.MemberCount,
+		CreatedAt:    *v.CreatedAt,
+		UpdatedAt:    *v.UpdatedAt,
 	}
 	res.Grants = make([]*access.RoleGrant, len(v.Grants))
 	for i, val := range v.Grants {

@@ -11,6 +11,7 @@ import {
 function role(grants: Role["grants"]): Role {
   return {
     id: "role_test",
+    principalUrn: "role:organization:role_test",
     name: "Test",
     slug: "org-test",
     description: "",

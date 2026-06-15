@@ -2082,7 +2082,7 @@ function PolicyAudiencePicker({
               </p>
             ) : (
               roles.map((role) => {
-                const principalUrn = `role:organization:${role.id}`;
+                const principalUrn = role.principalUrn;
                 return (
                   <AudiencePrincipalRow
                     key={principalUrn}

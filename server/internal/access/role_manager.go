@@ -1023,15 +1023,16 @@ func (r *RoleManager) roleViewFromLocalRole(ctx context.Context, organizationID 
 	}
 
 	return &gen.Role{
-		ID:          role.ID,
-		Name:        role.Name,
-		Slug:        role.Slug,
-		Description: role.Description,
-		IsSystem:    isSystemRole(role.Slug),
-		Grants:      genGrants,
-		MemberCount: role.MemberCount,
-		CreatedAt:   conv.Default(role.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
-		UpdatedAt:   conv.Default(role.UpdatedAt, time.Time{}.UTC().Format(time.RFC3339)),
+		ID:           role.ID,
+		PrincipalUrn: role.PrincipalURN,
+		Name:         role.Name,
+		Slug:         role.Slug,
+		Description:  role.Description,
+		IsSystem:     isSystemRole(role.Slug),
+		Grants:       genGrants,
+		MemberCount:  role.MemberCount,
+		CreatedAt:    conv.Default(role.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
+		UpdatedAt:    conv.Default(role.UpdatedAt, time.Time{}.UTC().Format(time.RFC3339)),
 	}, nil
 }
 

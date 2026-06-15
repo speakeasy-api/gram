@@ -557,6 +557,8 @@ type ResolveChallengesResult struct {
 type Role struct {
 	// Unique role identifier.
 	ID string
+	// Canonical principal URN for this role.
+	PrincipalUrn string
 	// Display name of the role.
 	Name string
 	// Stable WorkOS role slug.

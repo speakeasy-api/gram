@@ -158,6 +158,8 @@ type ListRolesResponseBody struct {
 type GetRoleResponseBody struct {
 	// Unique role identifier.
 	ID string `form:"id" json:"id" xml:"id"`
+	// Canonical principal URN for this role.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 	// Display name of the role.
 	Name string `form:"name" json:"name" xml:"name"`
 	// Stable WorkOS role slug.
@@ -179,6 +181,8 @@ type GetRoleResponseBody struct {
 type CreateRoleResponseBody struct {
 	// Unique role identifier.
 	ID string `form:"id" json:"id" xml:"id"`
+	// Canonical principal URN for this role.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 	// Display name of the role.
 	Name string `form:"name" json:"name" xml:"name"`
 	// Stable WorkOS role slug.
@@ -200,6 +204,8 @@ type CreateRoleResponseBody struct {
 type UpdateRoleResponseBody struct {
 	// Unique role identifier.
 	ID string `form:"id" json:"id" xml:"id"`
+	// Canonical principal URN for this role.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 	// Display name of the role.
 	Name string `form:"name" json:"name" xml:"name"`
 	// Stable WorkOS role slug.
@@ -4621,6 +4627,8 @@ type ResolveChallengeGatewayErrorResponseBody struct {
 type RoleResponseBody struct {
 	// Unique role identifier.
 	ID string `form:"id" json:"id" xml:"id"`
+	// Canonical principal URN for this role.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 	// Display name of the role.
 	Name string `form:"name" json:"name" xml:"name"`
 	// Stable WorkOS role slug.
@@ -4928,14 +4936,15 @@ func NewListRolesResponseBody(res *access.ListRolesResult) *ListRolesResponseBod
 // "getRole" endpoint of the "access" service.
 func NewGetRoleResponseBody(res *access.Role) *GetRoleResponseBody {
 	body := &GetRoleResponseBody{
-		ID:          res.ID,
-		Name:        res.Name,
-		Slug:        res.Slug,
-		Description: res.Description,
-		IsSystem:    res.IsSystem,
-		MemberCount: res.MemberCount,
-		CreatedAt:   res.CreatedAt,
-		UpdatedAt:   res.UpdatedAt,
+		ID:           res.ID,
+		PrincipalUrn: res.PrincipalUrn,
+		Name:         res.Name,
+		Slug:         res.Slug,
+		Description:  res.Description,
+		IsSystem:     res.IsSystem,
+		MemberCount:  res.MemberCount,
+		CreatedAt:    res.CreatedAt,
+		UpdatedAt:    res.UpdatedAt,
 	}
 	if res.Grants != nil {
 		body.Grants = make([]*RoleGrantResponseBody, len(res.Grants))
@@ -4956,14 +4965,15 @@ func NewGetRoleResponseBody(res *access.Role) *GetRoleResponseBody {
 // the "createRole" endpoint of the "access" service.
 func NewCreateRoleResponseBody(res *access.Role) *CreateRoleResponseBody {
 	body := &CreateRoleResponseBody{
-		ID:          res.ID,
-		Name:        res.Name,
-		Slug:        res.Slug,
-		Description: res.Description,
-		IsSystem:    res.IsSystem,
-		MemberCount: res.MemberCount,
-		CreatedAt:   res.CreatedAt,
-		UpdatedAt:   res.UpdatedAt,
+		ID:           res.ID,
+		PrincipalUrn: res.PrincipalUrn,
+		Name:         res.Name,
+		Slug:         res.Slug,
+		Description:  res.Description,
+		IsSystem:     res.IsSystem,
+		MemberCount:  res.MemberCount,
+		CreatedAt:    res.CreatedAt,
+		UpdatedAt:    res.UpdatedAt,
 	}
 	if res.Grants != nil {
 		body.Grants = make([]*RoleGrantResponseBody, len(res.Grants))
@@ -4984,14 +4994,15 @@ func NewCreateRoleResponseBody(res *access.Role) *CreateRoleResponseBody {
 // the "updateRole" endpoint of the "access" service.
 func NewUpdateRoleResponseBody(res *access.Role) *UpdateRoleResponseBody {
 	body := &UpdateRoleResponseBody{
-		ID:          res.ID,
-		Name:        res.Name,
-		Slug:        res.Slug,
-		Description: res.Description,
-		IsSystem:    res.IsSystem,
-		MemberCount: res.MemberCount,
-		CreatedAt:   res.CreatedAt,
-		UpdatedAt:   res.UpdatedAt,
+		ID:           res.ID,
+		PrincipalUrn: res.PrincipalUrn,
+		Name:         res.Name,
+		Slug:         res.Slug,
+		Description:  res.Description,
+		IsSystem:     res.IsSystem,
+		MemberCount:  res.MemberCount,
+		CreatedAt:    res.CreatedAt,
+		UpdatedAt:    res.UpdatedAt,
 	}
 	if res.Grants != nil {
 		body.Grants = make([]*RoleGrantResponseBody, len(res.Grants))
