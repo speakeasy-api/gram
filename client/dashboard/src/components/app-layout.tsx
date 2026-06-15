@@ -7,7 +7,8 @@ import { ShieldAlert } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
 import { AppSidebar } from "./app-sidebar.tsx";
-import { InsightsProvider } from "./insights-sidebar.tsx";
+import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
+import { InsightsProvider } from "./insights-dock.tsx";
 import { OrgSidebar } from "./org-sidebar.tsx";
 import { SidebarInset, SidebarProvider } from "./ui/sidebar.tsx";
 
@@ -116,9 +117,9 @@ const AppLayoutContent = ({
 
 /**
  * Wraps every project-scoped page in a single InsightsProvider so the
- * AI Insights trigger lives statically in the top breadcrumb bar across
- * the whole project app. Pages mount <InsightsConfig /> to override the
- * defaults (custom prompt/suggestions/MCP filter).
+ * docked Project Assistant composer floats at the bottom of the content
+ * area across the whole project app. Pages mount <InsightsConfig /> to
+ * override the defaults (custom prompt/suggestions/MCP filter).
  */
 const GlobalInsightsWrapper = ({ children }: { children: React.ReactNode }) => {
   // Default config: include all observability tools (no filter), so the
@@ -132,24 +133,7 @@ const GlobalInsightsWrapper = ({ children }: { children: React.ReactNode }) => {
       mcpConfig={mcpConfig}
       title="How can I help you understand your AI usage?"
       subtitle="Your assistant for exploring the platform — logs, traces, MCP servers, and more."
-      suggestions={[
-        {
-          title: "Summarize errors",
-          label: "Recent error trends",
-          prompt:
-            "Summarize the most common error patterns in the last 24 hours.",
-        },
-        {
-          title: "Top tool calls",
-          label: "Most-called tools",
-          prompt: "Which tools have been called most often this week?",
-        },
-        {
-          title: "Slow tools",
-          label: "Latency outliers",
-          prompt: "Find tools with the slowest p95 latency in the last day.",
-        },
-      ]}
+      suggestions={INSIGHTS_SUGGESTIONS.default}
     >
       {children}
     </InsightsProvider>
