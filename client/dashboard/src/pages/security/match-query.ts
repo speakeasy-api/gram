@@ -444,14 +444,13 @@ function targetSuggestions(
 ): QuerySuggestion[] {
   const lower = fieldPart.toLowerCase();
   const negPrefix = negated ? "-" : "";
+  // `from` is already positioned after any leading "-", so the inserted text
+  // must not re-add it (that produced "--field:"); only the label shows it.
   return QUERY_TARGETS.filter((t) => t.name.startsWith(lower)).map((t) => ({
     label: `${negPrefix}${t.name}`,
     description: t.description,
     group: t.category === "tool" ? "Tool" : "Prompt",
-    insert:
-      t.hasPath && t.name === lower
-        ? `${negPrefix}${t.name}.`
-        : `${negPrefix}${t.name}:`,
+    insert: t.hasPath && t.name === lower ? `${t.name}.` : `${t.name}:`,
   }));
 }
 
