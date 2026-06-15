@@ -2403,9 +2403,10 @@ function CustomRulesPicker({
 /*  RuleActionToggle                                                          */
 /* -------------------------------------------------------------------------- */
 
-/** Compact deny/allow segmented control for a custom rule within a policy.
- *  Deny (the default) flags findings; allow makes the rule an allowlist that
- *  short-circuits the whole policy for a matched message. */
+/** Compact Detect/Exempt segmented control for a custom rule within a policy.
+ *  Detect (the default, stored as `deny`) flags findings on a match; Exempt
+ *  (stored as `allow`) makes the rule an allowlist that short-circuits the
+ *  whole policy for a matched message. */
 function RuleActionToggle({
   value,
   onChange,
@@ -2416,13 +2417,14 @@ function RuleActionToggle({
   const options: { key: CustomRuleAction; label: string; title: string }[] = [
     {
       key: "deny",
-      label: "Deny",
-      title: "Flag a finding when this rule matches",
+      label: "Detect",
+      title: "A match contributes a finding",
     },
     {
       key: "allow",
-      label: "Allow",
-      title: "Allowlist: a match short-circuits the policy, flagging nothing",
+      label: "Exempt",
+      title:
+        "A match exempts the message from the whole policy (allowlist), flagging nothing",
     },
   ];
   return (
