@@ -11,6 +11,7 @@ dependencies = [
   "protobuf>=7.35.0,<8",
   "google-cloud-pubsub>=2.31.0",
   "anyio>=4.13.0",
+  "structlog>=26.1.0",
 ]
 
 [project.scripts]

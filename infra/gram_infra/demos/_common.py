@@ -15,6 +15,7 @@ import uuid
 from typing import Awaitable, Callable
 
 import anyio
+import structlog
 from google.cloud.pubsub_v1 import PublisherClient, SubscriberClient
 from google.protobuf.timestamp_pb2 import Timestamp
 
@@ -26,8 +27,20 @@ from gram_infra.pubsub.publisher import Publisher
 PUBLISH_INTERVAL_SECONDS = 0.2
 
 
+def configure_logging() -> None:
+    """Configure structlog for the demos: leveled, timestamped console output."""
+    structlog.configure(
+        processors=[
+            structlog.processors.add_log_level,
+            structlog.processors.TimeStamper(fmt="iso", utc=True),
+            structlog.dev.ConsoleRenderer(),
+        ],
+        wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
+    )
+
+
 def make_emulator_broker(
-    logger: logging.Logger, *, script_name: str
+    logger: structlog.stdlib.BoundLogger, *, script_name: str
 ) -> EmulatedPubSubBroker:
     """Build a broker against the local emulator, or exit with guidance."""
     if not os.environ.get("PUBSUB_EMULATOR_HOST"):
@@ -42,7 +55,7 @@ def make_emulator_broker(
     project_id = os.environ.get("GOOGLE_CLOUD_PROJECT") or (
         f"gram-infra-demo-{uuid.uuid4().hex[:8]}"
     )
-    logger.info("using emulator project %s", project_id)
+    logger.info("using emulator project", project=project_id)
     return EmulatedPubSubBroker(
         project_id, PublisherClient(), SubscriberClient(), logger=logger
     )
@@ -65,7 +78,7 @@ async def publish_forever(publisher: Publisher[ping_pb2.Message]) -> None:
 
 
 async def shutdown_on_signal(
-    cancel_scope: anyio.CancelScope, logger: logging.Logger
+    cancel_scope: anyio.CancelScope, logger: structlog.stdlib.BoundLogger
 ) -> None:
     """Cancel the surrounding task group when SIGINT/SIGTERM arrives."""
     with anyio.open_signal_receiver(signal.SIGINT, signal.SIGTERM) as signals:
@@ -88,4 +101,5 @@ def run_demo(demo: Callable[[str], Awaitable[None]]) -> None:
         raise SystemExit(
             f"PUBSUB_DEMO_BACKEND must be 'asyncio' or 'trio', got {backend!r}"
         )
+    configure_logging()
     anyio.run(demo, backend, backend=backend)

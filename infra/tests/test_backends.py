@@ -11,12 +11,12 @@ uses, and proves the library does not secretly depend on asyncio internals
 from __future__ import annotations
 
 import concurrent.futures as cf
-import logging
 import threading
 from typing import Any, cast
 
 import anyio
 import pytest
+import structlog
 
 from datetime import timedelta
 
@@ -208,6 +208,7 @@ def test_emulated_reconcile_is_memoized() -> None:
     assert len(topic_names) == len(set(topic_names))
     assert len(subscriber.requests) == 1
 
+
 # Both anyio backends. trio is a dev dependency (anyio[trio]).
 BACKENDS = ["asyncio", "trio"]
 
@@ -308,7 +309,7 @@ def test_receive_acks_messages_on_backend(backend) -> None:
     subscriber = Subscriber(
         SubscriberHandle(cast(Any, client), "subscriptions/test"),
         ping_pb2.Message,
-        logger=logging.getLogger("gram_infra.test"),
+        logger=structlog.get_logger("gram_infra.test"),
         topic_proto_name=TOPIC_PROTO,
         subscription_proto_name=SUB_PROTO,
     )

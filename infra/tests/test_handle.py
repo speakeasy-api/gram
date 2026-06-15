@@ -11,14 +11,15 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
-import logging
 import threading
 from typing import Any, cast
 
 import anyio
 import anyio.to_thread
 import pytest
+import structlog
 from google.api_core.exceptions import NotFound
+from structlog.testing import capture_logs
 
 from conftest import FakeMessage, FakeSubscriberClient
 from gram.ping.v1 import ping_pb2
@@ -35,7 +36,7 @@ def make_subscriber(logger=None) -> Subscriber:
     return Subscriber(
         cast(SubscriberHandle, None),
         ping_pb2.Message,
-        logger=logger or logging.getLogger("gram_infra.test"),
+        logger=logger or structlog.get_logger("gram_infra.test"),
         topic_proto_name=TOPIC_PROTO,
         subscription_proto_name=SUB_PROTO,
     )
@@ -92,7 +93,7 @@ async def test_unmarshal_non_decode_error_is_nacked_and_skips_callback() -> None
     subscriber = Subscriber(
         cast(SubscriberHandle, None),
         cast(Any, ExplodingProto),
-        logger=logging.getLogger("gram_infra.test"),
+        logger=structlog.get_logger("gram_infra.test"),
         topic_proto_name=TOPIC_PROTO,
         subscription_proto_name=SUB_PROTO,
     )
@@ -111,44 +112,41 @@ async def test_unmarshal_non_decode_error_is_nacked_and_skips_callback() -> None
     assert not called
 
 
-async def test_callback_exception_is_logged_and_nacked(caplog) -> None:
+async def test_callback_exception_is_logged_and_nacked() -> None:
     data = ping_pb2.Message(id="x").SerializeToString()
     message = FakeMessage(data, message_id="msg-123", delivery_attempt=3)
 
     async def callback(msg, meta) -> None:
         raise RuntimeError("boom")
 
-    with caplog.at_level(logging.ERROR, logger="gram_infra.test"):
+    with capture_logs() as logs:
         await make_subscriber()._handle_message(message, callback)
 
     assert message.nacked is True
     assert message.acked is False
 
-    record = next(
-        r for r in caplog.records if r.msg == "error processing pubsub message"
-    )
-    assert "boom" in record.exc_text
-    assert record.topic_proto_name == TOPIC_PROTO
-    assert record.subscription_proto_name == SUB_PROTO
-    assert record.message_id == "msg-123"
-    assert record.delivery_attempt == 3
+    entry = next(e for e in logs if e["event"] == "error processing pubsub message")
+    # The handler's exception is logged via exc_info so it stays inspectable.
+    assert "boom" in str(entry["exc_info"])
+    assert entry["topic_proto_name"] == TOPIC_PROTO
+    assert entry["subscription_proto_name"] == SUB_PROTO
+    assert entry["message_id"] == "msg-123"
+    assert entry["delivery_attempt"] == 3
 
 
-async def test_nil_delivery_attempt_logs_zero(caplog) -> None:
+async def test_nil_delivery_attempt_logs_zero() -> None:
     data = ping_pb2.Message(id="x").SerializeToString()
     message = FakeMessage(data, message_id="msg-nil", delivery_attempt=None)
 
     async def callback(msg, meta) -> None:
         raise RuntimeError("kaboom")
 
-    with caplog.at_level(logging.ERROR, logger="gram_infra.test"):
+    with capture_logs() as logs:
         await make_subscriber()._handle_message(message, callback)
 
     assert message.nacked is True
-    record = next(
-        r for r in caplog.records if r.msg == "error processing pubsub message"
-    )
-    assert record.delivery_attempt == 0
+    entry = next(e for e in logs if e["event"] == "error processing pubsub message")
+    assert entry["delivery_attempt"] == 0
 
 
 def make_client_subscriber(messages) -> tuple[FakeSubscriberClient, Subscriber]:
@@ -156,7 +154,7 @@ def make_client_subscriber(messages) -> tuple[FakeSubscriberClient, Subscriber]:
     subscriber = Subscriber(
         SubscriberHandle(cast(Any, client), "subscriptions/test"),
         ping_pb2.Message,
-        logger=logging.getLogger("gram_infra.test"),
+        logger=structlog.get_logger("gram_infra.test"),
         topic_proto_name=TOPIC_PROTO,
         subscription_proto_name=SUB_PROTO,
     )
@@ -322,9 +320,7 @@ async def test_stream_yields_messages_with_explicit_ack() -> None:
 
 
 async def test_stream_explicit_nack() -> None:
-    message = FakeMessage(
-        ping_pb2.Message(id="x").SerializeToString(), message_id="x"
-    )
+    message = FakeMessage(ping_pb2.Message(id="x").SerializeToString(), message_id="x")
     subscriber = make_stream_subscriber([message])
 
     async with subscriber.stream() as stream:
@@ -393,7 +389,7 @@ async def test_stream_raises_terminal_stream_error() -> None:
     subscriber = Subscriber(
         SubscriberHandle(cast(Any, client), "subscriptions/test"),
         ping_pb2.Message,
-        logger=logging.getLogger("gram_infra.test"),
+        logger=structlog.get_logger("gram_infra.test"),
         topic_proto_name=TOPIC_PROTO,
         subscription_proto_name=SUB_PROTO,
     )
@@ -453,9 +449,7 @@ async def test_scheduler_close_nacks_buffered_and_is_idempotent() -> None:
     # buffered-but-undispatched message a nack (the manager's own shutdown nacks
     # only what shutdown() returns, which is nothing here) and stay safe to call
     # again from any of the teardown paths.
-    send, recv = anyio.create_memory_object_stream[object](
-        max_buffer_size=float("inf")
-    )
+    send, recv = anyio.create_memory_object_stream[object](max_buffer_size=float("inf"))
     scheduler = _PortalScheduler(cast(Any, None), send, recv)
 
     buffered = [FakeMessage(b"", message_id=str(i)) for i in range(3)]
@@ -479,9 +473,7 @@ async def test_scheduler_close_nacks_buffered_and_is_idempotent() -> None:
 async def test_stream_tears_down_cleanly_on_cancel() -> None:
     # Mirrors the streaming demo's shutdown: a stream consumed inside a task that
     # is cancelled must unwind through `async with`/`async for` without hanging.
-    message = FakeMessage(
-        ping_pb2.Message(id="x").SerializeToString(), message_id="x"
-    )
+    message = FakeMessage(ping_pb2.Message(id="x").SerializeToString(), message_id="x")
     subscriber = make_stream_subscriber([message])
 
     seen = asyncio.Event()
@@ -530,9 +522,7 @@ async def test_message_scheduled_after_teardown_is_nacked() -> None:
 
 
 async def test_received_message_disposition_is_idempotent() -> None:
-    message = FakeMessage(
-        ping_pb2.Message(id="x").SerializeToString(), message_id="x"
-    )
+    message = FakeMessage(ping_pb2.Message(id="x").SerializeToString(), message_id="x")
     subscriber = make_stream_subscriber([message])
 
     async with subscriber.stream() as stream:
