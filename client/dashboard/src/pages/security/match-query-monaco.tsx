@@ -5,10 +5,11 @@ import Editor, {
   type OnChange,
   type OnMount,
 } from "@monaco-editor/react";
+import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import { ChevronRight } from "lucide-react";
 import type * as Monaco from "monaco-editor";
 import * as monaco from "monaco-editor";
-import { Fragment, useRef, type JSX } from "react";
+import { Fragment, useEffect, useRef, type JSX } from "react";
 import {
   MATCH_QUERY_EXAMPLES,
   matchQuerySuggestions,
@@ -16,6 +17,46 @@ import {
 } from "./match-query";
 
 loader.config({ monaco });
+
+const THEME_LIGHT = "matchquery-light";
+const THEME_DARK = "matchquery-dark";
+
+/** Transparent-background themes so the editor blends into the form input,
+ *  with token colors for fields / keywords / regex / strings. */
+function defineThemes(m: typeof Monaco) {
+  const transparent = {
+    "editor.background": "#00000000",
+    "editor.lineHighlightBackground": "#00000000",
+    "editor.lineHighlightBorder": "#00000000",
+    "editorIndentGuide.background": "#00000000",
+  };
+  m.editor.defineTheme(THEME_DARK, {
+    base: "vs-dark",
+    inherit: true,
+    rules: [
+      { token: "type", foreground: "4ec9b0" },
+      { token: "keyword", foreground: "c586c0" },
+      { token: "regexp", foreground: "d16969" },
+      { token: "string", foreground: "ce9178" },
+      { token: "operator", foreground: "9aa0a6" },
+      { token: "delimiter", foreground: "9aa0a6" },
+    ],
+    colors: transparent,
+  });
+  m.editor.defineTheme(THEME_LIGHT, {
+    base: "vs",
+    inherit: true,
+    rules: [
+      { token: "type", foreground: "267f99" },
+      { token: "keyword", foreground: "af00db" },
+      { token: "regexp", foreground: "b91c1c" },
+      { token: "string", foreground: "a31515" },
+      { token: "operator", foreground: "6b7280" },
+      { token: "delimiter", foreground: "6b7280" },
+    ],
+    colors: transparent,
+  });
+}
 
 const LANGUAGE_ID = "matchquery";
 const MARKER_OWNER = "matchquery";
@@ -26,6 +67,7 @@ function registerLanguage(m: typeof Monaco) {
   if (languageRegistered) return;
   languageRegistered = true;
 
+  defineThemes(m);
   m.languages.register({ id: LANGUAGE_ID });
   m.languages.setMonarchTokensProvider(LANGUAGE_ID, {
     tokenizer: {
@@ -68,6 +110,11 @@ function registerLanguage(m: typeof Monaco) {
             insertTextRules: snippet
               ? m.languages.CompletionItemInsertTextRule.InsertAsSnippet
               : undefined,
+            // Re-open suggestions after accepting (field → values, AND → field)
+            // so chaining flows without re-typing a trigger character.
+            command: snippet
+              ? undefined
+              : { id: "editor.action.triggerSuggest", title: "" },
             range,
           };
         }),
@@ -117,8 +164,10 @@ const EDITOR_OPTIONS: Monaco.editor.IStandaloneEditorConstructionOptions = {
     handleMouseWheel: false,
     alwaysConsumeMouseWheel: false,
   },
-  fontFamily: "var(--font-mono, monospace)",
+  fontFamily:
+    'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
   fontSize: 12,
+  lineHeight: 20,
   automaticLayout: true,
   contextmenu: false,
   fixedOverflowWidgets: true,
@@ -127,7 +176,9 @@ const EDITOR_OPTIONS: Monaco.editor.IStandaloneEditorConstructionOptions = {
   occurrencesHighlight: "off",
   selectionHighlight: false,
   matchBrackets: "never",
-  padding: { top: 9, bottom: 9 },
+  padding: { top: 0, bottom: 0 },
+  suggest: { showStatusBar: false, showIcons: false },
+  guides: { indentation: false },
 };
 
 /** Monaco-backed single-line query editor: syntax highlighting, autocomplete,
@@ -144,6 +195,8 @@ export function MatchQueryMonaco({
 }): JSX.Element {
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<typeof Monaco | null>(null);
+  const { theme } = useMoonshineConfig();
+  const monacoTheme = theme === "dark" ? THEME_DARK : THEME_LIGHT;
 
   const beforeMount: BeforeMount = (m) => registerLanguage(m);
 
@@ -157,6 +210,11 @@ export function MatchQueryMonaco({
     updateMarkers(m, editor.getModel(), value);
   };
 
+  // Keep Monaco's theme in sync with the dashboard light/dark mode.
+  useEffect(() => {
+    monacoRef.current?.editor.setTheme(monacoTheme);
+  }, [monacoTheme]);
+
   const handleChange: OnChange = (next) => {
     const flat = (next ?? "").replace(/\n/g, " ");
     if (flat !== next) editorRef.current?.setValue(flat);
@@ -169,13 +227,15 @@ export function MatchQueryMonaco({
     <div className="space-y-2">
       <div
         className={cn(
-          "border-input bg-background overflow-hidden rounded-md border",
+          "border-input bg-background focus-within:ring-ring flex h-10 items-center overflow-hidden rounded-md border focus-within:ring-1",
           error && "border-destructive",
         )}
       >
         <Editor
-          height="38px"
+          className="w-full"
+          height="22px"
           language={LANGUAGE_ID}
+          theme={monacoTheme}
           value={value}
           beforeMount={beforeMount}
           onMount={onMount}
