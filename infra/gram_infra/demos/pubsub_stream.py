@@ -18,9 +18,8 @@ topic on demand, so no Config Connector / GCP resources are needed locally.
 
 from __future__ import annotations
 
-import logging
-
 import anyio
+import structlog
 
 from gram.ping.v1 import ping_pb2, processor_pb2
 from gram_infra.pubsub import (
@@ -31,7 +30,7 @@ from gram_infra.pubsub import (
 
 from ._common import make_emulator_broker, publish_forever, run_demo, shutdown_on_signal
 
-logger = logging.getLogger("gram-infra-pubsub-stream-demo")
+logger = structlog.get_logger("gram-infra-pubsub-stream-demo")
 
 
 async def _consume_stream(
@@ -46,21 +45,18 @@ async def _consume_stream(
     async with subscriber.stream() as messages:
         async for received in messages:
             logger.info(
-                "%s received message id=%s type=%s payload=%s (delivery_attempt=%s)",
-                receiver_id,
-                received.message.id,
-                received.message.type,
-                received.message.payload.decode("utf-8", "replace"),
-                received.metadata.delivery_attempt,
+                "received message",
+                receiver_id=receiver_id,
+                id=received.message.id,
+                type=received.message.type,
+                payload=received.message.payload.decode("utf-8", "replace"),
+                delivery_attempt=received.metadata.delivery_attempt,
             )
             received.ack()
 
 
 async def _main(backend: str) -> None:
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s"
-    )
-    logger.info("running on %s backend", backend)
+    logger.info("running", backend=backend)
 
     with make_emulator_broker(logger, script_name="pubsub-stream-demo") as broker:
         # Publisher for the topic declared by gram.ping.v1.Message.
