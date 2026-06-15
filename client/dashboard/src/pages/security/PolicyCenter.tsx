@@ -1644,9 +1644,11 @@ function PolicySheetBody({
   const [expandedCategory, setExpandedCategory] = useState<
     RuleCategory | "custom" | null
   >(null);
-  // Built-in categories live in one accordion so they can be collapsed out of
-  // the way, but it's expanded by default so the rules are discoverable.
+  // Built-in categories and the org's custom rules each live in their own
+  // top-level accordion (same look), expanded by default so they're
+  // discoverable but collapsible to get them out of the way.
   const [builtinExpanded, setBuiltinExpanded] = useState(true);
+  const [detectionExpanded, setDetectionExpanded] = useState(true);
   const selectedBuiltinCount = ALL_CATEGORIES.filter((c) =>
     selectedCategories.has(c),
   ).length;
@@ -1917,10 +1919,8 @@ function PolicySheetBody({
           setSelectedCustomRuleIds={setSelectedCustomRuleIds}
           customRuleActions={customRuleActions}
           setCustomRuleActions={setCustomRuleActions}
-          expanded={expandedCategory === "custom"}
-          onToggle={() =>
-            setExpandedCategory(expandedCategory === "custom" ? null : "custom")
-          }
+          expanded={detectionExpanded}
+          onToggle={() => setDetectionExpanded((v) => !v)}
         />
       )}
 
@@ -2333,113 +2333,83 @@ function CustomRulesPicker({
     }
     setCustomRuleActions(next);
   };
-  const meta = RULE_CATEGORY_META.custom;
-  const allSelected =
-    customRules.length > 0 &&
-    customRules.every((r) => selectedCustomRuleIds.has(r.id));
-  const someSelected =
-    !allSelected && customRules.some((r) => selectedCustomRuleIds.has(r.id));
+  const selectedCount = customRules.filter((r) =>
+    selectedCustomRuleIds.has(r.id),
+  ).length;
   return (
     <div className="space-y-3">
-      <div className="space-y-1">
-        <Label className="text-sm font-medium">Detection Rules</Label>
-        <p className="text-muted-foreground text-xs">
-          Your organization's custom rules. For each one you attach, choose
-          whether a match <span className="font-medium">Detects</span> (records
-          a finding) or <span className="font-medium">Exempts</span> the message
-          from this entire policy (an allowlist).
-        </p>
-      </div>
-      <div className="border-border divide-border divide-y rounded-lg border">
-        <div
-          className="flex cursor-pointer items-center gap-3 px-4 py-3"
-          onClick={onToggle}
-        >
-          <ChevronRight
-            className={cn(
-              "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
-              expanded && "rotate-90",
-            )}
-          />
-          <Icon
-            name={meta.icon as IconName}
-            className="text-muted-foreground size-4 shrink-0"
-          />
-          <div className="min-w-0 flex-1">
-            <span className="text-sm font-medium">{meta.label}</span>
-            <p className="text-muted-foreground text-xs">
-              {customRules.length} organization-defined rule
-              {customRules.length === 1 ? "" : "s"}
-            </p>
-          </div>
-          <Checkbox
-            checked={
-              allSelected ? true : someSelected ? "indeterminate" : false
-            }
-            onCheckedChange={(checked) => {
-              const next = new Set(selectedCustomRuleIds);
-              if (checked) {
-                customRules.forEach((r) => {
-                  void next.add(r.id);
-                });
-              } else {
-                customRules.forEach((r) => {
-                  void next.delete(r.id);
-                });
-              }
-              setSelectedCustomRuleIds(next);
-            }}
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
-        {expanded && (
-          <div className="bg-muted/30 border-border border-t px-4 py-2">
-            <div className="space-y-2 py-1">
-              {customRules.map((rule) => {
-                const checked = selectedCustomRuleIds.has(rule.id);
-                const action = customRuleActions.get(rule.id) ?? "deny";
-                return (
-                  <div
-                    key={rule.id}
-                    className="flex items-center gap-3 py-1 pl-8"
-                  >
-                    <Checkbox
-                      id={`custom-${rule.id}`}
-                      checked={checked}
-                      onCheckedChange={(next) => {
-                        const set = new Set(selectedCustomRuleIds);
-                        if (next) {
-                          set.add(rule.id);
-                        } else {
-                          set.delete(rule.id);
-                        }
-                        setSelectedCustomRuleIds(set);
-                      }}
-                    />
-                    <label
-                      htmlFor={`custom-${rule.id}`}
-                      className="min-w-0 flex-1 cursor-pointer truncate text-xs"
-                    >
-                      <span className="text-foreground">
-                        {rule.title || rule.id}
-                      </span>
-                      <span className="text-muted-foreground ml-2 font-mono text-[10px]">
-                        {rule.id}
-                      </span>
-                    </label>
-                    {checked && (
-                      <RuleActionToggle
-                        value={action}
-                        onChange={(next) => setRuleAction(rule.id, next)}
-                      />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center gap-2"
+      >
+        <ChevronRight
+          className={cn(
+            "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
+            expanded && "rotate-90",
+          )}
+        />
+        <Label className="cursor-pointer text-sm font-medium">
+          Detection Rules
+        </Label>
+        {selectedCount > 0 && (
+          <Badge variant="neutral">
+            <Badge.Text>{selectedCount} selected</Badge.Text>
+          </Badge>
         )}
-      </div>
+      </button>
+      {expanded && (
+        <div className="border-border divide-border divide-y rounded-lg border">
+          <p className="text-muted-foreground px-4 py-3 text-xs">
+            Your organization's custom rules. For each one you attach, choose
+            whether a match{" "}
+            <span className="text-foreground font-medium">Detects</span>{" "}
+            (records a finding) or{" "}
+            <span className="text-foreground font-medium">Exempts</span> the
+            message from this entire policy.
+          </p>
+          <div className="space-y-2 px-4 py-3">
+            {customRules.map((rule) => {
+              const checked = selectedCustomRuleIds.has(rule.id);
+              const action = customRuleActions.get(rule.id) ?? "deny";
+              return (
+                <div key={rule.id} className="flex items-center gap-3 py-1">
+                  <Checkbox
+                    id={`custom-${rule.id}`}
+                    checked={checked}
+                    onCheckedChange={(next) => {
+                      const set = new Set(selectedCustomRuleIds);
+                      if (next) {
+                        set.add(rule.id);
+                      } else {
+                        set.delete(rule.id);
+                      }
+                      setSelectedCustomRuleIds(set);
+                    }}
+                  />
+                  <label
+                    htmlFor={`custom-${rule.id}`}
+                    className="min-w-0 flex-1 cursor-pointer truncate text-xs"
+                  >
+                    <span className="text-foreground">
+                      {rule.title || rule.id}
+                    </span>
+                    <span className="text-muted-foreground ml-2 font-mono text-[10px]">
+                      {rule.id}
+                    </span>
+                  </label>
+                  {checked && (
+                    <RuleActionToggle
+                      value={action}
+                      onChange={(next) => setRuleAction(rule.id, next)}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
