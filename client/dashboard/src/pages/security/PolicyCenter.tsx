@@ -2398,12 +2398,19 @@ function CustomRulesPicker({
                       {rule.id}
                     </span>
                   </label>
-                  {checked && (
-                    <RuleActionToggle
-                      value={action}
-                      onChange={(next) => setRuleAction(rule.id, next)}
-                    />
-                  )}
+                  <span
+                    className={cn(
+                      "text-muted-foreground shrink-0 text-[10px]",
+                      !checked && "opacity-50",
+                    )}
+                  >
+                    On match
+                  </span>
+                  <RuleActionToggle
+                    value={action}
+                    onChange={(next) => setRuleAction(rule.id, next)}
+                    disabled={!checked}
+                  />
                 </div>
               );
             })}
@@ -2421,13 +2428,16 @@ function CustomRulesPicker({
 /** Compact Detect/Exempt segmented control for a custom rule within a policy.
  *  Detect (the default, stored as `deny`) flags findings on a match; Exempt
  *  (stored as `allow`) makes the rule an allowlist that short-circuits the
- *  whole policy for a matched message. */
+ *  whole policy for a matched message — accented so the exemption stands out.
+ *  Rendered dimmed and inert until the rule is actually attached. */
 function RuleActionToggle({
   value,
   onChange,
+  disabled = false,
 }: {
   value: CustomRuleAction;
   onChange: (v: CustomRuleAction) => void;
+  disabled?: boolean;
 }) {
   const options: { key: CustomRuleAction; label: string; title: string }[] = [
     {
@@ -2442,18 +2452,28 @@ function RuleActionToggle({
         "A match exempts the message from the whole policy (allowlist), flagging nothing",
     },
   ];
+  const activeClass = (key: CustomRuleAction) =>
+    key === "allow"
+      ? "bg-warning text-warning-foreground"
+      : "bg-foreground text-background";
   return (
-    <div className="border-border inline-flex shrink-0 overflow-hidden rounded-md border">
+    <div
+      className={cn(
+        "border-border inline-flex shrink-0 overflow-hidden rounded-md border",
+        disabled && "opacity-50",
+      )}
+    >
       {options.map((opt) => (
         <SimpleTooltip key={opt.key} tooltip={opt.title}>
           <button
             type="button"
+            disabled={disabled}
             onClick={() => onChange(opt.key)}
             className={cn(
               "px-2 py-0.5 text-[10px] font-medium transition-colors",
               value === opt.key
-                ? "bg-foreground text-background"
-                : "text-muted-foreground hover:bg-muted",
+                ? activeClass(opt.key)
+                : "text-muted-foreground enabled:hover:bg-muted",
             )}
           >
             {opt.label}
