@@ -400,20 +400,10 @@ function ReviewRequestSheet({
   const [approvalAudience, setApprovalAudience] =
     useState<ApprovalAudience>("user");
   const [approvalAudienceDirty, setApprovalAudienceDirty] = useState(false);
+  const [reviewDirty, setReviewDirty] = useState(false);
   const [selectedRoleId, setSelectedRoleId] = useState("");
   const [selectedUserPrincipalUrn, setSelectedUserPrincipalUrn] = useState("");
-  const requestRef = useRef(request);
-  const rolesRef = useRef(roles);
-  const membersRef = useRef(members);
-  useEffect(() => {
-    requestRef.current = request;
-  }, [request]);
-  useEffect(() => {
-    rolesRef.current = roles;
-  }, [roles]);
-  useEffect(() => {
-    membersRef.current = members;
-  }, [members]);
+  const initializedRequestIDRef = useRef<string | null>(null);
   const requesterRoleIds = useMemo(() => {
     if (!request) return [];
     return requesterRoleIdsForRequest(request, members);
@@ -425,27 +415,30 @@ function ReviewRequestSheet({
   const defaultRequesterRoleId = firstRequesterRoleId(requesterRoleIds, roles);
 
   useEffect(() => {
-    const initialRequest = requestRef.current;
-    if (!initialRequest || !open) return;
-    const initialRoles = rolesRef.current;
-    const initialMembers = membersRef.current;
+    if (!request || !open) {
+      initializedRequestIDRef.current = null;
+      return;
+    }
+    if (initializedRequestIDRef.current === request.id && reviewDirty) return;
 
     const initial = approvalAudienceFromPrincipalUrns(
-      initialRequest.grantedPrincipalUrns,
-      initialRequest,
-      initialRoles,
-      initialMembers,
+      request.grantedPrincipalUrns,
+      request,
+      roles,
+      members,
     );
     const initialRequesterRoleId = firstRequesterRoleId(
-      requesterRoleIdsForRequest(initialRequest, initialMembers),
-      initialRoles,
+      requesterRoleIdsForRequest(request, members),
+      roles,
     );
     setAction("approve");
+    setReviewDirty(false);
     setApprovalAudienceDirty(false);
     setApprovalAudience(initial.audience);
     setSelectedRoleId(initial.selectedRoleId || initialRequesterRoleId);
     setSelectedUserPrincipalUrn(initial.selectedUserPrincipalUrn);
-  }, [request?.id, open]);
+    initializedRequestIDRef.current = request.id;
+  }, [members, open, request, reviewDirty, roles]);
 
   if (!request) return null;
 
@@ -464,6 +457,7 @@ function ReviewRequestSheet({
   const submitLabel = reviewRequestSubmitLabel(isEditingAccess, action);
   const sheetCopy = reviewRequestSheetCopy(isEditingAccess);
   const selectApprovalAudience = (audience: ApprovalAudience) => {
+    setReviewDirty(true);
     setApprovalAudienceDirty(true);
     setApprovalAudience(audience);
     if (
@@ -546,7 +540,10 @@ function ReviewRequestSheet({
           {!isEditingAccess && (
             <RadioGroup
               value={action}
-              onValueChange={(value) => setAction(value as ReviewAction)}
+              onValueChange={(value) => {
+                setReviewDirty(true);
+                setAction(value as ReviewAction);
+              }}
               className="border-border grid grid-cols-2 gap-4 rounded-md border p-3"
             >
               <label
