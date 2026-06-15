@@ -170,6 +170,10 @@ interface InsightsDockProps {
   onSubmitPrompt: (text: string) => void;
   /** Genies the dock down into the sidebar-footer resume button. */
   onDismiss: () => void;
+  /** Opens the chat panel and reveals the conversation-history list, letting
+   *  the user resume a previous thread straight from the minimized pill
+   *  instead of submitting (which would start a new conversation). */
+  onOpenHistory: () => void;
   /** Chat panel content, rendered inside the card when `open`. */
   panel: React.ReactNode;
   /** Stretch the open chat panel to fill the content area. */
@@ -211,6 +215,7 @@ function InsightsDock({
   focusKey,
   onSubmitPrompt,
   onDismiss,
+  onOpenHistory,
   panel,
   maximized,
 }: InsightsDockProps): ReactElement {
@@ -504,6 +509,16 @@ function InsightsDock({
                     className="placeholder:text-muted-foreground min-w-0 flex-1 bg-transparent text-sm outline-none"
                   />
                   {value.trim() && <DockSubmitButton />}
+                  <button
+                    type="button"
+                    onClick={onOpenHistory}
+                    tabIndex={open ? -1 : 0}
+                    className={PANEL_ICON_BUTTON_CLASS}
+                    aria-label="Open conversation history"
+                    title="Previous conversations"
+                  >
+                    <HistoryIcon className="size-3.5" />
+                  </button>
                   <button
                     type="button"
                     onClick={onDismiss}
@@ -811,6 +826,15 @@ export function InsightsProvider({
     setSessionKey((k) => k + 1);
   }, []);
 
+  // Clock button on the minimized pill: open the chat panel onto the CURRENT
+  // thread (no sessionKey bump, so we don't mint a new conversation) and pop
+  // the history list open so the user can jump straight to a previous thread.
+  // Reuses the same `historyOpen` popover the in-panel header clock drives.
+  const handleOpenHistory = useCallback(() => {
+    setIsExpanded(true);
+    setHistoryOpen(true);
+  }, []);
+
   // Global keyboard shortcut: Cmd+/ (Mac) / Ctrl+/ (PC). With the chat panel
   // closed it focuses the docked composer; with it open it collapses the
   // panel back into the composer pill.
@@ -1003,6 +1027,7 @@ export function InsightsProvider({
             focusKey={focusComposerKey}
             onSubmitPrompt={handleDockSubmit}
             onDismiss={handleDockDismiss}
+            onOpenHistory={handleOpenHistory}
             panel={panelContent}
             maximized={panelMaximized}
           />
