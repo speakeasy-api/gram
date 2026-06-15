@@ -1118,6 +1118,22 @@ const slackThinkingStatus = "is thinking…"
 
 var slackInitialLoadingMessages = []string{"Routing…"}
 
+// slackEventExpectsReply reports whether a slack event is one the assistant
+// always replies to: an explicit @-mention, a DM (channel IDs start with "D"),
+// or a Block Kit interaction. Ambient channel events (plain messages,
+// reactions, joins) may legitimately end in a silent turn, so the ingress
+// loading indicator is suppressed for them — a silent turn would otherwise
+// strand the indicator until Slack's two-minute timeout.
+func slackEventExpectsReply(event EventEnvelope) bool {
+	evt, isSlack := event.Event.(slackTriggerEvent)
+	if !isSlack {
+		return false
+	}
+	return evt.EventType == "app_mention" ||
+		evt.EnvelopeType == "interactive" ||
+		strings.HasPrefix(evt.ChannelID, "D")
+}
+
 // slackThreadStatusTarget extracts the channel + thread to anchor a loading
 // status on. Returns ok=false for events without a threadable target (e.g.
 // user_change, channel_created).
