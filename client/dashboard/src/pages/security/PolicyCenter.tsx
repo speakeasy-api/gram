@@ -1644,12 +1644,9 @@ function PolicySheetBody({
   const [expandedCategory, setExpandedCategory] = useState<
     RuleCategory | "custom" | null
   >(null);
-  // Built-in categories collapse into one accordion so the (long) list doesn't
-  // crowd out custom rules and message types. Open it by default when the
-  // policy already has built-in categories selected (i.e. on edit).
-  const [builtinExpanded, setBuiltinExpanded] = useState(() =>
-    ALL_CATEGORIES.some((c) => selectedCategories.has(c)),
-  );
+  // Built-in categories live in one accordion so they can be collapsed out of
+  // the way, but it's expanded by default so the rules are discoverable.
+  const [builtinExpanded, setBuiltinExpanded] = useState(true);
   const selectedBuiltinCount = ALL_CATEGORIES.filter((c) =>
     selectedCategories.has(c),
   ).length;
