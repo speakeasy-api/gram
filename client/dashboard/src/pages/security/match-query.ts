@@ -467,6 +467,13 @@ function valueSuggestions(typed: string): QuerySuggestion[] {
   if (typed.trim() !== "") return [];
   return [
     {
+      label: '"value"',
+      group: "equals",
+      description: "value matches exactly",
+      insert: '""',
+      caretOffset: 1,
+    },
+    {
       label: "*value*",
       group: "contains",
       description: "value is a substring",
