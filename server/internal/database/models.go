@@ -441,6 +441,11 @@ type DirectoryGroup struct {
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
 	Deleted                bool
+	WorkosCreatedAt        pgtype.Timestamptz
+	WorkosUpdatedAt        pgtype.Timestamptz
+	WorkosDeletedAt        pgtype.Timestamptz
+	WorkosDeleted          bool
+	WorkosLastEventID      pgtype.Text
 }
 
 type DirectoryUser struct {
@@ -454,6 +459,11 @@ type DirectoryUser struct {
 	UpdatedAt             pgtype.Timestamptz
 	DeletedAt             pgtype.Timestamptz
 	Deleted               bool
+	WorkosCreatedAt       pgtype.Timestamptz
+	WorkosUpdatedAt       pgtype.Timestamptz
+	WorkosDeletedAt       pgtype.Timestamptz
+	WorkosDeleted         bool
+	WorkosLastEventID     pgtype.Text
 }
 
 type DirectoryUserGroupMembership struct {
@@ -466,6 +476,7 @@ type DirectoryUserGroupMembership struct {
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
 	Deleted                bool
+	WorkosCreatedAt        pgtype.Timestamptz
 }
 
 type Environment struct {

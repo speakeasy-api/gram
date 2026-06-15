@@ -1700,6 +1700,13 @@ CREATE TABLE IF NOT EXISTS directory_groups (
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
+  -- WorkOS directory group metadata
+  workos_created_at timestamptz NOT NULL,
+  workos_updated_at timestamptz NOT NULL,
+  workos_deleted_at timestamptz,
+  workos_deleted boolean NOT NULL GENERATED ALWAYS AS (workos_deleted_at IS NOT NULL) stored,
+  workos_last_event_id TEXT,
+
   CONSTRAINT directory_groups_pkey PRIMARY KEY (id),
   CONSTRAINT directory_groups_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
@@ -1722,6 +1729,13 @@ CREATE TABLE IF NOT EXISTS directory_users (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  -- WorkOS directory user metadata
+  workos_created_at timestamptz NOT NULL,
+  workos_updated_at timestamptz NOT NULL,
+  workos_deleted_at timestamptz,
+  workos_deleted boolean NOT NULL GENERATED ALWAYS AS (workos_deleted_at IS NOT NULL) stored,
+  workos_last_event_id TEXT,
 
   CONSTRAINT directory_users_pkey PRIMARY KEY (id),
   CONSTRAINT directory_users_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
@@ -1748,6 +1762,9 @@ CREATE TABLE IF NOT EXISTS directory_user_group_memberships (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  -- WorkOS directory user group membership metadata
+  workos_created_at timestamptz NOT NULL,
 
   CONSTRAINT directory_user_group_memberships_pkey PRIMARY KEY (id),
   CONSTRAINT directory_user_group_memberships_directory_user_id_fkey FOREIGN KEY (directory_user_id) REFERENCES directory_users (id) ON DELETE CASCADE,
