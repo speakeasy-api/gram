@@ -46,6 +46,7 @@ jobs:
       migrations: ${{ steps.gates.outputs.migrations }}
       plog: ${{ steps.gates.outputs.plog }}
       infra: ${{ steps.gates.outputs.infra }}
+      pystreams: ${{ steps.gates.outputs.pystreams }}
       sdk: ${{ steps.gates.outputs.sdk }}
       sdk-gen: ${{ steps.gates.outputs.sdk-gen }}
       risk_accuracy: ${{ steps.gates.outputs.risk_accuracy }}
@@ -129,6 +130,13 @@ jobs:
             echo "Infra jobs will run."
           else
             echo "Infra jobs will be skipped."
+          fi
+
+          if [[ "${{ steps.filter.outputs.pystreams }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+            echo "pystreams=true" >> $GITHUB_OUTPUT
+            echo "Pystreams jobs will run."
+          else
+            echo "Pystreams jobs will be skipped."
           fi
 
           if [[ "${{ steps.filter.outputs.sdk }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
@@ -301,7 +309,7 @@ jobs:
     if: needs.changes.outputs.pi_classifier == 'true'
     steps:
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
 
       - id: "auth"
         name: "Authenticate to Google Cloud"
@@ -339,6 +347,60 @@ jobs:
           context: ./services/pi-classifier
           file: services/pi-classifier/Dockerfile
           git-auth-token: ${{ secrets.BOT_REPO_TOKEN }}
+
+  docker-build-pystreams:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: [changes, pystreams-build-lint]
+    if: needs.changes.outputs.pystreams == 'true'
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+
+      - id: "auth"
+        name: "Authenticate to Google Cloud"
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          token_format: "access_token"
+          workload_identity_provider: "projects/409661704476/locations/global/workloadIdentityPools/ga-pool/providers/github-oidc-provider"
+          service_account: "speakeasy-registry-ga-ci@linen-analyst-344721.iam.gserviceaccount.com"
+      - name: Login to GCR
+        env:
+          GCR_TOKEN: ${{ steps.auth.outputs.access_token }}
+        run: |
+          max_attempts=3
+          for ((i=1; i<=max_attempts; i++)); do
+            echo "Docker login attempt $i/$max_attempts..."
+            if docker login -u oauth2accesstoken --password-stdin gcr.io/linen-analyst-344721 <<< "$GCR_TOKEN"; then
+              echo "Login successful"
+              exit 0
+            fi
+            if [ $i -lt $max_attempts ]; then
+              echo "Login failed, waiting 5s before retry..."
+              sleep 5
+            fi
+          done
+          echo "All login attempts failed"
+          exit 1
+      - name: Build and Push Registry image to GCR
+        id: build
+        uses: ./.github/workflows/composite/build-push
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+          image: ${{ env.DOCKER_REPOSITORY_OWNER }}/gram-pystreams
+          # The build context must be the uv workspace root: pystreams depends on
+          # the in-repo gram-infra member and the single uv.lock lives there. The
+          # build-scoped pystreams/Dockerfile.pystreams.dockerignore trims it down.
+          context: .
+          file: pystreams/Dockerfile.pystreams
+          git-auth-token: ${{ secrets.BOT_REPO_TOKEN }}
+      - name: Pull and Run Image
+        run: |
+          echo "Pulling image: ${{ steps.build.outputs.image-tag }}"
+          docker pull ${{ steps.build.outputs.image-tag }}
+          echo "Running image..."
+          docker run --rm ${{ steps.build.outputs.image-tag }} --help
 
   assistant-runtime-image:
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -898,6 +960,15 @@ jobs:
             ${{ env.GOCACHE }}
             ${{ env.GOMODCACHE }}
 
+      - name: Cache uv
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          key: ${{ env.GH_CACHE_UV_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_UV_KEY }}
+            ${{ env.GH_CACHE_UV_KEY_PARTIAL }}
+          path: ${{ env.UV_CACHE_DIR }}
+
       # TODO: re-enable once buf.yaml + infra/proto exist on main. The breaking
       # check compares against origin/main, which has no protos until this
       # scaffolding lands, so `buf breaking` fails with "no .proto files" on the
@@ -908,6 +979,9 @@ jobs:
       # - name: Lint proto files
       #   run: mise run lint:infra --against ".git#ref=origin/main"
 
+      - name: Install uv dependencies
+        run: mise run install:uv --all-packages --locked
+
       - name: Type-check and test the infra Python package
         run: mise run test:infra
 
@@ -916,6 +990,51 @@ jobs:
 
       - name: Check for dirty files
         run: mise run git:porcelain
+
+      - name: Minimize uv cache
+        run: uv cache prune --ci
+
+  pystreams-build-lint:
+    name: Lint and test the pystreams package
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: read
+    needs: changes
+    if: needs.changes.outputs.pystreams == 'true'
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        run: mise run github
+
+      - name: Cache uv
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          key: ${{ env.GH_CACHE_UV_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_UV_KEY }}
+            ${{ env.GH_CACHE_UV_KEY_PARTIAL }}
+          path: ${{ env.UV_CACHE_DIR }}
+
+      - name: Install uv dependencies
+        run: mise run install:uv --all-packages --locked
+
+      - name: Lint the pystreams package
+        run: mise run lint:pystreams
+
+      - name: Test the pystreams package
+        run: mise run test:pystreams
+
+      - name: Minimize uv cache
+        run: uv cache prune --ci
 
   cli-build-lint:
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -1931,12 +2050,14 @@ jobs:
       - server-test
       - docker-build-server
       - docker-build-client
+      - docker-build-pystreams
       - client-build-lint
       - sdk-gen-check
       - ts-sdk-build-lint
       - cli-build-lint
       - plog-build-lint
       - infra-build-lint
+      - pystreams-build-lint
       - functions-build-host
       - functions-image
       - assistant-runtime-image

@@ -19,3 +19,17 @@ message Processor {
     dead_letter: {max_delivery_attempts: 5}
   };
 }
+
+message PyProcessor {
+  option (gcp.pubsub.v1.subscription) = {
+    topic: "gram.ping.v1.Message"
+    ack_deadline: {seconds: 30}
+    retention: {seconds: 3600}
+    retain_acked_messages: true
+    retry_policy: {
+      minimum_backoff: {seconds: 10}
+      maximum_backoff: {seconds: 600}
+    }
+    dead_letter: {max_delivery_attempts: 5}
+  };
+}
