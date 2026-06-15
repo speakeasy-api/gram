@@ -28,6 +28,11 @@ function defineThemes(m: typeof Monaco) {
     "editor.background": "#00000000",
     "editor.lineHighlightBackground": "#00000000",
     "editor.lineHighlightBorder": "#00000000",
+    "editor.selectionHighlightBackground": "#00000000",
+    "editor.wordHighlightBackground": "#00000000",
+    "editor.wordHighlightStrongBackground": "#00000000",
+    "editorBracketMatch.background": "#00000000",
+    "editorBracketMatch.border": "#00000000",
     "editorIndentGuide.background": "#00000000",
   };
   m.editor.defineTheme(THEME_DARK, {
@@ -173,8 +178,12 @@ const EDITOR_OPTIONS: Monaco.editor.IStandaloneEditorConstructionOptions = {
   fixedOverflowWidgets: true,
   suggestOnTriggerCharacters: true,
   quickSuggestions: { other: true, comments: false, strings: true },
+  // Our completion provider is the only source — Monaco's built-in word
+  // completions would otherwise duplicate every suggestion.
+  wordBasedSuggestions: "off",
   occurrencesHighlight: "off",
   selectionHighlight: false,
+  renderValidationDecorations: "on",
   matchBrackets: "never",
   padding: { top: 0, bottom: 0 },
   suggest: { showStatusBar: false, showIcons: false },
