@@ -16,6 +16,10 @@ import { Switch } from "@/components/ui/switch";
 import { TextArea } from "@/components/ui/textarea";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
+  OnboardingStepper,
+  type Step,
+} from "@/pages/setup/components/onboarding-stepper";
+import {
   Sheet,
   SheetContent,
   SheetHeader,
@@ -125,6 +129,30 @@ const FLAG_ONLY_CATEGORIES: Set<RuleCategory> = new Set([
   "destructive_tool",
   "cli_destructive",
 ]);
+
+/** Steps in the guided standard-policy creation/edit flow. Mirrors the
+ *  enterprise onboarding wizard (left rail + paged content). */
+const POLICY_WIZARD_STEPS: Step[] = [
+  { id: "detect", title: "Detect", description: "What to scan for" },
+  { id: "scope", title: "Scope", description: "Where it applies" },
+  { id: "action", title: "Action", description: "What happens on a match" },
+  { id: "review", title: "Review", description: "Name & enable" },
+];
+
+function WizardStepHeading({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <div>
+      <h3 className="text-base font-semibold">{title}</h3>
+      <p className="text-muted-foreground text-sm">{description}</p>
+    </div>
+  );
+}
 
 type PolicyKind = "risk" | "prompt";
 
@@ -370,6 +398,8 @@ function PolicyCenterContent() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<RiskPolicy | null>(null);
   const [createStep, setCreateStep] = useState<"type" | "details">("details");
+  // Active step in the standard-policy guided flow (0=Detect…3=Review).
+  const [wizardStep, setWizardStep] = useState(0);
   const [formPolicyKind, setFormPolicyKind] = useState<PolicyKind>("risk");
   const [formName, setFormName] = useState("");
   const [formEnabled, setFormEnabled] = useState(true);
@@ -458,6 +488,7 @@ function PolicyCenterContent() {
     const nextKind = kind ?? "risk";
     setEditingPolicy(null);
     setCreateStep(kind || !nlEnabled ? "details" : "type");
+    setWizardStep(0);
     setFormPolicyKind(nextKind);
     setFormName("");
     setFormEnabled(true);
@@ -489,6 +520,7 @@ function PolicyCenterContent() {
     const kind: PolicyKind = isPrompt ? "prompt" : "risk";
     setEditingPolicy(policy);
     setCreateStep("details");
+    setWizardStep(0);
     setFormPolicyKind(kind);
     setFormName(policy.name);
     setFormEnabled(policy.enabled);
@@ -937,6 +969,33 @@ function PolicyCenterContent() {
 
   const isChoosingPolicyKind =
     !editingPolicy && nlEnabled && createStep === "type";
+
+  // Footer behaviour for the guided standard-policy flow. The prompt flow stays
+  // a single save; the risk flow pages through steps (Continue, then Create).
+  const isRiskWizard = !isChoosingPolicyKind && formPolicyKind === "risk";
+  const isLastWizardStep = wizardStep === POLICY_WIZARD_STEPS.length - 1;
+  const showWizardContinue = isRiskWizard && !isLastWizardStep;
+  const mutationPending = createMutation.isPending || updateMutation.isPending;
+  const continueDisabled =
+    (wizardStep === 0 &&
+      selectedCategories.size === 0 &&
+      selectedCustomRuleIds.size === 0) ||
+    (wizardStep === 1 && selectedMessageTypes.size === 0);
+  const saveDisabled =
+    (formPolicyKind === "prompt" && !formPromptInstruction.trim()) ||
+    (!formAutoName && !formName.trim()) ||
+    selectedMessageTypes.size === 0 ||
+    mutationPending;
+  const showFooterBack =
+    (isRiskWizard && wizardStep > 0) || (!editingPolicy && nlEnabled);
+  const onFooterBack = () => {
+    if (isRiskWizard && wizardStep > 0) {
+      setWizardStep(wizardStep - 1);
+    } else {
+      setCreateStep("type");
+    }
+  };
+
   let sheetTitle = "New Policy";
   let sheetDescription = "Create a policy to scan agent session interactions.";
   if (editingPolicy) {
@@ -1043,7 +1102,15 @@ function PolicyCenterContent() {
             if (!open) clearPolicyDeepLink();
           }}
         >
-          <SheetContent className="flex flex-col overflow-y-auto sm:max-w-lg">
+          <SheetContent
+            className={cn(
+              "flex flex-col overflow-y-auto",
+              // The guided standard-policy flow needs room for the step rail.
+              !isChoosingPolicyKind && formPolicyKind === "risk"
+                ? "sm:max-w-3xl"
+                : "sm:max-w-lg",
+            )}
+          >
             <SheetHeader className="px-6 pt-6">
               <SheetTitle>{sheetTitle}</SheetTitle>
               <SheetDescription>{sheetDescription}</SheetDescription>
@@ -1054,6 +1121,8 @@ function PolicyCenterContent() {
                   <PolicyKindChoice onSelect={handleChoosePolicyKind} />
                 ) : formPolicyKind === "risk" ? (
                   <PolicySheetBody
+                    wizardStep={wizardStep}
+                    setWizardStep={setWizardStep}
                     formName={formName}
                     setFormName={setFormName}
                     formEnabled={formEnabled}
@@ -1103,42 +1172,48 @@ function PolicyCenterContent() {
               </div>
             </div>
             {!isChoosingPolicyKind && (
-              <SheetFooter className="px-6 pb-6">
-                {!editingPolicy && nlEnabled && (
-                  <Button
-                    variant="secondary"
-                    onClick={() => setCreateStep("type")}
-                  >
-                    <Button.LeftIcon>
-                      <ArrowLeft className="h-4 w-4" />
-                    </Button.LeftIcon>
-                    <Button.Text>Back</Button.Text>
-                  </Button>
+              <SheetFooter className="flex-row items-center justify-between px-6 pb-6">
+                {isRiskWizard ? (
+                  <span className="text-muted-foreground text-xs">
+                    Step {wizardStep + 1} of {POLICY_WIZARD_STEPS.length} ·{" "}
+                    {POLICY_WIZARD_STEPS[wizardStep]?.title}
+                  </span>
+                ) : (
+                  <span />
                 )}
-                <Button
-                  onClick={handleSave}
-                  disabled={
-                    (formPolicyKind === "prompt" &&
-                      !formPromptInstruction.trim()) ||
-                    (!formAutoName && !formName.trim()) ||
-                    selectedMessageTypes.size === 0 ||
-                    createMutation.isPending ||
-                    updateMutation.isPending
-                  }
-                >
-                  {(createMutation.isPending || updateMutation.isPending) && (
-                    <Button.LeftIcon>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    </Button.LeftIcon>
+                <div className="flex gap-2">
+                  {showFooterBack && (
+                    <Button variant="secondary" onClick={onFooterBack}>
+                      <Button.LeftIcon>
+                        <ArrowLeft className="h-4 w-4" />
+                      </Button.LeftIcon>
+                      <Button.Text>Back</Button.Text>
+                    </Button>
                   )}
-                  <Button.Text>
-                    {createMutation.isPending || updateMutation.isPending
-                      ? "Saving..."
-                      : editingPolicy
-                        ? "Update"
-                        : "Create"}
-                  </Button.Text>
-                </Button>
+                  {showWizardContinue ? (
+                    <Button
+                      onClick={() => setWizardStep(wizardStep + 1)}
+                      disabled={continueDisabled}
+                    >
+                      <Button.Text>Continue</Button.Text>
+                    </Button>
+                  ) : (
+                    <Button onClick={handleSave} disabled={saveDisabled}>
+                      {mutationPending && (
+                        <Button.LeftIcon>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        </Button.LeftIcon>
+                      )}
+                      <Button.Text>
+                        {mutationPending
+                          ? "Saving..."
+                          : editingPolicy
+                            ? "Update"
+                            : "Create"}
+                      </Button.Text>
+                    </Button>
+                  )}
+                </div>
               </SheetFooter>
             )}
           </SheetContent>
@@ -1597,6 +1672,8 @@ function PromptPolicyHowItWorks({ isEditing }: { isEditing: boolean }) {
 /* -------------------------------------------------------------------------- */
 
 function PolicySheetBody({
+  wizardStep,
+  setWizardStep,
   formName,
   setFormName,
   formEnabled,
@@ -1619,6 +1696,8 @@ function PolicySheetBody({
   formUserMessage,
   setFormUserMessage,
 }: {
+  wizardStep: number;
+  setWizardStep: (v: number) => void;
   formName: string;
   setFormName: (v: string) => void;
   formEnabled: boolean;
@@ -1657,312 +1736,369 @@ function PolicySheetBody({
   );
 
   return (
-    <div className="space-y-6 py-4">
-      {/* Policy Name */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label className="text-sm font-medium">Policy Name</Label>
-          <div className="flex items-center gap-2">
-            <span className="text-muted-foreground text-xs">Auto</span>
-            <Switch checked={formAutoName} onCheckedChange={setFormAutoName} />
-          </div>
-        </div>
-        {formAutoName ? (
-          <p className="text-muted-foreground text-xs">
-            Name will be generated automatically based on detection rules and
-            action.
-          </p>
-        ) : (
-          <Input
-            value={formName}
-            onChange={(value) => setFormName(value)}
-            placeholder="e.g. Secret Detection"
-          />
-        )}
+    <div className="flex gap-8 py-4">
+      <div className="w-44 flex-shrink-0">
+        <OnboardingStepper
+          steps={POLICY_WIZARD_STEPS}
+          currentStep={wizardStep}
+          onStepClick={(i) => setWizardStep(i)}
+        />
       </div>
+      <div className="min-w-0 flex-1 space-y-6">
+        {wizardStep === 0 && (
+          <div className="space-y-6">
+            <WizardStepHeading
+              title="What should this policy detect?"
+              description="Turn on detector categories and attach your organization's custom rules."
+            />
 
-      {/* Built-in rules */}
-      <div className="space-y-3">
-        <button
-          type="button"
-          onClick={() => setBuiltinExpanded((v) => !v)}
-          className="flex w-full items-center gap-2"
-        >
-          <ChevronRight
-            className={cn(
-              "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
-              builtinExpanded && "rotate-90",
-            )}
-          />
-          <Label className="cursor-pointer text-sm font-medium">
-            Built-in rules
-          </Label>
-          {selectedBuiltinCount > 0 && (
-            <Badge variant="neutral">
-              <Badge.Text>{selectedBuiltinCount} selected</Badge.Text>
-            </Badge>
-          )}
-        </button>
-        {builtinExpanded && (
-          <div className="border-border divide-border divide-y rounded-lg border">
-            {ALL_CATEGORIES.map((cat) => {
-              const meta = RULE_CATEGORY_META[cat];
-              const isAvailable = AVAILABLE_CATEGORIES.has(cat);
-              const isExpanded = expandedCategory === cat;
-              // Hidden rules stay in the catalog so legacy risk_results keep
-              // resolving their title via risk-utils, but they are scrubbed
-              // from the form's display, counts, and bulk toggles. The
-              // underlying disabledRules/selectedCategories state is left
-              // untouched so existing policies that pin a hidden rule round-
-              // trip cleanly through edit.
-              const rules = DETECTION_RULES[cat].filter((r) => !r.hidden);
-              const isExpandable = isAvailable && rules.length > 0;
-              const categorySelected = selectedCategories.has(cat);
-              const enabledRuleCount = categorySelected
-                ? rules.filter((r) => !disabledRules.has(r.id)).length
-                : 0;
-              const hasPartialSelection =
-                categorySelected &&
-                rules.length > 0 &&
-                enabledRuleCount > 0 &&
-                enabledRuleCount < rules.length;
-              const headerChecked: boolean | "indeterminate" =
-                hasPartialSelection
-                  ? "indeterminate"
-                  : categorySelected &&
-                    (rules.length === 0 || enabledRuleCount > 0);
+            {/* Built-in rules */}
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => setBuiltinExpanded((v) => !v)}
+                className="flex w-full items-center gap-2"
+              >
+                <ChevronRight
+                  className={cn(
+                    "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
+                    builtinExpanded && "rotate-90",
+                  )}
+                />
+                <Label className="cursor-pointer text-sm font-medium">
+                  Built-in rules
+                </Label>
+                {selectedBuiltinCount > 0 && (
+                  <Badge variant="neutral">
+                    <Badge.Text>{selectedBuiltinCount} selected</Badge.Text>
+                  </Badge>
+                )}
+              </button>
+              {builtinExpanded && (
+                <div className="border-border divide-border divide-y rounded-lg border">
+                  {ALL_CATEGORIES.map((cat) => {
+                    const meta = RULE_CATEGORY_META[cat];
+                    const isAvailable = AVAILABLE_CATEGORIES.has(cat);
+                    const isExpanded = expandedCategory === cat;
+                    // Hidden rules stay in the catalog so legacy risk_results keep
+                    // resolving their title via risk-utils, but they are scrubbed
+                    // from the form's display, counts, and bulk toggles. The
+                    // underlying disabledRules/selectedCategories state is left
+                    // untouched so existing policies that pin a hidden rule round-
+                    // trip cleanly through edit.
+                    const rules = DETECTION_RULES[cat].filter((r) => !r.hidden);
+                    const isExpandable = isAvailable && rules.length > 0;
+                    const categorySelected = selectedCategories.has(cat);
+                    const enabledRuleCount = categorySelected
+                      ? rules.filter((r) => !disabledRules.has(r.id)).length
+                      : 0;
+                    const hasPartialSelection =
+                      categorySelected &&
+                      rules.length > 0 &&
+                      enabledRuleCount > 0 &&
+                      enabledRuleCount < rules.length;
+                    const headerChecked: boolean | "indeterminate" =
+                      hasPartialSelection
+                        ? "indeterminate"
+                        : categorySelected &&
+                          (rules.length === 0 || enabledRuleCount > 0);
 
-              const toggleCategory = (checked: boolean) => {
-                const nextCats = new Set(selectedCategories);
-                const nextDisabled = new Set(disabledRules);
-                if (checked) {
-                  nextCats.add(cat);
-                  for (const rule of rules) nextDisabled.delete(rule.id);
-                } else {
-                  nextCats.delete(cat);
-                  for (const rule of rules) nextDisabled.delete(rule.id);
-                }
-                setSelectedCategories(nextCats);
-                setDisabledRules(nextDisabled);
-                if (
-                  checked &&
-                  cat === "destructive_tool" &&
-                  formAction === "block"
-                ) {
-                  setFormAction("flag");
-                }
-              };
-
-              const toggleRule = (ruleId: string, enabled: boolean) => {
-                const nextDisabled = new Set(disabledRules);
-                const nextCats = new Set(selectedCategories);
-                if (enabled) {
-                  // Enabling the first rule in a not-yet-selected category must
-                  // turn on ONLY that rule. Selecting the category alone would
-                  // enable every rule (enabled = category selected && not in
-                  // disabled_rules), so seed the rest as disabled first.
-                  if (!nextCats.has(cat)) {
-                    for (const r of rules) nextDisabled.add(r.id);
-                    nextCats.add(cat);
-                  }
-                  nextDisabled.delete(ruleId);
-                } else {
-                  nextDisabled.add(ruleId);
-                }
-                setSelectedCategories(nextCats);
-                setDisabledRules(nextDisabled);
-              };
-
-              return (
-                <div key={cat}>
-                  {/* Category header */}
-                  <div
-                    className={cn(
-                      "flex items-center gap-3 px-4 py-3",
-                      isExpandable && "cursor-pointer",
-                    )}
-                    onClick={() => {
-                      if (isExpandable) {
-                        setExpandedCategory(isExpanded ? null : cat);
+                    const toggleCategory = (checked: boolean) => {
+                      const nextCats = new Set(selectedCategories);
+                      const nextDisabled = new Set(disabledRules);
+                      if (checked) {
+                        nextCats.add(cat);
+                        for (const rule of rules) nextDisabled.delete(rule.id);
+                      } else {
+                        nextCats.delete(cat);
+                        for (const rule of rules) nextDisabled.delete(rule.id);
                       }
-                    }}
-                  >
-                    {/* Expand chevron (only for categories with rules to expand) */}
-                    {isExpandable ? (
-                      <ChevronRight
-                        className={cn(
-                          "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
-                          isExpanded && "rotate-90",
-                        )}
-                      />
-                    ) : (
-                      <div className="w-4 shrink-0" />
-                    )}
+                      setSelectedCategories(nextCats);
+                      setDisabledRules(nextDisabled);
+                      if (
+                        checked &&
+                        cat === "destructive_tool" &&
+                        formAction === "block"
+                      ) {
+                        setFormAction("flag");
+                      }
+                    };
 
-                    {/* Category icon */}
-                    <Icon
-                      name={meta.icon as IconName}
-                      className="text-muted-foreground size-4 shrink-0"
-                    />
+                    const toggleRule = (ruleId: string, enabled: boolean) => {
+                      const nextDisabled = new Set(disabledRules);
+                      const nextCats = new Set(selectedCategories);
+                      if (enabled) {
+                        // Enabling the first rule in a not-yet-selected category must
+                        // turn on ONLY that rule. Selecting the category alone would
+                        // enable every rule (enabled = category selected && not in
+                        // disabled_rules), so seed the rest as disabled first.
+                        if (!nextCats.has(cat)) {
+                          for (const r of rules) nextDisabled.add(r.id);
+                          nextCats.add(cat);
+                        }
+                        nextDisabled.delete(ruleId);
+                      } else {
+                        nextDisabled.add(ruleId);
+                      }
+                      setSelectedCategories(nextCats);
+                      setDisabledRules(nextDisabled);
+                    };
 
-                    {/* Label & description */}
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">
-                          {meta.label}
-                        </span>
-                        {!isAvailable && (
-                          <Badge variant="neutral">
-                            <Badge.Text>Coming Soon</Badge.Text>
-                          </Badge>
-                        )}
-                        {isExpandable && categorySelected && (
-                          <Badge variant="neutral">
-                            <Badge.Text>
-                              {enabledRuleCount}/{rules.length}
-                            </Badge.Text>
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-muted-foreground text-xs">
-                        {meta.description}
-                      </p>
-                    </div>
+                    return (
+                      <div key={cat}>
+                        {/* Category header */}
+                        <div
+                          className={cn(
+                            "flex items-center gap-3 px-4 py-3",
+                            isExpandable && "cursor-pointer",
+                          )}
+                          onClick={() => {
+                            if (isExpandable) {
+                              setExpandedCategory(isExpanded ? null : cat);
+                            }
+                          }}
+                        >
+                          {/* Expand chevron (only for categories with rules to expand) */}
+                          {isExpandable ? (
+                            <ChevronRight
+                              className={cn(
+                                "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
+                                isExpanded && "rotate-90",
+                              )}
+                            />
+                          ) : (
+                            <div className="w-4 shrink-0" />
+                          )}
 
-                    {/* Category checkbox */}
-                    <Checkbox
-                      checked={headerChecked}
-                      disabled={!isAvailable}
-                      onCheckedChange={(checked) => toggleCategory(!!checked)}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  </div>
+                          {/* Category icon */}
+                          <Icon
+                            name={meta.icon as IconName}
+                            className="text-muted-foreground size-4 shrink-0"
+                          />
 
-                  {/* Expanded per-rule toggles. Each rule is independently
+                          {/* Label & description */}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium">
+                                {meta.label}
+                              </span>
+                              {!isAvailable && (
+                                <Badge variant="neutral">
+                                  <Badge.Text>Coming Soon</Badge.Text>
+                                </Badge>
+                              )}
+                              {isExpandable && categorySelected && (
+                                <Badge variant="neutral">
+                                  <Badge.Text>
+                                    {enabledRuleCount}/{rules.length}
+                                  </Badge.Text>
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-muted-foreground text-xs">
+                              {meta.description}
+                            </p>
+                          </div>
+
+                          {/* Category checkbox */}
+                          <Checkbox
+                            checked={headerChecked}
+                            disabled={!isAvailable}
+                            onCheckedChange={(checked) =>
+                              toggleCategory(!!checked)
+                            }
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </div>
+
+                        {/* Expanded per-rule toggles. Each rule is independently
                     toggleable; unchecking adds the canonical rule_id to the
                     policy's disabled_rules list and the scanner drops matching
                     findings. */}
-                  {isAvailable && isExpanded && rules.length > 0 && (
-                    <div className="bg-muted/30 border-border border-t px-4 py-2">
-                      <div className="flex items-center justify-between py-1">
-                        <span className="text-muted-foreground text-xs">
-                          {enabledRuleCount} of {rules.length} rules enabled
-                        </span>
-                        <div className="flex gap-3">
-                          <button
-                            type="button"
-                            className="text-primary text-xs underline-offset-2 hover:underline disabled:opacity-50"
-                            disabled={enabledRuleCount === rules.length}
-                            onClick={() => {
-                              const nextDisabled = new Set(disabledRules);
-                              for (const r of rules) nextDisabled.delete(r.id);
-                              setDisabledRules(nextDisabled);
-                              const nextCats = new Set(selectedCategories);
-                              nextCats.add(cat);
-                              setSelectedCategories(nextCats);
-                            }}
-                          >
-                            Enable all
-                          </button>
-                          <button
-                            type="button"
-                            className="text-primary text-xs underline-offset-2 hover:underline disabled:opacity-50"
-                            disabled={
-                              !categorySelected || enabledRuleCount === 0
-                            }
-                            onClick={() => {
-                              const nextDisabled = new Set(disabledRules);
-                              for (const r of rules) nextDisabled.add(r.id);
-                              setDisabledRules(nextDisabled);
-                            }}
-                          >
-                            Disable all
-                          </button>
-                        </div>
-                      </div>
-                      <div className="space-y-2 py-1">
-                        {rules.map((rule) => {
-                          const ruleEnabled =
-                            categorySelected && !disabledRules.has(rule.id);
-                          return (
-                            <div
-                              key={rule.id}
-                              className="flex items-center gap-3 py-1 pl-8"
-                            >
-                              <Checkbox
-                                id={rule.id}
-                                checked={ruleEnabled}
-                                onCheckedChange={(checked) =>
-                                  toggleRule(rule.id, !!checked)
-                                }
-                              />
-                              <label htmlFor={rule.id} className="text-xs">
-                                {rule.title}
-                              </label>
+                        {isAvailable && isExpanded && rules.length > 0 && (
+                          <div className="bg-muted/30 border-border border-t px-4 py-2">
+                            <div className="flex items-center justify-between py-1">
+                              <span className="text-muted-foreground text-xs">
+                                {enabledRuleCount} of {rules.length} rules
+                                enabled
+                              </span>
+                              <div className="flex gap-3">
+                                <button
+                                  type="button"
+                                  className="text-primary text-xs underline-offset-2 hover:underline disabled:opacity-50"
+                                  disabled={enabledRuleCount === rules.length}
+                                  onClick={() => {
+                                    const nextDisabled = new Set(disabledRules);
+                                    for (const r of rules)
+                                      nextDisabled.delete(r.id);
+                                    setDisabledRules(nextDisabled);
+                                    const nextCats = new Set(
+                                      selectedCategories,
+                                    );
+                                    nextCats.add(cat);
+                                    setSelectedCategories(nextCats);
+                                  }}
+                                >
+                                  Enable all
+                                </button>
+                                <button
+                                  type="button"
+                                  className="text-primary text-xs underline-offset-2 hover:underline disabled:opacity-50"
+                                  disabled={
+                                    !categorySelected || enabledRuleCount === 0
+                                  }
+                                  onClick={() => {
+                                    const nextDisabled = new Set(disabledRules);
+                                    for (const r of rules)
+                                      nextDisabled.add(r.id);
+                                    setDisabledRules(nextDisabled);
+                                  }}
+                                >
+                                  Disable all
+                                </button>
+                              </div>
                             </div>
-                          );
-                        })}
+                            <div className="space-y-2 py-1">
+                              {rules.map((rule) => {
+                                const ruleEnabled =
+                                  categorySelected &&
+                                  !disabledRules.has(rule.id);
+                                return (
+                                  <div
+                                    key={rule.id}
+                                    className="flex items-center gap-3 py-1 pl-8"
+                                  >
+                                    <Checkbox
+                                      id={rule.id}
+                                      checked={ruleEnabled}
+                                      onCheckedChange={(checked) =>
+                                        toggleRule(rule.id, !!checked)
+                                      }
+                                    />
+                                    <label
+                                      htmlFor={rule.id}
+                                      className="text-xs"
+                                    >
+                                      {rule.title}
+                                    </label>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  )}
+                    );
+                  })}
                 </div>
-              );
-            })}
+              )}
+            </div>
+
+            {customRules.length > 0 && (
+              <CustomRulesPicker
+                customRules={customRules}
+                selectedCustomRuleIds={selectedCustomRuleIds}
+                setSelectedCustomRuleIds={setSelectedCustomRuleIds}
+                customRuleActions={customRuleActions}
+                setCustomRuleActions={setCustomRuleActions}
+                expanded={detectionExpanded}
+                onToggle={() => setDetectionExpanded((v) => !v)}
+              />
+            )}
           </div>
         )}
-      </div>
 
-      {customRules.length > 0 && (
-        <CustomRulesPicker
-          customRules={customRules}
-          selectedCustomRuleIds={selectedCustomRuleIds}
-          setSelectedCustomRuleIds={setSelectedCustomRuleIds}
-          customRuleActions={customRuleActions}
-          setCustomRuleActions={setCustomRuleActions}
-          expanded={detectionExpanded}
-          onToggle={() => setDetectionExpanded((v) => !v)}
-        />
-      )}
+        {wizardStep === 1 && (
+          <div className="space-y-6">
+            <WizardStepHeading
+              title="Where should it evaluate?"
+              description="Leave all four on to apply everywhere. Narrow the scope to reduce noise or cost."
+            />
+            <MessageTypesPicker
+              selectedMessageTypes={selectedMessageTypes}
+              setSelectedMessageTypes={setSelectedMessageTypes}
+            />
+          </div>
+        )}
 
-      <MessageTypesPicker
-        selectedMessageTypes={selectedMessageTypes}
-        setSelectedMessageTypes={setSelectedMessageTypes}
-      />
+        {wizardStep === 2 && (
+          <div className="space-y-6">
+            <WizardStepHeading
+              title="What happens on a match?"
+              description="Choose how the policy responds when its detection rules fire."
+            />
+            <ActionPicker
+              formAction={formAction}
+              setFormAction={setFormAction}
+              flagOnlySelected={flagOnlySelected}
+            />
 
-      <ActionPicker
-        formAction={formAction}
-        setFormAction={setFormAction}
-        flagOnlySelected={flagOnlySelected}
-      />
-
-      {/* Custom message — only relevant for block-action policies that
+            {/* Custom message — only relevant for block-action policies that
           surface a user-facing reason at deny time. Flag-action policies
           record findings silently, so no message is needed. */}
-      {formAction === "block" && (
-        <div className="space-y-2">
-          <Label className="text-sm font-medium">Custom Message</Label>
-          <p className="text-muted-foreground text-xs">
-            Shown to the user when this policy blocks a tool call or prompt.
-            Leave blank to use the default message.
-          </p>
-          <TextArea
-            value={formUserMessage}
-            onChange={setFormUserMessage}
-            placeholder="e.g. This action was blocked by your organization's security policy. Contact your admin for help."
-            rows={3}
-          />
-        </div>
-      )}
+            {formAction === "block" && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Custom Message</Label>
+                <p className="text-muted-foreground text-xs">
+                  Shown to the user when this policy blocks a tool call or
+                  prompt. Leave blank to use the default message.
+                </p>
+                <TextArea
+                  value={formUserMessage}
+                  onChange={setFormUserMessage}
+                  placeholder="e.g. This action was blocked by your organization's security policy. Contact your admin for help."
+                  rows={3}
+                />
+              </div>
+            )}
+          </div>
+        )}
 
-      {/* Enabled toggle */}
-      <div className="flex items-center justify-between">
-        <div>
-          <Label className="text-sm font-medium">Enabled</Label>
-          <p className="text-muted-foreground text-xs">
-            Enable this policy to begin scanning messages.
-          </p>
-        </div>
-        <Switch checked={formEnabled} onCheckedChange={setFormEnabled} />
+        {wizardStep === 3 && (
+          <div className="space-y-6">
+            <WizardStepHeading
+              title="Name & enable"
+              description="Review the policy, then create it."
+            />
+
+            {/* Policy Name */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">Policy Name</Label>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground text-xs">Auto</span>
+                  <Switch
+                    checked={formAutoName}
+                    onCheckedChange={setFormAutoName}
+                  />
+                </div>
+              </div>
+              {formAutoName ? (
+                <p className="text-muted-foreground text-xs">
+                  Name will be generated automatically based on detection rules
+                  and action.
+                </p>
+              ) : (
+                <Input
+                  value={formName}
+                  onChange={(value) => setFormName(value)}
+                  placeholder="e.g. Secret Detection"
+                />
+              )}
+            </div>
+
+            {/* Enabled toggle */}
+            <div className="flex items-center justify-between">
+              <div>
+                <Label className="text-sm font-medium">Enabled</Label>
+                <p className="text-muted-foreground text-xs">
+                  Enable this policy to begin scanning messages.
+                </p>
+              </div>
+              <Switch checked={formEnabled} onCheckedChange={setFormEnabled} />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
