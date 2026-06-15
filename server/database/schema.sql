@@ -1763,6 +1763,9 @@ CREATE TABLE IF NOT EXISTS directory_user_group_memberships (
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
+  -- WorkOS directory user group membership metadata
+  workos_created_at timestamptz NOT NULL,
+
   CONSTRAINT directory_user_group_memberships_pkey PRIMARY KEY (id),
   CONSTRAINT directory_user_group_memberships_directory_user_id_fkey FOREIGN KEY (directory_user_id) REFERENCES directory_users (id) ON DELETE CASCADE,
   CONSTRAINT directory_user_group_memberships_directory_group_id_fkey FOREIGN KEY (directory_group_id) REFERENCES directory_groups (id) ON DELETE CASCADE
