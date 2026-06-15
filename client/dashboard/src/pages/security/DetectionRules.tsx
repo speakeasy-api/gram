@@ -41,17 +41,9 @@ import { unwrapAsync } from "@gram/client/types/fp.js";
 import { useSdkClient } from "@/contexts/Sdk";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   BUILTIN_RULES_BY_CATEGORY,
   SEVERITY_LEVELS,
   buildMatchConfig,
-  ruleAction,
   ruleCombine,
   ruleConditions,
   ruleSummary,
@@ -59,7 +51,6 @@ import {
   validateCustomRuleId,
   type BuiltinRule,
   type CustomDetectionRule,
-  type CustomRuleAction,
   type CustomRuleDraft,
   type SeverityLevel,
 } from "./detection-rules-data";
@@ -477,40 +468,6 @@ function BuiltinRuleDetail({ rule }: { rule: BuiltinRule }) {
   );
 }
 
-function ActionSelect({
-  value,
-  onChange,
-}: {
-  value: CustomRuleAction;
-  onChange: (v: CustomRuleAction) => void;
-}) {
-  return (
-    <div className="space-y-1">
-      <Select
-        value={value}
-        onValueChange={(v) => onChange(v as CustomRuleAction)}
-      >
-        <SelectTrigger className="h-9 w-full">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="deny">
-            Deny — flag a finding when it matches
-          </SelectItem>
-          <SelectItem value="allow">
-            Allow — let the message through, skipping the rest of the policy
-          </SelectItem>
-        </SelectContent>
-      </Select>
-      <p className="text-muted-foreground text-xs">
-        {value === "allow"
-          ? "An allowlist: when this matches, the whole policy is short-circuited and nothing is flagged for that message."
-          : "A detection rule: when this matches, the policy records a finding."}
-      </p>
-    </div>
-  );
-}
-
 function CustomRuleDetail({
   rule,
   onUpdate,
@@ -525,9 +482,6 @@ function CustomRuleDetail({
   const [query, setQuery] = useState(() =>
     matchQueryFromConditions(ruleConditions(rule), ruleCombine(rule)),
   );
-  const [action, setAction] = useState<CustomRuleAction>(() =>
-    ruleAction(rule),
-  );
   const [saveState, setSaveState] = useState<
     "idle" | "saving" | "saved" | "error"
   >("idle");
@@ -536,15 +490,13 @@ function CustomRuleDetail({
     title: rule.title,
     description: rule.description,
     query: matchQueryFromConditions(ruleConditions(rule), ruleCombine(rule)),
-    action: ruleAction(rule),
   });
 
   const parsed = useMemo(() => parseMatchQuery(query), [query]);
   const dirty =
     title !== savedRef.current.title ||
     description !== savedRef.current.description ||
-    query !== savedRef.current.query ||
-    action !== savedRef.current.action;
+    query !== savedRef.current.query;
 
   useEffect(() => {
     if (dirty && saveState === "error") {
@@ -573,9 +525,8 @@ function CustomRuleDetail({
         description,
         conditions: parsed.conditions,
         combine: parsed.combine,
-        action,
       });
-      savedRef.current = { title, description, query, action };
+      savedRef.current = { title, description, query };
       setSaveState("saved");
       if (savedTimerRef.current !== undefined) {
         window.clearTimeout(savedTimerRef.current);
@@ -633,14 +584,9 @@ function CustomRuleDetail({
           matchConfig={
             parsed.error
               ? null
-              : buildMatchConfig(parsed.conditions, action, parsed.combine)
+              : buildMatchConfig(parsed.conditions, parsed.combine)
           }
         />
-
-        <div className="space-y-2">
-          <Label className="text-sm font-medium">Action</Label>
-          <ActionSelect value={action} onChange={setAction} />
-        </div>
       </div>
       <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">
         <Button
@@ -1259,7 +1205,6 @@ function CreateCustomRuleSheet({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [query, setQuery] = useState("");
-  const [action, setAction] = useState<CustomRuleAction>("deny");
   const [severity, setSeverity] = useState<SeverityLevel>("medium");
 
   const reset = () => {
@@ -1269,7 +1214,6 @@ function CreateCustomRuleSheet({
     setTitle("");
     setDescription("");
     setQuery("");
-    setAction("deny");
     setSeverity("medium");
   };
 
@@ -1289,7 +1233,6 @@ function CreateCustomRuleSheet({
             next.matchConfig.combine ?? "and",
           ),
         );
-        setAction(next.matchConfig.action ?? "deny");
       } else {
         setQuery(
           matchQueryFromConditions(
@@ -1333,7 +1276,6 @@ function CreateCustomRuleSheet({
     setTitle("");
     setDescription("");
     setQuery("");
-    setAction("deny");
     setSeverity("medium");
     setStep("review");
   };
@@ -1370,7 +1312,6 @@ function CreateCustomRuleSheet({
       description: description.trim(),
       conditions: parsed.conditions,
       combine: parsed.combine,
-      action,
       severity,
     });
     reset();
@@ -1484,11 +1425,6 @@ function CreateCustomRuleSheet({
                   onChange={setQuery}
                   error={query.trim() ? parsed.error : null}
                 />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Action</Label>
-                <ActionSelect value={action} onChange={setAction} />
               </div>
             </div>
             <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">

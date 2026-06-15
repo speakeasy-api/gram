@@ -12,6 +12,10 @@ import {
   RiskPolicyModelConfig,
   RiskPolicyModelConfig$inboundSchema,
 } from "./riskpolicymodelconfig.js";
+import {
+  RiskPolicyRuleConfig,
+  RiskPolicyRuleConfig$inboundSchema,
+} from "./riskpolicyruleconfig.js";
 
 /**
  * Policy action: flag (log only) or block (deny in real-time).
@@ -100,6 +104,10 @@ export type RiskPolicy = {
    */
   promptInjectionRules?: Array<string> | undefined;
   /**
+   * Per-rule configuration keyed by canonical rule_id (built-in + custom). Maps a rule to {action: deny|allow}; rules absent from the map default to deny. An allow rule short-circuits the policy for a message it matches.
+   */
+  rules?: { [k: string]: RiskPolicyRuleConfig } | undefined;
+  /**
    * Detection sources enabled for this policy.
    */
   sources: Array<string>;
@@ -154,6 +162,9 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
       project_id: z.string(),
       prompt: z.optional(z.string()),
       prompt_injection_rules: z.optional(z.array(z.string())),
+      rules: z.optional(
+        z.record(z.string(), RiskPolicyRuleConfig$inboundSchema),
+      ),
       sources: z.array(z.string()),
       total_messages: z.int(),
       updated_at: z.pipe(

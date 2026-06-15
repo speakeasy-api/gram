@@ -1,6 +1,7 @@
 import {
   type RiskMatchCondition,
   type RiskMatchConfig,
+  type RiskPolicyRuleConfig,
 } from "@gram/client/models/components";
 import {
   invalidateAllRiskListCustomDetectionRules,
@@ -161,9 +162,10 @@ const BUILTIN_RULE_IDS = new Set<string>([
   ...Object.values(DETECTION_RULES).flatMap((rules) => rules.map((r) => r.id)),
 ]);
 
-/** What a rule does when it matches. `deny` flags a finding (the default);
- *  `allow` is an inline allowlist that short-circuits the whole policy for that
- *  message. Named to mirror the policy-level action. */
+/** What a policy does when one of its rules matches. `deny` flags a finding
+ *  (the default); `allow` is an allowlist that short-circuits the whole policy
+ *  for that message. Configured per policy in PolicyCenter (risk_policies.rules),
+ *  not on the rule itself. */
 export type CustomRuleAction = "deny" | "allow";
 
 /** How a rule's conditions reduce to a verdict. The backend stores a single,
@@ -191,7 +193,6 @@ export type CustomRuleDraft = {
   description: string;
   conditions: RiskMatchCondition[];
   combine: MatchCombine;
-  action: CustomRuleAction;
   severity: SeverityLevel;
 };
 
@@ -251,11 +252,7 @@ function useDetectionRulesStoreImpl() {
             ruleId: rule.id,
             title: rule.title,
             description: rule.description,
-            matchConfig: buildMatchConfig(
-              rule.conditions,
-              rule.action,
-              rule.combine,
-            ),
+            matchConfig: buildMatchConfig(rule.conditions, rule.combine),
             severity: rule.severity,
           },
         },
@@ -269,7 +266,6 @@ function useDetectionRulesStoreImpl() {
         return Promise.reject(new Error("Custom detection rule not found"));
       }
       const conditions = patch.conditions ?? ruleConditions(rule);
-      const action = patch.action ?? ruleAction(rule);
       const combine = patch.combine ?? ruleCombine(rule);
       return updateMutation
         .mutateAsync({
@@ -278,7 +274,7 @@ function useDetectionRulesStoreImpl() {
               id: rule.dbId,
               title: patch.title ?? rule.title,
               description: patch.description ?? rule.description,
-              matchConfig: buildMatchConfig(conditions, action, combine),
+              matchConfig: buildMatchConfig(conditions, combine),
               severity: patch.severity ?? rule.severity,
             },
           },
@@ -440,10 +436,9 @@ export function defaultCondition(): RiskMatchCondition {
 
 export function buildMatchConfig(
   conditions: RiskMatchCondition[],
-  action: CustomRuleAction,
   combine: MatchCombine,
 ): RiskMatchConfig {
-  return { action, combine, conditions };
+  return { combine, conditions };
 }
 
 /** Effective conditions for a rule — its match_config, or the legacy regex
@@ -460,12 +455,33 @@ export function ruleConditions(
   return [];
 }
 
-export function ruleAction(rule: CustomDetectionRule): CustomRuleAction {
-  return (rule.matchConfig?.action as CustomRuleAction) ?? "deny";
-}
-
 export function ruleCombine(rule: CustomDetectionRule): MatchCombine {
   return (rule.matchConfig?.combine as MatchCombine) ?? "and";
+}
+
+/** Read a policy's per-rule action map (risk_policies.rules) into a Map.
+ *  Missing rules are deny by default and simply absent from the result. */
+export function policyRuleActions(
+  rules: { [k: string]: RiskPolicyRuleConfig } | undefined,
+): Map<string, CustomRuleAction> {
+  const out = new Map<string, CustomRuleAction>();
+  for (const [id, cfg] of Object.entries(rules ?? {})) {
+    out.set(id, (cfg.action as CustomRuleAction) ?? "deny");
+  }
+  return out;
+}
+
+/** Build the risk_policies.rules payload for the given attached rule ids,
+ *  defaulting any untracked rule to deny. */
+export function buildPolicyRules(
+  selectedRuleIds: Iterable<string>,
+  actions: Map<string, CustomRuleAction>,
+): { [k: string]: RiskPolicyRuleConfig } {
+  const out: { [k: string]: RiskPolicyRuleConfig } = {};
+  for (const id of selectedRuleIds) {
+    out[id] = { action: actions.get(id) ?? "deny" };
+  }
+  return out;
 }
 
 /** Message types a rule can ever match, inferred from its condition targets.
@@ -556,8 +572,8 @@ export function summarizeConditions(
   return conditions.map(summarizeCondition).join(joiner);
 }
 
-/** List-row summary: an allow prefix plus the condition summary. */
+/** List-row summary of a rule's conditions. The allow/deny polarity is no
+ *  longer a rule property — it is configured per policy. */
 export function ruleSummary(rule: CustomDetectionRule): string {
-  const prefix = ruleAction(rule) === "allow" ? "allow · " : "";
-  return prefix + summarizeConditions(ruleConditions(rule), ruleCombine(rule));
+  return summarizeConditions(ruleConditions(rule), ruleCombine(rule));
 }

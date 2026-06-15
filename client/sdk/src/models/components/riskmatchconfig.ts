@@ -15,18 +15,6 @@ import {
 } from "./riskmatchcondition.js";
 
 /**
- * What the rule does when it matches: deny (flag a finding, the default) or allow (an allowlist that short-circuits the whole policy for that message).
- */
-export const Action = {
-  Deny: "deny",
-  Allow: "allow",
-} as const;
-/**
- * What the rule does when it matches: deny (flag a finding, the default) or allow (an allowlist that short-circuits the whole policy for that message).
- */
-export type Action = ClosedEnum<typeof Action>;
-
-/**
  * How the conditions reduce to a verdict.
  */
 export const Combine = {
@@ -40,10 +28,6 @@ export type Combine = ClosedEnum<typeof Combine>;
 
 export type RiskMatchConfig = {
   /**
-   * What the rule does when it matches: deny (flag a finding, the default) or allow (an allowlist that short-circuits the whole policy for that message).
-   */
-  action?: Action | undefined;
-  /**
    * How the conditions reduce to a verdict.
    */
   combine?: Combine | undefined;
@@ -52,14 +36,6 @@ export type RiskMatchConfig = {
    */
   conditions: Array<RiskMatchCondition>;
 };
-
-/** @internal */
-export const Action$inboundSchema: z.ZodMiniEnum<typeof Action> = z.enum(
-  Action,
-);
-/** @internal */
-export const Action$outboundSchema: z.ZodMiniEnum<typeof Action> =
-  Action$inboundSchema;
 
 /** @internal */
 export const Combine$inboundSchema: z.ZodMiniEnum<typeof Combine> = z.enum(
@@ -74,13 +50,11 @@ export const RiskMatchConfig$inboundSchema: z.ZodMiniType<
   RiskMatchConfig,
   unknown
 > = z.object({
-  action: z.optional(Action$inboundSchema),
   combine: z.optional(Combine$inboundSchema),
   conditions: z.array(RiskMatchCondition$inboundSchema),
 });
 /** @internal */
 export type RiskMatchConfig$Outbound = {
-  action?: string | undefined;
   combine?: string | undefined;
   conditions: Array<RiskMatchCondition$Outbound>;
 };
@@ -90,7 +64,6 @@ export const RiskMatchConfig$outboundSchema: z.ZodMiniType<
   RiskMatchConfig$Outbound,
   RiskMatchConfig
 > = z.object({
-  action: z.optional(Action$outboundSchema),
   combine: z.optional(Combine$outboundSchema),
   conditions: z.array(RiskMatchCondition$outboundSchema),
 });

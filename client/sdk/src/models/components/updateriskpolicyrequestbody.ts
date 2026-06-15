@@ -10,6 +10,11 @@ import {
   RiskPolicyModelConfig$Outbound,
   RiskPolicyModelConfig$outboundSchema,
 } from "./riskpolicymodelconfig.js";
+import {
+  RiskPolicyRuleConfig,
+  RiskPolicyRuleConfig$Outbound,
+  RiskPolicyRuleConfig$outboundSchema,
+} from "./riskpolicyruleconfig.js";
 
 /**
  * Policy action: flag or block.
@@ -72,6 +77,10 @@ export type UpdateRiskPolicyRequestBody = {
    */
   promptInjectionRules?: Array<string> | undefined;
   /**
+   * Per-rule configuration keyed by canonical rule_id (built-in + custom). Maps a rule to {action: deny|allow}; rules absent from the map default to deny.
+   */
+  rules?: { [k: string]: RiskPolicyRuleConfig } | undefined;
+  /**
    * Detection sources to enable.
    */
   sources?: Array<string> | undefined;
@@ -100,6 +109,7 @@ export type UpdateRiskPolicyRequestBody$Outbound = {
   presidio_entities?: Array<string> | undefined;
   prompt?: string | undefined;
   prompt_injection_rules?: Array<string> | undefined;
+  rules?: { [k: string]: RiskPolicyRuleConfig$Outbound } | undefined;
   sources?: Array<string> | undefined;
   user_message?: string | undefined;
 };
@@ -122,6 +132,9 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     presidioEntities: z.optional(z.array(z.string())),
     prompt: z.optional(z.string()),
     promptInjectionRules: z.optional(z.array(z.string())),
+    rules: z.optional(
+      z.record(z.string(), RiskPolicyRuleConfig$outboundSchema),
+    ),
     sources: z.optional(z.array(z.string())),
     userMessage: z.optional(z.string()),
   }),

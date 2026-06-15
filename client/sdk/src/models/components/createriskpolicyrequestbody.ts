@@ -10,20 +10,23 @@ import {
   RiskPolicyModelConfig$Outbound,
   RiskPolicyModelConfig$outboundSchema,
 } from "./riskpolicymodelconfig.js";
+import {
+  RiskPolicyRuleConfig,
+  RiskPolicyRuleConfig$Outbound,
+  RiskPolicyRuleConfig$outboundSchema,
+} from "./riskpolicyruleconfig.js";
 
 /**
  * Policy action: flag or block.
  */
-export const CreateRiskPolicyRequestBodyAction = {
+export const Action = {
   Flag: "flag",
   Block: "block",
 } as const;
 /**
  * Policy action: flag or block.
  */
-export type CreateRiskPolicyRequestBodyAction = ClosedEnum<
-  typeof CreateRiskPolicyRequestBodyAction
->;
+export type Action = ClosedEnum<typeof Action>;
 
 /**
  * Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge). Defaults to standard.
@@ -41,7 +44,7 @@ export type CreateRiskPolicyRequestBody = {
   /**
    * Policy action: flag or block.
    */
-  action?: CreateRiskPolicyRequestBodyAction | undefined;
+  action?: Action | undefined;
   /**
    * Whether the policy name should be auto-generated.
    */
@@ -84,6 +87,10 @@ export type CreateRiskPolicyRequestBody = {
    */
   promptInjectionRules?: Array<string> | undefined;
   /**
+   * Per-rule configuration keyed by canonical rule_id (built-in + custom). Maps a rule to {action: deny|allow}; rules absent from the map default to deny.
+   */
+  rules?: { [k: string]: RiskPolicyRuleConfig } | undefined;
+  /**
    * Detection sources to enable.
    */
   sources?: Array<string> | undefined;
@@ -94,9 +101,9 @@ export type CreateRiskPolicyRequestBody = {
 };
 
 /** @internal */
-export const CreateRiskPolicyRequestBodyAction$outboundSchema: z.ZodMiniEnum<
-  typeof CreateRiskPolicyRequestBodyAction
-> = z.enum(CreateRiskPolicyRequestBodyAction);
+export const Action$outboundSchema: z.ZodMiniEnum<typeof Action> = z.enum(
+  Action,
+);
 
 /** @internal */
 export const PolicyType$outboundSchema: z.ZodMiniEnum<typeof PolicyType> = z
@@ -116,6 +123,7 @@ export type CreateRiskPolicyRequestBody$Outbound = {
   presidio_entities?: Array<string> | undefined;
   prompt?: string | undefined;
   prompt_injection_rules?: Array<string> | undefined;
+  rules?: { [k: string]: RiskPolicyRuleConfig$Outbound } | undefined;
   sources?: Array<string> | undefined;
   user_message?: string | undefined;
 };
@@ -126,10 +134,7 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
   CreateRiskPolicyRequestBody
 > = z.pipe(
   z.object({
-    action: z._default(
-      CreateRiskPolicyRequestBodyAction$outboundSchema,
-      "flag",
-    ),
+    action: z._default(Action$outboundSchema, "flag"),
     autoName: z.optional(z.boolean()),
     customRuleIds: z.optional(z.array(z.string())),
     disabledRules: z.optional(z.array(z.string())),
@@ -141,6 +146,9 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     presidioEntities: z.optional(z.array(z.string())),
     prompt: z.optional(z.string()),
     promptInjectionRules: z.optional(z.array(z.string())),
+    rules: z.optional(
+      z.record(z.string(), RiskPolicyRuleConfig$outboundSchema),
+    ),
     sources: z.optional(z.array(z.string())),
     userMessage: z.optional(z.string()),
   }),

@@ -79,7 +79,12 @@ import {
 } from "./policy-data";
 import { cn } from "@/lib/utils";
 import { ruleIdToPresidioEntity } from "./rule-ids";
-import { useDetectionRulesStore } from "./detection-rules-data";
+import {
+  buildPolicyRules,
+  policyRuleActions,
+  useDetectionRulesStore,
+  type CustomRuleAction,
+} from "./detection-rules-data";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { PROMPT_POLICY_TEMPLATES } from "./prompt-policy-templates";
 
@@ -376,6 +381,12 @@ function PolicyCenterContent() {
   const [selectedCustomRuleIds, setSelectedCustomRuleIds] = useState<
     Set<string>
   >(new Set<string>());
+  // Per-rule deny/allow polarity for this policy (risk_policies.rules). Only
+  // entries that differ from the deny default need to be tracked, but we keep
+  // every allow-listed rule here; absent rules render and persist as deny.
+  const [customRuleActions, setCustomRuleActions] = useState<
+    Map<string, CustomRuleAction>
+  >(new Map());
   const [selectedMessageTypes, setSelectedMessageTypes] = useState<
     Set<PolicyMessageType>
   >(new Set(ALL_POLICY_MESSAGE_TYPES));
@@ -454,6 +465,7 @@ function PolicyCenterContent() {
     setSelectedCategories(new Set<RuleCategory>(["secrets", "pii"]));
     setDisabledRules(new Set());
     setSelectedCustomRuleIds(new Set<string>());
+    setCustomRuleActions(new Map());
     setSelectedMessageTypes(new Set(ALL_POLICY_MESSAGE_TYPES));
     setFormAction("flag");
     setFormAutoName(true);
@@ -506,6 +518,7 @@ function PolicyCenterContent() {
     setSelectedCategories(categories);
     setDisabledRules(new Set(policy.disabledRules ?? []));
     setSelectedCustomRuleIds(new Set<string>(customRuleIds));
+    setCustomRuleActions(policyRuleActions(policy.rules));
     setSelectedMessageTypes(policyMessageTypesForForm(policy.messageTypes));
     setFormAction((policy.action as PolicyAction) ?? "flag");
     setFormAutoName(policy.autoName ?? true);
@@ -619,6 +632,7 @@ function PolicyCenterContent() {
             promptInjectionRules,
             disabledRules: payloadDisabled,
             customRuleIds: [...selectedCustomRuleIds],
+            rules: buildPolicyRules(selectedCustomRuleIds, customRuleActions),
             messageTypes,
             action,
             autoName: formAutoName,
@@ -637,6 +651,7 @@ function PolicyCenterContent() {
             promptInjectionRules,
             disabledRules: payloadDisabled,
             customRuleIds: [...selectedCustomRuleIds],
+            rules: buildPolicyRules(selectedCustomRuleIds, customRuleActions),
             messageTypes,
             action,
             autoName: formAutoName,
@@ -1050,6 +1065,8 @@ function PolicyCenterContent() {
                     customRules={customRules}
                     selectedCustomRuleIds={selectedCustomRuleIds}
                     setSelectedCustomRuleIds={setSelectedCustomRuleIds}
+                    customRuleActions={customRuleActions}
+                    setCustomRuleActions={setCustomRuleActions}
                     selectedMessageTypes={selectedMessageTypes}
                     setSelectedMessageTypes={setSelectedMessageTypes}
                     formAction={formAction}
@@ -1591,6 +1608,8 @@ function PolicySheetBody({
   customRules,
   selectedCustomRuleIds,
   setSelectedCustomRuleIds,
+  customRuleActions,
+  setCustomRuleActions,
   selectedMessageTypes,
   setSelectedMessageTypes,
   formAction,
@@ -1611,6 +1630,8 @@ function PolicySheetBody({
   customRules: ReturnType<typeof useDetectionRulesStore>["customRules"];
   selectedCustomRuleIds: Set<string>;
   setSelectedCustomRuleIds: (v: Set<string>) => void;
+  customRuleActions: Map<string, CustomRuleAction>;
+  setCustomRuleActions: (v: Map<string, CustomRuleAction>) => void;
   selectedMessageTypes: Set<PolicyMessageType>;
   setSelectedMessageTypes: (v: Set<PolicyMessageType>) => void;
   formAction: PolicyAction;
@@ -1857,6 +1878,8 @@ function PolicySheetBody({
           customRules={customRules}
           selectedCustomRuleIds={selectedCustomRuleIds}
           setSelectedCustomRuleIds={setSelectedCustomRuleIds}
+          customRuleActions={customRuleActions}
+          setCustomRuleActions={setCustomRuleActions}
           expanded={expandedCategory === "custom"}
           onToggle={() =>
             setExpandedCategory(expandedCategory === "custom" ? null : "custom")
@@ -2251,15 +2274,28 @@ function CustomRulesPicker({
   customRules,
   selectedCustomRuleIds,
   setSelectedCustomRuleIds,
+  customRuleActions,
+  setCustomRuleActions,
   expanded,
   onToggle,
 }: {
   customRules: ReturnType<typeof useDetectionRulesStore>["customRules"];
   selectedCustomRuleIds: Set<string>;
   setSelectedCustomRuleIds: (v: Set<string>) => void;
+  customRuleActions: Map<string, CustomRuleAction>;
+  setCustomRuleActions: (v: Map<string, CustomRuleAction>) => void;
   expanded: boolean;
   onToggle: () => void;
 }) {
+  const setRuleAction = (ruleId: string, action: CustomRuleAction) => {
+    const next = new Map(customRuleActions);
+    if (action === "deny") {
+      next.delete(ruleId);
+    } else {
+      next.set(ruleId, action);
+    }
+    setCustomRuleActions(next);
+  };
   const meta = RULE_CATEGORY_META.custom;
   const allSelected =
     customRules.length > 0 &&
@@ -2316,6 +2352,7 @@ function CustomRulesPicker({
             <div className="space-y-2 py-1">
               {customRules.map((rule) => {
                 const checked = selectedCustomRuleIds.has(rule.id);
+                const action = customRuleActions.get(rule.id) ?? "deny";
                 return (
                   <div
                     key={rule.id}
@@ -2336,7 +2373,7 @@ function CustomRulesPicker({
                     />
                     <label
                       htmlFor={`custom-${rule.id}`}
-                      className="cursor-pointer text-xs"
+                      className="min-w-0 flex-1 cursor-pointer truncate text-xs"
                     >
                       <span className="text-foreground">
                         {rule.title || rule.id}
@@ -2345,6 +2382,12 @@ function CustomRulesPicker({
                         {rule.id}
                       </span>
                     </label>
+                    {checked && (
+                      <RuleActionToggle
+                        value={action}
+                        onChange={(next) => setRuleAction(rule.id, next)}
+                      />
+                    )}
                   </div>
                 );
               })}
@@ -2352,6 +2395,54 @@ function CustomRulesPicker({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  RuleActionToggle                                                          */
+/* -------------------------------------------------------------------------- */
+
+/** Compact deny/allow segmented control for a custom rule within a policy.
+ *  Deny (the default) flags findings; allow makes the rule an allowlist that
+ *  short-circuits the whole policy for a matched message. */
+function RuleActionToggle({
+  value,
+  onChange,
+}: {
+  value: CustomRuleAction;
+  onChange: (v: CustomRuleAction) => void;
+}) {
+  const options: { key: CustomRuleAction; label: string; title: string }[] = [
+    {
+      key: "deny",
+      label: "Deny",
+      title: "Flag a finding when this rule matches",
+    },
+    {
+      key: "allow",
+      label: "Allow",
+      title: "Allowlist: a match short-circuits the policy, flagging nothing",
+    },
+  ];
+  return (
+    <div className="border-border inline-flex shrink-0 overflow-hidden rounded-md border">
+      {options.map((opt) => (
+        <button
+          key={opt.key}
+          type="button"
+          title={opt.title}
+          onClick={() => onChange(opt.key)}
+          className={cn(
+            "px-2 py-0.5 text-[10px] font-medium transition-colors",
+            value === opt.key
+              ? "bg-foreground text-background"
+              : "text-muted-foreground hover:bg-muted",
+          )}
+        >
+          {opt.label}
+        </button>
+      ))}
     </div>
   );
 }
