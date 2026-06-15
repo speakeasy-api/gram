@@ -176,7 +176,7 @@ func (tp *ToolProxy) Do(
 
 	switch plan.Kind {
 	case "":
-		return oops.E(oops.CodeInvariantViolation, nil, "tool kind is not set").Log(ctx, tp.logger)
+		return oops.E(oops.CodeInvariantViolation, nil, "tool kind is not set").LogError(ctx, tp.logger)
 	case ToolKindFunction:
 		return tp.doFunction(ctx, logger, w, requestBody, env, plan.Descriptor, plan.Function, attrs)
 	case ToolKindHTTP:
@@ -203,7 +203,7 @@ func (tp *ToolProxy) doPlatform(
 ) error {
 	span := trace.SpanFromContext(ctx)
 	if tp.platformTools == nil {
-		return oops.E(oops.CodeUnexpected, nil, "platform tool executor not configured").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, nil, "platform tool executor not configured").LogError(ctx, logger)
 	}
 
 	attrRecorder.RecordMethod(http.MethodPost)
@@ -221,12 +221,12 @@ func (tp *ToolProxy) doPlatform(
 
 	bodyBytes, err := io.ReadAll(requestBody)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, logger)
+		return oops.E(oops.CodeBadRequest, err, "failed to read request body").LogError(ctx, logger)
 	}
 
 	payloadBytes, err := extractPlatformPayload(bodyBytes)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid request body").Log(ctx, logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid request body").LogError(ctx, logger)
 	}
 
 	if len(plan.Platform.InputSchema) > 0 {
@@ -350,29 +350,29 @@ func (tp *ToolProxy) doFunction(
 	span := trace.SpanFromContext(ctx)
 	invocationID, err := uuid.NewV7()
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to generate function invocation ID").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to generate function invocation ID").LogError(ctx, logger)
 	}
 
 	projectID, err := uuid.Parse(descriptor.ProjectID)
 	if err != nil {
-		return oops.E(oops.CodeInvariantViolation, err, "invalid project id received for function tool call").Log(ctx, logger)
+		return oops.E(oops.CodeInvariantViolation, err, "invalid project id received for function tool call").LogError(ctx, logger)
 	}
 	deploymentID, err := uuid.Parse(descriptor.DeploymentID)
 	if err != nil {
-		return oops.E(oops.CodeInvariantViolation, err, "invalid deployment id received for function tool call").Log(ctx, logger)
+		return oops.E(oops.CodeInvariantViolation, err, "invalid deployment id received for function tool call").LogError(ctx, logger)
 	}
 	functionID, err := uuid.Parse(plan.FunctionID)
 	if err != nil {
-		return oops.E(oops.CodeInvariantViolation, err, "invalid function id received for function tool call").Log(ctx, logger)
+		return oops.E(oops.CodeInvariantViolation, err, "invalid function id received for function tool call").LogError(ctx, logger)
 	}
 	accessID, err := uuid.Parse(plan.FunctionsAccessID)
 	if err != nil {
-		return oops.E(oops.CodeInvariantViolation, err, "invalid function access id received for function tool call").Log(ctx, logger)
+		return oops.E(oops.CodeInvariantViolation, err, "invalid function access id received for function tool call").LogError(ctx, logger)
 	}
 
 	var input json.RawMessage
 	if err := json.NewDecoder(requestBody).Decode(&input); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, logger)
+		return oops.E(oops.CodeBadRequest, err, "failed to read request body").LogError(ctx, logger)
 	}
 
 	payloadEnv := make(map[string]string)
@@ -419,7 +419,7 @@ func (tp *ToolProxy) doFunction(
 		ToolName: descriptor.Name,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to create function tool call request").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to create function tool call request").LogError(ctx, logger)
 	}
 
 	var responseStatusCode int
@@ -507,7 +507,7 @@ func (tp *ToolProxy) doHTTP(
 
 	bodyBytes, err := io.ReadAll(requestBody)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, logger)
+		return oops.E(oops.CodeBadRequest, err, "failed to read request body").LogError(ctx, logger)
 	}
 
 	var toolCallBody ToolCallBody
@@ -516,7 +516,7 @@ func (tp *ToolProxy) doHTTP(
 	dec.UseNumber()
 
 	if err := dec.Decode(&toolCallBody); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid request body").Log(ctx, logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid request body").LogError(ctx, logger)
 	}
 
 	if len(plan.Schema) > 0 {
@@ -578,7 +578,7 @@ func (tp *ToolProxy) doHTTP(
 		urlStr := insertPathParams(requestPath, pathParams)
 		parsedURL, parseErr := url.Parse(urlStr)
 		if parseErr != nil {
-			return oops.E(oops.CodeUnexpected, parseErr, "failed to parse URL with path parameters").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, parseErr, "failed to parse URL with path parameters").LogError(ctx, logger)
 		}
 		requestPath = parsedURL.String()
 	}
@@ -595,18 +595,18 @@ func (tp *ToolProxy) doHTTP(
 
 	if serverURL == "" {
 		logger.ErrorContext(ctx, "no server URL provided for tool", attr.SlogToolName(descriptor.Name))
-		return oops.E(oops.CodeInvalid, nil, "no server URL provided for tool").Log(ctx, logger)
+		return oops.E(oops.CodeInvalid, nil, "no server URL provided for tool").LogError(ctx, logger)
 	}
 
 	fullURL, err := url.JoinPath(serverURL, requestPath)
 	var urlErr *url.Error
 	switch {
 	case errors.As(err, &urlErr) && urlErr.Err != nil:
-		return oops.E(oops.CodeInvalid, err, "error parsing server url: %s", urlErr.Err.Error()).Log(ctx, logger)
+		return oops.E(oops.CodeInvalid, err, "error parsing server url: %s", urlErr.Err.Error()).LogError(ctx, logger)
 	case err != nil:
 		// we do not want to print the full err here because it may leak the server URL which can contain
 		// sensitive information like usernames, passwords, etc.
-		return oops.E(oops.CodeInvalid, err, "error parsing server url").Log(ctx, logger)
+		return oops.E(oops.CodeInvalid, err, "error parsing server url").LogError(ctx, logger)
 	}
 
 	var req *http.Request
@@ -616,7 +616,7 @@ func (tp *ToolProxy) doHTTP(
 			// Assume toolCallBody.Body is a JSON object (map[string]interface{})
 			var formMap map[string]any
 			if err := json.Unmarshal(toolCallBody.Body, &formMap); err != nil {
-				return oops.E(oops.CodeBadRequest, err, "failed to parse form body").Log(ctx, logger)
+				return oops.E(oops.CodeBadRequest, err, "failed to parse form body").LogError(ctx, logger)
 			}
 			values := url.Values{}
 			for k, v := range formMap {
@@ -631,7 +631,7 @@ func (tp *ToolProxy) doHTTP(
 			strings.NewReader(encoded),
 		)
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to build url-encoded request").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to build url-encoded request").LogError(ctx, logger)
 		}
 		req.Header.Set("Content-Type", plan.RequestContentType.Value)
 	} else {
@@ -642,7 +642,7 @@ func (tp *ToolProxy) doHTTP(
 			bytes.NewReader(toolCallBody.Body),
 		)
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to build json request").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to build json request").LogError(ctx, logger)
 		}
 		if plan.RequestContentType.Value != "" {
 			req.Header.Set("Content-Type", plan.RequestContentType.Value)
@@ -744,18 +744,18 @@ type promptGetParams struct {
 func (tp *ToolProxy) doPrompt(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, requestBody io.Reader, env toolconfig.ToolCallEnv, descriptor *ToolDescriptor, plan *PromptToolCallPlan) error {
 	var params promptGetParams
 	if err := json.NewDecoder(requestBody).Decode(&params); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to parse get prompt request").Log(ctx, logger)
+		return oops.E(oops.CodeBadRequest, err, "failed to parse get prompt request").LogError(ctx, logger)
 	}
 
 	promptData, err := templates.RenderTemplate(ctx, logger, plan.Prompt, plan.Kind, plan.Engine, params.Arguments)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to render template").Log(ctx, logger)
+		return oops.E(oops.CodeBadRequest, err, "failed to render template").LogError(ctx, logger)
 	}
 
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write([]byte(promptData)); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to write prompt data").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to write prompt data").LogError(ctx, logger)
 	}
 
 	return nil
@@ -771,7 +771,7 @@ func (tp *ToolProxy) doExternalMCP(
 ) error {
 	arguments, err := io.ReadAll(requestBody)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to read tool arguments").Log(ctx, logger)
+		return oops.E(oops.CodeBadRequest, err, "failed to read tool arguments").LogError(ctx, logger)
 	}
 
 	// Use the tool name from the plan (set by Match for proxy tools, or directly for materialized tools)
@@ -793,14 +793,14 @@ func (tp *ToolProxy) doExternalMCP(
 	// Connect to the external MCP server
 	client, err := externalmcp.NewClient(ctx, logger, tp.policy, plan.RemoteURL, plan.TransportType, opts)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to connect to external MCP server").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to connect to external MCP server").LogError(ctx, logger)
 	}
 	defer o11y.LogDefer(ctx, logger, client.Close)
 
 	// Call the tool on the external MCP server
 	callResult, err := client.CallTool(ctx, toolName, arguments)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to call external MCP tool").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to call external MCP tool").LogError(ctx, logger)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -815,7 +815,7 @@ func (tp *ToolProxy) doExternalMCP(
 	}
 
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to write external MCP tool result").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to write external MCP tool result").LogError(ctx, logger)
 	}
 
 	return nil
@@ -983,7 +983,7 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 	}, executeRequest)
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
-		return oops.E(oops.CodeGatewayError, err, "failed to execute request").Log(ctx, opts.Logger)
+		return oops.E(oops.CodeGatewayError, err, "failed to execute request").LogError(ctx, opts.Logger)
 	}
 
 	defer o11y.LogDefer(ctx, opts.Logger, func() error {
@@ -992,7 +992,7 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 
 	if err := opts.VerifyResponse(resp); err != nil {
 		span.SetStatus(codes.Error, err.Error())
-		return oops.E(oops.CodeGatewayError, err, "response verification failed").Log(ctx, opts.Logger)
+		return oops.E(oops.CodeGatewayError, err, "response verification failed").LogError(ctx, opts.Logger)
 	}
 
 	if len(resp.Trailer) > 0 {

@@ -120,7 +120,7 @@ func (s *Service) HandleConsent(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
 	}
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
 	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, "mcp")
@@ -143,7 +143,7 @@ func (s *Service) ServeConsentScript(w http.ResponseWriter, r *http.Request) err
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write(consentScriptData); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "write consent script response").Log(r.Context(), s.logger)
+		return oops.E(oops.CodeUnexpected, err, "write consent script response").LogError(r.Context(), s.logger)
 	}
 	return nil
 }
@@ -158,7 +158,7 @@ func (s *Service) ServeConsent(w http.ResponseWriter, r *http.Request, endpoint 
 	case http.MethodPost:
 		return s.serveConsentPost(w, r, endpoint)
 	default:
-		return oops.E(oops.CodeBadRequest, nil, "method not allowed").Log(r.Context(), s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "method not allowed").LogError(r.Context(), s.logger)
 	}
 }
 
@@ -168,16 +168,16 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 
 	stateID := r.URL.Query().Get("state")
 	if stateID == "" {
-		return oops.E(oops.CodeBadRequest, nil, "state is required").Log(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, logger)
 	}
 
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").Log(ctx, logger)
+		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
 	if err := endpoint.ValidateRef(challengeState.Endpoint); err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server").Log(ctx, logger)
+		return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server").LogError(ctx, logger)
 	}
 
 	client, err := usersessions_repo.New(s.db).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
@@ -186,20 +186,20 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeUnauthorized, err, "user session client revoked").Log(ctx, logger)
+			return oops.E(oops.CodeUnauthorized, err, "user session client revoked").LogError(ctx, logger)
 		}
-		return oops.E(oops.CodeUnexpected, err, "lookup user session client").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 	}
 
 	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
-		return oops.E(oops.CodeUnauthorized, nil, "authn challenge subject is not resolved").Log(ctx, logger)
+		return oops.E(oops.CodeUnauthorized, nil, "authn challenge subject is not resolved").LogError(ctx, logger)
 	}
 
 	subjectDisplay := resolveSubjectDisplay(ctx, s.db, *challengeState.Subject)
 
 	cards, err := s.buildRemoteSessionCards(ctx, endpoint, challengeState)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "build remote session cards").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "build remote session cards").LogError(ctx, logger)
 	}
 
 	consentEnabled := len(cards) == 0
@@ -226,7 +226,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	if err := consentTemplate.Execute(w, data); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "render consent template").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "render consent template").LogError(ctx, logger)
 	}
 	return nil
 }
@@ -238,14 +238,14 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// consent form has a few short fields; 16 KiB is generous.
 	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 	if err := r.ParseForm(); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to parse form").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "failed to parse form").LogError(ctx, s.logger)
 	}
 
 	logger := endpoint.LogWith(s.logger)
 
 	stateID := r.PostForm.Get("state")
 	if stateID == "" {
-		return oops.E(oops.CodeBadRequest, nil, "state is required").Log(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, logger)
 	}
 
 	// Atomic GETDEL: a consent POST consumes the authn-challenge state
@@ -254,7 +254,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// authorization request.
 	challengeState, err := s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID)
 	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").Log(ctx, logger)
+		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
 	issuerID := endpoint.UserSessionIssuerID.String()
@@ -266,11 +266,11 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// let crafted requests pollute a config's health signal. A legitimate user
 	// never trips them; the rare case lands in the started-without-terminal gap.
 	if err := endpoint.ValidateRef(challengeState.Endpoint); err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server").Log(ctx, logger)
+		return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server").LogError(ctx, logger)
 	}
 
 	if challengeState.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf_token")), []byte(challengeState.CSRFToken)) != 1 {
-		return oops.E(oops.CodeUnauthorized, nil, "invalid consent csrf token").Log(ctx, logger)
+		return oops.E(oops.CodeUnauthorized, nil, "invalid consent csrf token").LogError(ctx, logger)
 	}
 
 	// Explicit action required: fail closed on missing / unknown values so
@@ -290,14 +290,14 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		http.Redirect(w, r, denyURL, http.StatusSeeOther)
 		return nil
 	default:
-		return oops.E(oops.CodeBadRequest, nil, `action must be "approve" or "deny"`).Log(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, `action must be "approve" or "deny"`).LogError(ctx, logger)
 	}
 
 	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
 		// Reaching an approved consent POST with no resolved subject is a code
 		// invariant break, not a user action — a config/code-class failure.
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
-		return oops.E(oops.CodeUnauthorized, nil, "authn challenge subject is not resolved").Log(ctx, logger)
+		return oops.E(oops.CodeUnauthorized, nil, "authn challenge subject is not resolved").LogError(ctx, logger)
 	}
 	subject := *challengeState.Subject
 
@@ -311,9 +311,9 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		// approved flow can't complete.
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeUnauthorized, err, "user session client revoked").Log(ctx, logger)
+			return oops.E(oops.CodeUnauthorized, err, "user session client revoked").LogError(ctx, logger)
 		}
-		return oops.E(oops.CodeUnexpected, err, "lookup user session client").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 	}
 
 	// Persist the consent record. The unique index on
@@ -326,13 +326,13 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		RemoteSetHash:       remoteSetHashEmpty,
 	}); err != nil && !isUniqueViolation(err) {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
-		return oops.E(oops.CodeUnexpected, err, "record consent").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "record consent").LogError(ctx, logger)
 	}
 
 	code, err := generateOpaqueToken()
 	if err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
-		return oops.E(oops.CodeUnexpected, err, "generate authorization code").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "generate authorization code").LogError(ctx, logger)
 	}
 
 	grant := UserSessionGrant{
@@ -349,7 +349,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	}
 	if err := s.userSessionGrantCache.Store(ctx, grant); err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
-		return oops.E(oops.CodeUnexpected, err, "store user session grant").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "store user session grant").LogError(ctx, logger)
 	}
 
 	clientRedirect := buildClientRedirect(challengeState.RedirectURI, code, challengeState.State, "", "")

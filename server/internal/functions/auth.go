@@ -92,18 +92,18 @@ func jwtAuth(ctx context.Context, logger *slog.Logger, db deprepo.DBTX, enc *enc
 	}, jwt.WithExpirationRequired(), jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
 	if err != nil {
 		err = fmt.Errorf("parse runner jwt: %w", err)
-		return nil, oops.E(oops.CodeUnauthorized, err, "%s", oops.CodeUnauthorized.UserMessage()).Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnauthorized, err, "%s", oops.CodeUnauthorized.UserMessage()).LogError(ctx, logger)
 	}
 
 	if !t.Valid {
 		err = fmt.Errorf("invalid runner jwt claims")
-		return nil, oops.E(oops.CodeUnauthorized, err, "%s", oops.CodeUnauthorized.UserMessage()).Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnauthorized, err, "%s", oops.CodeUnauthorized.UserMessage()).LogError(ctx, logger)
 	}
 
 	exp, err := t.Claims.GetExpirationTime()
 	if err != nil {
 		err = fmt.Errorf("get token exp claim: %w", err)
-		return nil, oops.E(oops.CodeUnauthorized, err, "%s", oops.CodeUnauthorized.UserMessage()).Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnauthorized, err, "%s", oops.CodeUnauthorized.UserMessage()).LogError(ctx, logger)
 	}
 	if exp.After(time.Now().Add(time.Hour)) {
 		logger.WarnContext(ctx, "runner jwt exp claim is greater than an hour")
@@ -112,7 +112,7 @@ func jwtAuth(ctx context.Context, logger *slog.Logger, db deprepo.DBTX, enc *enc
 	projectID, deploymentID, functionID, err := parseRunnerJWTSubjectClaim(t)
 	if err != nil {
 		err = fmt.Errorf("parse validated subject claim: %w", err)
-		return nil, oops.E(oops.CodeUnauthorized, err, "%s", oops.CodeUnauthorized.UserMessage()).Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnauthorized, err, "%s", oops.CodeUnauthorized.UserMessage()).LogError(ctx, logger)
 	}
 
 	authCtx := &RunnerAuthContext{
@@ -122,7 +122,7 @@ func jwtAuth(ctx context.Context, logger *slog.Logger, db deprepo.DBTX, enc *enc
 	}
 	if err := authCtx.Validate(); err != nil {
 		err = fmt.Errorf("validate runner auth context: %w", err)
-		return nil, oops.E(oops.CodeUnauthorized, err, "%s", oops.CodeUnauthorized.UserMessage()).Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnauthorized, err, "%s", oops.CodeUnauthorized.UserMessage()).LogError(ctx, logger)
 	}
 
 	return PushRunnerAuthContext(ctx, authCtx), nil

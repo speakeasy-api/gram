@@ -38,7 +38,7 @@ func (s *Service) DiscoverProtectedResourceMetadata(ctx context.Context, payload
 
 	serverID, err := uuid.Parse(payload.RemoteMcpServerID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote mcp server id").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote mcp server id").LogError(ctx, logger)
 	}
 
 	server, err := repo.New(s.db).GetServerByID(ctx, repo.GetServerByIDParams{
@@ -47,9 +47,9 @@ func (s *Service) DiscoverProtectedResourceMetadata(ctx context.Context, payload
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "remote mcp server not found").Log(ctx, logger)
+			return nil, oops.E(oops.CodeNotFound, err, "remote mcp server not found").LogError(ctx, logger)
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "get remote mcp server").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "get remote mcp server").LogError(ctx, logger)
 	}
 
 	doc, warnings, probeErr := wellknown.DiscoverProtectedResourceMetadata(ctx, s.policy, server.Url)
@@ -68,7 +68,7 @@ func (s *Service) DiscoverProtectedResourceMetadata(ctx context.Context, payload
 		// The helper always wraps in *ProtectedResourceDiscoveryError; an
 		// untyped probe error is a programming bug, not a user-visible
 		// upstream failure.
-		return nil, oops.E(oops.CodeUnexpected, probeErr, "discover protected resource metadata").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, probeErr, "discover protected resource metadata").LogError(ctx, logger)
 	}
 
 	return &gen.ProtectedResourceMetadataDiscovery{

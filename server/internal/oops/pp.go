@@ -138,7 +138,7 @@ func (e *ShareableError) effectiveCode(ctx context.Context) Code {
 	return e.Code
 }
 
-// Log logs the error using the provided logger and context. It also sets the
+// LogError logs the error using the provided logger and context. It also sets the
 // OpenTelemetry span status to error. Additional arguments can be provided to
 // include more context in the log entry.
 //
@@ -147,7 +147,7 @@ func (e *ShareableError) effectiveCode(ctx context.Context) Code {
 // not mark the span as errored or record an exception, to avoid drowning real
 // faults in disconnect noise. Server- and application-initiated cancellations,
 // where the request context is still live, keep full error severity.
-func (e *ShareableError) Log(ctx context.Context, logger *slog.Logger, args ...slog.Attr) *ShareableError {
+func (e *ShareableError) LogError(ctx context.Context, logger *slog.Logger, args ...slog.Attr) *ShareableError {
 	canceled := e.effectiveCode(ctx) == CodeCanceled
 
 	span := trace.SpanFromContext(ctx)

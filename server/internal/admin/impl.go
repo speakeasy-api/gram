@@ -102,11 +102,11 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 
 	state, err := randomString(32)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate oauth state").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate oauth state").LogError(ctx, logger)
 	}
 	verifier, err := randomString(32)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate pkce verifier").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate pkce verifier").LogError(ctx, logger)
 	}
 	challenge := pkceChallenge(verifier)
 
@@ -120,7 +120,7 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 		CreatedAt:    time.Now().UTC(),
 	}
 	if err := s.loginStates.Store(ctx, rec); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to persist login state").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to persist login state").LogError(ctx, logger)
 	}
 
 	return &gen.LoginResult{
@@ -148,7 +148,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 
 	rec, err := s.loginStates.Get(ctx, LoginStateCacheKey(payload.StateParam))
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "unknown or expired login state").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "unknown or expired login state").LogError(ctx, logger)
 	}
 
 	if err := s.loginStates.DeleteByKey(ctx, LoginStateCacheKey(payload.StateParam)); err != nil {
@@ -171,20 +171,20 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 
 	tok, err := s.oidc.Exchange(ctx, conv.PtrValOrEmpty(payload.Code, ""), rec.CodeVerifier)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnauthorized, err, "oauth code exchange failed").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnauthorized, err, "oauth code exchange failed").LogError(ctx, logger)
 	}
 
 	idToken, err := ExtractIDToken(tok)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnauthorized, err, "oidc id_token missing").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnauthorized, err, "oidc id_token missing").LogError(ctx, logger)
 	}
 
 	identity, err := s.oidc.VerifyIDToken(ctx, idToken)
 	switch {
 	case errors.Is(err, ErrAdminDomainNotAllowed):
-		return nil, oops.E(oops.CodeForbidden, err, "oidc account is not authorized for admin access").Log(ctx, logger)
+		return nil, oops.E(oops.CodeForbidden, err, "oidc account is not authorized for admin access").LogError(ctx, logger)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnauthorized, err, "oidc id_token verification failed").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnauthorized, err, "oidc id_token verification failed").LogError(ctx, logger)
 	}
 
 	sessionID, err := s.sessions.Store(ctx, StoreParams{
@@ -197,7 +197,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		ExpiresAt:    tok.Expiry,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to persist admin session").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to persist admin session").LogError(ctx, logger)
 	}
 
 	s.logger.InfoContext(ctx, "admin session created", attr.SlogAuthUserEmail(identity.Email))
@@ -212,7 +212,7 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) error 
 	sessionID := conv.PtrValOrEmpty(payload.SessionID, "")
 	if sessionID != "" {
 		if err := s.sessions.Delete(ctx, sessionID); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to delete admin session").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to delete admin session").LogError(ctx, s.logger)
 		}
 	}
 
@@ -221,7 +221,7 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) error 
 	// session identified by a foreign cookie).
 	if tok, ok := contextvalues.GetAdminSessionTokenFromContext(ctx); ok && tok != "" {
 		if err := s.sessions.Delete(ctx, tok); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to delete injected admin session").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to delete injected admin session").LogError(ctx, s.logger)
 		}
 	}
 
@@ -237,7 +237,7 @@ func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload
 		case errors.Is(err, pgx.ErrNoRows):
 			return nil, oops.C(oops.CodeNotFound)
 		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "lookup project detail by id").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "lookup project detail by id").LogError(ctx, s.logger)
 		}
 		return adminProjectDetailFromIDRow(row), nil
 	}
@@ -247,7 +247,7 @@ func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "lookup project detail by slug").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "lookup project detail by slug").LogError(ctx, s.logger)
 	}
 	return adminProjectDetailFromSlugRow(row), nil
 }
@@ -330,7 +330,7 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 		PageLimit:       limit,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list organizations").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list organizations").LogError(ctx, s.logger)
 	}
 
 	orgs := make([]*gen.AdminOrganization, len(rows))
@@ -353,7 +353,7 @@ func (s *Service) ListOrganizations(ctx context.Context, payload *gen.ListOrgani
 func (s *Service) ListOrganizationMembers(ctx context.Context, payload *gen.ListOrganizationMembersPayload) (*gen.AdminListOrganizationMembersResult, error) {
 	rows, err := repo.New(s.db).AdminListOrganizationMembers(ctx, payload.OrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list members for organization").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list members for organization").LogError(ctx, s.logger)
 	}
 
 	members := make([]*gen.AdminOrganizationMember, len(rows))
@@ -379,7 +379,7 @@ func (s *Service) ListOrganizationMembers(ctx context.Context, payload *gen.List
 func (s *Service) ListOrganizationProjects(ctx context.Context, payload *gen.ListOrganizationProjectsPayload) (*gen.AdminListOrganizationProjectsResult, error) {
 	rows, err := repo.New(s.db).AdminListProjectsForOrganization(ctx, payload.OrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list projects for organization").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list projects for organization").LogError(ctx, s.logger)
 	}
 
 	projects := make([]*gen.AdminProject, len(rows))
@@ -407,7 +407,7 @@ func (s *Service) UpdateOrganization(ctx context.Context, payload *gen.UpdateOrg
 		AccountType: conv.PtrToPGText(payload.AccountType),
 		Whitelisted: conv.PtrToPGBool(payload.Whitelisted),
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "update organization").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "update organization").LogError(ctx, s.logger)
 	}
 
 	row, err := queries.AdminGetOrganizationByIDOrSlug(ctx, payload.ID)
@@ -415,7 +415,7 @@ func (s *Service) UpdateOrganization(ctx context.Context, payload *gen.UpdateOrg
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "fetch organization after update").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "fetch organization after update").LogError(ctx, s.logger)
 	}
 	return adminOrganizationFromGetRow(row), nil
 }
@@ -426,7 +426,7 @@ func (s *Service) GetOrganization(ctx context.Context, payload *gen.GetOrganizat
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "lookup organization by id or slug").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "lookup organization by id or slug").LogError(ctx, s.logger)
 	}
 	return adminOrganizationFromGetRow(row), nil
 }

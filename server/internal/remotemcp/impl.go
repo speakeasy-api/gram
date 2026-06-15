@@ -99,13 +99,13 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	if err := validateURL(ctx, s.policy, payload.URL); err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid url").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid url").LogError(ctx, logger)
 	}
 
 	// Validate header inputs
 	for _, h := range payload.Headers {
 		if err := validateHeaderInput(h, false); err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid header").Log(ctx, logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid header").LogError(ctx, logger)
 		}
 	}
 
@@ -113,12 +113,12 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 	// the row can be inserted in a single statement (no insert-then-update).
 	serverID, err := uuid.NewV7()
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "generate server id").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "generate server id").LogError(ctx, logger)
 	}
 
 	slug, err := computeServerSlug(payload.URL, serverID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "compute server slug").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "compute server slug").LogError(ctx, logger)
 	}
 
 	name := pgtype.Text{String: "", Valid: false}
@@ -130,7 +130,7 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -148,9 +148,9 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return nil, oops.E(oops.CodeConflict, err, "remote mcp server slug already in use").Log(ctx, logger)
+			return nil, oops.E(oops.CodeConflict, err, "remote mcp server slug already in use").LogError(ctx, logger)
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "create remote mcp server").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "create remote mcp server").LogError(ctx, logger)
 	}
 
 	var headerRows []repo.RemoteMcpServerHeader
@@ -165,7 +165,7 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 			ValueFromRequestHeader: conv.PtrToPGTextEmpty(h.ValueFromRequestHeader),
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "create remote mcp server header").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "create remote mcp server header").LogError(ctx, logger)
 		}
 
 		headerRows = append(headerRows, row)
@@ -180,11 +180,11 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 		RemoteMcpServerID:  server.ID,
 		RemoteMcpServerURL: server.Url,
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log remote mcp server creation").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "log remote mcp server creation").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
 	return mv.BuildRemoteMcpServerView(server, headerRows), nil
@@ -202,7 +202,7 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -211,7 +211,7 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 
 	servers, err := txRepo.ListServersByProjectID(ctx, *authCtx.ProjectID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list remote mcp servers").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list remote mcp servers").LogError(ctx, s.logger)
 	}
 
 	serverIDs := make([]uuid.UUID, len(servers))
@@ -221,7 +221,7 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 
 	headersByServerID, err := headersRepo.ListHeadersByServerIDs(ctx, serverIDs, true)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list remote mcp server headers").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list remote mcp server headers").LogError(ctx, s.logger)
 	}
 
 	result := make([]*types.RemoteMcpServer, 0, len(servers))
@@ -245,15 +245,15 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 	idProvided := payload.ID != nil && *payload.ID != ""
 	slugProvided := payload.Slug != nil && *payload.Slug != ""
 	if !idProvided && !slugProvided {
-		return nil, oops.E(oops.CodeBadRequest, nil, "id or slug is required").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "id or slug is required").LogError(ctx, s.logger)
 	}
 	if idProvided && slugProvided {
-		return nil, oops.E(oops.CodeBadRequest, nil, "id and slug are mutually exclusive").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "id and slug are mutually exclusive").LogError(ctx, s.logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -264,7 +264,7 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 	if idProvided {
 		serverID, parseErr := uuid.Parse(*payload.ID)
 		if parseErr != nil {
-			return nil, oops.E(oops.CodeBadRequest, parseErr, "invalid server id").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, parseErr, "invalid server id").LogError(ctx, s.logger)
 		}
 		server, err = txRepo.GetServerByID(ctx, repo.GetServerByIDParams{
 			ID:        serverID,
@@ -278,15 +278,15 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 	}
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "remote mcp server not found").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeNotFound, err, "remote mcp server not found").LogError(ctx, s.logger)
 		}
 
-		return nil, oops.E(oops.CodeUnexpected, err, "get remote mcp server").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "get remote mcp server").LogError(ctx, s.logger)
 	}
 
 	headers, err := headersRepo.ListHeaders(ctx, server.ID, true)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list remote mcp server headers").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list remote mcp server headers").LogError(ctx, s.logger)
 	}
 
 	return mv.BuildRemoteMcpServerView(server, headers), nil
@@ -306,25 +306,25 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 
 	serverID, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid server id").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid server id").LogError(ctx, logger)
 	}
 
 	if payload.URL != nil {
 		if err := validateURL(ctx, s.policy, *payload.URL); err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid url").Log(ctx, logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid url").LogError(ctx, logger)
 		}
 	}
 
 	// Validate header inputs (allow secret headers to omit value on updates to preserve existing)
 	for _, h := range payload.Headers {
 		if err := validateHeaderInput(h, true); err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid header").Log(ctx, logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid header").LogError(ctx, logger)
 		}
 	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -338,15 +338,15 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "remote mcp server not found").Log(ctx, logger)
+			return nil, oops.E(oops.CodeNotFound, err, "remote mcp server not found").LogError(ctx, logger)
 		}
 
-		return nil, oops.E(oops.CodeUnexpected, err, "get remote mcp server").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "get remote mcp server").LogError(ctx, logger)
 	}
 
 	beforeHeaders, err := headersRepo.ListHeaders(ctx, existingServer.ID, true)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list headers for before snapshot").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list headers for before snapshot").LogError(ctx, logger)
 	}
 
 	beforeView := mv.BuildRemoteMcpServerView(existingServer, beforeHeaders)
@@ -363,7 +363,7 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	finalURL := conv.PtrValOr(payload.URL, existingServer.Url)
 	slug, err := computeServerSlug(finalURL, existingServer.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "compute server slug").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "compute server slug").LogError(ctx, logger)
 	}
 
 	// Update server fields
@@ -378,9 +378,9 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return nil, oops.E(oops.CodeConflict, err, "remote mcp server slug already in use").Log(ctx, logger)
+			return nil, oops.E(oops.CodeConflict, err, "remote mcp server slug already in use").LogError(ctx, logger)
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "update remote mcp server").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "update remote mcp server").LogError(ctx, logger)
 	}
 
 	// Reconcile headers: nil means leave unchanged, non-nil is the desired state.
@@ -388,7 +388,7 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 		// Fetch raw headers (with encrypted values intact) for secret value preservation
 		rawHeaders, err := txRepo.ListHeadersByServerID(ctx, serverID)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "list raw headers for preservation").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "list raw headers for preservation").LogError(ctx, logger)
 		}
 
 		rawByName := make(map[string]repo.RemoteMcpServerHeader, len(rawHeaders))
@@ -422,13 +422,13 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 						ValueFromRequestHeader: conv.PtrToPGTextEmpty(h.ValueFromRequestHeader),
 					})
 					if err != nil {
-						return nil, oops.E(oops.CodeUnexpected, err, "upsert remote mcp server header").Log(ctx, logger)
+						return nil, oops.E(oops.CodeUnexpected, err, "upsert remote mcp server header").LogError(ctx, logger)
 					}
 
 					continue
 				}
 
-				return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("header %q: new secret header must provide a value", h.Name), "invalid header").Log(ctx, logger)
+				return nil, oops.E(oops.CodeBadRequest, fmt.Errorf("header %q: new secret header must provide a value", h.Name), "invalid header").LogError(ctx, logger)
 			}
 
 			_, err := headersRepo.UpsertHeader(ctx, repo.UpsertHeaderParams{
@@ -441,7 +441,7 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 				ValueFromRequestHeader: conv.PtrToPGTextEmpty(h.ValueFromRequestHeader),
 			})
 			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "upsert remote mcp server header").Log(ctx, logger)
+				return nil, oops.E(oops.CodeUnexpected, err, "upsert remote mcp server header").LogError(ctx, logger)
 			}
 		}
 
@@ -449,7 +449,7 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 		for _, existing := range beforeHeaders {
 			if _, keep := desiredNames[existing.Name]; !keep {
 				if err := headersRepo.DeleteHeader(ctx, serverID, existing.Name); err != nil {
-					return nil, oops.E(oops.CodeUnexpected, err, "delete remote mcp server header").Log(ctx, logger)
+					return nil, oops.E(oops.CodeUnexpected, err, "delete remote mcp server header").LogError(ctx, logger)
 				}
 			}
 		}
@@ -458,7 +458,7 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	// Fetch updated state for after-snapshot
 	afterHeaders, err := headersRepo.ListHeaders(ctx, updatedServer.ID, true)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list headers for after snapshot").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list headers for after snapshot").LogError(ctx, logger)
 	}
 
 	afterView := mv.BuildRemoteMcpServerView(updatedServer, afterHeaders)
@@ -474,11 +474,11 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 		SnapshotBefore:     beforeView,
 		SnapshotAfter:      afterView,
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log remote mcp server update").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "log remote mcp server update").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
 	return afterView, nil
@@ -497,7 +497,7 @@ func (s *Service) VerifyURL(ctx context.Context, payload *gen.VerifyURLPayload) 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	if err := validateURL(ctx, s.policy, payload.URL); err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid url").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid url").LogError(ctx, logger)
 	}
 
 	probeCtx, cancel := context.WithTimeout(ctx, verifyURLTimeout)
@@ -526,19 +526,19 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 
 	serverID, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid server id").Log(ctx, logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid server id").LogError(ctx, logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
 
 	if err := txRepo.DeleteHeadersByServerID(ctx, serverID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "delete remote mcp server headers").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "delete remote mcp server headers").LogError(ctx, logger)
 	}
 
 	deleted, err := txRepo.DeleteServer(ctx, repo.DeleteServerParams{
@@ -550,7 +550,7 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 			return nil
 		}
 
-		return oops.E(oops.CodeUnexpected, err, "delete remote mcp server").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "delete remote mcp server").LogError(ctx, logger)
 	}
 
 	if err := s.audit.LogRemoteMcpServerDelete(ctx, dbtx, audit.LogRemoteMcpServerDeleteEvent{
@@ -562,11 +562,11 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 		RemoteMcpServerID:  deleted.ID,
 		RemoteMcpServerURL: deleted.Url,
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "log remote mcp server deletion").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "log remote mcp server deletion").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
 	return nil

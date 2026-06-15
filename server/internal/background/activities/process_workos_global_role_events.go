@@ -62,7 +62,7 @@ func (p *ProcessWorkOSGlobalRoleEvents) Do(ctx context.Context, params ProcessWo
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "get global role sync cursor").Log(ctx, p.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "get global role sync cursor").LogError(ctx, p.logger)
 		default:
 			sinceEventID = cursor
 		}
@@ -81,7 +81,7 @@ func (p *ProcessWorkOSGlobalRoleEvents) Do(ctx context.Context, params ProcessWo
 		RangeEnd:       "",
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list WorkOS global role events").Log(ctx, p.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list WorkOS global role events").LogError(ctx, p.logger)
 	}
 
 	lastEventID, err := p.handlePage(ctx, resp.Data)
@@ -106,7 +106,7 @@ func (p *ProcessWorkOSGlobalRoleEvents) handlePage(ctx context.Context, page []e
 
 		eventID, err := p.handleEvent(ctx, eventLogger, event)
 		if err != nil {
-			return lastEventID, oops.E(oops.CodeUnexpected, err, "handle WorkOS global role event").Log(ctx, eventLogger)
+			return lastEventID, oops.E(oops.CodeUnexpected, err, "handle WorkOS global role event").LogError(ctx, eventLogger)
 		}
 		if eventID != "" {
 			lastEventID = eventID

@@ -2121,12 +2121,12 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return threadBootstrap{}, oops.E(oops.CodeNotFound, nil, "assistant thread not found").Log(ctx, s.logger, logAttrs...)
+			return threadBootstrap{}, oops.E(oops.CodeNotFound, nil, "assistant thread not found").LogError(ctx, s.logger, logAttrs...)
 		}
-		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant thread").Log(ctx, s.logger, logAttrs...)
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant thread").LogError(ctx, s.logger, logAttrs...)
 	}
 	if row.AssistantID != principalAssistantID {
-		return threadBootstrap{}, oops.E(oops.CodeForbidden, nil, "thread does not belong to assistant").Log(ctx, s.logger, logAttrs...)
+		return threadBootstrap{}, oops.E(oops.CodeForbidden, nil, "thread does not belong to assistant").LogError(ctx, s.logger, logAttrs...)
 	}
 
 	thread := assistantThreadRecord{
@@ -2157,13 +2157,13 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	}
 	toolsets, err := s.loadAssistantToolsets(ctx, assistant.ProjectID, []uuid.UUID{assistant.ID})
 	if err != nil {
-		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant toolsets").Log(ctx, s.logger, logAttrs...)
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant toolsets").LogError(ctx, s.logger, logAttrs...)
 	}
 	assistant.Toolsets = toolsets[assistant.ID]
 
 	runtimeServerURL := s.runtime.ServerURL()
 	if runtimeServerURL == nil {
-		return threadBootstrap{}, oops.E(oops.CodeUnexpected, nil, "assistant runtime server url not configured").Log(ctx, s.logger, logAttrs...)
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, nil, "assistant runtime server url not configured").LogError(ctx, s.logger, logAttrs...)
 	}
 
 	// The managed-assistant platform toolset is granted only to the project's
@@ -2178,7 +2178,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	case errors.Is(mErr, pgx.ErrNoRows):
 		// Project has no managed assistant; managed-only tools stay ungranted.
 	default:
-		return threadBootstrap{}, oops.E(oops.CodeUnexpected, mErr, "resolve managed assistant").Log(ctx, s.logger, logAttrs...)
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, mErr, "resolve managed assistant").LogError(ctx, s.logger, logAttrs...)
 	}
 
 	// Misconfigured toolsets (no MCP slug, MCP disabled) are surfaced as
@@ -2189,12 +2189,12 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 
 	instructions, err := composeInstructions(assistant.Instructions, thread)
 	if err != nil {
-		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "compose assistant instructions").Log(ctx, s.logger, logAttrs...)
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "compose assistant instructions").LogError(ctx, s.logger, logAttrs...)
 	}
 
 	history, err := s.loadChatHistory(ctx, thread.ChatID, thread.ProjectID)
 	if err != nil {
-		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant chat history").Log(ctx, s.logger, logAttrs...)
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant chat history").LogError(ctx, s.logger, logAttrs...)
 	}
 
 	completionsEndpoint := runtimeServerURL.JoinPath("chat", "completions")
@@ -2204,7 +2204,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 
 	compaction := compactionPolicyFor(thread.SourceKind)
 	if err := compaction.Validate(); err != nil {
-		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "build compaction policy").Log(ctx, s.logger, logAttrs...)
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "build compaction policy").LogError(ctx, s.logger, logAttrs...)
 	}
 
 	return threadBootstrap{

@@ -1200,7 +1200,7 @@ func (s *Service) CaptureEvent(ctx context.Context, payload *telem_gen.CaptureEv
 	// Capture event in PostHog
 	if err := s.posthog.CaptureEvent(ctx, payload.Event, distinctID, properties); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to capture event").
-			Log(ctx, s.logger,
+			LogError(ctx, s.logger,
 				attr.SlogEvent(payload.Event),
 			)
 	}

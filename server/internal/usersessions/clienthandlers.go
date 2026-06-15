@@ -36,12 +36,12 @@ func (s *Service) ListUserSessionClients(ctx context.Context, payload *gen.ListU
 	limit := pageLimit(payload.Limit)
 	cursor, err := parseCursor(payload.Cursor)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
 	}
 
 	issuerFilter, err := conv.PtrToNullUUID(payload.UserSessionIssuerID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id").LogError(ctx, s.logger)
 	}
 
 	rows, err := repo.New(s.db).ListUserSessionClientsByProjectID(ctx, repo.ListUserSessionClientsByProjectIDParams{
@@ -51,7 +51,7 @@ func (s *Service) ListUserSessionClients(ctx context.Context, payload *gen.ListU
 		LimitValue:          limit,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list user session clients").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list user session clients").LogError(ctx, s.logger)
 	}
 
 	items := make([]*types.UserSessionClient, len(rows))
@@ -84,7 +84,7 @@ func (s *Service) GetUserSessionClient(ctx context.Context, payload *gen.GetUser
 
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid client id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid client id").LogError(ctx, s.logger)
 	}
 
 	row, err := repo.New(s.db).GetUserSessionClientByID(ctx, repo.GetUserSessionClientByIDParams{
@@ -93,9 +93,9 @@ func (s *Service) GetUserSessionClient(ctx context.Context, payload *gen.GetUser
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "user session client not found").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeNotFound, err, "user session client not found").LogError(ctx, s.logger)
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "get user session client").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "get user session client").LogError(ctx, s.logger)
 	}
 
 	return mv.BuildUserSessionClientView(repo.UserSessionClient{
@@ -129,14 +129,14 @@ func (s *Service) RevokeUserSessionClient(ctx context.Context, payload *gen.Revo
 
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid client id").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid client id").LogError(ctx, s.logger)
 	}
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -148,13 +148,13 @@ func (s *Service) RevokeUserSessionClient(ctx context.Context, payload *gen.Revo
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeNotFound, err, "user session client not found").Log(ctx, logger)
+			return oops.E(oops.CodeNotFound, err, "user session client not found").LogError(ctx, logger)
 		}
-		return oops.E(oops.CodeUnexpected, err, "revoke user session client").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "revoke user session client").LogError(ctx, logger)
 	}
 
 	if _, err := txRepo.SoftDeleteUserSessionsByClientID(ctx, uuid.NullUUID{UUID: revoked.ID, Valid: true}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "delete child user sessions").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "delete child user sessions").LogError(ctx, logger)
 	}
 
 	if err := s.audit.LogUserSessionClientRevoke(ctx, dbtx, audit.LogUserSessionClientRevokeEvent{
@@ -167,11 +167,11 @@ func (s *Service) RevokeUserSessionClient(ctx context.Context, payload *gen.Revo
 		ClientID:             revoked.ClientID,
 		ClientName:           revoked.ClientName,
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "log user session client revocation").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "log user session client revocation").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
 	return nil

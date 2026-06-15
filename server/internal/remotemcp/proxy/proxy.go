@@ -357,7 +357,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 			})
 			return nil
 		}
-		return oops.E(oops.CodeBadRequest, parseErr, "invalid jsonrpc request").Log(ctx, p.Logger)
+		return oops.E(oops.CodeBadRequest, parseErr, "invalid jsonrpc request").LogError(ctx, p.Logger)
 	}
 
 	// Extract the originating request id once. Used as the correlation id
@@ -434,7 +434,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	// into the cached body bytes so the forwarder sends the mutated payload
 	// upstream. A no-op when no interceptor mutated the request.
 	if mutated, err := userReq.refreshBody(); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "refresh mutated request body").Log(ctx, p.Logger)
+		return oops.E(oops.CodeUnexpected, err, "refresh mutated request body").LogError(ctx, p.Logger)
 	} else if mutated {
 		p.Logger.InfoContext(ctx, "forwarding mutated request body upstream",
 			attr.SlogComponent("remotemcp.proxy"),
@@ -469,7 +469,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 
 	bodyBytes, msg, err := readJSONRPCBody(upstreamResp.Body, p.MaxBufferedBodyBytes)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "invalid jsonrpc response from remote mcp server").Log(ctx, p.Logger)
+		return oops.E(oops.CodeUnexpected, err, "invalid jsonrpc response from remote mcp server").LogError(ctx, p.Logger)
 	}
 
 	// Empty bodies skip interceptor invocation but still relay through to
@@ -528,7 +528,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		// the upstream's original payload. A no-op when no interceptor
 		// mutated the response.
 		if mutated, ok, err := remoteMsg.materializedBytes(); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "encode mutated response body").Log(ctx, p.Logger)
+			return oops.E(oops.CodeUnexpected, err, "encode mutated response body").LogError(ctx, p.Logger)
 		} else if ok {
 			bodyBytes = mutated
 			p.Logger.InfoContext(ctx, "relaying mutated response body to client",
@@ -580,7 +580,7 @@ func (p *Proxy) forwardRequest(ctx context.Context, r *http.Request, body io.Rea
 	if err != nil {
 		phaseTimer.Stop()
 		forwardCancel()
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "build upstream request").Log(ctx, p.Logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "build upstream request").LogError(ctx, p.Logger)
 	}
 
 	if err := p.applyRequestHeaders(ctx, r, upstreamReq); err != nil {
@@ -1145,7 +1145,7 @@ func (p *Proxy) dispatchInterceptorError(
 ) error {
 	var mutErr *MutationError
 	if errors.As(err, &mutErr) {
-		return oops.E(oops.CodeUnexpected, err, "proxy interceptor mutation failure").Log(ctx, p.Logger)
+		return oops.E(oops.CodeUnexpected, err, "proxy interceptor mutation failure").LogError(ctx, p.Logger)
 	}
 	*responseBytes = p.writeRejection(ctx, w, span, id, err)
 	return nil

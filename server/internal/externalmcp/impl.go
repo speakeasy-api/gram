@@ -81,7 +81,7 @@ func (s *Service) ClearCache(ctx context.Context, payload *gen.ClearCachePayload
 
 	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "fetch user info").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "fetch user info").LogError(ctx, s.logger)
 	}
 	if userInfo == nil || !userInfo.Admin {
 		return oops.C(oops.CodeForbidden)
@@ -89,7 +89,7 @@ func (s *Service) ClearCache(ctx context.Context, payload *gen.ClearCachePayload
 
 	registryID, err := uuid.Parse(payload.RegistryID)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid registry_id").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid registry_id").LogError(ctx, s.logger)
 	}
 
 	registry, err := s.repo.GetMCPRegistryByID(ctx, registryID)
@@ -97,11 +97,11 @@ func (s *Service) ClearCache(ctx context.Context, payload *gen.ClearCachePayload
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.C(oops.CodeNotFound)
 		}
-		return oops.E(oops.CodeUnexpected, err, "get registry").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "get registry").LogError(ctx, s.logger)
 	}
 
 	if err := s.registryClient.ClearCache(ctx, registry.Url); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "clear registry cache").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "clear registry cache").LogError(ctx, s.logger)
 	}
 
 	s.logger.InfoContext(ctx, "registry cache cleared",
@@ -120,7 +120,7 @@ func (s *Service) ListRegistries(ctx context.Context, payload *gen.ListRegistrie
 
 	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "fetch user info").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "fetch user info").LogError(ctx, s.logger)
 	}
 	if userInfo == nil || !userInfo.Admin {
 		return nil, oops.C(oops.CodeForbidden)
@@ -128,7 +128,7 @@ func (s *Service) ListRegistries(ctx context.Context, payload *gen.ListRegistrie
 
 	registries, err := s.repo.ListMCPRegistries(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list registries").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list registries").LogError(ctx, s.logger)
 	}
 
 	result := make([]*types.MCPRegistry, 0, len(registries))
@@ -159,7 +159,7 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 	if payload.RegistryID != nil {
 		registryID, err := uuid.Parse(*payload.RegistryID)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid registry_id").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid registry_id").LogError(ctx, s.logger)
 		}
 
 		registry, err := s.repo.GetMCPRegistryByID(ctx, registryID)
@@ -167,7 +167,7 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 			if errors.Is(err, pgx.ErrNoRows) {
 				return nil, oops.C(oops.CodeNotFound)
 			}
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get registry").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get registry").LogError(ctx, s.logger)
 		}
 
 		result, err := s.registryClient.ListServers(ctx, Registry{
@@ -178,7 +178,7 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 			Cursor: payload.Cursor,
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch servers from registry").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch servers from registry").LogError(ctx, s.logger)
 		}
 
 		return &gen.ListCatalogResult{
@@ -190,7 +190,7 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 	// Fetch all registries from the database
 	registries, err := s.repo.ListMCPRegistries(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list registries").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list registries").LogError(ctx, s.logger)
 	}
 
 	// Aggregate servers from all registries
@@ -246,7 +246,7 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 
 	registryID, err := uuid.Parse(payload.RegistryID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid registry_id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid registry_id").LogError(ctx, s.logger)
 	}
 
 	registry, err := s.repo.GetMCPRegistryByID(ctx, registryID)
@@ -254,13 +254,13 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.C(oops.CodeNotFound)
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get registry").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get registry").LogError(ctx, s.logger)
 	}
 
 	// Fetch all server details in a single HTTP call
 	details, err := s.fetchServerDetails(ctx, registry, payload.ServerSpecifier)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch server details from registry").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch server details from registry").LogError(ctx, s.logger)
 	}
 
 	registryIDStr := registryID.String()

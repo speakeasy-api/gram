@@ -75,7 +75,7 @@ func (p *ProcessWorkOSOrganizationEvents) Do(ctx context.Context, params Process
 		case errors.Is(err, pgx.ErrNoRows):
 			// No cursor yet — full sync from the beginning.
 		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get organization sync last event ID").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get organization sync last event ID").LogError(ctx, logger)
 		default:
 			sinceEventID = cursor
 		}
@@ -109,7 +109,7 @@ func (p *ProcessWorkOSOrganizationEvents) Do(ctx context.Context, params Process
 		RangeEnd:       "",
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list WorkOS events").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list WorkOS events").LogError(ctx, logger)
 	}
 
 	lastEventID, err := p.handlePage(ctx, logger, workOSOrgID, resp.Data)
@@ -145,7 +145,7 @@ func (p *ProcessWorkOSOrganizationEvents) handlePage(ctx context.Context, logger
 
 		var orgEvent workosOrgEvent
 		if err := json.Unmarshal(event.Data, &orgEvent); err != nil {
-			return lastEventID, oops.E(oops.CodeUnexpected, err, "failed to unmarshal workos organization event data").Log(ctx, eventLogger)
+			return lastEventID, oops.E(oops.CodeUnexpected, err, "failed to unmarshal workos organization event data").LogError(ctx, eventLogger)
 		}
 
 		// Resolve the WorkOS organization ID from the payload for logging.
@@ -158,7 +158,7 @@ func (p *ProcessWorkOSOrganizationEvents) handlePage(ctx context.Context, logger
 
 		eventID, err := p.handleEvent(ctx, eventLogger, workosOrgID, event)
 		if err != nil {
-			return lastEventID, oops.E(oops.CodeUnexpected, err, "failed to handle WorkOS event").Log(ctx, eventLogger)
+			return lastEventID, oops.E(oops.CodeUnexpected, err, "failed to handle WorkOS event").LogError(ctx, eventLogger)
 		}
 		lastEventID = eventID
 	}

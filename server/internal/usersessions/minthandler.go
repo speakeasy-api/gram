@@ -58,12 +58,12 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 	}
 
 	if s.signer == nil || s.serverURL == "" {
-		return nil, oops.E(oops.CodeUnexpected, nil, "user-session signer not configured").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, nil, "user-session signer not configured").LogError(ctx, s.logger)
 	}
 
 	toolsetID, err := uuid.Parse(payload.ToolsetID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset_id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset_id").LogError(ctx, s.logger)
 	}
 
 	toolset, err := toolsetsrepo.New(s.db).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{
@@ -72,9 +72,9 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, s.logger)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "load toolset").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "load toolset").LogError(ctx, s.logger)
 	}
 
 	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())); err != nil {
@@ -82,10 +82,10 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 	}
 
 	if !toolset.UserSessionIssuerID.Valid {
-		return nil, oops.E(oops.CodeBadRequest, nil, "toolset is not issuer-gated; minting a user-session JWT is only meaningful for issuer-gated toolsets").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "toolset is not issuer-gated; minting a user-session JWT is only meaningful for issuer-gated toolsets").LogError(ctx, s.logger)
 	}
 	if toolset.McpSlug.String == "" {
-		return nil, oops.E(oops.CodeInvariantViolation, nil, "issuer-gated toolset has no mcp slug").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeInvariantViolation, nil, "issuer-gated toolset has no mcp slug").LogError(ctx, s.logger)
 	}
 
 	issuer, err := repo.New(s.db).GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
@@ -94,16 +94,16 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeNotFound, err, "user_session_issuer not found").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, err, "user_session_issuer not found").LogError(ctx, s.logger)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "load user_session_issuer").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "load user_session_issuer").LogError(ctx, s.logger)
 	}
 	if !issuer.SessionDuration.Valid || issuer.SessionDuration.Months != 0 || issuer.SessionDuration.Days != 0 {
-		return nil, oops.E(oops.CodeUnexpected, nil, "issuer session_duration is unset or carries Months/Days; only Microseconds intervals are supported").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, nil, "issuer session_duration is unset or carries Months/Days; only Microseconds intervals are supported").LogError(ctx, s.logger)
 	}
 	refreshLifetime := time.Duration(issuer.SessionDuration.Microseconds) * time.Microsecond
 	if refreshLifetime <= 0 {
-		return nil, oops.E(oops.CodeUnexpected, nil, "issuer session_duration is non-positive").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, nil, "issuer session_duration is non-positive").LogError(ctx, s.logger)
 	}
 
 	// Issuer URL matches what /token would emit: <serverURL>/mcp/<mcpSlug>.
@@ -112,7 +112,7 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 	// indistinguishable from /token output in audit trails.
 	issuerURL, err := url.JoinPath(s.serverURL, "mcp", toolset.McpSlug.String)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build issuer URL").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, s.logger)
 	}
 
 	subject := urn.NewUserSubject(authCtx.UserID)
@@ -120,7 +120,7 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 
 	access, jti, err := s.signer.Mint(subject, audience, issuerURL, mintAccessTokenLifetime)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "mint session jwt").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "mint session jwt").LogError(ctx, s.logger)
 	}
 
 	now := time.Now()
@@ -138,7 +138,7 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		ExpiresAt:        pgtype.Timestamptz{Time: now.Add(mintAccessTokenLifetime), InfinityModifier: 0, Valid: true},
 		RefreshExpiresAt: pgtype.Timestamptz{Time: now.Add(refreshLifetime), InfinityModifier: 0, Valid: true},
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "persist user session").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "persist user session").LogError(ctx, s.logger)
 	}
 
 	s.logger.InfoContext(ctx, "minted user session via dashboard",

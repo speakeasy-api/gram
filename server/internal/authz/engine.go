@@ -523,7 +523,7 @@ func (e *Engine) ShouldEnforce(ctx context.Context) (bool, error) {
 
 	enabled, err := e.isEnabled(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "check RBAC feature").Log(ctx, e.logger)
+		return false, oops.E(oops.CodeUnexpected, err, "check RBAC feature").LogError(ctx, e.logger)
 	}
 
 	return enabled, nil
@@ -545,10 +545,10 @@ func (e *Engine) mapError(ctx context.Context, err error) error {
 	case errors.Is(err, ErrDenied):
 		return oops.C(oops.CodeForbidden)
 	case errors.Is(err, ErrMissingGrants):
-		return oops.E(oops.CodeUnexpected, err, "authz grants missing from prepared context").Log(ctx, e.logger)
+		return oops.E(oops.CodeUnexpected, err, "authz grants missing from prepared context").LogError(ctx, e.logger)
 	case errors.Is(err, ErrInvalidCheck), errors.Is(err, ErrNoChecks):
-		return oops.E(oops.CodeUnexpected, err, "invalid authz check").Log(ctx, e.logger)
+		return oops.E(oops.CodeUnexpected, err, "invalid authz check").LogError(ctx, e.logger)
 	default:
-		return oops.E(oops.CodeUnexpected, err, "check authz").Log(ctx, e.logger)
+		return oops.E(oops.CodeUnexpected, err, "check authz").LogError(ctx, e.logger)
 	}
 }
