@@ -464,7 +464,11 @@ func toTriggerError(ctx context.Context, logger *slog.Logger, err error, message
 		// reached when the input fails validation.
 		public = fmt.Sprintf("%s: %s", message, err.Error())
 	case errors.Is(err, bgtriggers.ErrAuthFailed):
-		code = oops.CodeUnauthorized
+		// Webhook signature failures are client faults: a 401 on a public
+		// endpoint, commonly a single trigger with a stale or wrong signing
+		// secret whose sender keeps retrying.
+		logger.WarnContext(ctx, "trigger webhook authentication failed", attr.SlogError(err))
+		return oops.E(oops.CodeUnauthorized, err, "%s", public)
 	case errors.Is(err, pgx.ErrNoRows):
 		code = oops.CodeNotFound
 	}
