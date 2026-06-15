@@ -39,7 +39,11 @@ if (!existsSync(".vscode")) {
 function amendSettings(settingsJSON: string): string {
   const edited = JSON.parse(settingsJSON);
 
-  edited["mise.configureExtensionsAutomaticallyIgnoreList"] ??= [];
+  edited["mise.configureExtensionsAutomaticallyIgnoreList"] = Array.isArray(
+    edited["mise.configureExtensionsAutomaticallyIgnoreList"],
+  )
+    ? edited["mise.configureExtensionsAutomaticallyIgnoreList"]
+    : [];
   edited["mise.configureExtensionsAutomaticallyIgnoreList"].push(
     // python is managed by uv virtual environment, not mise.
     "charliermarsh.ruff",
