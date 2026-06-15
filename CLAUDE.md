@@ -56,6 +56,7 @@ Contains the main application code for the Gram server:
 - `mise build:server`: Build the server binary
 - `mise lint:server`: Run linters on the server code
 - `mise start:server --dev-single-process`: Run the server locally
+- `hk fix`: Runs formatters across changed files in the current branch.
 
 </commands>
 

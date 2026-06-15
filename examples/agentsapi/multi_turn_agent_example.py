@@ -17,9 +17,7 @@ headers = {
     "Gram-Project": "default",
 }
 
-context = [
-  { "role": "role", "content": f"Get me a speakeasy org {org_slug}?" }
-]
+context = [{"role": "role", "content": f"Get me a speakeasy org {org_slug}?"}]
 
 payload = {
     "model": "openai/gpt-4o",
@@ -41,8 +39,8 @@ if verbose:
     print(json.dumps(data, indent=2))
 
 context = [
-  *data["output"],
-  { "role": "user", "content": "What are the workspaces in that org?" }
+    *data["output"],
+    {"role": "user", "content": "What are the workspaces in that org?"},
 ]
 
 payload["input"] = context

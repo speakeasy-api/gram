@@ -38,7 +38,9 @@ if verbose:
 
 
 payload["previous_response_id"] = data["id"]
-payload["input"] = "What are the workspaces in that org? Also what was my secret word from previously"
+payload["input"] = (
+    "What are the workspaces in that org? Also what was my secret word from previously"
+)
 
 print("\n=== Turn 2 ===")
 resp = requests.post(url, headers=headers, json=payload)

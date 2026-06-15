@@ -134,9 +134,9 @@ func insertToolCallRow(t *testing.T, conn driver.Conn, projectID string, timesta
 	t.Helper()
 
 	insertTelemetryRow(t, conn, projectID, timestamp, "tools:http:petstore:listPets", map[string]any{
-		"gen_ai.conversation.id":     chatID,
-		"gram.tool.urn":              "tools:http:petstore:listPets",
-		"http.response.status_code":  200,
+		"gen_ai.conversation.id":    chatID,
+		"gram.tool.urn":             "tools:http:petstore:listPets",
+		"http.response.status_code": 200,
 	})
 }
 
