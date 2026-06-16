@@ -144,6 +144,43 @@ func TestLogs_CodexPayloadContinuesThroughUsagePath(t *testing.T) {
 	}, 300*time.Millisecond, 50*time.Millisecond)
 }
 
+func TestExtractSessionMetadataSkipsNilOTELAttributeElements(t *testing.T) {
+	t.Parallel()
+
+	payload := claudeLogsPayload(
+		[]*gen.OTELResourceAttribute{
+			nil,
+			resourceStrAttr("service.name", "claude-code"),
+		},
+		nil,
+		&gen.OTELLogRecord{
+			Attributes: []*gen.OTELAttribute{
+				nil,
+				{Key: "empty-value"},
+				strAttr("session.id", "claude-session-1"),
+				strAttr("user.email", "dev@example.com"),
+				strAttr("organization.id", "claude-org-1"),
+			},
+		},
+	)
+
+	var metadata claudeLogMetadata
+	require.NotPanics(t, func() {
+		metadata = extractSessionMetadata(payload)
+	})
+	require.Equal(t, "claude-code", metadata.ServiceName)
+	require.Equal(t, "claude-session-1", metadata.SessionID)
+	require.Equal(t, "dev@example.com", metadata.UserEmail)
+	require.Equal(t, "claude-org-1", metadata.ClaudeOrgID)
+
+	require.Empty(t, extractLogData(&gen.OTELLogRecord{Attributes: []*gen.OTELAttribute{nil}}).SessionID)
+	require.Empty(t, extractAttributeString([]*gen.OTELAttribute{nil}, "session.id"))
+	require.Equal(t, "claude-session-1", extractAttributeString([]*gen.OTELAttribute{
+		nil,
+		strAttr("session.id", "claude-session-1"),
+	}, "session.id"))
+}
+
 func enableHookTelemetryLogger(t *testing.T, ctx context.Context, ti *testInstance) *telemetryrepo.Queries {
 	t.Helper()
 
