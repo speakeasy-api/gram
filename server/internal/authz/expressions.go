@@ -114,33 +114,16 @@ type GrantCheck struct {
 	Instance Selector
 }
 
-// GrantDifference represents "Base is allowed unless Exception also applies".
-//
-// It evaluates Base and Exception into sets of concrete permission instances,
-// removes every exception instance from the base set, and is satisfied when at
-// least one base instance remains.
-//
-// Examples:
-//
-//	risk_policy:evaluate - risk_policy:bypass
-//	mcp:connect - mcp:block
-//
-// The scopes on the two sides do not have to be the same. What matters is that
-// both sides produce the same Instance selector when the exception should
-// remove the base permission.
-type GrantDifference struct {
-	Base      GrantExpression
-	Exception GrantExpression
-}
-
 func (g GrantCheck) Evaluate(grants []Grant) (GrantExpressionResult, error) {
-	set, err := g.grantSet(grants)
-	if err != nil {
+	if err := validateInput(g.Check); err != nil {
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, err
 	}
-	if len(set) == 0 {
+
+	grant, _ := matchingAllowGrant(grants, g.Check.expand())
+	if grant == nil {
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonMissingBase}, nil
 	}
+
 	return GrantExpressionResult{Satisfied: true, Reason: GrantExpressionReasonMatched}, nil
 }
 
@@ -175,12 +158,51 @@ func (g GrantCheck) instanceSelector() Selector {
 	return g.Check.selector()
 }
 
+func (g GrantCheck) instanceSelectorView() Selector {
+	if len(g.Instance) > 0 {
+		return g.Instance
+	}
+	return g.Check.selector()
+}
+
+// GrantDifference represents "Base is allowed unless Exception also applies".
+//
+// It evaluates Base and Exception into sets of concrete permission instances,
+// removes every exception instance from the base set, and is satisfied when at
+// least one base instance remains.
+//
+// Examples:
+//
+//	risk_policy:evaluate - risk_policy:bypass
+//	mcp:connect - mcp:block
+//
+// The scopes on the two sides do not have to be the same. What matters is that
+// both sides produce the same Instance selector when the exception should
+// remove the base permission.
+type GrantDifference struct {
+	Base      GrantExpression
+	Exception GrantExpression
+}
+
+// Evaluate answers whether Base still proves access after subtracting
+// Exception. See ../../../docs/rbac.md#grant-expressions-and-set-difference for
+// concrete risk-policy and MCP examples.
+//
+// The direct GrantCheck - GrantCheck case skips grantSet construction because
+// most runtime rules prove exactly one concrete permission instance. Complex or
+// nested expressions still use the generic grantSet path below.
 func (g GrantDifference) Evaluate(grants []Grant) (GrantExpressionResult, error) {
 	if g.Base == nil {
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, errors.New("grant difference requires a base expression")
 	}
 	if g.Exception == nil {
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, errors.New("grant difference requires an exception expression")
+	}
+
+	baseCheck, baseIsCheck := g.Base.(GrantCheck)
+	exceptionCheck, exceptionIsCheck := g.Exception.(GrantCheck)
+	if baseIsCheck && exceptionIsCheck {
+		return evaluateGrantCheckDifference(grants, baseCheck, exceptionCheck)
 	}
 
 	baseResult, err := g.Base.Evaluate(grants)
@@ -273,6 +295,52 @@ func rejectDenyGrantsForExpressionScope(grants []Grant, scope Scope) error {
 		return fmt.Errorf("%w: deny grant with scope %q cannot be evaluated by grant expressions", ErrUnsupportedMixedGrantSemantics, grant.Scope)
 	}
 	return nil
+}
+
+func evaluateGrantCheckDifference(grants []Grant, base GrantCheck, exception GrantCheck) (GrantExpressionResult, error) {
+	if err := validateInput(base.Check); err != nil {
+		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, err
+	}
+	if err := validateInput(exception.Check); err != nil {
+		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, err
+	}
+	if err := rejectDenyGrantsForExpressionScope(grants, base.Check.Scope); err != nil {
+		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, err
+	}
+	if err := rejectDenyGrantsForExpressionScope(grants, exception.Check.Scope); err != nil {
+		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, err
+	}
+
+	baseGrant, _ := matchingAllowGrant(grants, base.Check.expand())
+	if baseGrant == nil {
+		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonMissingBase}, nil
+	}
+
+	if !selectorsEqual(base.instanceSelectorView(), exception.instanceSelectorView()) {
+		return GrantExpressionResult{Satisfied: true, Reason: GrantExpressionReasonMatched}, nil
+	}
+
+	exceptionGrant, _ := matchingAllowGrant(grants, exception.Check.expand())
+	if exceptionGrant != nil {
+		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonExceptionMatched}, nil
+	}
+
+	return GrantExpressionResult{Satisfied: true, Reason: GrantExpressionReasonMatched}, nil
+}
+
+func selectorsEqual(left Selector, right Selector) bool {
+	if len(left) != len(right) {
+		return false
+	}
+
+	for key, leftValue := range left {
+		rightValue, ok := right[key]
+		if !ok || rightValue != leftValue {
+			return false
+		}
+	}
+
+	return true
 }
 
 func grantSetKey(selector Selector) string {

@@ -220,6 +220,131 @@ authz.Check{
 
 A grant lives in data. A check lives in code. Authorization succeeds when at least one loaded grant satisfies the check.
 
+## Grant Expressions and Set Difference
+
+Some authorization questions are not answered by one grant. They are answered by
+starting with a base grant set and subtracting an exception grant set:
+
+```text
+effective result = base - exception
+```
+
+This is the same shape as a Zanzibar-style userset difference such as:
+
+```text
+viewer = allowed - blocked
+```
+
+In Gram, the main example today is risk policy evaluation:
+
+```text
+risk_policy_applies =
+  risk_policy:evaluate(policy_id)
+  - risk_policy:bypass(policy_id, runtime_dimensions)
+```
+
+Read that as:
+
+> Apply the policy if the user can evaluate the policy, unless the user also has
+> a bypass grant for this exact policy and this exact runtime target.
+
+The most important rule: **exception grants do not create access by themselves**.
+They only subtract something that the base side already proved.
+
+### Risk Policy Example
+
+Assume the user has these grants:
+
+```text
+1. risk_policy:evaluate
+   selector: {resource_kind: "risk_policy", resource_id: "policy_123"}
+
+2. risk_policy:bypass
+   selector: {
+     resource_kind: "risk_policy",
+     resource_id: "policy_123",
+     server_url: "https://abc.com"
+   }
+```
+
+There are two related questions, and their answers point in opposite directions:
+
+```text
+Question A: Does the bypass grant match this request?
+Question B: Does the policy still apply after subtracting bypass?
+```
+
+| Request being evaluated                    | Bypass grant matches?                                 | `risk_policy:evaluate - risk_policy:bypass` result                              |
+| ------------------------------------------ | ----------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `policy_123`, `server_url=https://bcd.com` | No. The bypass is only for `https://abc.com`.         | Policy applies. Base evaluate grant matches, and nothing subtracts it.          |
+| `policy_123`, `server_url=https://abc.com` | Yes. Same policy and same server URL.                 | Policy does not apply. The bypass subtracts the exact policy/server instance.   |
+| `policy_345`, `server_url=https://abc.com` | No. The bypass is for `policy_123`, not `policy_345`. | Policy does not apply because there is no base evaluate grant for `policy_345`. |
+
+The second row is the core set-difference case:
+
+```text
+base set:
+  {policy_id: policy_123, server_url: https://abc.com}
+
+exception set:
+  {policy_id: policy_123, server_url: https://abc.com}
+
+base - exception:
+  {}
+```
+
+The expression result is empty, so the policy is not applied for that request.
+
+The first row keeps the base result:
+
+```text
+base set:
+  {policy_id: policy_123, server_url: https://bcd.com}
+
+exception set:
+  {policy_id: policy_123, server_url: https://abc.com}
+
+base - exception:
+  {policy_id: policy_123, server_url: https://bcd.com}
+```
+
+The exception is real, but it is for a different concrete permission instance.
+It does not subtract the `https://bcd.com` decision.
+
+### MCP Example
+
+The same model can express "allow broad access except a narrow blocked target."
+For example:
+
+```text
+mcp_tool_call_allowed =
+  mcp:connect(toolset_id, tool)
+  - mcp:block(toolset_id, tool)
+```
+
+Assume the user has:
+
+```text
+1. mcp:connect
+   selector: {resource_kind: "mcp", resource_id: "toolset_123"}
+
+2. mcp:block
+   selector: {
+     resource_kind: "mcp",
+     resource_id: "toolset_123",
+     tool: "delete_database"
+   }
+```
+
+| Tool call being evaluated             | Block grant matches?                         | `mcp:connect - mcp:block` result                                                       |
+| ------------------------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `toolset_123`, `tool=search_docs`     | No. The block is only for `delete_database`. | Tool call is allowed.                                                                  |
+| `toolset_123`, `tool=delete_database` | Yes. Same toolset and same tool.             | Tool call is not allowed. The block subtracts the exact tool-call instance.            |
+| `toolset_456`, `tool=delete_database` | No. The block is for `toolset_123`.          | Tool call is not allowed unless another base `mcp:connect` grant covers `toolset_456`. |
+
+Again, the exception side only subtracts. A block/bypass/exception grant without
+a matching base grant never grants anything.
+
 ## Scopes vs Grants
 
 Scopes and grants are easy to confuse, but they answer different questions.
