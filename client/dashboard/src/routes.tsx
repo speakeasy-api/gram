@@ -182,7 +182,7 @@ const ROUTE_STRUCTURE = {
     component: Home,
   },
   chat: {
-    title: "Chat",
+    title: "Project Assistant",
     url: "chat",
     icon: "message-circle",
     // Layout route: renders the index (ChatHome) or a conversation subpage.

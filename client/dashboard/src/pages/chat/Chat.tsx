@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type ReactElement } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactElement,
+} from "react";
 import { Link, Outlet, useNavigate, useParams } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { useAssistantRuntime, useAssistantState } from "@assistant-ui/react";
@@ -25,7 +32,10 @@ import { useSlugs } from "@/contexts/Sdk";
 import {
   CHAT_LANDING_SUGGESTIONS,
   INSIGHTS_SUGGESTION_ICONS,
+  SLASH_COMMANDS,
+  type InsightsSuggestion,
 } from "@/lib/insights-suggestions";
+import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 
 // Shared pill-style icon button used by the page chrome (back affordances).
@@ -151,11 +161,38 @@ export function ChatLanding({
   const routes = useRoutes();
   const { sendPrompt } = useInsightsState();
   const [value, setValue] = useState("");
+  const [inputFocused, setInputFocused] = useState(false);
+  const [activeCommand, setActiveCommand] = useState(0);
   const { text: placeholder, visible: placeholderVisible } =
     useCyclingPlaceholder();
 
+  // Slash menu: typing "/" opens a filtered palette of starter prompts. The
+  // query is everything after the leading slash; matching is substring across
+  // the command title, label, and full prompt.
+  const slashQuery = value.startsWith("/") ? value.slice(1) : null;
+  const slashCommands = useMemo(() => {
+    if (slashQuery === null) return [];
+    const q = slashQuery.trim().toLowerCase();
+    if (!q) return SLASH_COMMANDS;
+    return SLASH_COMMANDS.filter(
+      (command) =>
+        command.title.toLowerCase().includes(q) ||
+        command.label.toLowerCase().includes(q) ||
+        command.prompt.toLowerCase().includes(q),
+    );
+  }, [slashQuery]);
+  const slashOpen = inputFocused && slashCommands.length > 0;
+
+  // Reset the highlighted row whenever the query (and therefore the filtered
+  // list) changes, so the selection never points past the end.
+  useEffect(() => {
+    setActiveCommand(0);
+  }, [slashQuery]);
+
   const firstName = user.displayName?.trim().split(/\s+/)[0];
-  const greeting = firstName ? `Hi ${firstName}, ask anything` : "Ask anything";
+  const greeting = firstName
+    ? `Hi ${firstName}, ask your Project Assistant about your AI usage`
+    : "Ask your Project Assistant about your AI usage";
 
   const startChat = (prompt: string) => {
     const trimmed = prompt.trim();
@@ -167,6 +204,35 @@ export function ChatLanding({
     void navigate(routes.chat.conversation.href("new"));
   };
 
+  const submit = () => {
+    if (value.startsWith("/")) {
+      // Slash mode: Enter runs the highlighted command — never send the raw
+      // "/…" text as a prompt.
+      const command = slashCommands[activeCommand];
+      if (command) startChat(command.prompt);
+      return;
+    }
+    startChat(value);
+  };
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Escape" && value.startsWith("/")) {
+      e.preventDefault();
+      setValue("");
+      return;
+    }
+    if (!slashOpen) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveCommand((i) => (i + 1) % slashCommands.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveCommand(
+        (i) => (i - 1 + slashCommands.length) % slashCommands.length,
+      );
+    }
+  };
+
   return (
     <div className="flex w-full flex-col gap-6">
       <div className="flex flex-col gap-4">
@@ -176,33 +242,128 @@ export function ChatLanding({
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            startChat(value);
+            submit();
           }}
           className="border-border bg-card focus-within:border-foreground/30 relative rounded-2xl border px-4 py-3 shadow-sm transition-colors"
         >
           <input
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            aria-label="Ask anything"
+            onKeyDown={handleKeyDown}
+            onFocus={() => setInputFocused(true)}
+            onBlur={() => setInputFocused(false)}
+            aria-label="Ask your Project Assistant about your AI usage"
+            role="combobox"
+            aria-expanded={slashOpen}
+            aria-controls="ask-slash-menu"
+            aria-activedescendant={
+              slashOpen ? `ask-slash-${activeCommand}` : undefined
+            }
             autoFocus={autoFocusInput}
             className="w-full bg-transparent text-base outline-none"
           />
           {/* Overlay placeholder so it can crossfade (native ::placeholder
-              can't transition between values). Shown only while empty. */}
+              can't transition between values). Shown only while empty; the
+              kbd hint advertises the slash menu. */}
           {value === "" && (
-            <span
-              aria-hidden="true"
-              className="text-muted-foreground pointer-events-none absolute inset-x-4 top-1/2 -translate-y-1/2 truncate text-base transition-opacity duration-300"
-              style={{ opacity: placeholderVisible ? 1 : 0 }}
-            >
-              {placeholder}
-            </span>
+            <>
+              <span
+                aria-hidden="true"
+                className="text-muted-foreground pointer-events-none absolute top-1/2 right-36 left-4 -translate-y-1/2 truncate text-base transition-opacity duration-300"
+                style={{ opacity: placeholderVisible ? 1 : 0 }}
+              >
+                {placeholder}
+              </span>
+              <div className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 flex items-center gap-1.5 text-xs">
+                <kbd className="border-border rounded border px-1.5 py-0.5 font-mono">
+                  /
+                </kbd>
+                for suggestions
+              </div>
+            </>
+          )}
+          {slashOpen && (
+            <SlashCommandMenu
+              commands={slashCommands}
+              activeIndex={activeCommand}
+              onHover={setActiveCommand}
+              onSelect={(command) => startChat(command.prompt)}
+            />
           )}
         </form>
       </div>
 
       <ChatHomeRecents />
       <ChatHomeSuggestions onPick={startChat} />
+    </div>
+  );
+}
+
+/**
+ * Command palette rendered under the composer while the user is typing a slash
+ * query. Selection (keyboard or hover) is owned by the parent so Enter and
+ * clicks resolve to the same highlighted row. Items use onMouseDown-prevent so
+ * clicking one doesn't blur the input (which would close the menu first).
+ */
+function SlashCommandMenu({
+  commands,
+  activeIndex,
+  onHover,
+  onSelect,
+}: {
+  commands: InsightsSuggestion[];
+  activeIndex: number;
+  onHover: (index: number) => void;
+  onSelect: (command: InsightsSuggestion) => void;
+}): ReactElement {
+  const activeRef = useRef<HTMLButtonElement | null>(null);
+
+  // Keep the keyboard-highlighted row visible. "nearest" is a no-op when the
+  // row is already on-screen, so hovering visible rows never triggers a scroll.
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex]);
+
+  return (
+    <div
+      id="ask-slash-menu"
+      role="listbox"
+      aria-label="Suggested prompts"
+      className="border-border bg-card absolute inset-x-0 top-full z-20 mt-2 max-h-80 overflow-y-auto rounded-xl border p-1 shadow-lg"
+    >
+      {commands.map((command, index) => {
+        const Icon = INSIGHTS_SUGGESTION_ICONS[command.icon ?? "sparkles"];
+        const active = index === activeIndex;
+        return (
+          <button
+            key={command.title}
+            id={`ask-slash-${index}`}
+            ref={active ? activeRef : undefined}
+            type="button"
+            role="option"
+            aria-selected={active}
+            // Prevent the input from blurring (which closes the menu) before
+            // the click selects.
+            onMouseDown={(e) => e.preventDefault()}
+            onMouseEnter={() => onHover(index)}
+            onClick={() => onSelect(command)}
+            className={cn(
+              "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left",
+              active ? "bg-muted" : "hover:bg-muted/60",
+            )}
+          >
+            <Icon className="text-muted-foreground size-4 shrink-0" />
+            <span className="flex min-w-0 flex-col">
+              <span className="text-foreground truncate text-sm font-medium">
+                {command.title}
+              </span>
+              <span className="text-muted-foreground truncate text-xs">
+                {command.label}
+              </span>
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
