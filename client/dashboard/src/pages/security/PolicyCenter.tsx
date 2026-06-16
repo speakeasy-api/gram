@@ -2081,10 +2081,31 @@ function PolicySheetBody({
                 title="Where should it evaluate?"
                 description="Leave all four on to apply everywhere. Narrow the scope to reduce noise or cost."
               />
-              <MessageTypesPicker
-                selectedMessageTypes={selectedMessageTypes}
-                setSelectedMessageTypes={setSelectedMessageTypes}
-              />
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {ALL_POLICY_MESSAGE_TYPES.map((type) => (
+                  <ScopeCard
+                    key={type}
+                    type={type as PolicyMessageType}
+                    checked={selectedMessageTypes.has(
+                      type as PolicyMessageType,
+                    )}
+                    onToggle={(checked) => {
+                      const updated = new Set(selectedMessageTypes);
+                      if (checked) {
+                        updated.add(type as PolicyMessageType);
+                      } else {
+                        updated.delete(type as PolicyMessageType);
+                      }
+                      setSelectedMessageTypes(updated);
+                    }}
+                  />
+                ))}
+              </div>
+              {selectedMessageTypes.size === 0 && (
+                <p className="text-destructive text-xs">
+                  Select at least one session part.
+                </p>
+              )}
               {coverageGaps.length > 0 && (
                 <Alert variant="warning">
                   <AlertDescription>
@@ -2383,13 +2404,19 @@ const ACTION_BADGE_CONFIG: Record<
   block: { label: "Block", variant: "destructive" },
 };
 
-const ACTION_OPTIONS: { value: PolicyAction; description: string }[] = [
+const ACTION_OPTIONS: {
+  value: PolicyAction;
+  title: string;
+  description: string;
+}[] = [
   {
     value: "flag",
+    title: "Log for review",
     description: "Log findings for review without interrupting the session",
   },
   {
     value: "block",
+    title: "Deny the request",
     description: "Deny prompts and tool calls that match detection rules",
   },
 ];
@@ -2400,6 +2427,39 @@ function ActionBadge({ action }: { action: PolicyAction }) {
     <Badge variant={config.variant}>
       <Badge.Text>{config.label}</Badge.Text>
     </Badge>
+  );
+}
+
+/** One session-part as a selectable card (Scope step). */
+function ScopeCard({
+  type,
+  checked,
+  onToggle,
+}: {
+  type: PolicyMessageType;
+  checked: boolean;
+  onToggle: (checked: boolean) => void;
+}) {
+  const meta = POLICY_MESSAGE_TYPE_META[type];
+  return (
+    <label
+      className={cn(
+        "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors",
+        checked
+          ? "border-foreground bg-muted/40"
+          : "border-border hover:bg-muted/30",
+      )}
+    >
+      <Checkbox
+        checked={checked}
+        onCheckedChange={(next) => onToggle(!!next)}
+        className="mt-0.5"
+      />
+      <div className="min-w-0">
+        <div className="text-sm font-medium">{meta.label}</div>
+        <div className="text-muted-foreground text-xs">{meta.description}</div>
+      </div>
+    </label>
   );
 }
 
@@ -2523,58 +2583,58 @@ function ActionPicker({
     flagOnlySelected && formAction === "block" ? "flag" : formAction;
 
   return (
-    <div className="space-y-2">
-      <Label className="text-sm font-medium">Action</Label>
-      <RadioGroup
-        value={actionValue}
-        onValueChange={(v) => {
-          if (flagOnlySelected && v === "block") {
-            return;
-          }
-          setFormAction(v as PolicyAction);
-        }}
-      >
-        <div className="border-border divide-border divide-y rounded-lg border">
-          {ACTION_OPTIONS.map((opt) => {
-            const disabled = flagOnlySelected && opt.value === "block";
+    <RadioGroup
+      value={actionValue}
+      onValueChange={(v) => {
+        if (flagOnlySelected && v === "block") {
+          return;
+        }
+        setFormAction(v as PolicyAction);
+      }}
+      className="space-y-2.5"
+    >
+      {ACTION_OPTIONS.map((opt) => {
+        const disabled = flagOnlySelected && opt.value === "block";
+        const selected = actionValue === opt.value;
 
-            return (
-              <label
-                key={opt.value}
-                htmlFor={`action-${opt.value}`}
-                className={cn(
-                  "flex items-start gap-3 p-3",
-                  disabled
-                    ? "cursor-not-allowed opacity-60"
-                    : "hover:bg-muted/50 cursor-pointer",
-                )}
-              >
-                <RadioGroupItem
-                  value={opt.value}
-                  id={`action-${opt.value}`}
-                  className="mt-0.5"
-                  disabled={disabled}
-                />
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <ActionBadge action={opt.value} />
-                  </div>
-                  <div className="text-muted-foreground mt-1 text-xs">
-                    {opt.description}
-                  </div>
-                  {disabled && (
-                    <div className="text-destructive mt-1 text-xs font-medium">
-                      Destructive Tools and Destructive CLI Commands support
-                      flagging only.
-                    </div>
-                  )}
+        return (
+          <label
+            key={opt.value}
+            htmlFor={`action-${opt.value}`}
+            className={cn(
+              "flex items-start gap-3 rounded-lg border p-3.5 transition-colors",
+              disabled
+                ? "border-border cursor-not-allowed opacity-60"
+                : selected
+                  ? "border-foreground bg-muted/40 cursor-pointer"
+                  : "border-border hover:bg-muted/30 cursor-pointer",
+            )}
+          >
+            <RadioGroupItem
+              value={opt.value}
+              id={`action-${opt.value}`}
+              className="mt-0.5"
+              disabled={disabled}
+            />
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <ActionBadge action={opt.value} />
+                <span className="text-sm font-medium">{opt.title}</span>
+              </div>
+              <div className="text-muted-foreground mt-1.5 text-xs">
+                {opt.description}
+              </div>
+              {disabled && (
+                <div className="text-destructive mt-1 text-xs font-medium">
+                  Destructive Tools and Destructive CLI Commands support
+                  flagging only.
                 </div>
-              </label>
-            );
-          })}
-        </div>
-      </RadioGroup>
-    </div>
+              )}
+            </div>
+          </label>
+        );
+      })}
+    </RadioGroup>
   );
 }
 
