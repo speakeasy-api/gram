@@ -7,7 +7,12 @@ import type {
   ElementsConfig,
   ElementsTransportFactory,
 } from "@gram-ai/elements";
-import { Chat, ChatHistory, GramElementsProvider } from "@gram-ai/elements";
+import {
+  Chat,
+  ChatHistory,
+  GramElementsProvider,
+  useThreadId,
+} from "@gram-ai/elements";
 import { stripMessageContextFraming } from "@/lib/projectAssistantTranscript";
 import {
   INSIGHTS_DOCK_CONTENT_VT_CLASS,
@@ -15,6 +20,7 @@ import {
   useInsightsDockCta,
 } from "@/hooks/useInsightsDockCta";
 import { useLocation } from "react-router";
+import { useRoutes } from "@/routes";
 import { motion } from "motion/react";
 import {
   getRouteSuggestions,
@@ -29,7 +35,6 @@ import {
   HistoryIcon,
   Loader2,
   Maximize2,
-  Minimize2,
   SquarePen,
   Terminal,
   X,
@@ -170,19 +175,12 @@ interface InsightsDockProps {
   onOpenHistory: () => void;
   /** Chat panel content, rendered inside the card when `open`. */
   panel: React.ReactNode;
-  /** Stretch the open chat panel to fill the content area. */
-  maximized: boolean;
 }
 
 /** Width/shape/elevation of the dock card across its states: chat panel
  *  full-screen, chat panel open, composer focused (or holding draft text),
  *  and collapsed pill. Activity is signalled by deepening shadow. */
-function dockCardShapeClass(
-  open: boolean,
-  composerExpanded: boolean,
-  maximized: boolean,
-): string {
-  if (open && maximized) return "h-full max-w-none rounded-2xl shadow-2xl";
+function dockCardShapeClass(open: boolean, composerExpanded: boolean): string {
   if (open) return "max-w-3xl rounded-2xl shadow-2xl";
   if (composerExpanded) return "max-w-2xl rounded-2xl shadow-xl";
   return "max-w-md rounded-full shadow-md hover:shadow-lg";
@@ -211,7 +209,6 @@ function InsightsDock({
   onDismiss,
   onOpenHistory,
   panel,
-  maximized,
 }: InsightsDockProps): ReactElement {
   const [value, setValue] = useState("");
   // Expansion is sticky state, not a focus mirror: it must survive the input
@@ -308,9 +305,6 @@ function InsightsDock({
     <div
       className={cn(
         "pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center px-4 pt-14 pb-8",
-        // Full-screen: anchor the wrapper to the whole content area so the
-        // card (h-full) fills it, keeping the floating-card margins.
-        open && maximized && "top-0 pt-8",
       )}
     >
       {/* Frosted veil under the dock: blurs the page content directly behind
@@ -325,7 +319,7 @@ function InsightsDock({
         className={cn(
           "border-border bg-card text-card-foreground pointer-events-auto w-full border",
           "transition-all duration-300 ease-out",
-          dockCardShapeClass(open, composerExpanded, maximized),
+          dockCardShapeClass(open, composerExpanded),
           // Pairs with the sidebar resume button for the dismiss/resume genie
           // (see useInsightsDockCta). The inner wrapper carries the content
           // name so text fades at the endpoints instead of warping mid-flight.
@@ -351,14 +345,7 @@ function InsightsDock({
           }
         }}
       >
-        <div
-          className={cn(
-            INSIGHTS_DOCK_CONTENT_VT_CLASS,
-            // Full-screen: the card is h-full, so switch the content wrapper
-            // to a column flex and let the panel row absorb the height.
-            open && maximized && "flex h-full flex-col",
-          )}
-        >
+        <div className={INSIGHTS_DOCK_CONTENT_VT_CLASS}>
           {/* Chat panel — grows up out of the dock when open. The 0fr->1fr grid
             row transition animates from zero height to the panel's fixed
             height without hardcoding it on the card; since the card is
@@ -369,28 +356,15 @@ function InsightsDock({
             className={cn(
               "grid grid-rows-[0fr] transition-[grid-template-rows] duration-300 ease-out",
               open && "grid-rows-[1fr]",
-              open && maximized && "min-h-0 flex-1",
             )}
           >
-            <div
-              className={cn("overflow-hidden", open && maximized && "h-full")}
-            >
+            <div className="overflow-hidden">
               {/* Same grey-tray-around-white-surface treatment as the
                   expanded composer, so opening the chat reads as the input
                   surface growing into the conversation rather than an
                   unrelated white panel appearing. */}
-              <div
-                className={cn(
-                  "bg-muted/40 rounded-2xl p-2",
-                  open && maximized && "h-full",
-                )}
-              >
-                <div
-                  className={cn(
-                    "border-border bg-card h-[min(640px,70vh)] overflow-hidden rounded-xl border",
-                    open && maximized && "h-full",
-                  )}
-                >
+              <div className="bg-muted/40 rounded-2xl p-2">
+                <div className="border-border bg-card h-[min(640px,70vh)] overflow-hidden rounded-xl border">
                   {panel}
                 </div>
               </div>
@@ -608,18 +582,15 @@ export function InsightsProvider({
   // the back affordance is hidden and only close is offered. True when opened
   // from inside an active chat via the in-panel history button.
   const [historyReturnable, setHistoryReturnable] = useState(false);
-  // Full-screen chat panel, toggled from the panel header. Reset on close so
-  // the next open always starts at the regular panel size.
-  const [panelMaximized, setPanelMaximized] = useState(false);
   useEffect(() => {
     if (!isExpanded) {
-      setPanelMaximized(false);
       setHistoryView(false);
       setHistoryReturnable(false);
     }
   }, [isExpanded]);
   const { theme } = useMoonshineConfig();
   const { pathname } = useLocation();
+  const routes = useRoutes();
 
   // Resolve effective values: per-page override wins, then the colocated
   // route-level suggestions (lib/insights-suggestions.ts), then the
@@ -851,6 +822,17 @@ export function InsightsProvider({
     setHistoryReturnable(false);
   }, []);
 
+  // Expand: leave the floating dock for the full-page chat, opening the
+  // current conversation (or a fresh one when none exists yet). Collapse the
+  // panel so a later return to the dock starts from the resting pill.
+  const handleExpandToPage = useCallback(
+    (threadId: string | null) => {
+      setIsExpanded(false);
+      routes.chat.conversation.goTo(threadId ?? "new");
+    },
+    [routes],
+  );
+
   // Global keyboard shortcut: Cmd+/ (Mac) / Ctrl+/ (PC). With the chat panel
   // closed it focuses the docked composer; with it open it collapses the
   // panel back into the composer pill.
@@ -1003,22 +985,7 @@ export function InsightsProvider({
                     >
                       <SquarePen className="size-4" />
                     </button>
-                    <button
-                      onClick={() => setPanelMaximized((m) => !m)}
-                      className={PANEL_ICON_BUTTON_CLASS}
-                      aria-label={
-                        panelMaximized ? "Exit full screen" : "Full screen"
-                      }
-                      title={
-                        panelMaximized ? "Exit full screen" : "Full screen"
-                      }
-                    >
-                      {panelMaximized ? (
-                        <Minimize2 className="size-4" />
-                      ) : (
-                        <Maximize2 className="size-4" />
-                      )}
-                    </button>
+                    <ExpandToPageButton onExpand={handleExpandToPage} />
                     {panelCloseButton}
                   </div>
                 </div>
@@ -1089,11 +1056,34 @@ export function InsightsProvider({
             onDismiss={handleDockDismiss}
             onOpenHistory={handleOpenHistory}
             panel={panelContent}
-            maximized={panelMaximized}
           />
         )}
       </div>
     </InsightsContext.Provider>
+  );
+}
+
+/**
+ * Expand affordance in the chat panel header. Reads the current conversation
+ * id from the runtime (so the full-page chat opens the same thread) and hands
+ * it to the provider, which navigates to `/chat/:chatId`. Lives inside
+ * GramElementsProvider so `useThreadId` resolves.
+ */
+function ExpandToPageButton({
+  onExpand,
+}: {
+  onExpand: (threadId: string | null) => void;
+}): ReactElement {
+  const { threadId } = useThreadId();
+  return (
+    <button
+      onClick={() => onExpand(threadId)}
+      className={PANEL_ICON_BUTTON_CLASS}
+      aria-label="Open in full page"
+      title="Open in full page"
+    >
+      <Maximize2 className="size-4" />
+    </button>
   );
 }
 
@@ -1113,14 +1103,17 @@ function isEmptyThreadError(err: unknown): boolean {
  * appends it to the current thread as a user message, triggering the
  * assistant to respond. It fires once per nonce so repeat clicks on the
  * same CTA still work.
+ *
+ * Exported so the standalone Chat page can reuse the same cold-thread retry
+ * logic when starting a conversation from the "Ask anything" composer.
  */
-function PendingPromptBridge({
+export function PendingPromptBridge({
   pending,
   onConsume,
 }: {
   pending: { text: string; nonce: number } | null;
   onConsume: () => void;
-}) {
+}): null {
   const assistantRuntime = useAssistantRuntime();
   const firedNonceRef = useRef<number | null>(null);
 

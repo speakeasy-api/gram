@@ -185,6 +185,18 @@ export function AppSidebar({
                 scope={scopeFor(routes.home)}
               />
 
+              {/* Chat — top-level, no group; a full-page entry to the
+                  Project Assistant alongside the docked composer */}
+              <ScopeGatedTopLevelItem
+                item={routes.chat}
+                scope={scopeFor(routes.chat)}
+              />
+
+              {/* Divider: sets Home + Chat apart from the grouped nav below */}
+              <li aria-hidden="true" className="my-3 px-1">
+                <div className="border-border border-t" />
+              </li>
+
               {/* Connect group */}
               <CollapsibleNavGroup
                 label="Connect"

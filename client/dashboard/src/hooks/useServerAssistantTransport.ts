@@ -113,6 +113,20 @@ export function useServerAssistantTransport(
         },
       },
     );
+
+    // React Query ties the mutate-level callbacks above to this component's
+    // observer: if the component unmounts before the request settles, they
+    // never fire (the request still completes). Dev StrictMode does exactly
+    // that — mount, fire, unmount, remount — which would orphan onSuccess
+    // while leaving the in-flight latch set, so the remount never re-fires and
+    // `enabled`-from-mount callers (the standalone /chat pages) hang with no
+    // assistant id forever. Release the latch on cleanup so the next run
+    // re-fires with a live observer whose callbacks actually run.
+    return () => {
+      if (inflightSlugRef.current === slugAtRequest) {
+        inflightSlugRef.current = null;
+      }
+    };
   }, [enabled, projectSlug, ensureManagedMutate]);
 
   const ready = assistantId !== "";
