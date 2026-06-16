@@ -15,10 +15,7 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { TextArea } from "@/components/ui/textarea";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import {
-  OnboardingStepper,
-  type Step,
-} from "@/pages/setup/components/onboarding-stepper";
+import { type Step } from "@/pages/setup/components/onboarding-stepper";
 import {
   Sheet,
   SheetContent,
@@ -26,7 +23,6 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import { Dialog } from "@/components/ui/dialog";
 import { Type } from "@/components/ui/type";
 import {
   PageTabsTrigger,
@@ -58,6 +54,8 @@ import {
   RefreshCw,
   Sparkles,
   SlidersHorizontal,
+  X,
+  Check,
 } from "lucide-react";
 import {
   useState,
@@ -65,6 +63,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  Fragment,
   type ReactNode,
 } from "react";
 import { useQueryState } from "nuqs";
@@ -179,8 +178,10 @@ const PROMPT_WIZARD_STEPS: Step[] = [
   POLICY_WIZARD_STEPS[3]!,
 ];
 
-/** Shared wizard chrome: the left step rail + the paged content column. The
- *  footer (Back/Continue/Create) lives in the sheet, driven by the parent. */
+/** Shared wizard chrome: a horizontal step indicator above the paged content.
+ *  On a full page the left rail (the drawer-style OnboardingStepper) reads as
+ *  cramped chrome, so steps run across the top instead. The footer
+ *  (Back/Continue/Create) lives in the page shell, driven by the parent. */
 function WizardShell({
   steps,
   currentStep,
@@ -193,16 +194,47 @@ function WizardShell({
   children: ReactNode;
 }) {
   return (
-    <div className="flex gap-8 py-4">
-      <div className="w-44 flex-shrink-0">
-        <OnboardingStepper
-          steps={steps}
-          currentStep={currentStep}
-          onStepClick={(i) => setCurrentStep(i)}
-          allowJumpAhead
-        />
-      </div>
-      <div className="min-w-0 flex-1 space-y-6">{children}</div>
+    <div className="space-y-8">
+      <nav className="flex items-center">
+        {steps.map((step, i) => {
+          const done = i < currentStep;
+          const active = i === currentStep;
+          return (
+            <Fragment key={step.id}>
+              {i > 0 && <div className="bg-border mx-2 h-px flex-1" />}
+              <button
+                type="button"
+                onClick={() => setCurrentStep(i)}
+                className="flex items-center gap-2"
+              >
+                <span
+                  className={cn(
+                    "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-medium transition-colors",
+                    active
+                      ? "bg-foreground text-background"
+                      : done
+                        ? "bg-foreground/70 text-background"
+                        : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {done ? <Check className="h-3.5 w-3.5" /> : i + 1}
+                </span>
+                <span
+                  className={cn(
+                    "text-sm",
+                    active
+                      ? "text-foreground font-medium"
+                      : "text-muted-foreground",
+                  )}
+                >
+                  {step.title}
+                </span>
+              </button>
+            </Fragment>
+          );
+        })}
+      </nav>
+      <div className="min-w-0 space-y-6">{children}</div>
     </div>
   );
 }
@@ -1496,30 +1528,33 @@ function PolicyCenterContent() {
           </Page.Section.Body>
         </Page.Section>
 
-        {/* Edit/Create Sheet */}
-        <Dialog
-          open={sheetOpen}
-          onOpenChange={(open) => {
-            setSheetOpen(open);
-            // Drop the deep-link param so the dialog doesn't reopen and the same
-            // id can be deep-linked again later.
-            if (!open) clearPolicyDeepLink();
-          }}
-        >
-          <Dialog.Content
-            className={cn(
-              "flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0",
-              // The guided create/edit flow is a centered wizard that needs room
-              // for the step rail; the type chooser stays compact.
-              isWizard ? "sm:max-w-5xl" : "sm:max-w-lg",
-            )}
-          >
-            <Dialog.Header className="px-6 pt-6">
-              <Dialog.Title>{sheetTitle}</Dialog.Title>
-              <Dialog.Description>{sheetDescription}</Dialog.Description>
-            </Dialog.Header>
-            <div className="flex-1 overflow-y-auto px-6">
-              <div className="space-y-6 py-4">
+        {/* Edit/Create page (full-bleed, not a modal — see AGE-2756) */}
+        {sheetOpen && (
+          <div className="bg-background fixed inset-0 z-50 flex flex-col">
+            <div className="border-border flex items-start justify-between gap-4 border-b px-8 py-5">
+              <div className="mx-auto flex w-full max-w-5xl items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <Type variant="subheading">{sheetTitle}</Type>
+                  <Type small muted className="mt-1">
+                    {sheetDescription}
+                  </Type>
+                </div>
+                <Button
+                  variant="tertiary"
+                  onClick={() => {
+                    setSheetOpen(false);
+                    clearPolicyDeepLink();
+                  }}
+                >
+                  <Button.LeftIcon>
+                    <X className="h-4 w-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>Close</Button.Text>
+                </Button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-8">
+              <div className="mx-auto w-full max-w-5xl space-y-6 py-8">
                 {isChoosingPolicyKind ? (
                   <PolicyKindChoice onSelect={handleChoosePolicyKind} />
                 ) : formPolicyKind === "risk" ? (
@@ -1577,52 +1612,54 @@ function PolicyCenterContent() {
               </div>
             </div>
             {!isChoosingPolicyKind && (
-              <Dialog.Footer className="border-border flex-row items-center justify-between border-t px-6 py-4">
-                {isWizard ? (
-                  <span className="text-muted-foreground text-xs">
-                    Step {wizardStep + 1} of {wizardSteps.length} ·{" "}
-                    {wizardSteps[wizardStep]?.title}
-                  </span>
-                ) : (
-                  <span />
-                )}
-                <div className="flex gap-2">
-                  {showFooterBack && (
-                    <Button variant="secondary" onClick={onFooterBack}>
-                      <Button.LeftIcon>
-                        <ArrowLeft className="h-4 w-4" />
-                      </Button.LeftIcon>
-                      <Button.Text>Back</Button.Text>
-                    </Button>
-                  )}
-                  {showWizardContinue ? (
-                    <Button
-                      onClick={() => setWizardStep(wizardStep + 1)}
-                      disabled={continueDisabled}
-                    >
-                      <Button.Text>Continue</Button.Text>
-                    </Button>
+              <div className="border-border bg-background border-t px-8 py-4">
+                <div className="mx-auto flex w-full max-w-5xl flex-row items-center justify-between">
+                  {isWizard ? (
+                    <span className="text-muted-foreground text-xs">
+                      Step {wizardStep + 1} of {wizardSteps.length} ·{" "}
+                      {wizardSteps[wizardStep]?.title}
+                    </span>
                   ) : (
-                    <Button onClick={handleSave} disabled={saveDisabled}>
-                      {mutationPending && (
-                        <Button.LeftIcon>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        </Button.LeftIcon>
-                      )}
-                      <Button.Text>
-                        {mutationPending
-                          ? "Saving..."
-                          : editingPolicy
-                            ? "Update"
-                            : "Create"}
-                      </Button.Text>
-                    </Button>
+                    <span />
                   )}
+                  <div className="flex gap-2">
+                    {showFooterBack && (
+                      <Button variant="secondary" onClick={onFooterBack}>
+                        <Button.LeftIcon>
+                          <ArrowLeft className="h-4 w-4" />
+                        </Button.LeftIcon>
+                        <Button.Text>Back</Button.Text>
+                      </Button>
+                    )}
+                    {showWizardContinue ? (
+                      <Button
+                        onClick={() => setWizardStep(wizardStep + 1)}
+                        disabled={continueDisabled}
+                      >
+                        <Button.Text>Continue</Button.Text>
+                      </Button>
+                    ) : (
+                      <Button onClick={handleSave} disabled={saveDisabled}>
+                        {mutationPending && (
+                          <Button.LeftIcon>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          </Button.LeftIcon>
+                        )}
+                        <Button.Text>
+                          {mutationPending
+                            ? "Saving..."
+                            : editingPolicy
+                              ? "Update"
+                              : "Create"}
+                        </Button.Text>
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              </Dialog.Footer>
+              </div>
             )}
-          </Dialog.Content>
-        </Dialog>
+          </div>
+        )}
 
         {/* View Run Panel */}
         <Sheet
