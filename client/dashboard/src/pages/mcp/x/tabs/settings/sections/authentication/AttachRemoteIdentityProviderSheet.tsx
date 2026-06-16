@@ -220,7 +220,7 @@ export function AttachRemoteIdentityProviderSheet({
     }> => {
       // Step 1: ensure a user_session_issuer exists. First-add auto-creates
       // one with the conservative interactive challenge mode and a 2-week
-      // session lifetime — these match the wire-user-session-issuer defaults.
+      // session lifetime.
       let issuerId = userSessionIssuer?.id;
       if (!issuerId) {
         const created = await client.userSessionIssuers.create({

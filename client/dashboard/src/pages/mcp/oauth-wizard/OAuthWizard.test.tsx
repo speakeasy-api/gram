@@ -17,11 +17,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => {
   return {
     addExternalOAuth: vi.fn().mockResolvedValue(undefined),
-    addOAuthProxy: vi.fn().mockResolvedValue(undefined),
-    createEnvironment: vi
-      .fn()
-      .mockResolvedValue({ slug: "env-new", name: "Toolset OAuth" }),
-    deleteEnvironment: vi.fn().mockResolvedValue(undefined),
+    createUserSessionIssuer: vi.fn().mockResolvedValue({ id: "usi-1" }),
+    discoverRemoteSessionIssuer: vi.fn().mockResolvedValue({}),
+    createRemoteSessionIssuer: vi.fn().mockResolvedValue({ id: "rsi-1" }),
+    createRemoteSessionClient: vi.fn().mockResolvedValue({ id: "rsc-1" }),
+    setToolsetUserSessionIssuer: vi.fn().mockResolvedValue(undefined),
     capture: vi.fn(),
     invalidateAllToolset: vi.fn(),
     invalidateAllGetMcpMetadata: vi.fn(),
@@ -53,24 +53,38 @@ vi.mock("@gram/client/react-query/addExternalOAuthServer.js", () => ({
   }),
 }));
 
-vi.mock("@gram/client/react-query/addOAuthProxyServer.js", () => ({
-  buildAddOAuthProxyServerMutation: () => ({
+vi.mock("@gram/client/react-query/createUserSessionIssuer.js", () => ({
+  buildCreateUserSessionIssuerMutation: () => ({
     mutationKey: [],
-    mutationFn: mocks.addOAuthProxy,
+    mutationFn: mocks.createUserSessionIssuer,
   }),
 }));
 
-vi.mock("@gram/client/react-query/createEnvironment.js", () => ({
-  buildCreateEnvironmentMutation: () => ({
+vi.mock("@gram/client/react-query/discoverRemoteSessionIssuer.js", () => ({
+  buildDiscoverRemoteSessionIssuerMutation: () => ({
     mutationKey: [],
-    mutationFn: mocks.createEnvironment,
+    mutationFn: mocks.discoverRemoteSessionIssuer,
   }),
 }));
 
-vi.mock("@gram/client/react-query/deleteEnvironment.js", () => ({
-  buildDeleteEnvironmentMutation: () => ({
+vi.mock("@gram/client/react-query/createRemoteSessionIssuer.js", () => ({
+  buildCreateRemoteSessionIssuerMutation: () => ({
     mutationKey: [],
-    mutationFn: mocks.deleteEnvironment,
+    mutationFn: mocks.createRemoteSessionIssuer,
+  }),
+}));
+
+vi.mock("@gram/client/react-query/createRemoteSessionClient.js", () => ({
+  buildCreateRemoteSessionClientMutation: () => ({
+    mutationKey: [],
+    mutationFn: mocks.createRemoteSessionClient,
+  }),
+}));
+
+vi.mock("@gram/client/react-query/setToolsetUserSessionIssuer.js", () => ({
+  buildSetToolsetUserSessionIssuerMutation: () => ({
+    mutationKey: [],
+    mutationFn: mocks.setToolsetUserSessionIssuer,
   }),
 }));
 
@@ -147,7 +161,6 @@ const toolset = {
   slug: "mytoolset",
   mcpSlug: "mytoolset",
   rawTools: [],
-  oauthProxyServer: undefined,
   oauthEnablementMetadata: { oauth2SecurityCount: 0 },
 } as unknown as Parameters<typeof ConnectOAuthModal>[0]["toolset"];
 
@@ -264,8 +277,10 @@ describe("OAuthWizard — happy proxy create", () => {
       expect(screen.getByRole("button", { name: "Done" })).toBeTruthy();
     });
 
-    expect(mocks.createEnvironment).toHaveBeenCalledTimes(1);
-    expect(mocks.addOAuthProxy).toHaveBeenCalledTimes(1);
+    expect(mocks.createUserSessionIssuer).toHaveBeenCalledTimes(1);
+    expect(mocks.createRemoteSessionIssuer).toHaveBeenCalledTimes(1);
+    expect(mocks.createRemoteSessionClient).toHaveBeenCalledTimes(1);
+    expect(mocks.setToolsetUserSessionIssuer).toHaveBeenCalledTimes(1);
     expect(mocks.invalidateAllToolset).toHaveBeenCalled();
     expect(mocks.invalidateAllGetMcpMetadata).toHaveBeenCalled();
     expect(mocks.invalidateAllListEnvironments).toHaveBeenCalled();
@@ -279,9 +294,11 @@ describe("OAuthWizard — happy proxy create", () => {
   });
 });
 
-describe("OAuthWizard — partial-failure rollback", () => {
-  it("invokes deleteEnvironment when addOAuthProxy fails and surfaces error", async () => {
-    mocks.addOAuthProxy.mockRejectedValueOnce(new Error("upstream rejected"));
+describe("OAuthWizard — provisioning failure", () => {
+  it("surfaces the error and returns to the credentials step when provisioning fails", async () => {
+    mocks.createRemoteSessionIssuer.mockRejectedValueOnce(
+      new Error("upstream rejected"),
+    );
     renderWizard();
 
     fireEvent.click(screen.getByRole("button", { name: /OAuth Proxy/ }));
@@ -312,13 +329,7 @@ describe("OAuthWizard — partial-failure rollback", () => {
       expect(screen.getByText(/upstream rejected/i)).toBeTruthy();
     });
 
-    expect(mocks.createEnvironment).toHaveBeenCalledTimes(1);
-    expect(mocks.addOAuthProxy).toHaveBeenCalledTimes(1);
-    expect(mocks.deleteEnvironment).toHaveBeenCalledTimes(1);
-    expect(mocks.deleteEnvironment).toHaveBeenCalledWith(
-      expect.objectContaining({
-        request: expect.objectContaining({ slug: "env-new" }),
-      }),
-    );
+    expect(mocks.createUserSessionIssuer).toHaveBeenCalledTimes(1);
+    expect(mocks.setToolsetUserSessionIssuer).not.toHaveBeenCalled();
   });
 });

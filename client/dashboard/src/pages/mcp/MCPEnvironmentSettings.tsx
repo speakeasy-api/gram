@@ -37,8 +37,6 @@ import { EnvironmentSwitcher } from "./EnvironmentSwitcher";
 import { EnvironmentVariableRow } from "./EnvironmentVariableRow";
 import {
   ConnectOAuthModal,
-  EditOAuthProxyModal,
-  GramOAuthProxyModal,
   OAuthDetailsModal,
   PageSection,
 } from "./MCPDetails";
@@ -62,8 +60,6 @@ import {
   toolsetConvertAction,
 } from "./toolsetAuthSurface";
 import { useEnvironmentVariables } from "./useEnvironmentVariables";
-import { shouldRenderWireUserSessionIssuerModal } from "./wire-user-session-issuer/rendering";
-import { WireUserSessionIssuerModal } from "./wire-user-session-issuer/WireUserSessionIssuerModal";
 
 // Empty array constant to avoid creating new references
 const EMPTY_ENVIRONMENTS: never[] = [];
@@ -979,21 +975,10 @@ function LegacyOAuthSection({
   convertAction: ToolsetConvertAction | null;
 }) {
   const [isOAuthModalOpen, setIsOAuthModalOpen] = useState(false);
-  const [isEditOAuthModalOpen, setIsEditOAuthModalOpen] = useState(false);
-  const [isGramOAuthModalOpen, setIsGramOAuthModalOpen] = useState(false);
   const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
-  const [
-    isWireUserSessionIssuerModalOpen,
-    setIsWireUserSessionIssuerModalOpen,
-  ] = useState(false);
-
-  const { data: environmentsData } = useListEnvironments();
-  const environments = environmentsData?.environments ?? [];
 
   const loginSecured = !!toolset.userSessionIssuerSlug;
-  const isOAuthConnected = !!(
-    toolset?.oauthProxyServer || toolset?.externalOauthServer
-  );
+  const isOAuthConnected = !!toolset?.externalOauthServer;
   const availableOAuthAuthCode =
     toolset?.oauthEnablementMetadata?.oauth2SecurityCount > 0;
   const externalMcpOAuthStatus = useExternalMcpOAuthConfigStatus(toolset.slug);
@@ -1006,17 +991,9 @@ function LegacyOAuthSection({
 
   const oauthParadigm = getOAuthParadigm(toolset);
 
-  const proxyEnvironmentSlug =
-    toolset.oauthProxyServer?.oauthProxyProviders?.[0]?.environmentSlug;
-  const proxyEnvironmentName =
-    environments.find((e) => e.slug === proxyEnvironmentSlug)?.name ??
-    proxyEnvironmentSlug ??
-    "unknown";
-
   const handleConfigureClick = () => {
     if (isOAuthConnected) return setIsOAuthDetailsModalOpen(true);
-    if (toolset.mcpIsPublic) return setIsOAuthModalOpen(true);
-    setIsGramOAuthModalOpen(true);
+    setIsOAuthModalOpen(true);
   };
 
   const disabledTooltipText = !toolset.mcpEnabled
@@ -1027,10 +1004,8 @@ function LegacyOAuthSection({
   // dispatcher sends them to the manage surface), but non-holders can land
   // here wired, so the legacy display still handles it.
   const userSessionIssuerWired = !!toolset.userSessionIssuerSlug;
-  // Wire-modal covers both OAuth Proxy paradigms (custom and gram-managed).
-  const showWireUserSessionIssuer = convertAction === "wire-modal";
-  // Once wired, the cloned CLIENT_ID/SECRET is no longer live — hide Configure
-  // so operators aren't steered back into the legacy paradigm.
+  // Once wired, the external OAuth config is inert — hide Configure so
+  // operators aren't steered back into the legacy paradigm.
   const hideConfigureButton = userSessionIssuerWired;
 
   return (
@@ -1047,14 +1022,6 @@ function LegacyOAuthSection({
               </Badge.LeftIcon>
               <Badge.Text>Login Secured</Badge.Text>
             </Badge>
-          )}
-          {showWireUserSessionIssuer && (
-            <Button
-              variant="tertiary"
-              onClick={() => setIsWireUserSessionIssuerModalOpen(true)}
-            >
-              <Button.Text>Wire User Session Issuer</Button.Text>
-            </Button>
           )}
           {convertAction === "attach-sheet" && (
             <ConvertToUserSessionsButton toolset={toolset} />
@@ -1092,25 +1059,14 @@ function LegacyOAuthSection({
         showConfigureAction={!hideConfigureButton}
         oauthParadigm={oauthParadigm}
         mcpEnabled={!!toolset.mcpEnabled}
-        proxyEnvironmentSlug={proxyEnvironmentSlug}
-        proxyEnvironmentName={proxyEnvironmentName}
         onConfigureClick={handleConfigureClick}
       />
 
       {/* OAuth Modals */}
-      <GramOAuthProxyModal
-        isOpen={isGramOAuthModalOpen}
-        onClose={() => setIsGramOAuthModalOpen(false)}
-        toolset={toolset}
-      />
       <OAuthDetailsModal
         isOpen={isOAuthDetailsModalOpen}
         onClose={() => setIsOAuthDetailsModalOpen(false)}
         toolset={toolset}
-        onEditRequest={() => {
-          setIsOAuthDetailsModalOpen(false);
-          setIsEditOAuthModalOpen(true);
-        }}
       />
       <ConnectOAuthModal
         isOpen={isOAuthModalOpen}
@@ -1118,32 +1074,12 @@ function LegacyOAuthSection({
         toolsetSlug={toolset.slug}
         toolset={toolset}
       />
-      {toolset.oauthProxyServer && (
-        <EditOAuthProxyModal
-          isOpen={isEditOAuthModalOpen}
-          onClose={() => setIsEditOAuthModalOpen(false)}
-          toolsetSlug={toolset.slug}
-          proxyServer={toolset.oauthProxyServer}
-        />
-      )}
-      {shouldRenderWireUserSessionIssuerModal({
-        showWireUserSessionIssuer,
-        isOpen: isWireUserSessionIssuerModalOpen,
-      }) && (
-        <WireUserSessionIssuerModal
-          isOpen={isWireUserSessionIssuerModalOpen}
-          onClose={() => setIsWireUserSessionIssuerModalOpen(false)}
-          toolset={toolset}
-        />
-      )}
     </PageSection>
   );
 }
 
 const PARADIGM_LABELS: Record<OAuthParadigm, string> = {
   external: "External OAuth",
-  gram: "Platform OAuth",
-  proxy: "OAuth Proxy",
 };
 
 function OAuthStatusDisplay({
@@ -1154,8 +1090,6 @@ function OAuthStatusDisplay({
   showConfigureAction,
   oauthParadigm,
   mcpEnabled,
-  proxyEnvironmentSlug,
-  proxyEnvironmentName,
   onConfigureClick,
 }: {
   isOAuthConnected: boolean;
@@ -1165,12 +1099,8 @@ function OAuthStatusDisplay({
   showConfigureAction: boolean;
   oauthParadigm: OAuthParadigm | null;
   mcpEnabled: boolean;
-  proxyEnvironmentSlug: string | undefined;
-  proxyEnvironmentName: string;
   onConfigureClick: () => void;
 }) {
-  const routes = useRoutes();
-
   if (loginSecured) {
     return (
       <div className="border-success-softest bg-success-softest rounded-lg border border-dashed p-8 text-center">
@@ -1194,27 +1124,8 @@ function OAuthStatusDisplay({
           {PARADIGM_LABELS[oauthParadigm]} is configured
         </p>
         <p className="text-success-foreground text-sm">
-          {oauthParadigm === "external" ? (
-            "Users will authenticate with your external OAuth server before accessing this MCP server."
-          ) : oauthParadigm === "gram" ? (
-            "Users will authenticate with Platform OAuth before accessing this MCP server."
-          ) : (
-            <>
-              The CLIENT_ID and CLIENT_SECRET values in the{" "}
-              {proxyEnvironmentSlug ? (
-                <routes.environments.environment.Link
-                  params={[proxyEnvironmentSlug]}
-                  className="underline"
-                >
-                  {proxyEnvironmentName}
-                </routes.environments.environment.Link>
-              ) : (
-                `"${proxyEnvironmentName}"`
-              )}{" "}
-              environment will be used to authenticate with the OAuth provider
-              before users can access this MCP server.
-            </>
-          )}
+          Users will authenticate with your external OAuth server before
+          accessing this MCP server.
         </p>
       </div>
     );

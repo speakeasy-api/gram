@@ -5,15 +5,12 @@ import type { Toolset } from "@/lib/toolTypes";
  * page shows. React-free so the matrix stays unit testable.
  */
 
-export type OAuthParadigm = "external" | "gram" | "proxy";
+// OAuth proxy has been retired, so external OAuth is the only remaining legacy
+// paradigm.
+export type OAuthParadigm = "external";
 
 export function getOAuthParadigm(toolset: Toolset): OAuthParadigm | null {
-  if (toolset.externalOauthServer) return "external";
-  if (!toolset.oauthProxyServer) return null;
-  return toolset.oauthProxyServer.oauthProxyProviders?.[0]?.providerType ===
-    "gram"
-    ? "gram"
-    : "proxy";
+  return toolset.externalOauthServer ? "external" : null;
 }
 
 /**
@@ -55,19 +52,16 @@ export function toolsetAuthSurface({
 }
 
 /**
- * Convert path offered on the "legacy" surface. Proxy paradigms migrate via
- * the wire modal (it clones the proxy's credentials); external OAuth has none
- * to clone, so it converts by attaching a fresh provider via the attach sheet.
+ * Convert path offered on the "legacy" surface. External OAuth has no upstream
+ * client to clone, so it converts by attaching a fresh provider via the attach
+ * sheet.
  */
-export type ToolsetConvertAction = "wire-modal" | "attach-sheet";
+export type ToolsetConvertAction = "attach-sheet";
 
 export function toolsetConvertAction(
   oauthParadigm: OAuthParadigm | null,
 ): ToolsetConvertAction | null {
   switch (oauthParadigm) {
-    case "proxy":
-    case "gram":
-      return "wire-modal";
     case "external":
       return "attach-sheet";
     case null:
@@ -107,9 +101,7 @@ export function mustConvertOAuthBeforePrivate({
  */
 export function externalOauthIssuerUrl(toolset: Toolset): string | undefined {
   const metadata = toolset.externalOauthServer?.metadata as
-    | Record<string, unknown>
-    | undefined
-    | null;
+    Record<string, unknown> | undefined | null;
   const issuer = metadata?.["issuer"];
   return typeof issuer === "string" && issuer.trim() ? issuer : undefined;
 }

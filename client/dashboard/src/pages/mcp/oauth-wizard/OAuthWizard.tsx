@@ -95,7 +95,7 @@ function WizardBody({
   const provided = useMemo(
     () =>
       oauthWizardMachine.provide({
-        actors: createWizardServices(client, queryClient, authedFetch),
+        actors: createWizardServices(client, authedFetch),
         actions: {
           invalidateOnExternalSuccess: () => {
             void invalidateAllToolset(queryClient);
