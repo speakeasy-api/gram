@@ -1,5 +1,7 @@
 // Migration of legacy OAuth proxy client registrations into
-// user_session_clients, run as part of CloneClientFromOAuthProxyProvider.
+// user_session_clients. Run as part of CloneClientFromOAuthProxyProvider for
+// custom providers, and by the usersessions gram-migration handler (via this
+// package's exported MigrateLegacyClientRegistrations) for gram providers.
 //
 // Legacy registrations live in Redis only, written by
 // oauth.ClientRegistrationService (server/internal/oauth/client_registration.go)
@@ -53,15 +55,17 @@ type legacyProxyClientInfo struct {
 	TokenEndpointAuthMethod string
 }
 
-// migrateLegacyClientRegistrations finds every MCP server attached to the
-// oauth_proxy_server being cloned, scans Redis for dynamic client
-// registrations under each server's public URL variants, and ensures a
-// matching user_session_clients row exists on the target user_session_issuer
-// — preserving each client_id so migrated MCP clients skip re-registration
-// and re-auth. Runs on the clone's transaction: any failure aborts the whole
-// clone so a partial migration never commits. Returns the number of rows
-// inserted (already-migrated registrations count as zero).
-func (s *Service) migrateLegacyClientRegistrations(ctx context.Context, txRepo *repo.Queries, projectID, oauthProxyServerID, userSessionIssuerID uuid.UUID) (int64, error) {
+// MigrateLegacyClientRegistrations finds every MCP server attached to
+// oauthProxyServerID, scans Redis for dynamic client registrations under each
+// server's public URL variants, and ensures a matching user_session_clients row
+// exists on userSessionIssuerID — preserving each client_id so migrated MCP
+// clients skip re-registration and re-auth. Runs on the caller's transaction
+// (via the passed repo) so any failure aborts the whole operation and a partial
+// migration never commits. Returns the number of rows inserted (already-migrated
+// registrations count as zero). Called by CloneClientFromOAuthProxyProvider for
+// custom providers and by the usersessions gram-migration handler for gram
+// providers; removed with the legacy OAuth proxy.
+func (s *Service) MigrateLegacyClientRegistrations(ctx context.Context, txRepo *repo.Queries, projectID, oauthProxyServerID, userSessionIssuerID uuid.UUID) (int64, error) {
 	endpoints, err := txRepo.ListToolsetMCPEndpointsForOAuthProxyServer(ctx, repo.ListToolsetMCPEndpointsForOAuthProxyServerParams{
 		OauthProxyServerID: uuid.NullUUID{UUID: oauthProxyServerID, Valid: true},
 		ProjectID:          projectID,

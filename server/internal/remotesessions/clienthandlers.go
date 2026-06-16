@@ -295,7 +295,7 @@ func (s *Service) CloneClientFromOAuthProxyProvider(ctx context.Context, payload
 	// server attached to this proxy provider into user_session_clients, on
 	// the same transaction: a failure here aborts the whole clone so a
 	// partial migration never commits.
-	migrated, err := s.migrateLegacyClientRegistrations(ctx, txRepo, *authCtx.ProjectID, provider.OauthProxyServerID, userIssuerID)
+	migrated, err := s.MigrateLegacyClientRegistrations(ctx, txRepo, *authCtx.ProjectID, provider.OauthProxyServerID, userIssuerID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "migrate legacy client registrations").LogError(ctx, logger)
 	}
