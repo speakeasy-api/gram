@@ -114,6 +114,7 @@ async function $do(
   const query = encodeFormQuery({
     "cursor": payload?.cursor,
     "limit": payload?.limit,
+    "status": payload?.status,
     "subject_urn": payload?.subject_urn,
     "user_session_issuer_id": payload?.user_session_issuer_id,
   });
