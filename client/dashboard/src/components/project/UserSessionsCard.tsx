@@ -4,14 +4,12 @@ import { useUserSessions } from "@gram/client/react-query";
 import { DashboardCard } from "@/components/ui/dashboard-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { sessionStatus, subjectLabel } from "@/lib/user-session-status";
+import {
+  sessionStatus,
+  subjectLabel,
+  STATUS_PRESENTATION,
+} from "@/lib/user-session-status";
 import { formatDistanceToNow } from "date-fns";
-
-const STATUS_DOT: Record<string, string> = {
-  active: "bg-emerald-500",
-  expired: "bg-muted-foreground",
-  revoked: "bg-destructive",
-};
 
 export function UserSessionsCard({
   viewAllHref,
@@ -50,7 +48,7 @@ export function UserSessionsCard({
               <span
                 className={cn(
                   "size-2 shrink-0 rounded-full",
-                  STATUS_DOT[sessionStatus(s)],
+                  STATUS_PRESENTATION[sessionStatus(s)].dotClass,
                 )}
               />
               <div className="min-w-0 flex-1">
