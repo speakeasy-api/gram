@@ -94,7 +94,7 @@ const DOCK_COLLAPSE_GRACE_MS = 350;
 
 // How recent a conversation must be (by last message) for the docked pill to
 // offer "Continue chat" — reopen it — instead of "Ask anything".
-const CONTINUE_WINDOW_MS = 5 * 60 * 1000;
+const CONTINUE_WINDOW_MS = 60 * 1000;
 
 /** How recently a grace-timer collapse must have fired for a navigation to
  *  undo it. Covers slow clicks and route transitions that outlast the grace
