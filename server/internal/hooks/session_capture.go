@@ -353,10 +353,8 @@ func claudeLastUserPromptIDFromAdditionalData(additionalData map[string]any) str
 	if additionalData == nil {
 		return ""
 	}
-	for _, key := range []string{"LastUserPromptID", "lastUserPromptID", "last_user_prompt_id"} {
-		if v, ok := additionalData[key].(string); ok {
-			return v
-		}
+	if v, ok := additionalData["LastUserPromptID"].(string); ok {
+		return v
 	}
 	return ""
 }
