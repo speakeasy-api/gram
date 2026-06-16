@@ -10,6 +10,7 @@ import type {
   ToolUsageShadowServerFilterOption,
 } from "@gram/client/models/components";
 import type { TargetTypes } from "@gram/client/models/components/gettoolusagesummarypayload";
+import { normalizeUserEmailFilter } from "./observeUserFilters";
 
 export const SERVER_FILTER_PATH = "gram.tool_call.source";
 export const USER_EMAIL_FILTER_PATH = "user.email";
@@ -70,10 +71,6 @@ export function selectedUserEmails(activeFilters: FilterChip[]): string[] {
     .flatMap((f) => f.filters)
     .map(normalizeUserEmailFilter)
     .filter(Boolean);
-}
-
-function normalizeUserEmailFilter(email: string): string {
-  return email.trim().toLowerCase();
 }
 
 export function selectedHookSources(activeFilters: FilterChip[]): string[] {
