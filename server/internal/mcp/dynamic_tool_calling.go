@@ -253,7 +253,7 @@ func handleSearchToolsCall(
 		ID: reqID,
 		Result: toolCallResult{
 			Content:           []json.RawMessage{chunk},
-			StructuredContent: nil,
+			StructuredContent: json.RawMessage(payload),
 			IsError:           false,
 		},
 	})
@@ -368,7 +368,7 @@ func handleDescribeToolsCall(
 		ID: reqID,
 		Result: toolCallResult{
 			Content:           []json.RawMessage{chunk},
-			StructuredContent: nil,
+			StructuredContent: json.RawMessage(payload),
 			IsError:           false,
 		},
 	})
