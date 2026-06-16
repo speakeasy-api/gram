@@ -1249,7 +1249,7 @@ function PolicyCenterContent() {
       sheetTitle = "New Prompt-based Policy";
       sheetDescription = "Describe the tool-call behavior you want to detect.";
     } else {
-      sheetTitle = "New Standard Policy";
+      sheetTitle = "New Policy";
       sheetDescription = "Configure detection rules to scan agent sessions.";
     }
   }
