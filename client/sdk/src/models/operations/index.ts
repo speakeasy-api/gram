@@ -224,6 +224,7 @@ export * from "./listtriggerdefinitions.js";
 export * from "./listtriggerinstances.js";
 export * from "./listusersessionclients.js";
 export * from "./listusersessionconsents.js";
+export * from "./listusersessionfacets.js";
 export * from "./listusersessionissuers.js";
 export * from "./listusersessions.js";
 export * from "./listversions.js";

@@ -55,6 +55,10 @@ export type ListUserSessionsRequest = {
    */
   status?: ListUserSessionsQueryParamStatus | undefined;
   /**
+   * Filter by the connecting client id.
+   */
+  clientId?: string | undefined;
+  /**
    * Pagination cursor: id of the last item from the previous page.
    */
   cursor?: string | undefined;
@@ -191,6 +195,7 @@ export type ListUserSessionsRequest$Outbound = {
   subject_urn?: string | undefined;
   user_session_issuer_id?: string | undefined;
   status?: string | undefined;
+  client_id?: string | undefined;
   cursor?: string | undefined;
   limit?: number | undefined;
   "Gram-Session"?: string | undefined;
@@ -207,6 +212,7 @@ export const ListUserSessionsRequest$outboundSchema: z.ZodMiniType<
     subjectUrn: z.optional(z.string()),
     userSessionIssuerId: z.optional(z.string()),
     status: z.optional(ListUserSessionsQueryParamStatus$outboundSchema),
+    clientId: z.optional(z.string()),
     cursor: z.optional(z.string()),
     limit: z.optional(z.int()),
     gramSession: z.optional(z.string()),
@@ -217,6 +223,7 @@ export const ListUserSessionsRequest$outboundSchema: z.ZodMiniType<
     return remap$(v, {
       subjectUrn: "subject_urn",
       userSessionIssuerId: "user_session_issuer_id",
+      clientId: "client_id",
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",

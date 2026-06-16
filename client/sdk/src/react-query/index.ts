@@ -318,6 +318,7 @@ export * from "./upsertOtelForwardingConfig.js";
 export * from "./userSessionClient.js";
 export * from "./userSessionClients.js";
 export * from "./userSessionConsents.js";
+export * from "./userSessionFacets.js";
 export * from "./userSessionIssuer.js";
 export * from "./userSessionIssuers.js";
 export * from "./userSessions.js";
