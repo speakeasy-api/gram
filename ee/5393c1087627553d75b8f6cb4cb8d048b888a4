@@ -1,31 +1,608 @@
-docs/rbac.md
-  s_95d069cf52f7b4::t_463313e03db09a 223-250,252-347
-  h_2620cc60cfd1e9 251
-server/internal/authz/expressions.go
-  s_95d069cf52f7b4::t_4d1c9d2788cdd1 183-188
-  s_95d069cf52f7b4::t_b87cbc7b29ef68 118,121-123,126,156-162
-  s_95d069cf52f7b4::t_506cd7ac5b0cc7 197-200
-  s_95d069cf52f7b4::t_9bf9016edc48d6 276-313
-  s_95d069cf52f7b4::t_1fbc56b8498c7c 182
+elements/docs/interfaces/GramChatMessage.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/mv/toolset.go
+  s_9971e86f513595::t_908660c9f3de54 78,87,89,123,131,179,193,203,250,258,270,285,296,363,372,374,410,415,423,464,469,489,497,543,585,729,931,1014,1054,1062,1101,1112,1121,1169,1185,1193,1216,1262,1302
+elements/docs/_media/globals.md
+  s_9971e86f513595::t_908660c9f3de54 1,5
+elements/docs/functions/convertGramMessagesToUIMessages.md
+  s_9971e86f513595::t_908660c9f3de54 1
+elements/docs/interfaces/TimeRangePickerProps.md
+  s_9971e86f513595::t_908660c9f3de54 1
+elements/docs/type-aliases/ModalTriggerPosition.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/customdomains/middleware.go
+  s_9971e86f513595::t_908660c9f3de54 38,59
+server/internal/toolsets/set_tool_variations_group.go
+  s_9971e86f513595::t_908660c9f3de54 47,54,67,69,79,81,91,107,111
+server/internal/assistants/compaction_persist.go
+  s_9971e86f513595::t_908660c9f3de54 73,76,79,88,90,93,99,101,111,116,121,129,161,165
+server/internal/risk/presidiofp/data/dbip-asn.mmdb.sha256
+  s_9971e86f513595::t_908660c9f3de54 1
+elements/docs/functions/describeStreamError.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/mcp/rpc_prompts_list.go
+  s_9971e86f513595::t_908660c9f3de54 106
+server/internal/risk/presidiofp/fp_split_test.go
+  s_9971e86f513595::t_908660c9f3de54 1-96
+mprocs.yaml
+  s_9971e86f513595::t_908660c9f3de54 42-44
+server/internal/usersessions/minthandler.go
+  s_9971e86f513595::t_908660c9f3de54 61,66,75,77,85,88,97,99,102,106,115,123,141
+server/internal/customdomains/impl.go
+  s_9971e86f513595::t_908660c9f3de54 101,122,130,143,163,170,182,185,194,216,222,225,231,242,255,260,272,276,298,303
+server/cmd/tools/sweep_false_positives/main.go
+  s_9971e86f513595::t_908660c9f3de54 1-330
+server/internal/aiintegrations/impl.go
+  s_9971e86f513595::t_908660c9f3de54 160,188,192,233,249,253
+elements/docs/globals.md
+  s_9971e86f513595::t_908660c9f3de54 1,5
+.mise-tasks/start/pystreams-multi.sh
+  s_9971e86f513595::t_908660c9f3de54 1-6
+elements/docs/interfaces/CalendarProps.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/gateway/proxy.go
+  s_9971e86f513595::t_908660c9f3de54 179,206,224,229,353,358,362,366,370,375,422,510,519,581,598,605,609,619,634,645,747,752,758,774,796,803,818,986,995
+elements/docs/interfaces/ModalConfig.md
+  s_9971e86f513595::t_908660c9f3de54 1
+.agents/skills/golang/SKILL.md
+  s_9971e86f513595::t_908660c9f3de54 423,532
+server/internal/chat/message_capture_strategy.go
+  s_9971e86f513595::t_908660c9f3de54 70
+elements/docs/interfaces/ElementsTransportContext.md
+  s_9971e86f513595::t_908660c9f3de54 1
+pystreams/src/pystreams/attr/__init__.py
+  s_9971e86f513595::t_908660c9f3de54 1-25
+server/internal/background/activities/process_workos_user_events.go
+  s_9971e86f513595::t_908660c9f3de54 58,67,86,111
+ts-framework/create-function/package.json
+  s_9971e86f513595::t_908660c9f3de54 4
+server/internal/mv/templates.go
+  s_9971e86f513595::t_908660c9f3de54 46,52,58,76,82,90
+elements/docs/interfaces/MessageContentProps.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/usersessions/clienthandlers.go
+  s_9971e86f513595::t_908660c9f3de54 39,44,54,87,96,98,132,139,151,153,157,170,174
+server/internal/mcp/resolved_mcp_endpoint.go
+  s_9971e86f513595::t_908660c9f3de54 306,316,332,342,376
+server/internal/risk/presidiofp/ip_asn.go
+  s_9971e86f513595::t_908660c9f3de54 1-80
+server/internal/admin/verifier.go
+  s_9971e86f513595::t_908660c9f3de54 40,59,65,75,79,88,90,97
+elements/docs/type-aliases/DangerousApiKeyAuthConfig.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/cmd/gram/streams.go
+  s_9971e86f513595::t_908660c9f3de54 15,273-281
+.github/filters.yaml
+  s_9971e86f513595::t_908660c9f3de54 69-70,72,75-85
+server/internal/background/activities/transition_deployment.go
+  s_9971e86f513595::t_908660c9f3de54 42
+elements/docs/interfaces/ReplayOptions.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/functions/process.go
+  s_9971e86f513595::t_908660c9f3de54 118,159,169,175,183,199,203,208,216,221,226,285
+elements/src/contexts/ThreadMetaContext.ts
+  s_9971e86f513595::t_908660c9f3de54 1-27
+elements/docs/type-aliases/CassettePart.md
+  s_9971e86f513595::t_908660c9f3de54 1
+pystreams/src/pystreams/cmd/flags_control.py
+  s_9971e86f513595::t_908660c9f3de54 1-21
+server/internal/background/activities/provision_functions_access.go
+  s_9971e86f513595::t_908660c9f3de54 49,54,66,72,77,88,93
+elements/docs/interfaces/TimeRangePreset.md
+  s_9971e86f513595::t_908660c9f3de54 1
+elements/docs/type-aliases/VARIANTS.md
+  s_9971e86f513595::t_908660c9f3de54 1
+pystreams/src/pystreams/deps/loop_lag.py
+  s_9971e86f513595::t_908660c9f3de54 1-53
+.mise-tasks/lint/pystreams.sh
+  s_9971e86f513595::t_908660c9f3de54 1-9
+pystreams/Dockerfile.pystreams
+  s_9971e86f513595::t_908660c9f3de54 1-90
+pystreams/src/pystreams/ping/handler.py
+  s_9971e86f513595::t_908660c9f3de54 1-27
+server/internal/assistants/mcp_auth_handler.go
+  s_9971e86f513595::t_908660c9f3de54 133,138,142,147,150,155,159,179,184,207,210,215,219,223,227,231,291,293,296,301,318
+ts-framework/create-function/CHANGELOG.md
+  s_9971e86f513595::t_908660c9f3de54 3-4
+elements/docs/interfaces/Cassette.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/mcp/rpc_resources_read.go
+  s_9971e86f513595::t_908660c9f3de54 69,73,81,89,97,102,116,121,216,246,281
+server/internal/assets/impl.go
+  s_9971e86f513595::t_908660c9f3de54 253,269,283,287,353,370,386,400,404,483,499,513,517,744,768,773,778,787,943,959,973,977,1009,1033,1038,1043,1052,1205,1228,1233,1238,1247,1278,1302,1315,1367,1372,1377,1386
+infra/gen_py/gram/ping/v1/processor_pb2.pyi
+  s_9971e86f513595::t_908660c9f3de54 11-14
+server/internal/background/activities/list_workos_organizations.go
+  s_9971e86f513595::t_908660c9f3de54 26
+ts-framework/functions/src/framework.test.ts
+  s_9971e86f513595::t_908660c9f3de54 459,469-495
+.mise-tasks/github/pre-cache.mts
+  s_9971e86f513595::t_908660c9f3de54 53-85,117
+pyproject.toml
+  s_9971e86f513595::t_908660c9f3de54 1-16
+elements/docs/_media/ElementsConfig.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/access/impl.go
+  s_9971e86f513595::t_908660c9f3de54 230,318,320,322,327,345,380,385,388,548,562,575,597,613,624,681,705,715,763,910,920,938,1082,1087,1090,1106,1122,1151,1156
+server/internal/background/activities/process_deployment.go
+  s_9971e86f513595::t_908660c9f3de54 100,153,168,182,192,206,240,245,253,258,344,349,357,362,431
+server/internal/mcp/authnchallenge_well_known.go
+  s_9971e86f513595::t_908660c9f3de54 83,108,121,135,160,215,219,262,278,291,308,317,349,370,391,396
+ts-framework/functions/src/mcp.ts
+  s_9971e86f513595::t_908660c9f3de54 247-301,307-318,320-331,333-334
+server/internal/background/activities/reap_functions.go
+  s_9971e86f513595::t_908660c9f3de54 82
+server/internal/background/activities/custom_domain_ingress.go
+  s_9971e86f513595::t_908660c9f3de54 96,100,108,112,126,140,148,160
+elements/docs/variables/MessageContent.md
+  s_9971e86f513595::t_908660c9f3de54 1
+elements/docs/type-aliases/Variant.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/keys/impl.go
+  s_9971e86f513595::t_908660c9f3de54 112,126,142,158,171,175,204,244,263,276,280
+pystreams/src/pystreams/deps/logging.py
+  s_9971e86f513595::t_908660c9f3de54 1-81
+server/internal/openapi/extract_speakeasy.go
+  s_9971e86f513595::t_908660c9f3de54 138,170,176,186,387,549,1023
+client/dashboard/src/components/insights-dock-shortcut-hint.tsx
+  s_9971e86f513595::t_908660c9f3de54 12-42,69
+server/internal/chat/impl.go
+  s_9971e86f513595::t_908660c9f3de54 207,220,227,263,281,332,352,370,402,513,541,543,545,605,613,636,649,787,830,863,943,969,993,1001,1024,1041,1061,1334
+elements/src/components/assistant-ui/thread-list.tsx
+  s_9971e86f513595::t_908660c9f3de54 7,14-31,128-132,136-142,152,157-171
+elements/docs/functions/sleep.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/assistantmemories/impl.go
+  s_9971e86f513595::t_908660c9f3de54 45,50,95,114
+elements/docs/interfaces/HistoryConfig.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/remotemcp/proxy/proxy.go
+  s_9971e86f513595::t_908660c9f3de54 360,437,472,531,583,1148
+server/internal/remotesessions/organizationissuerhandlers.go
+  s_9971e86f513595::t_908660c9f3de54 40,43,48,53,78,92,96,114,121,124,133,138,150,152,177,179,197,201,220,229,261,274,276,294,303,311,314,325,339,343
+server/package.json
+  s_9971e86f513595::t_908660c9f3de54 3
+ts-framework/functions/CHANGELOG.md
+  s_9971e86f513595::t_908660c9f3de54 3-10
+server/internal/oauth/impl.go
+  s_9971e86f513595::t_908660c9f3de54 262,271,312,321,324,335,344,355,375,391,397,403,414,419,470,478,482,488,509,513,530,538,543,551,557,574,579,610,615,623,628,637,640,665,697,715,756,769,801,927,931,937,942,964,972,979,990,997,1002,1005
+server/internal/triggers/impl.go
+  s_9971e86f513595::t_908660c9f3de54 116,132,142,157,191,204,216,222,230,268,281,345,355,368,373,393,467-471,475
+server/internal/telemetry/impl.go
+  s_9971e86f513595::t_908660c9f3de54 1203
+elements/docs/functions/useThreadId.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/uuidv7/uuidv7.go
+  s_9971e86f513595::t_908660c9f3de54 1-27
+server/internal/plugins/impl.go
+  s_9971e86f513595::t_908660c9f3de54 223,257,269,274,279,310,326,339,343,361,371,386,405,428,432,437,442,460,469,474,481,485,493,506,510,529,543,561,581,595,617,637,641,716,720,729,734,749,766,770,788,792,801,806,818,835,839,858,867,902,909,920,936,940,958,971,1005,1010,1041,1045,1053,1058,1103,1214,1376,1388,1404,1412,1416,1424,1428,1441,1465,1494,1532,1567,1757,1765,1825,1829
+server/internal/mcp/authnchallenge_revoke.go
+  s_9971e86f513595::t_908660c9f3de54 31,85
+elements/docs/functions/trackError.md
+  s_9971e86f513595::t_908660c9f3de54 1
+pystreams/src/pystreams/cmd/flags_service.py
+  s_9971e86f513595::t_908660c9f3de54 1-36
+client/dashboard/CHANGELOG.md
+  s_9971e86f513595::t_908660c9f3de54 3-30
+server/internal/assistants/service.go
+  s_9971e86f513595::t_908660c9f3de54 2124,2126,2129,2160,2166,2181,2192,2197,2207
+elements/docs/interfaces/ComponentOverrides.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/access/shadow_mcp.go
+  s_9971e86f513595::t_908660c9f3de54 58,70,93,96,100,103,116,123,126,155,161,189,201,205,253,306,310,322,326,389,450,462,532,568,635,664,675,687,689,691,886,891,898,915,926,934,946,980,983,986,988
+server/internal/background/activities/refresh_billing_usage.go
+  s_9971e86f513595::t_908660c9f3de54 61
+server/internal/risk/policy_bypass.go
+  s_9971e86f513595::t_908660c9f3de54 62,83,112,120,128,150,154,158,180,190,197,208,227,241,252,256,260,282,292,302,312,316,320,342,352,359,367,379,390,394,398
+server/internal/usage/tum.go
+  s_9971e86f513595::t_908660c9f3de54 34,49,62,74,84,96,100,119,137
+elements/docs/interfaces/WelcomeConfig.md
+  s_9971e86f513595::t_908660c9f3de54 1
+mise.toml
+  s_9971e86f513595::t_908660c9f3de54 38-41,169-170,279-286
+elements/docs/interfaces/AttachmentsConfig.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/background/activities/backfill_workos_global_roles.go
+  s_9971e86f513595::t_908660c9f3de54 37
+server/internal/background/activities/refresh_open_router_key.go
+  s_9971e86f513595::t_908660c9f3de54 33
+infra/gram_infra/pubsub/publisher.py
+  s_9971e86f513595::t_908660c9f3de54 18,30-44,76
+pystreams/tests/test_smoke.py
+  s_9971e86f513595::t_908660c9f3de54 1-2
+server/internal/integrations/impl.go
+  s_9971e86f513595::t_908660c9f3de54 80,98,115,155
+client/dashboard/src/components/command-palette/recentlyVisited.ts
+  s_9971e86f513595::t_908660c9f3de54 25-65
+elements/docs/interfaces/ElementsConfig.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/deployments/crud.go
+  s_9971e86f513595::t_908660c9f3de54 86,102,112,145,172,183,195,204,215,224,240,266,293,304,319
+server/internal/functions/auth.go
+  s_9971e86f513595::t_908660c9f3de54 95,100,106,115,125
+elements/CHANGELOG.md
+  s_9971e86f513595::t_908660c9f3de54 3-18
+server/internal/instances/impl.go
+  s_9971e86f513595::t_908660c9f3de54 187,239,252,257,262,266,280,285,295,313,320,326
+server/internal/mcp/rpc_tools_list.go
+  s_9971e86f513595::t_908660c9f3de54 103,130,160,180,215
+server/internal/chat/queries.sql
+  s_9971e86f513595::t_908660c9f3de54 234,245,302,313,345,546,557
+elements/docs/interfaces/ModelConfig.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/usage/impl.go
+  s_9971e86f513595::t_908660c9f3de54 108,116,141,148,154,166,172,178,206,209,243,250,269,288,306,322
+server/internal/admin/impl.go
+  s_9971e86f513595::t_908660c9f3de54 105,109,123,151,174,179,185,187,200,215,224,240,250,333,356,382,410,418,429
+pystreams/src/pystreams/cmd/flags_gcp.py
+  s_9971e86f513595::t_908660c9f3de54 1-19
+server/internal/background/activities/validate_deployment.go
+  s_9971e86f513595::t_908660c9f3de54 50,55,63,67,71,74
+elements/docs/functions/Replay.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/mcp/dynamic_tool_calling.go
+  s_9971e86f513595::t_908660c9f3de54 162,168,174,186,238,249,260,310,315,352,363,374
+server/internal/mcp/serveendpoint.go
+  s_9971e86f513595::t_908660c9f3de54 81,89,156,175,255,317,338,363,372,374,379
+server/internal/mv/toolfilters.go
+  s_9971e86f513595::t_908660c9f3de54 28
+elements/docs/functions/GramElementsProvider.md
+  s_9971e86f513595::t_908660c9f3de54 1
+elements/docs/type-aliases/RADII.md
+  s_9971e86f513595::t_908660c9f3de54 1
+elements/docs/variables/ToolFallback.md
+  s_9971e86f513595::t_908660c9f3de54 1
+elements/docs/interfaces/SidecarConfig.md
+  s_9971e86f513595::t_908660c9f3de54 1
+.mise-tasks/install/vscode.mts
+  s_9971e86f513595::t_908660c9f3de54 55-57
+elements/docs/type-aliases/Radius.md
+  s_9971e86f513595::t_908660c9f3de54 1
+elements/docs/type-aliases/Density.md
+  s_9971e86f513595::t_908660c9f3de54 1
+pystreams/src/pystreams/health/__init__.py
+  s_9971e86f513595::t_908660c9f3de54 1-136
+server/internal/background/activities/risk_analysis/presidio.go
+  s_9971e86f513595::t_908660c9f3de54 29,635-639,641
+server/internal/mcp/authnchallenge_idp_callback.go
+  s_9971e86f513595::t_908660c9f3de54 41,54,68,73,116,123,132,142,156,173
+server/internal/otelforwarding/impl.go
+  s_9971e86f513595::t_908660c9f3de54 127,152,156,185,200,204
+server/internal/risk/presidiofp/classify.go
+  s_9971e86f513595::t_908660c9f3de54 1-68
+server/CHANGELOG.md
+  s_9971e86f513595::t_908660c9f3de54 3-14
+infra/proto/gram/ping/v1/processor.proto
+  s_9971e86f513595::t_908660c9f3de54 22-35
+server/internal/authz/grants.go
+  s_9971e86f513595::t_908660c9f3de54 278,282,290,295
+server/internal/functions/impl.go
+  s_9971e86f513595::t_908660c9f3de54 78,82,96,101,106
+server/internal/access/role_manager.go
+  s_9971e86f513595::t_216e7d06c65771 160,165,182,184,187,203,245,249,292,295,305,308
+server/internal/risk/presidiofp/classify_test.go
+  s_9971e86f513595::t_908660c9f3de54 1-65
+server/internal/resources/impl.go
+  s_9971e86f513595::t_908660c9f3de54 88,96,103,116
+pystreams/Dockerfile.pystreams.dockerignore
+  s_9971e86f513595::t_908660c9f3de54 1-39
+server/internal/mv/deployment.go
+  s_9971e86f513595::t_908660c9f3de54 28,54,75,129
+server/internal/risk/presidiofp/ip.go
+  s_9971e86f513595::t_908660c9f3de54 1-275
+pystreams/tests/test_health.py
+  s_9971e86f513595::t_908660c9f3de54 1-62
+elements/docs/functions/getPresetRange.md
+  s_9971e86f513595::t_908660c9f3de54 1
+elements/docs/interfaces/CassetteMessage.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/agent/impl.go
+  s_9971e86f513595::t_908660c9f3de54 96
+server/internal/mcp/rpc_tools_call.go
+  s_9971e86f513595::t_908660c9f3de54 85,89,133,147,168,196,201,207,240,268,381,415,423,434,455,457,520,549,552,557,566,571
+server/internal/background/activities/verify_custom_domain.go
+  s_9971e86f513595::t_908660c9f3de54 81,86,92,121,132,135,139,143,159,165,177,182
+elements/docs/interfaces/GramChat.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/mcp/authnchallenge_register.go
+  s_9971e86f513595::t_908660c9f3de54 62,108,122,126,141,178,186,199,212
+client/dashboard/src/components/insights-dock.tsx
+  s_9971e86f513595::t_908660c9f3de54 27,47,169-170,212,506-521,602-610,615-619,796-797,841-851,906-918,957-985,987-991,993,997-1030,1035-1047,1090
+pystreams/pyproject.toml
+  s_9971e86f513595::t_908660c9f3de54 1-44
+server/internal/oauth/external_oauth.go
+  s_9971e86f513595::t_908660c9f3de54 236,255,277,283,288,296,299,304,313,319,325,332,341,347,370,413,418,422,427,430,438,446,450,455,460,463,478,508,511,517,522,536,541,547,564,571,598,614,632,650,668,674,679,688,768,791,796,801,809,818,1300
+elements/docs/interfaces/TimeRange.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/mcpendpoints/impl.go
+  s_9971e86f513595::t_908660c9f3de54 99,104,109,114,121,133,135,147,151,171,175,183,192,194,202,212,214,235,243,251,271,276,281,286,291,303,305,311,323,327,329,345,349,369,384,407,412,424,426,438,442
+server/internal/functions/deploy_fly.go
+  s_9971e86f513595::t_908660c9f3de54 153,155,161,166,170,196,206,215,224,229,258,268,277,286,291,339,369,384,398,408,440,458,472,477,489,495,512,546,901,914,925,937
+server/internal/environments/impl.go
+  s_9971e86f513595::t_908660c9f3de54 109,118,134,149,153,171,178,202,214,219,239,253,261,271,276,293,297,322,341,363,373,378,386,392,405,409,429,443,456,460,506,515,525,552,576,578,583,601,606,615,624,646,654,672,682,684,689
+server/internal/mcpservers/impl.go
+  s_9971e86f513595::t_908660c9f3de54 104,115,118,125,130,135,142,160,162,175,179,198,201,211,225,227,246,249,259,273,275,291,293,340,344,347,356,376,387,390,395,407,409,415,423,432,450,453,455,472,476,496,501,513,515,526,539,553,557
+server/internal/background/activities/process_workos_global_role_events.go
+  s_9971e86f513595::t_908660c9f3de54 65,84,109
+elements/docs/type-aliases/Model.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/mcp/authnchallenge.go
+  s_9971e86f513595::t_908660c9f3de54 300,332,358
+server/internal/background/activities/platform_usage_metrics.go
+  s_9971e86f513595::t_908660c9f3de54 42
+elements/docs/functions/convertGramMessagesToExported.md
+  s_9971e86f513595::t_908660c9f3de54 1
+client/dashboard/src/components/page-header.tsx
+  s_9971e86f513595::t_908660c9f3de54 59,198-234
+server/internal/mcp/rpc_initialize.go
+  s_9971e86f513595::t_908660c9f3de54 108
+server/internal/oops/pp_test.go
+  s_9971e86f513595::t_908660c9f3de54 32,56,79,97
+elements/package.json
+  s_9971e86f513595::t_908660c9f3de54 5
+server/internal/toolsets/set_user_session_issuer.go
+  s_9971e86f513595::t_908660c9f3de54 47,54,67,69,79,81,91,107,111
+server/internal/remotemcp/tools_call_usage_limits_interceptor.go
+  s_9971e86f513595::t_908660c9f3de54 87
+server/internal/tools/impl.go
+  s_9971e86f513595::t_908660c9f3de54 142,212,246,254,261,360,370,417,475,485
+elements/docs/interfaces/ComposerConfig.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/packages/impl.go
+  s_9971e86f513595::t_908660c9f3de54 87,141,158,168,187,191,201,221,228,238,246,268,272,281,301,322,366,371,381,389,393,407,417,451
+server/internal/projects/impl.go
+  s_9971e86f513595::t_908660c9f3de54 104,155,173,175,186,200,204,301,306,314,324,343,347,367,409,432,449,459,470,484,488,503,511
+server/internal/usersessions/issuerhandlers.go
+  s_9971e86f513595::t_908660c9f3de54 43,46,52,63,75,79,98,106,114,126,128,142,144,160,164,184,193,227,234,243,245,255,257,278,285,297,299,314,318,322,334,338
+server/internal/background/activities/backfill_workos_organization.go
+  s_9971e86f513595::t_908660c9f3de54 65,69,74,79
+elements/docs/interfaces/ToolsConfig.md
+  s_9971e86f513595::t_908660c9f3de54 1
+infra/pkg/gcp/publisher_test.go
+  s_9971e86f513595::t_908660c9f3de54 1-71
+pystreams/src/pystreams/cmd/receiver.py
+  s_9971e86f513595::t_908660c9f3de54 1-60
+server/internal/auth/auth.go
+  s_9971e86f513595::t_908660c9f3de54 69,86,110,129,131,136
+elements/docs/interfaces/ThemeConfig.md
+  s_9971e86f513595::t_908660c9f3de54 1
+elements/docs/interfaces/Dimension.md
+  s_9971e86f513595::t_908660c9f3de54 1
+elements/docs/type-aliases/ToolsFilter.md
+  s_9971e86f513595::t_908660c9f3de54 1
+pystreams/tests/test_tracing.py
+  s_9971e86f513595::t_908660c9f3de54 1-126
+server/internal/mcp/serve_platform.go
+  s_9971e86f513595::t_908660c9f3de54 61,67,79,83,88,91,101,106,139,196,234,248,251,267,270,408,414,425
+infra/tests/test_publisher.py
+  s_9971e86f513595::t_908660c9f3de54 1-64
+server/internal/openapi/process.go
+  s_9971e86f513595::t_908660c9f3de54 139,154,201,213,230,413,426
+server/internal/usersessions/sessionhandlers.go
+  s_9971e86f513595::t_908660c9f3de54 39,44,55,85,96,108,110,123,127,135
+elements/docs/interfaces/Suggestion.md
+  s_9971e86f513595::t_908660c9f3de54 1
+elements/docs/interfaces/Plugin.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/remotemcp/proxy/headers.go
+  s_9971e86f513595::t_908660c9f3de54 109
+server/internal/auth/sessions/sessions.go
+  s_9971e86f513595::t_908660c9f3de54 124,127
+server/internal/variations/impl.go
+  s_9971e86f513595::t_908660c9f3de54 94,137,184,187,195,216,226,236,242,250,289,305,309,327,332,344,346,358,362
+elements/docs/type-aliases/ColorScheme.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/mcp/authnchallenge_token.go
+  s_9971e86f513595::t_908660c9f3de54 56,98,254,328,331,334,338,343,347,352,365,375,383,409,422
+server/internal/remotemcp/discoverprotectedresource.go
+  s_9971e86f513595::t_908660c9f3de54 41,50,52,71
+server/internal/auditapi/impl.go
+  s_9971e86f513595::t_908660c9f3de54 105,112,119,157,165,187
+elements/docs/functions/useRecordCassette.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/external/impl.go
+  s_9971e86f513595::t_908660c9f3de54 102,111,143,151,161
+elements/docs/variables/PRESETS.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/externalmcp/process.go
+  s_9971e86f513595::t_908660c9f3de54 105,121,129,144,186,214,224,250,262,288
+client/dashboard/src/App.tsx
+  s_9971e86f513595::t_908660c9f3de54 22-26,188-218
+server/internal/background/activities/process_workos_org_events.go
+  s_9971e86f513595::t_908660c9f3de54 78,112,148,161
+server/internal/productfeatures/client.go
+  s_9971e86f513595::t_908660c9f3de54 64
+server/internal/assistants/impl.go
+  s_9971e86f513595::t_908660c9f3de54 95,102,119,128,142,163,178,198,213,231,236,245,256,258,270,296,302,309,368,370,372
+server/internal/authz/engine.go
+  s_9971e86f513595::t_908660c9f3de54 526,548,550,552
+client/dashboard/src/pages/assistants/Assistant.tsx
+  s_9971e86f513595::t_908660c9f3de54 1-3,7,10-23
+server/internal/auth/impl.go
+  s_9971e86f513595::t_908660c9f3de54 234,434,440,452,527,556,561,565,582,591,604,727,733,744,751,755,760,764,862,879,900
+server/internal/risk/presidiofp/email.go
+  s_9971e86f513595::t_908660c9f3de54 1-212
+server/internal/mcp/authnchallenge_authorize.go
+  s_9971e86f513595::t_908660c9f3de54 46,82,109,142,154,166,175,225,238
+server/internal/remotesessions/issuerhandlers.go
+  s_9971e86f513595::t_908660c9f3de54 69,74,80,82,118,121,126,131,156,170,174,192,201,204,213,218,234,236,261,263,281,285,304,314,347,355,367,369,382,384,403,412,420,423,434,448,452
+elements/docs/type-aliases/UnifiedSessionAuthConfig.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/risk/queries.sql
+  s_9971e86f513595::t_908660c9f3de54 322-323,330,336,339,363,425,445,507,532,600,736,805,821,841
+ts-framework/functions/package.json
+  s_9971e86f513595::t_908660c9f3de54 4
+server/internal/mcpmetadata/impl.go
+  s_9971e86f513595::t_908660c9f3de54 299,304,325,362,374,397,402,412,414,451,458,475,502,520,525,546,565,595,610,729,731,740,742,748,756,758,951,971,1154,1269,1307,1334,1398,1441,1453,1459,1487,1577,1596,1606,1615
+elements/docs/interfaces/GramChatOverview.md
+  s_9971e86f513595::t_908660c9f3de54 1
+elements/docs/interfaces/ShareButtonProps.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/risk/presidiofp/data/CREDITS.md
+  s_9971e86f513595::t_908660c9f3de54 1-33
+elements/src/hooks/useGramThreadListAdapter.tsx
+  s_9971e86f513595::t_908660c9f3de54 19-21,115-126,312-319,327-331,358-366
+server/internal/mcp/rpc_ping.go
+  s_9971e86f513595::t_908660c9f3de54 18
+server/internal/background/activities/cancel_assistants_subscription.go
+  s_9971e86f513595::t_908660c9f3de54 29
+.github/dependabot.yml
+  s_9971e86f513595::t_908660c9f3de54 91
+server/internal/risk/impl.go
+  s_9971e86f513595::t_30c0abbca0a8b9 378,567,642,675,765
+  s_9971e86f513595::t_908660c9f3de54 344,349,374,390,394,420,455,486,648,671,689,693,726,731,740,747,755,777,781,872,907,911,1044,1055,1090,1100,1113,1122,1135,1288,1316,1345,1397,1408,1418,1462,1473,1516,1521,1530,1539,1594,1612,1616,1634,1665,1698,1711,1715,1738,1746,1750,2063,2090,2121
+elements/docs/type-aliases/DateRangePreset.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/remotesessions/challenge.go
+  s_9971e86f513595::t_908660c9f3de54 378,382,390,397,400,403,416,425,432,441,446,452,485
+elements/docs/functions/ChatHistory.md
+  s_9971e86f513595::t_908660c9f3de54 1
+infra/pkg/gcp/publisher.go
+  s_9971e86f513595::t_908660c9f3de54 8-9,49,53-58,68-69,86,94-111,121-122
+server/internal/gateway/resources.go
+  s_9971e86f513595::t_908660c9f3de54 55,76,80,84,88,92,97,132
+server/internal/collections/impl.go
+  s_9971e86f513595::t_908660c9f3de54 110,128,140,146,150,157,161,174,178,198,212,222,242,247,261,269,285,301,305,323,328,342,353,359,365,377,381,399,409,423,435,450,454,472,482,496,514,534,549,553,577,585,593,601,744,749,846,849,861,863,878,881,893,895,909,922,930,934
+elements/docs/type-aliases/DENSITIES.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/thirdparty/openrouter/openrouter.go
+  s_9971e86f513595::t_908660c9f3de54 202,219,224,231,256,278,311,533
+elements/docs/type-aliases/FrontendTool.md
+  s_9971e86f513595::t_908660c9f3de54 1
+.github/workflows/pr.yaml
+  s_9971e86f513595::t_908660c9f3de54 49,135-141,312,351-404,963-971,982-984,994-1038,2053,2060
+elements/docs/functions/useChatId.md
+  s_9971e86f513595::t_908660c9f3de54 1
+elements/docs/README.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/remotesessions/clienthandlers.go
+  s_9971e86f513595::t_908660c9f3de54 45,50,55,62,69,85,87,97,99,116,130,142,146,151,179,188,193,198,203,215,217,221,226,241,243,253,255,260,281,291,303,307,312,381,386,391,403,405,410,421,423,431,448,450,470,484,490,504,508,528,533,539,545,547,554,585,594,596,601,625,630,644,659,663,675,679
+server/internal/deployments/impl.go
+  s_9971e86f513595::t_908660c9f3de54 133,181,188,199,249,264,295,310,343,354,410,422,436,475,479,492,533,537,549,587,600,614,623,640,671,680,684,705,739,748,769,774,801,805,817,846,857,867,883,888,911,915,927,957,960,969,973,985,988,997,1028,1037,1054,1057
+server/internal/externalmcp/impl.go
+  s_9971e86f513595::t_908660c9f3de54 84,92,100,104,123,131,162,170,181,193,249,257,263
+server/.golangci.yaml
+  s_9971e86f513595::t_908660c9f3de54 245
+pystreams/src/pystreams/cmd/multi.py
+  s_9971e86f513595::t_908660c9f3de54 1-158
+server/internal/usersessions/consenthandlers.go
+  s_9971e86f513595::t_908660c9f3de54 38,43,47,59,100,111,123,125,137,141
+server/internal/background/activities/get_all_organizations.go
+  s_9971e86f513595::t_908660c9f3de54 28
+server/internal/remotemcp/resources_read_usage_limits_interceptor.go
+  s_9971e86f513595::t_908660c9f3de54 88
+client/dashboard/package.json
+  s_9971e86f513595::t_908660c9f3de54 4
+server/internal/remotemcp/proxy/errors.go
+  s_9971e86f513595::t_908660c9f3de54 32,36,38,40
+server/internal/risk/exclusion.go
+  s_9971e86f513595::t_908660c9f3de54 154,185,198,207,222,234,238,268,274,296,306,321,335,339,363,368,373,385,389
+server/internal/oauth/wellknown/wellknown.go
+  s_9971e86f513595::t_908660c9f3de54 120,123,129
+server/internal/background/risk_analysis_coordinator.go
+  s_9971e86f513595::t_908660c9f3de54 19,74
+server/internal/platformtools/runtime/service.go
+  s_9971e86f513595::t_908660c9f3de54 188,191,198,219
+ts-framework/functions/src/framework.ts
+  s_9971e86f513595::t_908660c9f3de54 141-147,149
+elements/docs/interfaces/ErrorContext.md
+  s_9971e86f513595::t_908660c9f3de54 1
+elements/docs/type-aliases/GetSessionFn.md
+  s_9971e86f513595::t_908660c9f3de54 1
+infra/pyproject.toml
+  s_9971e86f513595::t_908660c9f3de54 15
+server/internal/chatsessions/impl.go
+  s_9971e86f513595::t_908660c9f3de54 71,74,106,131,134,140,145,151
+server/internal/memory/service.go
+  s_9971e86f513595::t_908660c9f3de54 269,292,295,301,308,313,325,335,356,386,390,501,613,620,635,660,664,731,745,749,787,804
+elements/docs/functions/defineFrontendTool.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/toolsets/updateoauthproxyserver.go
+  s_9971e86f513595::t_908660c9f3de54 59,71,74,82,87,98,107,112,123,125,130,136,144,146,159,161,180,186,203,205,233,237
+ts-framework/functions/src/mcp.test.ts
+  s_9971e86f513595::t_908660c9f3de54 221-285
+elements/docs/functions/TimeRangePicker.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/productfeatures/impl.go
+  s_9971e86f513595::t_908660c9f3de54 105
+server/internal/remotemcp/impl.go
+  s_9971e86f513595::t_908660c9f3de54 102,108,116,121,133,151,153,168,183,187,205,214,224,248,251,256,267,281,284,289,309,314,321,327,341,344,349,366,381,383,391,425,431,444,452,461,477,481,500,529,534,541,553,565,569
+elements/docs/interfaces/ErrorTrackingConfigOption.md
+  s_9971e86f513595::t_908660c9f3de54 1
+elements/docs/interfaces/Dimensions.md
+  s_9971e86f513595::t_908660c9f3de54 1
+elements/docs/variables/CREDITS_EXHAUSTED_MESSAGE.md
+  s_9971e86f513595::t_908660c9f3de54 1
+pystreams/src/pystreams/deps/tracing.py
+  s_9971e86f513595::t_908660c9f3de54 1-73
+server/internal/toolsets/impl.go
+  s_9971e86f513595::t_908660c9f3de54 134,180,193,203,223,227,246,297,302,320,333,341,421,449,482,504,521,525,541,555,570,583,587,623,625,668,680,694,728,734,740,743,748,752,765,817,822,826,848,853,869,873,877,883,893,904,906,927,931,947,960,962,981,1000,1015,1017,1039,1057,1062,1076,1091,1095,1108,1114,1121,1127,1130,1136,1139,1142,1145,1159,1161,1171,1182,1206,1217,1219,1240,1244,1345,1361,1369,1385,1400,1409
+.mise-tasks/install/uv.sh
+  s_9971e86f513595::t_908660c9f3de54 1-6
+elements/docs/functions/Calendar.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/mcpendpoints/resolve.go
+  s_9971e86f513595::t_908660c9f3de54 44,55
+server/internal/mcp/authnchallenge_consent.go
+  s_9971e86f513595::t_908660c9f3de54 123,146,161,171,176,180,189,191,195,202,229,241,248,257,269,273,293,300,314,316,329,335,352
+server/internal/mcp/rpc_resources_list.go
+  s_9971e86f513595::t_908660c9f3de54 61
+server/internal/hooks/server_names_impl.go
+  s_9971e86f513595::t_908660c9f3de54 49,97,136
+elements/docs/functions/Chat.md
+  s_9971e86f513595::t_908660c9f3de54 1
+elements/docs/functions/ShareButton.md
+  s_9971e86f513595::t_908660c9f3de54 1
+elements/docs/variables/MODELS.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/mcp/rpc_prompt_get.go
+  s_9971e86f513595::t_908660c9f3de54 32,36,45,50,66,77
+.mise-tasks/test/pystreams.sh
+  s_9971e86f513595::t_908660c9f3de54 1-8
+infra/gen/kcc.yaml
+  s_9971e86f513595::t_908660c9f3de54 25-42,56-60
+REVIEW.md
+  s_9971e86f513595::t_908660c9f3de54 43
+server/internal/functions/deploy_local.go
+  s_9971e86f513595::t_908660c9f3de54 101,106,111,120,129,134,139,159,164,169,178,187,192,197,217,222,225,230,241,264,268
+server/internal/organizations/impl.go
+  s_9971e86f513595::t_908660c9f3de54 174,213,222,225,230,240,256,269,283,285,302,309,318,350,361,384,389,397,406,408,438,443,451,453,456,473,487,491,524,531,533,536,539,542,552,565,567,581,585,614,645,670,680,692,694,701,706,717,726,738,752,758,765,785,788,801,806,815,827,833,847,860,865,874,895,917,929,938,948,953,967,984,993,1014,1019,1132,1140,1145,1159,1173,1182,1219,1230,1239,1244,1247
+server/internal/templates/impl.go
+  s_9971e86f513595::t_908660c9f3de54 115,129,133,139,160,162,177,181,208,225,227,239,243,248,253,278,302,318,323,328,359,393,410,433,438,444,531,533,538,572,583,586,616
+elements/docs/interfaces/ToolMentionsConfig.md
+  s_9971e86f513595::t_908660c9f3de54 1
+elements/docs/type-aliases/COLOR_SCHEMES.md
+  s_9971e86f513595::t_908660c9f3de54 1
+elements/docs/interfaces/MCPServerEntry.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/background/activities/deploy_function_runners.go
+  s_9971e86f513595::t_908660c9f3de54 75,89,105,118,136,168,178,211,216,219,222,227,232,237,242,247,252,256
+server/internal/mcp/impl.go
+  s_9971e86f513595::t_908660c9f3de54 349,352,358,371,377,440,539,543,594,661,663,697,716,723,728,803,833,856,1135
+elements/docs/type-aliases/ElementsTransportFactory.md
+  s_9971e86f513595::t_908660c9f3de54 1
+server/internal/oops/pp.go
+  s_9971e86f513595::t_908660c9f3de54 141,150
+server/internal/remotesessions/sessionhandlers.go
+  s_9971e86f513595::t_908660c9f3de54 39,45,56,90,95,109,121,125
+.mise-tasks/test/infra.sh
+  s_9971e86f513595::t_908660c9f3de54 8-10
+.mise-tasks/install/_default
+  s_9971e86f513595::t_908660c9f3de54 3
 ---
 {
   "schema_version": "authorship/3.0.0",
   "git_ai_version": "1.5.7",
   "base_commit_sha": "ee5393c1087627553d75b8f6cb4cb8d048b888a4",
   "prompts": {},
-  "humans": {
-    "h_2620cc60cfd1e9": {
-      "author": "tgmendes <tiago@speakeasy.com>"
-    }
-  },
   "sessions": {
-    "s_95d069cf52f7b4": {
+    "s_9971e86f513595": {
       "agent_id": {
         "tool": "codex",
-        "id": "019ecfff-79bd-7ac0-8355-76dbf61e503f",
+        "id": "019ecbe4-9fbc-7a21-bc41-2031dbdd6e97",
         "model": "gpt-5.5"
       },
-      "human_author": null
+      "human_author": "tgmendes <tiago@speakeasy.com>"
     }
   }
 }
