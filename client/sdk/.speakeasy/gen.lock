@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 9d47b9a858b32b5bbe3e56d6f029b169
+  docChecksum: 1bf9f35c08d73685811546f8d11ddc4f
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -143,7 +143,7 @@ trackedFiles:
   docs/models/components/cloneenvironmentrequestbody.md:
     last_write_checksum: sha1:b8f70e603600ad77b21e37d50cdcde0ee184a2c9
   docs/models/components/codexhookpayload.md:
-    last_write_checksum: sha1:d402c7c8e323f2fe7448f7bebcd0a7b6e2a72500
+    last_write_checksum: sha1:ffc59883f5d326f7a0b4b20a99587d713d2cf626
   docs/models/components/codexhookpayloadhookeventname.md:
     last_write_checksum: sha1:ed0c0ecf80563e919dac680664a82bfa925761ed
   docs/models/components/codexhookresult.md:
@@ -4059,7 +4059,7 @@ trackedFiles:
   src/models/components/cloneenvironmentrequestbody.ts:
     last_write_checksum: sha1:b1706b25cf4df77a03adf7a51df0566edb5b9147
   src/models/components/codexhookpayload.ts:
-    last_write_checksum: sha1:f47e339d3b12572cbee7faca605576c40607c608
+    last_write_checksum: sha1:d364b3d21470df3f5b405867214cc030f59d5736
   src/models/components/codexhookresult.ts:
     last_write_checksum: sha1:c2fc11be25bf3ec299077675ebe25642409b2aa4
   src/models/components/createassistantform.ts:
