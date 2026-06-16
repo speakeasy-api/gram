@@ -1222,6 +1222,11 @@ function PolicyCenterContent() {
     (wizardStep === 1 && selectedMessageTypes.size === 0);
   const saveDisabled =
     (formPolicyKind === "prompt" && !formPromptInstruction.trim()) ||
+    // A standard policy needs at least one detector or custom rule (the step-0
+    // gate, re-checked here since free-jump can skip it).
+    (isRiskWizard &&
+      selectedCategories.size === 0 &&
+      selectedCustomRuleIds.size === 0) ||
     (!formAutoName && !formName.trim()) ||
     selectedMessageTypes.size === 0 ||
     mutationPending;
@@ -2027,6 +2032,7 @@ function PolicySheetBody({
             steps={POLICY_WIZARD_STEPS}
             currentStep={wizardStep}
             onStepClick={(i) => setWizardStep(i)}
+            allowJumpAhead
           />
         </div>
         <div className="min-w-0 flex-1 space-y-6">
