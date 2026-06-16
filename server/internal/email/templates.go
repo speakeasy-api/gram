@@ -24,6 +24,7 @@ type TransactionalID string
 const (
 	transactionalIDTeamInvite                TransactionalID = "cml3n1h2n27o50i2rakc30bwb"
 	transactionalIDEnterpriseAdminOnboarding TransactionalID = "cmpqyxnzl00hj0jwtkibhyjdz"
+	transactionalIDAccessRequestCreated      TransactionalID = "cmq12wqp901sl0j0ll8cpr0yj"
 )
 
 // Template is implemented by every concrete email template. Concrete types
@@ -57,5 +58,10 @@ var RegisteredTemplates = []Template{
 	},
 	EnterpriseAdminOnboarding{
 		SetupLink: "",
+	},
+	AccessRequestCreated{
+		RequesterEmail: "",
+		DisplayName:    "",
+		ApprovalURL:    "",
 	},
 }
