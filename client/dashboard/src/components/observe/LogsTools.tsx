@@ -858,7 +858,8 @@ function LogsToolsTraceRow({
       ? (serverNameMappings.rawToDisplay.get(trace.targetId) ??
         trace.targetLabel)
       : trace.targetLabel;
-  const showTargetLabel = trace.targetType !== "local_tool";
+  const showTargetLabel =
+    trace.targetType !== "local_tool" && trace.targetType !== "skill";
 
   const editDialogProps = useMemo(() => {
     if (trace.targetType !== "shadow_mcp_server") return null;
@@ -935,9 +936,7 @@ function LogsToolsTraceRow({
                 {targetLabel}
               </span>
             )}
-            <span className="truncate font-mono text-sm">
-              {trace.toolName || "unknown"}
-            </span>
+            <span className="truncate font-mono text-sm">{trace.toolName}</span>
           </div>
         </div>
 
@@ -1001,7 +1000,7 @@ function LogsToolsTraceRow({
           )}
           <TraceLogsList
             logGroup={trace.logGroup}
-            toolName={trace.toolName || "unknown"}
+            toolName={trace.toolName}
             isExpanded={isExpanded}
             onLogClick={onLogClick}
             parentTimestamp={trace.startTimeUnixNano}

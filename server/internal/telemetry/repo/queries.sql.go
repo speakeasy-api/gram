@@ -2653,6 +2653,12 @@ func toolUsageHostedMatchIndexExpr(matchExpr, serverURLExpr string) string {
 func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error) {
 	conversationID := chFirstNonEmpty(chAttr("gen_ai.conversation.id"), "toString(attributes.`genai.conversation.id`)")
 	triggerInstanceID := chAttr("gram.trigger.instance_id")
+	toolCallArguments := chFirstNonEmpty(
+		chAttr("gen_ai.tool.call.arguments"),
+		"toString(attributes.`gen_ai.tool.call.arguments`)",
+		"JSONExtractString(toString(attributes), 'gen_ai.tool.call.arguments')",
+	)
+	toolCallSkillName := "JSONExtractString(" + toolCallArguments + ", 'skill')"
 	rawSB := sq.Select(
 		"id AS log_id",
 		"time_unix_nano",
@@ -2660,8 +2666,9 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		"gram_urn",
 		"event_source",
 		"toolset_slug",
-		"tool_name",
+		"tool_name AS raw_tool_name",
 		"tool_source",
+		"skill_name",
 		"user_email",
 		"external_user_id",
 		"user_id",
@@ -2669,7 +2676,7 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		chAttr("gen_ai.tool.call.result")+" AS tool_result",
 		chAttr("gram.hook.error")+" AS hook_error",
 		chAttr("gram.hook.block_reason")+" AS block_reason",
-		chAttr("gen_ai.tool.call.arguments")+" AS tool_call_arguments",
+		toolCallArguments+" AS tool_call_arguments",
 		chAttr("gram.mcp.match")+" AS mcp_match",
 		chAttr("gram.mcp.server_url")+" AS mcp_server_url",
 		chAttr("http.response.status_code")+" AS http_status_code_raw",
@@ -2683,7 +2690,7 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd)
 
-	sourceCondition := "((startsWith(gram_urn, 'tools:') AND toolset_slug != '') OR (event_source = 'hook' AND tool_name != ''))"
+	sourceCondition := "((startsWith(gram_urn, 'tools:') AND toolset_slug != '') OR (event_source = 'hook' AND (tool_name != '' OR skill_name != '' OR " + toolCallSkillName + " != '')))"
 	includeTriggerRows := arg.Query != ""
 	for _, filter := range arg.Filters {
 		if strings.HasPrefix(filter.Path, "gram.trigger.") {
@@ -2730,7 +2737,6 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		sourceArgs = append(sourceArgs, rawArgs...)
 	}
 
-	skillName := "JSONExtractString(tool_call_arguments, 'skill')"
 	userKind := chMultiIf(
 		"user_email != ''", "'"+toolUsageUserKindEmail+"'",
 		"external_user_id != ''", "'"+toolUsageUserKindExternalUserID+"'",
@@ -2750,27 +2756,32 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		"trigger_event_id != ''", "trigger_event_id",
 		"toString(log_id)",
 	)
+	eventSkillName := chFirstNonEmpty("skill_name", "JSONExtractString(tool_call_arguments, 'skill')")
+	skillName := "anyIf(" + eventSkillName + ", " + eventSkillName + " != '') OVER (PARTITION BY " + logGroupKind + ", " + logGroupValue + ")"
+	hasSkillTool := "max(toUInt8(raw_tool_name = 'Skill')) OVER (PARTITION BY " + logGroupKind + ", " + logGroupValue + ") = 1"
+	isSkillCall := "(" + hasSkillTool + " OR " + skillName + " != '')"
+	skillLabel := chFirstNonEmpty(skillName, "''")
 	targetType := chMultiIf(
 		"event_source != 'hook' AND toolset_slug != ''", "'"+ToolUsageTargetTypeHostedMCP+"'",
-		skillName+" != ''", "'"+ToolUsageTargetTypeSkill+"'",
+		isSkillCall, "'"+ToolUsageTargetTypeSkill+"'",
 		"tool_source != ''", "'"+ToolUsageTargetTypeShadowMCP+"'",
 		"'"+ToolUsageTargetTypeLocalTool+"'",
 	)
 	targetKind := chMultiIf(
 		"event_source != 'hook' AND toolset_slug != ''", "'"+toolUsageTargetKindServer+"'",
-		skillName+" != ''", "'"+toolUsageTargetKindSkill+"'",
+		isSkillCall, "'"+toolUsageTargetKindSkill+"'",
 		"tool_source != ''", "'"+toolUsageTargetKindServer+"'",
 		"'"+toolUsageTargetKindLocalTools+"'",
 	)
 	targetID := chMultiIf(
 		"event_source != 'hook' AND toolset_slug != ''", "toolset_slug",
-		skillName+" != ''", skillName,
+		isSkillCall, skillLabel,
 		"tool_source != ''", "tool_source",
 		"'local'",
 	)
 	targetLabel := chMultiIf(
 		"event_source != 'hook' AND toolset_slug != ''", "toolset_slug",
-		skillName+" != ''", skillName,
+		isSkillCall, skillLabel,
 		"tool_source != ''", "tool_source",
 		"'Local Tools'",
 	)
@@ -2779,28 +2790,28 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		targetType = chMultiIf(
 			"event_source != 'hook' AND toolset_slug != ''", "'"+ToolUsageTargetTypeHostedMCP+"'",
 			hostedMatchCondition, "'"+ToolUsageTargetTypeHostedMCP+"'",
-			skillName+" != ''", "'"+ToolUsageTargetTypeSkill+"'",
+			isSkillCall, "'"+ToolUsageTargetTypeSkill+"'",
 			"tool_source != ''", "'"+ToolUsageTargetTypeShadowMCP+"'",
 			"'"+ToolUsageTargetTypeLocalTool+"'",
 		)
 		targetKind = chMultiIf(
 			"event_source != 'hook' AND toolset_slug != ''", "'"+toolUsageTargetKindServer+"'",
 			hostedMatchCondition, "'"+toolUsageTargetKindServer+"'",
-			skillName+" != ''", "'"+toolUsageTargetKindSkill+"'",
+			isSkillCall, "'"+toolUsageTargetKindSkill+"'",
 			"tool_source != ''", "'"+toolUsageTargetKindServer+"'",
 			"'"+toolUsageTargetKindLocalTools+"'",
 		)
 		targetID = chMultiIf(
 			"event_source != 'hook' AND toolset_slug != ''", "toolset_slug",
 			hostedMatchCondition, "arrayElement(?, hosted_match_index)",
-			skillName+" != ''", skillName,
+			isSkillCall, skillLabel,
 			"tool_source != ''", "tool_source",
 			"'local'",
 		)
 		targetLabel = chMultiIf(
 			"event_source != 'hook' AND toolset_slug != ''", "toolset_slug",
 			hostedMatchCondition, "arrayElement(?, hosted_match_index)",
-			skillName+" != ''", skillName,
+			isSkillCall, skillLabel,
 			"tool_source != ''", "tool_source",
 			"'Local Tools'",
 		)
@@ -2827,7 +2838,7 @@ SELECT
 	if(event_source = 'hook', CAST(multiIf(block_reason != '', 'blocked', hook_error != '', 'failure', tool_result != '', 'success', 'pending') AS Nullable(String)), CAST(NULL AS Nullable(String))) AS hook_status,
 	if(event_source = 'hook', CAST(multiIf(block_reason != '', 3, hook_error != '', 2, tool_result != '', 1, 0) AS Nullable(UInt8)), CAST(NULL AS Nullable(UInt8))) AS hook_status_rank,
 	nullIf(block_reason, '') AS block_reason
-FROM (%s)`, logGroupKind, logGroupValue, chMultiIf(skillName+" != ''", skillName, "tool_name"), targetType, targetKind, targetID, targetLabel, userKey, userKey, userKind, sourceSQL)
+FROM (%s)`, logGroupKind, logGroupValue, chMultiIf(isSkillCall, skillLabel, "raw_tool_name"), targetType, targetKind, targetID, targetLabel, userKey, userKey, userKind, sourceSQL)
 
 	normalizedArgs := make([]any, 0, 2+len(sourceArgs))
 	if len(hostedToolsetSlugs) > 0 {
@@ -2874,6 +2885,12 @@ normalized_traces AS (
 
 func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any, error) {
 	httpStatus := "toInt32OrZero(" + chAttr("http.response.status_code") + ")"
+	toolCallArguments := chFirstNonEmpty(
+		chAttr("gen_ai.tool.call.arguments"),
+		"toString(attributes.`gen_ai.tool.call.arguments`)",
+		"JSONExtractString(toString(attributes), 'gen_ai.tool.call.arguments')",
+	)
+	eventSkillName := chFirstNonEmpty("skill_name", "JSONExtractString("+toolCallArguments+", 'skill')")
 	userKind := chMultiIf(
 		"user_email != ''", "'"+toolUsageUserKindEmail+"'",
 		"external_user_id != ''", "'"+toolUsageUserKindExternalUserID+"'",
@@ -2909,7 +2926,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		"any(user_email) AS user_email",
 		"any(external_user_id) AS external_user_id",
 		"any(user_id) AS user_id",
-		"any(skill_name) AS skill_name",
+		"anyIf("+eventSkillName+", "+eventSkillName+" != '') AS skill_name",
 		"any("+chAttr("gram.mcp.match")+") AS mcp_match",
 		"any("+chAttr("gram.mcp.server_url")+") AS mcp_server_url",
 		"max(if("+chAttr("gen_ai.tool.call.result")+" != '', 1, 0)) AS has_result",
@@ -2921,7 +2938,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		Where("time_unix_nano <= ?", arg.TimeEnd).
 		Where("telemetry_logs.event_source = 'hook'").
 		Where("trace_id IS NOT NULL AND trace_id != ''").
-		Where("telemetry_logs.tool_name != ''").
+		Where("(telemetry_logs.tool_name != '' OR telemetry_logs.skill_name != '' OR JSONExtractString(" + toolCallArguments + ", 'skill') != '')").
 		GroupBy("trace_id")
 
 	hostedSQL, hostedArgs, err := hostedSB.ToSql()

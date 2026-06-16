@@ -106,7 +106,64 @@ func TestListToolUsageTraces_ReturnsHostedShadowLocalAndSkills(t *testing.T) {
 
 	skill := byTarget["skill:golang"]
 	require.NotNil(t, skill)
+	require.Equal(t, "golang", skill.TargetID)
+	require.Equal(t, "golang", skill.TargetLabel)
 	require.Equal(t, "golang", skill.ToolName)
+}
+
+func TestListToolUsageTraces_DerivesSkillNameFromToolInput(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+	traceID := uuid.New().String()
+
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      projectID,
+		deploymentID:   uuid.New().String(),
+		timestamp:      now.Add(-5 * time.Minute),
+		traceID:        traceID,
+		userEmail:      "dana@example.com",
+		hookSource:     "claude-code",
+		toolName:       "Skill",
+		skillName:      "golang",
+		conversationID: "conv-skill",
+	})
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      projectID,
+		deploymentID:   uuid.New().String(),
+		timestamp:      now.Add(-4 * time.Minute),
+		traceID:        traceID,
+		userEmail:      "dana@example.com",
+		hookSource:     "claude-code",
+		toolName:       "Skill",
+		skillName:      "golang",
+		result:         `"ok"`,
+		conversationID: "conv-skill",
+	})
+
+	time.Sleep(200 * time.Millisecond)
+
+	result, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{
+		From:  now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:    now.Add(1 * time.Hour).Format(time.RFC3339),
+		Limit: 10,
+		Sort:  "desc",
+	})
+
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.NotNil(t, result)
+	require.Len(t, result.Traces, 1)
+	require.Equal(t, gen.ToolUsageTargetType("skill"), result.Traces[0].TargetType)
+	require.Equal(t, "golang", result.Traces[0].TargetID)
+	require.Equal(t, "golang", result.Traces[0].TargetLabel)
+	require.Equal(t, "golang", result.Traces[0].ToolName)
+	require.Equal(t, uint64(2), result.Traces[0].LogCount)
+	require.NotNil(t, result.Traces[0].HookStatus)
+	require.Equal(t, "success", *result.Traces[0].HookStatus)
 }
 
 func TestListToolUsageTraces_FiltersByTargetsUsersAndHookSource(t *testing.T) {
