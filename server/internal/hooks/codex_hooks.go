@@ -143,6 +143,10 @@ func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload
 		if err := s.writeCodexUserPromptToPG(ctx, payload, metadata); err != nil {
 			s.logger.ErrorContext(ctx, "failed to persist Codex user prompt", attr.SlogError(err))
 		}
+	case "Stop":
+		if err := s.writeCodexAssistantResponseToPG(ctx, payload, metadata); err != nil {
+			s.logger.ErrorContext(ctx, "failed to persist Codex assistant response", attr.SlogError(err))
+		}
 	}
 }
 
@@ -413,4 +417,65 @@ func (s *Service) writeCodexUserPromptToPG(ctx context.Context, payload *gen.Cod
 	}
 
 	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCodexChatTitle)
+}
+
+func (s *Service) writeCodexAssistantResponseToPG(ctx context.Context, payload *gen.CodexPayload, metadata *SessionMetadata) error {
+	if metadata.SessionID == "" {
+		return nil
+	}
+
+	content := conv.PtrValOr(payload.LastAssistantMessage, "")
+	if content == "" {
+		return nil
+	}
+
+	projectID, err := uuid.Parse(metadata.ProjectID)
+	if err != nil {
+		return fmt.Errorf("invalid project ID for Codex assistant response: %w", err)
+	}
+
+	chatID := sessionIDToUUID(metadata.SessionID)
+
+	msgParams := chatRepo.CreateChatMessageParams{
+		ChatID:           chatID,
+		ProjectID:        projectID,
+		Role:             "assistant",
+		Content:          content,
+		Model:            conv.ToPGTextEmpty(conv.PtrValOr(payload.Model, "")),
+		UserID:           conv.ToPGTextEmpty(metadata.UserID),
+		Source:           conv.ToPGText("Codex"),
+		PromptTokens:     0,
+		CompletionTokens: 0,
+		TotalTokens:      0,
+		ContentRaw:       nil,
+		ContentAssetUrl:  conv.ToPGTextEmpty(""),
+		StorageError:     conv.ToPGTextEmpty(""),
+		MessageID:        conv.ToPGTextEmpty(""),
+		ToolCallID:       conv.ToPGTextEmpty(""),
+		ExternalUserID:   conv.ToPGTextEmpty(metadata.UserEmail),
+		FinishReason:     conv.ToPGTextEmpty(""),
+		ToolCalls:        nil,
+		Origin:           conv.ToPGTextEmpty(""),
+		UserAgent:        conv.ToPGTextEmpty(""),
+		IpAddress:        conv.ToPGTextEmpty(""),
+		ContentHash:      nil,
+		Generation:       0,
+	}
+
+	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, activities.DefaultCodexChatTitle); err != nil {
+		return err
+	}
+
+	if s.chatTitleGenerator != nil {
+		if err := s.chatTitleGenerator.ScheduleChatTitleGeneration(
+			context.WithoutCancel(ctx),
+			chatID.String(),
+			metadata.GramOrgID,
+			projectID.String(),
+		); err != nil {
+			s.logger.WarnContext(ctx, "failed to schedule chat title generation", attr.SlogError(err))
+		}
+	}
+
+	return nil
 }
