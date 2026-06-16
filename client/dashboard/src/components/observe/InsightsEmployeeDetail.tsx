@@ -354,7 +354,7 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                   "grid gap-4 transition-all duration-300",
                   isInsightsOpen
                     ? "grid-cols-1 md:grid-cols-2"
-                    : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4",
+                    : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5",
                 )}
               >
                 <FirstActivityCard
@@ -381,6 +381,12 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                   value={summary?.totalToolCalls ?? 0}
                   icon="wrench"
                   subtext={`${(summary?.toolCallSuccess ?? 0).toLocaleString()} succeeded / ${(summary?.toolCallFailure ?? 0).toLocaleString()} failed`}
+                />
+                <MetricCard
+                  title="Agent Sessions"
+                  value={summary?.totalChats ?? 0}
+                  icon="message-square"
+                  subtext={`Over ${rangeLabel}`}
                 />
               </section>
 
@@ -531,10 +537,10 @@ function DetailLoadingState({ isInsightsOpen }: { isInsightsOpen: boolean }) {
           "grid gap-4 transition-all duration-300",
           isInsightsOpen
             ? "grid-cols-1 md:grid-cols-2"
-            : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4",
+            : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5",
         )}
       >
-        {Array.from({ length: 4 }).map((_, index) => (
+        {Array.from({ length: 5 }).map((_, index) => (
           <div key={index} className="bg-card rounded-lg border p-5">
             <Skeleton className="mb-4 h-4 w-28" />
             <Skeleton className="h-9 w-20" />
@@ -697,7 +703,7 @@ function EmployeeDataFlowGraphCard({
                 pannable
                 zoomable
                 ariaLabel="Data flow minimap"
-                className="!bg-card !border-border rounded-md border"
+                className="bg-card! border-border! rounded-md border"
                 maskColor="hsl(0 0% 50% / 0.12)"
                 nodeColor={getDataFlowMiniMapColor}
                 nodeStrokeWidth={2}
@@ -765,7 +771,7 @@ function DataFlowNodeCard({ data }: NodeProps<DataFlowGraphNode>) {
       <Handle
         type="target"
         position={Position.Left}
-        className="!border-background !bg-muted-foreground"
+        className="border-background! bg-muted-foreground!"
       />
       <div className="mb-2 flex items-center gap-2">
         <DataFlowNodeVisual
@@ -803,7 +809,7 @@ function DataFlowNodeCard({ data }: NodeProps<DataFlowGraphNode>) {
       <Handle
         type="source"
         position={Position.Right}
-        className="!border-background !bg-muted-foreground"
+        className="border-background! bg-muted-foreground!"
       />
     </div>
   );
