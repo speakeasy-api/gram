@@ -190,7 +190,7 @@ func newStreamsCommand() *cli.Command {
 			}
 
 			// Use errgroup.WithContext (not a bare errgroup.Group) so the first
-			// receiver or publisher to exit cancels gctx and unwinds the rest.
+			// receiver or publisher to return a non-nil error cancels gctx and unwinds the rest.
 			// A plain group's Wait blocks until *every* goroutine returns, and
 			// the heartbeat publisher loops until its context is cancelled — so
 			// a subscriber whose Receive returns (e.g. its subscription vanished
