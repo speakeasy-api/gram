@@ -1,0 +1,23 @@
+server/internal/risk/scanner.go
+  s_67e5161625cc67::t_5cc3c94196ba9f 218,264,276,295-296,298-305,307,309-310
+  s_67e5161625cc67::t_338a51c0ecb1cb 178-184,213,265-270,272,291-294,297,306
+  s_67e5161625cc67::t_162247573ed80d 308
+server/internal/risk/policy_audience_test.go
+  s_67e5161625cc67::t_456fe90a61b63c 15,247-323,365-399
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "3776a76441f555baf36aedeaeb8e384bb02ce7b1",
+  "prompts": {},
+  "sessions": {
+    "s_67e5161625cc67": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ecfe0-9405-7441-aec9-1a4a9133f548",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    }
+  }
+}
