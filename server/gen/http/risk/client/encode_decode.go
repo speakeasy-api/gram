@@ -7543,11 +7543,25 @@ func marshalTypesRiskPolicyApplicationToRiskPolicyApplicationRequestBody(v *type
 		return nil
 	}
 	res := &RiskPolicyApplicationRequestBody{}
-	if v.Include != nil {
-		res.Include = marshalTypesRiskMatchConfigToRiskMatchConfigRequestBody(v.Include)
+	if v.Includes != nil {
+		res.Includes = make([]*RiskMatchConfigRequestBody, len(v.Includes))
+		for i, val := range v.Includes {
+			if val == nil {
+				res.Includes[i] = nil
+				continue
+			}
+			res.Includes[i] = marshalTypesRiskMatchConfigToRiskMatchConfigRequestBody(val)
+		}
 	}
-	if v.Exempt != nil {
-		res.Exempt = marshalTypesRiskMatchConfigToRiskMatchConfigRequestBody(v.Exempt)
+	if v.Exempts != nil {
+		res.Exempts = make([]*RiskMatchConfigRequestBody, len(v.Exempts))
+		for i, val := range v.Exempts {
+			if val == nil {
+				res.Exempts[i] = nil
+				continue
+			}
+			res.Exempts[i] = marshalTypesRiskMatchConfigToRiskMatchConfigRequestBody(val)
+		}
 	}
 
 	return res
@@ -7623,11 +7637,25 @@ func marshalRiskPolicyApplicationRequestBodyToTypesRiskPolicyApplication(v *Risk
 		return nil
 	}
 	res := &types.RiskPolicyApplication{}
-	if v.Include != nil {
-		res.Include = marshalRiskMatchConfigRequestBodyToTypesRiskMatchConfig(v.Include)
+	if v.Includes != nil {
+		res.Includes = make([]*types.RiskMatchConfig, len(v.Includes))
+		for i, val := range v.Includes {
+			if val == nil {
+				res.Includes[i] = nil
+				continue
+			}
+			res.Includes[i] = marshalRiskMatchConfigRequestBodyToTypesRiskMatchConfig(val)
+		}
 	}
-	if v.Exempt != nil {
-		res.Exempt = marshalRiskMatchConfigRequestBodyToTypesRiskMatchConfig(v.Exempt)
+	if v.Exempts != nil {
+		res.Exempts = make([]*types.RiskMatchConfig, len(v.Exempts))
+		for i, val := range v.Exempts {
+			if val == nil {
+				res.Exempts[i] = nil
+				continue
+			}
+			res.Exempts[i] = marshalRiskMatchConfigRequestBodyToTypesRiskMatchConfig(val)
+		}
 	}
 
 	return res
@@ -7703,11 +7731,25 @@ func unmarshalRiskPolicyApplicationResponseBodyToTypesRiskPolicyApplication(v *R
 		return nil
 	}
 	res := &types.RiskPolicyApplication{}
-	if v.Include != nil {
-		res.Include = unmarshalRiskMatchConfigResponseBodyToTypesRiskMatchConfig(v.Include)
+	if v.Includes != nil {
+		res.Includes = make([]*types.RiskMatchConfig, len(v.Includes))
+		for i, val := range v.Includes {
+			if val == nil {
+				res.Includes[i] = nil
+				continue
+			}
+			res.Includes[i] = unmarshalRiskMatchConfigResponseBodyToTypesRiskMatchConfig(val)
+		}
 	}
-	if v.Exempt != nil {
-		res.Exempt = unmarshalRiskMatchConfigResponseBodyToTypesRiskMatchConfig(v.Exempt)
+	if v.Exempts != nil {
+		res.Exempts = make([]*types.RiskMatchConfig, len(v.Exempts))
+		for i, val := range v.Exempts {
+			if val == nil {
+				res.Exempts[i] = nil
+				continue
+			}
+			res.Exempts[i] = unmarshalRiskMatchConfigResponseBodyToTypesRiskMatchConfig(val)
+		}
 	}
 
 	return res

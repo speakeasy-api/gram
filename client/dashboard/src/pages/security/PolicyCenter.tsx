@@ -104,7 +104,10 @@ import {
   MatchQueryMonaco as MatchQueryInput,
   MatchQueryExamples,
 } from "./match-query-monaco";
-import type { RiskPolicyApplication } from "@gram/client/models/components";
+import type {
+  RiskPolicyApplication,
+  RiskMatchConfig,
+} from "@gram/client/models/components";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { PROMPT_POLICY_TEMPLATES } from "./prompt-policy-templates";
@@ -798,37 +801,42 @@ function promptPolicyName(prompt: string): string {
   return prompt.trim().replace(/\s+/g, " ").slice(0, 60) || "Prompt Policy";
 }
 
-/** A stored application predicate (include/exempt) as a query-bar string, empty
- *  when none is set. */
-function queryFromPredicate(
-  cfg: RiskPolicyApplication["include"] | undefined,
-): string {
-  if (!cfg || cfg.conditions.length === 0) return "";
+/** A stored predicate as a query-bar string. */
+function queryFromPredicate(cfg: RiskMatchConfig): string {
+  if (cfg.conditions.length === 0) return "";
   return matchQueryFromConditions(
     cfg.conditions,
     cfg.combine === "or" ? "or" : "and",
   );
 }
 
-/** A query-bar string parsed back into a predicate, or undefined when empty or
- *  invalid (so the policy falls back to its coarse knobs). */
-function predicateFromQuery(query: string): RiskPolicyApplication["include"] {
+/** A query-bar string parsed into a predicate, or undefined when empty/invalid. */
+function predicateFromQuery(query: string): RiskMatchConfig | undefined {
   if (!query.trim()) return undefined;
   const parsed = parseMatchQuery(query);
   if (parsed.error || parsed.conditions.length === 0) return undefined;
   return buildMatchConfig(parsed.conditions, parsed.combine);
 }
 
-/** Build application_config from the include/exempt query strings; undefined when
- *  neither is set (policy relies on the coarse message_types + exempt_rule_ids). */
+/** Stored predicate list → query-bar strings (one row per predicate). */
+function queriesFromPredicates(cfgs: RiskMatchConfig[] | undefined): string[] {
+  return (cfgs ?? []).map(queryFromPredicate).filter((q) => q.trim() !== "");
+}
+
+/** Build application_config from the include/exempt query rows; undefined when
+ *  none are set (policy relies on the coarse message_types + exempt_rule_ids). */
 function buildApplicationConfig(
-  includeQuery: string,
-  exemptQuery: string,
+  includeQueries: string[],
+  exemptQueries: string[],
 ): RiskPolicyApplication | undefined {
-  const include = predicateFromQuery(includeQuery);
-  const exempt = predicateFromQuery(exemptQuery);
-  if (!include && !exempt) return undefined;
-  return { include, exempt };
+  const includes = includeQueries
+    .map(predicateFromQuery)
+    .filter((c): c is RiskMatchConfig => !!c);
+  const exempts = exemptQueries
+    .map(predicateFromQuery)
+    .filter((c): c is RiskMatchConfig => !!c);
+  if (includes.length === 0 && exempts.length === 0) return undefined;
+  return { includes, exempts };
 }
 
 export default function PolicyCenter(): JSX.Element {
@@ -883,10 +891,11 @@ function PolicyCenterContent() {
   const [exemptRuleIds, setExemptRuleIds] = useState<Set<string>>(
     new Set<string>(),
   );
-  // Fine-grained application predicates (application_config), as query-bar
-  // strings. Empty => rely on the coarse message_types + exempt_rule_ids knobs.
-  const [includeQuery, setIncludeQuery] = useState("");
-  const [exemptQuery, setExemptQuery] = useState("");
+  // Fine-grained application predicates (application_config): lists of query-bar
+  // strings, OR'd within each list. Empty => rely on the coarse message_types +
+  // exempt_rule_ids knobs.
+  const [includeQueries, setIncludeQueries] = useState<string[]>([]);
+  const [exemptQueries, setExemptQueries] = useState<string[]>([]);
   const [selectedMessageTypes, setSelectedMessageTypes] = useState<
     Set<PolicyMessageType>
   >(new Set(ALL_POLICY_MESSAGE_TYPES));
@@ -981,8 +990,8 @@ function PolicyCenterContent() {
     setDisabledRules(new Set());
     setSelectedCustomRuleIds(new Set<string>());
     setExemptRuleIds(new Set<string>());
-    setIncludeQuery("");
-    setExemptQuery("");
+    setIncludeQueries([]);
+    setExemptQueries([]);
     setSelectedMessageTypes(new Set(ALL_POLICY_MESSAGE_TYPES));
     setFormAction("flag");
     setFormAutoName(true);
@@ -1011,8 +1020,10 @@ function PolicyCenterContent() {
     setFormName(policy.name);
     setFormEnabled(policy.enabled);
     // application_config applies to both kinds; load it before the kind branch.
-    setIncludeQuery(queryFromPredicate(policy.applicationConfig?.include));
-    setExemptQuery(queryFromPredicate(policy.applicationConfig?.exempt));
+    setIncludeQueries(
+      queriesFromPredicates(policy.applicationConfig?.includes),
+    );
+    setExemptQueries(queriesFromPredicates(policy.applicationConfig?.exempts));
     if (isPrompt) {
       setFormPromptInstruction(policy.prompt ?? "");
       setSelectedMessageTypes(policyMessageTypesForForm(policy.messageTypes));
@@ -1067,7 +1078,10 @@ function PolicyCenterContent() {
     // Fine-grained application predicates (both kinds). On update we always send
     // a value (empty object clears) so the omit-to-preserve impl can replace it;
     // on create we omit when empty.
-    const applicationConfig = buildApplicationConfig(includeQuery, exemptQuery);
+    const applicationConfig = buildApplicationConfig(
+      includeQueries,
+      exemptQueries,
+    );
     const applicationUpdate = { applicationConfig: applicationConfig ?? {} };
     const applicationCreate = applicationConfig ? { applicationConfig } : {};
     if (formPolicyKind === "prompt") {
@@ -1486,10 +1500,9 @@ function PolicyCenterContent() {
         : selectedCategories.size === 0 && selectedCustomRuleIds.size === 0)) ||
     (wizardStep === 1 && selectedMessageTypes.size === 0);
   // Block save while an advanced application predicate is present but unparseable.
-  const applicationInvalid =
-    (includeQuery.trim() !== "" &&
-      parseMatchQuery(includeQuery).error !== null) ||
-    (exemptQuery.trim() !== "" && parseMatchQuery(exemptQuery).error !== null);
+  const applicationInvalid = [...includeQueries, ...exemptQueries].some(
+    (q) => q.trim() !== "" && parseMatchQuery(q).error !== null,
+  );
   const saveDisabled =
     (formPolicyKind === "prompt" && !formPromptInstruction.trim()) ||
     // A standard policy needs at least one detector or custom rule (the step-0
@@ -1653,10 +1666,10 @@ function PolicyCenterContent() {
                     setSelectedCustomRuleIds={setSelectedCustomRuleIds}
                     exemptRuleIds={exemptRuleIds}
                     setExemptRuleIds={setExemptRuleIds}
-                    includeQuery={includeQuery}
-                    setIncludeQuery={setIncludeQuery}
-                    exemptQuery={exemptQuery}
-                    setExemptQuery={setExemptQuery}
+                    includeQueries={includeQueries}
+                    setIncludeQueries={setIncludeQueries}
+                    exemptQueries={exemptQueries}
+                    setExemptQueries={setExemptQueries}
                     selectedMessageTypes={selectedMessageTypes}
                     setSelectedMessageTypes={setSelectedMessageTypes}
                     formAction={formAction}
@@ -2324,6 +2337,71 @@ function PromptPolicyHowItWorks({ isEditing }: { isEditing: boolean }) {
 /*  PolicySheetBody                                                           */
 /* -------------------------------------------------------------------------- */
 
+/** A list of match-query predicate rows (OR'd) with add/remove — used for both
+ *  the include (scope) and exempt lists in the Scope step's Advanced section. */
+function PredicateList({
+  label,
+  helpText,
+  emptyAddLabel,
+  queries,
+  setQueries,
+}: {
+  label: string;
+  helpText: string;
+  emptyAddLabel: string;
+  queries: string[];
+  setQueries: (v: string[]) => void;
+}) {
+  const update = (i: number, v: string) => {
+    const next = [...queries];
+    next[i] = v;
+    setQueries(next);
+  };
+  return (
+    <div className="space-y-2">
+      <Label className="text-sm font-medium">{label}</Label>
+      <p className="text-muted-foreground text-xs">{helpText}</p>
+      {queries.map((q, i) => (
+        // Index key: rows are positional and Monaco is controlled by `value`.
+        // eslint-disable-next-line react/no-array-index-key
+        <div key={i} className="space-y-1">
+          {i > 0 && (
+            <div className="text-muted-foreground text-[10px] font-semibold tracking-wide">
+              OR
+            </div>
+          )}
+          <div className="flex items-start gap-2">
+            <div className="min-w-0 flex-1">
+              <MatchQueryInput
+                value={q}
+                onChange={(v) => update(i, v)}
+                error={q.trim() ? parseMatchQuery(q).error : null}
+                showExamples={false}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setQueries(queries.filter((_, j) => j !== i))}
+              aria-label="Remove"
+              className="text-muted-foreground hover:text-foreground mt-2.5 shrink-0"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      ))}
+      <Button variant="secondary" onClick={() => setQueries([...queries, ""])}>
+        <Button.LeftIcon>
+          <Plus className="h-4 w-4" />
+        </Button.LeftIcon>
+        <Button.Text>
+          {queries.length === 0 ? emptyAddLabel : "Add another (OR)"}
+        </Button.Text>
+      </Button>
+    </div>
+  );
+}
+
 function PolicySheetBody({
   wizardStep,
   setWizardStep,
@@ -2340,10 +2418,10 @@ function PolicySheetBody({
   setSelectedCustomRuleIds,
   exemptRuleIds,
   setExemptRuleIds,
-  includeQuery,
-  setIncludeQuery,
-  exemptQuery,
-  setExemptQuery,
+  includeQueries,
+  setIncludeQueries,
+  exemptQueries,
+  setExemptQueries,
   selectedMessageTypes,
   setSelectedMessageTypes,
   formAction,
@@ -2368,10 +2446,10 @@ function PolicySheetBody({
   setSelectedCustomRuleIds: (v: Set<string>) => void;
   exemptRuleIds: Set<string>;
   setExemptRuleIds: (v: Set<string>) => void;
-  includeQuery: string;
-  setIncludeQuery: (v: string) => void;
-  exemptQuery: string;
-  setExemptQuery: (v: string) => void;
+  includeQueries: string[];
+  setIncludeQueries: (v: string[]) => void;
+  exemptQueries: string[];
+  setExemptQueries: (v: string[]) => void;
   selectedMessageTypes: Set<PolicyMessageType>;
   setSelectedMessageTypes: (v: Set<PolicyMessageType>) => void;
   formAction: PolicyAction;
@@ -2392,7 +2470,7 @@ function PolicySheetBody({
   // Fine-grained scope/exemption predicates (application_config); collapsed
   // unless the policy already uses one.
   const [advancedScopeOpen, setAdvancedScopeOpen] = useState(
-    () => includeQuery.trim() !== "" || exemptQuery.trim() !== "",
+    () => includeQueries.length > 0 || exemptQueries.length > 0,
   );
   const [customizeCategory, setCustomizeCategory] =
     useState<RuleCategory | null>(null);
@@ -2651,44 +2729,20 @@ function PolicySheetBody({
                 />
               </CollapsibleTrigger>
               <CollapsibleContent className="border-border space-y-4 border-t px-4 py-4">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">
-                    Only evaluate messages matching
-                  </Label>
-                  <MatchQueryInput
-                    value={includeQuery}
-                    onChange={setIncludeQuery}
-                    error={
-                      includeQuery.trim()
-                        ? parseMatchQuery(includeQuery).error
-                        : null
-                    }
-                    showExamples={false}
-                  />
-                  <p className="text-muted-foreground text-xs">
-                    Narrows scope further — the policy skips messages that don't
-                    match. Leave blank to scope by message types alone.
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">
-                    Exempt messages matching
-                  </Label>
-                  <MatchQueryInput
-                    value={exemptQuery}
-                    onChange={setExemptQuery}
-                    error={
-                      exemptQuery.trim()
-                        ? parseMatchQuery(exemptQuery).error
-                        : null
-                    }
-                    showExamples={false}
-                  />
-                  <p className="text-muted-foreground text-xs">
-                    When a message matches, the whole policy is skipped for it
-                    (an allowlist), alongside any exempt rules above.
-                  </p>
-                </div>
+                <PredicateList
+                  label="Only evaluate messages matching"
+                  helpText="The policy evaluates a message only when it matches one of these. Add more to widen scope — they're OR'd. Leave empty to scope by message types alone."
+                  emptyAddLabel="Add scope predicate"
+                  queries={includeQueries}
+                  setQueries={setIncludeQueries}
+                />
+                <PredicateList
+                  label="Exempt messages matching"
+                  helpText="When a message matches any of these it's skipped for the whole policy (an allowlist), alongside any exempt rules above."
+                  emptyAddLabel="Add exemption"
+                  queries={exemptQueries}
+                  setQueries={setExemptQueries}
+                />
                 <MatchQueryExamples />
               </CollapsibleContent>
             </Collapsible>

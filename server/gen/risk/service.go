@@ -218,9 +218,10 @@ type CreateRiskPolicyPayload struct {
 	// Message types this policy applies to. When empty or omitted, the policy
 	// scans all supported types.
 	MessageTypes []string
-	// Granular policy application: include (narrows which messages the policy
-	// evaluates, beyond message_types) and exempt (messages skipped entirely).
-	// Omit to rely only on message_types + exempt_rule_ids.
+	// Granular policy application: includes (a message is evaluated when it
+	// matches ANY include; supersedes message_types) and exempts (a message is
+	// skipped when it matches ANY exempt). Omit to rely only on message_types +
+	// exempt_rule_ids.
 	ApplicationConfig *types.RiskPolicyApplication
 	// Whether the policy is active.
 	Enabled *bool
@@ -887,9 +888,9 @@ type UpdateRiskPolicyPayload struct {
 	// Message types this policy applies to. Omit to preserve the current
 	// selection; send an empty array to apply to all types.
 	MessageTypes []string
-	// Granular policy application: include (narrows which messages the policy
-	// evaluates, beyond message_types) and exempt (messages skipped entirely).
-	// Omit to preserve the current value.
+	// Granular policy application: includes (a message is evaluated when it
+	// matches ANY include; supersedes message_types) and exempts (a message is
+	// skipped when it matches ANY exempt). Omit to preserve the current value.
 	ApplicationConfig *types.RiskPolicyApplication
 	// Whether the policy is active.
 	Enabled *bool

@@ -140,8 +140,8 @@ var RiskMatchConfig = Type("RiskMatchConfig", func() {
 var RiskPolicyApplication = Type("RiskPolicyApplication", func() {
 	Meta("struct:pkg:path", "types")
 
-	Attribute("include", RiskMatchConfig, "Include predicate: the policy evaluates a message only when this matches. Omit for all-in (scope falls back to message_types).")
-	Attribute("exempt", RiskMatchConfig, "Exempt predicate: when it matches a message, the whole policy is skipped for that message (an inline allowlist, alongside exempt_rule_ids).")
+	Attribute("includes", ArrayOf(RiskMatchConfig), "Include predicates (the fine-grained scope). A message is evaluated when it matches ANY include; the list supersedes message_types. Empty/omitted scopes by message_types instead.")
+	Attribute("exempts", ArrayOf(RiskMatchConfig), "Exempt predicates. A message is skipped for the whole policy when it matches ANY exempt (alongside exempt_rule_ids). Empty/omitted means no inline exemption.")
 })
 
 var RiskCustomDetectionRule = Type("RiskCustomDetectionRule", func() {

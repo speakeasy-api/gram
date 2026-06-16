@@ -14,8 +14,14 @@ import {
 } from "./riskmatchconfig.js";
 
 export type RiskPolicyApplication = {
-  exempt?: RiskMatchConfig | undefined;
-  include?: RiskMatchConfig | undefined;
+  /**
+   * Exempt predicates. A message is skipped for the whole policy when it matches ANY exempt (alongside exempt_rule_ids). Empty/omitted means no inline exemption.
+   */
+  exempts?: Array<RiskMatchConfig> | undefined;
+  /**
+   * Include predicates (the fine-grained scope). A message is evaluated when it matches ANY include; the list supersedes message_types. Empty/omitted scopes by message_types instead.
+   */
+  includes?: Array<RiskMatchConfig> | undefined;
 };
 
 /** @internal */
@@ -23,13 +29,13 @@ export const RiskPolicyApplication$inboundSchema: z.ZodMiniType<
   RiskPolicyApplication,
   unknown
 > = z.object({
-  exempt: z.optional(RiskMatchConfig$inboundSchema),
-  include: z.optional(RiskMatchConfig$inboundSchema),
+  exempts: z.optional(z.array(RiskMatchConfig$inboundSchema)),
+  includes: z.optional(z.array(RiskMatchConfig$inboundSchema)),
 });
 /** @internal */
 export type RiskPolicyApplication$Outbound = {
-  exempt?: RiskMatchConfig$Outbound | undefined;
-  include?: RiskMatchConfig$Outbound | undefined;
+  exempts?: Array<RiskMatchConfig$Outbound> | undefined;
+  includes?: Array<RiskMatchConfig$Outbound> | undefined;
 };
 
 /** @internal */
@@ -37,8 +43,8 @@ export const RiskPolicyApplication$outboundSchema: z.ZodMiniType<
   RiskPolicyApplication$Outbound,
   RiskPolicyApplication
 > = z.object({
-  exempt: z.optional(RiskMatchConfig$outboundSchema),
-  include: z.optional(RiskMatchConfig$outboundSchema),
+  exempts: z.optional(z.array(RiskMatchConfig$outboundSchema)),
+  includes: z.optional(z.array(RiskMatchConfig$outboundSchema)),
 });
 
 export function riskPolicyApplicationToJSON(

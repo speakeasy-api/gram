@@ -322,8 +322,8 @@ func TestValidateMatchConfig(t *testing.T) {
 func TestApplication_IncludeNarrowsExemptExcludes(t *testing.T) {
 	t.Parallel()
 	app, err := ra.CompileApplication([]byte(`{
-		"include": {"conditions":[{"target":"tool_server","op":"equals","value":"acme"}]},
-		"exempt":  {"conditions":[{"target":"content","op":"keyword","values":["approved"]}]}
+		"includes": [{"conditions":[{"target":"tool_server","op":"equals","value":"acme"}]}],
+		"exempts":  [{"conditions":[{"target":"content","op":"keyword","values":["approved"]}]}]
 	}`))
 	require.NoError(t, err)
 	require.True(t, app.Active())
@@ -353,6 +353,6 @@ func TestApplication_NilIsAllInNoneExempt(t *testing.T) {
 
 func TestApplication_InvalidPredicateErrors(t *testing.T) {
 	t.Parallel()
-	_, err := ra.CompileApplication([]byte(`{"include":{"conditions":[{"target":"content","op":"regex","value":"("}]}}`))
+	_, err := ra.CompileApplication([]byte(`{"includes":[{"conditions":[{"target":"content","op":"regex","value":"("}]}]}`))
 	require.Error(t, err)
 }

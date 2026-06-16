@@ -8,10 +8,12 @@
 package types
 
 type RiskPolicyApplication struct {
-	// Include predicate: the policy evaluates a message only when this matches.
-	// Omit for all-in (scope falls back to message_types).
-	Include *RiskMatchConfig
-	// Exempt predicate: when it matches a message, the whole policy is skipped for
-	// that message (an inline allowlist, alongside exempt_rule_ids).
-	Exempt *RiskMatchConfig
+	// Include predicates (the fine-grained scope). A message is evaluated when it
+	// matches ANY include; the list supersedes message_types. Empty/omitted scopes
+	// by message_types instead.
+	Includes []*RiskMatchConfig
+	// Exempt predicates. A message is skipped for the whole policy when it matches
+	// ANY exempt (alongside exempt_rule_ids). Empty/omitted means no inline
+	// exemption.
+	Exempts []*RiskMatchConfig
 }

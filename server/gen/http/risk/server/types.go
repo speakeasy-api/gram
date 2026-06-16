@@ -42,9 +42,10 @@ type CreateRiskPolicyRequestBody struct {
 	// Message types this policy applies to. When empty or omitted, the policy
 	// scans all supported types.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
-	// Granular policy application: include (narrows which messages the policy
-	// evaluates, beyond message_types) and exempt (messages skipped entirely).
-	// Omit to rely only on message_types + exempt_rule_ids.
+	// Granular policy application: includes (a message is evaluated when it
+	// matches ANY include; supersedes message_types) and exempts (a message is
+	// skipped when it matches ANY exempt). Omit to rely only on message_types +
+	// exempt_rule_ids.
 	ApplicationConfig *RiskPolicyApplicationRequestBody `form:"application_config,omitempty" json:"application_config,omitempty" xml:"application_config,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
@@ -89,9 +90,9 @@ type UpdateRiskPolicyRequestBody struct {
 	// Message types this policy applies to. Omit to preserve the current
 	// selection; send an empty array to apply to all types.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
-	// Granular policy application: include (narrows which messages the policy
-	// evaluates, beyond message_types) and exempt (messages skipped entirely).
-	// Omit to preserve the current value.
+	// Granular policy application: includes (a message is evaluated when it
+	// matches ANY include; supersedes message_types) and exempts (a message is
+	// skipped when it matches ANY exempt). Omit to preserve the current value.
 	ApplicationConfig *RiskPolicyApplicationRequestBody `form:"application_config,omitempty" json:"application_config,omitempty" xml:"application_config,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
@@ -6686,12 +6687,14 @@ type TestDetectionRuleGatewayErrorResponseBody struct {
 // RiskPolicyApplicationResponseBody is used to define fields on response body
 // types.
 type RiskPolicyApplicationResponseBody struct {
-	// Include predicate: the policy evaluates a message only when this matches.
-	// Omit for all-in (scope falls back to message_types).
-	Include *RiskMatchConfigResponseBody `form:"include,omitempty" json:"include,omitempty" xml:"include,omitempty"`
-	// Exempt predicate: when it matches a message, the whole policy is skipped for
-	// that message (an inline allowlist, alongside exempt_rule_ids).
-	Exempt *RiskMatchConfigResponseBody `form:"exempt,omitempty" json:"exempt,omitempty" xml:"exempt,omitempty"`
+	// Include predicates (the fine-grained scope). A message is evaluated when it
+	// matches ANY include; the list supersedes message_types. Empty/omitted scopes
+	// by message_types instead.
+	Includes []*RiskMatchConfigResponseBody `form:"includes,omitempty" json:"includes,omitempty" xml:"includes,omitempty"`
+	// Exempt predicates. A message is skipped for the whole policy when it matches
+	// ANY exempt (alongside exempt_rule_ids). Empty/omitted means no inline
+	// exemption.
+	Exempts []*RiskMatchConfigResponseBody `form:"exempts,omitempty" json:"exempts,omitempty" xml:"exempts,omitempty"`
 }
 
 // RiskMatchConfigResponseBody is used to define fields on response body types.
@@ -7070,12 +7073,14 @@ type TestDetectionRuleMatchResponseBody struct {
 // RiskPolicyApplicationRequestBody is used to define fields on request body
 // types.
 type RiskPolicyApplicationRequestBody struct {
-	// Include predicate: the policy evaluates a message only when this matches.
-	// Omit for all-in (scope falls back to message_types).
-	Include *RiskMatchConfigRequestBody `form:"include,omitempty" json:"include,omitempty" xml:"include,omitempty"`
-	// Exempt predicate: when it matches a message, the whole policy is skipped for
-	// that message (an inline allowlist, alongside exempt_rule_ids).
-	Exempt *RiskMatchConfigRequestBody `form:"exempt,omitempty" json:"exempt,omitempty" xml:"exempt,omitempty"`
+	// Include predicates (the fine-grained scope). A message is evaluated when it
+	// matches ANY include; the list supersedes message_types. Empty/omitted scopes
+	// by message_types instead.
+	Includes []*RiskMatchConfigRequestBody `form:"includes,omitempty" json:"includes,omitempty" xml:"includes,omitempty"`
+	// Exempt predicates. A message is skipped for the whole policy when it matches
+	// ANY exempt (alongside exempt_rule_ids). Empty/omitted means no inline
+	// exemption.
+	Exempts []*RiskMatchConfigRequestBody `form:"exempts,omitempty" json:"exempts,omitempty" xml:"exempts,omitempty"`
 }
 
 // RiskMatchConfigRequestBody is used to define fields on request body types.
@@ -13304,14 +13309,18 @@ func ValidateTestDetectionRuleRequestBody(body *TestDetectionRuleRequestBody) (e
 // ValidateRiskPolicyApplicationRequestBody runs the validations defined on
 // RiskPolicyApplicationRequestBody
 func ValidateRiskPolicyApplicationRequestBody(body *RiskPolicyApplicationRequestBody) (err error) {
-	if body.Include != nil {
-		if err2 := ValidateRiskMatchConfigRequestBody(body.Include); err2 != nil {
-			err = goa.MergeErrors(err, err2)
+	for _, e := range body.Includes {
+		if e != nil {
+			if err2 := ValidateRiskMatchConfigRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
-	if body.Exempt != nil {
-		if err2 := ValidateRiskMatchConfigRequestBody(body.Exempt); err2 != nil {
-			err = goa.MergeErrors(err, err2)
+	for _, e := range body.Exempts {
+		if e != nil {
+			if err2 := ValidateRiskMatchConfigRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return

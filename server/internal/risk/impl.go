@@ -2406,17 +2406,17 @@ func customRuleMatchConfigFromStorage(raw []byte) *types.RiskMatchConfig {
 }
 
 // applicationConfigToStorage marshals an API application_config into the
-// risk_policies.application_config JSONB { include, exempt }. Returns nil when
-// neither predicate is set.
+// risk_policies.application_config JSONB { includes, exempts }. Returns nil when
+// no predicate is set.
 func applicationConfigToStorage(in *types.RiskPolicyApplication) ([]byte, error) {
 	if in == nil {
 		return nil, nil
 	}
 	app := ra.PolicyApplication{
-		Include: matchConfigToEngine(in.Include),
-		Exempt:  matchConfigToEngine(in.Exempt),
+		Includes: matchConfigsToEngine(in.Includes),
+		Exempts:  matchConfigsToEngine(in.Exempts),
 	}
-	if app.Include == nil && app.Exempt == nil {
+	if len(app.Includes) == 0 && len(app.Exempts) == 0 {
 		return nil, nil
 	}
 	raw, err := json.Marshal(app)
@@ -2436,12 +2436,40 @@ func applicationConfigFromStorage(raw []byte) *types.RiskPolicyApplication {
 	if err := json.Unmarshal(raw, &app); err != nil {
 		return nil
 	}
-	include := matchConfigFromEngine(app.Include)
-	exempt := matchConfigFromEngine(app.Exempt)
-	if include == nil && exempt == nil {
+	includes := matchConfigsFromEngine(app.Includes)
+	exempts := matchConfigsFromEngine(app.Exempts)
+	if len(includes) == 0 && len(exempts) == 0 {
 		return nil
 	}
-	return &types.RiskPolicyApplication{Include: include, Exempt: exempt}
+	return &types.RiskPolicyApplication{Includes: includes, Exempts: exempts}
+}
+
+// matchConfigsToEngine maps a list of API match_configs to engine structs,
+// dropping empty entries; returns nil for an all-empty list.
+func matchConfigsToEngine(in []*types.RiskMatchConfig) []*ra.MatchConfig {
+	out := make([]*ra.MatchConfig, 0, len(in))
+	for _, c := range in {
+		if cfg := matchConfigToEngine(c); cfg != nil {
+			out = append(out, cfg)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func matchConfigsFromEngine(in []*ra.MatchConfig) []*types.RiskMatchConfig {
+	out := make([]*types.RiskMatchConfig, 0, len(in))
+	for _, c := range in {
+		if cfg := matchConfigFromEngine(c); cfg != nil {
+			out = append(out, cfg)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func (s *Service) generatePolicyName(ctx context.Context, orgID, projectID string, sources, presidioEntities []string, action string, existingNames []string) string {

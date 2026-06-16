@@ -477,21 +477,22 @@ func (r CompiledCustomDetectionRule) evaluate(view MessageView) (bool, string) {
 
 // PolicyApplication is the parsed risk_policies.application_config JSON object:
 //
-//	{ "include": <match_config>, "exempt": <match_config> }
+//	{ "includes": [<match_config>, ...], "exempts": [<match_config>, ...] }
 //
-// include narrows which messages the policy evaluates (in addition to the coarse
-// message_types filter); exempt takes a matched message out of the policy
-// entirely (an inline allowlist, alongside exempt_rule_ids). Both optional.
+// includes are the policy's fine-grained scope: a message is in scope when it
+// matches ANY include (rows OR'd), superseding the coarse message_types filter.
+// exempts take a matched message out of the policy entirely: a message is exempt
+// when it matches ANY exempt (alongside exempt_rule_ids). Both lists optional.
 type PolicyApplication struct {
-	Include *MatchConfig `json:"include,omitempty"`
-	Exempt  *MatchConfig `json:"exempt,omitempty"`
+	Includes []*MatchConfig `json:"includes,omitempty"`
+	Exempts  []*MatchConfig `json:"exempts,omitempty"`
 }
 
-// CompiledApplication holds a policy's compiled include/exempt predicates. The
-// zero value (both nil) means "all messages in scope, none exempt".
+// CompiledApplication holds a policy's compiled include/exempt predicate lists.
+// The zero value (both empty) means "all messages in scope, none exempt".
 type CompiledApplication struct {
-	include *compiledPredicate
-	exempt  *compiledPredicate
+	includes []*compiledPredicate
+	exempts  []*compiledPredicate
 }
 
 type compiledPredicate struct {
@@ -503,21 +504,21 @@ type compiledPredicate struct {
 // nil/empty config yields a zero CompiledApplication (all-in, none-exempt).
 func CompileApplication(raw []byte) (CompiledApplication, error) {
 	if isEmptyJSON(raw) {
-		return CompiledApplication{include: nil, exempt: nil}, nil
+		return CompiledApplication{includes: nil, exempts: nil}, nil
 	}
 	var app PolicyApplication
 	if err := json.Unmarshal(raw, &app); err != nil {
 		return CompiledApplication{}, fmt.Errorf("parse application_config: %w", err)
 	}
-	include, err := compilePredicate(app.Include)
+	includes, err := compilePredicates(app.Includes)
 	if err != nil {
-		return CompiledApplication{}, fmt.Errorf("application_config include: %w", err)
+		return CompiledApplication{}, fmt.Errorf("application_config includes: %w", err)
 	}
-	exempt, err := compilePredicate(app.Exempt)
+	exempts, err := compilePredicates(app.Exempts)
 	if err != nil {
-		return CompiledApplication{}, fmt.Errorf("application_config exempt: %w", err)
+		return CompiledApplication{}, fmt.Errorf("application_config exempts: %w", err)
 	}
-	return CompiledApplication{include: include, exempt: exempt}, nil
+	return CompiledApplication{includes: includes, exempts: exempts}, nil
 }
 
 // ValidateApplicationConfig compiles application_config to surface invalid
@@ -525,6 +526,21 @@ func CompileApplication(raw []byte) (CompiledApplication, error) {
 func ValidateApplicationConfig(raw []byte) error {
 	_, err := CompileApplication(raw)
 	return err
+}
+
+// compilePredicates compiles a list of predicates, dropping empty ones.
+func compilePredicates(cfgs []*MatchConfig) ([]*compiledPredicate, error) {
+	out := make([]*compiledPredicate, 0, len(cfgs))
+	for _, cfg := range cfgs {
+		p, err := compilePredicate(cfg)
+		if err != nil {
+			return nil, err
+		}
+		if p != nil {
+			out = append(out, p)
+		}
+	}
+	return out, nil
 }
 
 func compilePredicate(cfg *MatchConfig) (*compiledPredicate, error) {
@@ -538,20 +554,20 @@ func compilePredicate(cfg *MatchConfig) (*compiledPredicate, error) {
 	return &compiledPredicate{combine: cfg.combineOrDefault(), conditions: conditions}, nil
 }
 
-// Active reports whether either predicate is set, so callers can skip building a
+// Active reports whether any predicate is set, so callers can skip building a
 // MessageView when there is nothing to evaluate.
 func (a CompiledApplication) Active() bool {
-	return a.include != nil || a.exempt != nil
+	return len(a.includes) > 0 || len(a.exempts) > 0
 }
 
-// HasInclude reports whether a fine-grained include predicate is set. When it is,
-// it is the policy's scope and supersedes the coarse message_types filter.
+// HasInclude reports whether any fine-grained include predicate is set. When so,
+// includes are the policy's scope and supersede the coarse message_types filter.
 func (a CompiledApplication) HasInclude() bool {
-	return a.include != nil
+	return len(a.includes) > 0
 }
 
-// ApplicationHasInclude reports whether application_config defines an include
-// predicate, without fully compiling it — a cheap check for the realtime
+// ApplicationHasInclude reports whether application_config defines at least one
+// include predicate, without fully compiling it — a cheap check for the realtime
 // pre-filter, which must not skip an include-scoped policy by message type.
 func ApplicationHasInclude(raw []byte) bool {
 	if isEmptyJSON(raw) {
@@ -561,19 +577,38 @@ func ApplicationHasInclude(raw []byte) bool {
 	if err := json.Unmarshal(raw, &app); err != nil {
 		return false
 	}
-	return app.Include != nil && len(app.Include.Conditions) > 0
+	for _, inc := range app.Includes {
+		if inc != nil && len(inc.Conditions) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
-// Includes reports whether the message is in scope. A nil include predicate
-// means "all messages" (scope falls back to the coarse message_types filter).
+// Includes reports whether the message is in scope: true when there are no
+// include predicates (scope falls back to message_types), otherwise true when
+// ANY include predicate matches.
 func (a CompiledApplication) Includes(view MessageView) bool {
-	return a.include == nil || a.include.matches(view)
+	if len(a.includes) == 0 {
+		return true
+	}
+	for _, inc := range a.includes {
+		if inc.matches(view) {
+			return true
+		}
+	}
+	return false
 }
 
-// Exempts reports whether the inline exemption predicate takes this message out
-// of the policy. A nil exempt predicate means no inline exemption.
+// Exempts reports whether ANY exemption predicate matches — taking the message
+// out of the policy entirely.
 func (a CompiledApplication) Exempts(view MessageView) bool {
-	return a.exempt != nil && a.exempt.matches(view)
+	for _, ex := range a.exempts {
+		if ex.matches(view) {
+			return true
+		}
+	}
+	return false
 }
 
 // matches applies the predicate's combine logic to the view (boolean-only;

@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: b068150fb49be39ef4fb2efad1b12731
+  docChecksum: 5b736ad11994cda42ff389a1170b7a8d
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -833,7 +833,7 @@ trackedFiles:
   docs/models/components/riskpolicyaction.md:
     last_write_checksum: sha1:3729eadfe620fd4d1c367a384ab82ea55ab8b2d3
   docs/models/components/riskpolicyapplication.md:
-    last_write_checksum: sha1:a635aa60c464153d5fbe949fa88ba96ab9a38040
+    last_write_checksum: sha1:99cd2f81f093d458bb2cdb94a572c80d2a6e7f9f
   docs/models/components/riskpolicybypassapprovalrequestbody.md:
     last_write_checksum: sha1:5440b577d32b89be2e85a01da97cc55c6e92003d
   docs/models/components/riskpolicybypassrequest.md:
@@ -4647,7 +4647,7 @@ trackedFiles:
   src/models/components/riskpolicy.ts:
     last_write_checksum: sha1:95f14fd9e55c8d888a638654ab58c5d1419c1eb6
   src/models/components/riskpolicyapplication.ts:
-    last_write_checksum: sha1:dc226dc9dc1024d2c9263d7304ef9ded7a918e75
+    last_write_checksum: sha1:33188a8b7e5570150853779a5f54e14511a59e08
   src/models/components/riskpolicybypassapprovalrequestbody.ts:
     last_write_checksum: sha1:e55bacae622a6a00c2ce0b2825a3294c239bf39a
   src/models/components/riskpolicybypassrequest.ts:
