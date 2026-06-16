@@ -178,10 +178,18 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, projectID uuid.UUID, t
 	// condition under which the fan-out would run the judge — a prompt_based
 	// policy whose message_types apply to this message — so the lookup is
 	// skipped entirely for scans that can never enforce one.
+	// A defined include predicate is the policy's fine-grained scope and
+	// supersedes message_types, so an include-scoped policy is always a candidate
+	// here — the per-message include/exempt check then runs in scanPolicy.
+	inMessageScope := func(p repo.RiskPolicy) bool {
+		return ra.ApplicationHasInclude(p.ApplicationConfig) ||
+			len(p.MessageTypes) == 0 ||
+			slices.Contains(p.MessageTypes, messageType)
+	}
+
 	promptPoliciesOn := false
 	if slices.ContainsFunc(policies, func(p repo.RiskPolicy) bool {
-		return p.PolicyType == "prompt_based" &&
-			(len(p.MessageTypes) == 0 || slices.Contains(p.MessageTypes, messageType))
+		return p.PolicyType == "prompt_based" && inMessageScope(p)
 	}) {
 		// All enforcing policies for a project belong to the same org.
 		promptPoliciesOn = s.promptPoliciesEnabled(ctx, policies[0].OrganizationID, projectID)
@@ -198,7 +206,7 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, projectID uuid.UUID, t
 	)
 	g, gctx := errgroup.WithContext(ctx)
 	for _, p := range policies {
-		if len(p.MessageTypes) > 0 && !slices.Contains(p.MessageTypes, messageType) {
+		if !inMessageScope(p) {
 			continue
 		}
 

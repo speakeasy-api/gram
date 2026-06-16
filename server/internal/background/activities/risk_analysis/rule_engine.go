@@ -544,6 +544,26 @@ func (a CompiledApplication) Active() bool {
 	return a.include != nil || a.exempt != nil
 }
 
+// HasInclude reports whether a fine-grained include predicate is set. When it is,
+// it is the policy's scope and supersedes the coarse message_types filter.
+func (a CompiledApplication) HasInclude() bool {
+	return a.include != nil
+}
+
+// ApplicationHasInclude reports whether application_config defines an include
+// predicate, without fully compiling it — a cheap check for the realtime
+// pre-filter, which must not skip an include-scoped policy by message type.
+func ApplicationHasInclude(raw []byte) bool {
+	if isEmptyJSON(raw) {
+		return false
+	}
+	var app PolicyApplication
+	if err := json.Unmarshal(raw, &app); err != nil {
+		return false
+	}
+	return app.Include != nil && len(app.Include.Conditions) > 0
+}
+
 // Includes reports whether the message is in scope. A nil include predicate
 // means "all messages" (scope falls back to the coarse message_types filter).
 func (a CompiledApplication) Includes(view MessageView) bool {

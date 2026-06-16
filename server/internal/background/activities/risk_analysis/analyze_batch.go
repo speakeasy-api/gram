@@ -169,7 +169,17 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	if err != nil {
 		return nil, err
 	}
-	messages = filterMessagesByMessageTypes(messages, args.MessageTypes)
+	// Policy application: a defined include predicate is the fine-grained scope
+	// and supersedes the coarse message_types filter; exempt takes a matched
+	// message out of the policy entirely. Computed once, applied to the source
+	// scanners and the judge.
+	app, err := CompileApplication(policy.ApplicationConfig)
+	if err != nil {
+		return nil, fmt.Errorf("compile application_config: %w", err)
+	}
+	if !app.HasInclude() {
+		messages = filterMessagesByMessageTypes(messages, args.MessageTypes)
+	}
 	scannedCount = len(messages)
 	if len(messages) == 0 {
 		if err := a.writeResults(ctx, args, nil); err != nil {
@@ -196,13 +206,6 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		return nil, fmt.Errorf("list exclusions: %w", err)
 	}
 
-	// Policy application: include narrows scope (in addition to the message_types
-	// filter already applied), exempt takes a message out of the policy entirely.
-	// Computed once and applied to both the source scanners and the judge.
-	app, err := CompileApplication(policy.ApplicationConfig)
-	if err != nil {
-		return nil, fmt.Errorf("compile application_config: %w", err)
-	}
 	appExcluded := a.applicationExcluded(ctx, app, messages)
 
 	findings, err := a.scan(ctx, args, messages, customRules, NewExclusionSet(exclusions), appExcluded)
