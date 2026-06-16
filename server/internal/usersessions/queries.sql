@@ -172,12 +172,32 @@ WHERE s.id = @id AND iss.project_id = @project_id AND s.deleted IS FALSE;
 -- surface cannot accidentally return it.
 SELECT s.id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, s.jti,
        s.refresh_expires_at, s.expires_at,
-       s.created_at, s.updated_at, s.deleted_at, s.deleted
+       s.created_at, s.updated_at, s.deleted_at, s.deleted,
+       iss.slug AS issuer_slug,
+       c.client_name AS client_name,
+       u.display_name AS user_display_name,
+       u.email AS user_email,
+       k.name AS api_key_name
 FROM user_sessions AS s
 JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
+LEFT JOIN user_session_clients AS c ON c.id = s.user_session_client_id
+LEFT JOIN users AS u
+  ON s.subject_urn::text LIKE 'user:%'
+  AND u.id = split_part(s.subject_urn::text, ':', 2)
+LEFT JOIN api_keys AS k
+  ON k.id = CASE
+             WHEN s.subject_urn::text LIKE 'apikey:%'
+             THEN split_part(s.subject_urn::text, ':', 2)::uuid
+           END
 WHERE iss.project_id = @project_id
-  AND s.deleted IS FALSE
   AND iss.deleted IS FALSE
+  AND CASE sqlc.narg('status')::text
+        WHEN 'active'  THEN (s.deleted IS FALSE AND s.expires_at > now())
+        WHEN 'expired' THEN (s.deleted IS FALSE AND s.expires_at <= now())
+        WHEN 'revoked' THEN (s.deleted IS TRUE)
+        WHEN 'all'     THEN TRUE
+        ELSE (s.deleted IS FALSE)
+      END
   AND (sqlc.narg('subject_urn')::text IS NULL OR s.subject_urn = sqlc.narg('subject_urn')::text)
   AND (sqlc.narg('user_session_issuer_id')::uuid IS NULL OR s.user_session_issuer_id = sqlc.narg('user_session_issuer_id')::uuid)
   AND (sqlc.narg('cursor')::uuid IS NULL OR s.id < sqlc.narg('cursor')::uuid)

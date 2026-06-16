@@ -766,21 +766,42 @@ func (q *Queries) ListUserSessionIssuersByProjectID(ctx context.Context, arg Lis
 const listUserSessionsByProjectID = `-- name: ListUserSessionsByProjectID :many
 SELECT s.id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, s.jti,
        s.refresh_expires_at, s.expires_at,
-       s.created_at, s.updated_at, s.deleted_at, s.deleted
+       s.created_at, s.updated_at, s.deleted_at, s.deleted,
+       iss.slug AS issuer_slug,
+       c.client_name AS client_name,
+       u.display_name AS user_display_name,
+       u.email AS user_email,
+       k.name AS api_key_name
 FROM user_sessions AS s
 JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
+LEFT JOIN user_session_clients AS c ON c.id = s.user_session_client_id
+LEFT JOIN users AS u
+  ON s.subject_urn::text LIKE 'user:%'
+  AND u.id = split_part(s.subject_urn::text, ':', 2)
+LEFT JOIN api_keys AS k
+  ON k.id = CASE
+             WHEN s.subject_urn::text LIKE 'apikey:%'
+             THEN split_part(s.subject_urn::text, ':', 2)::uuid
+           END
 WHERE iss.project_id = $1
-  AND s.deleted IS FALSE
   AND iss.deleted IS FALSE
-  AND ($2::text IS NULL OR s.subject_urn = $2::text)
-  AND ($3::uuid IS NULL OR s.user_session_issuer_id = $3::uuid)
-  AND ($4::uuid IS NULL OR s.id < $4::uuid)
+  AND CASE $2::text
+        WHEN 'active'  THEN (s.deleted IS FALSE AND s.expires_at > now())
+        WHEN 'expired' THEN (s.deleted IS FALSE AND s.expires_at <= now())
+        WHEN 'revoked' THEN (s.deleted IS TRUE)
+        WHEN 'all'     THEN TRUE
+        ELSE (s.deleted IS FALSE)
+      END
+  AND ($3::text IS NULL OR s.subject_urn = $3::text)
+  AND ($4::uuid IS NULL OR s.user_session_issuer_id = $4::uuid)
+  AND ($5::uuid IS NULL OR s.id < $5::uuid)
 ORDER BY s.id DESC
-LIMIT $5
+LIMIT $6
 `
 
 type ListUserSessionsByProjectIDParams struct {
 	ProjectID           uuid.UUID
+	Status              pgtype.Text
 	SubjectUrn          pgtype.Text
 	UserSessionIssuerID uuid.NullUUID
 	Cursor              uuid.NullUUID
@@ -799,6 +820,11 @@ type ListUserSessionsByProjectIDRow struct {
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz
 	Deleted             bool
+	IssuerSlug          string
+	ClientName          pgtype.Text
+	UserDisplayName     pgtype.Text
+	UserEmail           pgtype.Text
+	ApiKeyName          pgtype.Text
 }
 
 // refresh_token_hash is excluded from the projection so the management API
@@ -806,6 +832,7 @@ type ListUserSessionsByProjectIDRow struct {
 func (q *Queries) ListUserSessionsByProjectID(ctx context.Context, arg ListUserSessionsByProjectIDParams) ([]ListUserSessionsByProjectIDRow, error) {
 	rows, err := q.db.Query(ctx, listUserSessionsByProjectID,
 		arg.ProjectID,
+		arg.Status,
 		arg.SubjectUrn,
 		arg.UserSessionIssuerID,
 		arg.Cursor,
@@ -830,6 +857,11 @@ func (q *Queries) ListUserSessionsByProjectID(ctx context.Context, arg ListUserS
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
+			&i.IssuerSlug,
+			&i.ClientName,
+			&i.UserDisplayName,
+			&i.UserEmail,
+			&i.ApiKeyName,
 		); err != nil {
 			return nil, err
 		}
