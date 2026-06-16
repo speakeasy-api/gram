@@ -5,8 +5,6 @@ import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SessionRow } from "@/components/sessions/SessionRow";
-import { STATUS_PRESENTATION } from "@/lib/user-session-status";
-import { cn } from "@/lib/utils";
 import {
   useUserSessionFacets,
   useUserSessionsInfinite,
@@ -15,6 +13,10 @@ import type { ListUserSessionsQueryParamStatus } from "@gram/client/models/opera
 
 const STATUS_OPTIONS = ["all", "active", "expired", "revoked"] as const;
 type StatusFilter = (typeof STATUS_OPTIONS)[number];
+
+const STATUS_FILTER_OPTIONS = STATUS_OPTIONS.filter((o) => o !== "all").map(
+  (o) => ({ value: o, displayName: o[0]!.toUpperCase() + o.slice(1) }),
+);
 
 export default function UserSessions(): JSX.Element {
   return (
@@ -60,33 +62,14 @@ function UserSessionsInner(): JSX.Element {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
-        {STATUS_OPTIONS.map((opt) => {
-          const selected = status === opt;
-          const dotClass =
-            opt === "all" ? null : STATUS_PRESENTATION[opt].dotClass;
-          return (
-            <button
-              key={opt}
-              type="button"
-              aria-pressed={selected}
-              onClick={() => setStatus(opt)}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                selected
-                  ? "border-border bg-secondary text-secondary-foreground"
-                  : "text-muted-foreground hover:bg-muted border-transparent",
-              )}
-            >
-              {dotClass && (
-                <span className={cn("size-2 rounded-full", dotClass)} />
-              )}
-              {opt[0]!.toUpperCase() + opt.slice(1)}
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="flex flex-wrap gap-2">
+        <FacetSelect
+          label="Status"
+          value={status}
+          onValueChange={(v) => setStatus(v as StatusFilter)}
+          placeholder="All statuses"
+          allLabel="All statuses"
+          options={STATUS_FILTER_OPTIONS}
+        />
         <FacetSelect
           label="MCP server"
           value={issuerId}
