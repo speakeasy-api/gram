@@ -25,6 +25,7 @@ import {
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { cn } from "@/lib/utils";
+import { useRoutes } from "@/routes";
 import { telemetryGetEmployeeDataFlowGraph } from "@gram/client/funcs/telemetryGetEmployeeDataFlowGraph";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import { telemetryGetUserMetricsSummary } from "@gram/client/funcs/telemetryGetUserMetricsSummary";
@@ -60,7 +61,7 @@ import {
 import { slugify } from "@/lib/constants";
 import { useMemo, useState } from "react";
 import { Line } from "react-chartjs-2";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   Background,
@@ -139,6 +140,7 @@ const DATA_FLOW_EDGE_TYPES = { dataFlow: DataFlowEdgeLine };
 export function InsightsEmployeeDetailContent(): JSX.Element {
   const { userSlug } = useParams<{ userSlug: string }>();
   const client = useGramContext();
+  const routes = useRoutes();
   const { isExpanded: isInsightsOpen } = useInsightsState();
   const mcpConfig = useObservabilityMcpConfig({
     toolsToInclude: ["gram_search_users", "gram_list_organization_users"],
@@ -178,6 +180,28 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
     if (customRange) return customRangeLabel ?? "the selected range";
     return formatDateRangeLabel(dateRange, null);
   }, [customRange, customRangeLabel, dateRange]);
+  const employeeEmailFilter =
+    member?.email ?? (routeUser.includes("@") ? routeUser : null);
+  const agentSessionsHref = useMemo(() => {
+    const params = new URLSearchParams();
+    if (customRange) {
+      params.set("from", from.toISOString());
+      params.set("to", to.toISOString());
+    } else {
+      params.set("range", dateRange);
+    }
+    if (employeeEmailFilter) {
+      params.set("search", employeeEmailFilter);
+    }
+    return `${routes.agentSessions.href()}?${params.toString()}`;
+  }, [
+    customRange,
+    dateRange,
+    employeeEmailFilter,
+    from,
+    routes.agentSessions,
+    to,
+  ]);
 
   const handlePresetChange = (preset: DateRangePreset) => {
     setDateRange(preset);
@@ -391,6 +415,23 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                   value={summary?.totalChats ?? 0}
                   icon="message-square"
                   subtext={`Over ${rangeLabel}`}
+                  action={
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Link
+                          to={agentSessionsHref}
+                          aria-label="View Agent Sessions"
+                          className="text-primary/70 hover:text-primary flex items-center gap-1 text-xs no-underline"
+                        >
+                          View
+                          <Icon name="arrow-right" />
+                        </Link>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        View Agent Sessions for {member?.name ?? routeUser}
+                      </TooltipContent>
+                    </Tooltip>
+                  }
                 />
               </section>
 
