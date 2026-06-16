@@ -76,7 +76,7 @@ func seedActiveClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, pro
 	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
 		ProjectID:               conv.ToNullUUID(projectID),
 		RemoteSessionIssuerID:   issuer.ID,
-		UserSessionIssuerID:     userIssuerID,
+		UserSessionIssuerID:     conv.ToNullUUID(userIssuerID),
 		ClientID:                "cid-" + slug,
 		ClientSecretEncrypted:   pgtype.Text{String: "", Valid: false},
 		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now()),

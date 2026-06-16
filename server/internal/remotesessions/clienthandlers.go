@@ -150,7 +150,7 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 	created, err := txRepo.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 		RemoteSessionIssuerID:   issuerID,
-		UserSessionIssuerID:     userIssuerID,
+		UserSessionIssuerID:     conv.ToNullUUID(userIssuerID),
 		ClientID:                clientID,
 		ClientSecretEncrypted:   secretCiphertext,
 		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
@@ -315,7 +315,7 @@ func (s *Service) CloneClientFromOAuthProxyProvider(ctx context.Context, payload
 	created, err := txRepo.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 		RemoteSessionIssuerID:   issuerID,
-		UserSessionIssuerID:     userIssuerID,
+		UserSessionIssuerID:     conv.ToNullUUID(userIssuerID),
 		ClientID:                clientID,
 		ClientSecretEncrypted:   conv.ToPGText(encrypted),
 		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
@@ -517,13 +517,13 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 		return nil, oops.E(oops.CodeUnexpected, err, "update remote session client").LogError(ctx, logger)
 	}
 
-	shouldRemakeUserSessionIssuerAttachment := payload.UserSessionIssuerID != nil && userIssuerID.Valid && userIssuerID.UUID != existing.UserSessionIssuerID
+	shouldRemakeUserSessionIssuerAttachment := payload.UserSessionIssuerID != nil && userIssuerID.Valid && userIssuerID.UUID != existing.UserSessionIssuerID.UUID
 
 	if shouldRemakeUserSessionIssuerAttachment {
 		// The new user_session_issuer must not already bind a different client
 		// for this client's remote_session_issuer. Exclude this client so a
 		// no-op re-bind passes.
-		if err = s.guardSingleClientPerRemoteIssuer(ctx, logger, txRepo, *authCtx.ProjectID, updated.UserSessionIssuerID, existing.RemoteSessionIssuerID, updated.ID); err != nil {
+		if err = s.guardSingleClientPerRemoteIssuer(ctx, logger, txRepo, *authCtx.ProjectID, updated.UserSessionIssuerID.UUID, existing.RemoteSessionIssuerID, updated.ID); err != nil {
 			return nil, err
 		}
 
@@ -550,7 +550,7 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 			ctx,
 			repo.AttachRemoteSessionClientToUserSessionIssuerParams{
 				RemoteSessionClientID: updated.ID,
-				UserSessionIssuerID:   updated.UserSessionIssuerID,
+				UserSessionIssuerID:   updated.UserSessionIssuerID.UUID,
 			},
 		); err != nil {
 			return nil, oops.E(

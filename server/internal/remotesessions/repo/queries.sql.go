@@ -112,7 +112,7 @@ RETURNING id, project_id, remote_session_issuer_id, user_session_issuer_id, clie
 type CreateRemoteSessionClientParams struct {
 	ProjectID               uuid.NullUUID
 	RemoteSessionIssuerID   uuid.UUID
-	UserSessionIssuerID     uuid.UUID
+	UserSessionIssuerID     uuid.NullUUID
 	ClientID                string
 	ClientSecretEncrypted   pgtype.Text
 	ClientIDIssuedAt        pgtype.Timestamptz
@@ -753,7 +753,7 @@ type GetRemoteSessionClientWithIssuerByIDRow struct {
 	ClientAudience          pgtype.Text
 	LegacyCallbackUrl       bool
 	RemoteSessionIssuerID   uuid.UUID
-	UserSessionIssuerID     uuid.UUID
+	UserSessionIssuerID     uuid.NullUUID
 	IssuerSlug              string
 	IssuerUrl               string
 	AuthorizationEndpoint   pgtype.Text
@@ -1520,7 +1520,7 @@ type ListRemoteSessionClientsForUserSessionIssuerRow struct {
 	ClientAudience          pgtype.Text
 	LegacyCallbackUrl       bool
 	RemoteSessionIssuerID   uuid.UUID
-	UserSessionIssuerID     uuid.UUID
+	UserSessionIssuerID     uuid.NullUUID
 	IssuerSlug              string
 	IssuerUrl               string
 	AuthorizationEndpoint   pgtype.Text
