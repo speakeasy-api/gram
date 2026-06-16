@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
+	"golang.org/x/tools/go/ast/inspector"
 )
 
 const (
@@ -32,47 +34,47 @@ type noTestingRawSqlSettings struct {
 
 func newNoTestingRawSqlAnalyzer(_ noTestingRawSqlSettings) *analysis.Analyzer {
 	return &analysis.Analyzer{
-		Name: noTestingRawSqlAnalyzer,
-		Doc:  noTestingRawSqlDefaultMessage,
+		Name:     noTestingRawSqlAnalyzer,
+		Doc:      noTestingRawSqlDefaultMessage,
+		Requires: []*analysis.Analyzer{inspect.Analyzer},
 		Run: func(pass *analysis.Pass) (any, error) {
-			for _, file := range pass.Files {
-				if !strings.HasSuffix(pass.Fset.File(file.Pos()).Name(), "_test.go") {
-					continue
+			ins := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
+
+			ins.Preorder([]ast.Node{(*ast.CallExpr)(nil)}, func(node ast.Node) {
+				callExpr := node.(*ast.CallExpr)
+
+				// This rule only applies to test files. The shared inspector
+				// walks every file in the package, so filter by filename per
+				// node rather than per file.
+				if !strings.HasSuffix(pass.Fset.File(callExpr.Pos()).Name(), "_test.go") {
+					return
 				}
 
-				ast.Inspect(file, func(node ast.Node) bool {
-					callExpr, ok := node.(*ast.CallExpr)
-					if !ok {
-						return true
-					}
+				selectorExpr, ok := callExpr.Fun.(*ast.SelectorExpr)
+				if !ok {
+					return
+				}
 
-					selectorExpr, ok := callExpr.Fun.(*ast.SelectorExpr)
-					if !ok {
-						return true
-					}
+				if !noTestingRawSqlMethods[selectorExpr.Sel.Name] {
+					return
+				}
 
-					if !noTestingRawSqlMethods[selectorExpr.Sel.Name] {
-						return true
-					}
+				fn, ok := pass.TypesInfo.Uses[selectorExpr.Sel].(*types.Func)
+				if !ok {
+					return
+				}
 
-					fn, ok := pass.TypesInfo.Uses[selectorExpr.Sel].(*types.Func)
-					if !ok {
-						return true
-					}
+				sig, ok := fn.Type().(*types.Signature)
+				if !ok || sig.Recv() == nil {
+					return
+				}
 
-					sig, ok := fn.Type().(*types.Signature)
-					if !ok || sig.Recv() == nil {
-						return true
-					}
+				if !isPgxReceiver(sig.Recv().Type()) {
+					return
+				}
 
-					if !isPgxReceiver(sig.Recv().Type()) {
-						return true
-					}
-
-					pass.ReportRangef(callExpr, "%s", noTestingRawSqlDefaultMessage)
-					return true
-				})
-			}
+				pass.ReportRangef(callExpr, "%s", noTestingRawSqlDefaultMessage)
+			})
 
 			return nil, nil
 		},
