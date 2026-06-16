@@ -1249,6 +1249,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	apiKeyID := conv.PtrValOr(payload.APIKeyID, "")
 	toolsetSlug := conv.PtrValOr(payload.ToolsetSlug, "")
 	remoteMCPServerID := conv.PtrValOr(payload.RemoteMcpServerID, "")
+	mcpServerID := conv.PtrValOr(payload.McpServerID, "")
 	eventSource := conv.PtrValOr(payload.EventSource, "")
 	hookSource := conv.PtrValOr(payload.HookSource, "")
 
@@ -1274,6 +1275,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		APIKeyID:          apiKeyID,
 		ToolsetSlug:       toolsetSlug,
 		RemoteMCPServerID: remoteMCPServerID,
+		MCPServerID:       mcpServerID,
 		EventSource:       eventSource,
 		HookSource:        hookSource,
 	})
@@ -1290,6 +1292,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		APIKeyID:          apiKeyID,
 		ToolsetSlug:       toolsetSlug,
 		RemoteMCPServerID: remoteMCPServerID,
+		MCPServerID:       mcpServerID,
 		EventSource:       eventSource,
 		HookSource:        hookSource,
 	})
@@ -1309,6 +1312,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 			APIKeyID:          apiKeyID,
 			ToolsetSlug:       toolsetSlug,
 			RemoteMCPServerID: remoteMCPServerID,
+			MCPServerID:       mcpServerID,
 			EventSource:       eventSource,
 			HookSource:        hookSource,
 		})
@@ -1326,6 +1330,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		APIKeyID:          apiKeyID,
 		ToolsetSlug:       toolsetSlug,
 		RemoteMCPServerID: remoteMCPServerID,
+		MCPServerID:       mcpServerID,
 		EventSource:       eventSource,
 		HookSource:        hookSource,
 		Limit:             10,
@@ -1344,6 +1349,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		APIKeyID:          apiKeyID,
 		ToolsetSlug:       toolsetSlug,
 		RemoteMCPServerID: remoteMCPServerID,
+		MCPServerID:       mcpServerID,
 		EventSource:       eventSource,
 		HookSource:        hookSource,
 		Limit:             10,
@@ -1435,6 +1441,7 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 		APIKeyID:          "",
 		ToolsetSlug:       "",
 		RemoteMCPServerID: "",
+		MCPServerID:       "",
 		EventSource:       "",
 		HookSource:        "",
 	})
@@ -1462,6 +1469,7 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 		APIKeyID:          "",
 		ToolsetSlug:       "",
 		RemoteMCPServerID: "",
+		MCPServerID:       "",
 		EventSource:       "",
 		HookSource:        "",
 	})

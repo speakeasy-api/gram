@@ -1440,6 +1440,9 @@ var GetObservabilityOverviewPayload = Type("GetObservabilityOverviewPayload", fu
 	Attribute("remote_mcp_server_id", String, "Optional Remote MCP server ID filter", func() {
 		Format(FormatUUID)
 	})
+	Attribute("mcp_server_id", String, "Optional MCP server ID filter (fronting server; spans both remote-backed and toolset-backed activity)", func() {
+		Format(FormatUUID)
+	})
 	Attribute("event_source", String, "Optional event source filter (e.g. 'hook')")
 	Attribute("hook_source", String, "Optional hook source filter (e.g. 'cursor', 'claude-code')")
 	Attribute("include_time_series", Boolean, "Whether to include time series data (default: true)", func() {

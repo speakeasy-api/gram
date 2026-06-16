@@ -619,6 +619,7 @@ type GetTimeSeriesMetricsParams struct {
 	APIKeyID          string // Optional filter
 	ToolsetSlug       string // Optional filter - filters by toolset/MCP server slug
 	RemoteMCPServerID string // Optional filter - filters by remote_mcp_server_id
+	MCPServerID       string // Optional filter - filters by mcp_server_id
 	EventSource       string // Optional filter - filters by event_source
 	HookSource        string // Optional filter - filters by hook_source
 }
@@ -679,6 +680,9 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 	if arg.RemoteMCPServerID != "" {
 		sb = sb.Where(squirrel.Eq{"remote_mcp_server_id": arg.RemoteMCPServerID})
 	}
+	if arg.MCPServerID != "" {
+		sb = sb.Where(squirrel.Eq{"mcp_server_id": arg.MCPServerID})
+	}
 	if arg.EventSource != "" {
 		sb = sb.Where(squirrel.Eq{"event_source": arg.EventSource})
 	}
@@ -730,6 +734,7 @@ type GetToolMetricsBreakdownParams struct {
 	APIKeyID          string // Optional filter
 	ToolsetSlug       string // Optional filter - filters by toolset/MCP server slug
 	RemoteMCPServerID string // Optional filter - filters by remote_mcp_server_id
+	MCPServerID       string // Optional filter - filters by mcp_server_id
 	EventSource       string // Optional filter - filters by event_source
 	HookSource        string // Optional filter - filters by hook_source
 	Limit             int
@@ -769,6 +774,9 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 	}
 	if arg.RemoteMCPServerID != "" {
 		sb = sb.Where(squirrel.Eq{"remote_mcp_server_id": arg.RemoteMCPServerID})
+	}
+	if arg.MCPServerID != "" {
+		sb = sb.Where(squirrel.Eq{"mcp_server_id": arg.MCPServerID})
 	}
 	if arg.EventSource != "" {
 		sb = sb.Where(squirrel.Eq{"event_source": arg.EventSource})
@@ -825,6 +833,7 @@ type GetOverviewSummaryParams struct {
 	APIKeyID          string // Optional filter
 	ToolsetSlug       string // Optional filter - filters by toolset/MCP server slug
 	RemoteMCPServerID string // Optional filter - filters by remote_mcp_server_id
+	MCPServerID       string // Optional filter - filters by mcp_server_id
 	EventSource       string // Optional filter - filters by event_source
 	HookSource        string // Optional filter - filters by hook_source
 }
@@ -835,7 +844,7 @@ type GetOverviewSummaryParams struct {
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetOverviewSummary(ctx context.Context, arg GetOverviewSummaryParams) (*OverviewSummary, error) {
-	hasFilters := arg.UserID != "" || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.EventSource != "" || arg.HookSource != ""
+	hasFilters := arg.UserID != "" || arg.ExternalUserID != "" || arg.APIKeyID != "" || arg.ToolsetSlug != "" || arg.RemoteMCPServerID != "" || arg.MCPServerID != "" || arg.EventSource != "" || arg.HookSource != ""
 
 	var sb squirrel.SelectBuilder
 	if hasFilters {
@@ -947,6 +956,9 @@ func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.S
 	}
 	if arg.RemoteMCPServerID != "" {
 		sb = sb.Where(squirrel.Eq{"remote_mcp_server_id": arg.RemoteMCPServerID})
+	}
+	if arg.MCPServerID != "" {
+		sb = sb.Where(squirrel.Eq{"mcp_server_id": arg.MCPServerID})
 	}
 	if arg.EventSource != "" {
 		sb = sb.Where(squirrel.Eq{"event_source": arg.EventSource})
