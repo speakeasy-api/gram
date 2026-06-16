@@ -283,7 +283,6 @@ trackedFiles:
   src/funcs/remoteMcpUpdateServerHeader.ts: {}
   src/funcs/remoteMcpVerifyURL.ts: {}
   src/funcs/remoteSessionClientsAttachUserSessionIssuer.ts: {}
-  src/funcs/remoteSessionClientsCloneClientFromOAuthProxyProvider.ts: {}
   src/funcs/remoteSessionClientsCreate.ts: {}
   src/funcs/remoteSessionClientsCreateCimd.ts: {}
   src/funcs/remoteSessionClientsDelete.ts: {}
@@ -381,7 +380,6 @@ trackedFiles:
   src/funcs/templatesUpdate.ts: {}
   src/funcs/toolsList.ts: {}
   src/funcs/toolsetsAddExternalOAuthServer.ts: {}
-  src/funcs/toolsetsAddOAuthProxyServer.ts: {}
   src/funcs/toolsetsCheckMCPSlugAvailability.ts: {}
   src/funcs/toolsetsCloneBySlug.ts: {}
   src/funcs/toolsetsCreate.ts: {}
@@ -394,7 +392,6 @@ trackedFiles:
   src/funcs/toolsetsSetToolVariationsGroup.ts: {}
   src/funcs/toolsetsSetUserSessionIssuer.ts: {}
   src/funcs/toolsetsUpdateBySlug.ts: {}
-  src/funcs/toolsetsUpdateOAuthProxyServer.ts: {}
   src/funcs/triggersCreate.ts: {}
   src/funcs/triggersDelete.ts: {}
   src/funcs/triggersGet.ts: {}
@@ -426,7 +423,6 @@ trackedFiles:
   src/funcs/userSessionIssuersDelete.ts: {}
   src/funcs/userSessionIssuersGet.ts: {}
   src/funcs/userSessionIssuersList.ts: {}
-  src/funcs/userSessionIssuersMigrateLegacyGramRegistrations.ts: {}
   src/funcs/userSessionIssuersUpdate.ts: {}
   src/funcs/userSessionsList.ts: {}
   src/funcs/userSessionsListFacets.ts: {}
@@ -461,7 +457,6 @@ trackedFiles:
   src/models/components/addexternalmcpform.ts: {}
   src/models/components/addexternaloauthserverrequestbody.ts: {}
   src/models/components/addfunctionsform.ts: {}
-  src/models/components/addoauthproxyserverrequestbody.ts: {}
   src/models/components/addopenapiv3deploymentassetform.ts: {}
   src/models/components/addpackageform.ts: {}
   src/models/components/addpluginserverform.ts: {}
@@ -503,7 +498,6 @@ trackedFiles:
   src/models/components/claudehookresult.ts: {}
   src/models/components/claudetoolusage.ts: {}
   src/models/components/claudeturnusage.ts: {}
-  src/models/components/cloneclientfromoauthproxyproviderform.ts: {}
   src/models/components/cloneenvironmentrequestbody.ts: {}
   src/models/components/codexhookpayload.ts: {}
   src/models/components/codexhookresult.ts: {}
@@ -758,8 +752,6 @@ trackedFiles:
   src/models/components/mcpmetadata.ts: {}
   src/models/components/mcpregistry.ts: {}
   src/models/components/mcpserver.ts: {}
-  src/models/components/migratelegacygramregistrationsform.ts: {}
-  src/models/components/migratelegacygramregistrationsresult.ts: {}
   src/models/components/mintusersessionrequestbody.ts: {}
   src/models/components/mintusersessionresponsebody.ts: {}
   src/models/components/modelproviderkey.ts: {}
@@ -767,10 +759,6 @@ trackedFiles:
   src/models/components/moveissuerrequestbody.ts: {}
   src/models/components/notmodified.ts: {}
   src/models/components/oauthenablementmetadata.ts: {}
-  src/models/components/oauthproxyprovider.ts: {}
-  src/models/components/oauthproxyserver.ts: {}
-  src/models/components/oauthproxyserverform.ts: {}
-  src/models/components/oauthproxyserverupdateform.ts: {}
   src/models/components/observabilitysummary.ts: {}
   src/models/components/onboardinghookevent.ts: {}
   src/models/components/onboardingstatusresult.ts: {}
@@ -1016,7 +1004,6 @@ trackedFiles:
   src/models/components/updatemcpendpointform.ts: {}
   src/models/components/updatemcpserverform.ts: {}
   src/models/components/updatememberrolesform.ts: {}
-  src/models/components/updateoauthproxyserverrequestbody.ts: {}
   src/models/components/updatepackageform.ts: {}
   src/models/components/updatepackageresult.ts: {}
   src/models/components/updatepluginform.ts: {}
@@ -1074,7 +1061,6 @@ trackedFiles:
   src/models/errors/serviceerror.ts: {}
   src/models/operations/acknowledgeriskpolicychallenge.ts: {}
   src/models/operations/addexternaloauthserver.ts: {}
-  src/models/operations/addoauthproxyserver.ts: {}
   src/models/operations/addpluginserver.ts: {}
   src/models/operations/addskillversion.ts: {}
   src/models/operations/approveriskpolicybypassrequest.ts: {}
@@ -1089,7 +1075,6 @@ trackedFiles:
   src/models/operations/checkmcpslugavailability.ts: {}
   src/models/operations/clearmcpregistrycache.ts: {}
   src/models/operations/cliauthauthorize.ts: {}
-  src/models/operations/cloneclientfromoauthproxyprovider.ts: {}
   src/models/operations/cloneenvironment.ts: {}
   src/models/operations/clonetoolset.ts: {}
   src/models/operations/compileexpr.ts: {}
@@ -1360,7 +1345,6 @@ trackedFiles:
   src/models/operations/listversions.ts: {}
   src/models/operations/loadchat.ts: {}
   src/models/operations/logout.ts: {}
-  src/models/operations/migratelegacygramregistrations.ts: {}
   src/models/operations/mintusersession.ts: {}
   src/models/operations/moveorganizationremotesessionissuer.ts: {}
   src/models/operations/pausetriggerinstance.ts: {}
@@ -1442,7 +1426,6 @@ trackedFiles:
   src/models/operations/updatemcpendpoint.ts: {}
   src/models/operations/updatemcpserver.ts: {}
   src/models/operations/updatememberroles.ts: {}
-  src/models/operations/updateoauthproxyserver.ts: {}
   src/models/operations/updateorganizationremotesessionclient.ts: {}
   src/models/operations/updateorganizationremotesessionissuer.ts: {}
   src/models/operations/updatepackage.ts: {}
@@ -1481,7 +1464,6 @@ trackedFiles:
   src/react-query/activeDeployment.core.ts: {}
   src/react-query/activeDeployment.ts: {}
   src/react-query/addExternalOAuthServer.ts: {}
-  src/react-query/addOAuthProxyServer.ts: {}
   src/react-query/addPluginServer.ts: {}
   src/react-query/addSkillVersion.ts: {}
   src/react-query/agentPlugins.core.ts: {}
@@ -1523,7 +1505,6 @@ trackedFiles:
   src/react-query/checkMcpEndpointSlugAvailability.ts: {}
   src/react-query/cliAuthAuthorize.ts: {}
   src/react-query/cliAuthRedeem.ts: {}
-  src/react-query/cloneClientFromOAuthProxyProvider.ts: {}
   src/react-query/cloneEnvironment.ts: {}
   src/react-query/cloneToolset.ts: {}
   src/react-query/collectionsAttachServer.ts: {}
@@ -1781,7 +1762,6 @@ trackedFiles:
   src/react-query/mcpServers.ts: {}
   src/react-query/members.core.ts: {}
   src/react-query/members.ts: {}
-  src/react-query/migrateLegacyGramRegistrations.ts: {}
   src/react-query/mintUserSession.ts: {}
   src/react-query/modelProviderKeys.core.ts: {}
   src/react-query/modelProviderKeys.ts: {}
@@ -2015,7 +1995,6 @@ trackedFiles:
   src/react-query/updateMcpEndpoint.ts: {}
   src/react-query/updateMcpServer.ts: {}
   src/react-query/updateMemberRoles.ts: {}
-  src/react-query/updateOAuthProxyServer.ts: {}
   src/react-query/updateOrganizationRemoteSessionClient.ts: {}
   src/react-query/updateOrganizationRemoteSessionIssuer.ts: {}
   src/react-query/updatePackage.ts: {}
