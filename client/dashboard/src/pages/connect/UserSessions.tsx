@@ -1,10 +1,14 @@
 import { useState } from "react";
+import { FacetSelect } from "@/components/auditlogs/feed";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SessionRow } from "@/components/sessions/SessionRow";
-import { useUserSessionsInfinite } from "@gram/client/react-query";
+import {
+  useUserSessionFacets,
+  useUserSessionsInfinite,
+} from "@gram/client/react-query";
 import type { ListUserSessionsQueryParamStatus } from "@gram/client/models/operations";
 
 const STATUS_OPTIONS = ["all", "active", "expired", "revoked"] as const;
@@ -27,6 +31,12 @@ export default function UserSessions(): JSX.Element {
 
 function UserSessionsInner(): JSX.Element {
   const [status, setStatus] = useState<StatusFilter>("all");
+  const [clientId, setClientId] = useState("all");
+  const [subjectUrn, setSubjectUrn] = useState("all");
+  const [issuerId, setIssuerId] = useState("all");
+
+  const { data: facets } = useUserSessionFacets({});
+
   const {
     data,
     isPending,
@@ -36,6 +46,9 @@ function UserSessionsInner(): JSX.Element {
     refetch,
   } = useUserSessionsInfinite({
     status: status as ListUserSessionsQueryParamStatus,
+    clientId: clientId === "all" ? undefined : clientId,
+    subjectUrn: subjectUrn === "all" ? undefined : subjectUrn,
+    userSessionIssuerId: issuerId === "all" ? undefined : issuerId,
   });
   const sessions = data?.pages.flatMap((p) => p.result.items) ?? [];
 
@@ -52,6 +65,33 @@ function UserSessionsInner(): JSX.Element {
             {opt[0]!.toUpperCase() + opt.slice(1)}
           </Button>
         ))}
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <FacetSelect
+          label="MCP server"
+          value={issuerId}
+          onValueChange={setIssuerId}
+          placeholder="All servers"
+          allLabel="All servers"
+          options={facets?.servers ?? []}
+        />
+        <FacetSelect
+          label="Client"
+          value={clientId}
+          onValueChange={setClientId}
+          placeholder="All clients"
+          allLabel="All clients"
+          options={facets?.clients ?? []}
+        />
+        <FacetSelect
+          label="User"
+          value={subjectUrn}
+          onValueChange={setSubjectUrn}
+          placeholder="All users"
+          allLabel="All users"
+          options={facets?.users ?? []}
+        />
       </div>
 
       {isPending ? (
