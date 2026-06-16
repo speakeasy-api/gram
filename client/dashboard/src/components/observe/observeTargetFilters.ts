@@ -14,7 +14,7 @@ import { normalizeUserEmailFilter } from "./observeUserFilters";
 
 export const SERVER_FILTER_PATH = "gram.tool_call.source";
 export const USER_EMAIL_FILTER_PATH = "user.email";
-export const HOOK_SOURCE_FILTER_PATH = "gram.hook.source";
+const HOOK_SOURCE_FILTER_PATH = "gram.hook.source";
 
 const HOSTED_SERVER_PREFIX = "hosted:";
 const SHADOW_SERVER_PREFIX = "shadow:";
