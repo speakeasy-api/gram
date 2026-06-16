@@ -20,6 +20,7 @@ import type {
   CreateRemoteSessionIssuerInput,
   CreateUserSessionIssuerInput,
   LinkToolsetUserSessionIssuerInput,
+  MigrateGramRegistrationsInput,
   MigrationInput,
   ResolveRemoteSessionClientInput,
   ResolveRemoteSessionIssuerInput,
@@ -99,7 +100,10 @@ function remoteSessionClient(id = "rsc-1"): RemoteSessionClient {
   };
 }
 
-function happyServices(linkCalls: LinkToolsetUserSessionIssuerInput[] = []) {
+function happyServices(
+  linkCalls: LinkToolsetUserSessionIssuerInput[] = [],
+  migrateCalls: MigrateGramRegistrationsInput[] = [],
+) {
   return {
     resolveUserSessionIssuer: fromPromise<
       UserSessionIssuer | null,
@@ -129,6 +133,11 @@ function happyServices(linkCalls: LinkToolsetUserSessionIssuerInput[] = []) {
       remoteSessionIssuerId: input.remoteSessionIssuer.id,
       userSessionIssuerId: input.userSessionIssuerId,
     })),
+    migrateGramRegistrations: fromPromise<void, MigrateGramRegistrationsInput>(
+      async ({ input }) => {
+        migrateCalls.push(input);
+      },
+    ),
     linkToolsetUserSessionIssuer: fromPromise<
       void,
       LinkToolsetUserSessionIssuerInput
@@ -183,8 +192,9 @@ describe("wireUserSessionIssuerMachine", () => {
     ]);
   });
 
-  it("links Gram-managed migrations immediately after creating the user issuer", async () => {
+  it("migrates legacy registrations then links Gram-managed migrations after creating the user issuer", async () => {
     const linkCalls: LinkToolsetUserSessionIssuerInput[] = [];
+    const migrateCalls: MigrateGramRegistrationsInput[] = [];
     const actor = makeActor(
       {
         ...baseInput,
@@ -194,7 +204,7 @@ describe("wireUserSessionIssuerMachine", () => {
           proxyProvider: { ...proxyProvider, providerType: "gram" },
         },
       },
-      happyServices(linkCalls),
+      happyServices(linkCalls, migrateCalls),
     );
     actor.start();
 
@@ -202,6 +212,12 @@ describe("wireUserSessionIssuerMachine", () => {
     await waitFor(actor, (state) => state.matches("complete"));
 
     expect(selectSteps(actor.getSnapshot())).toHaveLength(1);
+    expect(migrateCalls).toEqual([
+      {
+        oauthProxyProviderId: "proxy-provider-1",
+        userSessionIssuerId: "usi-1",
+      },
+    ]);
     expect(linkCalls).toEqual([
       { toolsetSlug: "github", userSessionIssuerId: "usi-1" },
     ]);
