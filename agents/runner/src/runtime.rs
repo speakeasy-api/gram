@@ -385,11 +385,12 @@ async fn spawn_thread(
     );
 
     let mcp_source = ClippedToolSource::new(mcp_catalog, host.spill_root.clone());
+    let compose_source = agentkit_tool_compose::ComposeTool::wrap(mcp_source)
+        .with_source(native_tools.merge(agentkit_tool_fs::registry()));
+
     let mut builder = Agent::builder()
         .model(adapter)
-        .add_tool_source(native_tools)
-        .add_tool_source(agentkit_tool_fs::registry())
-        .add_tool_source(mcp_source)
+        .add_tool_source(compose_source)
         .permissions(permissions)
         .resources(fs_resources)
         .observer(TracingReporter::new())
