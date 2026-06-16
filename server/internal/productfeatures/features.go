@@ -44,6 +44,3 @@ func (f FeatureCache) TTL() time.Duration {
 	return 15 * time.Minute
 }
 
-func (c FeatureCache) AdditionalCacheKeys() []string {
-	return []string{}
-}
