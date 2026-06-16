@@ -252,8 +252,9 @@ func handleSearchToolsCall(
 	response, err := json.Marshal(result[toolCallResult]{
 		ID: reqID,
 		Result: toolCallResult{
-			Content: []json.RawMessage{chunk},
-			IsError: false,
+			Content:           []json.RawMessage{chunk},
+			StructuredContent: nil,
+			IsError:           false,
 		},
 	})
 	if err != nil {
@@ -366,8 +367,9 @@ func handleDescribeToolsCall(
 	response, err := json.Marshal(result[toolCallResult]{
 		ID: reqID,
 		Result: toolCallResult{
-			Content: []json.RawMessage{chunk},
-			IsError: false,
+			Content:           []json.RawMessage{chunk},
+			StructuredContent: nil,
+			IsError:           false,
 		},
 	})
 	if err != nil {
