@@ -171,6 +171,12 @@ linters:
               disabled: false
             audit-action-naming:
               disabled: true
+            no-client-error-log-error:
+              disabled: false
+              # Opt in one oops.Code at a time as its 4xx `.LogError` call sites
+              # are migrated to `.LogWarn` / `.LogInfo`. An empty list reports
+              # nothing, so the rule stays silent until a code is enabled here.
+              codes: []
     gosec:
       excludes:
         # Temporarily ignore this lint rule because it needs to be a separate

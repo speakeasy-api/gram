@@ -1210,8 +1210,7 @@ func (s *Service) authenticateToken(ctx context.Context, token string, oauthReso
 		return ctx, nil
 	}
 
-	s.logger.WarnContext(ctx, "failed to authorize token using any strategy", attr.SlogToolsetID(oauthResourceID.String()))
-	return ctx, oops.E(oops.CodeUnauthorized, nil, "failed to authorize")
+	return ctx, oops.E(oops.CodeUnauthorized, errors.New("failed to authorize token using any strategy"), "failed to authorize").LogWarn(ctx, s.logger, attr.SlogToolsetID(oauthResourceID.String()))
 }
 
 //nolint:unused // kept for follow-up: restore stored-credential resolution for session-authenticated users

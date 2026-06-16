@@ -106,6 +106,105 @@ func TestShareableError_Log_DeadlineExceededLogsAtError(t *testing.T) {
 	require.Len(t, spans[0].Events(), 1)
 }
 
+func TestShareableError_LogWarn_LogsAtWarn(t *testing.T) {
+	t.Parallel()
+	logger, logBuf := captureLogger()
+	ctx, recorder := startRecordedSpan(t)
+
+	_ = E(CodeUnauthorized, errors.New("bad signature"), "unauthorized").LogWarn(ctx, logger)
+
+	entries := parseLogEntries(t, logBuf)
+	require.Len(t, entries, 1)
+	require.Equal(t, "WARN", entries[0].Level)
+	require.Equal(t, "unauthorized", entries[0].Msg)
+	require.NotEmpty(t, entries[0].ErrorID)
+
+	spans := recorder.Started()
+	require.Len(t, spans, 1)
+	require.Equal(t, codes.Unset, spans[0].Status().Code, "LogWarn must not mark the span as errored")
+	require.Empty(t, spans[0].Events(), "LogWarn must not record an exception event")
+}
+
+func TestShareableError_LogWarn_ClientCanceledLogsAtInfo(t *testing.T) {
+	t.Parallel()
+	logger, logBuf := captureLogger()
+	ctx, recorder := startRecordedSpan(t)
+	// A client disconnect cancels the request context itself.
+	ctx, cancel := context.WithCancel(ctx)
+	cancel()
+
+	cause := fmt.Errorf("authorize token: %w", context.Canceled)
+	_ = E(CodeUnauthorized, cause, "unauthorized").LogWarn(ctx, logger)
+
+	entries := parseLogEntries(t, logBuf)
+	require.Len(t, entries, 1)
+	require.Equal(t, "INFO", entries[0].Level, "client cancellation must demote LogWarn to info")
+
+	spans := recorder.Started()
+	require.Len(t, spans, 1)
+	require.Equal(t, codes.Unset, spans[0].Status().Code, "LogWarn must not mark the span as errored")
+	require.Empty(t, spans[0].Events())
+}
+
+func TestShareableError_LogWarn_AppCanceledWithLiveContextLogsAtWarn(t *testing.T) {
+	t.Parallel()
+	logger, logBuf := captureLogger()
+	// The request context is still live: a context.Canceled cause that did not
+	// originate from a client disconnect must not be demoted.
+	ctx, recorder := startRecordedSpan(t)
+
+	cause := fmt.Errorf("errgroup sibling: %w", context.Canceled)
+	_ = E(CodeUnauthorized, cause, "unauthorized").LogWarn(ctx, logger)
+
+	entries := parseLogEntries(t, logBuf)
+	require.Len(t, entries, 1)
+	require.Equal(t, "WARN", entries[0].Level, "a live request context must keep LogWarn at warn level")
+
+	spans := recorder.Started()
+	require.Len(t, spans, 1)
+	require.Equal(t, codes.Unset, spans[0].Status().Code, "LogWarn must never mark the span as errored")
+	require.Empty(t, spans[0].Events())
+}
+
+func TestShareableError_LogInfo_LogsAtInfo(t *testing.T) {
+	t.Parallel()
+	logger, logBuf := captureLogger()
+	ctx, recorder := startRecordedSpan(t)
+
+	_ = E(CodeNotFound, nil, "resource not found").LogInfo(ctx, logger)
+
+	entries := parseLogEntries(t, logBuf)
+	require.Len(t, entries, 1)
+	require.Equal(t, "INFO", entries[0].Level)
+	require.Equal(t, "resource not found", entries[0].Msg)
+	require.NotEmpty(t, entries[0].ErrorID)
+
+	spans := recorder.Started()
+	require.Len(t, spans, 1)
+	require.Equal(t, codes.Unset, spans[0].Status().Code, "LogInfo must not mark the span as errored")
+	require.Empty(t, spans[0].Events(), "LogInfo must not record an exception event")
+}
+
+func TestShareableError_LogInfo_ClientCanceledLogsAtInfo(t *testing.T) {
+	t.Parallel()
+	logger, logBuf := captureLogger()
+	ctx, recorder := startRecordedSpan(t)
+	ctx, cancel := context.WithCancel(ctx)
+	cancel()
+
+	cause := fmt.Errorf("authorize token: %w", context.Canceled)
+	_ = E(CodeUnauthorized, cause, "unauthorized").LogInfo(ctx, logger)
+
+	entries := parseLogEntries(t, logBuf)
+	require.Len(t, entries, 1)
+	require.Equal(t, "INFO", entries[0].Level, "LogInfo stays at info under client cancellation")
+
+	spans := recorder.Started()
+	require.Len(t, spans, 1)
+	require.Equal(t, codes.Unset, spans[0].Status().Code, "LogInfo must not mark the span as errored")
+	require.Empty(t, spans[0].Events())
+}
+
 func TestShareableError_HTTPStatus_Canceled(t *testing.T) {
 	t.Parallel()
 

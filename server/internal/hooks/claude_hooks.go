@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -191,10 +192,7 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		// Auth middleware should have rejected this already; log here so a
 		// stray unauthenticated request is still visible per source/event
 		// when filtering hook traffic in Datadog.
-		logger.WarnContext(ctx, "rejected unauthorized claude OTEL logs request",
-			attr.SlogEvent("claude_logs_unauthorized"),
-		)
-		return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
+		return oops.E(oops.CodeUnauthorized, errors.New("rejected unauthorized claude OTEL logs request"), "unauthorized").LogWarn(ctx, logger, attr.SlogEvent("claude_logs_unauthorized"))
 	}
 
 	orgID := authCtx.ActiveOrganizationID
@@ -256,10 +254,7 @@ func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) erro
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		logger.WarnContext(ctx, "rejected unauthorized claude OTEL metrics request",
-			attr.SlogEvent("claude_metrics_unauthorized"),
-		)
-		return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
+		return oops.E(oops.CodeUnauthorized, errors.New("rejected unauthorized claude OTEL metrics request"), "unauthorized").LogWarn(ctx, logger, attr.SlogEvent("claude_metrics_unauthorized"))
 	}
 
 	orgID := authCtx.ActiveOrganizationID
