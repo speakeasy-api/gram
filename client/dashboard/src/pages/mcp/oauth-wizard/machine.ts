@@ -12,10 +12,7 @@ import {
 } from "./machine-types";
 import {
   type AddExternalOAuthInput,
-  type AddOAuthProxyInput,
-  type CreateEnvironmentInput,
-  type CreateEnvironmentOutput,
-  type DeleteEnvironmentInput,
+  type ProvisionUserSessionInput,
   type RegisterClientInput,
   type RegisterClientOutput,
 } from "./services";
@@ -133,12 +130,9 @@ export const oauthWizardMachine = setup({
   },
   actors: {
     addExternalOAuth: placeholder<AddExternalOAuthInput>("addExternalOAuth"),
-    createEnvironment: placeholder<
-      CreateEnvironmentInput,
-      CreateEnvironmentOutput
-    >("createEnvironment"),
-    addOAuthProxy: placeholder<AddOAuthProxyInput>("addOAuthProxy"),
-    deleteEnvironment: placeholder<DeleteEnvironmentInput>("deleteEnvironment"),
+    provisionUserSession: placeholder<ProvisionUserSessionInput>(
+      "provisionUserSession",
+    ),
     registerClient: placeholder<RegisterClientInput, RegisterClientOutput>(
       "registerClient",
     ),
@@ -427,128 +421,57 @@ export const oauthWizardMachine = setup({
         },
         submitting: {
           meta: { title: "OAuth Client Credentials" },
-          initial: "creatingEnvironment",
-          states: {
-            creatingEnvironment: {
-              invoke: {
-                src: "createEnvironment",
-                input: ({ context }): CreateEnvironmentInput => ({
-                  organizationId: context.activeOrganizationId,
-                  toolsetName: context.toolsetName,
-                  clientId: context.proxy.clientId,
-                  clientSecret: context.proxy.clientSecret,
-                }),
-                onDone: {
-                  target: "creatingProxy",
-                  actions: assign({
-                    envSlug: ({ event }) => event.output.envSlug,
+          invoke: {
+            src: "provisionUserSession",
+            input: ({ context }): ProvisionUserSessionInput => ({
+              toolsetSlug: context.toolsetSlug,
+              authorizationEndpoint: context.proxy.authorizationEndpoint,
+              tokenEndpoint: context.proxy.tokenEndpoint,
+              scopes: context.proxy.scopes,
+              tokenAuthMethod: context.proxy.tokenAuthMethod,
+              clientId: context.proxy.clientId,
+              clientSecret: context.proxy.clientSecret,
+            }),
+            onDone: {
+              target: "#oauthWizard.result.success",
+              actions: [
+                assign({
+                  result: () => ({
+                    success: true,
+                    message:
+                      "Your MCP server is now secured with user sessions backed by your upstream OAuth server.",
                   }),
-                },
-                onError: [
-                  {
-                    // Auto-configure path: never drop the user back into the
-                    // manual credentials form — they didn't ask to type
-                    // anything. Surface the failure on the same screen used
-                    // by DCR errors and post-rollback proxy-creation errors.
-                    guard: ({ context }) => context.autoRegistering,
-                    target: "#oauthWizard.proxy.autoRegisterFailed",
-                    actions: assign({
-                      error: ({ event }) =>
-                        errorMessage(
-                          event.error,
-                          "Failed to create environment for OAuth credentials",
-                        ),
-                    }),
-                  },
-                  {
-                    target: "#oauthWizard.proxy.credentials",
-                    actions: assign({
-                      error: ({ event }) =>
-                        errorMessage(
-                          event.error,
-                          "Failed to create environment for OAuth credentials",
-                        ),
-                    }),
-                  },
-                ],
-              },
-            },
-            creatingProxy: {
-              invoke: {
-                src: "addOAuthProxy",
-                input: ({ context }): AddOAuthProxyInput => ({
-                  toolsetSlug: context.toolsetSlug,
-                  slug: context.proxy.slug,
-                  audience: context.proxy.audience,
-                  authorizationEndpoint: context.proxy.authorizationEndpoint,
-                  tokenEndpoint: context.proxy.tokenEndpoint,
-                  scopes: context.proxy.scopes,
-                  tokenAuthMethod: context.proxy.tokenAuthMethod,
-                  environmentSlug: context.envSlug ?? "",
                 }),
-                onDone: {
-                  target: "#oauthWizard.result.success",
-                  actions: [
-                    assign({
-                      result: () => ({
-                        success: true,
-                        message:
-                          "Your OAuth proxy has been configured successfully. Client credentials have been stored in a new environment.",
-                      }),
-                    }),
-                    "captureProxyCreateSuccess",
-                    "invalidateOnProxyCreate",
-                  ],
-                },
-                onError: {
-                  target: "rollingBackEnv",
-                  actions: assign({
-                    error: ({ event }) =>
-                      errorMessage(
-                        event.error,
-                        "Failed to configure OAuth proxy",
-                      ),
-                  }),
-                },
-              },
+                "captureProxyCreateSuccess",
+                "invalidateOnProxyCreate",
+              ],
             },
-            rollingBackEnv: {
-              invoke: {
-                src: "deleteEnvironment",
-                input: ({ context }): DeleteEnvironmentInput => ({
-                  envSlug: context.envSlug ?? "",
+            onError: [
+              {
+                // Auto-configure path: never drop the user back into the manual
+                // credentials form — they didn't ask to type anything. Surface
+                // the failure on the same screen used by DCR errors.
+                guard: ({ context }) => context.autoRegistering,
+                target: "#oauthWizard.proxy.autoRegisterFailed",
+                actions: assign({
+                  error: ({ event }) =>
+                    errorMessage(
+                      event.error,
+                      "Failed to configure user sessions",
+                    ),
                 }),
-                onDone: [
-                  {
-                    // Auto-configure path: never drop the user back into the
-                    // manual credentials form — they didn't ask to type anything,
-                    // and DCR-fetched secrets aren't reusable here. Surface the
-                    // proxy-creation error on the same failure screen used by
-                    // DCR errors.
-                    guard: ({ context }) => context.autoRegistering,
-                    target: "#oauthWizard.proxy.autoRegisterFailed",
-                    actions: assign({ envSlug: () => null }),
-                  },
-                  {
-                    target: "#oauthWizard.proxy.credentials",
-                    actions: assign({ envSlug: () => null }),
-                  },
-                ],
-                onError: {
-                  target: "#oauthWizard.proxy.fatalError",
-                  actions: assign({
-                    error: ({ context, event }) => {
-                      const proxyErr = context.error ?? "Proxy creation failed";
-                      const cleanupErr = errorMessage(
-                        event.error,
-                        "unknown error",
-                      );
-                      return `${proxyErr}. Environment cleanup also failed: ${cleanupErr}. The orphaned environment must be deleted manually.`;
-                    },
-                  }),
-                },
               },
-            },
+              {
+                target: "#oauthWizard.proxy.credentials",
+                actions: assign({
+                  error: ({ event }) =>
+                    errorMessage(
+                      event.error,
+                      "Failed to configure user sessions",
+                    ),
+                }),
+              },
+            ],
           },
         },
         fatalError: {

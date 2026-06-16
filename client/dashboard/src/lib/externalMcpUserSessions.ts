@@ -1,6 +1,6 @@
 import type { Gram } from "@gram/client";
 import {
-  CreateRemoteSessionClientFormTokenEndpointAuthMethod,
+  TokenEndpointAuthMethod,
   type ExternalMCPToolDefinition,
   type RemoteSessionIssuerDraft,
   type Tool,
@@ -15,12 +15,10 @@ import { getServerURL } from "@/lib/utils";
 
 function narrowTokenEndpointAuthMethod(
   value: string | null | undefined,
-): CreateRemoteSessionClientFormTokenEndpointAuthMethod | undefined {
+): TokenEndpointAuthMethod | undefined {
   if (
-    value ===
-      CreateRemoteSessionClientFormTokenEndpointAuthMethod.ClientSecretBasic ||
-    value ===
-      CreateRemoteSessionClientFormTokenEndpointAuthMethod.ClientSecretPost
+    value === TokenEndpointAuthMethod.ClientSecretBasic ||
+    value === TokenEndpointAuthMethod.ClientSecretPost
   ) {
     return value;
   }

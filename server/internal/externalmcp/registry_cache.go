@@ -24,7 +24,6 @@ type CachedListServersResponse struct {
 var _ cache.CacheableObject[CachedListServersResponse] = (*CachedListServersResponse)(nil)
 
 func (c CachedListServersResponse) CacheKey() string              { return c.Key }
-func (c CachedListServersResponse) AdditionalCacheKeys() []string { return []string{} }
 func (c CachedListServersResponse) TTL() time.Duration            { return registryCacheTTL }
 
 // CachedServerDetailsResponse wraps server details for caching.
@@ -36,7 +35,6 @@ type CachedServerDetailsResponse struct {
 var _ cache.CacheableObject[CachedServerDetailsResponse] = (*CachedServerDetailsResponse)(nil)
 
 func (c CachedServerDetailsResponse) CacheKey() string              { return c.Key }
-func (c CachedServerDetailsResponse) AdditionalCacheKeys() []string { return []string{} }
 func (c CachedServerDetailsResponse) TTL() time.Duration            { return registryCacheTTL }
 
 // registryCacheKey builds a cache key from a prefix and the request's URL + headers.

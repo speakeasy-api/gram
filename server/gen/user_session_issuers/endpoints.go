@@ -16,12 +16,11 @@ import (
 
 // Endpoints wraps the "userSessionIssuers" service endpoints.
 type Endpoints struct {
-	CreateUserSessionIssuer        goa.Endpoint
-	UpdateUserSessionIssuer        goa.Endpoint
-	ListUserSessionIssuers         goa.Endpoint
-	GetUserSessionIssuer           goa.Endpoint
-	DeleteUserSessionIssuer        goa.Endpoint
-	MigrateLegacyGramRegistrations goa.Endpoint
+	CreateUserSessionIssuer goa.Endpoint
+	UpdateUserSessionIssuer goa.Endpoint
+	ListUserSessionIssuers  goa.Endpoint
+	GetUserSessionIssuer    goa.Endpoint
+	DeleteUserSessionIssuer goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "userSessionIssuers" service with
@@ -30,12 +29,11 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		CreateUserSessionIssuer:        NewCreateUserSessionIssuerEndpoint(s, a.APIKeyAuth),
-		UpdateUserSessionIssuer:        NewUpdateUserSessionIssuerEndpoint(s, a.APIKeyAuth),
-		ListUserSessionIssuers:         NewListUserSessionIssuersEndpoint(s, a.APIKeyAuth),
-		GetUserSessionIssuer:           NewGetUserSessionIssuerEndpoint(s, a.APIKeyAuth),
-		DeleteUserSessionIssuer:        NewDeleteUserSessionIssuerEndpoint(s, a.APIKeyAuth),
-		MigrateLegacyGramRegistrations: NewMigrateLegacyGramRegistrationsEndpoint(s, a.APIKeyAuth),
+		CreateUserSessionIssuer: NewCreateUserSessionIssuerEndpoint(s, a.APIKeyAuth),
+		UpdateUserSessionIssuer: NewUpdateUserSessionIssuerEndpoint(s, a.APIKeyAuth),
+		ListUserSessionIssuers:  NewListUserSessionIssuersEndpoint(s, a.APIKeyAuth),
+		GetUserSessionIssuer:    NewGetUserSessionIssuerEndpoint(s, a.APIKeyAuth),
+		DeleteUserSessionIssuer: NewDeleteUserSessionIssuerEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -47,7 +45,6 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListUserSessionIssuers = m(e.ListUserSessionIssuers)
 	e.GetUserSessionIssuer = m(e.GetUserSessionIssuer)
 	e.DeleteUserSessionIssuer = m(e.DeleteUserSessionIssuer)
-	e.MigrateLegacyGramRegistrations = m(e.MigrateLegacyGramRegistrations)
 }
 
 // NewCreateUserSessionIssuerEndpoint returns an endpoint function that calls
@@ -342,65 +339,5 @@ func NewDeleteUserSessionIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPI
 			return nil, err
 		}
 		return nil, s.DeleteUserSessionIssuer(ctx, p)
-	}
-}
-
-// NewMigrateLegacyGramRegistrationsEndpoint returns an endpoint function that
-// calls the method "migrateLegacyGramRegistrations" of service
-// "userSessionIssuers".
-func NewMigrateLegacyGramRegistrationsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*MigrateLegacyGramRegistrationsPayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err == nil {
-			sc := security.APIKeyScheme{
-				Name:           "project_slug",
-				Scopes:         []string{},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.ProjectSlugInput != nil {
-				key = *p.ProjectSlugInput
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-		}
-		if err != nil {
-			sc := security.APIKeyScheme{
-				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
-				RequiredScopes: []string{"producer"},
-			}
-			var key string
-			if p.ApikeyToken != nil {
-				key = *p.ApikeyToken
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-			if err == nil {
-				sc := security.APIKeyScheme{
-					Name:           "project_slug",
-					Scopes:         []string{},
-					RequiredScopes: []string{"producer"},
-				}
-				var key string
-				if p.ProjectSlugInput != nil {
-					key = *p.ProjectSlugInput
-				}
-				ctx, err = authAPIKeyFn(ctx, key, &sc)
-			}
-		}
-		if err != nil {
-			return nil, err
-		}
-		return s.MigrateLegacyGramRegistrations(ctx, p)
 	}
 }

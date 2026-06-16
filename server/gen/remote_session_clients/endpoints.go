@@ -16,12 +16,11 @@ import (
 
 // Endpoints wraps the "remoteSessionClients" service endpoints.
 type Endpoints struct {
-	CreateRemoteSessionClient         goa.Endpoint
-	CloneClientFromOAuthProxyProvider goa.Endpoint
-	UpdateRemoteSessionClient         goa.Endpoint
-	ListRemoteSessionClients          goa.Endpoint
-	GetRemoteSessionClient            goa.Endpoint
-	DeleteRemoteSessionClient         goa.Endpoint
+	CreateRemoteSessionClient goa.Endpoint
+	UpdateRemoteSessionClient goa.Endpoint
+	ListRemoteSessionClients  goa.Endpoint
+	GetRemoteSessionClient    goa.Endpoint
+	DeleteRemoteSessionClient goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "remoteSessionClients" service with
@@ -30,12 +29,11 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		CreateRemoteSessionClient:         NewCreateRemoteSessionClientEndpoint(s, a.APIKeyAuth),
-		CloneClientFromOAuthProxyProvider: NewCloneClientFromOAuthProxyProviderEndpoint(s, a.APIKeyAuth),
-		UpdateRemoteSessionClient:         NewUpdateRemoteSessionClientEndpoint(s, a.APIKeyAuth),
-		ListRemoteSessionClients:          NewListRemoteSessionClientsEndpoint(s, a.APIKeyAuth),
-		GetRemoteSessionClient:            NewGetRemoteSessionClientEndpoint(s, a.APIKeyAuth),
-		DeleteRemoteSessionClient:         NewDeleteRemoteSessionClientEndpoint(s, a.APIKeyAuth),
+		CreateRemoteSessionClient: NewCreateRemoteSessionClientEndpoint(s, a.APIKeyAuth),
+		UpdateRemoteSessionClient: NewUpdateRemoteSessionClientEndpoint(s, a.APIKeyAuth),
+		ListRemoteSessionClients:  NewListRemoteSessionClientsEndpoint(s, a.APIKeyAuth),
+		GetRemoteSessionClient:    NewGetRemoteSessionClientEndpoint(s, a.APIKeyAuth),
+		DeleteRemoteSessionClient: NewDeleteRemoteSessionClientEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -43,7 +41,6 @@ func NewEndpoints(s Service) *Endpoints {
 // endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateRemoteSessionClient = m(e.CreateRemoteSessionClient)
-	e.CloneClientFromOAuthProxyProvider = m(e.CloneClientFromOAuthProxyProvider)
 	e.UpdateRemoteSessionClient = m(e.UpdateRemoteSessionClient)
 	e.ListRemoteSessionClients = m(e.ListRemoteSessionClients)
 	e.GetRemoteSessionClient = m(e.GetRemoteSessionClient)
@@ -106,66 +103,6 @@ func NewCreateRemoteSessionClientEndpoint(s Service, authAPIKeyFn security.AuthA
 			return nil, err
 		}
 		return s.CreateRemoteSessionClient(ctx, p)
-	}
-}
-
-// NewCloneClientFromOAuthProxyProviderEndpoint returns an endpoint function
-// that calls the method "cloneClientFromOAuthProxyProvider" of service
-// "remoteSessionClients".
-func NewCloneClientFromOAuthProxyProviderEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*CloneClientFromOAuthProxyProviderPayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err == nil {
-			sc := security.APIKeyScheme{
-				Name:           "project_slug",
-				Scopes:         []string{},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.ProjectSlugInput != nil {
-				key = *p.ProjectSlugInput
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-		}
-		if err != nil {
-			sc := security.APIKeyScheme{
-				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
-				RequiredScopes: []string{"producer"},
-			}
-			var key string
-			if p.ApikeyToken != nil {
-				key = *p.ApikeyToken
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-			if err == nil {
-				sc := security.APIKeyScheme{
-					Name:           "project_slug",
-					Scopes:         []string{},
-					RequiredScopes: []string{"producer"},
-				}
-				var key string
-				if p.ProjectSlugInput != nil {
-					key = *p.ProjectSlugInput
-				}
-				ctx, err = authAPIKeyFn(ctx, key, &sc)
-			}
-		}
-		if err != nil {
-			return nil, err
-		}
-		return s.CloneClientFromOAuthProxyProvider(ctx, p)
 	}
 }
 

@@ -421,7 +421,6 @@ run();
 
 ### [RemoteSessionClients](docs/sdks/remotesessionclients/README.md)
 
-* [cloneClientFromOAuthProxyProvider](docs/sdks/remotesessionclients/README.md#cloneclientfromoauthproxyprovider) - cloneClientFromOAuthProxyProvider remoteSessionClients
 * [create](docs/sdks/remotesessionclients/README.md#create) - createRemoteSessionClient remoteSessionClients
 * [delete](docs/sdks/remotesessionclients/README.md#delete) - deleteRemoteSessionClient remoteSessionClients
 * [get](docs/sdks/remotesessionclients/README.md#get) - getRemoteSessionClient remoteSessionClients
@@ -540,7 +539,6 @@ run();
 ### [Toolsets](docs/sdks/toolsets/README.md)
 
 * [addExternalOAuthServer](docs/sdks/toolsets/README.md#addexternaloauthserver) - addExternalOAuthServer toolsets
-* [addOAuthProxyServer](docs/sdks/toolsets/README.md#addoauthproxyserver) - addOAuthProxyServer toolsets
 * [checkMCPSlugAvailability](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
 * [cloneBySlug](docs/sdks/toolsets/README.md#clonebyslug) - cloneToolset toolsets
 * [create](docs/sdks/toolsets/README.md#create) - createToolset toolsets
@@ -553,7 +551,6 @@ run();
 * [setToolVariationsGroup](docs/sdks/toolsets/README.md#settoolvariationsgroup) - setToolVariationsGroup toolsets
 * [setUserSessionIssuer](docs/sdks/toolsets/README.md#setusersessionissuer) - setUserSessionIssuer toolsets
 * [updateBySlug](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
-* [updateOAuthProxyServer](docs/sdks/toolsets/README.md#updateoauthproxyserver) - updateOAuthProxyServer toolsets
 
 ### [Triggers](docs/sdks/triggers/README.md)
 
@@ -593,7 +590,6 @@ run();
 * [delete](docs/sdks/usersessionissuers/README.md#delete) - deleteUserSessionIssuer userSessionIssuers
 * [get](docs/sdks/usersessionissuers/README.md#get) - getUserSessionIssuer userSessionIssuers
 * [list](docs/sdks/usersessionissuers/README.md#list) - listUserSessionIssuers userSessionIssuers
-* [migrateLegacyGramRegistrations](docs/sdks/usersessionissuers/README.md#migratelegacygramregistrations) - migrateLegacyGramRegistrations userSessionIssuers
 * [update](docs/sdks/usersessionissuers/README.md#update) - updateUserSessionIssuer userSessionIssuers
 
 ### [UserSessions](docs/sdks/usersessions/README.md)
@@ -819,7 +815,6 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`remoteMcpListServers`](docs/sdks/remotemcp/README.md#listservers) - listServers remoteMcp
 - [`remoteMcpUpdateServer`](docs/sdks/remotemcp/README.md#updateserver) - updateServer remoteMcp
 - [`remoteMcpVerifyURL`](docs/sdks/remotemcp/README.md#verifyurl) - verifyURL remoteMcp
-- [`remoteSessionClientsCloneClientFromOAuthProxyProvider`](docs/sdks/remotesessionclients/README.md#cloneclientfromoauthproxyprovider) - cloneClientFromOAuthProxyProvider remoteSessionClients
 - [`remoteSessionClientsCreate`](docs/sdks/remotesessionclients/README.md#create) - createRemoteSessionClient remoteSessionClients
 - [`remoteSessionClientsDelete`](docs/sdks/remotesessionclients/README.md#delete) - deleteRemoteSessionClient remoteSessionClients
 - [`remoteSessionClientsGet`](docs/sdks/remotesessionclients/README.md#get) - getRemoteSessionClient remoteSessionClients
@@ -889,7 +884,6 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`templatesRenderByID`](docs/sdks/templates/README.md#renderbyid) - renderTemplateByID templates
 - [`templatesUpdate`](docs/sdks/templates/README.md#update) - updateTemplate templates
 - [`toolsetsAddExternalOAuthServer`](docs/sdks/toolsets/README.md#addexternaloauthserver) - addExternalOAuthServer toolsets
-- [`toolsetsAddOAuthProxyServer`](docs/sdks/toolsets/README.md#addoauthproxyserver) - addOAuthProxyServer toolsets
 - [`toolsetsCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
 - [`toolsetsCloneBySlug`](docs/sdks/toolsets/README.md#clonebyslug) - cloneToolset toolsets
 - [`toolsetsCreate`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
@@ -902,7 +896,6 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`toolsetsSetToolVariationsGroup`](docs/sdks/toolsets/README.md#settoolvariationsgroup) - setToolVariationsGroup toolsets
 - [`toolsetsSetUserSessionIssuer`](docs/sdks/toolsets/README.md#setusersessionissuer) - setUserSessionIssuer toolsets
 - [`toolsetsUpdateBySlug`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
-- [`toolsetsUpdateOAuthProxyServer`](docs/sdks/toolsets/README.md#updateoauthproxyserver) - updateOAuthProxyServer toolsets
 - [`toolsList`](docs/sdks/tools/README.md#list) - listTools tools
 - [`triggersCreate`](docs/sdks/triggers/README.md#create) - createTriggerInstance triggers
 - [`triggersDelete`](docs/sdks/triggers/README.md#delete) - deleteTriggerInstance triggers
@@ -928,7 +921,6 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`userSessionIssuersDelete`](docs/sdks/usersessionissuers/README.md#delete) - deleteUserSessionIssuer userSessionIssuers
 - [`userSessionIssuersGet`](docs/sdks/usersessionissuers/README.md#get) - getUserSessionIssuer userSessionIssuers
 - [`userSessionIssuersList`](docs/sdks/usersessionissuers/README.md#list) - listUserSessionIssuers userSessionIssuers
-- [`userSessionIssuersMigrateLegacyGramRegistrations`](docs/sdks/usersessionissuers/README.md#migratelegacygramregistrations) - migrateLegacyGramRegistrations userSessionIssuers
 - [`userSessionIssuersUpdate`](docs/sdks/usersessionissuers/README.md#update) - updateUserSessionIssuer userSessionIssuers
 - [`userSessionsList`](docs/sdks/usersessions/README.md#list) - listUserSessions userSessions
 - [`userSessionsMint`](docs/sdks/usersessions/README.md#mint) - mintUserSession userSessions
@@ -966,7 +958,6 @@ To learn about this feature and how to get started, check
 
 - [`useActiveDeployment`](docs/sdks/deployments/README.md#active) - getActiveDeployment deployments
 - [`useAddExternalOAuthServerMutation`](docs/sdks/toolsets/README.md#addexternaloauthserver) - addExternalOAuthServer toolsets
-- [`useAddOAuthProxyServerMutation`](docs/sdks/toolsets/README.md#addoauthproxyserver) - addOAuthProxyServer toolsets
 - [`useAddPluginServerMutation`](docs/sdks/plugins/README.md#addpluginserver) - addPluginServer plugins
 - [`useAgentPlugins`](docs/sdks/agent/README.md#getplugins) - getPlugins agent
 - [`useAiIntegrationConfig`](docs/sdks/aiintegrations/README.md#getconfig) - getConfig aiIntegrations
@@ -988,7 +979,6 @@ To learn about this feature and how to get started, check
 - [`useChatSubmitFeedbackMutation`](docs/sdks/chat/README.md#submitfeedback) - submitFeedback chat
 - [`useCheckMcpEndpointSlugAvailability`](docs/sdks/mcpendpoints/README.md#checkslugavailability) - checkMcpEndpointSlugAvailability mcpEndpoints
 - [`useCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
-- [`useCloneClientFromOAuthProxyProviderMutation`](docs/sdks/remotesessionclients/README.md#cloneclientfromoauthproxyprovider) - cloneClientFromOAuthProxyProvider remoteSessionClients
 - [`useCloneEnvironmentMutation`](docs/sdks/environments/README.md#clone) - cloneEnvironment environments
 - [`useCloneToolsetMutation`](docs/sdks/toolsets/README.md#clonebyslug) - cloneToolset toolsets
 - [`useCollectionsAttachServerMutation`](docs/sdks/collections/README.md#attachserver) - attachServer collections
@@ -1127,7 +1117,6 @@ To learn about this feature and how to get started, check
 - [`useMcpRegistriesGetServerDetails`](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
 - [`useMcpServers`](docs/sdks/mcpservers/README.md#list) - listMcpServers mcpServers
 - [`useMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
-- [`useMigrateLegacyGramRegistrationsMutation`](docs/sdks/usersessionissuers/README.md#migratelegacygramregistrations) - migrateLegacyGramRegistrations userSessionIssuers
 - [`useMintUserSessionMutation`](docs/sdks/usersessions/README.md#mint) - mintUserSession userSessions
 - [`useOnboardingStatus`](docs/sdks/organizations/README.md#getonboardingstatus) - getOnboardingStatus organizations
 - [`useOrganization`](docs/sdks/organizations/README.md#get) - get organizations
@@ -1240,7 +1229,6 @@ To learn about this feature and how to get started, check
 - [`useUpdateMcpEndpointMutation`](docs/sdks/mcpendpoints/README.md#update) - updateMcpEndpoint mcpEndpoints
 - [`useUpdateMcpServerMutation`](docs/sdks/mcpservers/README.md#update) - updateMcpServer mcpServers
 - [`useUpdateMemberRolesMutation`](docs/sdks/access/README.md#updatememberroles) - updateMemberRoles access
-- [`useUpdateOAuthProxyServerMutation`](docs/sdks/toolsets/README.md#updateoauthproxyserver) - updateOAuthProxyServer toolsets
 - [`useUpdateOrganizationRemoteSessionIssuerMutation`](docs/sdks/organizationremotesessionissuers/README.md#update) - updateOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
 - [`useUpdatePackageMutation`](docs/sdks/packages/README.md#update) - updatePackage packages
 - [`useUpdatePluginMutation`](docs/sdks/plugins/README.md#updateplugin) - updatePlugin plugins

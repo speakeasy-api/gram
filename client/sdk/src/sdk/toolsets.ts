@@ -3,7 +3,6 @@
  */
 
 import { toolsetsAddExternalOAuthServer } from "../funcs/toolsetsAddExternalOAuthServer.js";
-import { toolsetsAddOAuthProxyServer } from "../funcs/toolsetsAddOAuthProxyServer.js";
 import { toolsetsCheckMCPSlugAvailability } from "../funcs/toolsetsCheckMCPSlugAvailability.js";
 import { toolsetsCloneBySlug } from "../funcs/toolsetsCloneBySlug.js";
 import { toolsetsCreate } from "../funcs/toolsetsCreate.js";
@@ -16,7 +15,6 @@ import { toolsetsRemoveOAuthServer } from "../funcs/toolsetsRemoveOAuthServer.js
 import { toolsetsSetToolVariationsGroup } from "../funcs/toolsetsSetToolVariationsGroup.js";
 import { toolsetsSetUserSessionIssuer } from "../funcs/toolsetsSetUserSessionIssuer.js";
 import { toolsetsUpdateBySlug } from "../funcs/toolsetsUpdateBySlug.js";
-import { toolsetsUpdateOAuthProxyServer } from "../funcs/toolsetsUpdateOAuthProxyServer.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -35,25 +33,6 @@ export class Toolsets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.Toolset> {
     return unwrapAsync(toolsetsAddExternalOAuthServer(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * addOAuthProxyServer toolsets
-   *
-   * @remarks
-   * Associate an OAuth proxy server with a toolset (admin only)
-   */
-  async addOAuthProxyServer(
-    request: operations.AddOAuthProxyServerRequest,
-    security?: operations.AddOAuthProxyServerSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.Toolset> {
-    return unwrapAsync(toolsetsAddOAuthProxyServer(
       this,
       request,
       security,
@@ -282,25 +261,6 @@ export class Toolsets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.Toolset> {
     return unwrapAsync(toolsetsUpdateBySlug(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * updateOAuthProxyServer toolsets
-   *
-   * @remarks
-   * Update an existing OAuth proxy server associated with a toolset
-   */
-  async updateOAuthProxyServer(
-    request: operations.UpdateOAuthProxyServerRequest,
-    security?: operations.UpdateOAuthProxyServerSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.Toolset> {
-    return unwrapAsync(toolsetsUpdateOAuthProxyServer(
       this,
       request,
       security,

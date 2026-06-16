@@ -19,12 +19,8 @@ import {
   type Input,
 } from "./machine-types";
 import {
-  nextEnvironmentName,
   type AddExternalOAuthInput,
-  type AddOAuthProxyInput,
-  type CreateEnvironmentInput,
-  type CreateEnvironmentOutput,
-  type DeleteEnvironmentInput,
+  type ProvisionUserSessionInput,
   type RegisterClientInput,
   type RegisterClientOutput,
 } from "./services";
@@ -63,12 +59,7 @@ const baseInput: Input = {
 function happyServices() {
   return {
     addExternalOAuth: fromPromise<void, AddExternalOAuthInput>(async () => {}),
-    createEnvironment: fromPromise<
-      CreateEnvironmentOutput,
-      CreateEnvironmentInput
-    >(async () => ({ envSlug: "env-new" })),
-    addOAuthProxy: fromPromise<void, AddOAuthProxyInput>(async () => {}),
-    deleteEnvironment: fromPromise<void, DeleteEnvironmentInput>(
+    provisionUserSession: fromPromise<void, ProvisionUserSessionInput>(
       async () => {},
     ),
     registerClient: fromPromise<RegisterClientOutput, RegisterClientInput>(
@@ -92,36 +83,14 @@ function servicesWithRegisterFailure() {
   };
 }
 
-function servicesWithProxyFailure() {
+function servicesWithProvisionFailure() {
   return {
     ...happyServices(),
-    addOAuthProxy: fromPromise<void, AddOAuthProxyInput>(async () => {
-      throw new Error("proxy boom");
-    }),
-  };
-}
-
-function servicesWithEnvFailure() {
-  return {
-    ...happyServices(),
-    createEnvironment: fromPromise<
-      CreateEnvironmentOutput,
-      CreateEnvironmentInput
-    >(async () => {
-      throw new Error("env boom");
-    }),
-  };
-}
-
-function servicesWithDoubleFailure() {
-  return {
-    ...happyServices(),
-    addOAuthProxy: fromPromise<void, AddOAuthProxyInput>(async () => {
-      throw new Error("proxy boom");
-    }),
-    deleteEnvironment: fromPromise<void, DeleteEnvironmentInput>(async () => {
-      throw new Error("rollback boom");
-    }),
+    provisionUserSession: fromPromise<void, ProvisionUserSessionInput>(
+      async () => {
+        throw new Error("provision boom");
+      },
+    ),
   };
 }
 
@@ -173,28 +142,6 @@ describe("parseScopes", () => {
 
   it("returns empty array for empty input", () => {
     expect(parseScopes("")).toEqual([]);
-  });
-});
-
-describe("nextEnvironmentName", () => {
-  it("returns base name when no collision", () => {
-    expect(nextEnvironmentName("MyTool", [])).toBe("MyTool OAuth");
-  });
-
-  it("appends 1 on first collision", () => {
-    expect(nextEnvironmentName("MyTool", ["MyTool OAuth"])).toBe(
-      "MyTool OAuth 1",
-    );
-  });
-
-  it("walks suffixes until finding a free slot", () => {
-    expect(
-      nextEnvironmentName("MyTool", [
-        "MyTool OAuth",
-        "MyTool OAuth 1",
-        "MyTool OAuth 2",
-      ]),
-    ).toBe("MyTool OAuth 3");
   });
 });
 
@@ -508,7 +455,6 @@ describe("oauthWizardMachine — happy proxy create", () => {
     });
 
     const snap = actor.getSnapshot();
-    expect(snap.context.envSlug).toBe("env-new");
     expect(snap.context.result?.success).toBe(true);
   });
 
@@ -529,9 +475,9 @@ describe("oauthWizardMachine — happy proxy create", () => {
 // Machine — partial-failure rollback
 // ---------------------------------------------------------------------------
 
-describe("oauthWizardMachine — rollback on proxy failure", () => {
-  it("creatingProxy failure → rollingBackEnv → credentials with error; envSlug cleared", async () => {
-    const actor = makeActor(baseInput, servicesWithProxyFailure());
+describe("oauthWizardMachine — provisioning failure", () => {
+  it("provisionUserSession failure returns to credentials with error", async () => {
+    const actor = makeActor(baseInput, servicesWithProvisionFailure());
     actor.start();
     actor.send({ type: "SELECT_PROXY" });
     fillProxyForm(actor);
@@ -543,37 +489,10 @@ describe("oauthWizardMachine — rollback on proxy failure", () => {
     await waitFor(
       actor,
       (s) => s.matches({ proxy: "credentials" }) && !!s.context.error,
-      {
-        timeout: 1000,
-      },
+      { timeout: 1000 },
     );
 
-    const snap = actor.getSnapshot();
-    expect(snap.context.error).toContain("proxy boom");
-    expect(snap.context.envSlug).toBeNull();
-  });
-
-  it("rollback failure routes to fatalError (terminal) with compound error", async () => {
-    const actor = makeActor(baseInput, servicesWithDoubleFailure());
-    actor.start();
-    actor.send({ type: "SELECT_PROXY" });
-    fillProxyForm(actor);
-    actor.send({ type: "NEXT" });
-    actor.send({ type: "FIELD_PROXY", key: "clientId", value: "cid" });
-    actor.send({ type: "FIELD_PROXY", key: "clientSecret", value: "csec" });
-    actor.send({ type: "SUBMIT" });
-
-    await waitFor(actor, (s) => s.matches({ proxy: "fatalError" }), {
-      timeout: 1000,
-    });
-
-    const snap = actor.getSnapshot();
-    expect(snap.context.error).toContain("proxy boom");
-    expect(snap.context.error).toContain("rollback boom");
-    expect(snap.context.error).toContain("manually");
-    // fatalError is terminal — sending more events doesn't move us
-    actor.send({ type: "BACK" });
-    expect(actor.getSnapshot().matches({ proxy: "fatalError" })).toBe(true);
+    expect(actor.getSnapshot().context.error).toContain("provision boom");
   });
 });
 
@@ -690,11 +609,10 @@ describe("oauthWizardMachine — auto-configure from path selection", () => {
     const snap = actor.getSnapshot();
     expect(snap.context.proxy.clientId).toBe("auto-cid");
     expect(snap.context.proxy.clientSecret).toBe("auto-secret");
-    expect(snap.context.envSlug).toBe("env-new");
     expect(snap.context.result?.success).toBe(true);
   });
 
-  it("keeps using the OAuth proxy DCR path when auto-configuring", async () => {
+  it("keeps using the upstream DCR path when auto-configuring", async () => {
     const actor = makeActor(inputWithDiscovered);
     actor.start();
     actor.send({ type: "SELECT_PROXY_AUTO" });
@@ -706,8 +624,7 @@ describe("oauthWizardMachine — auto-configure from path selection", () => {
     });
 
     const snap = actor.getSnapshot();
-    expect(snap.context.result?.message).toContain("OAuth proxy");
-    expect(snap.context.envSlug).toBe("env-new");
+    expect(snap.context.result?.message).toContain("user sessions");
   });
 
   it("registerClient failure routes to autoRegisterFailed", async () => {
@@ -722,8 +639,11 @@ describe("oauthWizardMachine — auto-configure from path selection", () => {
     expect(actor.getSnapshot().context.error).toContain("DCR boom");
   });
 
-  it("addOAuthProxy failure rolls back env and lands on autoRegisterFailed (does not drop into manual creds form)", async () => {
-    const actor = makeActor(inputWithDiscovered, servicesWithProxyFailure());
+  it("provisionUserSession failure lands on autoRegisterFailed (does not drop into manual creds form)", async () => {
+    const actor = makeActor(
+      inputWithDiscovered,
+      servicesWithProvisionFailure(),
+    );
     actor.start();
     actor.send({ type: "SELECT_PROXY_AUTO" });
 
@@ -731,22 +651,7 @@ describe("oauthWizardMachine — auto-configure from path selection", () => {
       timeout: 1000,
     });
 
-    const snap = actor.getSnapshot();
-    expect(snap.context.error).toContain("proxy boom");
-    expect(snap.context.envSlug).toBeNull();
-  });
-
-  it("createEnvironment failure lands on autoRegisterFailed (does not drop into manual creds form)", async () => {
-    const actor = makeActor(inputWithDiscovered, servicesWithEnvFailure());
-    actor.start();
-    actor.send({ type: "SELECT_PROXY_AUTO" });
-
-    await waitFor(actor, (s) => s.matches({ proxy: "autoRegisterFailed" }), {
-      timeout: 1000,
-    });
-
-    const snap = actor.getSnapshot();
-    expect(snap.context.error).toContain("env boom");
+    expect(actor.getSnapshot().context.error).toContain("provision boom");
   });
 
   it("SELECT_PROXY_AUTO is a no-op when no discovered metadata (UI hides the card in this case)", () => {

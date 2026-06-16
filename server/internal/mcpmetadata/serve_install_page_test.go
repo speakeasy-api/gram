@@ -23,7 +23,6 @@ import (
 	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
-	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
@@ -977,38 +976,6 @@ func TestServeInstallPage_ClaudeDesktop_WithSecurityInputs(t *testing.T) {
 // the GRAM_KEY Authorization header (or gram-environment) in the install snippets.
 // OAuth handles identity auth at the HTTP layer, so the install command must not
 // instruct users to set those headers manually.
-func TestServeInstallPage_PrivateWithGramOAuth_NoAuthorizationHeader(t *testing.T) {
-	t.Parallel()
-	ctx, testInstance := newTestMCPMetadataService(t)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	result := oauthtest.CreateProxyToolset(t, ctx, testInstance.conn, authCtx, oauthtest.ProxyToolsetOpts{
-		Slug:         "private-gram-oauth",
-		IsPublic:     false,
-		ProviderType: "",
-	})
-	mcpSlug := result.Toolset.McpSlug.String
-
-	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("mcpSlug", mcpSlug)
-	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
-
-	rr := httptest.NewRecorder()
-	err := testInstance.service.ServeInstallPage(rr, req)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, rr.Code)
-
-	body := rr.Body.String()
-	assert.NotContains(t, body, "Authorization", "OAuth-protected install command must not reference an Authorization header")
-	assert.NotContains(t, body, "gram-key", "OAuth-protected install command must not reference the gram-key input")
-	assert.NotContains(t, body, "gram-environment", "OAuth-protected install command must not reference the gram-environment input")
-	assert.NotContains(t, body, "GRAM_KEY", "OAuth-protected install command must not reference the GRAM_KEY env var")
-}
-
 // TestServeInstallPage_PrivateWithUserSessionIssuer_NoGramKey covers the new
 // OAuth scheme: a private toolset gated by a user_session_issuer (rather than
 // the legacy oauth_proxy/external_oauth fields) delegates identity to OAuth, so

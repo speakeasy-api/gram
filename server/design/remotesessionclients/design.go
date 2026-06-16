@@ -64,31 +64,6 @@ var _ = Service("remoteSessionClients", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateRemoteSessionClient"}`)
 	})
 
-	Method("cloneClientFromOAuthProxyProvider", func() {
-		Description("Platform-admin-only. Clone the client_id / client_secret from an existing oauth_proxy_provider into a new remote_session_client paired with the supplied issuers. The upstream secret stays server-side: it is read from the proxy provider's stored secrets, re-encrypted, and persisted on the remote_session_client row without ever crossing the wire.")
-
-		Payload(func() {
-			Extend(CloneClientFromOAuthProxyProviderForm)
-			security.SessionPayload()
-			security.ByKeyPayload()
-			security.ProjectPayload()
-		})
-
-		Result(RemoteSessionClient)
-
-		HTTP(func() {
-			POST("/rpc/remoteSessionClients.cloneClientFromOAuthProxyProvider")
-			security.SessionHeader()
-			security.ByKeyHeader()
-			security.ProjectHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "cloneClientFromOAuthProxyProvider")
-		Meta("openapi:extension:x-speakeasy-name-override", "cloneClientFromOAuthProxyProvider")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CloneClientFromOAuthProxyProvider"}`)
-	})
-
 	Method("updateRemoteSessionClient", func() {
 		Description("Rotate the client_secret or change the user_session_issuer_id linkage on an existing remote_session_client.")
 
@@ -226,27 +201,6 @@ var CreateRemoteSessionClientForm = Type("CreateRemoteSessionClientForm", func()
 	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange.", audienceAttribute)
 
 	Required("remote_session_issuer_id", "user_session_issuer_id", "client_id")
-})
-
-var CloneClientFromOAuthProxyProviderForm = Type("CloneClientFromOAuthProxyProviderForm", func() {
-	Description("Form for cloning an oauth_proxy_provider's client credentials into a new remote_session_client. The caller supplies the existing oauth_proxy_provider, plus the remote_session_issuer and user_session_issuer to pair the new client with.")
-
-	Attribute("oauth_proxy_provider_id", String, "The oauth_proxy_provider to read client_id / client_secret from. Must live in the caller's project.", func() {
-		Format(FormatUUID)
-	})
-	Attribute("remote_session_issuer_id", String, "The remote_session_issuer the new client is registered with.", func() {
-		Format(FormatUUID)
-	})
-	Attribute("user_session_issuer_id", String, "The user_session_issuer the new client is paired with.", func() {
-		Format(FormatUUID)
-	})
-	Attribute("token_endpoint_auth_method", String, "How the cloned client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", tokenEndpointAuthMethodEnum)
-	Attribute("scope", ArrayOf(String), func() {
-		scopeAttribute("Explicit upstream OAuth scopes the dance should request for the cloned client. Omit to fall back to the issuer's scopes_supported.")
-	})
-	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange for the cloned client.", audienceAttribute)
-
-	Required("oauth_proxy_provider_id", "remote_session_issuer_id", "user_session_issuer_id")
 })
 
 var UpdateRemoteSessionClientForm = Type("UpdateRemoteSessionClientForm", func() {

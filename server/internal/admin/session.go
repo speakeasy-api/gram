@@ -60,9 +60,6 @@ func (s Session) CacheKey() string {
 	return AdminSessionCacheKey(s.SessionID)
 }
 
-func (s Session) AdditionalCacheKeys() []string {
-	return []string{}
-}
 
 func (s Session) TTL() time.Duration {
 	return adminSessionTTL

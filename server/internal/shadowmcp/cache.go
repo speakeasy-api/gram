@@ -40,7 +40,6 @@ func (p PolicyEnabledCache) CacheKey() string {
 	return "shadow_mcp_policy_enabled:" + p.ProjectID
 }
 
-func (p PolicyEnabledCache) AdditionalCacheKeys() []string { return nil }
 
 func (p PolicyEnabledCache) TTL() time.Duration { return policyEnabledCacheTTL }
 

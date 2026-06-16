@@ -1,17 +1,23 @@
+import type { Gram } from "@gram/client";
+import { TokenEndpointAuthMethod } from "@gram/client/models/components";
 import {
   buildAddExternalOAuthServerMutation,
-  buildAddOAuthProxyServerMutation,
-  buildCreateEnvironmentMutation,
-  buildDeleteEnvironmentMutation,
-  buildListEnvironmentsQuery,
+  buildCreateRemoteSessionClientMutation,
+  buildCreateRemoteSessionIssuerMutation,
+  buildCreateUserSessionIssuerMutation,
+  buildDiscoverRemoteSessionIssuerMutation,
+  buildSetToolsetUserSessionIssuerMutation,
 } from "@gram/client/react-query";
-import type { Gram } from "@gram/client";
-import type { QueryClient } from "@tanstack/react-query";
 import { fromPromise } from "xstate";
 
+import { buildUserSessionResourceSlug } from "@/lib/externalMcpUserSessions";
 import { proxyRegisterUpstreamClient } from "@/lib/proxyRegisterUpstreamClient";
 
-import { parseScopes, pickAuthMethodFromList } from "./machine-types";
+import {
+  authServerOrigin,
+  parseScopes,
+  pickAuthMethodFromList,
+} from "./machine-types";
 
 type SignalArg = { signal: AbortSignal };
 
@@ -19,33 +25,40 @@ const fetchOptions = ({ signal }: SignalArg) => ({
   options: { fetchOptions: { signal } },
 });
 
+// 2 weeks — matches the user-session default used elsewhere.
+const DEFAULT_SESSION_DURATION_HOURS = 24 * 14;
+
+function narrowTokenEndpointAuthMethod(
+  value: string | null | undefined,
+): TokenEndpointAuthMethod | undefined {
+  if (
+    value === TokenEndpointAuthMethod.ClientSecretBasic ||
+    value === TokenEndpointAuthMethod.ClientSecretPost
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
 export type AddExternalOAuthInput = {
   toolsetSlug: string;
   slug: string;
   metadata: Record<string, unknown>;
 };
 
-export type CreateEnvironmentInput = {
-  organizationId: string;
-  toolsetName: string;
-  clientId: string;
-  clientSecret: string;
-};
-
-export type CreateEnvironmentOutput = { envSlug: string };
-
-export type AddOAuthProxyInput = {
+// The custom path provisions a user_session_issuer + remote_session_issuer +
+// remote_session_client from the operator-supplied upstream metadata and
+// credentials, then links the toolset — the user-session-backed replacement
+// for the removed oauth_proxy_server creation.
+export type ProvisionUserSessionInput = {
   toolsetSlug: string;
-  slug: string;
-  audience: string;
   authorizationEndpoint: string;
   tokenEndpoint: string;
   scopes: string;
   tokenAuthMethod: string;
-  environmentSlug: string;
+  clientId: string;
+  clientSecret: string;
 };
-
-export type DeleteEnvironmentInput = { envSlug: string };
 
 export type RegisterClientInput = {
   registrationEndpoint: string;
@@ -70,12 +83,8 @@ export type AuthedFetch = (
 
 export type WizardServices = {
   addExternalOAuth: ReturnType<typeof fromPromise<void, AddExternalOAuthInput>>;
-  createEnvironment: ReturnType<
-    typeof fromPromise<CreateEnvironmentOutput, CreateEnvironmentInput>
-  >;
-  addOAuthProxy: ReturnType<typeof fromPromise<void, AddOAuthProxyInput>>;
-  deleteEnvironment: ReturnType<
-    typeof fromPromise<void, DeleteEnvironmentInput>
+  provisionUserSession: ReturnType<
+    typeof fromPromise<void, ProvisionUserSessionInput>
   >;
   registerClient: ReturnType<
     typeof fromPromise<RegisterClientOutput, RegisterClientInput>
@@ -86,7 +95,6 @@ export type GramClient = Gram;
 
 export function createWizardServices(
   client: GramClient,
-  queryClient: QueryClient,
   authedFetch: AuthedFetch,
 ): WizardServices {
   const addExternalOAuth = fromPromise<void, AddExternalOAuthInput>(
@@ -107,67 +115,102 @@ export function createWizardServices(
     },
   );
 
-  const createEnvironment = fromPromise<
-    CreateEnvironmentOutput,
-    CreateEnvironmentInput
-  >(async ({ input, signal }) => {
-    // Read fresh at submit time so the name-collision check doesn't race a
-    // still-loading useListEnvironments() at modal open.
-    const envs = await queryClient.fetchQuery(
-      buildListEnvironmentsQuery(client),
-    );
-    const name = nextEnvironmentName(
-      input.toolsetName,
-      envs.environments.map((e) => e.name),
-    );
-
-    const { mutationFn } = buildCreateEnvironmentMutation(client);
-    const env = await mutationFn({
-      request: {
-        createEnvironmentForm: {
-          name,
-          organizationId: input.organizationId,
-          entries: [
-            { name: "CLIENT_ID", value: input.clientId },
-            { name: "CLIENT_SECRET", value: input.clientSecret },
-          ],
-        },
-      },
-      ...fetchOptions({ signal }),
-    });
-    return { envSlug: env.slug };
-  });
-
-  const addOAuthProxy = fromPromise<void, AddOAuthProxyInput>(
+  const provisionUserSession = fromPromise<void, ProvisionUserSessionInput>(
     async ({ input, signal }) => {
-      const { mutationFn } = buildAddOAuthProxyServerMutation(client);
-      await mutationFn({
+      const opts = fetchOptions({ signal });
+      const slug = buildUserSessionResourceSlug(input.toolsetSlug);
+
+      const issuer = await buildCreateUserSessionIssuerMutation(
+        client,
+      ).mutationFn({
         request: {
-          slug: input.toolsetSlug,
-          addOAuthProxyServerRequestBody: {
-            oauthProxyServer: {
-              providerType: "custom",
-              slug: input.slug,
-              audience: input.audience || undefined,
-              authorizationEndpoint: input.authorizationEndpoint,
-              tokenEndpoint: input.tokenEndpoint,
-              scopesSupported: parseScopes(input.scopes),
-              tokenEndpointAuthMethodsSupported: [input.tokenAuthMethod],
-              environmentSlug: input.environmentSlug,
-            },
+          createUserSessionIssuerForm: {
+            slug,
+            authnChallengeMode: "interactive",
+            sessionDurationHours: DEFAULT_SESSION_DURATION_HOURS,
           },
         },
-        ...fetchOptions({ signal }),
+        ...opts,
       });
-    },
-  );
 
-  const deleteEnvironment = fromPromise<void, DeleteEnvironmentInput>(
-    async ({ input, signal }) => {
-      const { mutationFn } = buildDeleteEnvironmentMutation(client);
-      await mutationFn({
-        request: { slug: input.envSlug },
-        ...fetchOptions({ signal }),
+      // Best-effort RFC 8414 discovery to enrich the remote issuer; falls back
+      // to the operator-supplied endpoints.
+      const issuerUrl =
+        authServerOrigin(input.authorizationEndpoint, input.tokenEndpoint) ||
+        input.authorizationEndpoint;
+      let draft: {
+        authorizationEndpoint?: string;
+        tokenEndpoint?: string;
+        registrationEndpoint?: string;
+        jwksUri?: string;
+        scopesSupported?: string[];
+        grantTypesSupported?: string[];
+        responseTypesSupported?: string[];
+        tokenEndpointAuthMethodsSupported?: string[];
+      } = {};
+      if (issuerUrl) {
+        try {
+          draft = await buildDiscoverRemoteSessionIssuerMutation(
+            client,
+          ).mutationFn({
+            request: {
+              discoverRemoteSessionIssuerRequestBody: { issuer: issuerUrl },
+            },
+            ...opts,
+          });
+        } catch {
+          // Keep the operator-supplied endpoints on discovery failure.
+        }
+      }
+
+      const remoteIssuer = await buildCreateRemoteSessionIssuerMutation(
+        client,
+      ).mutationFn({
+        request: {
+          createRemoteSessionIssuerForm: {
+            slug,
+            issuer: issuerUrl,
+            authorizationEndpoint:
+              draft.authorizationEndpoint ?? input.authorizationEndpoint,
+            tokenEndpoint: draft.tokenEndpoint ?? input.tokenEndpoint,
+            registrationEndpoint: draft.registrationEndpoint,
+            jwksUri: draft.jwksUri,
+            scopesSupported: draft.scopesSupported ?? parseScopes(input.scopes),
+            grantTypesSupported: draft.grantTypesSupported ?? [
+              "authorization_code",
+              "refresh_token",
+            ],
+            responseTypesSupported: draft.responseTypesSupported ?? ["code"],
+            tokenEndpointAuthMethodsSupported:
+              draft.tokenEndpointAuthMethodsSupported ?? [
+                input.tokenAuthMethod,
+              ],
+          },
+        },
+        ...opts,
+      });
+
+      await buildCreateRemoteSessionClientMutation(client).mutationFn({
+        request: {
+          createRemoteSessionClientForm: {
+            remoteSessionIssuerId: remoteIssuer.id,
+            userSessionIssuerId: issuer.id,
+            clientId: input.clientId,
+            clientSecret: input.clientSecret || undefined,
+            tokenEndpointAuthMethod: narrowTokenEndpointAuthMethod(
+              input.tokenAuthMethod,
+            ),
+          },
+        },
+        ...opts,
+      });
+
+      await buildSetToolsetUserSessionIssuerMutation(client).mutationFn({
+        request: {
+          slug: input.toolsetSlug,
+          setUserSessionIssuerRequestBody: { userSessionIssuerId: issuer.id },
+        },
+        ...opts,
       });
     },
   );
@@ -216,21 +259,7 @@ export function createWizardServices(
 
   return {
     addExternalOAuth,
-    createEnvironment,
-    addOAuthProxy,
-    deleteEnvironment,
+    provisionUserSession,
     registerClient,
   };
-}
-
-export function nextEnvironmentName(
-  toolsetName: string,
-  existingNames: string[],
-): string {
-  const base = `${toolsetName} OAuth`;
-  const set = new Set(existingNames);
-  if (!set.has(base)) return base;
-  let suffix = 1;
-  while (set.has(`${base} ${suffix}`)) suffix++;
-  return `${base} ${suffix}`;
 }
