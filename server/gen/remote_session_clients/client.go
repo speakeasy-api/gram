@@ -16,30 +16,28 @@ import (
 
 // Client is the "remoteSessionClients" service client.
 type Client struct {
-	CreateRemoteSessionClientEndpoint         goa.Endpoint
-	CreateCimdEndpoint                        goa.Endpoint
-	CloneClientFromOAuthProxyProviderEndpoint goa.Endpoint
-	UpdateRemoteSessionClientEndpoint         goa.Endpoint
-	AttachUserSessionIssuerEndpoint           goa.Endpoint
-	DetachUserSessionIssuerEndpoint           goa.Endpoint
-	ListRemoteSessionClientsEndpoint          goa.Endpoint
-	GetRemoteSessionClientEndpoint            goa.Endpoint
-	DeleteRemoteSessionClientEndpoint         goa.Endpoint
+	CreateRemoteSessionClientEndpoint goa.Endpoint
+	CreateCimdEndpoint                goa.Endpoint
+	UpdateRemoteSessionClientEndpoint goa.Endpoint
+	AttachUserSessionIssuerEndpoint   goa.Endpoint
+	DetachUserSessionIssuerEndpoint   goa.Endpoint
+	ListRemoteSessionClientsEndpoint  goa.Endpoint
+	GetRemoteSessionClientEndpoint    goa.Endpoint
+	DeleteRemoteSessionClientEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "remoteSessionClients" service client given the
 // endpoints.
-func NewClient(createRemoteSessionClient, createCimd, cloneClientFromOAuthProxyProvider, updateRemoteSessionClient, attachUserSessionIssuer, detachUserSessionIssuer, listRemoteSessionClients, getRemoteSessionClient, deleteRemoteSessionClient goa.Endpoint) *Client {
+func NewClient(createRemoteSessionClient, createCimd, updateRemoteSessionClient, attachUserSessionIssuer, detachUserSessionIssuer, listRemoteSessionClients, getRemoteSessionClient, deleteRemoteSessionClient goa.Endpoint) *Client {
 	return &Client{
-		CreateRemoteSessionClientEndpoint:         createRemoteSessionClient,
-		CreateCimdEndpoint:                        createCimd,
-		CloneClientFromOAuthProxyProviderEndpoint: cloneClientFromOAuthProxyProvider,
-		UpdateRemoteSessionClientEndpoint:         updateRemoteSessionClient,
-		AttachUserSessionIssuerEndpoint:           attachUserSessionIssuer,
-		DetachUserSessionIssuerEndpoint:           detachUserSessionIssuer,
-		ListRemoteSessionClientsEndpoint:          listRemoteSessionClients,
-		GetRemoteSessionClientEndpoint:            getRemoteSessionClient,
-		DeleteRemoteSessionClientEndpoint:         deleteRemoteSessionClient,
+		CreateRemoteSessionClientEndpoint: createRemoteSessionClient,
+		CreateCimdEndpoint:                createCimd,
+		UpdateRemoteSessionClientEndpoint: updateRemoteSessionClient,
+		AttachUserSessionIssuerEndpoint:   attachUserSessionIssuer,
+		DetachUserSessionIssuerEndpoint:   detachUserSessionIssuer,
+		ListRemoteSessionClientsEndpoint:  listRemoteSessionClients,
+		GetRemoteSessionClientEndpoint:    getRemoteSessionClient,
+		DeleteRemoteSessionClientEndpoint: deleteRemoteSessionClient,
 	}
 }
 
@@ -83,30 +81,6 @@ func (c *Client) CreateRemoteSessionClient(ctx context.Context, p *CreateRemoteS
 func (c *Client) CreateCimd(ctx context.Context, p *CreateCimdPayload) (res *types.RemoteSessionClient, err error) {
 	var ires any
 	ires, err = c.CreateCimdEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*types.RemoteSessionClient), nil
-}
-
-// CloneClientFromOAuthProxyProvider calls the
-// "cloneClientFromOAuthProxyProvider" endpoint of the "remoteSessionClients"
-// service.
-// CloneClientFromOAuthProxyProvider may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) CloneClientFromOAuthProxyProvider(ctx context.Context, p *CloneClientFromOAuthProxyProviderPayload) (res *types.RemoteSessionClient, err error) {
-	var ires any
-	ires, err = c.CloneClientFromOAuthProxyProviderEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
