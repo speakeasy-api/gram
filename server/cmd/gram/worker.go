@@ -43,7 +43,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/memory"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/gram/server/internal/oauth"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
@@ -641,7 +640,6 @@ func newWorkerCommand() *cli.Command {
 
 			chatSessionsManager := chatsessions.NewManager(logger, redisClient, c.String(usersessions.JWTSigningKeyFlag))
 
-			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager, identityResolver, guardianPolicy)
 			// The worker never serves webhook ingress (ProcessWebhook lives in
 			// the HTTP server), so the dashboard site URL used for Slack link
 			// unfurls is not needed here.
@@ -688,7 +686,6 @@ func newWorkerCommand() *cli.Command {
 				cache.NewRedisCacheAdapter(redisClient),
 				guardianPolicy,
 				functionsOrchestrator,
-				oauthService,
 				billingTracker,
 				billingRepo,
 				telemetryLogger,
