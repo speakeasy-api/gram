@@ -198,11 +198,6 @@ func resourceStrAttr(key, val string) *gen.OTELResourceAttribute {
 	return &gen.OTELResourceAttribute{Key: key, Value: &gen.OTELAttributeValue{StringValue: new(val)}}
 }
 
-//go:fix inline
-func strPtr(s string) *string {
-	return new(s)
-}
-
 func nanoString(ts time.Time) string {
 	return strconvFormatInt(ts.UnixNano())
 }

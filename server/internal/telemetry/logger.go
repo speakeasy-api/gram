@@ -34,11 +34,18 @@ var ResourceAttributeKeys = map[attribute.Key]struct{}{
 }
 
 type LogParams struct {
-	Timestamp          time.Time
-	ObservedTimestamp  time.Time
-	ToolInfo           ToolInfo
-	Attributes         map[attr.Key]any
-	ResourceAttributes map[attr.Key]any
+	Timestamp  time.Time
+	ToolInfo   ToolInfo
+	Attributes map[attr.Key]any
+
+	observedTimestamp  time.Time
+	resourceAttributes map[attr.Key]any
+}
+
+func WithOTELMetadata(params LogParams, observedTimestamp time.Time, resourceAttributes map[attr.Key]any) LogParams {
+	params.observedTimestamp = observedTimestamp
+	params.resourceAttributes = resourceAttributes
+	return params
 }
 
 type Logger struct {
@@ -165,7 +172,7 @@ func buildTelemetryLogParams(params LogParams) (*repo.InsertTelemetryLogParams, 
 	maps.Copy(allAttrs, params.Attributes)
 	maps.Copy(allAttrs, params.ToolInfo.AsAttributes())
 
-	observedTimestamp := params.ObservedTimestamp
+	observedTimestamp := params.observedTimestamp
 	if observedTimestamp.IsZero() {
 		observedTimestamp = time.Now()
 	}
@@ -174,7 +181,7 @@ func buildTelemetryLogParams(params LogParams) (*repo.InsertTelemetryLogParams, 
 	allAttrs[attr.TimeUnixNanoKey] = params.Timestamp.UnixNano()
 	allAttrs[attr.ServiceNameKey] = serviceName
 
-	spanAttrs, resourceAttrs, err := parseAttributesWithExplicitResources(allAttrs, params.ResourceAttributes)
+	spanAttrs, resourceAttrs, err := parseAttributesWithExplicitResources(allAttrs, params.resourceAttributes)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "parse log attributes")
 	}
@@ -202,12 +209,6 @@ func buildTelemetryLogParams(params LogParams) (*repo.InsertTelemetryLogParams, 
 		ServiceVersion:       getStringPtr(allAttrs, attr.ServiceVersionKey),
 		GramChatID:           getStringPtr(allAttrs, attr.GenAIConversationIDKey),
 	}, nil
-}
-
-// parseAttributes splits attributes into resource and span attributes
-// based on ResourceAttributeKeys, and returns their json string representation.
-func parseAttributes(attrs map[attr.Key]any) (spanAttrsJSON, resourceAttrsJSON string, err error) {
-	return parseAttributesWithExplicitResources(attrs, nil)
 }
 
 func parseAttributesWithExplicitResources(attrs map[attr.Key]any, explicitResourceAttrs map[attr.Key]any) (spanAttrsJSON, resourceAttrsJSON string, err error) {

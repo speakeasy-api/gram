@@ -212,13 +212,11 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 				}
 
 				timestamp, observedTimestamp := otelLogTimestamps(logRecord)
-				params = append(params, telemetry.LogParams{
-					Timestamp:          timestamp,
-					ObservedTimestamp:  observedTimestamp,
-					ToolInfo:           claudeOTELLogToolInfo(orgID, parsedProjectID.String()),
-					Attributes:         logAttrs,
-					ResourceAttributes: resourceAttrs,
-				})
+				params = append(params, telemetry.WithOTELMetadata(telemetry.LogParams{
+					Timestamp:  timestamp,
+					ToolInfo:   claudeOTELLogToolInfo(orgID, parsedProjectID.String()),
+					Attributes: logAttrs,
+				}, observedTimestamp, resourceAttrs))
 			}
 		}
 	}
@@ -415,7 +413,7 @@ func parseUnixNanoString(raw string) (int64, bool) {
 }
 
 func stringAttr(attrs map[attr.Key]any, key attribute.Key) string {
-	if v, ok := attrs[attr.Key(key)]; ok {
+	if v, ok := attrs[key]; ok {
 		if s, ok := v.(string); ok {
 			return s
 		}
