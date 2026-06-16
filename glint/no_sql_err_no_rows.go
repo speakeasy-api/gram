@@ -28,6 +28,15 @@ func newNoSqlErrNoRowsAnalyzer(_ noSqlErrNoRowsSettings) *analysis.Analyzer {
 	return &analysis.Analyzer{
 		Name: noSqlErrNoRowsAnalyzer,
 		Doc:  noSqlErrNoRowsDefaultMessage,
+		// This analyzer intentionally keeps the manual per-file ast.Inspect
+		// walk rather than depending on inspect.Analyzer like the other
+		// analyzers in this package. Its detection is per-file stateful: it
+		// accumulates the file's ErrNoRows occurrences alongside a single
+		// otherSqlUsage flag, then emits import add/remove SuggestedFixes scoped
+		// to that *ast.File. The shared inspector walks every file together with
+		// no file boundary, so adopting it would mean re-bucketing nodes back by
+		// file to rebuild that state, which is both slower to reason about and
+		// riskier for the SuggestedFix golden fixture, with no traversal saved.
 		Run: func(pass *analysis.Pass) (any, error) {
 			for _, file := range pass.Files {
 				inspectFileForSqlErrNoRows(pass, file)

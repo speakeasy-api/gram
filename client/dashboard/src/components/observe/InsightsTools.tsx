@@ -10,6 +10,20 @@ import {
   ObserveFilterBar,
   type ObserveTypeFilterValue,
 } from "@/components/observe/ObserveFilterBar";
+import {
+  SERVER_FILTER_PATH,
+  TOOL_USAGE_DEFAULT_TYPES,
+  TOOL_USAGE_TYPE_OPTIONS,
+  TOOL_USAGE_VALID_TYPES,
+  USER_EMAIL_FILTER_PATH,
+  buildServerOptionGroups,
+  encodeHostedServerFilter,
+  encodeShadowServerFilter,
+  parseTargetFilter,
+  selectedTargetValues,
+  selectedUserEmails,
+  toTargetTypes,
+} from "@/components/observe/observeTargetFilters";
 import { useSlugs } from "@/contexts/Sdk";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
@@ -21,16 +35,12 @@ import { telemetryGetToolUsageFilterOptions } from "@gram/client/funcs/telemetry
 import { telemetryGetToolUsageSummary } from "@gram/client/funcs/telemetryGetToolUsageSummary";
 import type {
   GetToolUsageSummaryResult,
-  ToolsetEntry,
-  ToolUsageHostedServerFilterOption,
-  ToolUsageShadowServerFilterOption,
   ToolUsageTargetTimeSeriesPoint,
   ToolUsageTargetToolBreakdownRow,
   ToolUsageUserSummary,
   ToolUsageUserTimeSeriesPoint,
   ToolUsageUsersByTargetRow,
 } from "@gram/client/models/components";
-import type { TargetTypes } from "@gram/client/models/components/gettoolusagesummarypayload";
 import { useGramContext, useListToolsets } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { Badge, Icon } from "@speakeasy-api/moonshine";
@@ -112,73 +122,6 @@ const BAR_ROW_HEIGHT = { collapsed: 18, expanded: 24 };
 const BAR_ROW_SPACER = { collapsed: 8, expanded: 12 };
 const BAR_BORDER_RADIUS = 5;
 const LINE_CHART_HEIGHT = { collapsed: 250, expanded: 600 };
-const HOSTED_SERVER_PREFIX = "hosted:";
-const SHADOW_SERVER_PREFIX = "shadow:";
-
-const TOOL_USAGE_DEFAULT_TYPES: ObserveTypeFilterValue[] = [];
-const TOOL_USAGE_VALID_TYPES: ObserveTypeFilterValue[] = [
-  "hosted_mcp_server",
-  "shadow_mcp_server",
-  "local_tool",
-  "skill",
-];
-const TOOL_USAGE_TYPE_OPTIONS: Array<{
-  label: string;
-  value: ObserveTypeFilterValue;
-}> = [
-  { label: "Hosted MCP Servers", value: "hosted_mcp_server" },
-  { label: "Shadow MCP Servers", value: "shadow_mcp_server" },
-  { label: "Local Tools", value: "local_tool" },
-  { label: "Skills", value: "skill" },
-];
-
-const SERVER_FILTER_PATH = "gram.tool_call.source";
-const USER_EMAIL_FILTER_PATH = "user.email";
-
-type ParsedServerFilter =
-  | { type: "hosted"; id: string }
-  | { type: "shadow"; id: string };
-
-function encodeHostedServerFilter(slug: string): string {
-  return `${HOSTED_SERVER_PREFIX}${slug}`;
-}
-
-function encodeShadowServerFilter(name: string): string {
-  return name;
-}
-
-function parseServerFilter(value: string): ParsedServerFilter {
-  if (value.startsWith(HOSTED_SERVER_PREFIX)) {
-    return { type: "hosted", id: value.slice(HOSTED_SERVER_PREFIX.length) };
-  }
-  if (value.startsWith(SHADOW_SERVER_PREFIX)) {
-    return { type: "shadow", id: value.slice(SHADOW_SERVER_PREFIX.length) };
-  }
-  return { type: "shadow", id: value };
-}
-
-function selectedServerValues(activeFilters: FilterChip[]): string[] {
-  return activeFilters
-    .filter((f) => f.path === SERVER_FILTER_PATH)
-    .flatMap((f) => f.filters)
-    .filter(Boolean);
-}
-
-function selectedUserEmails(activeFilters: FilterChip[]): string[] {
-  return activeFilters
-    .filter((f) => f.path === USER_EMAIL_FILTER_PATH)
-    .flatMap((f) => f.filters)
-    .filter(Boolean);
-}
-
-function toTargetTypes(
-  selectedTypes: ObserveTypeFilterValue[],
-): TargetTypes[] | undefined {
-  const mapped = selectedTypes.filter((type): type is TargetTypes =>
-    TOOL_USAGE_VALID_TYPES.includes(type),
-  );
-  return mapped.length > 0 ? mapped : undefined;
-}
 
 function displayTargetLabel(
   targetLabel: string,
@@ -190,74 +133,6 @@ function displayTargetLabel(
     return serverNameMappings.rawToDisplay.get(targetLabel) ?? targetLabel;
   }
   return targetLabel;
-}
-
-function buildServerOptionGroups({
-  hostedToolsets,
-  hostedServers,
-  shadowServers,
-  activeFilters,
-  serverNameMappings,
-}: {
-  hostedToolsets: ToolsetEntry[];
-  hostedServers: ToolUsageHostedServerFilterOption[];
-  shadowServers: ToolUsageShadowServerFilterOption[];
-  activeFilters: FilterChip[];
-  serverNameMappings: ReturnType<typeof useServerNameMappings>;
-}): MultiSelectGroup[] {
-  const hosted = new Map<string, { label: string; count: number }>();
-  const shadow = new Map<string, { label: string; count: number }>();
-  const hostedCounts = new Map(
-    hostedServers.map((server) => [server.toolsetSlug, server.eventCount]),
-  );
-
-  for (const toolset of hostedToolsets) {
-    if (!toolset.mcpEnabled) continue;
-    hosted.set(encodeHostedServerFilter(toolset.slug), {
-      label: toolset.name || toolset.slug,
-      count: hostedCounts.get(toolset.slug) ?? 0,
-    });
-  }
-
-  for (const server of shadowServers) {
-    shadow.set(encodeShadowServerFilter(server.serverName), {
-      label:
-        serverNameMappings.rawToDisplay.get(server.serverName) ??
-        server.serverName,
-      count: server.eventCount,
-    });
-  }
-
-  for (const value of selectedServerValues(activeFilters)) {
-    const parsed = parseServerFilter(value);
-    if (parsed.type === "hosted" && !hosted.has(value)) {
-      hosted.set(value, { label: parsed.id, count: 0 });
-    }
-    const encodedShadow = encodeShadowServerFilter(parsed.id);
-    if (parsed.type === "shadow" && !shadow.has(encodedShadow)) {
-      shadow.set(encodedShadow, {
-        label: serverNameMappings.rawToDisplay.get(parsed.id) ?? parsed.id,
-        count: 0,
-      });
-    }
-  }
-
-  const toOptions = (entries: Map<string, { label: string; count: number }>) =>
-    Array.from(entries.entries())
-      .sort(
-        (a, b) =>
-          b[1].count - a[1].count || a[1].label.localeCompare(b[1].label),
-      )
-      .map(([value, option]) => ({
-        value,
-        label:
-          option.count > 0 ? `${option.label} (${option.count})` : option.label,
-      }));
-
-  return [
-    { heading: "Hosted MCP", options: toOptions(hosted) },
-    { heading: "Shadow MCP", options: toOptions(shadow) },
-  ].filter((group) => group.options.length > 0);
 }
 
 type _BarLegend = Exclude<
@@ -354,7 +229,7 @@ export function InsightsToolsContent(): JSX.Element {
   const client = useGramContext();
 
   const serverFilters = useMemo(
-    () => selectedServerValues(activeFilters).map(parseServerFilter),
+    () => selectedTargetValues(activeFilters).map(parseTargetFilter),
     [activeFilters],
   );
   const hostedToolsetSlugs = useMemo(

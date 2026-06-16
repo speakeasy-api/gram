@@ -105,7 +105,7 @@ func handleInitialize(ctx context.Context, logger *slog.Logger, req *rawRequest,
 
 	bs, err := json.Marshal(result)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize initialize response").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize initialize response").LogError(ctx, logger)
 	}
 
 	return bs, nil

@@ -29,12 +29,13 @@ type Client struct {
 	ListAttributeKeysEndpoint         goa.Endpoint
 	GetHooksSummaryEndpoint           goa.Endpoint
 	GetToolUsageSummaryEndpoint       goa.Endpoint
+	ListToolUsageTracesEndpoint       goa.Endpoint
 	GetToolUsageFilterOptionsEndpoint goa.Endpoint
 	ListHooksTracesEndpoint           goa.Endpoint
 }
 
 // NewClient initializes a "telemetry" service client given the endpoints.
-func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEvent, getProjectMetricsSummary, getUserMetricsSummary, getEmployeeDataFlowGraph, getObservabilityOverview, getProjectOverview, listFilterOptions, listAttributeKeys, getHooksSummary, getToolUsageSummary, getToolUsageFilterOptions, listHooksTraces goa.Endpoint) *Client {
+func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEvent, getProjectMetricsSummary, getUserMetricsSummary, getEmployeeDataFlowGraph, getObservabilityOverview, getProjectOverview, listFilterOptions, listAttributeKeys, getHooksSummary, getToolUsageSummary, listToolUsageTraces, getToolUsageFilterOptions, listHooksTraces goa.Endpoint) *Client {
 	return &Client{
 		SearchLogsEndpoint:                searchLogs,
 		SearchToolCallsEndpoint:           searchToolCalls,
@@ -50,6 +51,7 @@ func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEve
 		ListAttributeKeysEndpoint:         listAttributeKeys,
 		GetHooksSummaryEndpoint:           getHooksSummary,
 		GetToolUsageSummaryEndpoint:       getToolUsageSummary,
+		ListToolUsageTracesEndpoint:       listToolUsageTraces,
 		GetToolUsageFilterOptionsEndpoint: getToolUsageFilterOptions,
 		ListHooksTracesEndpoint:           listHooksTraces,
 	}
@@ -371,6 +373,29 @@ func (c *Client) GetToolUsageSummary(ctx context.Context, p *GetToolUsageSummary
 		return
 	}
 	return ires.(*GetToolUsageSummaryResult), nil
+}
+
+// ListToolUsageTraces calls the "listToolUsageTraces" endpoint of the
+// "telemetry" service.
+// ListToolUsageTraces may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListToolUsageTraces(ctx context.Context, p *ListToolUsageTracesPayload) (res *ListToolUsageTracesResult, err error) {
+	var ires any
+	ires, err = c.ListToolUsageTracesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListToolUsageTracesResult), nil
 }
 
 // GetToolUsageFilterOptions calls the "getToolUsageFilterOptions" endpoint of

@@ -36,12 +36,12 @@ func (s *Service) ListUserSessions(ctx context.Context, payload *gen.ListUserSes
 	limit := pageLimit(payload.Limit)
 	cursor, err := parseCursor(payload.Cursor)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
 	}
 
 	issuerFilter, err := conv.PtrToNullUUID(payload.UserSessionIssuerID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id").LogError(ctx, s.logger)
 	}
 
 	rows, err := repo.New(s.db).ListUserSessionsByProjectID(ctx, repo.ListUserSessionsByProjectIDParams{
@@ -53,7 +53,7 @@ func (s *Service) ListUserSessions(ctx context.Context, payload *gen.ListUserSes
 		LimitValue:          limit,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list user sessions").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list user sessions").LogError(ctx, s.logger)
 	}
 
 	items := make([]*types.UserSession, len(rows))
@@ -83,7 +83,7 @@ func (s *Service) RevokeUserSession(ctx context.Context, payload *gen.RevokeUser
 
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid session id").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid session id").LogError(ctx, s.logger)
 	}
 
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
@@ -94,7 +94,7 @@ func (s *Service) RevokeUserSession(ctx context.Context, payload *gen.RevokeUser
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -106,9 +106,9 @@ func (s *Service) RevokeUserSession(ctx context.Context, payload *gen.RevokeUser
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeNotFound, err, "user session not found").Log(ctx, logger)
+			return oops.E(oops.CodeNotFound, err, "user session not found").LogError(ctx, logger)
 		}
-		return oops.E(oops.CodeUnexpected, err, "revoke user session").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "revoke user session").LogError(ctx, logger)
 	}
 
 	if err := s.audit.LogUserSessionRevoke(ctx, dbtx, audit.LogUserSessionRevokeEvent{
@@ -121,11 +121,11 @@ func (s *Service) RevokeUserSession(ctx context.Context, payload *gen.RevokeUser
 		Principal:        revoked.SubjectUrn,
 		Jti:              revoked.Jti,
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "log user session revocation").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "log user session revocation").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
 	// Push the jti into the revocation cache after the DB commit so a cached
@@ -133,7 +133,7 @@ func (s *Service) RevokeUserSession(ctx context.Context, payload *gen.RevokeUser
 	// surfaced as Unexpected — the row is gone but the access token would keep
 	// validating until expiry, which is the case the cache exists to prevent.
 	if err := s.chatSessions.RevokeToken(ctx, revoked.Jti); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "push jti into revocation cache").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "push jti into revocation cache").LogError(ctx, logger)
 	}
 
 	return nil

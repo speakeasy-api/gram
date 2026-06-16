@@ -138,7 +138,7 @@ func (e *ShareableError) effectiveCode(ctx context.Context) Code {
 	return e.Code
 }
 
-// Log logs the error using the provided logger and context. It also sets the
+// LogError logs the error using the provided logger and context. It also sets the
 // OpenTelemetry span status to error. Additional arguments can be provided to
 // include more context in the log entry.
 //
@@ -147,7 +147,7 @@ func (e *ShareableError) effectiveCode(ctx context.Context) Code {
 // not mark the span as errored or record an exception, to avoid drowning real
 // faults in disconnect noise. Server- and application-initiated cancellations,
 // where the request context is still live, keep full error severity.
-func (e *ShareableError) Log(ctx context.Context, logger *slog.Logger, args ...slog.Attr) *ShareableError {
+func (e *ShareableError) LogError(ctx context.Context, logger *slog.Logger, args ...slog.Attr) *ShareableError {
 	canceled := e.effectiveCode(ctx) == CodeCanceled
 
 	span := trace.SpanFromContext(ctx)
@@ -163,6 +163,64 @@ func (e *ShareableError) Log(ctx context.Context, logger *slog.Logger, args ...s
 
 	var pcs [1]uintptr
 	runtime.Callers(2, pcs[:]) // skip [Callers, Log]
+	r := slog.NewRecord(time.Now(), level, e.public, pcs[0])
+
+	if len(args) > 0 {
+		r.AddAttrs(append(args, attr.SlogErrorID(e.id), attr.SlogErrorMessage(e.String()))...)
+	} else {
+		r.AddAttrs(attr.SlogErrorID(e.id), attr.SlogErrorMessage(e.String()))
+	}
+
+	_ = logger.Handler().Handle(ctx, r)
+	return e
+}
+
+// LogWarn logs the error using the provided logger and context at warn level.
+// Unlike LogError, it never sets the OpenTelemetry span status to error or
+// records the error on the span. It is intended for client-fault boundary errors
+// (e.g. 400/401/403/404) that should be visible in logs but must not pollute the
+// errored-span population that error-rate monitors and SLOs are keyed on.
+// Additional arguments can be provided to include more context in the log entry.
+//
+// A client-initiated cancellation (context.Canceled cause with a canceled
+// request context) is demoted to info level, mirroring LogError's cancellation
+// handling.
+func (e *ShareableError) LogWarn(ctx context.Context, logger *slog.Logger, args ...slog.Attr) *ShareableError {
+	level := slog.LevelWarn
+	if e.effectiveCode(ctx) == CodeCanceled {
+		level = slog.LevelInfo
+	}
+
+	var pcs [1]uintptr
+	runtime.Callers(2, pcs[:]) // skip [Callers, LogWarn]
+	r := slog.NewRecord(time.Now(), level, e.public, pcs[0])
+
+	if len(args) > 0 {
+		r.AddAttrs(append(args, attr.SlogErrorID(e.id), attr.SlogErrorMessage(e.String()))...)
+	} else {
+		r.AddAttrs(attr.SlogErrorID(e.id), attr.SlogErrorMessage(e.String()))
+	}
+
+	_ = logger.Handler().Handle(ctx, r)
+	return e
+}
+
+// LogInfo logs the error using the provided logger and context at info level.
+// Like LogWarn, it never sets the OpenTelemetry span status to error or records
+// the error on the span. Additional arguments can be provided to include more
+// context in the log entry.
+//
+// The client-initiated cancellation check is a no-op at info level (the level is
+// already info and the span is never touched) but is kept for symmetry with
+// LogError and LogWarn.
+func (e *ShareableError) LogInfo(ctx context.Context, logger *slog.Logger, args ...slog.Attr) *ShareableError {
+	level := slog.LevelInfo
+	if e.effectiveCode(ctx) == CodeCanceled {
+		level = slog.LevelInfo
+	}
+
+	var pcs [1]uintptr
+	runtime.Callers(2, pcs[:]) // skip [Callers, LogInfo]
 	r := slog.NewRecord(time.Now(), level, e.public, pcs[0])
 
 	if len(args) > 0 {

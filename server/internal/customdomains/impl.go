@@ -98,7 +98,7 @@ func (s *Service) GetDomain(ctx context.Context, payload *gen.GetDomainPayload) 
 
 	domain, err := repo.GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "no custom domain found for organization").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, err, "no custom domain found for organization").LogError(ctx, s.logger)
 	}
 
 	isUpdating := false
@@ -119,7 +119,7 @@ func (s *Service) CreateDomain(ctx context.Context, payload *gen.CreateDomainPay
 	}
 
 	if !slices.Contains([]string{"pro", "enterprise"}, authCtx.AccountType) {
-		return oops.E(oops.CodeUnauthorized, err, "custom domain registration is not supported for free account").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnauthorized, err, "custom domain registration is not supported for free account").LogError(ctx, s.logger)
 	}
 
 	ipAllowlist := payload.IPAllowlist
@@ -127,7 +127,7 @@ func (s *Service) CreateDomain(ctx context.Context, payload *gen.CreateDomainPay
 		ipAllowlist = []string{}
 	}
 	if err := validateIPAllowlist(ipAllowlist); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid ip_allowlist entry").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid ip_allowlist entry").LogError(ctx, s.logger)
 	}
 
 	_, err = s.temporalClient.ExecuteCustomDomainRegistration(
@@ -140,7 +140,7 @@ func (s *Service) CreateDomain(ctx context.Context, payload *gen.CreateDomainPay
 		ipAllowlist,
 	)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error executing custom domain registration").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "error executing custom domain registration").LogError(ctx, s.logger)
 	}
 
 	return nil
@@ -160,14 +160,14 @@ func (s *Service) UpdateDomain(ctx context.Context, payload *gen.UpdateDomainPay
 		ipAllowlist = []string{}
 	}
 	if err := validateIPAllowlist(ipAllowlist); err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid ip_allowlist entry").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid ip_allowlist entry").LogError(ctx, s.logger)
 	}
 
 	repository := repo.New(s.db)
 
 	domain, err := repository.GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "no custom domain found for organization").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, err, "no custom domain found for organization").LogError(ctx, s.logger)
 	}
 
 	// Reconcile the live k8s resource BEFORE persisting so a reconcile failure
@@ -179,10 +179,10 @@ func (s *Service) UpdateDomain(ctx context.Context, payload *gen.UpdateDomainPay
 	if domain.Activated && domain.IngressName.Valid {
 		run, err := s.temporalClient.ExecuteCustomDomainUpdate(ctx, authCtx.ActiveOrganizationID, domain.Domain, k8s.ProvisionerKind(domain.ProvisionerKind), ipAllowlist)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to start custom domain update workflow").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to start custom domain update workflow").LogError(ctx, s.logger)
 		}
 		if err := run.Get(ctx, nil); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "custom domain update workflow failed").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "custom domain update workflow failed").LogError(ctx, s.logger)
 		}
 	}
 
@@ -191,7 +191,7 @@ func (s *Service) UpdateDomain(ctx context.Context, payload *gen.UpdateDomainPay
 		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to update custom domain ip allowlist").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to update custom domain ip allowlist").LogError(ctx, s.logger)
 	}
 
 	isUpdating := false
@@ -213,22 +213,22 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 
 	domain, err := repo.New(s.db).GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "no custom domain found for organization").Log(ctx, s.logger)
+		return oops.E(oops.CodeNotFound, err, "no custom domain found for organization").LogError(ctx, s.logger)
 	}
 
 	if domain.Activated && domain.IngressName.Valid {
 		run, err := s.temporalClient.ExecuteCustomDomainDeletion(ctx, authCtx.ActiveOrganizationID, domain.Domain, domain.IngressName.String, domain.CertSecretName.String, k8s.ProvisionerKind(domain.ProvisionerKind))
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to start custom domain deletion workflow").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to start custom domain deletion workflow").LogError(ctx, s.logger)
 		}
 		if err := run.Get(ctx, nil); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "custom domain deletion workflow failed").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, err, "custom domain deletion workflow failed").LogError(ctx, s.logger)
 		}
 	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to access custom domains").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to access custom domains").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -239,7 +239,7 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 	// so the org:admin gate above authorizes the entire fan-out.
 	deletedEndpoints, err := mcpendpointsrepo.New(dbtx).SoftDeleteMCPEndpointsByCustomDomainID(ctx, domain.ID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "delete child mcp endpoints").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "delete child mcp endpoints").LogError(ctx, s.logger)
 	}
 
 	for _, endpoint := range deletedEndpoints {
@@ -252,12 +252,12 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 			McpEndpointURN:   urn.NewMcpEndpoint(endpoint.ID),
 			Slug:             endpoint.Slug,
 		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "log mcp endpoint deletion").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, err, "log mcp endpoint deletion").LogError(ctx, s.logger)
 		}
 	}
 
 	if err := repo.New(dbtx).DeleteCustomDomain(ctx, authCtx.ActiveOrganizationID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to delete custom domain").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to delete custom domain").LogError(ctx, s.logger)
 	}
 
 	if err := s.audit.LogCustomDomainDelete(ctx, dbtx, audit.LogCustomDomainDeleteEvent{
@@ -269,11 +269,11 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 		CustomDomainURN: urn.NewCustomDomain(domain.ID),
 		DomainName:      domain.Domain,
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to create custom domain deletion audit log").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to create custom domain deletion audit log").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to commit custom domain deletion").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to commit custom domain deletion").LogError(ctx, s.logger)
 	}
 
 	s.logger.InfoContext(ctx, "custom domain deleted",
@@ -295,12 +295,12 @@ func (s *Service) ListMcpEndpoints(ctx context.Context, _ *gen.ListMcpEndpointsP
 
 	domain, err := repo.New(s.db).GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "no custom domain found for organization").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, err, "no custom domain found for organization").LogError(ctx, s.logger)
 	}
 
 	rows, err := mcpendpointsrepo.New(s.db).ListMCPEndpointsByCustomDomainID(ctx, domain.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list mcp endpoints by custom domain").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list mcp endpoints by custom domain").LogError(ctx, s.logger)
 	}
 
 	return &gen.ListCustomDomainMcpEndpointsResult{McpEndpoints: mv.BuildCustomDomainMcpEndpointListView(rows)}, nil

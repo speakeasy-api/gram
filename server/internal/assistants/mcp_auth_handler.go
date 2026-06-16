@@ -130,33 +130,33 @@ func (s *Service) handleCreateMCPAuthFlow(w http.ResponseWriter, r *http.Request
 
 	flowID := uuid.NewString()
 	if s.core.serverURL == nil {
-		return oops.E(oops.CodeUnexpected, nil, "assistant mcp auth callback base url not configured").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, nil, "assistant mcp auth callback base url not configured").LogError(ctx, s.logger)
 	}
 	redirectURI := s.core.serverURL.JoinPath("rpc", "assistantMcpAuth", flowID, "oauth", "callback").String()
 	codeVerifier, codeChallenge, err := newPKCEPair()
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "generate PKCE verifier").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "generate PKCE verifier").LogError(ctx, s.logger)
 	}
 	encryptedVerifier, err := s.core.encryptionClient.Encrypt([]byte(codeVerifier))
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "encrypt pkce verifier").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "encrypt pkce verifier").LogError(ctx, s.logger)
 	}
 
 	metadata, err := externalmcp.DiscoverOAuthMetadata(ctx, s.logger, s.core.guardianPolicy, "", mcpURL.String())
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "discover mcp authorization server metadata").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "discover mcp authorization server metadata").LogError(ctx, s.logger)
 	}
 	if metadata.AuthorizationEndpoint == "" || metadata.TokenEndpoint == "" || metadata.RegistrationEndpoint == "" {
-		return oops.E(oops.CodeUnexpected, nil, "mcp authorization server does not advertise RFC 8414 endpoints").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, nil, "mcp authorization server does not advertise RFC 8414 endpoints").LogError(ctx, s.logger)
 	}
 
 	registration, err := s.registerMCPAuthClient(ctx, metadata.RegistrationEndpoint, redirectURI)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "register assistant mcp oauth client").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "register assistant mcp oauth client").LogError(ctx, s.logger)
 	}
 	encryptedSecret, err := s.core.encryptionClient.Encrypt([]byte(registration.ClientSecret))
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "encrypt mcp client secret").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "encrypt mcp client secret").LogError(ctx, s.logger)
 	}
 
 	state, err := s.core.assistantTokens.GenerateMCPAuthFlow(assistanttokens.MCPAuthFlowInput{
@@ -176,12 +176,12 @@ func (s *Service) handleCreateMCPAuthFlow(w http.ResponseWriter, r *http.Request
 		TTL:           mcpAuthFlowTTL,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "sign mcp auth flow state").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "sign mcp auth flow state").LogError(ctx, s.logger)
 	}
 
 	authURL, err := buildMCPAuthURL(metadata.AuthorizationEndpoint, registration.ClientID, redirectURI, state, codeChallenge)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "build mcp auth url").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "build mcp auth url").LogError(ctx, s.logger)
 	}
 
 	s.logger.InfoContext(ctx, "assistant mcp auth flow created",
@@ -204,31 +204,31 @@ func (s *Service) handleMCPAuthCallback(w http.ResponseWriter, r *http.Request) 
 	state := r.URL.Query().Get("state")
 	claims, err := s.core.assistantTokens.ValidateMCPAuthFlow(state)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid mcp auth callback state").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid mcp auth callback state").LogError(ctx, s.logger)
 	}
 	if claims.FlowID != flowID {
-		return oops.E(oops.CodeBadRequest, nil, "mcp auth callback flow mismatch").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "mcp auth callback flow mismatch").LogError(ctx, s.logger)
 	}
 
 	projectID, err := uuid.Parse(claims.ProjectID)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid callback project id").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid callback project id").LogError(ctx, s.logger)
 	}
 	assistantID, err := uuid.Parse(claims.AssistantID)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid callback assistant id").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid callback assistant id").LogError(ctx, s.logger)
 	}
 	threadID, err := uuid.Parse(claims.ThreadID)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid callback thread id").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid callback thread id").LogError(ctx, s.logger)
 	}
 	mcpURL, err := url.Parse(claims.McpURL)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid callback mcp url").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid callback mcp url").LogError(ctx, s.logger)
 	}
 	mcpSlug, err := mcpSlugFromURL(mcpURL)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "callback mcp url missing slug").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "callback mcp url missing slug").LogError(ctx, s.logger)
 	}
 
 	payload := mcpAuthEventPayload{
@@ -288,17 +288,17 @@ func (s *Service) enqueueMCPAuthEvent(ctx context.Context, projectID, assistantI
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return false, oops.E(oops.CodeNotFound, err, "assistant thread not found").Log(ctx, s.logger)
+			return false, oops.E(oops.CodeNotFound, err, "assistant thread not found").LogError(ctx, s.logger)
 		}
-		return false, oops.E(oops.CodeUnexpected, err, "load assistant thread for mcp auth event").Log(ctx, s.logger)
+		return false, oops.E(oops.CodeUnexpected, err, "load assistant thread for mcp auth event").LogError(ctx, s.logger)
 	}
 	if thread.AssistantID != assistantID {
-		return false, oops.E(oops.CodeForbidden, nil, "assistant thread assistant mismatch").Log(ctx, s.logger)
+		return false, oops.E(oops.CodeForbidden, nil, "assistant thread assistant mismatch").LogError(ctx, s.logger)
 	}
 
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "marshal mcp auth event").Log(ctx, s.logger)
+		return false, oops.E(oops.CodeUnexpected, err, "marshal mcp auth event").LogError(ctx, s.logger)
 	}
 	_, err = repo.InsertAssistantThreadEvent(ctx, assistantrepo.InsertAssistantThreadEventParams{
 		AssistantThreadID:     threadID,
@@ -315,7 +315,7 @@ func (s *Service) enqueueMCPAuthEvent(ctx context.Context, projectID, assistantI
 	case errors.Is(err, pgx.ErrNoRows):
 		return false, nil
 	case err != nil:
-		return false, oops.E(oops.CodeUnexpected, err, "insert mcp auth assistant event").Log(ctx, s.logger)
+		return false, oops.E(oops.CodeUnexpected, err, "insert mcp auth assistant event").LogError(ctx, s.logger)
 	default:
 		return true, nil
 	}

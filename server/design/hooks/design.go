@@ -126,6 +126,8 @@ var CodexHookPayload = Type("CodexHookPayload", func() {
 	Attribute("permission_type", String, "The type of permission being requested (PermissionRequest only)")
 	// UserPromptSubmit fields
 	Attribute("prompt", String, "The user's prompt text (UserPromptSubmit only)")
+	// Stop fields
+	Attribute("last_assistant_message", String, "The final assistant message text for the turn (Stop only)")
 })
 
 // Codex hook result

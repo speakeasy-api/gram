@@ -31,6 +31,65 @@ func TestGrantExpressionEvaluate_missingBase(t *testing.T) {
 	require.Equal(t, GrantExpressionReasonMissingBase, result.Reason)
 }
 
+func TestGrantExpressionEvaluate_rejectsDenyGrantForBaseScope(t *testing.T) {
+	t.Parallel()
+
+	policyID := "policy_123"
+	grants := []Grant{
+		NewGrant(ScopeRiskPolicyEvaluate, policyID),
+		NewDenyGrant(ScopeRiskPolicyEvaluate, policyID),
+	}
+
+	result, err := RiskPolicyApplies(policyID, RiskPolicyDimensions{}).Evaluate(grants)
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrUnsupportedMixedGrantSemantics)
+	require.False(t, result.Satisfied)
+	require.Equal(t, GrantExpressionReasonError, result.Reason)
+}
+
+func TestGrantExpressionEvaluate_rejectsDenyGrantForExceptionScope(t *testing.T) {
+	t.Parallel()
+
+	policyID := "policy_123"
+	grants := []Grant{
+		NewDenyGrant(ScopeRiskPolicyBypass, policyID),
+	}
+
+	result, err := RiskPolicyApplies(policyID, RiskPolicyDimensions{}).Evaluate(grants)
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrUnsupportedMixedGrantSemantics)
+	require.False(t, result.Satisfied)
+	require.Equal(t, GrantExpressionReasonError, result.Reason)
+}
+
+func TestGrantExpressionEvaluate_ignoresDenyGrantForUnreferencedScope(t *testing.T) {
+	t.Parallel()
+
+	policyID := "policy_123"
+	grants := []Grant{
+		NewGrant(ScopeRiskPolicyEvaluate, policyID),
+		NewDenyGrant(ScopeProjectRead, "project_123"),
+	}
+
+	result, err := RiskPolicyApplies(policyID, RiskPolicyDimensions{}).Evaluate(grants)
+	require.NoError(t, err)
+	require.True(t, result.Satisfied)
+	require.Equal(t, GrantExpressionReasonMatched, result.Reason)
+}
+
+func TestGrantExpressionEvaluate_rejectsWrappedMixedSemanticsError(t *testing.T) {
+	t.Parallel()
+
+	policyID := "policy_123"
+	grants := []Grant{
+		NewGrant(ScopeRiskPolicyEvaluate, policyID),
+		NewDenyGrant(ScopeRiskPolicyBypass, policyID),
+	}
+
+	_, err := RiskPolicyApplies(policyID, RiskPolicyDimensions{}).Evaluate(grants)
+	require.ErrorIs(t, err, ErrUnsupportedMixedGrantSemantics)
+}
+
 func TestGrantExpressionEvaluate_differenceWorksForGenericChecks(t *testing.T) {
 	t.Parallel()
 
@@ -48,6 +107,21 @@ func TestGrantExpressionEvaluate_differenceWorksForGenericChecks(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, result.Satisfied)
 	require.Equal(t, GrantExpressionReasonExceptionMatched, result.Reason)
+}
+
+func TestGrantExpressionEvaluate_allowsDenyGrantForExpandedScope(t *testing.T) {
+	t.Parallel()
+
+	grants := []Grant{
+		NewGrant(ScopeProjectWrite, "proj_123"),
+		NewDenyGrant(ScopeProjectWrite, "proj_123"),
+	}
+	readCheck := Check{Scope: ScopeProjectRead, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal, expanded: false}
+
+	result, err := GrantCheck{Check: readCheck, Instance: nil}.Evaluate(grants)
+	require.NoError(t, err)
+	require.True(t, result.Satisfied)
+	require.Equal(t, GrantExpressionReasonMatched, result.Reason)
 }
 
 func TestGrantExpressionEvaluate_differenceKeepsNonMatchingSetKey(t *testing.T) {

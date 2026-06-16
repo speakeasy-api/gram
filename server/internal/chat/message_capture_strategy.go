@@ -67,7 +67,7 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 
 	projectID, err := uuid.Parse(request.ProjectID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "parse project ID").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "parse project ID").LogError(ctx, s.logger)
 	}
 	orgID := request.OrgID
 	userID := request.UserID

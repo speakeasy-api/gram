@@ -31,7 +31,7 @@ func (s *Service) GetTokensUnderManagement(ctx context.Context, payload *gen.Get
 
 	meta, err := s.repo.GetBillingMetadata(ctx, authCtx.ActiveOrganizationID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get billing metadata").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get billing metadata").LogError(ctx, s.logger)
 	}
 	// On pgx.ErrNoRows the zero-value row stands in for an unconfigured
 	// contract: no token limit, no alert email, and an anchor day that
@@ -46,7 +46,7 @@ func (s *Service) SetBillingMetadata(ctx context.Context, payload *gen.SetBillin
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 	if !authCtx.IsAdmin {
-		return nil, oops.E(oops.CodeForbidden, nil, "platform admin required").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeForbidden, nil, "platform admin required").LogError(ctx, s.logger)
 	}
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
@@ -59,7 +59,7 @@ func (s *Service) SetBillingMetadata(ctx context.Context, payload *gen.SetBillin
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to update billing metadata").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to update billing metadata").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -71,7 +71,7 @@ func (s *Service) SetBillingMetadata(ctx context.Context, payload *gen.SetBillin
 	case err == nil:
 		snapshotBefore = billingMetadataSnapshot(before)
 	case !errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get billing metadata").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get billing metadata").LogError(ctx, s.logger)
 	}
 
 	row, err := qtx.UpsertBillingMetadata(ctx, repo.UpsertBillingMetadataParams{
@@ -81,7 +81,7 @@ func (s *Service) SetBillingMetadata(ctx context.Context, payload *gen.SetBillin
 		BillingCycleAnchorDay: conv.SafeInt32(payload.BillingCycleAnchorDay),
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to upsert billing metadata").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to upsert billing metadata").LogError(ctx, s.logger)
 	}
 
 	if err := s.auditLogger.LogBillingMetadataUpdate(ctx, dbtx, audit.LogBillingMetadataUpdateEvent{
@@ -93,11 +93,11 @@ func (s *Service) SetBillingMetadata(ctx context.Context, payload *gen.SetBillin
 		BillingMetadataSnapshotBefore: snapshotBefore,
 		BillingMetadataSnapshotAfter:  billingMetadataSnapshot(row),
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to record billing metadata audit event").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to record billing metadata audit event").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to update billing metadata").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to update billing metadata").LogError(ctx, s.logger)
 	}
 
 	return s.buildTokensUnderManagement(ctx, authCtx, row)
@@ -116,7 +116,7 @@ func (s *Service) buildTokensUnderManagement(ctx context.Context, authCtx *conte
 
 	projectIDs, err := s.repo.ListProjectIDsByOrganization(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list organization projects").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list organization projects").LogError(ctx, s.logger)
 	}
 
 	ids := make([]string, 0, len(projectIDs))
@@ -134,7 +134,7 @@ func (s *Service) buildTokensUnderManagement(ctx context.Context, authCtx *conte
 			EndUnixNano:   cycle.End.UnixNano(),
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to compute tokens under management").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to compute tokens under management").LogError(ctx, s.logger)
 		}
 
 		var cycleTokens int64

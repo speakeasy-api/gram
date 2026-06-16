@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { organizationRemoteSessionIssuersUpdate } from "../funcs/organizationRemoteSessionIssuersUpdate.js";
+import { organizationRemoteSessionIssuersUpdateIssuer } from "../funcs/organizationRemoteSessionIssuersUpdateIssuer.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -51,10 +51,10 @@ export type UpdateOrganizationRemoteSessionIssuerMutationError =
   | SDKValidationError;
 
 /**
- * updateOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
+ * updateIssuer organizationRemoteSessionIssuers
  *
  * @remarks
- * Update fields on an existing organization-level remote_session_issuer.
+ * Update any remote_session_issuer (organizational or project-specific) in the caller's organization. Requires org:admin.
  */
 export function useUpdateOrganizationRemoteSessionIssuerMutation(
   options?: MutationHookOptions<
@@ -75,7 +75,7 @@ export function useUpdateOrganizationRemoteSessionIssuerMutation(
 }
 
 export function mutationKeyUpdateOrganizationRemoteSessionIssuer(): MutationKey {
-  return ["@gram/client", "organizationRemoteSessionIssuers", "update"];
+  return ["@gram/client", "organizationRemoteSessionIssuers", "updateIssuer"];
 }
 
 export function buildUpdateOrganizationRemoteSessionIssuerMutation(
@@ -106,7 +106,7 @@ export function buildUpdateOrganizationRemoteSessionIssuerMutation(
           ),
         },
       };
-      return unwrapAsync(organizationRemoteSessionIssuersUpdate(
+      return unwrapAsync(organizationRemoteSessionIssuersUpdateIssuer(
         client$,
         request,
         security,

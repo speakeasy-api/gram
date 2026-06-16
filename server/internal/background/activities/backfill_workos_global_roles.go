@@ -34,7 +34,7 @@ func NewBackfillWorkOSGlobalRoles(logger *slog.Logger, db *pgxpool.Pool, workosC
 func (b *BackfillWorkOSGlobalRoles) Do(ctx context.Context) error {
 	roles, err := b.workos.ListGlobalRoles(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "list WorkOS global roles").Log(ctx, b.logger)
+		return oops.E(oops.CodeUnexpected, err, "list WorkOS global roles").LogError(ctx, b.logger)
 	}
 
 	tx, err := b.db.Begin(ctx)

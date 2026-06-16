@@ -85,7 +85,7 @@ func (s *Service) ListResources(ctx context.Context, payload *gen.ListResourcesP
 	if payload.Cursor != nil {
 		cursorUUID, err := uuid.Parse(*payload.Cursor)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
 		}
 		params.Cursor = uuid.NullUUID{UUID: cursorUUID, Valid: true}
 	}
@@ -93,14 +93,14 @@ func (s *Service) ListResources(ctx context.Context, payload *gen.ListResourcesP
 	if payload.DeploymentID != nil {
 		deploymentUUID, err := uuid.Parse(*payload.DeploymentID)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid deployment ID").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid deployment ID").LogError(ctx, s.logger)
 		}
 		params.DeploymentID = uuid.NullUUID{UUID: deploymentUUID, Valid: true}
 	}
 
 	resources, err := s.repo.ListFunctionResources(ctx, params)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list resources").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list resources").LogError(ctx, s.logger)
 	}
 
 	result := &gen.ListResourcesResult{
@@ -113,7 +113,7 @@ func (s *Service) ListResources(ctx context.Context, payload *gen.ListResourcesP
 		if resource.Meta != nil {
 			err = json.Unmarshal(resource.Meta, &meta)
 			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "failed to unmarshal meta").Log(ctx, s.logger)
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to unmarshal meta").LogError(ctx, s.logger)
 			}
 		}
 		result.Resources[i] = &types.Resource{

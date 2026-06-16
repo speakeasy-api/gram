@@ -56,7 +56,7 @@ function PageHeaderTitle({
     // 1270 carefully chosen to make the header line up with the max width of the page content
     <Heading
       variant="h4"
-      className={cn("mx-auto ml-1 w-full max-w-[1270px]", className)}
+      className={cn("ml-1 w-full max-w-[1270px]", className)}
     >
       {children}
     </Heading>
@@ -195,37 +195,43 @@ function PageHeaderBreadcrumbs({
   visibleElements.push(...pageElements);
 
   return (
-    <PageHeader.Title className={cn(fullWidth ? "max-w-full" : "", className)}>
-      <div className="ml-auto flex items-center gap-2 normal-case">
-        {visibleElements.map((elem, index) => (
-          <React.Fragment key={`${elem.url}-${index}`}>
-            {elem.isCurrentPage || elem.disableLink ? (
-              <span
-                className={
-                  elem.isCurrentPage ? undefined : "text-muted-foreground"
-                }
-              >
-                {elem.display}
-              </span>
-            ) : (
-              <Link
-                to={elem.url}
-                className="text-muted-foreground hover:text-foreground trans"
-              >
-                {elem.display}
-              </Link>
-            )}
-            {index < visibleElements.length - 1 && (
-              <span className="text-muted-foreground"> / </span>
-            )}
-          </React.Fragment>
-        ))}
-        {stage && <ReleaseStageBadge stage={stage} />}
-        {/* Cmd+/ hint for the docked Project Assistant composer — lives here
-            (rather than inside the dock's input) so the pill stays clean. */}
-        <InsightsDockShortcutHint className="ml-auto" />
-      </div>
-    </PageHeader.Title>
+    // The shortcut hint is a sibling of the breadcrumb band — not nested inside
+    // it — so it pins to the true right edge of the nav bar. Nested, it would
+    // stop at the right edge of the centered max-w-[1270px] band, landing
+    // mid-bar on wide screens. Breadcrumbs are unchanged; only the hint moves.
+    <>
+      <PageHeader.Title
+        className={cn(fullWidth ? "max-w-full" : "", className)}
+      >
+        <div className="ml-auto flex items-center gap-2 normal-case">
+          {visibleElements.map((elem, index) => (
+            <React.Fragment key={`${elem.url}-${index}`}>
+              {elem.isCurrentPage || elem.disableLink ? (
+                <span
+                  className={
+                    elem.isCurrentPage ? undefined : "text-muted-foreground"
+                  }
+                >
+                  {elem.display}
+                </span>
+              ) : (
+                <Link
+                  to={elem.url}
+                  className="text-muted-foreground hover:text-foreground trans"
+                >
+                  {elem.display}
+                </Link>
+              )}
+              {index < visibleElements.length - 1 && (
+                <span className="text-muted-foreground"> / </span>
+              )}
+            </React.Fragment>
+          ))}
+          {stage && <ReleaseStageBadge stage={stage} />}
+        </div>
+      </PageHeader.Title>
+      <InsightsDockShortcutHint className="ml-auto shrink-0" />
+    </>
   );
 }
 

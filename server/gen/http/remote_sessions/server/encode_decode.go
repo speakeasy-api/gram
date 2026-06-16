@@ -502,6 +502,8 @@ func marshalTypesRemoteSessionToRemoteSessionResponseBody(v *types.RemoteSession
 	res := &RemoteSessionResponseBody{
 		ID:                    v.ID,
 		SubjectUrn:            v.SubjectUrn,
+		SubjectDisplayName:    v.SubjectDisplayName,
+		SubjectEmail:          v.SubjectEmail,
 		UserSessionIssuerID:   v.UserSessionIssuerID,
 		RemoteSessionClientID: v.RemoteSessionClientID,
 		AccessExpiresAt:       v.AccessExpiresAt,

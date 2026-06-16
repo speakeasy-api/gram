@@ -1,6 +1,7 @@
 package repo
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -28,4 +29,14 @@ func TestResolveAttributeColumn_MaterializedToolURN(t *testing.T) {
 	t.Parallel()
 	got := resolveAttributeColumn("gram.tool.urn")
 	require.Equal(t, "urn", got)
+}
+
+func TestToolUsageTraceRowsCTE_UsesDeterministicStatusAggregation(t *testing.T) {
+	t.Parallel()
+
+	sql, _, err := toolUsageTraceRowsCTE(ListToolUsageTracesParams{})
+	require.NoError(t, err)
+	require.NotContains(t, strings.ToLower(sql), "any(http_status_code)")
+	require.NotContains(t, strings.ToLower(sql), "any(hook_status)")
+	require.Contains(t, sql, "max(hook_status_rank)")
 }

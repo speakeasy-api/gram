@@ -275,11 +275,11 @@ func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, o
 	// role:<kind>:<uuid> principal and the legacy role:<slug> principal.
 	rp, err := newRolePrincipals(roleSlug, rolePrincipalURN)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build role principals").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "build role principals").LogError(ctx, logger)
 	}
 	principalURNs, err := principalURNStrings(rp.MatchPrincipals)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build role principals").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "build role principals").LogError(ctx, logger)
 	}
 
 	rows, err := repo.New(db).GetPrincipalGrants(ctx, repo.GetPrincipalGrantsParams{
@@ -287,12 +287,12 @@ func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, o
 		PrincipalUrns:  principalURNs,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list grants for role").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list grants for role").LogError(ctx, logger)
 	}
 
 	scoped, err := scopedGrantsFromGrantRows(rows)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "unmarshal grant selector").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "unmarshal grant selector").LogError(ctx, logger)
 	}
 
 	return scoped, nil

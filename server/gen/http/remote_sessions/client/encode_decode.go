@@ -508,6 +508,8 @@ func unmarshalRemoteSessionResponseBodyToTypesRemoteSession(v *RemoteSessionResp
 	res := &types.RemoteSession{
 		ID:                    *v.ID,
 		SubjectUrn:            *v.SubjectUrn,
+		SubjectDisplayName:    v.SubjectDisplayName,
+		SubjectEmail:          v.SubjectEmail,
 		UserSessionIssuerID:   *v.UserSessionIssuerID,
 		RemoteSessionClientID: *v.RemoteSessionClientID,
 		AccessExpiresAt:       *v.AccessExpiresAt,

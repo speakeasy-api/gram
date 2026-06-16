@@ -102,21 +102,21 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 	if payload.Cursor != nil && *payload.Cursor != "" {
 		seq, err := decodeCursor(*payload.Cursor)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
 		}
 		params.CursorSeq = pgtype.Int8{Int64: seq, Valid: true}
 	}
 
 	rows, err := repo.New(s.db).ListAuditLogs(ctx, params)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit logs").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit logs").LogError(ctx, s.logger)
 	}
 
 	logs := make([]*gen.AuditLog, 0, min(len(rows), listAuditLogsPageSize))
 	for _, row := range rows[:min(len(rows), listAuditLogsPageSize)] {
 		log, err := toAuditLog(row)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error building audit log response").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "error building audit log response").LogError(ctx, s.logger)
 		}
 		logs = append(logs, log)
 	}
@@ -154,7 +154,7 @@ func (s *Service) ListFacets(ctx context.Context, payload *gen.ListFacetsPayload
 		ProjectID:      projectID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit actor facets").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit actor facets").LogError(ctx, s.logger)
 	}
 
 	actionRows, err := queries.ListAuditActionFacets(ctx, repo.ListAuditActionFacetsParams{
@@ -162,7 +162,7 @@ func (s *Service) ListFacets(ctx context.Context, payload *gen.ListFacetsPayload
 		ProjectID:      projectID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit action facets").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit action facets").LogError(ctx, s.logger)
 	}
 
 	return &gen.ListAuditLogFacetsResult{
@@ -184,7 +184,7 @@ func (s *Service) resolveProjectID(ctx context.Context, organizationID string, p
 	case errors.Is(err, pgx.ErrNoRows):
 		return uuid.NullUUID{}, oops.C(oops.CodeNotFound)
 	case err != nil:
-		return uuid.NullUUID{}, oops.E(oops.CodeUnexpected, err, "error getting project by slug").Log(ctx, s.logger, attr.SlogProjectSlug(projectSlug), attr.SlogOrganizationID(organizationID))
+		return uuid.NullUUID{}, oops.E(oops.CodeUnexpected, err, "error getting project by slug").LogError(ctx, s.logger, attr.SlogProjectSlug(projectSlug), attr.SlogOrganizationID(organizationID))
 	default:
 		return uuid.NullUUID{UUID: project.ID, Valid: true}, nil
 	}

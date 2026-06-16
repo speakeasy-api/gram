@@ -35,16 +35,16 @@ func (s *Service) ListUserSessionConsents(ctx context.Context, payload *gen.List
 	limit := pageLimit(payload.Limit)
 	cursor, err := parseCursor(payload.Cursor)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
 	}
 
 	clientFilter, err := conv.PtrToNullUUID(payload.UserSessionClientID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_client_id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_client_id").LogError(ctx, s.logger)
 	}
 	issuerFilter, err := conv.PtrToNullUUID(payload.UserSessionIssuerID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id").LogError(ctx, s.logger)
 	}
 
 	rows, err := repo.New(s.db).ListUserSessionConsentsByProjectID(ctx, repo.ListUserSessionConsentsByProjectIDParams{
@@ -56,7 +56,7 @@ func (s *Service) ListUserSessionConsents(ctx context.Context, payload *gen.List
 		LimitValue:          limit,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list user session consents").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list user session consents").LogError(ctx, s.logger)
 	}
 
 	items := make([]*types.UserSessionConsent, len(rows))
@@ -97,7 +97,7 @@ func (s *Service) RevokeUserSessionConsent(ctx context.Context, payload *gen.Rev
 
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid consent id").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid consent id").LogError(ctx, s.logger)
 	}
 
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
@@ -108,7 +108,7 @@ func (s *Service) RevokeUserSessionConsent(ctx context.Context, payload *gen.Rev
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -120,9 +120,9 @@ func (s *Service) RevokeUserSessionConsent(ctx context.Context, payload *gen.Rev
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeNotFound, err, "user session consent not found").Log(ctx, logger)
+			return oops.E(oops.CodeNotFound, err, "user session consent not found").LogError(ctx, logger)
 		}
-		return oops.E(oops.CodeUnexpected, err, "revoke user session consent").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "revoke user session consent").LogError(ctx, logger)
 	}
 
 	if err := s.audit.LogUserSessionConsentRevoke(ctx, dbtx, audit.LogUserSessionConsentRevokeEvent{
@@ -134,11 +134,11 @@ func (s *Service) RevokeUserSessionConsent(ctx context.Context, payload *gen.Rev
 		UserSessionConsentURN: urn.NewUserSessionConsent(revoked.ID),
 		Principal:             revoked.SubjectUrn,
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "log user session consent revocation").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "log user session consent revocation").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
 	return nil

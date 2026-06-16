@@ -124,7 +124,7 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to begin transaction").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -149,11 +149,11 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 		SnapshotBefore:   beforeSnap,
 		SnapshotAfter:    &afterSnap,
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log otel forwarding upsert").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "log otel forwarding upsert").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit otel forwarding upsert").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "commit otel forwarding upsert").LogError(ctx, logger)
 	}
 
 	s.client.RefreshCache(ctx, cfg)
@@ -182,7 +182,7 @@ func (s *Service) DeleteConfig(ctx context.Context, _ *gen.DeleteConfigPayload) 
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to begin transaction").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -197,11 +197,11 @@ func (s *Service) DeleteConfig(ctx context.Context, _ *gen.DeleteConfigPayload) 
 		ActorSlug:        nil,
 		ConfigURN:        urn.NewOtelForwardingConfig(row.ID),
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "log otel forwarding delete").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "log otel forwarding delete").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit otel forwarding delete").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "commit otel forwarding delete").LogError(ctx, logger)
 	}
 
 	s.client.InvalidateCache(ctx, authCtx.ActiveOrganizationID)

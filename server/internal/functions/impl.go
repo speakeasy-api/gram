@@ -75,11 +75,11 @@ func (s *Service) GetSignedAssetURL(ctx context.Context, p *gen.GetSignedAssetUR
 
 	assetID, err := uuid.Parse(p.AssetID)
 	if err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid asset id").Log(ctx, logger)
+		return nil, oops.E(oops.CodeInvalid, err, "invalid asset id").LogError(ctx, logger)
 	}
 
 	if assetID == uuid.Nil {
-		return nil, oops.E(oops.CodeInvalid, nil, "asset id cannot be nil").Log(ctx, logger)
+		return nil, oops.E(oops.CodeInvalid, nil, "asset id cannot be nil").LogError(ctx, logger)
 	}
 
 	fr := repo.New(s.db)
@@ -93,17 +93,17 @@ func (s *Service) GetSignedAssetURL(ctx context.Context, p *gen.GetSignedAssetUR
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get function asset url").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get function asset url").LogError(ctx, logger)
 	}
 
 	parsed, err := url.Parse(tu)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse function asset url").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse function asset url").LogError(ctx, logger)
 	}
 
 	signed, err := s.tigrisStore.PresignRead(ctx, parsed.Path, 10*time.Minute)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to presign function asset url").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to presign function asset url").LogError(ctx, logger)
 	}
 
 	return &gen.GetSignedAssetURLResult{

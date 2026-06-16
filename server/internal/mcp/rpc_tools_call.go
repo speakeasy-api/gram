@@ -82,11 +82,11 @@ func handleToolsCall(
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse tool call request").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse tool call request").LogError(ctx, logger)
 	}
 
 	if params.Name == "" {
-		return nil, oops.E(oops.CodeInvalid, nil, "tool name is required").Log(ctx, logger)
+		return nil, oops.E(oops.CodeInvalid, nil, "tool name is required").LogError(ctx, logger)
 	}
 
 	projectID := mv.ProjectID(payload.projectID)
@@ -130,7 +130,7 @@ func handleToolsCall(
 	// call.
 	stripped, err := shadowmcp.StripToolsetIDProperty(params.Arguments)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse tool arguments").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse tool arguments").LogError(ctx, logger)
 	}
 	params.Arguments = stripped
 
@@ -144,7 +144,7 @@ func handleToolsCall(
 
 	toolsetID, err := uuid.Parse(toolset.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset ID").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset ID").LogError(ctx, logger)
 	}
 
 	executor := externalmcp.BuildProxyToolExecutor(logger, guardianPolicy, toolset.Tools)
@@ -165,7 +165,7 @@ func handleToolsCall(
 
 	planInputs, err := executor.MatchPlanInputs(ctx, params.Name, uuid.UUID(projectID), resolve)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to match proxy tool").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to match proxy tool").LogError(ctx, logger)
 	}
 
 	var tool *types.Tool
@@ -193,18 +193,18 @@ func handleToolsCall(
 		}
 
 		if tool == nil {
-			return nil, oops.E(oops.CodeNotFound, errors.New("tool not found"), "tool not found").Log(ctx, logger)
+			return nil, oops.E(oops.CodeNotFound, errors.New("tool not found"), "tool not found").LogError(ctx, logger)
 		}
 
 		urn, err := conv.GetToolURN(*tool)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get tool urn").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get tool urn").LogError(ctx, logger)
 		}
 		toolURN = *urn
 
 		plan, err = toolsetHelpers.GetToolCallPlanByURN(ctx, toolURN, uuid.UUID(projectID))
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed get tool call plan").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed get tool call plan").LogError(ctx, logger)
 		}
 	}
 
@@ -237,7 +237,7 @@ func handleToolsCall(
 
 	systemConfig, err := env.LoadSystemEnv(ctx, payload.projectID, toolsetID, string(toolURN.Kind), toolURN.Source)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load system environment").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load system environment").LogError(ctx, logger)
 	}
 
 	// Extract general OAuth token (no security-key binding)
@@ -265,7 +265,7 @@ func handleToolsCall(
 
 	err = filterOmittedEnvVars(ctx, toolCallEnv, mcpMetadataRepo, toolsetID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to filter omitted environment variables").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to filter omitted environment variables").LogError(ctx, logger)
 	}
 
 	descriptor := plan.Descriptor
@@ -378,7 +378,7 @@ func handleToolsCall(
 
 	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), toolCallEnv, plan, logAttrs)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute tool call").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute tool call").LogError(ctx, logger)
 	}
 
 	outputBytes = int64(rw.body.Len())
@@ -412,7 +412,7 @@ func handleToolsCall(
 			Result: json.RawMessage(rw.body.Bytes()),
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize MCP result").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize MCP result").LogError(ctx, logger)
 		}
 
 		return bs, nil
@@ -420,7 +420,7 @@ func handleToolsCall(
 
 	chunk, err := formatResult(*rw, plan.Kind)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed format tool call result").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed format tool call result").LogError(ctx, logger)
 	}
 
 	bs, err := json.Marshal(result[toolCallResult]{
@@ -431,7 +431,7 @@ func handleToolsCall(
 		},
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call result").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call result").LogError(ctx, logger)
 	}
 
 	return bs, nil
@@ -452,9 +452,9 @@ func resolveUserConfiguration(
 		storedEnvVars, err := env.Load(ctx, payload.projectID, toolconfig.Slug(payload.environment))
 		switch {
 		case errors.Is(err, toolconfig.ErrNotFound):
-			return nil, oops.E(oops.CodeBadRequest, err, "environment not found").Log(ctx, logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "environment not found").LogError(ctx, logger)
 		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment").LogError(ctx, logger)
 		}
 
 		for k, v := range storedEnvVars {
@@ -517,7 +517,7 @@ func checkToolUsageLimits(ctx context.Context, logger *slog.Logger, orgID string
 	}
 
 	if periodUsage.ToolCalls >= hardToolCallsLimit {
-		return oops.E(oops.CodeForbidden, errors.New("tool usage limit reached"), "tool usage limit reached").Log(ctx, logger)
+		return oops.E(oops.CodeForbidden, errors.New("tool usage limit reached"), "tool usage limit reached").LogError(ctx, logger)
 	}
 
 	return nil
@@ -546,15 +546,15 @@ type executeToolArguments struct {
 func processExecuteToolCall(ctx context.Context, logger *slog.Logger, argsRaw json.RawMessage) (string, json.RawMessage, error) {
 	var args executeToolArguments
 	if len(argsRaw) == 0 {
-		return "", nil, oops.E(oops.CodeInvalid, errors.New("missing execute arguments"), "execute_tool arguments are required").Log(ctx, logger)
+		return "", nil, oops.E(oops.CodeInvalid, errors.New("missing execute arguments"), "execute_tool arguments are required").LogError(ctx, logger)
 	}
 	if err := json.Unmarshal(argsRaw, &args); err != nil {
-		return "", nil, oops.E(oops.CodeBadRequest, err, "failed to parse execute_tool arguments").Log(ctx, logger)
+		return "", nil, oops.E(oops.CodeBadRequest, err, "failed to parse execute_tool arguments").LogError(ctx, logger)
 	}
 
 	name := strings.TrimSpace(args.Name)
 	if name == "" {
-		return "", nil, oops.E(oops.CodeInvalid, errors.New("missing tool name"), "name is required for execute_tool").Log(ctx, logger)
+		return "", nil, oops.E(oops.CodeInvalid, errors.New("missing tool name"), "name is required for execute_tool").LogError(ctx, logger)
 	}
 
 	payload := args.Arguments
@@ -563,12 +563,12 @@ func processExecuteToolCall(ctx context.Context, logger *slog.Logger, argsRaw js
 		if len(trimmed) > 0 && trimmed[0] == '"' {
 			var payloadString string
 			if err := json.Unmarshal(payload, &payloadString); err != nil {
-				return "", nil, oops.E(oops.CodeBadRequest, err, "failed to parse execute_tool payload").Log(ctx, logger)
+				return "", nil, oops.E(oops.CodeBadRequest, err, "failed to parse execute_tool payload").LogError(ctx, logger)
 			}
 			payload = json.RawMessage(payloadString)
 		}
 		if !json.Valid(payload) {
-			return "", nil, oops.E(oops.CodeBadRequest, errors.New("invalid payload"), "arguments must be valid JSON").Log(ctx, logger)
+			return "", nil, oops.E(oops.CodeBadRequest, errors.New("invalid payload"), "arguments must be valid JSON").LogError(ctx, logger)
 		}
 	}
 

@@ -272,7 +272,7 @@ func TestHandleRemoteLoginCallback_AnonymousSubject(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, sessions, 1, "exactly one remote_sessions row should exist after callback")
-	require.Equal(t, anonymousSubject.String(), sessions[0].SubjectUrn.String())
+	require.Equal(t, anonymousSubject.String(), sessions[0].RemoteSession.SubjectUrn.String())
 }
 
 // extractCSRFToken yanks the csrf_token hidden input value out of the

@@ -16,6 +16,12 @@ type RemoteSession struct {
 	// The session's subject URN (user:<id> | apikey:<uuid> |
 	// anonymous:<mcp-session-id>).
 	SubjectUrn string
+	// Resolved display name when the subject is a Gram user. Absent for
+	// apikey/anonymous subjects or unresolved users.
+	SubjectDisplayName *string
+	// Resolved email when the subject is a Gram user. Absent for apikey/anonymous
+	// subjects or unresolved users.
+	SubjectEmail *string
 	// The user_session_issuer this session is bound to.
 	UserSessionIssuerID string
 	// The remote_session_client this session was minted against.

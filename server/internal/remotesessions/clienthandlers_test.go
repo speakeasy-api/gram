@@ -12,10 +12,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -402,7 +406,13 @@ func TestListRemoteSessionClients(t *testing.T) {
 	}
 }
 
-func TestListRemoteSessionClients_UserIssuerLegacyFallbackBackfills(t *testing.T) {
+// TestListRemoteSessionClients_ColumnOnlyClientNotVisible asserts the join
+// table is the sole read path: a remote_session_client that carries only the
+// legacy user_session_issuer_id column, with no
+// remote_session_client_user_session_issuers binding, is invisible on both the
+// management list path and the runtime consent/token path, and neither path
+// opportunistically backfills the join row.
+func TestListRemoteSessionClients_ColumnOnlyClientNotVisible(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -410,16 +420,19 @@ func TestListRemoteSessionClients_UserIssuerLegacyFallbackBackfills(t *testing.T
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-list-legacy", "")
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-list-column-only", "")
 	issuerUUID, err := uuid.Parse(issuerID)
 	require.NoError(t, err)
-	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-list-legacy")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-list-column-only")
 
-	legacyClient, err := repo.New(ti.conn).CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+	// Create a client that sets only the legacy user_session_issuer_id column
+	// and deliberately skips AttachRemoteSessionClientToUserSessionIssuer, so it
+	// has no join-table binding.
+	columnOnlyClient, err := repo.New(ti.conn).CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 		RemoteSessionIssuerID:   issuerUUID,
 		UserSessionIssuerID:     userIssuerID,
-		ClientID:                "legacy-list-client",
+		ClientID:                "column-only-client",
 		ClientSecretEncrypted:   pgtype.Text{},
 		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
 		ClientSecretExpiresAt:   pgtype.Timestamptz{},
@@ -428,8 +441,10 @@ func TestListRemoteSessionClients_UserIssuerLegacyFallbackBackfills(t *testing.T
 		Audience:                pgtype.Text{},
 	})
 	require.NoError(t, err)
-	require.Equal(t, 0, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, legacyClient.ID, userIssuerID))
+	require.Equal(t, 0, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, columnOnlyClient.ID, userIssuerID))
 
+	// Management read path: filtering by user_session_issuer_id must not surface
+	// a client that lacks a join-table binding.
 	userIssuerIDString := userIssuerID.String()
 	result, err := ti.service.ListRemoteSessionClients(ctx, &clientsgen.ListRemoteSessionClientsPayload{
 		RemoteSessionIssuerID: nil,
@@ -441,9 +456,26 @@ func TestListRemoteSessionClients_UserIssuerLegacyFallbackBackfills(t *testing.T
 		ProjectSlugInput:      nil,
 	})
 	require.NoError(t, err)
-	require.Len(t, result.Items, 1)
-	require.Equal(t, legacyClient.ID.String(), result.Items[0].ID)
-	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, legacyClient.ID, userIssuerID))
+	require.Empty(t, result.Items)
+
+	// Runtime consent/token path: the ChallengeManager reads the same join table
+	// and must not surface the column-only client either.
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	mgr := remotesessions.NewChallengeManager(
+		testenv.NewLogger(t),
+		ti.conn,
+		testenv.NewEncryptionClient(t),
+		policy,
+		cache.NoopCache,
+		mustURL(t, "http://localhost"),
+	)
+	clients, err := mgr.ListClients(ctx, *authCtx.ProjectID, userIssuerID)
+	require.NoError(t, err)
+	require.Empty(t, clients)
+
+	// Neither path may opportunistically backfill the join table.
+	require.Equal(t, 0, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, columnOnlyClient.ID, userIssuerID))
 }
 
 func TestListRemoteSessionClients_PaginationTraversal(t *testing.T) {

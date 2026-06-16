@@ -1,6 +1,6 @@
 import { useSdkClient } from "@/contexts/Sdk";
 import { useMutation } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { DiscoveredEndpoints } from "./issuerFormUtils";
 
 // Initial form values for the Issuer URL + endpoint fields. Pass `null` for
@@ -19,15 +19,34 @@ export type UseIssuerDiscoveryInitial = {
   tokenEndpointAuthMethodsSupported: string[];
 } | null;
 
+// Options controlling how `initial` seeds the hook.
+export type UseIssuerDiscoveryOptions = {
+  // When false, seed the field values from `initial` but NOT the discovered
+  // snapshot, so the Discover control stays available against the seeded URL.
+  // The issuer Settings tab uses this to let operators re-run discovery on an
+  // already-saved issuer. Defaults to true (Modify sheet behavior: seed the
+  // snapshot so Reset works and Discover only appears once the URL changes).
+  seedSnapshot?: boolean;
+};
+
 // Encapsulates the Issuer URL + 4 endpoint state, RFC 8414 metadata
 // snapshot, discovery RPC call, Discover/Reset slot derivations, and the
 // endpoint-validation warnings. Used by both AttachRemoteIdentityProviderSheet
 // and ModifyRemoteIdentityProviderSheet — those sheets compose their own
 // slug / credentials / override state on top.
-function useIssuerDiscoveryImpl(initial: UseIssuerDiscoveryInitial) {
+function useIssuerDiscoveryImpl(
+  initial: UseIssuerDiscoveryInitial,
+  options?: UseIssuerDiscoveryOptions,
+) {
   const client = useSdkClient();
+  const seedSnapshot = options?.seedSnapshot ?? true;
 
   const [issuerUrl, setIssuerUrl] = useState(initial?.issuerUrl ?? "");
+  // Tracks the latest Issuer URL so an in-flight discovery's onSuccess can tell
+  // whether its result is still relevant — the operator may have edited the URL
+  // (or reopened the sheet) while the request was in flight.
+  const issuerUrlRef = useRef(issuerUrl);
+  issuerUrlRef.current = issuerUrl;
   const [authorizationEndpoint, setAuthorizationEndpoint] = useState(
     initial?.authorizationEndpoint ?? "",
   );
@@ -40,7 +59,7 @@ function useIssuerDiscoveryImpl(initial: UseIssuerDiscoveryInitial) {
   const [jwksUri, setJwksUri] = useState(initial?.jwksUri ?? "");
   const [discoveredSnapshot, setDiscoveredSnapshot] =
     useState<DiscoveredEndpoints | null>(() =>
-      initial
+      initial && seedSnapshot
         ? {
             url: initial.issuerUrl,
             authorizationEndpoint: initial.authorizationEndpoint,
@@ -76,6 +95,9 @@ function useIssuerDiscoveryImpl(initial: UseIssuerDiscoveryInitial) {
       };
     },
     onSuccess: (snapshot) => {
+      // Discard a stale discovery whose URL no longer matches the field so we
+      // never apply one issuer's endpoints to another's URL.
+      if (snapshot.url !== issuerUrlRef.current.trim()) return;
       setAuthorizationEndpoint(snapshot.authorizationEndpoint);
       setTokenEndpoint(snapshot.tokenEndpoint);
       setRegistrationEndpoint(snapshot.registrationEndpoint);
@@ -203,6 +225,7 @@ function useIssuerDiscoveryImpl(initial: UseIssuerDiscoveryInitial) {
 
 export function useIssuerDiscovery(
   initial: UseIssuerDiscoveryInitial,
+  options?: UseIssuerDiscoveryOptions,
 ): ReturnType<typeof useIssuerDiscoveryImpl> {
-  return useIssuerDiscoveryImpl(initial);
+  return useIssuerDiscoveryImpl(initial, options);
 }

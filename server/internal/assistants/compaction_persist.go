@@ -70,13 +70,13 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 		attr.SlogAssistantThreadID(threadID.String()),
 	}
 	if s.chatWriter == nil {
-		return oops.E(oops.CodeUnexpected, nil, "chat writer not configured").Log(ctx, s.logger, logAttrs...)
+		return oops.E(oops.CodeUnexpected, nil, "chat writer not configured").LogError(ctx, s.logger, logAttrs...)
 	}
 	if len(messages) == 0 {
-		return oops.E(oops.CodeBadRequest, nil, "compacted transcript is empty").Log(ctx, s.logger, logAttrs...)
+		return oops.E(oops.CodeBadRequest, nil, "compacted transcript is empty").LogError(ctx, s.logger, logAttrs...)
 	}
 	if err := validateCompactedMessages(messages); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "validate compacted transcript").Log(ctx, s.logger, logAttrs...)
+		return oops.E(oops.CodeBadRequest, err, "validate compacted transcript").LogError(ctx, s.logger, logAttrs...)
 	}
 
 	threadRow, err := assistantrepo.New(s.db).LoadAssistantThreadForBootstrap(ctx, assistantrepo.LoadAssistantThreadForBootstrapParams{
@@ -85,20 +85,20 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeNotFound, nil, "assistant thread not found").Log(ctx, s.logger, logAttrs...)
+			return oops.E(oops.CodeNotFound, nil, "assistant thread not found").LogError(ctx, s.logger, logAttrs...)
 		}
-		return oops.E(oops.CodeUnexpected, err, "load assistant thread").Log(ctx, s.logger, logAttrs...)
+		return oops.E(oops.CodeUnexpected, err, "load assistant thread").LogError(ctx, s.logger, logAttrs...)
 	}
 	if threadRow.AssistantID != principalAssistantID {
-		return oops.E(oops.CodeForbidden, nil, "thread does not belong to assistant").Log(ctx, s.logger, logAttrs...)
+		return oops.E(oops.CodeForbidden, nil, "thread does not belong to assistant").LogError(ctx, s.logger, logAttrs...)
 	}
 
 	chatRow, err := chatrepo.New(s.db).GetChat(ctx, threadRow.ChatID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeNotFound, nil, "assistant chat not found").Log(ctx, s.logger, logAttrs...)
+			return oops.E(oops.CodeNotFound, nil, "assistant chat not found").LogError(ctx, s.logger, logAttrs...)
 		}
-		return oops.E(oops.CodeUnexpected, err, "load assistant chat").Log(ctx, s.logger, logAttrs...)
+		return oops.E(oops.CodeUnexpected, err, "load assistant chat").LogError(ctx, s.logger, logAttrs...)
 	}
 
 	// Concurrent compaction posts for the same chat must serialize so they
@@ -108,17 +108,17 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 	// non-locking reader, and the lock releases on COMMIT/ROLLBACK.
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "begin compaction transaction").Log(ctx, s.logger, logAttrs...)
+		return oops.E(oops.CodeUnexpected, err, "begin compaction transaction").LogError(ctx, s.logger, logAttrs...)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	if _, err := tx.Exec(ctx, "SELECT 1 FROM chats WHERE id = $1 FOR UPDATE", threadRow.ChatID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "lock chat for compaction").Log(ctx, s.logger, logAttrs...)
+		return oops.E(oops.CodeUnexpected, err, "lock chat for compaction").LogError(ctx, s.logger, logAttrs...)
 	}
 
 	currentGen, err := chatrepo.New(tx).GetMaxGenerationForChat(ctx, threadRow.ChatID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "load chat generation").Log(ctx, s.logger, logAttrs...)
+		return oops.E(oops.CodeUnexpected, err, "load chat generation").LogError(ctx, s.logger, logAttrs...)
 	}
 	nextGen := currentGen + 1
 
@@ -126,7 +126,7 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 	for _, m := range messages {
 		toolCallsJSON, err := encodeRuntimeToolCalls(m.ToolCalls)
 		if err != nil {
-			return oops.E(oops.CodeBadRequest, err, "encode tool_calls").Log(ctx, s.logger, logAttrs...)
+			return oops.E(oops.CodeBadRequest, err, "encode tool_calls").LogError(ctx, s.logger, logAttrs...)
 		}
 		empty := pgtype.Text{String: "", Valid: false}
 		params = append(params, chatrepo.CreateChatMessageParams{
@@ -158,11 +158,11 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 
 	n, err := s.chatWriter.WriteInTx(ctx, tx, params)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "write compacted chat messages").Log(ctx, s.logger, logAttrs...)
+		return oops.E(oops.CodeUnexpected, err, "write compacted chat messages").LogError(ctx, s.logger, logAttrs...)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit compaction transaction").Log(ctx, s.logger, logAttrs...)
+		return oops.E(oops.CodeUnexpected, err, "commit compaction transaction").LogError(ctx, s.logger, logAttrs...)
 	}
 
 	if n > 0 {

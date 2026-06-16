@@ -28,7 +28,7 @@ func (s *Service) HandleRevoke(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
 	}
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
 	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, "mcp")
@@ -82,7 +82,7 @@ func (s *Service) ServeRevoke(w http.ResponseWriter, r *http.Request, endpoint *
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authentication rejected", clientID, presentedAuthMethod, "", "unknown_client_id")
 			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "unknown client_id")
 		}
-		return oops.E(oops.CodeUnexpected, err, "lookup user session client").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 	}
 	// Public clients (NULL hash) skip the secret check; their possession of
 	// the token alone authenticates the revoke per RFC 7009 §2.1.

@@ -40,7 +40,7 @@ return fmt.Errorf("save user: %w", err)
 - In HTTP handlers, use the `oops` package for user-facing error mapping:
 
 ```go
-return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").Log(ctx, s.logger)
+return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
 ```
 
 ### Logging

@@ -36,6 +36,7 @@ func TestService_GetRole(t *testing.T) {
 	role, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: customID})
 	require.NoError(t, err)
 	require.Equal(t, customID, role.ID)
+	require.Equal(t, "role:organization:"+customID, role.PrincipalUrn)
 	require.Equal(t, "Custom Builder", role.Name)
 	require.Equal(t, "Can build selected resources", role.Description)
 	require.False(t, role.IsSystem)

@@ -27,15 +27,18 @@ import (
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	oauthrepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -185,6 +188,20 @@ func insertRemoteSession(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 	return row
 }
 
+// seedUser inserts a users row so a `user:<id>` subject URN resolves to a
+// display name and email when listing remote sessions.
+func seedUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, id, email, displayName string) {
+	t.Helper()
+	_, err := usersrepo.New(conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID:          id,
+		Email:       email,
+		DisplayName: displayName,
+		PhotoUrl:    pgtype.Text{},
+		Admin:       false,
+	})
+	require.NoError(t, err)
+}
+
 func createUserSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug string) uuid.UUID {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -281,6 +298,40 @@ func seedOrgLevelRemoteIssuer(t *testing.T, ctx context.Context, conn *pgxpool.P
 	})
 	require.NoError(t, err)
 	return issuer.ID
+}
+
+// seedMCPServerInOrg creates a project in the supplied organization and an MCP
+// server within it, returning the MCP server id. Used to exercise cross-org
+// isolation on org-admin MCP server lookups.
+func seedMCPServerInOrg(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, slug string) uuid.UUID {
+	t.Helper()
+	project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           slug,
+		Slug:           slug,
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+
+	// MCP servers require exactly one backend; seed a remote MCP server to satisfy
+	// the backend-exclusivity constraint.
+	remoteServer, err := remotemcprepo.New(conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
+		ID:            uuid.New(),
+		ProjectID:     project.ID,
+		TransportType: "sse",
+		Url:           "https://mcp.example.com",
+	})
+	require.NoError(t, err)
+
+	server, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                uuid.New(),
+		ProjectID:         project.ID,
+		Name:              conv.ToPGText(slug),
+		Slug:              conv.ToPGText(slug),
+		RemoteMcpServerID: conv.ToNullUUID(remoteServer.ID),
+		Visibility:        "private",
+	})
+	require.NoError(t, err)
+	return server.ID
 }
 
 // createOrganization seeds a second organization_metadata row so tests can

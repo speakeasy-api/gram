@@ -11,9 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-const (
-	ActionRemoteSessionDelete Action = "remote-session:delete"
-)
+const ActionRemoteSessionDelete Action = "remote-session:delete"
 
 type LogRemoteSessionDeleteEvent struct {
 	OrganizationID string

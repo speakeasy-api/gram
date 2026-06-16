@@ -93,16 +93,28 @@ func TestGetToolUsageSummary_AggregatesHostedShadowLocalAndSkills(t *testing.T) 
 		result:         `"ok"`,
 		conversationID: "conv-local",
 	})
+	skillTraceID := uuid.New().String()
 	insertHookEvent(t, ctx, hookEventParams{
 		projectID:      projectID,
 		deploymentID:   uuid.New().String(),
 		timestamp:      now.Add(-5 * time.Minute),
-		traceID:        uuid.New().String(),
+		traceID:        skillTraceID,
 		userEmail:      "dana@example.com",
 		hookSource:     "local",
 		toolName:       "Skill",
-		result:         `"ok"`,
 		skillName:      "golang",
+		conversationID: "conv-skill",
+	})
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      projectID,
+		deploymentID:   uuid.New().String(),
+		timestamp:      now.Add(-4 * time.Minute),
+		traceID:        skillTraceID,
+		userEmail:      "dana@example.com",
+		hookSource:     "local",
+		toolName:       "Skill",
+		skillName:      "golang",
+		result:         `"ok"`,
 		conversationID: "conv-skill",
 	})
 

@@ -13,6 +13,7 @@ INSERT INTO risk_policies (
   , message_types
   , enabled
   , action
+  , audience_type
   , auto_name
   , user_message
   , prompt
@@ -33,6 +34,7 @@ VALUES (
   , sqlc.arg(message_types)::text[]
   , @enabled
   , @action
+  , @audience_type
   , @auto_name
   , @user_message
   , sqlc.narg(prompt)::text
@@ -87,6 +89,7 @@ SET name = @name
   , message_types = sqlc.arg(message_types)::text[]
   , enabled = @enabled
   , action = @action
+  , audience_type = @audience_type
   , auto_name = @auto_name
   , user_message = @user_message
   , prompt = sqlc.narg(prompt)::text
@@ -102,6 +105,7 @@ SET name = @name
         OR action IS DISTINCT FROM @action
         OR prompt IS DISTINCT FROM sqlc.narg(prompt)::text
         OR model_config IS DISTINCT FROM sqlc.narg(model_config)::jsonb
+        OR audience_type IS DISTINCT FROM @audience_type
       THEN version + 1
       ELSE version
     END
