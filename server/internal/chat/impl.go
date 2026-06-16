@@ -55,6 +55,7 @@ var _ gen.Auther = (*Service)(nil)
 
 type Service struct {
 	auth             *auth.Auth
+	authz            *authz.Engine
 	db               *pgxpool.Pool
 	repo             *repo.Queries
 	tracer           trace.Tracer
@@ -91,6 +92,7 @@ func NewService(
 
 	return &Service{
 		auth:             auth.New(logger, db, sessions, authzEngine),
+		authz:            authzEngine,
 		db:               db,
 		sessions:         sessions,
 		chatSessions:     chatSessions,
@@ -199,19 +201,30 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	var userInfo *sessions.CachedUserInfo
-	if authCtx.SessionID != nil {
-		var err error
-		userInfo, _, err = s.sessions.GetUserInfo(ctx, authCtx.UserID)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").LogError(ctx, s.logger)
-		}
-	}
-
 	// An assistant principal is set only on the assistant runtime path and
 	// only the managed-assistant platform toolset surfaces chat tools, so
 	// treat it as admin-equivalent for project-wide visibility.
 	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
+
+	// Project-wide visibility is gated on the org:admin RBAC scope. When RBAC is
+	// not enforced for the org we must NOT fall through to "see all" — Require
+	// short-circuits to allow when enforcement is off, so check ShouldEnforce
+	// explicitly and treat the disabled case as a non-admin (own sessions only).
+	isOrgAdmin := false
+	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
+		return nil, err
+	} else if enforce {
+		err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil})
+		var shareableErr *oops.ShareableError
+		switch {
+		case err == nil:
+			isOrgAdmin = true
+		case errors.As(err, &shareableErr) && shareableErr.Code == oops.CodeForbidden:
+			// Not an org admin — fall through to own-sessions-only below.
+		default:
+			return nil, err
+		}
+	}
 
 	var fromTime, toTime pgtype.Timestamptz
 	if payload.From != nil {
@@ -233,12 +246,12 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	assistantID := conv.PtrValOr(payload.AssistantID, "")
 	hasRiskFilter := conv.PtrValOr(payload.HasRisk, "")
 
-	// Payload filters only apply for admin users and the managed-assistant runtime.
+	// Payload filters only apply for org admins and the managed-assistant runtime.
 	var externalUserID, userID string
 	switch {
 	case authCtx.ExternalUserID != "":
 		externalUserID = authCtx.ExternalUserID
-	case userInfo != nil && userInfo.Admin, isAssistantCall:
+	case isOrgAdmin, isAssistantCall:
 		externalUserID = conv.PtrValOr(payload.ExternalUserID, "")
 	default:
 		if authCtx.UserID == "" {
