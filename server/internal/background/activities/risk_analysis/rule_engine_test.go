@@ -316,3 +316,43 @@ func TestValidateMatchConfig(t *testing.T) {
 		}
 	}
 }
+
+// application_config: include narrows which messages the policy evaluates and
+// exempt takes a matched message out of the policy.
+func TestApplication_IncludeNarrowsExemptExcludes(t *testing.T) {
+	t.Parallel()
+	app, err := ra.CompileApplication([]byte(`{
+		"include": {"conditions":[{"target":"tool_server","op":"equals","value":"acme"}]},
+		"exempt":  {"conditions":[{"target":"content","op":"keyword","values":["approved"]}]}
+	}`))
+	require.NoError(t, err)
+	require.True(t, app.Active())
+
+	acme := toolRequest(ra.ToolView{Name: "acme__deploy", Server: "acme", Function: "deploy", Arguments: "{}"})
+	other := toolRequest(ra.ToolView{Name: "other__x", Server: "other", Function: "x", Arguments: "{}"})
+
+	require.True(t, app.Includes(acme))   // in scope: tool_server == acme
+	require.False(t, app.Includes(other)) // out of scope
+	require.False(t, app.Exempts(acme))
+
+	approved := ra.MessageView{Content: "this is approved", Type: message.User, Tools: nil}
+	require.True(t, app.Exempts(approved)) // exempt predicate matches content
+}
+
+// A nil/empty application_config means all-in, none-exempt — legacy policies
+// (which only set message_types) are unaffected.
+func TestApplication_NilIsAllInNoneExempt(t *testing.T) {
+	t.Parallel()
+	app, err := ra.CompileApplication(nil)
+	require.NoError(t, err)
+	require.False(t, app.Active())
+	view := ra.MessageView{Content: "anything", Type: message.User, Tools: nil}
+	require.True(t, app.Includes(view))
+	require.False(t, app.Exempts(view))
+}
+
+func TestApplication_InvalidPredicateErrors(t *testing.T) {
+	t.Parallel()
+	_, err := ra.CompileApplication([]byte(`{"include":{"conditions":[{"target":"content","op":"regex","value":"("}]}}`))
+	require.Error(t, err)
+}

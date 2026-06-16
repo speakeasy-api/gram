@@ -471,6 +471,115 @@ func (r CompiledCustomDetectionRule) evaluate(view MessageView) (bool, string) {
 	return true, firstMatch
 }
 
+/* -------------------------------------------------------------------------- */
+/*  Policy application predicates (risk_policies.application_config)           */
+/* -------------------------------------------------------------------------- */
+
+// PolicyApplication is the parsed risk_policies.application_config JSON object:
+//
+//	{ "include": <match_config>, "exempt": <match_config> }
+//
+// include narrows which messages the policy evaluates (in addition to the coarse
+// message_types filter); exempt takes a matched message out of the policy
+// entirely (an inline allowlist, alongside exempt_rule_ids). Both optional.
+type PolicyApplication struct {
+	Include *MatchConfig `json:"include,omitempty"`
+	Exempt  *MatchConfig `json:"exempt,omitempty"`
+}
+
+// CompiledApplication holds a policy's compiled include/exempt predicates. The
+// zero value (both nil) means "all messages in scope, none exempt".
+type CompiledApplication struct {
+	include *compiledPredicate
+	exempt  *compiledPredicate
+}
+
+type compiledPredicate struct {
+	combine    MatchCombine
+	conditions []compiledCondition
+}
+
+// CompileApplication parses and compiles a policy's application_config. A
+// nil/empty config yields a zero CompiledApplication (all-in, none-exempt).
+func CompileApplication(raw []byte) (CompiledApplication, error) {
+	if isEmptyJSON(raw) {
+		return CompiledApplication{include: nil, exempt: nil}, nil
+	}
+	var app PolicyApplication
+	if err := json.Unmarshal(raw, &app); err != nil {
+		return CompiledApplication{}, fmt.Errorf("parse application_config: %w", err)
+	}
+	include, err := compilePredicate(app.Include)
+	if err != nil {
+		return CompiledApplication{}, fmt.Errorf("application_config include: %w", err)
+	}
+	exempt, err := compilePredicate(app.Exempt)
+	if err != nil {
+		return CompiledApplication{}, fmt.Errorf("application_config exempt: %w", err)
+	}
+	return CompiledApplication{include: include, exempt: exempt}, nil
+}
+
+// ValidateApplicationConfig compiles application_config to surface invalid
+// predicates before persisting. A nil/empty config is valid.
+func ValidateApplicationConfig(raw []byte) error {
+	_, err := CompileApplication(raw)
+	return err
+}
+
+func compilePredicate(cfg *MatchConfig) (*compiledPredicate, error) {
+	if cfg == nil || len(cfg.Conditions) == 0 {
+		return nil, nil
+	}
+	conditions, err := compileConditions(cfg.Conditions)
+	if err != nil {
+		return nil, err
+	}
+	return &compiledPredicate{combine: cfg.combineOrDefault(), conditions: conditions}, nil
+}
+
+// Active reports whether either predicate is set, so callers can skip building a
+// MessageView when there is nothing to evaluate.
+func (a CompiledApplication) Active() bool {
+	return a.include != nil || a.exempt != nil
+}
+
+// Includes reports whether the message is in scope. A nil include predicate
+// means "all messages" (scope falls back to the coarse message_types filter).
+func (a CompiledApplication) Includes(view MessageView) bool {
+	return a.include == nil || a.include.matches(view)
+}
+
+// Exempts reports whether the inline exemption predicate takes this message out
+// of the policy. A nil exempt predicate means no inline exemption.
+func (a CompiledApplication) Exempts(view MessageView) bool {
+	return a.exempt != nil && a.exempt.matches(view)
+}
+
+// matches applies the predicate's combine logic to the view (boolean-only;
+// mirrors CompiledCustomDetectionRule.evaluate).
+func (p *compiledPredicate) matches(view MessageView) bool {
+	if p.combine == CombineOr {
+		for _, c := range p.conditions {
+			if c.appliesTo(view.Type) {
+				if ok, _ := c.eval(view); ok {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	for _, c := range p.conditions {
+		if !c.appliesTo(view.Type) {
+			return false
+		}
+		if ok, _ := c.eval(view); !ok {
+			return false
+		}
+	}
+	return true
+}
+
 func (r CompiledCustomDetectionRule) regexSpanFindings(c compiledCondition, text string) []Finding {
 	matches := c.re.FindAllStringIndex(text, -1)
 	findings := make([]Finding, 0, len(matches))

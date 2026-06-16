@@ -196,18 +196,26 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		return nil, fmt.Errorf("list exclusions: %w", err)
 	}
 
-	findings, err := a.scan(ctx, args, messages, customRules, NewExclusionSet(exclusions))
+	// Policy application: include narrows scope (in addition to the message_types
+	// filter already applied), exempt takes a message out of the policy entirely.
+	// Computed once and applied to both the source scanners and the judge.
+	app, err := CompileApplication(policy.ApplicationConfig)
+	if err != nil {
+		return nil, fmt.Errorf("compile application_config: %w", err)
+	}
+	appExcluded := a.applicationExcluded(ctx, app, messages)
+
+	findings, err := a.scan(ctx, args, messages, customRules, NewExclusionSet(exclusions), appExcluded)
 	if err != nil {
 		return nil, err
 	}
 
 	// prompt_based policies are evaluated by the LLM judge rather than the
-	// source-based scanners above. The judge runs on every message left after
-	// the policy's message_types filter (already applied by
-	// filterMessagesByMessageTypes), so it covers whatever types the policy
-	// declares.
+	// source-based scanners above. The judge runs on every in-scope message left
+	// after the policy's message_types filter and application predicates, so it
+	// covers whatever the policy declares.
 	if policy.PolicyType == "prompt_based" {
-		judgeFindings := a.scanPromptJudge(ctx, args, policy, messages)
+		judgeFindings := a.scanPromptJudge(ctx, args, policy, messages, appExcluded)
 		for i := range findings {
 			findings[i] = append(findings[i], judgeFindings[i]...)
 		}
@@ -295,7 +303,7 @@ func messageRowMessageType(msg repo.GetMessageContentBatchRow) (message.Type, bo
 // destructive_tool, cli_destructive) run serially after the parallel scans
 // — shadow_mcp/destructive_tool make per-message DB calls; cli_destructive
 // is purely in-memory regex but kept in the same lane for consistency.
-func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages []repo.GetMessageContentBatchRow, customRules []CompiledCustomDetectionRule, exclusions ExclusionSet) ([][]Finding, error) {
+func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages []repo.GetMessageContentBatchRow, customRules []CompiledCustomDetectionRule, exclusions ExclusionSet, appExcluded []bool) ([][]Finding, error) {
 	ctx, scanSpan := a.tracer.Start(ctx, "risk.scanMessages")
 	defer scanSpan.End()
 	activity.RecordHeartbeat(ctx, 0)
@@ -420,10 +428,10 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 
 	merged := make([][]Finding, n)
 	for i := range n {
-		// An allow-effect custom rule matched: the message is allowlisted, so
-		// the whole policy is short-circuited and no findings are recorded for
-		// it — including ones the other detectors produced.
-		if allowlisted[i] {
+		// The message is short-circuited — no findings recorded, including ones
+		// other detectors produced — when an allow-effect custom rule matched, or
+		// the policy's application predicates put it out of scope / exempt it.
+		if allowlisted[i] || (appExcluded != nil && appExcluded[i]) {
 			merged[i] = nil
 			continue
 		}
@@ -442,6 +450,22 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 	return merged, nil
 }
 
+// applicationExcluded marks messages a policy's application_config takes out of
+// scope (include does not match) or exempts. Returns nil when the policy has no
+// application predicates, so the common path allocates nothing and callers skip
+// the per-message check.
+func (a *AnalyzeBatch) applicationExcluded(ctx context.Context, app CompiledApplication, messages []repo.GetMessageContentBatchRow) []bool {
+	if !app.Active() {
+		return nil
+	}
+	excluded := make([]bool, len(messages))
+	for i, msg := range messages {
+		view := a.customRuleMessageView(ctx, msg)
+		excluded[i] = !app.Includes(view) || app.Exempts(view)
+	}
+	return excluded
+}
+
 // judgeConcurrency bounds the number of in-flight judge calls per batch. Judge
 // calls are LLM/network-bound (unlike the cheap in-memory/DB tool-call scanners,
 // which run serially because they are not the bottleneck), so a bounded pool
@@ -458,7 +482,7 @@ const judgeConcurrency = 8
 // them to the policy's message_types via filterMessagesByMessageTypes — so it
 // covers whatever types the policy declares. Messages are evaluated
 // concurrently with a bounded worker pool.
-func (a *AnalyzeBatch) scanPromptJudge(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []repo.GetMessageContentBatchRow) [][]Finding {
+func (a *AnalyzeBatch) scanPromptJudge(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []repo.GetMessageContentBatchRow, appExcluded []bool) [][]Finding {
 	out := make([][]Finding, len(messages))
 	cfg := ParseJudgeConfig(policy.ModelConfig)
 	if !a.promptPoliciesEnabled(ctx, args.OrganizationID, args.ProjectID) {
@@ -467,6 +491,11 @@ func (a *AnalyzeBatch) scanPromptJudge(ctx context.Context, args AnalyzeBatchArg
 
 	indices := make([]int, 0, len(messages))
 	for i, msg := range messages {
+		// Skip messages the policy's application predicates put out of scope or
+		// exempt — never pay for a judge call the policy wouldn't act on.
+		if appExcluded != nil && appExcluded[i] {
+			continue
+		}
 		if _, ok := messageRowMessageType(msg); ok {
 			indices = append(indices, i)
 		}

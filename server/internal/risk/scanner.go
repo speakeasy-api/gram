@@ -287,6 +287,26 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 // per-policy parallelism over sources buys roughly nothing. The
 // across-policies fan-out in ScanForEnforcement is the real win.
 func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type, toolName string, promptPoliciesOn bool) (*ScanResult, error) {
+	// Build the structured view once; the application predicates and custom
+	// rules both evaluate against it.
+	view := ra.MessageView{Content: text, Type: messageType, Tools: nil}
+	if messageType == message.ToolRequest && toolName != "" {
+		// In realtime a tool-request's text carries the call arguments (the same
+		// body the judge sees), so it doubles as the tool_args source.
+		view.Tools = []ra.ToolView{ra.NewToolView(toolName, text)}
+	}
+
+	// Policy application gates both kinds before any detection: include narrows
+	// scope (alongside message_types); exempt — or an allow rule, below — takes
+	// the message out of the policy.
+	app, err := ra.CompileApplication(policy.ApplicationConfig)
+	if err != nil {
+		return nil, fmt.Errorf("compile application_config: %w", err)
+	}
+	if !app.Includes(view) || app.Exempts(view) {
+		return nil, nil
+	}
+
 	if policy.PolicyType == "prompt_based" {
 		return s.scanPromptPolicy(ctx, policy, text, messageType, toolName, promptPoliciesOn), nil
 	}
@@ -312,13 +332,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 	// any source). Deny findings are held for the block check after the
 	// built-in sources.
 	var customScan ra.CustomRuleScan
-	if len(policy.CustomRuleIds) > 0 {
-		view := ra.MessageView{Content: text, Type: messageType, Tools: nil}
-		if messageType == message.ToolRequest && toolName != "" {
-			// In realtime, a tool-request's text carries the call arguments (the
-			// same body the judge sees), so it doubles as the tool_args source.
-			view.Tools = []ra.ToolView{ra.NewToolView(toolName, text)}
-		}
+	if len(policy.CustomRuleIds) > 0 || len(policy.ExemptRuleIds) > 0 {
 		customScan, err = s.scanCustomRules(ctx, policy, view)
 		if err != nil {
 			return nil, err
