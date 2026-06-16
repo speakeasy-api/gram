@@ -175,11 +175,13 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, organizationID string,
 		s.recordScan(ctx, projectID.String(), "skipped", time.Since(start))
 		return nil, nil
 	}
-
-	grants, err := s.riskPolicyGrants(ctx, organizationID, userID)
-	if err != nil {
-		s.recordScan(ctx, projectID.String(), o11y.OutcomeFailure, time.Since(start))
-		return nil, err
+	var grants []authz.Grant
+	if riskPoliciesNeedGrants(policies) {
+		grants, err = s.riskPolicyGrants(ctx, organizationID, userID)
+		if err != nil {
+			s.recordScan(ctx, projectID.String(), o11y.OutcomeFailure, time.Since(start))
+			return nil, err
+		}
 	}
 
 	// Resolve the prompt-policy flag once per scan (on the parent ctx, before
@@ -208,12 +210,12 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, organizationID string,
 	)
 	g, gctx := errgroup.WithContext(ctx)
 	for _, p := range policies {
-		policyApplication, err := authz.RiskPolicyApplies(p.ID.String(), authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate(grants)
+		applies, err := riskPolicyApplies(p, grants)
 		if err != nil {
 			s.recordScan(ctx, projectID.String(), o11y.OutcomeFailure, time.Since(start))
 			return nil, fmt.Errorf("evaluate risk policy application: %w", err)
 		}
-		if !policyApplication.Satisfied {
+		if !applies {
 			continue
 		}
 		if len(p.MessageTypes) > 0 && !slices.Contains(p.MessageTypes, messageType) {
@@ -255,21 +257,23 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, organizationID string,
 // for the project whose action is "block". Flag-action policies surface as
 // findings via the batch scanner instead of denying at the hook layer.
 func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, organizationID string, projectID uuid.UUID, userID string) (*ShadowMCPPolicy, error) {
-	grants, err := s.riskPolicyGrants(ctx, organizationID, userID)
-	if err != nil {
-		return nil, err
-	}
-
 	policies, err := s.repo.ListEnabledShadowMCPPoliciesByProject(ctx, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("list shadow_mcp policies: %w", err)
 	}
+	var grants []authz.Grant
+	if riskPoliciesNeedGrants(policies) {
+		grants, err = s.riskPolicyGrants(ctx, organizationID, userID)
+		if err != nil {
+			return nil, err
+		}
+	}
 	for _, p := range policies {
-		policyApplication, err := authz.RiskPolicyApplies(p.ID.String(), authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate(grants)
+		applies, err := riskPolicyApplies(p, grants)
 		if err != nil {
 			return nil, fmt.Errorf("evaluate risk policy application: %w", err)
 		}
-		if !policyApplication.Satisfied {
+		if !applies {
 			continue
 		}
 		if p.Action == "block" {
@@ -282,6 +286,28 @@ func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, organizatio
 		}
 	}
 	return nil, nil
+}
+
+func riskPoliciesNeedGrants(policies []repo.RiskPolicy) bool {
+	return slices.ContainsFunc(policies, func(policy repo.RiskPolicy) bool {
+		return policy.AudienceType == riskPolicyAudienceTargeted
+	})
+}
+
+func riskPolicyApplies(policy repo.RiskPolicy, grants []authz.Grant) (bool, error) {
+	switch policy.AudienceType {
+	case riskPolicyAudienceEveryone:
+		return true, nil
+	case riskPolicyAudienceTargeted:
+	default:
+		return false, fmt.Errorf("invalid risk policy audience type %q", policy.AudienceType)
+	}
+
+	policyApplication, err := authz.RiskPolicyApplies(policy.ID.String(), authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate(grants)
+	if err != nil {
+		return false, fmt.Errorf("evaluate risk policy grants: %w", err)
+	}
+	return policyApplication.Satisfied, nil
 }
 
 func (s *Scanner) riskPolicyGrants(ctx context.Context, organizationID string, userID string) ([]authz.Grant, error) {

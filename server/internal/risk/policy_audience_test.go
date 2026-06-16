@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -243,6 +244,83 @@ func TestScanner_ScanForEnforcement_EveryoneAudienceAppliesWithoutResolvedUser(t
 	require.Equal(t, "Everyone Runtime", memberResult.PolicyName)
 }
 
+func TestScanner_ScanForEnforcement_EveryoneAudienceAppliesWithoutEvaluateGrant(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	policyID := uuid.New()
+	_, err := riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
+		ID:               policyID,
+		ProjectID:        *authCtx.ProjectID,
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		Name:             "Migrated Everyone Runtime",
+		Sources:          []string{"presidio"},
+		PresidioEntities: []string{"EMAIL_ADDRESS"},
+		Enabled:          true,
+		Action:           "block",
+		AudienceType:     "everyone",
+		AutoName:         false,
+	})
+	require.NoError(t, err)
+	requirePolicyAudience(t, ctx, ti, authCtx.ActiveOrganizationID, policyID.String(), nil)
+
+	pii := &instrumentedPIIScanner{findOnEntity: "EMAIL_ADDRESS"}
+	scanner, err := risk.NewScanner(
+		testenv.NewLogger(t),
+		ti.conn,
+		pii,
+		nil,
+		nil,
+		nil,
+		testenv.NewMeterProvider(t),
+	)
+	require.NoError(t, err)
+
+	result, err := scanner.ScanForEnforcement(ctx, "", *authCtx.ProjectID, "", "irrelevant text", message.User, "")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "Migrated Everyone Runtime", result.PolicyName)
+}
+
+func TestScanner_ScanForEnforcement_TargetedAudienceRequiresEvaluateGrant(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	policyID := uuid.New()
+	_, err := riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
+		ID:               policyID,
+		ProjectID:        *authCtx.ProjectID,
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		Name:             "Migrated Targeted Runtime",
+		Sources:          []string{"presidio"},
+		PresidioEntities: []string{"EMAIL_ADDRESS"},
+		Enabled:          true,
+		Action:           "block",
+		AudienceType:     "targeted",
+		AutoName:         false,
+	})
+	require.NoError(t, err)
+	requirePolicyAudience(t, ctx, ti, authCtx.ActiveOrganizationID, policyID.String(), nil)
+
+	pii := &instrumentedPIIScanner{findOnEntity: "EMAIL_ADDRESS"}
+	scanner, err := risk.NewScanner(
+		testenv.NewLogger(t),
+		ti.conn,
+		pii,
+		nil,
+		nil,
+		nil,
+		testenv.NewMeterProvider(t),
+	)
+	require.NoError(t, err)
+
+	result, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "irrelevant text", message.User, "")
+	require.NoError(t, err)
+	require.Nil(t, result)
+}
+
 func TestScanner_LookupShadowMCPBlockingPolicy_EveryoneAudienceAppliesWithoutResolvedUser(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
@@ -282,6 +360,43 @@ func TestScanner_LookupShadowMCPBlockingPolicy_EveryoneAudienceAppliesWithoutRes
 	require.NoError(t, err)
 	require.NotNil(t, unknownUserPolicy)
 	require.Equal(t, "Everyone Shadow MCP", unknownUserPolicy.Name)
+}
+
+func TestScanner_LookupShadowMCPBlockingPolicy_EveryoneAudienceAppliesWithoutEvaluateGrant(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	policyID := uuid.New()
+	_, err := riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
+		ID:             policyID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Name:           "Migrated Everyone Shadow MCP",
+		Sources:        []string{"shadow_mcp"},
+		Enabled:        true,
+		Action:         "block",
+		AudienceType:   "everyone",
+		AutoName:       false,
+	})
+	require.NoError(t, err)
+	requirePolicyAudience(t, ctx, ti, authCtx.ActiveOrganizationID, policyID.String(), nil)
+
+	scanner, err := risk.NewScanner(
+		testenv.NewLogger(t),
+		ti.conn,
+		nil,
+		nil,
+		nil,
+		nil,
+		testenv.NewMeterProvider(t),
+	)
+	require.NoError(t, err)
+
+	policy, err := scanner.LookupShadowMCPBlockingPolicy(ctx, "", *authCtx.ProjectID, "")
+	require.NoError(t, err)
+	require.NotNil(t, policy)
+	require.Equal(t, "Migrated Everyone Shadow MCP", policy.Name)
 }
 
 func grantKey(effect authz.PolicyEffect, principalURN string) string {
