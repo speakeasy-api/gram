@@ -1,0 +1,24 @@
+server/internal/authz/errors.go
+  s_5a92cd828d83ac::t_88b3ad68a9bd6a 16
+server/internal/authz/expressions.go
+  s_5a92cd828d83ac::t_ee868370c17e4c 203-208
+  s_5a92cd828d83ac::t_6f20b6dd385790 109-113,116,147-149,209-223
+server/internal/authz/expressions_test.go
+  s_5a92cd828d83ac::t_85f63b17b91505 4,35-91
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "2b3b7bda563e23085acc9d8dbc28205023075f75",
+  "prompts": {},
+  "sessions": {
+    "s_5a92cd828d83ac": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb6a2-6b62-7900-969e-22cc3bd839f6",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

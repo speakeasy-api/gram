@@ -1,0 +1,31 @@
+docs/rbac.md
+  h_2620cc60cfd1e9 251
+  s_95d069cf52f7b4::t_463313e03db09a 223-250,252-277,279-339,341-347
+server/internal/authz/expressions.go
+  s_95d069cf52f7b4::t_506cd7ac5b0cc7 197-200
+  s_95d069cf52f7b4::t_9bf9016edc48d6 276-313
+  s_95d069cf52f7b4::t_b87cbc7b29ef68 118,121-123,126,156-162
+  s_95d069cf52f7b4::t_1fbc56b8498c7c 182
+  s_95d069cf52f7b4::t_4d1c9d2788cdd1 183-188
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "2d4f95adf0040124baa891958824968412e50f69",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_95d069cf52f7b4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ecfff-79bd-7ac0-8355-76dbf61e503f",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

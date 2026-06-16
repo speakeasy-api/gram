@@ -1,0 +1,58 @@
+server/internal/hooks/shadow_mcp_request_link.go
+  s_5bb7da1b2bb48b::t_45e9907ffa80e2 53
+server/cmd/gram/start.go
+  s_5bb7da1b2bb48b::t_5bd45ae8672fa6 981
+  s_5bb7da1b2bb48b::t_488305d12e2dad 997-1015
+server/internal/hooks/shadow_mcp_access.go
+  s_5bb7da1b2bb48b::t_d07a509921e8df 9,82,88
+  s_5bb7da1b2bb48b::t_fb3b037f4e270c 58-66,72-73,75
+  s_5bb7da1b2bb48b::t_72c1bbb75e3337 28,57
+  s_5bb7da1b2bb48b::t_9186a55833681a 42,68-70
+server/internal/risk/policy_bypass_evaluator.go
+  s_5bb7da1b2bb48b::t_0f59648c3e875a 1-30,32-115,117-121,123-125,127,132-161
+  s_5bb7da1b2bb48b::t_72eeb9bd9b8d1a 31
+  s_5bb7da1b2bb48b::t_165d14f37da369 116,122,126,128-131
+server/internal/risk/policy_bypass.go
+  s_5bb7da1b2bb48b::t_42c88af2f2fb48 597
+  s_5bb7da1b2bb48b::t_af96bbb0eb6fb9 24,49-52,578-581,583-585,587-590,609-615
+server/internal/hooks/claude_hooks.go
+  s_5bb7da1b2bb48b::t_c2590b579e8b28 855
+  s_5bb7da1b2bb48b::t_e17d859552e531 834
+server/internal/hooks/setup_test.go
+  s_5bb7da1b2bb48b::t_e0cbb731e1e745 27,95
+  s_5bb7da1b2bb48b::t_488305d12e2dad 98-116
+server/internal/hooks/impl.go
+  s_5bb7da1b2bb48b::t_61bf68e952ec16 102,121
+  s_5bb7da1b2bb48b::t_83da4f68ff2b1e 50
+server/internal/shadowmcp/match.go
+  h_2620cc60cfd1e9 101-112
+  s_5bb7da1b2bb48b::t_0f59648c3e875a 22-56
+server/internal/hooks/shadow_mcp_request_link_test.go
+  s_5bb7da1b2bb48b::t_42c88af2f2fb48 95,108
+server/internal/hooks/shadow_mcp_access_test.go
+  s_5bb7da1b2bb48b::t_823a6c7f4c78c5 80,116-148
+server/internal/shadowmcp/access_rules.go
+  s_5bb7da1b2bb48b::t_c2590b579e8b28 105
+  s_5bb7da1b2bb48b::t_35a4e3978db411 5,7,104,106-195
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "dcc46d6fd1dd046ebc1f18760874578bd6ced36b",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_5bb7da1b2bb48b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb0be-3dcf-7cf1-ba40-ad162ca07261",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

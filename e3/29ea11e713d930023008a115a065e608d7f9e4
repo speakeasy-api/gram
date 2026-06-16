@@ -1,0 +1,37 @@
+server/internal/authz/principal.go
+  s_5a92cd828d83ac::t_dca74226afaa4e 24-28,33,37-41
+  s_5a92cd828d83ac::t_85f3213ab9683e 7-9,86-139
+  s_5a92cd828d83ac::t_b5ba2ff3b1cf13 50,53-54,56
+  s_5a92cd828d83ac::t_5642eacc431f4b 55
+server/internal/authz/principal_test.go
+  s_5a92cd828d83ac::t_e146b69e3bcd20 95-131
+  s_5a92cd828d83ac::t_a2cbc0e01a6339 48,61,63-64,67-69
+server/internal/risk/policy_audience_test.go
+  s_5a92cd828d83ac::t_1d94d124040870 148-186
+  s_5a92cd828d83ac::t_a2f38f13327e8e 102,134-135,139-140
+server/internal/shadowmcp/setup_test.go
+  s_5a92cd828d83ac::t_0685be04ad39c3 108
+server/internal/risk/policy_bypass.go
+  s_5a92cd828d83ac::t_6b6788b6d33838 643-644
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "e329ea11e713d930023008a115a065e608d7f9e4",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_5a92cd828d83ac": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb6a2-6b62-7900-969e-22cc3bd839f6",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
