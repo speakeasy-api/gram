@@ -120,10 +120,6 @@ var _ cache.CacheableObject[AuthnChallengeState] = (*AuthnChallengeState)(nil)
 // CacheKey implements cache.CacheableObject.
 func (a AuthnChallengeState) CacheKey() string { return "authnChallenge:" + a.ID }
 
-// AdditionalCacheKeys implements cache.CacheableObject. Single-key entry; no
-// fan-out. (Per the Cleanup ticket in project.md, AdditionalCacheKeys is
-// itself slated for removal from the interface.)
-func (a AuthnChallengeState) AdditionalCacheKeys() []string { return []string{} }
 
 // TTL implements cache.CacheableObject.
 func (a AuthnChallengeState) TTL() time.Duration { return 10 * time.Minute }
@@ -156,9 +152,6 @@ func (g UserSessionGrant) CacheKey() string {
 	return "userSessionGrant:" + g.UserSessionIssuerID.String() + ":" + g.Code
 }
 
-// AdditionalCacheKeys implements cache.CacheableObject. Single-key entry; no
-// fan-out.
-func (g UserSessionGrant) AdditionalCacheKeys() []string { return []string{} }
 
 // TTL implements cache.CacheableObject. 10 minutes is the standard OAuth code
 // lifetime — enough for a slow round trip from the MCP client to /token, short

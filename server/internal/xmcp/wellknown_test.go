@@ -151,87 +151,6 @@ func TestHandleWellKnownOAuthServerMetadata_ToolsetBackendWithoutOAuth(t *testin
 	require.Empty(t, w.Body.String())
 }
 
-func TestHandleWellKnownOAuthServerMetadata_ToolsetBackendWithProxy(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	proxy := oauthtest.CreateProxyToolset(t, ctx, ti.conn, authCtx, oauthtest.ProxyToolsetOpts{
-		Slug:         "xmcp-srv-proxy",
-		IsPublic:     true,
-		ProviderType: "",
-	})
-	slug, _ := seedToolsetMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, proxy.Toolset, "public")
-
-	w, err := runWellKnown(t, ctx, ti.service.HandleWellKnownOAuthServerMetadata, "/.well-known/oauth-authorization-server/x/mcp/"+slug, slug)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code)
-	require.Contains(t, w.Header().Get("Content-Type"), "application/json")
-
-	var metadata map[string]any
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
-
-	expectedIssuer := "http://0.0.0.0/oauth/" + slug
-	require.Equal(t, expectedIssuer, metadata["issuer"])
-	require.Equal(t, expectedIssuer+"/authorize", metadata["authorization_endpoint"])
-	require.Equal(t, expectedIssuer+"/token", metadata["token_endpoint"])
-	require.Equal(t, expectedIssuer+"/register", metadata["registration_endpoint"])
-
-	// The Gram-issued offline_access scope is always advertised so RFC 8414
-	// scopes_supported never disappears.
-	scopes, ok := metadata["scopes_supported"].([]any)
-	require.True(t, ok)
-	require.Contains(t, scopes, "offline_access")
-
-	grants, ok := metadata["grant_types_supported"].([]any)
-	require.True(t, ok)
-	require.Contains(t, grants, "authorization_code")
-	require.Contains(t, grants, "refresh_token")
-}
-
-func TestHandleWellKnownOAuthServerMetadata_ToolsetBackendOnCustomDomain(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	domain := seedCustomDomain(t, ctx, ti, authCtx.ActiveOrganizationID, "xmcp-srv-cd-"+uuid.NewString()[:8]+".example.com")
-	proxy := oauthtest.CreateProxyToolset(t, ctx, ti.conn, authCtx, oauthtest.ProxyToolsetOpts{
-		Slug:         "xmcp-srv-cd",
-		IsPublic:     true,
-		ProviderType: "",
-	})
-	slug, _ := seedToolsetMCPEndpointOnDomain(t, ctx, ti, *authCtx.ProjectID, proxy.Toolset, "public", uuid.NullUUID{UUID: domain.ID, Valid: true})
-
-	domainCtx := customdomains.WithContext(ctx, &customdomains.Context{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		Domain:         domain.Domain,
-		DomainID:       domain.ID,
-	})
-
-	w, err := runWellKnown(t, domainCtx, ti.service.HandleWellKnownOAuthServerMetadata, "/.well-known/oauth-authorization-server/x/mcp/"+slug, slug)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code)
-
-	var metadata map[string]any
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
-
-	// Custom-domain requests must produce metadata URLs rooted at the
-	// custom domain (https), not the platform serverURL — clients will
-	// reject discovery responses whose host doesn't match the resource
-	// they were directed to.
-	expectedIssuer := "https://" + domain.Domain + "/oauth/" + slug
-	require.Equal(t, expectedIssuer, metadata["issuer"])
-	require.Equal(t, expectedIssuer+"/authorize", metadata["authorization_endpoint"])
-	require.Equal(t, expectedIssuer+"/token", metadata["token_endpoint"])
-	require.Equal(t, expectedIssuer+"/register", metadata["registration_endpoint"])
-}
-
 func TestHandleWellKnownOAuthServerMetadata_ToolsetBackendWithExternalOAuth(t *testing.T) {
 	t.Parallel()
 
@@ -422,39 +341,6 @@ func TestHandleWellKnownOAuthProtectedResourceMetadata_ToolsetBackendWithoutOAut
 	require.Empty(t, w.Body.String())
 }
 
-func TestHandleWellKnownOAuthProtectedResourceMetadata_ToolsetBackendWithProxy(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	proxy := oauthtest.CreateProxyToolset(t, ctx, ti.conn, authCtx, oauthtest.ProxyToolsetOpts{
-		Slug:         "xmcp-pr-proxy",
-		IsPublic:     true,
-		ProviderType: "",
-	})
-	slug, _ := seedToolsetMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, proxy.Toolset, "public")
-
-	w, err := runWellKnown(t, ctx, ti.service.HandleWellKnownOAuthProtectedResourceMetadata, "/.well-known/oauth-protected-resource/x/mcp/"+slug, slug)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code)
-	require.Contains(t, w.Header().Get("Content-Type"), "application/json")
-
-	var metadata map[string]any
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
-
-	expectedResource := "http://0.0.0.0/x/mcp/" + slug
-	require.Equal(t, expectedResource, metadata["resource"])
-
-	// authorization_servers points at the same resource so .well-known
-	// discovery loops back to /.well-known/oauth-authorization-server/x/mcp/{slug}.
-	authServers, ok := metadata["authorization_servers"].([]any)
-	require.True(t, ok)
-	require.Equal(t, []any{expectedResource}, authServers)
-}
-
 func TestHandleWellKnownOAuthProtectedResourceMetadata_ToolsetBackendOnCustomDomain(t *testing.T) {
 	t.Parallel()
 
@@ -464,12 +350,12 @@ func TestHandleWellKnownOAuthProtectedResourceMetadata_ToolsetBackendOnCustomDom
 	require.NotNil(t, authCtx.ProjectID)
 
 	domain := seedCustomDomain(t, ctx, ti, authCtx.ActiveOrganizationID, "xmcp-pr-cd-"+uuid.NewString()[:8]+".example.com")
-	proxy := oauthtest.CreateProxyToolset(t, ctx, ti.conn, authCtx, oauthtest.ProxyToolsetOpts{
-		Slug:         "xmcp-pr-cd",
-		IsPublic:     true,
-		ProviderType: "",
+	external := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, authCtx, oauthtest.ExternalOAuthToolsetOpts{
+		Slug:     "xmcp-pr-cd",
+		IsPublic: true,
+		Metadata: nil,
 	})
-	slug, _ := seedToolsetMCPEndpointOnDomain(t, ctx, ti, *authCtx.ProjectID, proxy.Toolset, "public", uuid.NullUUID{UUID: domain.ID, Valid: true})
+	slug, _ := seedToolsetMCPEndpointOnDomain(t, ctx, ti, *authCtx.ProjectID, external.Toolset, "public", uuid.NullUUID{UUID: domain.ID, Valid: true})
 
 	domainCtx := customdomains.WithContext(ctx, &customdomains.Context{
 		OrganizationID: authCtx.ActiveOrganizationID,

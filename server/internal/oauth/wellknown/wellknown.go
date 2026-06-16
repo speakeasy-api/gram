@@ -25,11 +25,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -88,7 +86,6 @@ type OAuthServerMetadataResult struct {
 
 type OAuthRepo interface {
 	GetExternalOAuthServerMetadata(ctx context.Context, arg repo.GetExternalOAuthServerMetadataParams) (repo.ExternalOauthServerMetadatum, error)
-	ListOAuthProxyProvidersByServer(ctx context.Context, arg repo.ListOAuthProxyProvidersByServerParams) ([]repo.OauthProxyProvider, error)
 }
 
 // ResolveOAuthServerMetadataFromToolset returns OAuth Authorization Server
@@ -111,52 +108,6 @@ func ResolveOAuthServerMetadataFromToolset(
 	baseURL string,
 	oauthSlug string,
 ) (*OAuthServerMetadataResult, error) {
-	if toolset.OauthProxyServerID.Valid {
-		providers, err := oauthRepo.ListOAuthProxyProvidersByServer(ctx, repo.ListOAuthProxyProvidersByServerParams{
-			OauthProxyServerID: toolset.OauthProxyServerID.UUID,
-			ProjectID:          toolset.ProjectID,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to list OAuth proxy providers").LogError(ctx, logger)
-		}
-		if len(providers) == 0 {
-			return nil, oops.E(oops.CodeNotFound, nil, "no OAuth proxy providers configured for server").LogError(ctx, logger)
-		}
-		if len(providers) > 1 {
-			logger.ErrorContext(ctx, "multiple OAuth proxy providers per server is not supported",
-				attr.SlogOAuthProxyServerID(toolset.OauthProxyServerID.UUID.String()),
-				attr.SlogOAuthProviderCount(len(providers)))
-			return nil, oops.E(oops.CodeUnexpected, nil, "multiple OAuth proxy providers per server is not supported").LogError(ctx, logger)
-		}
-		provider := providers[0]
-
-		// Always include offline_access — Gram issues refresh tokens for all provider types.
-		// The provider's own scopes describe upstream capabilities; offline_access describes
-		// Gram's capability as the authorization server.
-		scopes := []string{"offline_access"}
-		for _, s := range provider.ScopesSupported {
-			if s != "offline_access" {
-				scopes = append(scopes, s)
-			}
-		}
-
-		return &OAuthServerMetadataResult{
-			Kind: OAuthServerMetadataResultKindStatic,
-			Static: &OAuthServerMetadata{
-				Issuer:                        baseURL + "/oauth/" + oauthSlug,
-				AuthorizationEndpoint:         baseURL + "/oauth/" + oauthSlug + "/authorize",
-				TokenEndpoint:                 baseURL + "/oauth/" + oauthSlug + "/token",
-				RegistrationEndpoint:          baseURL + "/oauth/" + oauthSlug + "/register",
-				ScopesSupported:               scopes,
-				ResponseTypesSupported:        []string{"code"},
-				GrantTypesSupported:           []string{"authorization_code", "refresh_token"},
-				CodeChallengeMethodsSupported: []string{"plain", "S256"},
-			},
-			Raw:      nil,
-			ProxyURL: "",
-		}, nil
-	}
-
 	if toolset.ExternalOauthServerID.Valid {
 		externalOAuthServer, err := oauthRepo.GetExternalOAuthServerMetadata(ctx, repo.GetExternalOAuthServerMetadataParams{
 			ProjectID: toolset.ProjectID,
@@ -194,8 +145,8 @@ func ResolveOAuthProtectedResourceFromToolset(
 	toolset *toolsets_repo.Toolset,
 	resourceURL string,
 ) (*OAuthProtectedResourceMetadata, error) {
-	// Check for OAuth proxy server or external OAuth server configuration
-	if toolset.OauthProxyServerID.Valid || toolset.ExternalOauthServerID.Valid {
+	// Check for external OAuth server configuration
+	if toolset.ExternalOauthServerID.Valid {
 		return &OAuthProtectedResourceMetadata{
 			Resource:               resourceURL,
 			AuthorizationServers:   []string{resourceURL},
