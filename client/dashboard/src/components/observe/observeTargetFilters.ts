@@ -68,7 +68,12 @@ export function selectedUserEmails(activeFilters: FilterChip[]): string[] {
   return activeFilters
     .filter((f) => f.path === USER_EMAIL_FILTER_PATH)
     .flatMap((f) => f.filters)
+    .map(normalizeUserEmailFilter)
     .filter(Boolean);
+}
+
+function normalizeUserEmailFilter(email: string): string {
+  return email.trim().toLowerCase();
 }
 
 export function selectedHookSources(activeFilters: FilterChip[]): string[] {

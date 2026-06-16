@@ -54,8 +54,13 @@ export function resolveRoleEmails(
   const roleSet = new Set(roleIds);
   const emails = members
     .filter((m) => m.roleIds.some((id) => roleSet.has(id)))
-    .map((m) => m.email);
+    .map((m) => normalizeUserEmailFilter(m.email))
+    .filter(Boolean);
   return [...new Set(emails)];
+}
+
+function normalizeUserEmailFilter(email: string): string {
+  return email.trim().toLowerCase();
 }
 
 export function buildLogFilters(

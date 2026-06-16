@@ -154,6 +154,25 @@ describe("resolveRoleEmails", () => {
     ]);
   });
 
+  it("normalizes emails for selected roles", () => {
+    expect(
+      resolveRoleEmails(
+        ["role-admin"],
+        [
+          {
+            id: "m4",
+            principalUrn: "user:m1",
+            email: " Alice@Example.com ",
+            name: "Alice",
+            roleIds: ["role-admin"],
+            joinedAt: new Date(),
+            photoUrl: undefined,
+          },
+        ],
+      ),
+    ).toEqual(["alice@example.com"]);
+  });
+
   it("unions emails across multiple selected roles", () => {
     expect(resolveRoleEmails(["role-admin", "role-member"], members)).toEqual(
       expect.arrayContaining([

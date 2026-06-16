@@ -2317,11 +2317,6 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		})
 	}
 
-	hostedMCPMatchers, err := s.toolUsageHostedMCPMatchers(ctx, *authCtx.ProjectID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing hosted MCP servers")
-	}
-
 	cursorTimeUnixNano := int64(0)
 	cursorID := ""
 	if params.cursor != "" {
@@ -2329,6 +2324,11 @@ func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.Li
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor")
 		}
+	}
+
+	hostedMCPMatchers, err := s.toolUsageHostedMCPMatchers(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing hosted MCP servers")
 	}
 
 	rows, err := s.chRepo.ListToolUsageTraces(ctx, repo.ListToolUsageTracesParams{

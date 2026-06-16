@@ -67,16 +67,14 @@ func TestListToolUsageTraces_ReturnsHostedShadowLocalAndSkills(t *testing.T) {
 		conversationID: "conv-skill",
 	})
 
-	time.Sleep(200 * time.Millisecond)
-
-	result, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{
+	result := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:  now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:    now.Add(1 * time.Hour).Format(time.RFC3339),
 		Limit: 10,
 		Sort:  "desc",
+	}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == 4
 	})
-
-	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
 	require.NotNil(t, result)
 	require.Len(t, result.Traces, 4)
 
@@ -145,16 +143,14 @@ func TestListToolUsageTraces_DerivesSkillNameFromToolInput(t *testing.T) {
 		conversationID: "conv-skill",
 	})
 
-	time.Sleep(200 * time.Millisecond)
-
-	result, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{
+	result := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:  now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:    now.Add(1 * time.Hour).Format(time.RFC3339),
 		Limit: 10,
 		Sort:  "desc",
+	}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == 1 && result.Traces[0].LogCount == 2
 	})
-
-	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
 	require.NotNil(t, result)
 	require.Len(t, result.Traces, 1)
 	require.Equal(t, gen.ToolUsageTargetType("skill"), result.Traces[0].TargetType)
@@ -196,21 +192,20 @@ func TestListToolUsageTraces_FiltersByTargetsUsersAndHookSource(t *testing.T) {
 		customAttrs:    map[string]any{"gram.trigger.instance_id": "trigger_123"},
 	})
 
-	time.Sleep(200 * time.Millisecond)
-
-	hostedOnly, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{
+	hostedOnly := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:               now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:                 now.Add(1 * time.Hour).Format(time.RFC3339),
 		TargetTypes:        []gen.ToolUsageTargetType{"hosted_mcp_server"},
 		HostedToolsetSlugs: []string{"payments"},
 		Limit:              10,
+	}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == 1
 	})
-	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
 	require.Len(t, hostedOnly.Traces, 1)
 	require.Equal(t, gen.ToolUsageTargetType("hosted_mcp_server"), hostedOnly.Traces[0].TargetType)
 
 	attributeQuery := "conv-shadow"
-	shadowCursorOnly, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{
+	shadowCursorOnly := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:              now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:                now.Add(1 * time.Hour).Format(time.RFC3339),
 		ShadowServerNames: []string{"shadow-db"},
@@ -218,13 +213,14 @@ func TestListToolUsageTraces_FiltersByTargetsUsersAndHookSource(t *testing.T) {
 		UserFilters:       []*gen.ToolUsageUserFilter{{Kind: "email", Key: "bob@example.com"}},
 		Query:             &attributeQuery,
 		Limit:             10,
+	}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == 1
 	})
-	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
 	require.Len(t, shadowCursorOnly.Traces, 1)
 	require.Equal(t, "shadow-db", shadowCursorOnly.Traces[0].TargetID)
 	require.Equal(t, "cursor", *shadowCursorOnly.Traces[0].HookSource)
 
-	triggerFiltered, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{
+	triggerFiltered := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From: now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:   now.Add(1 * time.Hour).Format(time.RFC3339),
 		Filters: []*gen.LogFilter{
@@ -235,8 +231,9 @@ func TestListToolUsageTraces_FiltersByTargetsUsersAndHookSource(t *testing.T) {
 			},
 		},
 		Limit: 10,
+	}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == 1
 	})
-	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
 	require.Len(t, triggerFiltered.Traces, 1)
 	require.Equal(t, "shadow-db", triggerFiltered.Traces[0].TargetID)
 }
@@ -260,15 +257,16 @@ func TestListToolUsageTraces_PaginatesWithOpaqueCursor(t *testing.T) {
 		})
 	}
 
-	time.Sleep(200 * time.Millisecond)
-
-	page1, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{
+	page1 := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:  now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:    now.Add(1 * time.Hour).Format(time.RFC3339),
 		Limit: 2,
 		Sort:  "desc",
+	}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == 2 &&
+			result.NextCursor != nil &&
+			*result.NextCursor != ""
 	})
-	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
 	require.Len(t, page1.Traces, 2)
 	require.NotNil(t, page1.NextCursor)
 	require.NotEmpty(t, *page1.NextCursor)
@@ -327,14 +325,15 @@ func TestListToolUsageTraces_PrefersWorstStatusInGroupedTrace(t *testing.T) {
 		},
 	})
 
-	time.Sleep(200 * time.Millisecond)
-
-	result, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{
+	result := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From:  now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:    now.Add(1 * time.Hour).Format(time.RFC3339),
 		Limit: 10,
+	}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == 1 &&
+			result.Traces[0].HookStatus != nil &&
+			*result.Traces[0].HookStatus == "blocked"
 	})
-	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
 	require.Len(t, result.Traces, 1)
 	require.NotNil(t, result.Traces[0].HookStatus)
 	require.Equal(t, "blocked", *result.Traces[0].HookStatus)
@@ -358,9 +357,7 @@ func TestListToolUsageTraces_IncludesTriggerOnlyRowsForTriggerFilter(t *testing.
 		body:              "trigger delivered",
 	})
 
-	time.Sleep(200 * time.Millisecond)
-
-	result, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{
+	result := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
 		From: now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:   now.Add(1 * time.Hour).Format(time.RFC3339),
 		Filters: []*gen.LogFilter{
@@ -371,14 +368,33 @@ func TestListToolUsageTraces_IncludesTriggerOnlyRowsForTriggerFilter(t *testing.
 			},
 		},
 		Limit: 10,
+	}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == 1
 	})
-	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
 	require.Len(t, result.Traces, 1)
 	require.Equal(t, gen.ToolUsageTargetType("local_tool"), result.Traces[0].TargetType)
 	require.Equal(t, "local", result.Traces[0].TargetID)
 	require.NotNil(t, result.Traces[0].LogGroup)
 	require.Equal(t, gen.ToolUsageTraceLogGroupKind("trigger_event_id"), result.Traces[0].LogGroup.Kind)
 	require.Equal(t, "event_123", result.Traces[0].LogGroup.Value)
+}
+
+func TestListToolUsageTraces_RejectsInvalidCursorBeforeListingHostedMCPServers(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	ti.conn.Close()
+
+	cursor := "not-a-valid-cursor"
+	_, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{
+		From:   time.Now().Add(-1 * time.Hour).UTC().Format(time.RFC3339),
+		To:     time.Now().Add(1 * time.Hour).UTC().Format(time.RFC3339),
+		Cursor: &cursor,
+		Limit:  10,
+	})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid cursor")
 }
 
 type triggerOnlyLogParams struct {
@@ -420,4 +436,23 @@ func insertTriggerOnlyLog(t *testing.T, ctx context.Context, ti *testInstance, p
 		GramChatID:           nil,
 	})
 	require.NoError(t, err)
+}
+
+func waitForToolUsageTraces(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	payload *gen.ListToolUsageTracesPayload,
+	ready func(*gen.ListToolUsageTracesResult) bool,
+) *gen.ListToolUsageTracesResult {
+	t.Helper()
+
+	var result *gen.ListToolUsageTracesResult
+	var err error
+	require.Eventually(t, func() bool {
+		result, err = ti.service.ListToolUsageTraces(ctx, payload)
+		return err == nil && result != nil && ready(result)
+	}, 2*time.Second, 50*time.Millisecond, "expected tool usage traces to become query-ready, err: %v", errors.Unwrap(err))
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	return result
 }
