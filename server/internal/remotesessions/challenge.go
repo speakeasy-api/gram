@@ -116,7 +116,6 @@ type RemoteLoginState struct {
 var _ cache.CacheableObject[RemoteLoginState] = (*RemoteLoginState)(nil)
 
 func (s RemoteLoginState) CacheKey() string              { return "remoteLogin:" + s.ID }
-func (s RemoteLoginState) AdditionalCacheKeys() []string { return []string{} }
 func (s RemoteLoginState) TTL() time.Duration            { return 10 * time.Minute }
 
 // ChallengeManager drives the per-remote OAuth authn-challenge leg.

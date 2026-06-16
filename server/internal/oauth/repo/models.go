@@ -35,39 +35,6 @@ type ExternalOauthServerMetadatum struct {
 	Deleted   bool
 }
 
-type OauthProxyProvider struct {
-	ID                                uuid.UUID
-	ProjectID                         uuid.UUID
-	OauthProxyServerID                uuid.UUID
-	Slug                              string
-	ProviderType                      string
-	AuthorizationEndpoint             pgtype.Text
-	TokenEndpoint                     pgtype.Text
-	RegistrationEndpoint              pgtype.Text
-	ScopesSupported                   []string
-	ResponseTypesSupported            []string
-	ResponseModesSupported            []string
-	GrantTypesSupported               []string
-	TokenEndpointAuthMethodsSupported []string
-	SecurityKeyNames                  []string
-	Secrets                           []byte
-	CreatedAt                         pgtype.Timestamptz
-	UpdatedAt                         pgtype.Timestamptz
-	DeletedAt                         pgtype.Timestamptz
-	Deleted                           bool
-}
-
-type OauthProxyServer struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-	Slug      string
-	Audience  pgtype.Text
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
-	DeletedAt pgtype.Timestamptz
-	Deleted   bool
-}
-
 type UserOauthToken struct {
 	ID                    uuid.UUID
 	UserID                string

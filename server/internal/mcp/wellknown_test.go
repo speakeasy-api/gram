@@ -117,43 +117,6 @@ func TestHandleGetAuthorizationServer_ToolsetBackendWithoutOAuth(t *testing.T) {
 	require.Empty(t, w.Body.String())
 }
 
-func TestHandleGetAuthorizationServer_ToolsetBackendWithProxy(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	proxy := oauthtest.CreateProxyToolset(t, ctx, ti.conn, authCtx, oauthtest.ProxyToolsetOpts{
-		Slug:         "mcp-srv-proxy",
-		IsPublic:     true,
-		ProviderType: "",
-	})
-	slug := proxy.Toolset.McpSlug.String
-	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, proxy.Toolset.ID, slug, "public", uuid.NullUUID{}, uuid.Nil)
-
-	w, err := runMCPWellKnown(t, ctx, ti.service.HandleGetAuthorizationServer, slug)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code)
-	require.Contains(t, w.Header().Get("Content-Type"), "application/json")
-
-	var metadata map[string]any
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
-
-	// Legacy proxy metadata is keyed on the toolset's mcp_slug under
-	// /oauth/{slug}, not the /mcp/{slug} surface.
-	expectedIssuer := "http://0.0.0.0/oauth/" + slug
-	require.Equal(t, expectedIssuer, metadata["issuer"])
-	require.Equal(t, expectedIssuer+"/authorize", metadata["authorization_endpoint"])
-	require.Equal(t, expectedIssuer+"/token", metadata["token_endpoint"])
-	require.Equal(t, expectedIssuer+"/register", metadata["registration_endpoint"])
-
-	scopes, ok := metadata["scopes_supported"].([]any)
-	require.True(t, ok)
-	require.Contains(t, scopes, "offline_access")
-}
-
 func TestHandleGetAuthorizationServer_ToolsetBackendWithExternalOAuth(t *testing.T) {
 	t.Parallel()
 
@@ -279,32 +242,6 @@ func TestHandleGetAuthorizationServer_IssuerGatedRemoteBackend_DanglingIssuerFK(
 // TestHandleGetAuthorizationServer_LegacySlugFallbackProxy confirms a
 // toolset with no mcp_endpoint row (pre the toolsets→mcp_servers
 // migration) still resolves via the legacy toolsets.mcp_slug fallback.
-func TestHandleGetAuthorizationServer_LegacySlugFallbackProxy(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	// No mcp_endpoint is created — the slug is only addressable via the
-	// legacy toolsets.mcp_slug path.
-	proxy := oauthtest.CreateProxyToolset(t, ctx, ti.conn, authCtx, oauthtest.ProxyToolsetOpts{
-		Slug:         "mcp-legacy-proxy",
-		IsPublic:     true,
-		ProviderType: "",
-	})
-	slug := proxy.Toolset.McpSlug.String
-
-	w, err := runMCPWellKnown(t, ctx, ti.service.HandleGetAuthorizationServer, slug)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code)
-
-	var metadata map[string]any
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
-	require.Equal(t, "http://0.0.0.0/oauth/"+slug, metadata["issuer"])
-}
-
 // ---------------------------------------------------------------------------
 // HandleGetProtectedResource
 // ---------------------------------------------------------------------------
@@ -348,37 +285,6 @@ func TestHandleGetProtectedResource_ToolsetBackendWithoutOAuth(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no OAuth configuration found")
 	require.Empty(t, w.Body.String())
-}
-
-func TestHandleGetProtectedResource_ToolsetBackendWithProxy(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	proxy := oauthtest.CreateProxyToolset(t, ctx, ti.conn, authCtx, oauthtest.ProxyToolsetOpts{
-		Slug:         "mcp-pr-proxy",
-		IsPublic:     true,
-		ProviderType: "",
-	})
-	slug := proxy.Toolset.McpSlug.String
-	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, proxy.Toolset.ID, slug, "public", uuid.NullUUID{}, uuid.Nil)
-
-	w, err := runMCPWellKnown(t, ctx, ti.service.HandleGetProtectedResource, slug)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code)
-	require.Contains(t, w.Header().Get("Content-Type"), "application/json")
-
-	var metadata map[string]any
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
-
-	expectedResource := "http://0.0.0.0/mcp/" + slug
-	require.Equal(t, expectedResource, metadata["resource"])
-	authServers, ok := metadata["authorization_servers"].([]any)
-	require.True(t, ok)
-	require.Equal(t, []any{expectedResource}, authServers)
 }
 
 // TestHandleGetProtectedResource_IssuerGatedRemoteBackend is the
@@ -476,26 +382,3 @@ func TestHandleGetProtectedResource_IssuerGatedToolsetBackend_OnCustomDomain(t *
 
 // TestHandleGetProtectedResource_LegacySlugFallbackProxy is the
 // protected-resource companion of the legacy fallback test.
-func TestHandleGetProtectedResource_LegacySlugFallbackProxy(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	proxy := oauthtest.CreateProxyToolset(t, ctx, ti.conn, authCtx, oauthtest.ProxyToolsetOpts{
-		Slug:         "mcp-legacy-pr-proxy",
-		IsPublic:     true,
-		ProviderType: "",
-	})
-	slug := proxy.Toolset.McpSlug.String
-
-	w, err := runMCPWellKnown(t, ctx, ti.service.HandleGetProtectedResource, slug)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code)
-
-	var metadata map[string]any
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
-	require.Equal(t, "http://0.0.0.0/mcp/"+slug, metadata["resource"])
-}

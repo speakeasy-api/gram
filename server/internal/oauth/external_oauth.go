@@ -100,10 +100,6 @@ func (s ExternalOAuthState) CacheKey() string {
 	return ExternalOAuthStateCacheKey(s.StateID)
 }
 
-func (s ExternalOAuthState) AdditionalCacheKeys() []string {
-	return []string{}
-}
-
 func (s ExternalOAuthState) TTL() time.Duration {
 	return time.Until(s.ExpiresAt)
 }
@@ -866,17 +862,16 @@ type ExternalOAuthConfig struct {
 
 // getExternalOAuthConfig resolves OAuth configuration for a toolset.
 //
-// For toolsets with an OAuth proxy server or external OAuth server, this delegates
-// to wellknown.ResolveOAuthServerMetadataFromToolset which returns Gram's proxy
-// endpoints. The external OAuth service then uses standard DCR against the proxy —
-// the proxy handles upstream provider interaction internally.
+// For toolsets with an external OAuth server, this delegates to
+// wellknown.ResolveOAuthServerMetadataFromToolset which returns the server's
+// metadata. The external OAuth service then uses standard DCR against it.
 //
 // For toolsets without explicit OAuth config, falls back to legacy external MCP
 // tool definitions.
 func (s *ExternalOAuthService) getExternalOAuthConfig(ctx context.Context, toolset toolsets_repo.Toolset, externalMCPSlug string) (*ExternalOAuthConfig, error) {
-	// Path 1: Toolset-level OAuth config (proxy server or external OAuth server).
-	// Delegates to the well-known resolver which returns Gram's proxy endpoints.
-	if toolset.OauthProxyServerID.Valid || toolset.ExternalOauthServerID.Valid {
+	// Path 1: Toolset-level OAuth config (external OAuth server).
+	// Delegates to the well-known resolver which returns the server's metadata.
+	if toolset.ExternalOauthServerID.Valid {
 		mcpSlug := toolset.McpSlug.String
 		if mcpSlug == "" {
 			return nil, fmt.Errorf("toolset has OAuth config but no MCP slug")

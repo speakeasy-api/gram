@@ -232,9 +232,6 @@ func (c clientCredentialsTokenCache) CacheKey() string {
 	return clientCredentialsTokenCacheCacheKey(c.ProjectID, c.ClientID, c.TokenURL, c.Scopes)
 }
 
-func (c clientCredentialsTokenCache) AdditionalCacheKeys() []string {
-	return []string{}
-}
 
 func (c clientCredentialsTokenCache) TTL() time.Duration {
 	return c.ExpiresIn
