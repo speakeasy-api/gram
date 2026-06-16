@@ -49,7 +49,6 @@ func NewTypedObjectCache[T CacheableObject[T]](logger *slog.Logger, cache Cache,
 
 type CacheableObject[T any] interface {
 	CacheKey() string
-	AdditionalCacheKeys() []string
 	TTL() time.Duration
 }
 
@@ -71,13 +70,6 @@ func (d *TypedCacheObject[T]) Delete(ctx context.Context, obj T) error {
 	err := d.cache.Delete(ctx, cacheKey)
 	if err != nil {
 		return fmt.Errorf("delete: %s: %w", cacheKey, err)
-	}
-
-	for _, key := range obj.AdditionalCacheKeys() {
-		err := d.cache.Delete(ctx, d.fullKey(key))
-		if err != nil {
-			return fmt.Errorf("delete additional: %s: %w", d.fullKey(key), err)
-		}
 	}
 
 	return nil
@@ -129,9 +121,6 @@ func (d *TypedCacheObject[T]) Get(ctx context.Context, key string) (T, error) {
 // the cache. Use this in place of a Get-then-Delete sequence on single-use
 // tokens (auth codes, in-flight challenge state) where the race window
 // would let two concurrent callers each redeem the same value.
-//
-// AdditionalCacheKeys on the returned object are NOT touched — callers that
-// rely on fan-out keys should Delete the returned object after.
 func (d *TypedCacheObject[T]) GetAndDelete(ctx context.Context, key string) (T, error) {
 	if d.cache == nil {
 		return *new(T), errors.New("cache is not configured")
@@ -153,11 +142,6 @@ func (d *TypedCacheObject[T]) Store(ctx context.Context, obj T) error {
 	if err := d.cache.Set(ctx, d.fullKey(obj.CacheKey()), obj, ttl); err != nil {
 		return fmt.Errorf("store: %s: %w", d.fullKey(obj.CacheKey()), err)
 	}
-	for _, key := range obj.AdditionalCacheKeys() {
-		if err := d.cache.Set(ctx, d.fullKey(key), obj, ttl); err != nil {
-			return fmt.Errorf("store additional: %s: %w", d.fullKey(key), err)
-		}
-	}
 	return nil
 }
 
@@ -175,11 +159,6 @@ func (d *TypedCacheObject[T]) Update(ctx context.Context, obj T) error {
 	}
 	if err := updateKey(obj.CacheKey()); err != nil {
 		return err
-	}
-	for _, key := range obj.AdditionalCacheKeys() {
-		if err := updateKey(key); err != nil {
-			return err
-		}
 	}
 	return nil
 }
