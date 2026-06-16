@@ -23,8 +23,8 @@ import {
 import { useServerAssistantTransport } from "@/hooks/useServerAssistantTransport";
 import { useSlugs } from "@/contexts/Sdk";
 import {
+  CHAT_LANDING_SUGGESTIONS,
   INSIGHTS_SUGGESTION_ICONS,
-  INSIGHTS_SUGGESTIONS,
 } from "@/lib/insights-suggestions";
 import { useRoutes } from "@/routes";
 
@@ -272,7 +272,9 @@ function ChatHomeRecents(): ReactElement {
   return (
     <section className="flex flex-col gap-2">
       <div className="flex items-center justify-between px-3">
-        <h2 className="text-muted-foreground text-sm font-medium">Recents</h2>
+        <h2 className="text-muted-foreground text-sm font-medium">
+          Recent Chats
+        </h2>
         {chats.length > RECENTS_COLLAPSED_COUNT && (
           <button
             type="button"
@@ -378,8 +380,8 @@ function ChatHomeSuggestions({
       <h2 className="text-muted-foreground px-3 text-sm font-medium">
         Suggestions
       </h2>
-      <div className="flex flex-wrap gap-2 px-3">
-        {INSIGHTS_SUGGESTIONS.default.map((suggestion) => {
+      <div className="flex flex-wrap gap-x-2 gap-y-2.5 px-3">
+        {CHAT_LANDING_SUGGESTIONS.map((suggestion) => {
           const SuggestionIcon =
             INSIGHTS_SUGGESTION_ICONS[suggestion.icon ?? "sparkles"];
           return (
@@ -418,7 +420,7 @@ export function ChatConversation(): ReactElement {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="border-border flex shrink-0 items-center justify-between border-b px-4 py-3">
+      <header className="border-border flex shrink-0 items-center gap-3 border-b px-4 py-3">
         <Link
           to={routes.chat.href()}
           aria-label="Back to chat"
@@ -426,10 +428,13 @@ export function ChatConversation(): ReactElement {
         >
           <ChevronLeft className="size-4" />
         </Link>
+        <div className="text-foreground min-w-0 flex-1 truncate text-left text-base font-medium">
+          {assistantReady && <ChatConversationTitle />}
+        </div>
         <button
           type="button"
           onClick={startNewChat}
-          className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-sm"
+          className="text-muted-foreground hover:text-foreground flex shrink-0 items-center gap-1.5 text-sm"
         >
           <SquarePen className="size-4" />
           New chat
@@ -440,6 +445,17 @@ export function ChatConversation(): ReactElement {
       </div>
     </div>
   );
+}
+
+/**
+ * The active conversation's title for the header. Reads the runtime's thread
+ * list item, which assistant-ui updates live when the backend `generateTitle`
+ * stream lands — so it flips from "New chat" to the generated title on its own.
+ * Must render inside the shared runtime (gated on assistantReady).
+ */
+function ChatConversationTitle(): ReactElement {
+  const title = useAssistantState(({ threadListItem }) => threadListItem.title);
+  return <>{title || "New chat"}</>;
 }
 
 function ConversationBody({
@@ -475,8 +491,11 @@ function ConversationSurface({
 // not a flex column), so the chat surface fills it with `h-full`; using
 // `flex-1` here would be inert and let the composer overflow off-screen.
 function ChatSurface(): ReactElement {
+  // `gram-chat-fullpage` lets the shared Elements customCss give the composer a
+  // roomier height on the full page (via :host-context) without affecting the
+  // compact docked panel — see CHAT_FULLPAGE_COMPOSER_CSS in insights-dock.
   return (
-    <div className="h-full overflow-hidden">
+    <div className="gram-chat-fullpage h-full overflow-hidden">
       <Chat />
     </div>
   );

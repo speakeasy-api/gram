@@ -86,6 +86,56 @@ export interface InsightsSuggestion {
   icon?: InsightsSuggestionIcon;
 }
 
+/**
+ * Starter prompts for the full-page chat landing + home widget. Pitched at the
+ * questions an enterprise platform, security, or FinOps lead actually asks of
+ * their AI usage — reliability, governance, exposure, spend, and adoption.
+ */
+export const CHAT_LANDING_SUGGESTIONS: InsightsSuggestion[] = [
+  {
+    title: "Any secrets or PII in chats?",
+    label: "Sensitive-data scan",
+    icon: "shield",
+    prompt:
+      "Scan recent agent conversations for sensitive-data exposure — leaked secrets, PII, or prompt-injection attempts. Show me the findings, how serious each is, and which chats they came from.",
+  },
+  {
+    title: "Any unapproved servers?",
+    label: "Shadow MCP usage",
+    icon: "server",
+    prompt:
+      "Are agents calling any MCP servers or tools that aren't on our approved list? List the shadow servers, who's calling them, and how often.",
+  },
+  {
+    title: "Which tools are erroring?",
+    label: "Failure hotspots",
+    icon: "alert",
+    prompt:
+      "Which tools and MCP servers are failing the most right now? Group the errors by pattern and tell me which users or clients are hitting them hardest.",
+  },
+  {
+    title: "What's driving our spend?",
+    label: "Token & cost drivers",
+    icon: "coins",
+    prompt:
+      "Break down token spend over the last 30 days by tool, model, and client, and call out the biggest cost drivers and any sudden jumps.",
+  },
+  {
+    title: "Is adoption growing?",
+    label: "Week-over-week adoption",
+    icon: "trend",
+    prompt:
+      "How is adoption trending week over week — active end users, agent sessions, and tool calls — and which teams or clients are driving the growth?",
+  },
+  {
+    title: "What's getting slower?",
+    label: "Latency regressions",
+    icon: "gauge",
+    prompt:
+      "Which tools have the worst p95 latency, and which ones have regressed the most this week compared to last? Flag anything that looks like it's degrading.",
+  },
+];
+
 type SuggestionEntry =
   | InsightsSuggestion[]
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- per-entry signatures vary; call sites get exact types from the object literal

@@ -167,6 +167,23 @@ const CHAT_MARKDOWN_CSS = `
   .aui-md-ul, .aui-md-ol { margin-top: 0.75rem; margin-bottom: 0.75rem; }
 `;
 
+// The docked composer above is intentionally compact. On the full-page chat
+// (ChatSurface wraps it in `.gram-chat-fullpage`) the composer should breathe,
+// so give it a roomier min-height + padding. Scoped via :host-context so the
+// docked panel keeps its tight pill.
+const CHAT_FULLPAGE_COMPOSER_CSS = `
+  :host-context(.gram-chat-fullpage) .aui-composer-root { min-height: 3.25rem; }
+  :host-context(.gram-chat-fullpage) .aui-composer-input {
+    min-height: 3.25rem;
+    padding-top: 0.875rem;
+    padding-bottom: 0.875rem;
+    font-size: 0.9375rem;
+  }
+  :host-context(.gram-chat-fullpage) .aui-composer-wrapper {
+    padding-bottom: 1.25rem;
+  }
+`;
+
 function DockSubmitButton() {
   return (
     <button
@@ -837,7 +854,10 @@ export function InsightsProvider({
       },
       theme: {
         colorScheme: theme === "dark" ? "dark" : "light",
-        customCss: DOCK_PANEL_COMPOSER_CSS + CHAT_MARKDOWN_CSS,
+        customCss:
+          DOCK_PANEL_COMPOSER_CSS +
+          CHAT_MARKDOWN_CSS +
+          CHAT_FULLPAGE_COMPOSER_CSS,
       },
     }),
     [
