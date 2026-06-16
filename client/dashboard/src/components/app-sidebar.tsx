@@ -96,6 +96,7 @@ export function AppSidebar({
     routes.catalog,
     routes.playground,
     ...(isDeploymentsPageEnabled ? [routes.deployments] : []),
+    routes.userSessions,
   ].some((r) => r.active);
 
   const buildActive = [
@@ -209,6 +210,10 @@ export function AppSidebar({
                     scope={scopeFor(routes.deployments)}
                   />
                 )}
+                <ScopeGatedNavItem
+                  item={routes.userSessions}
+                  scope={scopeFor(routes.userSessions)}
+                />
               </CollapsibleNavGroup>
 
               {/* Build group */}

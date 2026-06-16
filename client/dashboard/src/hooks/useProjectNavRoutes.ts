@@ -51,6 +51,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       ...(isDeploymentsPageEnabled
         ? [{ route: routes.deployments, scope: readWrite }]
         : []),
+      { route: routes.userSessions, scope: read },
       { route: routes.mcp, scope: ["mcp:read", "mcp:write"] },
       ...(isAssistantsEnabled
         ? [{ route: routes.assistants, scope: read }]
