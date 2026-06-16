@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 9d47b9a858b32b5bbe3e56d6f029b169
+  docChecksum: 6274491aabc5a0df76968849b8a9b738
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -604,6 +604,10 @@ trackedFiles:
     last_write_checksum: sha1:5b92f014430fc0fd3cc9d90c3f5e007e0edc5e10
   docs/models/components/metricsmode.md:
     last_write_checksum: sha1:ed17c3e43855f27a77dccc82c9e39a2c093f4a3a
+  docs/models/components/migratelegacygramregistrationsform.md:
+    last_write_checksum: sha1:ce49ad4acc0e731ce80b3523d5e0b764734758aa
+  docs/models/components/migratelegacygramregistrationsresult.md:
+    last_write_checksum: sha1:4cc98660b1d0909d4f82be6af0f9f53732e5c6d8
   docs/models/components/mintusersessionrequestbody.md:
     last_write_checksum: sha1:8b53450b9a389ed451bb0fa7839319ffaada87b9
   docs/models/components/mintusersessionresponsebody.md:
@@ -2630,6 +2634,14 @@ trackedFiles:
     last_write_checksum: sha1:ebe0a88710568bef5d9528a7b3342d15a802626f
   docs/models/operations/logoutsecurity.md:
     last_write_checksum: sha1:82795394ef763c56925a3db543cfe616e9e10dea
+  docs/models/operations/migratelegacygramregistrationsrequest.md:
+    last_write_checksum: sha1:e97f7bd95d99b0cc8a192760626a2be77c4f7b7b
+  docs/models/operations/migratelegacygramregistrationssecurity.md:
+    last_write_checksum: sha1:ae8bfd2f6c11f15cd78e10f207e8eed365d04f30
+  docs/models/operations/migratelegacygramregistrationssecurityoption1.md:
+    last_write_checksum: sha1:7c7bd2127339cd5c8ac80beb0528ce2b6dd706fc
+  docs/models/operations/migratelegacygramregistrationssecurityoption2.md:
+    last_write_checksum: sha1:533e38c615d2cf0c4e675e82256066eac4620aed
   docs/models/operations/mintusersessionrequest.md:
     last_write_checksum: sha1:29b29ceb0d44cfff3b0f72d493ee158017976eca
   docs/models/operations/mintusersessionsecurity.md:
@@ -3307,7 +3319,7 @@ trackedFiles:
   docs/sdks/usersessionconsents/README.md:
     last_write_checksum: sha1:c8ee62f37ff2ef009e1d8568dea2052919c7ff71
   docs/sdks/usersessionissuers/README.md:
-    last_write_checksum: sha1:4ca2034c1acb2aa7c33a24577879001ddec510e3
+    last_write_checksum: sha1:5da1909d83c2b5c5f04790a6c286488edb59986f
   docs/sdks/usersessions/README.md:
     last_write_checksum: sha1:f93064398cc47eea90d8b01bd83af0195602770d
   docs/sdks/variations/README.md:
@@ -3930,6 +3942,8 @@ trackedFiles:
     last_write_checksum: sha1:992e3b100bce55812a21b32415d4b9c29b9c9bfd
   src/funcs/userSessionIssuersList.ts:
     last_write_checksum: sha1:123226f0caa633433e0583300df7d4dbcc74f27d
+  src/funcs/userSessionIssuersMigrateLegacyGramRegistrations.ts:
+    last_write_checksum: sha1:21359538c11b403cc37cf9886e5393295b5e8385
   src/funcs/userSessionIssuersUpdate.ts:
     last_write_checksum: sha1:3b223b6df19baa1ccaca50289db66d7b50183b50
   src/funcs/userSessionsList.ts:
@@ -4287,7 +4301,7 @@ trackedFiles:
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:d0ca06224429ce28fd9acb778858df4a44140a8e
+    last_write_checksum: sha1:2bece1eb78c8f0f74b90865f12dbc5449ee75ec7
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     last_write_checksum: sha1:549d388111333748195b4791e63fd64f4a6e7140
@@ -4455,6 +4469,10 @@ trackedFiles:
     last_write_checksum: sha1:78224741968880f86a10b5ed9aeecac079504722
   src/models/components/mcpserver.ts:
     last_write_checksum: sha1:2c9a98e666e39fcf4ea2491a599781a4793972d5
+  src/models/components/migratelegacygramregistrationsform.ts:
+    last_write_checksum: sha1:1d8c7d25cddf39f1f96cfec5d9d466a098603112
+  src/models/components/migratelegacygramregistrationsresult.ts:
+    last_write_checksum: sha1:26c989c5992c3eb0cab25cb3264ddc90dbdd97ff
   src/models/components/mintusersessionrequestbody.ts:
     last_write_checksum: sha1:f71c7117fac7cb7aea1164ccad92126cae26edc8
   src/models/components/mintusersessionresponsebody.ts:
@@ -5256,7 +5274,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:518294bc91e36370b58c7ea343ad50cb7fd5474c
+    last_write_checksum: sha1:b57e7430136e4369e931d96ffc3e0b6e6b9950e2
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     last_write_checksum: sha1:082b8a2ed705b0b42b924e676b651e9431e8fddc
@@ -5392,6 +5410,8 @@ trackedFiles:
     last_write_checksum: sha1:3ff043c8448415f3baf641d1b1f3ecd5883e1ec0
   src/models/operations/logout.ts:
     last_write_checksum: sha1:e7a8a55498652b4bb691e5cfb28825baeeac3a40
+  src/models/operations/migratelegacygramregistrations.ts:
+    last_write_checksum: sha1:f414e958c74e883df5190b52dfa120d7f6ef940c
   src/models/operations/mintusersession.ts:
     last_write_checksum: sha1:8c8219143d24617958fe1612ba2042bef61af7af
   src/models/operations/pausetriggerinstance.ts:
@@ -5902,7 +5922,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:3adeebbb73973b9eab79a59847bed23e1b6e38f1
+    last_write_checksum: sha1:7511a20fc88eab9f3bb95c058fe2c3eb0b151d1a
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     last_write_checksum: sha1:34d434d40565d270fde497f4cec6bb9befffb505
@@ -6050,6 +6070,8 @@ trackedFiles:
     last_write_checksum: sha1:61911a4acd50a4d7c6f1cda61717090e083d64f2
   src/react-query/members.ts:
     last_write_checksum: sha1:c12a6dc5ce5c89856d0ff50ecdd4a1ff0200eb9f
+  src/react-query/migrateLegacyGramRegistrations.ts:
+    last_write_checksum: sha1:45a10d3b4715a70972931d1fc7ef10f229a60605
   src/react-query/mintUserSession.ts:
     last_write_checksum: sha1:18b6c3c8a8f0d7f1b7e7510e02dca16d9dd83208
   src/react-query/onboardingStatus.core.ts:
@@ -6577,7 +6599,7 @@ trackedFiles:
   src/sdk/usersessionconsents.ts:
     last_write_checksum: sha1:4aea7490fa8906e6c4c6d2c7e35ee0891e2b81aa
   src/sdk/usersessionissuers.ts:
-    last_write_checksum: sha1:f2cff50f27ec9cee58fe46928d7b8226124e2dda
+    last_write_checksum: sha1:a018e930aa897ce82f4de04e21adcb75809c23ba
   src/sdk/usersessions.ts:
     last_write_checksum: sha1:40bffd76b1ca97896ab350158dd6dfcb0a282521
   src/sdk/variations.ts:
@@ -9943,6 +9965,17 @@ examples:
       responses:
         "200":
           application/json: {"target_time_series": [], "target_tool_breakdown": [{"event_count": 655679, "failure_count": 908450, "failure_rate": 3743.13, "success_count": 540045, "target_id": "<id>", "target_kind": "skill", "target_label": "<value>", "target_type": "hosted_mcp_server", "tool_name": "<value>"}], "targets": [], "totals": {"event_count": 497777, "failure_count": 36101, "failure_rate": 2345.24, "success_count": 527861, "unique_targets": 37301, "unique_tools": 472763, "unique_users": 968692}, "user_time_series": [], "users": [], "users_by_target": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  migrateLegacyGramRegistrations:
+    speakeasy-default-migrate-legacy-gram-registrations:
+      requestBody:
+        application/json: {"oauth_proxy_provider_id": "3eac0b8e-5e52-4c9e-b75b-3fae65b02404", "user_session_issuer_id": "0a992ba5-fa63-4192-8c0c-afd21c749aad"}
+      responses:
+        "200":
+          application/json: {"migrated_count": 310592}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

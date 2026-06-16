@@ -233,6 +233,8 @@ export * from "./mcpexporttool.js";
 export * from "./mcpmetadata.js";
 export * from "./mcpregistry.js";
 export * from "./mcpserver.js";
+export * from "./migratelegacygramregistrationsform.js";
+export * from "./migratelegacygramregistrationsresult.js";
 export * from "./mintusersessionrequestbody.js";
 export * from "./mintusersessionresponsebody.js";
 export * from "./modelusage.js";

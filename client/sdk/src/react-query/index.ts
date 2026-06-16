@@ -168,6 +168,7 @@ export * from "./mcpRegistriesClearCache.js";
 export * from "./mcpRegistriesGetServerDetails.js";
 export * from "./mcpServers.js";
 export * from "./members.js";
+export * from "./migrateLegacyGramRegistrations.js";
 export * from "./mintUserSession.js";
 export * from "./onboardingStatus.js";
 export * from "./organization.js";

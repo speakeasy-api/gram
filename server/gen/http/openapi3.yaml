@@ -31079,6 +31079,110 @@ paths:
                 type: cursor
             x-speakeasy-react-hook:
                 name: UserSessionIssuers
+    /rpc/userSessionIssuers.migrateLegacyGramRegistrations:
+        post:
+            description: 'One-off migration: lift the legacy Redis dynamic-client registrations from a gram-type oauth_proxy_provider into user_session_clients on the given user_session_issuer, so migrated MCP clients skip re-registration and re-auth. Removed once the OAuth proxy is retired.'
+            operationId: migrateLegacyGramRegistrations
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/MigrateLegacyGramRegistrationsForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/MigrateLegacyGramRegistrationsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: migrateLegacyGramRegistrations userSessionIssuers
+            tags:
+                - userSessionIssuers
+            x-speakeasy-name-override: migrateLegacyGramRegistrations
+            x-speakeasy-react-hook:
+                name: MigrateLegacyGramRegistrations
     /rpc/userSessionIssuers.update:
         post:
             description: Update fields on an existing user_session_issuer.
@@ -38700,6 +38804,31 @@ components:
                 - visibility
                 - created_at
                 - updated_at
+        MigrateLegacyGramRegistrationsForm:
+            type: object
+            properties:
+                oauth_proxy_provider_id:
+                    type: string
+                    description: The gram-type oauth_proxy_provider whose Redis registrations are migrated.
+                    format: uuid
+                user_session_issuer_id:
+                    type: string
+                    description: The target user_session_issuer the migrated user_session_clients attach to.
+                    format: uuid
+            description: Form for migrating legacy gram OAuth-proxy client registrations onto a user_session_issuer.
+            required:
+                - oauth_proxy_provider_id
+                - user_session_issuer_id
+        MigrateLegacyGramRegistrationsResult:
+            type: object
+            properties:
+                migrated_count:
+                    type: integer
+                    description: Number of user_session_clients newly inserted; already-migrated registrations count as zero.
+                    format: int64
+            description: Result of a legacy gram registration migration.
+            required:
+                - migrated_count
         MintUserSessionRequestBody:
             type: object
             properties:
