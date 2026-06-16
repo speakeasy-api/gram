@@ -2043,12 +2043,10 @@ function PolicySheetBody({
                 description="Turn on detector categories and attach your organization's custom rules."
               />
 
-              {/* Built-in detectors */}
+              {/* Built-in rules */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium">
-                    Built-in detectors
-                  </Label>
+                  <Label className="text-sm font-medium">Built-in rules</Label>
                   <span className="text-muted-foreground text-xs">
                     {selectedBuiltinCount} on
                   </span>
