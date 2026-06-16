@@ -27,6 +27,18 @@ def _add_open_telemetry_spans(_, __, event_dict):
     return event_dict
 
 
+def _rename_event_to_message(_, __, event_dict):
+    """Rename the ``event`` key to ``message``, when present.
+
+    Unlike ``structlog.processors.EventRenamer``, this guards on the key being
+    present so log calls without an event (e.g. ``log.info(None, foo="bar")``)
+    don't raise a ``KeyError``.
+    """
+    if "event" in event_dict:
+        event_dict["message"] = event_dict.pop("event")
+    return event_dict
+
+
 def _add_base_attrs(base_attrs: dict[str, Any]):
     """Build a processor that merges fixed base attributes into every event."""
 
@@ -71,6 +83,7 @@ def configure_logging(
         renderer = structlog.dev.ConsoleRenderer()
     else:
         shared_processors.append(structlog.processors.format_exc_info)
+        shared_processors.append(_rename_event_to_message)
         renderer = structlog.processors.JSONRenderer()
 
     structlog.configure(
