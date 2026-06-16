@@ -2,9 +2,10 @@ import { useState } from "react";
 import { FacetSelect } from "@/components/auditlogs/feed";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { SessionTableRow } from "@/components/sessions/SessionTableRow";
 import { Button } from "@/components/ui/button";
+import { DotTable } from "@/components/ui/dot-table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SessionRow } from "@/components/sessions/SessionRow";
 import {
   useUserSessionFacets,
   useUserSessionsInfinite,
@@ -60,74 +61,92 @@ function UserSessionsInner(): JSX.Element {
   const sessions = data?.pages.flatMap((p) => p.result.items) ?? [];
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        <FacetSelect
-          label="Status"
-          value={status}
-          onValueChange={(v) => setStatus(v as StatusFilter)}
-          placeholder="All statuses"
-          allLabel="All statuses"
-          options={STATUS_FILTER_OPTIONS}
-        />
-        <FacetSelect
-          label="MCP server"
-          value={issuerId}
-          onValueChange={setIssuerId}
-          placeholder="All servers"
-          allLabel="All servers"
-          options={facets?.servers ?? []}
-        />
-        <FacetSelect
-          label="Client"
-          value={clientId}
-          onValueChange={setClientId}
-          placeholder="All clients"
-          allLabel="All clients"
-          options={facets?.clients ?? []}
-        />
-        <FacetSelect
-          label="User"
-          value={subjectUrn}
-          onValueChange={setSubjectUrn}
-          placeholder="All users"
-          allLabel="All users"
-          options={facets?.users ?? []}
-        />
-      </div>
-
-      {isPending ? (
-        <div className="space-y-2">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="h-12 w-full" />
-          ))}
-        </div>
-      ) : sessions.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No sessions found</p>
-      ) : (
-        <ul className="divide-border divide-y rounded-md border">
-          {sessions.map((s) => (
-            <SessionRow
-              key={s.id}
-              session={s}
-              onRevoked={() => void refetch()}
+    <Page.Section>
+      <Page.Section.Title>User Sessions</Page.Section.Title>
+      <Page.Section.Description>
+        Sessions clients hold into this project&apos;s MCP servers, established
+        via OAuth. Revoke a session to immediately cut off access.
+      </Page.Section.Description>
+      <Page.Section.Body>
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            <FacetSelect
+              label="Status"
+              value={status}
+              onValueChange={(v) => setStatus(v as StatusFilter)}
+              placeholder="All statuses"
+              allLabel="All statuses"
+              options={STATUS_FILTER_OPTIONS}
             />
-          ))}
-        </ul>
-      )}
+            <FacetSelect
+              label="MCP server"
+              value={issuerId}
+              onValueChange={setIssuerId}
+              placeholder="All servers"
+              allLabel="All servers"
+              options={facets?.servers ?? []}
+            />
+            <FacetSelect
+              label="Client"
+              value={clientId}
+              onValueChange={setClientId}
+              placeholder="All clients"
+              allLabel="All clients"
+              options={facets?.clients ?? []}
+            />
+            <FacetSelect
+              label="User"
+              value={subjectUrn}
+              onValueChange={setSubjectUrn}
+              placeholder="All users"
+              allLabel="All users"
+              options={facets?.users ?? []}
+            />
+          </div>
 
-      {hasNextPage && (
-        <div className="flex justify-center">
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={isFetchingNextPage}
-            onClick={() => void fetchNextPage()}
-          >
-            {isFetchingNextPage ? "Loading…" : "Load more"}
-          </Button>
+          {isPending ? (
+            <div className="space-y-2">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : sessions.length === 0 ? (
+            <p className="text-muted-foreground text-sm">No sessions found</p>
+          ) : (
+            <DotTable
+              headers={[
+                { label: "Subject" },
+                { label: "Client" },
+                { label: "MCP server" },
+                { label: "Status" },
+                { label: "Expires" },
+                { label: "", className: "w-10" },
+              ]}
+            >
+              {sessions.map((s) => (
+                <SessionTableRow
+                  key={s.id}
+                  session={s}
+                  onRevoked={() => void refetch()}
+                />
+              ))}
+            </DotTable>
+          )}
+
+          {hasNextPage && (
+            <div className="flex justify-center">
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={isFetchingNextPage}
+                onClick={() => void fetchNextPage()}
+              >
+                {isFetchingNextPage ? "Loading…" : "Load more"}
+              </Button>
+            </div>
+          )}
         </div>
-      )}
-    </div>
+      </Page.Section.Body>
+    </Page.Section>
   );
 }

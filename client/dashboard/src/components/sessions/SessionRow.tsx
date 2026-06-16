@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { format, formatDistanceToNow } from "date-fns";
 import type { UserSession } from "@gram/client/models/components";
-import { useRevokeUserSessionMutation } from "@gram/client/react-query";
 
 import {
   ContextMenu,
@@ -9,9 +8,7 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { Dialog } from "@/components/ui/dialog";
 import { MoreActions } from "@/components/ui/more-actions";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   sessionStatus,
@@ -19,6 +16,7 @@ import {
   STATUS_PRESENTATION,
 } from "@/lib/user-session-status";
 import { SessionStatusBadge } from "./SessionStatusBadge";
+import { RevokeSessionDialog } from "./RevokeSessionDialog";
 
 export function SessionRow({
   session,
@@ -28,20 +26,8 @@ export function SessionRow({
   onRevoked: () => void;
 }): JSX.Element {
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const revoke = useRevokeUserSessionMutation();
   const status = sessionStatus(session);
   const canRevoke = status === "active";
-
-  const doRevoke = () =>
-    revoke.mutate(
-      { request: { id: session.id } },
-      {
-        onSuccess: () => {
-          setConfirmOpen(false);
-          onRevoked();
-        },
-      },
-    );
 
   const rowContent = (
     <li className="flex items-center gap-3 px-3 py-2">
@@ -95,29 +81,12 @@ export function SessionRow({
       ) : (
         rowContent
       )}
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <Dialog.Content>
-          <Dialog.Header>
-            <Dialog.Title>Revoke session?</Dialog.Title>
-            <Dialog.Description>
-              This immediately invalidates the session for{" "}
-              {subjectLabel(session)}. The client will need to re-authenticate.
-            </Dialog.Description>
-          </Dialog.Header>
-          <Dialog.Footer>
-            <Button variant="ghost" onClick={() => setConfirmOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={revoke.isPending}
-              onClick={doRevoke}
-            >
-              {revoke.isPending ? "Revoking…" : "Revoke"}
-            </Button>
-          </Dialog.Footer>
-        </Dialog.Content>
-      </Dialog>
+      <RevokeSessionDialog
+        session={session}
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        onRevoked={onRevoked}
+      />
     </>
   );
 }
