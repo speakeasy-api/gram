@@ -32,7 +32,6 @@ func LoginStateCacheKey(state string) string {
 }
 
 func (s LoginState) CacheKey() string              { return LoginStateCacheKey(s.State) }
-func (s LoginState) AdditionalCacheKeys() []string { return []string{} }
 func (s LoginState) TTL() time.Duration            { return loginStateTTL }
 
 func randomString(n int) (string, error) {
