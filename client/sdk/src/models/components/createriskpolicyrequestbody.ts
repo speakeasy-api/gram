@@ -10,11 +10,6 @@ import {
   RiskPolicyModelConfig$Outbound,
   RiskPolicyModelConfig$outboundSchema,
 } from "./riskpolicymodelconfig.js";
-import {
-  RiskPolicyRuleConfig,
-  RiskPolicyRuleConfig$Outbound,
-  RiskPolicyRuleConfig$outboundSchema,
-} from "./riskpolicyruleconfig.js";
 
 /**
  * Policy action: flag or block.
@@ -50,7 +45,7 @@ export type CreateRiskPolicyRequestBody = {
    */
   autoName?: boolean | undefined;
   /**
-   * Custom detection rule ids to enable for this policy.
+   * Custom detection rule ids to attach as detectors: a match produces a finding.
    */
   customRuleIds?: Array<string> | undefined;
   /**
@@ -61,6 +56,10 @@ export type CreateRiskPolicyRequestBody = {
    * Whether the policy is active.
    */
   enabled?: boolean | undefined;
+  /**
+   * Custom detection rule ids to attach as exemptions: when one matches a message, the whole policy is skipped for that message (an allowlist). Disjoint from custom_rule_ids.
+   */
+  exemptRuleIds?: Array<string> | undefined;
   /**
    * Message types this policy applies to. When empty or omitted, the policy scans all supported types.
    */
@@ -87,10 +86,6 @@ export type CreateRiskPolicyRequestBody = {
    */
   promptInjectionRules?: Array<string> | undefined;
   /**
-   * Per-rule configuration keyed by canonical rule_id (built-in + custom). Maps a rule to {action: deny|allow}; rules absent from the map default to deny.
-   */
-  rules?: { [k: string]: RiskPolicyRuleConfig } | undefined;
-  /**
    * Detection sources to enable.
    */
   sources?: Array<string> | undefined;
@@ -116,6 +111,7 @@ export type CreateRiskPolicyRequestBody$Outbound = {
   custom_rule_ids?: Array<string> | undefined;
   disabled_rules?: Array<string> | undefined;
   enabled?: boolean | undefined;
+  exempt_rule_ids?: Array<string> | undefined;
   message_types?: Array<string> | undefined;
   model_config?: RiskPolicyModelConfig$Outbound | undefined;
   name?: string | undefined;
@@ -123,7 +119,6 @@ export type CreateRiskPolicyRequestBody$Outbound = {
   presidio_entities?: Array<string> | undefined;
   prompt?: string | undefined;
   prompt_injection_rules?: Array<string> | undefined;
-  rules?: { [k: string]: RiskPolicyRuleConfig$Outbound } | undefined;
   sources?: Array<string> | undefined;
   user_message?: string | undefined;
 };
@@ -139,6 +134,7 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     customRuleIds: z.optional(z.array(z.string())),
     disabledRules: z.optional(z.array(z.string())),
     enabled: z.optional(z.boolean()),
+    exemptRuleIds: z.optional(z.array(z.string())),
     messageTypes: z.optional(z.array(z.string())),
     modelConfig: z.optional(RiskPolicyModelConfig$outboundSchema),
     name: z.optional(z.string()),
@@ -146,9 +142,6 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     presidioEntities: z.optional(z.array(z.string())),
     prompt: z.optional(z.string()),
     promptInjectionRules: z.optional(z.array(z.string())),
-    rules: z.optional(
-      z.record(z.string(), RiskPolicyRuleConfig$outboundSchema),
-    ),
     sources: z.optional(z.array(z.string())),
     userMessage: z.optional(z.string()),
   }),
@@ -157,6 +150,7 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
       autoName: "auto_name",
       customRuleIds: "custom_rule_ids",
       disabledRules: "disabled_rules",
+      exemptRuleIds: "exempt_rule_ids",
       messageTypes: "message_types",
       modelConfig: "model_config",
       policyType: "policy_type",

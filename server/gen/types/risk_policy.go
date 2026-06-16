@@ -30,12 +30,12 @@ type RiskPolicy struct {
 	// means every rule in the selected categories runs; matching findings are
 	// dropped at scan time.
 	DisabledRules []string
-	// Custom detection rule ids enabled for this policy.
+	// Custom detection rule ids attached as detectors: a match produces a finding.
 	CustomRuleIds []string
-	// Per-rule configuration keyed by canonical rule_id (built-in + custom). Maps
-	// a rule to {action: deny|allow}; rules absent from the map default to deny.
-	// An allow rule short-circuits the policy for a message it matches.
-	Rules map[string]*RiskPolicyRuleConfig
+	// Custom detection rule ids attached as exemptions: when one matches a
+	// message, the whole policy is skipped for that message (an allowlist).
+	// Disjoint from custom_rule_ids.
+	ExemptRuleIds []string
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.

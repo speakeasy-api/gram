@@ -91,12 +91,9 @@ import {
 import { cn } from "@/lib/utils";
 import { ruleIdToPresidioEntity } from "./rule-ids";
 import {
-  buildPolicyRules,
-  policyRuleActions,
   ruleConditions,
   ruleRequiredMessageTypes,
   useDetectionRulesStore,
-  type CustomRuleAction,
 } from "./detection-rules-data";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -699,12 +696,12 @@ function PolicyCenterContent() {
   const [selectedCustomRuleIds, setSelectedCustomRuleIds] = useState<
     Set<string>
   >(new Set<string>());
-  // Per-rule deny/allow polarity for this policy (risk_policies.rules). Only
-  // entries that differ from the deny default need to be tracked, but we keep
-  // every allow-listed rule here; absent rules render and persist as deny.
-  const [customRuleActions, setCustomRuleActions] = useState<
-    Map<string, CustomRuleAction>
-  >(new Map());
+  // Custom rules attached as exemptions (risk_policies.exempt_rule_ids): when one
+  // matches a message, the whole policy is skipped for that message. Disjoint
+  // from selectedCustomRuleIds (detectors) — a rule is one or the other here.
+  const [exemptRuleIds, setExemptRuleIds] = useState<Set<string>>(
+    new Set<string>(),
+  );
   const [selectedMessageTypes, setSelectedMessageTypes] = useState<
     Set<PolicyMessageType>
   >(new Set(ALL_POLICY_MESSAGE_TYPES));
@@ -784,7 +781,7 @@ function PolicyCenterContent() {
     setSelectedCategories(new Set<RuleCategory>());
     setDisabledRules(new Set());
     setSelectedCustomRuleIds(new Set<string>());
-    setCustomRuleActions(new Map());
+    setExemptRuleIds(new Set<string>());
     setSelectedMessageTypes(new Set(ALL_POLICY_MESSAGE_TYPES));
     setFormAction("flag");
     setFormAutoName(true);
@@ -838,7 +835,7 @@ function PolicyCenterContent() {
     setSelectedCategories(categories);
     setDisabledRules(new Set(policy.disabledRules ?? []));
     setSelectedCustomRuleIds(new Set<string>(customRuleIds));
-    setCustomRuleActions(policyRuleActions(policy.rules));
+    setExemptRuleIds(new Set<string>(policy.exemptRuleIds ?? []));
     setSelectedMessageTypes(policyMessageTypesForForm(policy.messageTypes));
     setFormAction((policy.action as PolicyAction) ?? "flag");
     setFormAutoName(policy.autoName ?? true);
@@ -952,7 +949,7 @@ function PolicyCenterContent() {
             promptInjectionRules,
             disabledRules: payloadDisabled,
             customRuleIds: [...selectedCustomRuleIds],
-            rules: buildPolicyRules(selectedCustomRuleIds, customRuleActions),
+            exemptRuleIds: [...exemptRuleIds],
             messageTypes,
             action,
             autoName: formAutoName,
@@ -971,7 +968,7 @@ function PolicyCenterContent() {
             promptInjectionRules,
             disabledRules: payloadDisabled,
             customRuleIds: [...selectedCustomRuleIds],
-            rules: buildPolicyRules(selectedCustomRuleIds, customRuleActions),
+            exemptRuleIds: [...exemptRuleIds],
             messageTypes,
             action,
             autoName: formAutoName,
@@ -1431,8 +1428,8 @@ function PolicyCenterContent() {
                     customRules={customRules}
                     selectedCustomRuleIds={selectedCustomRuleIds}
                     setSelectedCustomRuleIds={setSelectedCustomRuleIds}
-                    customRuleActions={customRuleActions}
-                    setCustomRuleActions={setCustomRuleActions}
+                    exemptRuleIds={exemptRuleIds}
+                    setExemptRuleIds={setExemptRuleIds}
                     selectedMessageTypes={selectedMessageTypes}
                     setSelectedMessageTypes={setSelectedMessageTypes}
                     formAction={formAction}
@@ -2089,8 +2086,8 @@ function PolicySheetBody({
   customRules,
   selectedCustomRuleIds,
   setSelectedCustomRuleIds,
-  customRuleActions,
-  setCustomRuleActions,
+  exemptRuleIds,
+  setExemptRuleIds,
   selectedMessageTypes,
   setSelectedMessageTypes,
   formAction,
@@ -2113,8 +2110,8 @@ function PolicySheetBody({
   customRules: ReturnType<typeof useDetectionRulesStore>["customRules"];
   selectedCustomRuleIds: Set<string>;
   setSelectedCustomRuleIds: (v: Set<string>) => void;
-  customRuleActions: Map<string, CustomRuleAction>;
-  setCustomRuleActions: (v: Map<string, CustomRuleAction>) => void;
+  exemptRuleIds: Set<string>;
+  setExemptRuleIds: (v: Set<string>) => void;
   selectedMessageTypes: Set<PolicyMessageType>;
   setSelectedMessageTypes: (v: Set<PolicyMessageType>) => void;
   formAction: PolicyAction;
@@ -2127,6 +2124,11 @@ function PolicySheetBody({
   // The org's custom rules collapse into their own section; the Customize sheet
   // opens for one detector category at a time.
   const [detectionExpanded, setDetectionExpanded] = useState(true);
+  // Exemptions are an advanced scope concern; collapsed unless the policy
+  // already has some attached.
+  const [exemptionsExpanded, setExemptionsExpanded] = useState(
+    () => exemptRuleIds.size > 0,
+  );
   const [customizeCategory, setCustomizeCategory] =
     useState<RuleCategory | null>(null);
   const selectedBuiltinCount = ALL_CATEGORIES.filter((c) =>
@@ -2154,6 +2156,38 @@ function PolicySheetBody({
   const flagOnlySelected = [...FLAG_ONLY_CATEGORIES].some((c) =>
     selectedCategories.has(c),
   );
+
+  // A custom rule is either a detector or an exemption in a given policy, never
+  // both. Toggling one side removes the id from the other so the two sets stay
+  // disjoint, matching the backend's custom_rule_ids / exempt_rule_ids columns.
+  const toggleDetector = (ruleId: string, checked: boolean) => {
+    const next = new Set(selectedCustomRuleIds);
+    if (checked) {
+      next.add(ruleId);
+      if (exemptRuleIds.has(ruleId)) {
+        const nextExempt = new Set(exemptRuleIds);
+        nextExempt.delete(ruleId);
+        setExemptRuleIds(nextExempt);
+      }
+    } else {
+      next.delete(ruleId);
+    }
+    setSelectedCustomRuleIds(next);
+  };
+  const toggleExemption = (ruleId: string, checked: boolean) => {
+    const next = new Set(exemptRuleIds);
+    if (checked) {
+      next.add(ruleId);
+      if (selectedCustomRuleIds.has(ruleId)) {
+        const nextDetectors = new Set(selectedCustomRuleIds);
+        nextDetectors.delete(ruleId);
+        setSelectedCustomRuleIds(nextDetectors);
+      }
+    } else {
+      next.delete(ruleId);
+    }
+    setExemptRuleIds(next);
+  };
 
   // Coverage gaps: attached custom rules whose targets imply message types the
   // policy scope excludes — those rules silently never run. Built-in detectors
@@ -2222,12 +2256,21 @@ function PolicySheetBody({
             </div>
 
             {customRules.length > 0 && (
-              <CustomRulesPicker
+              <RuleSelectList
+                title="Custom Rules"
+                description={
+                  <>
+                    Attach your organization's custom rules as{" "}
+                    <span className="text-foreground font-medium">
+                      detectors
+                    </span>{" "}
+                    — a match records a finding.
+                  </>
+                }
+                idPrefix="detector"
                 customRules={customRules}
-                selectedCustomRuleIds={selectedCustomRuleIds}
-                setSelectedCustomRuleIds={setSelectedCustomRuleIds}
-                customRuleActions={customRuleActions}
-                setCustomRuleActions={setCustomRuleActions}
+                selectedRuleIds={selectedCustomRuleIds}
+                onToggleRule={toggleDetector}
                 expanded={detectionExpanded}
                 onToggle={() => setDetectionExpanded((v) => !v)}
               />
@@ -2295,6 +2338,24 @@ function PolicySheetBody({
                   </Button>
                 </AlertDescription>
               </Alert>
+            )}
+            {customRules.length > 0 && (
+              <RuleSelectList
+                title="Exemptions"
+                description={
+                  <>
+                    Skip this entire policy for a message when one of these
+                    custom rules matches it (an allowlist). A rule used here
+                    can't also be a detector.
+                  </>
+                }
+                idPrefix="exempt"
+                customRules={customRules}
+                selectedRuleIds={exemptRuleIds}
+                onToggleRule={toggleExemption}
+                expanded={exemptionsExpanded}
+                onToggle={() => setExemptionsExpanded((v) => !v)}
+              />
             )}
           </div>
         )}
@@ -2383,6 +2444,12 @@ function PolicySheetBody({
                       : "None",
                   ]}
                 />
+                {exemptRuleIds.size > 0 && (
+                  <SummaryRow
+                    label="Exemptions"
+                    chips={[`${exemptRuleIds.size} attached`]}
+                  />
+                )}
                 <SummaryRow label="Scope" chips={summaryScopes} />
                 <SummaryRow
                   label="Action"
@@ -2686,37 +2753,35 @@ function ActionPicker({
 }
 
 /* -------------------------------------------------------------------------- */
-/*  CustomRulesPicker                                                          */
+/*  RuleSelectList                                                             */
 /* -------------------------------------------------------------------------- */
 
-function CustomRulesPicker({
+/** A collapsible checkbox list of the org's custom rules. Used twice in the
+ *  standard-policy wizard: in the Detect step to attach rules as detectors, and
+ *  in the Scope step to attach them as exemptions. The two lists drive disjoint
+ *  id sets (custom_rule_ids vs exempt_rule_ids); the caller's onToggleRule keeps
+ *  them mutually exclusive. */
+function RuleSelectList({
+  title,
+  description,
+  idPrefix,
   customRules,
-  selectedCustomRuleIds,
-  setSelectedCustomRuleIds,
-  customRuleActions,
-  setCustomRuleActions,
+  selectedRuleIds,
+  onToggleRule,
   expanded,
   onToggle,
 }: {
+  title: string;
+  description: ReactNode;
+  idPrefix: string;
   customRules: ReturnType<typeof useDetectionRulesStore>["customRules"];
-  selectedCustomRuleIds: Set<string>;
-  setSelectedCustomRuleIds: (v: Set<string>) => void;
-  customRuleActions: Map<string, CustomRuleAction>;
-  setCustomRuleActions: (v: Map<string, CustomRuleAction>) => void;
+  selectedRuleIds: Set<string>;
+  onToggleRule: (ruleId: string, checked: boolean) => void;
   expanded: boolean;
   onToggle: () => void;
 }) {
-  const setRuleAction = (ruleId: string, action: CustomRuleAction) => {
-    const next = new Map(customRuleActions);
-    if (action === "deny") {
-      next.delete(ruleId);
-    } else {
-      next.set(ruleId, action);
-    }
-    setCustomRuleActions(next);
-  };
   const selectedCount = customRules.filter((r) =>
-    selectedCustomRuleIds.has(r.id),
+    selectedRuleIds.has(r.id),
   ).length;
   return (
     <div className="space-y-3">
@@ -2731,9 +2796,7 @@ function CustomRulesPicker({
             expanded && "rotate-90",
           )}
         />
-        <Label className="cursor-pointer text-sm font-medium">
-          Custom Rules
-        </Label>
+        <Label className="cursor-pointer text-sm font-medium">{title}</Label>
         {selectedCount > 0 && (
           <Badge variant="neutral">
             <Badge.Text>{selectedCount} selected</Badge.Text>
@@ -2743,125 +2806,32 @@ function CustomRulesPicker({
       {expanded && (
         <div className="border-border divide-border divide-y rounded-lg border">
           <p className="text-muted-foreground px-4 py-3 text-xs">
-            Your organization's custom rules. For each one you attach, choose
-            whether a match{" "}
-            <span className="text-foreground font-medium">Detects</span>{" "}
-            (records a finding) or{" "}
-            <span className="text-foreground font-medium">Exempts</span> the
-            message from this entire policy.
+            {description}
           </p>
           <div className="space-y-2 px-4 py-3">
-            {customRules.map((rule) => {
-              const checked = selectedCustomRuleIds.has(rule.id);
-              const action = customRuleActions.get(rule.id) ?? "deny";
-              return (
-                <div key={rule.id} className="flex items-center gap-3 py-1">
-                  <Checkbox
-                    id={`custom-${rule.id}`}
-                    checked={checked}
-                    onCheckedChange={(next) => {
-                      const set = new Set(selectedCustomRuleIds);
-                      if (next) {
-                        set.add(rule.id);
-                      } else {
-                        set.delete(rule.id);
-                      }
-                      setSelectedCustomRuleIds(set);
-                    }}
-                  />
-                  <label
-                    htmlFor={`custom-${rule.id}`}
-                    className="min-w-0 flex-1 cursor-pointer truncate text-xs"
-                  >
-                    <span className="text-foreground">
-                      {rule.title || rule.id}
-                    </span>
-                    <span className="text-muted-foreground ml-2 font-mono text-[10px]">
-                      {rule.id}
-                    </span>
-                  </label>
-                  <span
-                    className={cn(
-                      "text-muted-foreground shrink-0 text-[10px]",
-                      !checked && "opacity-50",
-                    )}
-                  >
-                    On match
+            {customRules.map((rule) => (
+              <div key={rule.id} className="flex items-center gap-3 py-1">
+                <Checkbox
+                  id={`${idPrefix}-${rule.id}`}
+                  checked={selectedRuleIds.has(rule.id)}
+                  onCheckedChange={(next) => onToggleRule(rule.id, !!next)}
+                />
+                <label
+                  htmlFor={`${idPrefix}-${rule.id}`}
+                  className="min-w-0 flex-1 cursor-pointer truncate text-xs"
+                >
+                  <span className="text-foreground">
+                    {rule.title || rule.id}
                   </span>
-                  <RuleActionToggle
-                    value={action}
-                    onChange={(next) => setRuleAction(rule.id, next)}
-                    disabled={!checked}
-                  />
-                </div>
-              );
-            })}
+                  <span className="text-muted-foreground ml-2 font-mono text-[10px]">
+                    {rule.id}
+                  </span>
+                </label>
+              </div>
+            ))}
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/*  RuleActionToggle                                                          */
-/* -------------------------------------------------------------------------- */
-
-/** Compact Detect/Exempt segmented control for a custom rule within a policy.
- *  Detect (the default, stored as `deny`) flags findings on a match; Exempt
- *  (stored as `allow`) makes the rule an allowlist that short-circuits the
- *  whole policy for a matched message — accented so the exemption stands out.
- *  Rendered dimmed and inert until the rule is actually attached. */
-function RuleActionToggle({
-  value,
-  onChange,
-  disabled = false,
-}: {
-  value: CustomRuleAction;
-  onChange: (v: CustomRuleAction) => void;
-  disabled?: boolean;
-}) {
-  const options: { key: CustomRuleAction; label: string; title: string }[] = [
-    {
-      key: "deny",
-      label: "Detect",
-      title: "A match contributes a finding",
-    },
-    {
-      key: "allow",
-      label: "Exempt",
-      title:
-        "A match exempts the message from the whole policy (allowlist), flagging nothing",
-    },
-  ];
-  const activeClass = (key: CustomRuleAction) =>
-    key === "allow"
-      ? "bg-warning text-warning-foreground"
-      : "bg-foreground text-background";
-  return (
-    <div
-      className={cn(
-        "border-border inline-flex shrink-0 overflow-hidden rounded-md border",
-        disabled && "opacity-50",
-      )}
-    >
-      {options.map((opt) => (
-        <SimpleTooltip key={opt.key} tooltip={opt.title}>
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={() => onChange(opt.key)}
-            className={cn(
-              "px-2 py-0.5 text-[10px] font-medium transition-colors",
-              value === opt.key
-                ? activeClass(opt.key)
-                : "text-muted-foreground enabled:hover:bg-muted",
-            )}
-          >
-            {opt.label}
-          </button>
-        </SimpleTooltip>
-      ))}
     </div>
   );
 }

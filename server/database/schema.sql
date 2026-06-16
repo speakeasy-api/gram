@@ -2953,14 +2953,13 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   -- Empty/NULL means every rule in the selected categories runs. Scanner
   -- drops any finding whose canonical rule_id appears here.
   disabled_rules TEXT[],
+  -- Custom detection rules attached as detectors: a match produces a finding.
   custom_rule_ids TEXT[] NOT NULL DEFAULT '{}',
-  -- Normalised per-rule config keyed by canonical rule_id (built-in + custom),
-  -- e.g. {"custom.acme": {"action": "deny"}, "custom.allowlist": {"action":
-  -- "allow"}}. Per-rule action is deny (detect) or allow (an allowlist that
-  -- short-circuits the policy). A rule absent from the map (incl. NULL) is
-  -- treated as deny. Membership still lives in custom_rule_ids/sources/
-  -- disabled_rules; a later ticket folds those into this map.
-  rules JSONB,
+  -- Custom rules attached as exemptions (policy application, not detection):
+  -- when one matches a message, the whole policy is skipped for that message
+  -- (an allowlist). Disjoint from custom_rule_ids — a rule is either a detector
+  -- or an exemption in a given policy.
+  exempt_rule_ids TEXT[] NOT NULL DEFAULT '{}',
   message_types TEXT[],
   action TEXT NOT NULL DEFAULT 'flag',
   audience_type TEXT NOT NULL DEFAULT 'everyone',

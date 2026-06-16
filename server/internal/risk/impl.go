@@ -329,11 +329,6 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		return nil, oops.E(oops.CodeUnexpected, err, "generate policy id").Log(ctx, s.logger)
 	}
 
-	rulesJSON, err := policyRulesToStorage(payload.Rules)
-	if err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid rules")
-	}
-
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
@@ -351,7 +346,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		PromptInjectionRules: createPolicyDetectionField(policyType, payload.PromptInjectionRules),
 		DisabledRules:        createPolicyDetectionField(policyType, payload.DisabledRules),
 		CustomRuleIds:        createPolicyDetectionField(policyType, payload.CustomRuleIds),
-		Rules:                rulesJSON,
+		ExemptRuleIds:        createPolicyDetectionField(policyType, payload.ExemptRuleIds),
 		MessageTypes:         payload.MessageTypes,
 		Enabled:              enabled,
 		Action:               action,
@@ -514,6 +509,14 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		customRuleIds = payload.CustomRuleIds
 	}
 
+	exemptRuleIds := current.ExemptRuleIds
+	if payload.ExemptRuleIds != nil {
+		if err := validateCustomRuleIDs(payload.ExemptRuleIds); err != nil {
+			return nil, err
+		}
+		exemptRuleIds = payload.ExemptRuleIds
+	}
+
 	messageTypes := current.MessageTypes
 	if payload.MessageTypes != nil {
 		if err := validateMessageTypes(payload.MessageTypes); err != nil {
@@ -573,17 +576,6 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		modelConfig = mc
 	}
 
-	// Per-rule policy config. Omit to preserve the current map; send an explicit
-	// (possibly empty) map to replace it. An empty map clears the column, so
-	// every rule reverts to deny.
-	rulesJSON := current.Rules
-	if payload.Rules != nil {
-		rulesJSON, err = policyRulesToStorage(payload.Rules)
-		if err != nil {
-			return nil, oops.E(oops.CodeInvalid, err, "invalid rules")
-		}
-	}
-
 	// Regenerate the name only when the caller explicitly opts in on this
 	// update via auto_name=true. Toggling unrelated fields (e.g. enabled)
 	// should not silently rename the policy.
@@ -624,7 +616,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		PromptInjectionRules: promptInjectionRules,
 		DisabledRules:        disabledRules,
 		CustomRuleIds:        customRuleIds,
-		Rules:                rulesJSON,
+		ExemptRuleIds:        exemptRuleIds,
 		MessageTypes:         messageTypes,
 		Enabled:              enabled,
 		Action:               action,
@@ -2242,7 +2234,7 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		PromptInjectionRules: row.PromptInjectionRules,
 		DisabledRules:        row.DisabledRules,
 		CustomRuleIds:        row.CustomRuleIds,
-		Rules:                policyRulesFromStorage(row.Rules),
+		ExemptRuleIds:        row.ExemptRuleIds,
 		MessageTypes:         row.MessageTypes,
 		Enabled:              row.Enabled,
 		Action:               row.Action,
@@ -2273,7 +2265,7 @@ func policyRowSnapshot(row repo.RiskPolicy) *types.RiskPolicy {
 		PromptInjectionRules: row.PromptInjectionRules,
 		DisabledRules:        row.DisabledRules,
 		CustomRuleIds:        row.CustomRuleIds,
-		Rules:                policyRulesFromStorage(row.Rules),
+		ExemptRuleIds:        row.ExemptRuleIds,
 		MessageTypes:         row.MessageTypes,
 		Enabled:              row.Enabled,
 		Action:               row.Action,
@@ -2363,45 +2355,6 @@ func customRuleMatchConfigFromStorage(raw []byte) *types.RiskMatchConfig {
 			Path:            conv.PtrEmpty(c.Path),
 			CaseInsensitive: conv.PtrEmpty(c.CaseInsensitive),
 		})
-	}
-	return out
-}
-
-// policyRulesToStorage converts the API per-rule policy config map into the
-// risk_policies.rules JSONB. Returns nil for an empty map so the column stays
-// NULL (every rule defaults to deny).
-func policyRulesToStorage(in map[string]*types.RiskPolicyRuleConfig) ([]byte, error) {
-	if len(in) == 0 {
-		return nil, nil
-	}
-	out := make(ra.PolicyRules, len(in))
-	for ruleID, cfg := range in {
-		if cfg == nil {
-			continue
-		}
-		out[ruleID] = ra.PolicyRuleConfig{Action: ra.Action(cfg.Action)}
-	}
-	if len(out) == 0 {
-		return nil, nil
-	}
-	raw, err := json.Marshal(out)
-	if err != nil {
-		return nil, fmt.Errorf("marshal policy rules: %w", err)
-	}
-	return raw, nil
-}
-
-// policyRulesFromStorage maps the stored risk_policies.rules JSONB back into the
-// API map, normalising each rule's action to deny when blank. Returns nil for an
-// empty/NULL column.
-func policyRulesFromStorage(raw []byte) map[string]*types.RiskPolicyRuleConfig {
-	pr, err := ra.ParsePolicyRules(raw)
-	if err != nil || len(pr) == 0 {
-		return nil
-	}
-	out := make(map[string]*types.RiskPolicyRuleConfig, len(pr))
-	for ruleID := range pr {
-		out[ruleID] = &types.RiskPolicyRuleConfig{Action: string(pr.ActionFor(ruleID))}
 	}
 	return out
 }
@@ -2635,7 +2588,8 @@ func payloadHasPromptPolicyDetectionConfig(payload *gen.UpdateRiskPolicyPayload)
 		len(payload.PresidioEntities) > 0 ||
 		len(payload.PromptInjectionRules) > 0 ||
 		len(payload.DisabledRules) > 0 ||
-		len(payload.CustomRuleIds) > 0
+		len(payload.CustomRuleIds) > 0 ||
+		len(payload.ExemptRuleIds) > 0
 }
 
 func payloadHasCreatePromptPolicyDetectionConfig(payload *gen.CreateRiskPolicyPayload) bool {
@@ -2643,7 +2597,8 @@ func payloadHasCreatePromptPolicyDetectionConfig(payload *gen.CreateRiskPolicyPa
 		len(payload.PresidioEntities) > 0 ||
 		len(payload.PromptInjectionRules) > 0 ||
 		len(payload.DisabledRules) > 0 ||
-		len(payload.CustomRuleIds) > 0
+		len(payload.CustomRuleIds) > 0 ||
+		len(payload.ExemptRuleIds) > 0
 }
 
 func createPolicyDetectionField(policyType string, values []string) []string {

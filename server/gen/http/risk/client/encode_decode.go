@@ -7535,20 +7535,6 @@ func DecodeTestDetectionRuleResponse(decoder func(*http.Response) goahttp.Decode
 	}
 }
 
-// marshalTypesRiskPolicyRuleConfigToRiskPolicyRuleConfigRequestBody builds a
-// value of type *RiskPolicyRuleConfigRequestBody from a value of type
-// *types.RiskPolicyRuleConfig.
-func marshalTypesRiskPolicyRuleConfigToRiskPolicyRuleConfigRequestBody(v *types.RiskPolicyRuleConfig) *RiskPolicyRuleConfigRequestBody {
-	if v == nil {
-		return nil
-	}
-	res := &RiskPolicyRuleConfigRequestBody{
-		Action: v.Action,
-	}
-
-	return res
-}
-
 // marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigRequestBody builds a
 // value of type *RiskPolicyModelConfigRequestBody from a value of type
 // *types.RiskPolicyModelConfig.
@@ -7565,20 +7551,6 @@ func marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigRequestBody(v *type
 	return res
 }
 
-// marshalRiskPolicyRuleConfigRequestBodyToTypesRiskPolicyRuleConfig builds a
-// value of type *types.RiskPolicyRuleConfig from a value of type
-// *RiskPolicyRuleConfigRequestBody.
-func marshalRiskPolicyRuleConfigRequestBodyToTypesRiskPolicyRuleConfig(v *RiskPolicyRuleConfigRequestBody) *types.RiskPolicyRuleConfig {
-	if v == nil {
-		return nil
-	}
-	res := &types.RiskPolicyRuleConfig{
-		Action: v.Action,
-	}
-
-	return res
-}
-
 // marshalRiskPolicyModelConfigRequestBodyToTypesRiskPolicyModelConfig builds a
 // value of type *types.RiskPolicyModelConfig from a value of type
 // *RiskPolicyModelConfigRequestBody.
@@ -7590,20 +7562,6 @@ func marshalRiskPolicyModelConfigRequestBodyToTypesRiskPolicyModelConfig(v *Risk
 		Model:       v.Model,
 		Temperature: v.Temperature,
 		FailOpen:    v.FailOpen,
-	}
-
-	return res
-}
-
-// unmarshalRiskPolicyRuleConfigResponseBodyToTypesRiskPolicyRuleConfig builds
-// a value of type *types.RiskPolicyRuleConfig from a value of type
-// *RiskPolicyRuleConfigResponseBody.
-func unmarshalRiskPolicyRuleConfigResponseBodyToTypesRiskPolicyRuleConfig(v *RiskPolicyRuleConfigResponseBody) *types.RiskPolicyRuleConfig {
-	if v == nil {
-		return nil
-	}
-	res := &types.RiskPolicyRuleConfig{
-		Action: *v.Action,
 	}
 
 	return res
@@ -7672,15 +7630,10 @@ func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody)
 			res.CustomRuleIds[i] = val
 		}
 	}
-	if v.Rules != nil {
-		res.Rules = make(map[string]*types.RiskPolicyRuleConfig, len(v.Rules))
-		for key, val := range v.Rules {
-			tk := key
-			if val == nil {
-				res.Rules[tk] = nil
-				continue
-			}
-			res.Rules[tk] = unmarshalRiskPolicyRuleConfigResponseBodyToTypesRiskPolicyRuleConfig(val)
+	if v.ExemptRuleIds != nil {
+		res.ExemptRuleIds = make([]string, len(v.ExemptRuleIds))
+		for i, val := range v.ExemptRuleIds {
+			res.ExemptRuleIds[i] = val
 		}
 	}
 	if v.MessageTypes != nil {

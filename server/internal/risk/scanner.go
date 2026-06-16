@@ -480,9 +480,8 @@ func promptPolicyUnavailableResult(policy repo.RiskPolicy, messageType message.T
 }
 
 func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, view ra.MessageView) (ra.CustomRuleScan, error) {
-	policyRules, err := ra.ParsePolicyRules(policy.Rules)
-	if err != nil {
-		return ra.CustomRuleScan{}, fmt.Errorf("parse policy rules: %w", err)
+	if len(policy.CustomRuleIds) == 0 && len(policy.ExemptRuleIds) == 0 {
+		return ra.CustomRuleScan{Findings: nil, Allowed: false}, nil
 	}
 
 	rules, err := s.repo.ListCustomDetectionRules(ctx, policy.ProjectID)
@@ -490,14 +489,21 @@ func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, v
 		return ra.CustomRuleScan{}, fmt.Errorf("list custom detection rules: %w", err)
 	}
 
-	selected := make(map[string]struct{}, len(policy.CustomRuleIds))
+	// Rules attached as detectors deny (a match flags); rules attached as
+	// exemptions allow (a match short-circuits the whole policy for the message).
+	// The two id sets are disjoint by construction.
+	actions := make(map[string]ra.Action, len(policy.CustomRuleIds)+len(policy.ExemptRuleIds))
 	for _, id := range policy.CustomRuleIds {
-		selected[id] = struct{}{}
+		actions[id] = ra.ActionDeny
+	}
+	for _, id := range policy.ExemptRuleIds {
+		actions[id] = ra.ActionAllow
 	}
 
-	customRules := make([]ra.CustomDetectionRule, 0, len(policy.CustomRuleIds))
+	customRules := make([]ra.CustomDetectionRule, 0, len(actions))
 	for _, rule := range rules {
-		if _, ok := selected[rule.RuleID]; !ok {
+		action, ok := actions[rule.RuleID]
+		if !ok {
 			continue
 		}
 		customRules = append(customRules, ra.CustomDetectionRule{
@@ -505,7 +511,7 @@ func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, v
 			Title:       rule.Title,
 			Description: rule.Description,
 			MatchConfig: ra.EffectiveMatchConfig(rule.MatchConfig, conv.PtrValOr(conv.FromPGText[string](rule.Regex), "")),
-			Action:      policyRules.ActionFor(rule.RuleID),
+			Action:      action,
 		})
 	}
 

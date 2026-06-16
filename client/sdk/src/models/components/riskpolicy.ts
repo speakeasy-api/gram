@@ -12,10 +12,6 @@ import {
   RiskPolicyModelConfig,
   RiskPolicyModelConfig$inboundSchema,
 } from "./riskpolicymodelconfig.js";
-import {
-  RiskPolicyRuleConfig,
-  RiskPolicyRuleConfig$inboundSchema,
-} from "./riskpolicyruleconfig.js";
 
 /**
  * Policy action: flag (log only) or block (deny in real-time).
@@ -55,7 +51,7 @@ export type RiskPolicy = {
    */
   createdAt: Date;
   /**
-   * Custom detection rule ids enabled for this policy.
+   * Custom detection rule ids attached as detectors: a match produces a finding.
    */
   customRuleIds?: Array<string> | undefined;
   /**
@@ -66,6 +62,10 @@ export type RiskPolicy = {
    * Whether the policy is active.
    */
   enabled: boolean;
+  /**
+   * Custom detection rule ids attached as exemptions: when one matches a message, the whole policy is skipped for that message (an allowlist). Disjoint from custom_rule_ids.
+   */
+  exemptRuleIds?: Array<string> | undefined;
   /**
    * The risk policy ID.
    */
@@ -103,10 +103,6 @@ export type RiskPolicy = {
    * Prompt-injection detection rule ids enabled in addition to the heuristic baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.
    */
   promptInjectionRules?: Array<string> | undefined;
-  /**
-   * Per-rule configuration keyed by canonical rule_id (built-in + custom). Maps a rule to {action: deny|allow}; rules absent from the map default to deny. An allow rule short-circuits the policy for a message it matches.
-   */
-  rules?: { [k: string]: RiskPolicyRuleConfig } | undefined;
   /**
    * Detection sources enabled for this policy.
    */
@@ -152,6 +148,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
       custom_rule_ids: z.optional(z.array(z.string())),
       disabled_rules: z.optional(z.array(z.string())),
       enabled: z.boolean(),
+      exempt_rule_ids: z.optional(z.array(z.string())),
       id: z.string(),
       message_types: z.optional(z.array(z.string())),
       model_config: z.optional(RiskPolicyModelConfig$inboundSchema),
@@ -162,9 +159,6 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
       project_id: z.string(),
       prompt: z.optional(z.string()),
       prompt_injection_rules: z.optional(z.array(z.string())),
-      rules: z.optional(
-        z.record(z.string(), RiskPolicyRuleConfig$inboundSchema),
-      ),
       sources: z.array(z.string()),
       total_messages: z.int(),
       updated_at: z.pipe(
@@ -180,6 +174,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
         "created_at": "createdAt",
         "custom_rule_ids": "customRuleIds",
         "disabled_rules": "disabledRules",
+        "exempt_rule_ids": "exemptRuleIds",
         "message_types": "messageTypes",
         "model_config": "modelConfig",
         "pending_messages": "pendingMessages",

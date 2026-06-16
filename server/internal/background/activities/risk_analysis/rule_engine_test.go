@@ -65,28 +65,15 @@ func TestRuleEngine_AllowRuleShortCircuits(t *testing.T) {
 	require.Len(t, res2.Findings, 1)
 }
 
-// The policy's rules map decides each rule's polarity: a rule listed as allow
-// short-circuits the policy, an unlisted rule defaults to deny.
-func TestRuleEngine_PolicyRulesAction(t *testing.T) {
+// A rule's polarity is set by the caller: the same match_config denies when
+// attached as a detector and exempts when attached as an exemption.
+func TestRuleEngine_CallerSetsPolarity(t *testing.T) {
 	t.Parallel()
-	pr, err := ra.ParsePolicyRules([]byte(`{"custom.allow":{"action":"allow"},"custom.explicit_deny":{"action":"deny"}}`))
-	require.NoError(t, err)
-	require.Equal(t, ra.ActionAllow, pr.ActionFor("custom.allow"))
-	require.Equal(t, ra.ActionDeny, pr.ActionFor("custom.explicit_deny"))
-	// Absent rule defaults to deny.
-	require.Equal(t, ra.ActionDeny, pr.ActionFor("custom.unlisted"))
-
-	// A nil/empty column yields an all-deny map.
-	empty, err := ra.ParsePolicyRules(nil)
-	require.NoError(t, err)
-	require.Equal(t, ra.ActionDeny, empty.ActionFor("custom.anything"))
-
-	// The same rule allow-lists or denies purely by its policy config.
 	deny := ruleWithConfigID(t, "custom.rule", ra.MatchConfig{Conditions: []ra.Condition{
 		{Target: ra.TargetContent, Op: ra.OpKeyword, Values: []string{"secret"}},
 	}})
 	allow := deny
-	allow.Action = pr.ActionFor("custom.allow")
+	allow.Action = ra.ActionAllow
 	view := ra.MessageView{Content: "a secret", Type: message.User, Tools: nil}
 	require.Len(t, scanRules(t, []ra.CustomDetectionRule{deny}, view).Findings, 1)
 	require.True(t, scanRules(t, []ra.CustomDetectionRule{allow}, view).Allowed)

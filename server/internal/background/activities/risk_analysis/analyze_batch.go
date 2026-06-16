@@ -178,7 +178,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
 	}
 
-	customRules, err := a.customRulesForPolicy(ctx, args.ProjectID, policy.CustomRuleIds, policy.Rules)
+	customRules, err := a.customRulesForPolicy(ctx, args.ProjectID, policy.CustomRuleIds, policy.ExemptRuleIds)
 	if err != nil {
 		return nil, err
 	}
@@ -588,14 +588,14 @@ func (a *AnalyzeBatch) customRuleMessageView(ctx context.Context, msg repo.GetMe
 	return view
 }
 
-func (a *AnalyzeBatch) customRulesForPolicy(ctx context.Context, projectID uuid.UUID, ruleIDs []string, policyRulesJSON []byte) ([]CompiledCustomDetectionRule, error) {
-	if len(ruleIDs) == 0 {
+// customRulesForPolicy loads the custom rules a policy attaches and compiles
+// them with the right polarity: rules in detectorIDs (risk_policies.custom_rule_ids)
+// deny — a match produces a finding — while rules in exemptIDs
+// (risk_policies.exempt_rule_ids) allow — a match short-circuits the whole policy
+// for that message. The two id sets are disjoint by construction.
+func (a *AnalyzeBatch) customRulesForPolicy(ctx context.Context, projectID uuid.UUID, detectorIDs, exemptIDs []string) ([]CompiledCustomDetectionRule, error) {
+	if len(detectorIDs) == 0 && len(exemptIDs) == 0 {
 		return nil, nil
-	}
-
-	policyRules, err := ParsePolicyRules(policyRulesJSON)
-	if err != nil {
-		return nil, fmt.Errorf("parse policy rules: %w", err)
 	}
 
 	rules, err := repo.New(a.db).ListCustomDetectionRules(ctx, projectID)
@@ -603,14 +603,18 @@ func (a *AnalyzeBatch) customRulesForPolicy(ctx context.Context, projectID uuid.
 		return nil, fmt.Errorf("list custom detection rules: %w", err)
 	}
 
-	selected := make(map[string]struct{}, len(ruleIDs))
-	for _, id := range ruleIDs {
-		selected[id] = struct{}{}
+	actions := make(map[string]Action, len(detectorIDs)+len(exemptIDs))
+	for _, id := range detectorIDs {
+		actions[id] = ActionDeny
+	}
+	for _, id := range exemptIDs {
+		actions[id] = ActionAllow
 	}
 
-	customRules := make([]CustomDetectionRule, 0, len(ruleIDs))
+	customRules := make([]CustomDetectionRule, 0, len(actions))
 	for _, rule := range rules {
-		if _, ok := selected[rule.RuleID]; !ok {
+		action, ok := actions[rule.RuleID]
+		if !ok {
 			continue
 		}
 		customRules = append(customRules, CustomDetectionRule{
@@ -618,7 +622,7 @@ func (a *AnalyzeBatch) customRulesForPolicy(ctx context.Context, projectID uuid.
 			Title:       rule.Title,
 			Description: rule.Description,
 			MatchConfig: EffectiveMatchConfig(rule.MatchConfig, conv.PtrValOr(conv.FromPGText[string](rule.Regex), "")),
-			Action:      policyRules.ActionFor(rule.RuleID),
+			Action:      action,
 		})
 	}
 

@@ -7362,20 +7362,6 @@ func EncodeTestDetectionRuleError(encoder func(context.Context, http.ResponseWri
 	}
 }
 
-// unmarshalRiskPolicyRuleConfigRequestBodyToTypesRiskPolicyRuleConfig builds a
-// value of type *types.RiskPolicyRuleConfig from a value of type
-// *RiskPolicyRuleConfigRequestBody.
-func unmarshalRiskPolicyRuleConfigRequestBodyToTypesRiskPolicyRuleConfig(v *RiskPolicyRuleConfigRequestBody) *types.RiskPolicyRuleConfig {
-	if v == nil {
-		return nil
-	}
-	res := &types.RiskPolicyRuleConfig{
-		Action: *v.Action,
-	}
-
-	return res
-}
-
 // unmarshalRiskPolicyModelConfigRequestBodyToTypesRiskPolicyModelConfig builds
 // a value of type *types.RiskPolicyModelConfig from a value of type
 // *RiskPolicyModelConfigRequestBody.
@@ -7387,20 +7373,6 @@ func unmarshalRiskPolicyModelConfigRequestBodyToTypesRiskPolicyModelConfig(v *Ri
 		Model:       v.Model,
 		Temperature: v.Temperature,
 		FailOpen:    v.FailOpen,
-	}
-
-	return res
-}
-
-// marshalTypesRiskPolicyRuleConfigToRiskPolicyRuleConfigResponseBody builds a
-// value of type *RiskPolicyRuleConfigResponseBody from a value of type
-// *types.RiskPolicyRuleConfig.
-func marshalTypesRiskPolicyRuleConfigToRiskPolicyRuleConfigResponseBody(v *types.RiskPolicyRuleConfig) *RiskPolicyRuleConfigResponseBody {
-	if v == nil {
-		return nil
-	}
-	res := &RiskPolicyRuleConfigResponseBody{
-		Action: v.Action,
 	}
 
 	return res
@@ -7473,15 +7445,10 @@ func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPo
 			res.CustomRuleIds[i] = val
 		}
 	}
-	if v.Rules != nil {
-		res.Rules = make(map[string]*RiskPolicyRuleConfigResponseBody, len(v.Rules))
-		for key, val := range v.Rules {
-			tk := key
-			if val == nil {
-				res.Rules[tk] = nil
-				continue
-			}
-			res.Rules[tk] = marshalTypesRiskPolicyRuleConfigToRiskPolicyRuleConfigResponseBody(val)
+	if v.ExemptRuleIds != nil {
+		res.ExemptRuleIds = make([]string, len(v.ExemptRuleIds))
+		for i, val := range v.ExemptRuleIds {
+			res.ExemptRuleIds[i] = val
 		}
 	}
 	if v.MessageTypes != nil {

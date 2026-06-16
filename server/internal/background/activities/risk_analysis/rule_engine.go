@@ -65,11 +65,13 @@ const (
 )
 
 // Action is a rule's polarity within a policy. A deny rule produces a finding
-// when it matches (the default). An allow rule is an inline allowlist: when it
-// matches a message it short-circuits the whole policy, dropping every finding
-// for that message — even ones other detectors (gitleaks, presidio, the judge)
-// produced. The action is configured per policy (risk_policies.rules), not on
-// the rule itself, so the same rule can deny in one policy and allow in another.
+// when it matches (the default). An allow rule is an exemption: when it matches
+// a message it short-circuits the whole policy, dropping every finding for that
+// message — even ones other detectors (gitleaks, presidio, the judge) produced.
+// The action is determined by how the policy attaches the rule: rules in
+// risk_policies.custom_rule_ids deny (detectors); rules in
+// risk_policies.exempt_rule_ids allow (exemptions). The same rule can therefore
+// deny in one policy and exempt in another; the caller sets Action accordingly.
 type Action string
 
 const (
@@ -83,35 +85,6 @@ func effectiveAction(a Action) Action {
 		return ActionAllow
 	}
 	return ActionDeny
-}
-
-// PolicyRuleConfig is the per-rule configuration a policy attaches to a rule_id
-// (built-in or custom). Only Action is meaningful today.
-type PolicyRuleConfig struct {
-	Action Action `json:"action,omitempty"`
-}
-
-// PolicyRules is the normalised risk_policies.rules JSONB: a map from canonical
-// rule_id to its per-policy config. Absent rules default to deny.
-type PolicyRules map[string]PolicyRuleConfig
-
-// ParsePolicyRules decodes the risk_policies.rules JSONB. A nil/empty column
-// yields an empty (all-deny) map.
-func ParsePolicyRules(raw []byte) (PolicyRules, error) {
-	if isEmptyJSON(raw) {
-		return PolicyRules{}, nil
-	}
-	var pr PolicyRules
-	if err := json.Unmarshal(raw, &pr); err != nil {
-		return nil, fmt.Errorf("parse policy rules: %w", err)
-	}
-	return pr, nil
-}
-
-// ActionFor returns the configured action for a rule_id, defaulting to deny
-// when the rule is absent or unset.
-func (pr PolicyRules) ActionFor(ruleID string) Action {
-	return effectiveAction(pr[ruleID].Action)
 }
 
 // Condition is one target/op/value test, decoded from a rule's match_config.
@@ -133,8 +106,9 @@ type Condition struct {
 
 // MatchConfig is the sparse, self-describing matcher stored in the
 // risk_custom_detection_rules.match_config JSONB column. The rule's polarity
-// (deny/allow) is no longer part of the matcher — it is configured per policy
-// via risk_policies.rules and supplied on CustomDetectionRule.
+// (deny/allow) is not part of the matcher — it is determined by how the policy
+// attaches the rule (custom_rule_ids vs exempt_rule_ids) and supplied on
+// CustomDetectionRule.Action.
 type MatchConfig struct {
 	Combine    MatchCombine `json:"combine,omitempty"`
 	Conditions []Condition  `json:"conditions"`

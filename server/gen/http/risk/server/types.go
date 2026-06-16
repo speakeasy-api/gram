@@ -33,11 +33,12 @@ type CreateRiskPolicyRequestBody struct {
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
-	// Custom detection rule ids to enable for this policy.
+	// Custom detection rule ids to attach as detectors: a match produces a finding.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
-	// Per-rule configuration keyed by canonical rule_id (built-in + custom). Maps
-	// a rule to {action: deny|allow}; rules absent from the map default to deny.
-	Rules map[string]*RiskPolicyRuleConfigRequestBody `form:"rules,omitempty" json:"rules,omitempty" xml:"rules,omitempty"`
+	// Custom detection rule ids to attach as exemptions: when one matches a
+	// message, the whole policy is skipped for that message (an allowlist).
+	// Disjoint from custom_rule_ids.
+	ExemptRuleIds []string `form:"exempt_rule_ids,omitempty" json:"exempt_rule_ids,omitempty" xml:"exempt_rule_ids,omitempty"`
 	// Message types this policy applies to. When empty or omitted, the policy
 	// scans all supported types.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
@@ -74,12 +75,13 @@ type UpdateRiskPolicyRequestBody struct {
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
-	// Custom detection rule ids to enable for this policy. Omit to preserve the
-	// current selection.
+	// Custom detection rule ids to attach as detectors: a match produces a
+	// finding. Omit to preserve the current selection.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
-	// Per-rule configuration keyed by canonical rule_id (built-in + custom). Maps
-	// a rule to {action: deny|allow}; rules absent from the map default to deny.
-	Rules map[string]*RiskPolicyRuleConfigRequestBody `form:"rules,omitempty" json:"rules,omitempty" xml:"rules,omitempty"`
+	// Custom detection rule ids to attach as exemptions: when one matches a
+	// message, the whole policy is skipped for that message (an allowlist).
+	// Disjoint from custom_rule_ids.
+	ExemptRuleIds []string `form:"exempt_rule_ids,omitempty" json:"exempt_rule_ids,omitempty" xml:"exempt_rule_ids,omitempty"`
 	// Message types this policy applies to. Omit to preserve the current
 	// selection; send an empty array to apply to all types.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
@@ -272,12 +274,12 @@ type CreateRiskPolicyResponseBody struct {
 	// means every rule in the selected categories runs; matching findings are
 	// dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
-	// Custom detection rule ids enabled for this policy.
+	// Custom detection rule ids attached as detectors: a match produces a finding.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
-	// Per-rule configuration keyed by canonical rule_id (built-in + custom). Maps
-	// a rule to {action: deny|allow}; rules absent from the map default to deny.
-	// An allow rule short-circuits the policy for a message it matches.
-	Rules map[string]*RiskPolicyRuleConfigResponseBody `form:"rules,omitempty" json:"rules,omitempty" xml:"rules,omitempty"`
+	// Custom detection rule ids attached as exemptions: when one matches a
+	// message, the whole policy is skipped for that message (an allowlist).
+	// Disjoint from custom_rule_ids.
+	ExemptRuleIds []string `form:"exempt_rule_ids,omitempty" json:"exempt_rule_ids,omitempty" xml:"exempt_rule_ids,omitempty"`
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
@@ -348,12 +350,12 @@ type GetRiskPolicyResponseBody struct {
 	// means every rule in the selected categories runs; matching findings are
 	// dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
-	// Custom detection rule ids enabled for this policy.
+	// Custom detection rule ids attached as detectors: a match produces a finding.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
-	// Per-rule configuration keyed by canonical rule_id (built-in + custom). Maps
-	// a rule to {action: deny|allow}; rules absent from the map default to deny.
-	// An allow rule short-circuits the policy for a message it matches.
-	Rules map[string]*RiskPolicyRuleConfigResponseBody `form:"rules,omitempty" json:"rules,omitempty" xml:"rules,omitempty"`
+	// Custom detection rule ids attached as exemptions: when one matches a
+	// message, the whole policy is skipped for that message (an allowlist).
+	// Disjoint from custom_rule_ids.
+	ExemptRuleIds []string `form:"exempt_rule_ids,omitempty" json:"exempt_rule_ids,omitempty" xml:"exempt_rule_ids,omitempty"`
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
@@ -410,12 +412,12 @@ type UpdateRiskPolicyResponseBody struct {
 	// means every rule in the selected categories runs; matching findings are
 	// dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
-	// Custom detection rule ids enabled for this policy.
+	// Custom detection rule ids attached as detectors: a match produces a finding.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
-	// Per-rule configuration keyed by canonical rule_id (built-in + custom). Maps
-	// a rule to {action: deny|allow}; rules absent from the map default to deny.
-	// An allow rule short-circuits the policy for a message it matches.
-	Rules map[string]*RiskPolicyRuleConfigResponseBody `form:"rules,omitempty" json:"rules,omitempty" xml:"rules,omitempty"`
+	// Custom detection rule ids attached as exemptions: when one matches a
+	// message, the whole policy is skipped for that message (an allowlist).
+	// Disjoint from custom_rule_ids.
+	ExemptRuleIds []string `form:"exempt_rule_ids,omitempty" json:"exempt_rule_ids,omitempty" xml:"exempt_rule_ids,omitempty"`
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
@@ -6661,14 +6663,6 @@ type TestDetectionRuleGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// RiskPolicyRuleConfigResponseBody is used to define fields on response body
-// types.
-type RiskPolicyRuleConfigResponseBody struct {
-	// What the policy does when this rule matches: deny (flag/block, the default)
-	// or allow (an allowlist that short-circuits the policy for that message).
-	Action string `form:"action" json:"action" xml:"action"`
-}
-
 // RiskPolicyModelConfigResponseBody is used to define fields on response body
 // types.
 type RiskPolicyModelConfigResponseBody struct {
@@ -6706,12 +6700,12 @@ type RiskPolicyResponseBody struct {
 	// means every rule in the selected categories runs; matching findings are
 	// dropped at scan time.
 	DisabledRules []string `form:"disabled_rules,omitempty" json:"disabled_rules,omitempty" xml:"disabled_rules,omitempty"`
-	// Custom detection rule ids enabled for this policy.
+	// Custom detection rule ids attached as detectors: a match produces a finding.
 	CustomRuleIds []string `form:"custom_rule_ids,omitempty" json:"custom_rule_ids,omitempty" xml:"custom_rule_ids,omitempty"`
-	// Per-rule configuration keyed by canonical rule_id (built-in + custom). Maps
-	// a rule to {action: deny|allow}; rules absent from the map default to deny.
-	// An allow rule short-circuits the policy for a message it matches.
-	Rules map[string]*RiskPolicyRuleConfigResponseBody `form:"rules,omitempty" json:"rules,omitempty" xml:"rules,omitempty"`
+	// Custom detection rule ids attached as exemptions: when one matches a
+	// message, the whole policy is skipped for that message (an allowlist).
+	// Disjoint from custom_rule_ids.
+	ExemptRuleIds []string `form:"exempt_rule_ids,omitempty" json:"exempt_rule_ids,omitempty" xml:"exempt_rule_ids,omitempty"`
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
@@ -7038,14 +7032,6 @@ type TestDetectionRuleMatchResponseBody struct {
 	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 }
 
-// RiskPolicyRuleConfigRequestBody is used to define fields on request body
-// types.
-type RiskPolicyRuleConfigRequestBody struct {
-	// What the policy does when this rule matches: deny (flag/block, the default)
-	// or allow (an allowlist that short-circuits the policy for that message).
-	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
-}
-
 // RiskPolicyModelConfigRequestBody is used to define fields on request body
 // types.
 type RiskPolicyModelConfigRequestBody struct {
@@ -7137,15 +7123,10 @@ func NewCreateRiskPolicyResponseBody(res *types.RiskPolicy) *CreateRiskPolicyRes
 			body.CustomRuleIds[i] = val
 		}
 	}
-	if res.Rules != nil {
-		body.Rules = make(map[string]*RiskPolicyRuleConfigResponseBody, len(res.Rules))
-		for key, val := range res.Rules {
-			tk := key
-			if val == nil {
-				body.Rules[tk] = nil
-				continue
-			}
-			body.Rules[tk] = marshalTypesRiskPolicyRuleConfigToRiskPolicyRuleConfigResponseBody(val)
+	if res.ExemptRuleIds != nil {
+		body.ExemptRuleIds = make([]string, len(res.ExemptRuleIds))
+		for i, val := range res.ExemptRuleIds {
+			body.ExemptRuleIds[i] = val
 		}
 	}
 	if res.MessageTypes != nil {
@@ -7239,15 +7220,10 @@ func NewGetRiskPolicyResponseBody(res *types.RiskPolicy) *GetRiskPolicyResponseB
 			body.CustomRuleIds[i] = val
 		}
 	}
-	if res.Rules != nil {
-		body.Rules = make(map[string]*RiskPolicyRuleConfigResponseBody, len(res.Rules))
-		for key, val := range res.Rules {
-			tk := key
-			if val == nil {
-				body.Rules[tk] = nil
-				continue
-			}
-			body.Rules[tk] = marshalTypesRiskPolicyRuleConfigToRiskPolicyRuleConfigResponseBody(val)
+	if res.ExemptRuleIds != nil {
+		body.ExemptRuleIds = make([]string, len(res.ExemptRuleIds))
+		for i, val := range res.ExemptRuleIds {
+			body.ExemptRuleIds[i] = val
 		}
 	}
 	if res.MessageTypes != nil {
@@ -7313,15 +7289,10 @@ func NewUpdateRiskPolicyResponseBody(res *types.RiskPolicy) *UpdateRiskPolicyRes
 			body.CustomRuleIds[i] = val
 		}
 	}
-	if res.Rules != nil {
-		body.Rules = make(map[string]*RiskPolicyRuleConfigResponseBody, len(res.Rules))
-		for key, val := range res.Rules {
-			tk := key
-			if val == nil {
-				body.Rules[tk] = nil
-				continue
-			}
-			body.Rules[tk] = marshalTypesRiskPolicyRuleConfigToRiskPolicyRuleConfigResponseBody(val)
+	if res.ExemptRuleIds != nil {
+		body.ExemptRuleIds = make([]string, len(res.ExemptRuleIds))
+		for i, val := range res.ExemptRuleIds {
+			body.ExemptRuleIds[i] = val
 		}
 	}
 	if res.MessageTypes != nil {
@@ -12452,15 +12423,10 @@ func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, apikeyToken *
 			v.CustomRuleIds[i] = val
 		}
 	}
-	if body.Rules != nil {
-		v.Rules = make(map[string]*types.RiskPolicyRuleConfig, len(body.Rules))
-		for key, val := range body.Rules {
-			tk := key
-			if val == nil {
-				v.Rules[tk] = nil
-				continue
-			}
-			v.Rules[tk] = unmarshalRiskPolicyRuleConfigRequestBodyToTypesRiskPolicyRuleConfig(val)
+	if body.ExemptRuleIds != nil {
+		v.ExemptRuleIds = make([]string, len(body.ExemptRuleIds))
+		for i, val := range body.ExemptRuleIds {
+			v.ExemptRuleIds[i] = val
 		}
 	}
 	if body.MessageTypes != nil {
@@ -12557,15 +12523,10 @@ func NewUpdateRiskPolicyPayload(body *UpdateRiskPolicyRequestBody, apikeyToken *
 			v.CustomRuleIds[i] = val
 		}
 	}
-	if body.Rules != nil {
-		v.Rules = make(map[string]*types.RiskPolicyRuleConfig, len(body.Rules))
-		for key, val := range body.Rules {
-			tk := key
-			if val == nil {
-				v.Rules[tk] = nil
-				continue
-			}
-			v.Rules[tk] = unmarshalRiskPolicyRuleConfigRequestBodyToTypesRiskPolicyRuleConfig(val)
+	if body.ExemptRuleIds != nil {
+		v.ExemptRuleIds = make([]string, len(body.ExemptRuleIds))
+		for i, val := range body.ExemptRuleIds {
+			v.ExemptRuleIds[i] = val
 		}
 	}
 	if body.MessageTypes != nil {
@@ -13015,13 +12976,6 @@ func ValidateCreateRiskPolicyRequestBody(body *CreateRiskPolicyRequestBody) (err
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.policy_type", *body.PolicyType, []any{"standard", "prompt_based"}))
 		}
 	}
-	for _, v := range body.Rules {
-		if v != nil {
-			if err2 := ValidateRiskPolicyRuleConfigRequestBody(v); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
 	if body.Action != nil {
 		if !(*body.Action == "flag" || *body.Action == "block") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block"}))
@@ -13041,13 +12995,6 @@ func ValidateUpdateRiskPolicyRequestBody(body *UpdateRiskPolicyRequestBody) (err
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	for _, v := range body.Rules {
-		if v != nil {
-			if err2 := ValidateRiskPolicyRuleConfigRequestBody(v); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
 	}
 	if body.Action != nil {
 		if !(*body.Action == "flag" || *body.Action == "block") {
@@ -13278,20 +13225,6 @@ func ValidateTestDetectionRuleRequestBody(body *TestDetectionRuleRequestBody) (e
 	if body.MatchConfig != nil {
 		if err2 := ValidateRiskMatchConfigRequestBody(body.MatchConfig); err2 != nil {
 			err = goa.MergeErrors(err, err2)
-		}
-	}
-	return
-}
-
-// ValidateRiskPolicyRuleConfigRequestBody runs the validations defined on
-// RiskPolicyRuleConfigRequestBody
-func ValidateRiskPolicyRuleConfigRequestBody(body *RiskPolicyRuleConfigRequestBody) (err error) {
-	if body.Action == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("action", "body"))
-	}
-	if body.Action != nil {
-		if !(*body.Action == "deny" || *body.Action == "allow") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"deny", "allow"}))
 		}
 	}
 	return

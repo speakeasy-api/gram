@@ -1,7 +1,6 @@
 import {
   type RiskMatchCondition,
   type RiskMatchConfig,
-  type RiskPolicyRuleConfig,
 } from "@gram/client/models/components";
 import {
   invalidateAllRiskListCustomDetectionRules,
@@ -161,12 +160,6 @@ const BUILTIN_RULE_IDS = new Set<string>([
   ),
   ...Object.values(DETECTION_RULES).flatMap((rules) => rules.map((r) => r.id)),
 ]);
-
-/** What a policy does when one of its rules matches. `deny` flags a finding
- *  (the default); `allow` is an allowlist that short-circuits the whole policy
- *  for that message. Configured per policy in PolicyCenter (risk_policies.rules),
- *  not on the rule itself. */
-export type CustomRuleAction = "deny" | "allow";
 
 /** How a rule's conditions reduce to a verdict. The backend stores a single,
  *  flat combine (no nested grouping). */
@@ -457,31 +450,6 @@ export function ruleConditions(
 
 export function ruleCombine(rule: CustomDetectionRule): MatchCombine {
   return (rule.matchConfig?.combine as MatchCombine) ?? "and";
-}
-
-/** Read a policy's per-rule action map (risk_policies.rules) into a Map.
- *  Missing rules are deny by default and simply absent from the result. */
-export function policyRuleActions(
-  rules: { [k: string]: RiskPolicyRuleConfig } | undefined,
-): Map<string, CustomRuleAction> {
-  const out = new Map<string, CustomRuleAction>();
-  for (const [id, cfg] of Object.entries(rules ?? {})) {
-    out.set(id, (cfg.action as CustomRuleAction) ?? "deny");
-  }
-  return out;
-}
-
-/** Build the risk_policies.rules payload for the given attached rule ids,
- *  defaulting any untracked rule to deny. */
-export function buildPolicyRules(
-  selectedRuleIds: Iterable<string>,
-  actions: Map<string, CustomRuleAction>,
-): { [k: string]: RiskPolicyRuleConfig } {
-  const out: { [k: string]: RiskPolicyRuleConfig } = {};
-  for (const id of selectedRuleIds) {
-    out[id] = { action: actions.get(id) ?? "deny" };
-  }
-  return out;
 }
 
 /** Message types a rule can ever match, inferred from its condition targets.

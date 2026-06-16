@@ -325,7 +325,6 @@ export * from "./riskpolicy.js";
 export * from "./riskpolicybypassapprovalrequestbody.js";
 export * from "./riskpolicybypassrequest.js";
 export * from "./riskpolicymodelconfig.js";
-export * from "./riskpolicyruleconfig.js";
 export * from "./riskpolicystatus.js";
 export * from "./riskresult.js";
 export * from "./riskresultredacted.js";

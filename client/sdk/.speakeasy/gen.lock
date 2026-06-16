@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 220815cdd236bb0ee8d6a23efb56873a
+  docChecksum: 3ac2b1f71797302dd6e167eeac3b45b3
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -211,7 +211,7 @@ trackedFiles:
   docs/models/components/createriskexclusionrequestbody.md:
     last_write_checksum: sha1:d8987530cafa6706a32d252da413c1d4448c935e
   docs/models/components/createriskpolicyrequestbody.md:
-    last_write_checksum: sha1:d9885b9007610cf85ff7d60f0947e550eb9b5373
+    last_write_checksum: sha1:08464def35eb75e719ca899582189d1356b6a344
   docs/models/components/createroleform.md:
     last_write_checksum: sha1:2862fd945c42babf0cce10ca510a35cc00b91201
   docs/models/components/createserverform.md:
@@ -829,7 +829,7 @@ trackedFiles:
   docs/models/components/riskoverviewuser.md:
     last_write_checksum: sha1:e27f5822bf1197b237ac5f37aab0c8d439d3dfa0
   docs/models/components/riskpolicy.md:
-    last_write_checksum: sha1:2512cf2cc6cf39a19a87e4cdea386cf0871ee725
+    last_write_checksum: sha1:7ec17d60977ec26b77b056ac78deee6f41ee5f63
   docs/models/components/riskpolicyaction.md:
     last_write_checksum: sha1:3729eadfe620fd4d1c367a384ab82ea55ab8b2d3
   docs/models/components/riskpolicybypassapprovalrequestbody.md:
@@ -842,10 +842,6 @@ trackedFiles:
     last_write_checksum: sha1:7caa836b93842d3c6241a7f8f615184df0d6be53
   docs/models/components/riskpolicypolicytype.md:
     last_write_checksum: sha1:9522b2e702ff794832ddcb14a54890e2ada009b8
-  docs/models/components/riskpolicyruleconfig.md:
-    last_write_checksum: sha1:46915048888acad640c5456d0b40269f14cd9685
-  docs/models/components/riskpolicyruleconfigaction.md:
-    last_write_checksum: sha1:610018163cac92a10ac09e1cf35c5540170a0c7b
   docs/models/components/riskpolicystatus.md:
     last_write_checksum: sha1:516633e7ddae4a15c8060c4cbcccbab4f9485352
   docs/models/components/riskresult.md:
@@ -1183,7 +1179,7 @@ trackedFiles:
   docs/models/components/updateriskexclusionrequestbodymatchtype.md:
     last_write_checksum: sha1:ec9f6d08a9258982255cf0e134a82f8e2f7cd348
   docs/models/components/updateriskpolicyrequestbody.md:
-    last_write_checksum: sha1:d35665be3aa81a805900ea4ac41e97df715993d4
+    last_write_checksum: sha1:e1472c59dadf3e79207192dac32d5bed26aa5c5f
   docs/models/components/updateriskpolicyrequestbodyaction.md:
     last_write_checksum: sha1:d0440dea4e7b2af3804fd303de46f1f8c1472d10
   docs/models/components/updateroleform.md:
@@ -4123,7 +4119,7 @@ trackedFiles:
   src/models/components/createriskexclusionrequestbody.ts:
     last_write_checksum: sha1:6dafc15fd69b59c7aeb7dedc1060612c7882efcc
   src/models/components/createriskpolicyrequestbody.ts:
-    last_write_checksum: sha1:bc9f1ffd59eba934fe20befd5e17c3e2791c7836
+    last_write_checksum: sha1:e3c487830813d591198e8e4980c6db28eff27d2f
   src/models/components/createroleform.ts:
     last_write_checksum: sha1:85aeb0cf9b2bcc28284e482e51fc8b2d97ca4a1e
   src/models/components/createserverform.ts:
@@ -4301,7 +4297,7 @@ trackedFiles:
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:31338324e7af6c8fb46d953ab6b20675c9c308e1
+    last_write_checksum: sha1:74794765164d00bcae1f666256d6fb2e79751279
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     last_write_checksum: sha1:549d388111333748195b4791e63fd64f4a6e7140
@@ -4647,15 +4643,13 @@ trackedFiles:
   src/models/components/riskoverviewuser.ts:
     last_write_checksum: sha1:eb4da626d8348818266f75b28ae1dac267441b5d
   src/models/components/riskpolicy.ts:
-    last_write_checksum: sha1:67436a12487016dc89bca716dc84876ae8572659
+    last_write_checksum: sha1:e49c75386b56c3f4de60712b9c481563cf713d6c
   src/models/components/riskpolicybypassapprovalrequestbody.ts:
     last_write_checksum: sha1:e55bacae622a6a00c2ce0b2825a3294c239bf39a
   src/models/components/riskpolicybypassrequest.ts:
     last_write_checksum: sha1:2122c00738588a12062d99b729d63b1717829575
   src/models/components/riskpolicymodelconfig.ts:
     last_write_checksum: sha1:c75ebe652fe7fcbf16a81f0f841c5389aed58fca
-  src/models/components/riskpolicyruleconfig.ts:
-    last_write_checksum: sha1:faf943c26f9c0a2071edcc4ab7df12073575e2b7
   src/models/components/riskpolicystatus.ts:
     last_write_checksum: sha1:478a39101a4d8c9d51b31417839ef68b5b727e77
   src/models/components/riskresult.ts:
@@ -4891,7 +4885,7 @@ trackedFiles:
   src/models/components/updateriskexclusionrequestbody.ts:
     last_write_checksum: sha1:c39b1489c4edc24484c2e8709ac3d90fabc02962
   src/models/components/updateriskpolicyrequestbody.ts:
-    last_write_checksum: sha1:0269c0770d775996378a110b84647a616af249df
+    last_write_checksum: sha1:69d708bdc030c162755b47a0879841d2cc028668
   src/models/components/updateroleform.ts:
     last_write_checksum: sha1:8b8b4268330a9ca348f2950ccbba16748c5cb25d
   src/models/components/updateserverform.ts:
