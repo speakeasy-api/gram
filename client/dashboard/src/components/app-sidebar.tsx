@@ -99,7 +99,7 @@ export function AppSidebar({
     routes.userSessions,
   ].some((r) => r.active);
 
-  const buildActive = [
+  const distributeActive = [
     routes.mcp,
     routes.clis,
     routes.plugins,
@@ -124,14 +124,14 @@ export function AppSidebar({
   ].some((r) => r.active);
 
   let activeGroup: string | undefined;
-  if (connectActive) {
-    activeGroup = "Connect";
-  } else if (buildActive) {
-    activeGroup = "Build";
-  } else if (observeActive) {
+  if (observeActive) {
     activeGroup = "Observe";
   } else if (securityActive) {
     activeGroup = "Secure";
+  } else if (connectActive) {
+    activeGroup = "Connect";
+  } else if (distributeActive) {
+    activeGroup = "Distribute";
   }
 
   // Find the specific active route title for the sliding highlight. Shared with
@@ -174,7 +174,7 @@ export function AppSidebar({
             activeGroup={activeGroup}
             defaultOpenGroups={
               !activeGroup
-                ? ["Connect", "Build", "Observe", "Secure"]
+                ? ["Observe", "Secure", "Connect", "Distribute"]
                 : undefined
             }
             activeItem={activeItem}
@@ -185,6 +185,63 @@ export function AppSidebar({
                 item={routes.home}
                 scope={scopeFor(routes.home)}
               />
+
+              {/* Observe group */}
+              <CollapsibleNavGroup
+                label="Observe"
+                Icon={(p) => <Icon {...p} name="eye" />}
+                defaultHref={routes.employees.href()}
+              >
+                <ScopeGatedNavItem
+                  item={routes.employees}
+                  scope={scopeFor(routes.employees)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.costs}
+                  scope={scopeFor(routes.costs)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.insights}
+                  scope={scopeFor(routes.insights)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.agentSessions}
+                  scope={scopeFor(routes.agentSessions)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.logs}
+                  scope={scopeFor(routes.logs)}
+                />
+              </CollapsibleNavGroup>
+
+              {/* Secure group */}
+              <CollapsibleNavGroup
+                label="Secure"
+                Icon={(p) => <Icon {...p} name="shield" />}
+                defaultHref={routes.riskOverview.href()}
+                stage="beta"
+              >
+                <ScopeGatedNavItem
+                  item={routes.riskOverview}
+                  scope={scopeFor(routes.riskOverview)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.policyCenter}
+                  scope={scopeFor(routes.policyCenter)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.riskEvents}
+                  scope={scopeFor(routes.riskEvents)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.approvalRequests}
+                  scope={scopeFor(routes.approvalRequests)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.detectionRules}
+                  scope={scopeFor(routes.detectionRules)}
+                />
+              </CollapsibleNavGroup>
 
               {/* Connect group */}
               <CollapsibleNavGroup
@@ -216,9 +273,9 @@ export function AppSidebar({
                 />
               </CollapsibleNavGroup>
 
-              {/* Build group */}
+              {/* Distribute group */}
               <CollapsibleNavGroup
-                label="Build"
+                label="Distribute"
                 Icon={(p) => <Icon {...p} name="hammer" />}
                 defaultHref={routes.mcp.href()}
               >
@@ -243,63 +300,6 @@ export function AppSidebar({
                 <ScopeGatedNavItem
                   item={routes.environments}
                   scope={scopeFor(routes.environments)}
-                />
-              </CollapsibleNavGroup>
-
-              {/* Observe group */}
-              <CollapsibleNavGroup
-                label="Observe"
-                Icon={(p) => <Icon {...p} name="eye" />}
-                defaultHref={routes.employees.href()}
-              >
-                <ScopeGatedNavItem
-                  item={routes.employees}
-                  scope={scopeFor(routes.employees)}
-                />
-                <ScopeGatedNavItem
-                  item={routes.costs}
-                  scope={scopeFor(routes.costs)}
-                />
-                <ScopeGatedNavItem
-                  item={routes.insights}
-                  scope={scopeFor(routes.insights)}
-                />
-                <ScopeGatedNavItem
-                  item={routes.agentSessions}
-                  scope={scopeFor(routes.agentSessions)}
-                />
-                <ScopeGatedNavItem
-                  item={routes.logs}
-                  scope={scopeFor(routes.logs)}
-                />
-              </CollapsibleNavGroup>
-
-              {/* Security group */}
-              <CollapsibleNavGroup
-                label="Secure"
-                Icon={(p) => <Icon {...p} name="shield" />}
-                defaultHref={routes.riskOverview.href()}
-                stage="beta"
-              >
-                <ScopeGatedNavItem
-                  item={routes.riskOverview}
-                  scope={scopeFor(routes.riskOverview)}
-                />
-                <ScopeGatedNavItem
-                  item={routes.policyCenter}
-                  scope={scopeFor(routes.policyCenter)}
-                />
-                <ScopeGatedNavItem
-                  item={routes.riskEvents}
-                  scope={scopeFor(routes.riskEvents)}
-                />
-                <ScopeGatedNavItem
-                  item={routes.approvalRequests}
-                  scope={scopeFor(routes.approvalRequests)}
-                />
-                <ScopeGatedNavItem
-                  item={routes.detectionRules}
-                  scope={scopeFor(routes.detectionRules)}
                 />
               </CollapsibleNavGroup>
 

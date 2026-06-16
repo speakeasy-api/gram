@@ -1407,17 +1407,43 @@ func renderCodexInstallScript(marketplaceURL, marketplace, plugin string, approv
 	fmt.Fprintf(&b, "MARKETPLACE_KEY=%q\n", marketplace)
 	fmt.Fprintf(&b, "PLUGIN_KEY=%q\n\n", plugin)
 
+	// Desktop-only and MDM-deployed machines run without codex on PATH; probe
+	// the managed-install and app-bundle locations. Candidate list mirrors
+	// find_codex in the generated hook script.
+	b.WriteString(`find_codex() {
+  if command -v codex >/dev/null 2>&1; then
+    command -v codex
+    return 0
+  fi
+  local codex_home="${CODEX_HOME:-$HOME/.codex}"
+  local candidate
+  for candidate in \
+    "${codex_home}/packages/standalone/current/bin/codex" \
+    "${HOME}/.local/bin/codex" \
+    /usr/local/bin/codex \
+    "/Applications/Codex.app/Contents/Resources/codex"; do
+    if [ -f "${candidate}" ] && [ -x "${candidate}" ]; then
+      printf '%s\n' "${candidate}"
+      return 0
+    fi
+  done
+  return 1
+}
+CODEX_BIN="$(find_codex || true)"
+
+`)
+
 	// Step 1: marketplace registration differs for remote vs local ZIP installs.
 	if marketplaceURL != "" {
 		fmt.Fprintf(&b, "MARKETPLACE_URL=%q\n\n", marketplaceURL)
 		b.WriteString(`# ── 1. Register & sync marketplace ──────────────────────────────────────────
 echo "→ Registering Speakeasy marketplace..."
-if command -v codex >/dev/null 2>&1; then
+if [ -n "${CODEX_BIN}" ]; then
   # add is idempotent (no-ops if already registered); upgrade pulls any new commits.
-  codex plugin marketplace add "${MARKETPLACE_URL}" || true
-  codex plugin marketplace upgrade "${MARKETPLACE_KEY}"
+  "${CODEX_BIN}" plugin marketplace add "${MARKETPLACE_URL}" || true
+  "${CODEX_BIN}" plugin marketplace upgrade "${MARKETPLACE_KEY}"
 else
-  echo "  ⚠  'codex' not found in PATH."
+  echo "  ⚠  'codex' executable not found."
   echo "     Run manually: codex plugin marketplace add '${MARKETPLACE_URL}'"
 fi
 
@@ -1426,10 +1452,10 @@ fi
 		b.WriteString(`# ── 1. Register marketplace (local ZIP install) ──────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo "→ Registering Speakeasy marketplace from ${SCRIPT_DIR}..."
-if command -v codex >/dev/null 2>&1; then
-  codex plugin marketplace add "${SCRIPT_DIR}"
+if [ -n "${CODEX_BIN}" ]; then
+  "${CODEX_BIN}" plugin marketplace add "${SCRIPT_DIR}"
 else
-  echo "  ⚠  'codex' not found in PATH."
+  echo "  ⚠  'codex' executable not found."
   echo "     Run manually: codex plugin marketplace add '${SCRIPT_DIR}'"
 fi
 
@@ -1448,16 +1474,14 @@ config_path = os.path.expanduser("~/.codex/config.toml")
 os.makedirs(os.path.dirname(config_path), exist_ok=True)
 content = open(config_path).read() if os.path.exists(config_path) else ""
 
-def ensure_dotted_key(text, key, value):
-    if re.search(r'(?m)^' + re.escape(key) + r'\s*=', text):
-        return text
-    # Insert before the first table header so the key stays at root scope.
-    # Appending after a [table] section would silently nest it inside that table.
+# A root-level dotted key implicitly defines its parent table and conflicts
+# with an explicit [table] header elsewhere in the file. Only the region
+# before the first table header is touched.
+def strip_root_dotted_key(text, key):
     m = re.search(r'(?m)^\[', text)
-    if m:
-        before = text[:m.start()].rstrip('\n')
-        return before + '\n' + key + ' = ' + value + '\n\n' + text[m.start():]
-    return text.rstrip('\n') + '\n' + key + ' = ' + value + '\n'
+    root, rest = (text[:m.start()], text[m.start():]) if m else (text, "")
+    root = re.sub(r'(?m)^' + re.escape(key) + r'\s*=.*\n?', '', root)
+    return root + rest
 
 def ensure_table_entry(text, table_header, key, value):
     if re.search(r'(?m)^' + re.escape(table_header) + r'\s*\n(?:[^\[]*\n)*' + re.escape(key) + r'\s*=', text):
@@ -1473,8 +1497,10 @@ def ensure_table_entry(text, table_header, key, value):
 	fmt.Fprintf(&b, "PLUGIN_KEY = %q\n", plugin)
 	fmt.Fprintf(&b, "MARKETPLACE_KEY = %q\n\n", marketplace)
 
-	b.WriteString(`content = ensure_dotted_key(content, "features.hooks", "true")
-content = ensure_dotted_key(content, "features.plugin_hooks", "true")
+	b.WriteString(`content = strip_root_dotted_key(content, "features.hooks")
+content = strip_root_dotted_key(content, "features.plugin_hooks")
+content = ensure_table_entry(content, "[features]", "hooks", "true")
+content = ensure_table_entry(content, "[features]", "plugin_hooks", "true")
 
 if not re.search(r'(?m)^\[hooks\.state\]', content):
     content = content.rstrip('\n') + '\n\n[hooks.state]\n'
