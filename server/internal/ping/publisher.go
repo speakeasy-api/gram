@@ -45,7 +45,7 @@ func StartPublisher(ctx context.Context, logger *slog.Logger, broker gcp.Publish
 		case errors.Is(err, context.Canceled):
 			return nil
 		case err != nil:
-			return errors.Join(err, fmt.Errorf("publish ping message: %w", err))
+			return fmt.Errorf("publish ping message: %w", err)
 		}
 	}
 }
