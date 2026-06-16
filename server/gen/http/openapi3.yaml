@@ -32516,6 +32516,14 @@ paths:
                         - all
                     type: string
                 - allowEmptyValue: true
+                  description: Filter by the connecting client id.
+                  in: query
+                  name: client_id
+                  schema:
+                    description: Filter by the connecting client id.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
                   description: 'Pagination cursor: id of the last item from the previous page.'
                   in: query
                   name: cursor
@@ -32632,6 +32640,104 @@ paths:
                 type: cursor
             x-speakeasy-react-hook:
                 name: UserSessions
+    /rpc/userSessions.listFacets:
+        get:
+            description: List available user session facet values (clients, users, servers) in the caller's project.
+            operationId: listUserSessionFacets
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListUserSessionFacetsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listFacets userSessions
+            tags:
+                - userSessions
+            x-speakeasy-name-override: listFacets
+            x-speakeasy-react-hook:
+                name: UserSessionFacets
     /rpc/userSessions.mint:
         post:
             description: Mint a user_session for an issuer-gated toolset on behalf of the authenticated dashboard user. The minted JWT matches the shape of the one /mcp/{slug}/token would emit after a successful OAuth dance, so the runtime MCP gateway validates it through the same path as a real MCP client's bearer.
@@ -39788,6 +39894,28 @@ components:
             description: Result type for listing user_session_consents.
             required:
                 - items
+        ListUserSessionFacetsResult:
+            type: object
+            properties:
+                clients:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UserSessionFacetOption'
+                    description: Connecting client facets.
+                servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UserSessionFacetOption'
+                    description: Issuer/server facets.
+                users:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UserSessionFacetOption'
+                    description: Subject (user) facets.
+            required:
+                - clients
+                - users
+                - servers
         ListUserSessionIssuersResult:
             type: object
             properties:
@@ -47645,6 +47773,23 @@ components:
                 - consented_at
                 - created_at
                 - updated_at
+        UserSessionFacetOption:
+            type: object
+            properties:
+                count:
+                    type: integer
+                    description: Number of sessions for this facet value.
+                    format: int64
+                display_name:
+                    type: string
+                    description: The label shown for the facet value.
+                value:
+                    type: string
+                    description: The facet value used for filtering.
+            required:
+                - value
+                - display_name
+                - count
         UserSessionIssuer:
             type: object
             properties:

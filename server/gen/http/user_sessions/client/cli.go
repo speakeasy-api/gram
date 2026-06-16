@@ -18,7 +18,7 @@ import (
 
 // BuildListUserSessionsPayload builds the payload for the userSessions
 // listUserSessions endpoint from CLI flags.
-func BuildListUserSessionsPayload(userSessionsListUserSessionsSubjectUrn string, userSessionsListUserSessionsUserSessionIssuerID string, userSessionsListUserSessionsStatus string, userSessionsListUserSessionsCursor string, userSessionsListUserSessionsLimit string, userSessionsListUserSessionsSessionToken string, userSessionsListUserSessionsApikeyToken string, userSessionsListUserSessionsProjectSlugInput string) (*usersessions.ListUserSessionsPayload, error) {
+func BuildListUserSessionsPayload(userSessionsListUserSessionsSubjectUrn string, userSessionsListUserSessionsUserSessionIssuerID string, userSessionsListUserSessionsStatus string, userSessionsListUserSessionsClientID string, userSessionsListUserSessionsCursor string, userSessionsListUserSessionsLimit string, userSessionsListUserSessionsSessionToken string, userSessionsListUserSessionsApikeyToken string, userSessionsListUserSessionsProjectSlugInput string) (*usersessions.ListUserSessionsPayload, error) {
 	var err error
 	var subjectUrn *string
 	{
@@ -43,6 +43,16 @@ func BuildListUserSessionsPayload(userSessionsListUserSessionsSubjectUrn string,
 			if !(*status == "active" || *status == "expired" || *status == "revoked" || *status == "all") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("status", *status, []any{"active", "expired", "revoked", "all"}))
 			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var clientID *string
+	{
+		if userSessionsListUserSessionsClientID != "" {
+			clientID = &userSessionsListUserSessionsClientID
+			err = goa.MergeErrors(err, goa.ValidateFormat("client_id", *clientID, goa.FormatUUID))
 			if err != nil {
 				return nil, err
 			}
@@ -92,8 +102,38 @@ func BuildListUserSessionsPayload(userSessionsListUserSessionsSubjectUrn string,
 	v.SubjectUrn = subjectUrn
 	v.UserSessionIssuerID = userSessionIssuerID
 	v.Status = status
+	v.ClientID = clientID
 	v.Cursor = cursor
 	v.Limit = limit
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListFacetsPayload builds the payload for the userSessions listFacets
+// endpoint from CLI flags.
+func BuildListFacetsPayload(userSessionsListFacetsSessionToken string, userSessionsListFacetsApikeyToken string, userSessionsListFacetsProjectSlugInput string) (*usersessions.ListFacetsPayload, error) {
+	var sessionToken *string
+	{
+		if userSessionsListFacetsSessionToken != "" {
+			sessionToken = &userSessionsListFacetsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if userSessionsListFacetsApikeyToken != "" {
+			apikeyToken = &userSessionsListFacetsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if userSessionsListFacetsProjectSlugInput != "" {
+			projectSlugInput = &userSessionsListFacetsProjectSlugInput
+		}
+	}
+	v := &usersessions.ListFacetsPayload{}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

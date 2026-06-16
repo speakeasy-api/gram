@@ -73,6 +73,12 @@ func (s *Service) ListUserSessions(ctx context.Context, payload *gen.ListUserSes
 	}, nil
 }
 
+// ListFacets returns available facet values for the user session feed filters.
+// Placeholder — full implementation ships in a follow-up PR.
+func (s *Service) ListFacets(ctx context.Context, payload *gen.ListFacetsPayload) (*gen.ListUserSessionFacetsResult, error) {
+	return nil, oops.C(oops.CodeNotFound)
+}
+
 // Soft-deletes the session and pushes its jti into the revocation cache
 // so the access token stops validating before its TTL expires.
 func (s *Service) RevokeUserSession(ctx context.Context, payload *gen.RevokeUserSessionPayload) error {
