@@ -86,9 +86,12 @@ import { ruleIdToPresidioEntity } from "./rule-ids";
 import {
   buildPolicyRules,
   policyRuleActions,
+  ruleConditions,
+  ruleRequiredMessageTypes,
   useDetectionRulesStore,
   type CustomRuleAction,
 } from "./detection-rules-data";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { PROMPT_POLICY_TEMPLATES } from "./prompt-policy-templates";
 
@@ -1767,6 +1770,25 @@ function PolicySheetBody({
     selectedCategories.has(c),
   );
 
+  // Coverage gaps: attached custom rules whose targets imply message types the
+  // policy scope excludes — those rules silently never run. Built-in detectors
+  // are type-agnostic, so they never gap. Surfaced in the Scope step.
+  const coverageGaps = customRules
+    .filter((r) => selectedCustomRuleIds.has(r.id))
+    .map((r) => ({
+      title: r.title || r.id,
+      missing: ruleRequiredMessageTypes(ruleConditions(r)).filter(
+        (t) => !selectedMessageTypes.has(t),
+      ),
+    }))
+    .filter((gap) => gap.missing.length > 0);
+  const missingScopeTypes = [
+    ...new Set(coverageGaps.flatMap((gap) => gap.missing)),
+  ];
+  const missingScopeLabels = missingScopeTypes
+    .map((t) => POLICY_MESSAGE_TYPE_META[t].label)
+    .join(", ");
+
   // Review-step summary chips.
   const summaryDetectors = ALL_CATEGORIES.filter((c) =>
     selectedCategories.has(c),
@@ -2061,6 +2083,38 @@ function PolicySheetBody({
               selectedMessageTypes={selectedMessageTypes}
               setSelectedMessageTypes={setSelectedMessageTypes}
             />
+            {coverageGaps.length > 0 && (
+              <Alert variant="warning">
+                <AlertDescription>
+                  <p className="font-medium">
+                    {coverageGaps.length === 1
+                      ? "1 attached rule targets message types outside this scope and won't run:"
+                      : `${coverageGaps.length} attached rules target message types outside this scope and won't run:`}
+                  </p>
+                  <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                    {coverageGaps.map((gap) => (
+                      <li key={gap.title}>
+                        {gap.title} — needs{" "}
+                        {gap.missing
+                          .map((t) => POLICY_MESSAGE_TYPE_META[t].label)
+                          .join(", ")}
+                      </li>
+                    ))}
+                  </ul>
+                  <Button
+                    variant="secondary"
+                    className="mt-2"
+                    onClick={() => {
+                      const next = new Set(selectedMessageTypes);
+                      for (const t of missingScopeTypes) next.add(t);
+                      setSelectedMessageTypes(next);
+                    }}
+                  >
+                    <Button.Text>Include {missingScopeLabels}</Button.Text>
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
         )}
 
