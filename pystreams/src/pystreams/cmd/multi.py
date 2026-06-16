@@ -17,6 +17,7 @@ from gram_infra.pubsub import (
 
 from .. import attr
 from ..deps import logging
+from ..deps.loop_lag import monitor_event_loop_lag
 from ..health import HealthState, serve_control
 from .receiver import ReceiverGroup
 from . import flags_service
@@ -84,6 +85,7 @@ async def multi(
 
         async with anyio.create_task_group() as tg:
             tg.start_soon(_shutdown_on_signal, tg.cancel_scope, health_state, logger)
+            tg.start_soon(monitor_event_loop_lag)
             # Start the health server first (and wait until it is bound) so the
             # liveness probe answers as early as possible, then begin consuming
             # and only then report ready.
