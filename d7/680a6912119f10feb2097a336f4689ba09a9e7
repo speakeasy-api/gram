@@ -1,0 +1,19 @@
+client/dashboard/src/components/app-sidebar.tsx
+  s_59337254a71aba::t_6645e745723801 126,130-133,176,216,245-298
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "d7680a6912119f10feb2097a336f4689ba09a9e7",
+  "prompts": {},
+  "sessions": {
+    "s_59337254a71aba": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb4b6-6761-7b51-aae8-8a95a6a06621",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Alex Martin <alex.martin@speakeasy.com>"
+    }
+  }
+}
