@@ -59,7 +59,8 @@ import {
   useListToolsets,
 } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Badge, Icon } from "@speakeasy-api/moonshine";
+import type { BadgeProps } from "@speakeasy-api/moonshine";
 import {
   useInfiniteQuery,
   useQuery,
@@ -670,8 +671,8 @@ function LogsToolsContent({
                   <div className="w-5 shrink-0" />
                   <div className="min-w-0 flex-2">Source / Tool</div>
                   <div className="min-w-[200px] flex-1 text-left">User</div>
-                  <div className="w-24 shrink-0">Agent</div>
-                  <div className="w-24 shrink-0 text-right">Status</div>
+                  <div className="min-w-28 shrink-0">Agent</div>
+                  <div className="min-w-20 shrink-0 text-center">Status</div>
                 </div>
 
                 <div
@@ -945,7 +946,7 @@ function LogsToolsTraceRow({
           {userLabel || "—"}
         </div>
 
-        <div className="flex w-24 shrink-0 items-center gap-2">
+        <div className="flex min-w-28 shrink-0 items-center gap-2">
           {trace.hookSource ? (
             <>
               <HookSourceIcon
@@ -963,21 +964,12 @@ function LogsToolsTraceRow({
           )}
         </div>
 
-        <div className="flex w-24 shrink-0 justify-end">
-          <div
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium",
-              statusConfig.bgColor,
-              statusConfig.color,
-            )}
-          >
-            {statusConfig.icon ? (
-              <Icon name={statusConfig.icon} className="size-3" />
-            ) : (
-              <div className="size-1.5 rounded-full bg-current" />
-            )}
-            {statusConfig.label}
-          </div>
+        <div className="flex min-w-20 shrink-0 justify-center">
+          {statusConfig && (
+            <Badge variant={statusConfig.variant}>
+              <Badge.Text>{statusConfig.label}</Badge.Text>
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -1056,57 +1048,51 @@ function getTargetConfig(targetType: ToolUsageTraceSummary["targetType"]) {
   }
 }
 
-function getStatusConfig(trace: ToolUsageTraceSummary) {
-  if (trace.hookStatus === "blocked") {
-    return {
-      color: "text-warning",
-      bgColor: "bg-warning/10",
-      label: "Blocked",
-      icon: "shield-alert" as const,
-    };
-  }
-
-  if (trace.hookStatus === "failure") {
-    return {
-      color: "text-destructive",
-      bgColor: "bg-destructive/10",
-      label: "Failure",
-      icon: null,
-    };
-  }
-
-  if (trace.hookStatus === "success") {
-    return {
-      color: "text-success",
-      bgColor: "bg-success/10",
-      label: "Success",
-      icon: null,
-    };
+function getStatusConfig(trace: ToolUsageTraceSummary): {
+  variant: NonNullable<BadgeProps["variant"]>;
+  label: string;
+} | null {
+  if (trace.hookStatus) {
+    switch (trace.hookStatus) {
+      case "blocked":
+        return {
+          variant: "warning",
+          label: "Blocked",
+        };
+      case "failure":
+        return {
+          variant: "destructive",
+          label: "Error",
+        };
+      case "success":
+        return {
+          variant: "success",
+          label: "Success",
+        };
+      case "pending":
+        return {
+          variant: "neutral",
+          label: "Pending",
+        };
+      default:
+        return null;
+    }
   }
 
   if (trace.httpStatusCode !== undefined) {
     if (trace.httpStatusCode >= 400) {
       return {
-        color: "text-destructive",
-        bgColor: "bg-destructive/10",
-        label: "Failure",
-        icon: null,
+        variant: "destructive",
+        label: "Error",
       };
     }
     if (trace.httpStatusCode >= 200 && trace.httpStatusCode < 400) {
       return {
-        color: "text-success",
-        bgColor: "bg-success/10",
+        variant: "success",
         label: "Success",
-        icon: null,
       };
     }
   }
 
-  return {
-    color: "text-muted-foreground",
-    bgColor: "bg-muted",
-    label: "Pending",
-    icon: null,
-  };
+  return null;
 }
