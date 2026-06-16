@@ -132,7 +132,7 @@ jobs:
             echo "Infra jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.pystreams }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.pystreams }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_PREVIEW_LABEL" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "pystreams=true" >> $GITHUB_OUTPUT
             echo "Pystreams jobs will run."
           else
