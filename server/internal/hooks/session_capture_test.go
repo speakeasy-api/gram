@@ -120,7 +120,7 @@ func TestClaudeHookSource_ConsistentAcrossAllWrites(t *testing.T) {
 	}
 }
 
-func TestClaudeUserPromptSubmitPersistsPromptIDAsMessageID(t *testing.T) {
+func TestClaudeUserPromptSubmitDoesNotPersistPromptIDAsMessageID(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
@@ -163,8 +163,7 @@ func TestClaudeUserPromptSubmitPersistsPromptIDAsMessageID(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, msgs, 1)
 	require.Equal(t, "user", msgs[0].Role)
-	require.True(t, msgs[0].MessageID.Valid)
-	require.Equal(t, wantPromptID, msgs[0].MessageID.String)
+	require.False(t, msgs[0].MessageID.Valid)
 	require.False(t, msgs[0].ExternalMessageID.Valid, "Claude prompt IDs must not be stored as external_message_id")
 }
 
@@ -206,6 +205,15 @@ func TestClaudeStopBackfillsLatestUserPromptID(t *testing.T) {
 		},
 	}, metadata))
 
+	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	require.Equal(t, "user", msgs[0].Role)
+	require.False(t, msgs[0].MessageID.Valid, "UserPromptSubmit promptId must not be persisted directly")
+
 	require.NoError(t, ti.service.persistConversationEvent(ctx, &gen.ClaudePayload{
 		HookEventName:        "Stop",
 		SessionID:            &sessionID,
@@ -215,7 +223,7 @@ func TestClaudeStopBackfillsLatestUserPromptID(t *testing.T) {
 		},
 	}, metadata))
 
-	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+	msgs, err = chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
 		ChatID:    chatID,
 		ProjectID: *authCtx.ProjectID,
 	})

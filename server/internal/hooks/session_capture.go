@@ -257,13 +257,11 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 	// Determine role and content based on event type
 	var role, content string
 	var model pgtype.Text
-	messageID := conv.ToPGTextEmpty("")
 
 	switch payload.HookEventName {
 	case "UserPromptSubmit":
 		role = "user"
 		content = conv.PtrValOr(payload.Prompt, "")
-		messageID = conv.ToPGTextEmpty(claudePromptIDFromAdditionalData(payload.AdditionalData))
 	case "Stop":
 		if err := s.backfillLastUserPromptID(ctx, chatID, projectID, payload); err != nil {
 			s.logger.WarnContext(ctx, "failed to backfill Claude user prompt ID",
@@ -303,7 +301,7 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 		ContentRaw:       nil,
 		ContentAssetUrl:  conv.ToPGTextEmpty(""),
 		StorageError:     conv.ToPGTextEmpty(""),
-		MessageID:        messageID,
+		MessageID:        conv.ToPGTextEmpty(""),
 		ToolCallID:       conv.ToPGTextEmpty(""),
 		ExternalUserID:   conv.ToPGTextEmpty(metadata.UserEmail),
 		FinishReason:     conv.ToPGTextEmpty(""),
@@ -349,18 +347,6 @@ func (s *Service) backfillLastUserPromptID(ctx context.Context, chatID uuid.UUID
 		return fmt.Errorf("backfill latest Claude user message prompt ID: %w", err)
 	}
 	return nil
-}
-
-func claudePromptIDFromAdditionalData(additionalData map[string]any) string {
-	if additionalData == nil {
-		return ""
-	}
-	for _, key := range []string{"promptId", "prompt_id"} {
-		if v, ok := additionalData[key].(string); ok {
-			return v
-		}
-	}
-	return ""
 }
 
 func claudeLastUserPromptIDFromAdditionalData(additionalData map[string]any) string {
