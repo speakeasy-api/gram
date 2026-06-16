@@ -58,12 +58,12 @@ func (s *Service) ListRemoteSessions(ctx context.Context, payload *gen.ListRemot
 
 	items := make([]*types.RemoteSession, 0, len(rows))
 	for _, row := range rows {
-		items = append(items, mv.BuildRemoteSessionView(row))
+		items = append(items, mv.BuildRemoteSessionView(row.RemoteSession, conv.FromPGText[string](row.SubjectDisplayName), conv.FromPGText[string](row.SubjectEmail)))
 	}
 
 	var nextCursor *string
 	if len(rows) >= int(limit) {
-		c := rows[len(rows)-1].ID.String()
+		c := rows[len(rows)-1].RemoteSession.ID.String()
 		nextCursor = &c
 	}
 

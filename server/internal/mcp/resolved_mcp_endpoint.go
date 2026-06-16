@@ -305,7 +305,7 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		case err != nil:
 			return nil, oops.E(oops.CodeUnexpected, err, "load mcp endpoint").LogError(ctx, s.logger)
 		}
-		mcpServer, err := mcpservers_repo.New(s.db).GetMCPServerByID(ctx, mcpservers_repo.GetMCPServerByIDParams{
+		mcpServer, err := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
 			ID:        mcpEndpoint.McpServerID,
 			ProjectID: mcpEndpoint.ProjectID,
 		})

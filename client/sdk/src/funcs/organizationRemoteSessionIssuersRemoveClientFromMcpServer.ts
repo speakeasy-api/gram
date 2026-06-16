@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { encodeJSON, encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -27,16 +27,16 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * deleteOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
+ * removeClientFromMcpServer organizationRemoteSessionIssuers
  *
  * @remarks
- * Soft-delete an organization-level remote_session_issuer. Blocked if any remote_session_clients still reference it.
+ * Detach a remote_session_client from an MCP server (clears the MCP server's user_session_issuer link) in the caller's organization. Requires org:admin.
  */
-export function organizationRemoteSessionIssuersDelete(
+export function organizationRemoteSessionIssuersRemoveClientFromMcpServer(
   client: GramCore,
-  request: operations.DeleteOrganizationRemoteSessionIssuerRequest,
+  request: operations.RemoveOrganizationRemoteSessionClientFromMcpServerRequest,
   security?:
-    | operations.DeleteOrganizationRemoteSessionIssuerSecurity
+    | operations.RemoveOrganizationRemoteSessionClientFromMcpServerSecurity
     | undefined,
   options?: RequestOptions,
 ): APIPromise<
@@ -63,9 +63,9 @@ export function organizationRemoteSessionIssuersDelete(
 
 async function $do(
   client: GramCore,
-  request: operations.DeleteOrganizationRemoteSessionIssuerRequest,
+  request: operations.RemoveOrganizationRemoteSessionClientFromMcpServerRequest,
   security?:
-    | operations.DeleteOrganizationRemoteSessionIssuerSecurity
+    | operations.RemoveOrganizationRemoteSessionClientFromMcpServerSecurity
     | undefined,
   options?: RequestOptions,
 ): Promise<
@@ -89,7 +89,8 @@ async function $do(
     request,
     (value) =>
       z.parse(
-        operations.DeleteOrganizationRemoteSessionIssuerRequest$outboundSchema,
+        operations
+          .RemoveOrganizationRemoteSessionClientFromMcpServerRequest$outboundSchema,
         value,
       ),
     "Input validation failed",
@@ -98,15 +99,18 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = null;
+  const body = encodeJSON(
+    "body",
+    payload.RemoveClientFromMcpServerRequestBody,
+    { explode: true },
+  );
 
-  const path = pathToFunc("/rpc/organizationRemoteSessionIssuers.delete")();
-
-  const query = encodeFormQuery({
-    "id": payload.id,
-  });
+  const path = pathToFunc(
+    "/rpc/organizationRemoteSessionIssuers.removeClientFromMcpServer",
+  )();
 
   const headers = new Headers(compactMap({
+    "Content-Type": "application/json",
     Accept: "application/json",
     "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
       explode: false,
@@ -138,7 +142,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "deleteOrganizationRemoteSessionIssuer",
+    operationID: "removeOrganizationRemoteSessionClientFromMcpServer",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -152,11 +156,10 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "DELETE",
+    method: "POST",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,

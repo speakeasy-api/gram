@@ -56,3 +56,38 @@ export function pickPreferredAuthMethod(
   }
   return ClientSecretBasic;
 }
+
+// Derive a unique slug from the Issuer URL's hostname. Mirrors the hyphen-style
+// transform an operator would reasonably hand-write so the auto-filled value
+// looks natural. Returns null for unparseable URLs — callers keep the prior slug
+// in that case so partial typing doesn't blow it away.
+export function deriveSlugFromUrl(url: string): string | null {
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  try {
+    const host = new URL(trimmed).hostname;
+    if (!host) return null;
+    const slug = host
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    return slug || null;
+  } catch {
+    return null;
+  }
+}
+
+// Derive a default Display name from the Issuer URL's hostname. Unlike the slug
+// transform this keeps the hostname human-readable (no hyphenation/lowercasing).
+// Returns null for unparseable URLs so callers leave the prior value intact while
+// a partial URL is being typed.
+export function deriveNameFromUrl(url: string): string | null {
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  try {
+    const host = new URL(trimmed).hostname;
+    return host || null;
+  } catch {
+    return null;
+  }
+}

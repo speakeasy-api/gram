@@ -747,7 +747,7 @@ func resolveMetadataBackend(
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp_server_id (not a valid UUID)").LogError(ctx, logger)
 		}
-		server, err := mcpServerQueries.GetMCPServerByID(ctx, mcpservers_repo.GetMCPServerByIDParams{
+		server, err := mcpServerQueries.GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
 			ID:        parsedID,
 			ProjectID: projectID,
 		})

@@ -71,10 +71,10 @@ export type OrganizationRemoteSessionIssuersQueryError =
   | SDKValidationError;
 
 /**
- * listOrganizationRemoteSessionIssuers organizationRemoteSessionIssuers
+ * listIssuers organizationRemoteSessionIssuers
  *
  * @remarks
- * List organization-level remote_session_issuers in the caller's organization.
+ * List all remote_session_issuers in the caller's organization — organizational (project_id NULL) and project-specific — each with its associated client count and, for project-specific issuers, the owning project name. Requires org:read.
  */
 export function useOrganizationRemoteSessionIssuers(
   request?: operations.ListOrganizationRemoteSessionIssuersRequest | undefined,
@@ -102,10 +102,10 @@ export function useOrganizationRemoteSessionIssuers(
 }
 
 /**
- * listOrganizationRemoteSessionIssuers organizationRemoteSessionIssuers
+ * listIssuers organizationRemoteSessionIssuers
  *
  * @remarks
- * List organization-level remote_session_issuers in the caller's organization.
+ * List all remote_session_issuers in the caller's organization — organizational (project_id NULL) and project-specific — each with its associated client count and, for project-specific issuers, the owning project name. Requires org:read.
  */
 export function useOrganizationRemoteSessionIssuersSuspense(
   request?: operations.ListOrganizationRemoteSessionIssuersRequest | undefined,
@@ -133,10 +133,10 @@ export function useOrganizationRemoteSessionIssuersSuspense(
 }
 
 /**
- * listOrganizationRemoteSessionIssuers organizationRemoteSessionIssuers
+ * listIssuers organizationRemoteSessionIssuers
  *
  * @remarks
- * List organization-level remote_session_issuers in the caller's organization.
+ * List all remote_session_issuers in the caller's organization — organizational (project_id NULL) and project-specific — each with its associated client count and, for project-specific issuers, the owning project name. Requires org:read.
  */
 export function useOrganizationRemoteSessionIssuersInfinite(
   request?: operations.ListOrganizationRemoteSessionIssuersRequest | undefined,
@@ -178,10 +178,10 @@ export function useOrganizationRemoteSessionIssuersInfinite(
 }
 
 /**
- * listOrganizationRemoteSessionIssuers organizationRemoteSessionIssuers
+ * listIssuers organizationRemoteSessionIssuers
  *
  * @remarks
- * List organization-level remote_session_issuers in the caller's organization.
+ * List all remote_session_issuers in the caller's organization — organizational (project_id NULL) and project-specific — each with its associated client count and, for project-specific issuers, the owning project name. Requires org:read.
  */
 export function useOrganizationRemoteSessionIssuersInfiniteSuspense(
   request?: operations.ListOrganizationRemoteSessionIssuersRequest | undefined,
@@ -259,7 +259,7 @@ export function invalidateOrganizationRemoteSessionIssuers(
     queryKey: [
       "@gram/client",
       "organizationRemoteSessionIssuers",
-      "list",
+      "listIssuers",
       ...queryKeyBase,
     ],
   });
@@ -271,6 +271,10 @@ export function invalidateAllOrganizationRemoteSessionIssuers(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "organizationRemoteSessionIssuers", "list"],
+    queryKey: [
+      "@gram/client",
+      "organizationRemoteSessionIssuers",
+      "listIssuers",
+    ],
   });
 }

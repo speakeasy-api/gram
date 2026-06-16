@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { organizationRemoteSessionIssuersCreate } from "../funcs/organizationRemoteSessionIssuersCreate.js";
+import { organizationRemoteSessionIssuersCreateIssuer } from "../funcs/organizationRemoteSessionIssuersCreateIssuer.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -51,10 +51,10 @@ export type CreateOrganizationRemoteSessionIssuerMutationError =
   | SDKValidationError;
 
 /**
- * createOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
+ * createIssuer organizationRemoteSessionIssuers
  *
  * @remarks
- * Create a new organization-level remote_session_issuer.
+ * Create a remote_session_issuer in the caller's organization. With no project_id the issuer is organization-level (project_id NULL, inherited by every project); with a project_id (which must belong to the organization) it is project-specific. Requires org:admin.
  */
 export function useCreateOrganizationRemoteSessionIssuerMutation(
   options?: MutationHookOptions<
@@ -75,7 +75,7 @@ export function useCreateOrganizationRemoteSessionIssuerMutation(
 }
 
 export function mutationKeyCreateOrganizationRemoteSessionIssuer(): MutationKey {
-  return ["@gram/client", "organizationRemoteSessionIssuers", "create"];
+  return ["@gram/client", "organizationRemoteSessionIssuers", "createIssuer"];
 }
 
 export function buildCreateOrganizationRemoteSessionIssuerMutation(
@@ -106,7 +106,7 @@ export function buildCreateOrganizationRemoteSessionIssuerMutation(
           ),
         },
       };
-      return unwrapAsync(organizationRemoteSessionIssuersCreate(
+      return unwrapAsync(organizationRemoteSessionIssuersCreateIssuer(
         client$,
         request,
         security,
