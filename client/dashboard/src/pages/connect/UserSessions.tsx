@@ -5,6 +5,8 @@ import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SessionRow } from "@/components/sessions/SessionRow";
+import { STATUS_PRESENTATION } from "@/lib/user-session-status";
+import { cn } from "@/lib/utils";
 import {
   useUserSessionFacets,
   useUserSessionsInfinite,
@@ -57,17 +59,31 @@ function UserSessionsInner(): JSX.Element {
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2">
-        {STATUS_OPTIONS.map((opt) => (
-          <Button
-            key={opt}
-            variant={status === opt ? "secondary" : "ghost"}
-            size="sm"
-            onClick={() => setStatus(opt)}
-          >
-            {opt[0]!.toUpperCase() + opt.slice(1)}
-          </Button>
-        ))}
+      <div className="flex flex-wrap gap-2">
+        {STATUS_OPTIONS.map((opt) => {
+          const selected = status === opt;
+          const dotClass =
+            opt === "all" ? null : STATUS_PRESENTATION[opt].dotClass;
+          return (
+            <button
+              key={opt}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => setStatus(opt)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                selected
+                  ? "border-border bg-secondary text-secondary-foreground"
+                  : "text-muted-foreground hover:bg-muted border-transparent",
+              )}
+            >
+              {dotClass && (
+                <span className={cn("size-2 rounded-full", dotClass)} />
+              )}
+              {opt[0]!.toUpperCase() + opt.slice(1)}
+            </button>
+          );
+        })}
       </div>
 
       <div className="flex flex-wrap gap-2">
