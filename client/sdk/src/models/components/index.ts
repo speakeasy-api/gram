@@ -322,6 +322,7 @@ export * from "./riskoverviewresult.js";
 export * from "./riskoverviewtimeseriesfinding.js";
 export * from "./riskoverviewuser.js";
 export * from "./riskpolicy.js";
+export * from "./riskpolicyapplication.js";
 export * from "./riskpolicybypassapprovalrequestbody.js";
 export * from "./riskpolicybypassrequest.js";
 export * from "./riskpolicymodelconfig.js";

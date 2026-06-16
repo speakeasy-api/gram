@@ -7535,6 +7535,70 @@ func DecodeTestDetectionRuleResponse(decoder func(*http.Response) goahttp.Decode
 	}
 }
 
+// marshalTypesRiskPolicyApplicationToRiskPolicyApplicationRequestBody builds a
+// value of type *RiskPolicyApplicationRequestBody from a value of type
+// *types.RiskPolicyApplication.
+func marshalTypesRiskPolicyApplicationToRiskPolicyApplicationRequestBody(v *types.RiskPolicyApplication) *RiskPolicyApplicationRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &RiskPolicyApplicationRequestBody{}
+	if v.Include != nil {
+		res.Include = marshalTypesRiskMatchConfigToRiskMatchConfigRequestBody(v.Include)
+	}
+	if v.Exempt != nil {
+		res.Exempt = marshalTypesRiskMatchConfigToRiskMatchConfigRequestBody(v.Exempt)
+	}
+
+	return res
+}
+
+// marshalTypesRiskMatchConfigToRiskMatchConfigRequestBody builds a value of
+// type *RiskMatchConfigRequestBody from a value of type *types.RiskMatchConfig.
+func marshalTypesRiskMatchConfigToRiskMatchConfigRequestBody(v *types.RiskMatchConfig) *RiskMatchConfigRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &RiskMatchConfigRequestBody{
+		Combine: v.Combine,
+	}
+	if v.Conditions != nil {
+		res.Conditions = make([]*RiskMatchConditionRequestBody, len(v.Conditions))
+		for i, val := range v.Conditions {
+			if val == nil {
+				res.Conditions[i] = nil
+				continue
+			}
+			res.Conditions[i] = marshalTypesRiskMatchConditionToRiskMatchConditionRequestBody(val)
+		}
+	} else {
+		res.Conditions = []*RiskMatchConditionRequestBody{}
+	}
+
+	return res
+}
+
+// marshalTypesRiskMatchConditionToRiskMatchConditionRequestBody builds a value
+// of type *RiskMatchConditionRequestBody from a value of type
+// *types.RiskMatchCondition.
+func marshalTypesRiskMatchConditionToRiskMatchConditionRequestBody(v *types.RiskMatchCondition) *RiskMatchConditionRequestBody {
+	res := &RiskMatchConditionRequestBody{
+		Target:          v.Target,
+		Op:              v.Op,
+		Value:           v.Value,
+		Path:            v.Path,
+		CaseInsensitive: v.CaseInsensitive,
+	}
+	if v.Values != nil {
+		res.Values = make([]string, len(v.Values))
+		for i, val := range v.Values {
+			res.Values[i] = val
+		}
+	}
+
+	return res
+}
+
 // marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigRequestBody builds a
 // value of type *RiskPolicyModelConfigRequestBody from a value of type
 // *types.RiskPolicyModelConfig.
@@ -7551,6 +7615,70 @@ func marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigRequestBody(v *type
 	return res
 }
 
+// marshalRiskPolicyApplicationRequestBodyToTypesRiskPolicyApplication builds a
+// value of type *types.RiskPolicyApplication from a value of type
+// *RiskPolicyApplicationRequestBody.
+func marshalRiskPolicyApplicationRequestBodyToTypesRiskPolicyApplication(v *RiskPolicyApplicationRequestBody) *types.RiskPolicyApplication {
+	if v == nil {
+		return nil
+	}
+	res := &types.RiskPolicyApplication{}
+	if v.Include != nil {
+		res.Include = marshalRiskMatchConfigRequestBodyToTypesRiskMatchConfig(v.Include)
+	}
+	if v.Exempt != nil {
+		res.Exempt = marshalRiskMatchConfigRequestBodyToTypesRiskMatchConfig(v.Exempt)
+	}
+
+	return res
+}
+
+// marshalRiskMatchConfigRequestBodyToTypesRiskMatchConfig builds a value of
+// type *types.RiskMatchConfig from a value of type *RiskMatchConfigRequestBody.
+func marshalRiskMatchConfigRequestBodyToTypesRiskMatchConfig(v *RiskMatchConfigRequestBody) *types.RiskMatchConfig {
+	if v == nil {
+		return nil
+	}
+	res := &types.RiskMatchConfig{
+		Combine: v.Combine,
+	}
+	if v.Conditions != nil {
+		res.Conditions = make([]*types.RiskMatchCondition, len(v.Conditions))
+		for i, val := range v.Conditions {
+			if val == nil {
+				res.Conditions[i] = nil
+				continue
+			}
+			res.Conditions[i] = marshalRiskMatchConditionRequestBodyToTypesRiskMatchCondition(val)
+		}
+	} else {
+		res.Conditions = []*types.RiskMatchCondition{}
+	}
+
+	return res
+}
+
+// marshalRiskMatchConditionRequestBodyToTypesRiskMatchCondition builds a value
+// of type *types.RiskMatchCondition from a value of type
+// *RiskMatchConditionRequestBody.
+func marshalRiskMatchConditionRequestBodyToTypesRiskMatchCondition(v *RiskMatchConditionRequestBody) *types.RiskMatchCondition {
+	res := &types.RiskMatchCondition{
+		Target:          v.Target,
+		Op:              v.Op,
+		Value:           v.Value,
+		Path:            v.Path,
+		CaseInsensitive: v.CaseInsensitive,
+	}
+	if v.Values != nil {
+		res.Values = make([]string, len(v.Values))
+		for i, val := range v.Values {
+			res.Values[i] = val
+		}
+	}
+
+	return res
+}
+
 // marshalRiskPolicyModelConfigRequestBodyToTypesRiskPolicyModelConfig builds a
 // value of type *types.RiskPolicyModelConfig from a value of type
 // *RiskPolicyModelConfigRequestBody.
@@ -7562,6 +7690,67 @@ func marshalRiskPolicyModelConfigRequestBodyToTypesRiskPolicyModelConfig(v *Risk
 		Model:       v.Model,
 		Temperature: v.Temperature,
 		FailOpen:    v.FailOpen,
+	}
+
+	return res
+}
+
+// unmarshalRiskPolicyApplicationResponseBodyToTypesRiskPolicyApplication
+// builds a value of type *types.RiskPolicyApplication from a value of type
+// *RiskPolicyApplicationResponseBody.
+func unmarshalRiskPolicyApplicationResponseBodyToTypesRiskPolicyApplication(v *RiskPolicyApplicationResponseBody) *types.RiskPolicyApplication {
+	if v == nil {
+		return nil
+	}
+	res := &types.RiskPolicyApplication{}
+	if v.Include != nil {
+		res.Include = unmarshalRiskMatchConfigResponseBodyToTypesRiskMatchConfig(v.Include)
+	}
+	if v.Exempt != nil {
+		res.Exempt = unmarshalRiskMatchConfigResponseBodyToTypesRiskMatchConfig(v.Exempt)
+	}
+
+	return res
+}
+
+// unmarshalRiskMatchConfigResponseBodyToTypesRiskMatchConfig builds a value of
+// type *types.RiskMatchConfig from a value of type
+// *RiskMatchConfigResponseBody.
+func unmarshalRiskMatchConfigResponseBodyToTypesRiskMatchConfig(v *RiskMatchConfigResponseBody) *types.RiskMatchConfig {
+	if v == nil {
+		return nil
+	}
+	res := &types.RiskMatchConfig{
+		Combine: v.Combine,
+	}
+	res.Conditions = make([]*types.RiskMatchCondition, len(v.Conditions))
+	for i, val := range v.Conditions {
+		if val == nil {
+			res.Conditions[i] = nil
+			continue
+		}
+		res.Conditions[i] = unmarshalRiskMatchConditionResponseBodyToTypesRiskMatchCondition(val)
+	}
+
+	return res
+}
+
+// unmarshalRiskMatchConditionResponseBodyToTypesRiskMatchCondition builds a
+// value of type *types.RiskMatchCondition from a value of type
+// *RiskMatchConditionResponseBody.
+func unmarshalRiskMatchConditionResponseBodyToTypesRiskMatchCondition(v *RiskMatchConditionResponseBody) *types.RiskMatchCondition {
+	res := &types.RiskMatchCondition{
+		Target:          *v.Target,
+		Op:              *v.Op,
+		Value:           v.Value,
+		Path:            v.Path,
+		CaseInsensitive: v.CaseInsensitive,
+	}
+	if v.Values != nil {
+		res.Values = make([]string, len(v.Values))
+		for i, val := range v.Values {
+			res.Values[i] = val
+		}
 	}
 
 	return res
@@ -7641,6 +7830,9 @@ func unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(v *RiskPolicyResponseBody)
 		for i, val := range v.MessageTypes {
 			res.MessageTypes[i] = val
 		}
+	}
+	if v.ApplicationConfig != nil {
+		res.ApplicationConfig = unmarshalRiskPolicyApplicationResponseBodyToTypesRiskPolicyApplication(v.ApplicationConfig)
 	}
 	if v.ModelConfig != nil {
 		res.ModelConfig = unmarshalRiskPolicyModelConfigResponseBodyToTypesRiskPolicyModelConfig(v.ModelConfig)
@@ -7823,141 +8015,6 @@ func unmarshalRiskPolicyBypassRequestResponseBodyToRiskRiskPolicyBypassRequest(v
 	res.GrantedPrincipalUrns = make([]string, len(v.GrantedPrincipalUrns))
 	for i, val := range v.GrantedPrincipalUrns {
 		res.GrantedPrincipalUrns[i] = val
-	}
-
-	return res
-}
-
-// marshalTypesRiskMatchConfigToRiskMatchConfigRequestBody builds a value of
-// type *RiskMatchConfigRequestBody from a value of type *types.RiskMatchConfig.
-func marshalTypesRiskMatchConfigToRiskMatchConfigRequestBody(v *types.RiskMatchConfig) *RiskMatchConfigRequestBody {
-	if v == nil {
-		return nil
-	}
-	res := &RiskMatchConfigRequestBody{
-		Combine: v.Combine,
-	}
-	if v.Conditions != nil {
-		res.Conditions = make([]*RiskMatchConditionRequestBody, len(v.Conditions))
-		for i, val := range v.Conditions {
-			if val == nil {
-				res.Conditions[i] = nil
-				continue
-			}
-			res.Conditions[i] = marshalTypesRiskMatchConditionToRiskMatchConditionRequestBody(val)
-		}
-	} else {
-		res.Conditions = []*RiskMatchConditionRequestBody{}
-	}
-
-	return res
-}
-
-// marshalTypesRiskMatchConditionToRiskMatchConditionRequestBody builds a value
-// of type *RiskMatchConditionRequestBody from a value of type
-// *types.RiskMatchCondition.
-func marshalTypesRiskMatchConditionToRiskMatchConditionRequestBody(v *types.RiskMatchCondition) *RiskMatchConditionRequestBody {
-	res := &RiskMatchConditionRequestBody{
-		Target:          v.Target,
-		Op:              v.Op,
-		Value:           v.Value,
-		Path:            v.Path,
-		CaseInsensitive: v.CaseInsensitive,
-	}
-	if v.Values != nil {
-		res.Values = make([]string, len(v.Values))
-		for i, val := range v.Values {
-			res.Values[i] = val
-		}
-	}
-
-	return res
-}
-
-// marshalRiskMatchConfigRequestBodyToTypesRiskMatchConfig builds a value of
-// type *types.RiskMatchConfig from a value of type *RiskMatchConfigRequestBody.
-func marshalRiskMatchConfigRequestBodyToTypesRiskMatchConfig(v *RiskMatchConfigRequestBody) *types.RiskMatchConfig {
-	if v == nil {
-		return nil
-	}
-	res := &types.RiskMatchConfig{
-		Combine: v.Combine,
-	}
-	if v.Conditions != nil {
-		res.Conditions = make([]*types.RiskMatchCondition, len(v.Conditions))
-		for i, val := range v.Conditions {
-			if val == nil {
-				res.Conditions[i] = nil
-				continue
-			}
-			res.Conditions[i] = marshalRiskMatchConditionRequestBodyToTypesRiskMatchCondition(val)
-		}
-	} else {
-		res.Conditions = []*types.RiskMatchCondition{}
-	}
-
-	return res
-}
-
-// marshalRiskMatchConditionRequestBodyToTypesRiskMatchCondition builds a value
-// of type *types.RiskMatchCondition from a value of type
-// *RiskMatchConditionRequestBody.
-func marshalRiskMatchConditionRequestBodyToTypesRiskMatchCondition(v *RiskMatchConditionRequestBody) *types.RiskMatchCondition {
-	res := &types.RiskMatchCondition{
-		Target:          v.Target,
-		Op:              v.Op,
-		Value:           v.Value,
-		Path:            v.Path,
-		CaseInsensitive: v.CaseInsensitive,
-	}
-	if v.Values != nil {
-		res.Values = make([]string, len(v.Values))
-		for i, val := range v.Values {
-			res.Values[i] = val
-		}
-	}
-
-	return res
-}
-
-// unmarshalRiskMatchConfigResponseBodyToTypesRiskMatchConfig builds a value of
-// type *types.RiskMatchConfig from a value of type
-// *RiskMatchConfigResponseBody.
-func unmarshalRiskMatchConfigResponseBodyToTypesRiskMatchConfig(v *RiskMatchConfigResponseBody) *types.RiskMatchConfig {
-	if v == nil {
-		return nil
-	}
-	res := &types.RiskMatchConfig{
-		Combine: v.Combine,
-	}
-	res.Conditions = make([]*types.RiskMatchCondition, len(v.Conditions))
-	for i, val := range v.Conditions {
-		if val == nil {
-			res.Conditions[i] = nil
-			continue
-		}
-		res.Conditions[i] = unmarshalRiskMatchConditionResponseBodyToTypesRiskMatchCondition(val)
-	}
-
-	return res
-}
-
-// unmarshalRiskMatchConditionResponseBodyToTypesRiskMatchCondition builds a
-// value of type *types.RiskMatchCondition from a value of type
-// *RiskMatchConditionResponseBody.
-func unmarshalRiskMatchConditionResponseBodyToTypesRiskMatchCondition(v *RiskMatchConditionResponseBody) *types.RiskMatchCondition {
-	res := &types.RiskMatchCondition{
-		Target:          *v.Target,
-		Op:              *v.Op,
-		Value:           v.Value,
-		Path:            v.Path,
-		CaseInsensitive: v.CaseInsensitive,
-	}
-	if v.Values != nil {
-		res.Values = make([]string, len(v.Values))
-		for i, val := range v.Values {
-			res.Values[i] = val
-		}
 	}
 
 	return res

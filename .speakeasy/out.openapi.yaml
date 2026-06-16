@@ -33978,6 +33978,8 @@ components:
           enum:
             - flag
             - block
+        application_config:
+          $ref: '#/components/schemas/RiskPolicyApplication'
         auto_name:
           type: boolean
           description: Whether the policy name should be auto-generated.
@@ -40722,6 +40724,8 @@ components:
           enum:
             - flag
             - block
+        application_config:
+          $ref: '#/components/schemas/RiskPolicyApplication'
         auto_name:
           type: boolean
           description: Whether the policy name is auto-generated. When true, the name is regenerated on each update.
@@ -40823,6 +40827,13 @@ components:
         - updated_at
         - pending_messages
         - total_messages
+    RiskPolicyApplication:
+      type: object
+      properties:
+        exempt:
+          $ref: '#/components/schemas/RiskMatchConfig'
+        include:
+          $ref: '#/components/schemas/RiskMatchConfig'
     RiskPolicyBypassApprovalRequestBody:
       type: object
       properties:
@@ -44699,6 +44710,8 @@ components:
           enum:
             - flag
             - block
+        application_config:
+          $ref: '#/components/schemas/RiskPolicyApplication'
         auto_name:
           type: boolean
           description: Whether the policy name should be auto-generated.

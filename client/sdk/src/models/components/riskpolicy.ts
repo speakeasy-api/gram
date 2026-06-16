@@ -9,6 +9,10 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  RiskPolicyApplication,
+  RiskPolicyApplication$inboundSchema,
+} from "./riskpolicyapplication.js";
+import {
   RiskPolicyModelConfig,
   RiskPolicyModelConfig$inboundSchema,
 } from "./riskpolicymodelconfig.js";
@@ -42,6 +46,7 @@ export type RiskPolicy = {
    * Policy action: flag (log only) or block (deny in real-time).
    */
   action: RiskPolicyAction;
+  applicationConfig?: RiskPolicyApplication | undefined;
   /**
    * Whether the policy name is auto-generated. When true, the name is regenerated on each update.
    */
@@ -140,6 +145,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
   .pipe(
     z.object({
       action: z._default(RiskPolicyAction$inboundSchema, "flag"),
+      application_config: z.optional(RiskPolicyApplication$inboundSchema),
       auto_name: z.boolean(),
       created_at: z.pipe(
         z.iso.datetime({ offset: true }),
@@ -170,6 +176,7 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
     }),
     z.transform((v) => {
       return remap$(v, {
+        "application_config": "applicationConfig",
         "auto_name": "autoName",
         "created_at": "createdAt",
         "custom_rule_ids": "customRuleIds",

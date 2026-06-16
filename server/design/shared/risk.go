@@ -68,6 +68,7 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids attached as detectors: a match produces a finding.")
 	Attribute("exempt_rule_ids", ArrayOf(String), "Custom detection rule ids attached as exemptions: when one matches a message, the whole policy is skipped for that message (an allowlist). Disjoint from custom_rule_ids.")
 	Attribute("message_types", ArrayOf(String), "Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message.")
+	Attribute("application_config", RiskPolicyApplication, "Granular policy application: include (which messages the policy evaluates, in addition to message_types) and exempt (messages skipped entirely). Null when the policy relies only on message_types + exempt_rule_ids.")
 	Attribute("enabled", Boolean, "Whether the policy is active.")
 	Attribute("action", String, "Policy action: flag (log only) or block (deny in real-time).", func() {
 		RiskPolicyActionEnum()
@@ -129,6 +130,18 @@ var RiskMatchConfig = Type("RiskMatchConfig", func() {
 	Attribute("conditions", ArrayOf(RiskMatchCondition), "Conditions evaluated against a message; all (and) or any (or) must match.")
 
 	Required("conditions")
+})
+
+// RiskPolicyApplication is a policy's granular application predicate set, stored
+// in risk_policies.application_config. include narrows which messages the policy
+// evaluates (in addition to the coarse message_types filter); exempt takes a
+// matched message out of the policy entirely (an inline allowlist alongside
+// exempt_rule_ids).
+var RiskPolicyApplication = Type("RiskPolicyApplication", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("include", RiskMatchConfig, "Include predicate: the policy evaluates a message only when this matches. Omit for all-in (scope falls back to message_types).")
+	Attribute("exempt", RiskMatchConfig, "Exempt predicate: when it matches a message, the whole policy is skipped for that message (an inline allowlist, alongside exempt_rule_ids).")
 })
 
 var RiskCustomDetectionRule = Type("RiskCustomDetectionRule", func() {

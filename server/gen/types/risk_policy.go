@@ -40,6 +40,10 @@ type RiskPolicy struct {
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
 	MessageTypes []string
+	// Granular policy application: include (which messages the policy evaluates,
+	// in addition to message_types) and exempt (messages skipped entirely). Null
+	// when the policy relies only on message_types + exempt_rule_ids.
+	ApplicationConfig *RiskPolicyApplication
 	// Whether the policy is active.
 	Enabled bool
 	// Policy action: flag (log only) or block (deny in real-time).

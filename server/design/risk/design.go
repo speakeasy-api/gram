@@ -33,6 +33,7 @@ var _ = Service("risk", func() {
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding.")
 			Attribute("exempt_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as exemptions: when one matches a message, the whole policy is skipped for that message (an allowlist). Disjoint from custom_rule_ids.")
 			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. When empty or omitted, the policy scans all supported types.")
+			Attribute("application_config", shared.RiskPolicyApplication, "Granular policy application: include (narrows which messages the policy evaluates, beyond message_types) and exempt (messages skipped entirely). Omit to rely only on message_types + exempt_rule_ids.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
 			Attribute("action", String, "Policy action: flag or block.", func() {
 				shared.RiskPolicyActionEnum()
@@ -157,6 +158,7 @@ var _ = Service("risk", func() {
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.")
 			Attribute("exempt_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as exemptions: when one matches a message, the whole policy is skipped for that message (an allowlist). Disjoint from custom_rule_ids.")
 			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. Omit to preserve the current selection; send an empty array to apply to all types.")
+			Attribute("application_config", shared.RiskPolicyApplication, "Granular policy application: include (narrows which messages the policy evaluates, beyond message_types) and exempt (messages skipped entirely). Omit to preserve the current value.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
 			Attribute("action", String, "Policy action: flag or block.", func() {
 				shared.RiskPolicyActionEnum()

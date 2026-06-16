@@ -561,6 +561,7 @@ INSERT INTO risk_policies (
   , custom_rule_ids
   , exempt_rule_ids
   , message_types
+  , application_config
   , enabled
   , action
   , auto_name
@@ -582,12 +583,13 @@ VALUES (
   , COALESCE($10::text[], '{}'::text[])
   , COALESCE($11::text[], '{}'::text[])
   , $12::text[]
-  , $13
+  , $13::jsonb
   , $14
   , $15
   , $16
-  , $17::text
-  , $18::jsonb
+  , $17
+  , $18::text
+  , $19::jsonb
   , 1
 )
 RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, exempt_rule_ids, message_types, application_config, action, audience_type, auto_name, user_message, prompt, model_config, version, created_at, updated_at, deleted_at, deleted
@@ -606,6 +608,7 @@ type CreateRiskPolicyParams struct {
 	CustomRuleIds        []string
 	ExemptRuleIds        []string
 	MessageTypes         []string
+	ApplicationConfig    []byte
 	Enabled              bool
 	Action               string
 	AutoName             bool
@@ -628,6 +631,7 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 		arg.CustomRuleIds,
 		arg.ExemptRuleIds,
 		arg.MessageTypes,
+		arg.ApplicationConfig,
 		arg.Enabled,
 		arg.Action,
 		arg.AutoName,
@@ -2868,12 +2872,13 @@ SET name = $1
   , custom_rule_ids = COALESCE($6::text[], '{}'::text[])
   , exempt_rule_ids = COALESCE($7::text[], '{}'::text[])
   , message_types = $8::text[]
-  , enabled = $9
-  , action = $10
-  , auto_name = $11
-  , user_message = $12
-  , prompt = $13::text
-  , model_config = $14::jsonb
+  , application_config = $9::jsonb
+  , enabled = $10
+  , action = $11
+  , auto_name = $12
+  , user_message = $13
+  , prompt = $14::text
+  , model_config = $15::jsonb
   , version = CASE
       WHEN sources IS DISTINCT FROM $2
         OR presidio_entities IS DISTINCT FROM $3
@@ -2882,16 +2887,17 @@ SET name = $1
         OR custom_rule_ids IS DISTINCT FROM COALESCE($6::text[], '{}'::text[])
         OR exempt_rule_ids IS DISTINCT FROM COALESCE($7::text[], '{}'::text[])
         OR message_types IS DISTINCT FROM $8::text[]
-        OR enabled IS DISTINCT FROM $9
-        OR action IS DISTINCT FROM $10
-        OR prompt IS DISTINCT FROM $13::text
-        OR model_config IS DISTINCT FROM $14::jsonb
+        OR application_config IS DISTINCT FROM $9::jsonb
+        OR enabled IS DISTINCT FROM $10
+        OR action IS DISTINCT FROM $11
+        OR prompt IS DISTINCT FROM $14::text
+        OR model_config IS DISTINCT FROM $15::jsonb
       THEN version + 1
       ELSE version
     END
   , updated_at = clock_timestamp()
-WHERE id = $15
-  AND project_id = $16
+WHERE id = $16
+  AND project_id = $17
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, exempt_rule_ids, message_types, application_config, action, audience_type, auto_name, user_message, prompt, model_config, version, created_at, updated_at, deleted_at, deleted
 `
@@ -2905,6 +2911,7 @@ type UpdateRiskPolicyParams struct {
 	CustomRuleIds        []string
 	ExemptRuleIds        []string
 	MessageTypes         []string
+	ApplicationConfig    []byte
 	Enabled              bool
 	Action               string
 	AutoName             bool
@@ -2925,6 +2932,7 @@ func (q *Queries) UpdateRiskPolicy(ctx context.Context, arg UpdateRiskPolicyPara
 		arg.CustomRuleIds,
 		arg.ExemptRuleIds,
 		arg.MessageTypes,
+		arg.ApplicationConfig,
 		arg.Enabled,
 		arg.Action,
 		arg.AutoName,

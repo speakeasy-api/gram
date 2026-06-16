@@ -12,6 +12,7 @@ INSERT INTO risk_policies (
   , custom_rule_ids
   , exempt_rule_ids
   , message_types
+  , application_config
   , enabled
   , action
   , auto_name
@@ -33,6 +34,7 @@ VALUES (
   , COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
   , COALESCE(sqlc.arg(exempt_rule_ids)::text[], '{}'::text[])
   , sqlc.arg(message_types)::text[]
+  , sqlc.narg(application_config)::jsonb
   , @enabled
   , @action
   , @auto_name
@@ -88,6 +90,7 @@ SET name = @name
   , custom_rule_ids = COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
   , exempt_rule_ids = COALESCE(sqlc.arg(exempt_rule_ids)::text[], '{}'::text[])
   , message_types = sqlc.arg(message_types)::text[]
+  , application_config = sqlc.narg(application_config)::jsonb
   , enabled = @enabled
   , action = @action
   , auto_name = @auto_name
@@ -102,6 +105,7 @@ SET name = @name
         OR custom_rule_ids IS DISTINCT FROM COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
         OR exempt_rule_ids IS DISTINCT FROM COALESCE(sqlc.arg(exempt_rule_ids)::text[], '{}'::text[])
         OR message_types IS DISTINCT FROM sqlc.arg(message_types)::text[]
+        OR application_config IS DISTINCT FROM sqlc.narg(application_config)::jsonb
         OR enabled IS DISTINCT FROM @enabled
         OR action IS DISTINCT FROM @action
         OR prompt IS DISTINCT FROM sqlc.narg(prompt)::text

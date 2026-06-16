@@ -6,6 +6,11 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 import {
+  RiskPolicyApplication,
+  RiskPolicyApplication$Outbound,
+  RiskPolicyApplication$outboundSchema,
+} from "./riskpolicyapplication.js";
+import {
   RiskPolicyModelConfig,
   RiskPolicyModelConfig$Outbound,
   RiskPolicyModelConfig$outboundSchema,
@@ -40,6 +45,7 @@ export type CreateRiskPolicyRequestBody = {
    * Policy action: flag or block.
    */
   action?: Action | undefined;
+  applicationConfig?: RiskPolicyApplication | undefined;
   /**
    * Whether the policy name should be auto-generated.
    */
@@ -107,6 +113,7 @@ export const PolicyType$outboundSchema: z.ZodMiniEnum<typeof PolicyType> = z
 /** @internal */
 export type CreateRiskPolicyRequestBody$Outbound = {
   action: string;
+  application_config?: RiskPolicyApplication$Outbound | undefined;
   auto_name?: boolean | undefined;
   custom_rule_ids?: Array<string> | undefined;
   disabled_rules?: Array<string> | undefined;
@@ -130,6 +137,7 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     action: z._default(Action$outboundSchema, "flag"),
+    applicationConfig: z.optional(RiskPolicyApplication$outboundSchema),
     autoName: z.optional(z.boolean()),
     customRuleIds: z.optional(z.array(z.string())),
     disabledRules: z.optional(z.array(z.string())),
@@ -147,6 +155,7 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      applicationConfig: "application_config",
       autoName: "auto_name",
       customRuleIds: "custom_rule_ids",
       disabledRules: "disabled_rules",

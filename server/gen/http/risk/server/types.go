@@ -42,6 +42,10 @@ type CreateRiskPolicyRequestBody struct {
 	// Message types this policy applies to. When empty or omitted, the policy
 	// scans all supported types.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
+	// Granular policy application: include (narrows which messages the policy
+	// evaluates, beyond message_types) and exempt (messages skipped entirely).
+	// Omit to rely only on message_types + exempt_rule_ids.
+	ApplicationConfig *RiskPolicyApplicationRequestBody `form:"application_config,omitempty" json:"application_config,omitempty" xml:"application_config,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag or block.
@@ -85,6 +89,10 @@ type UpdateRiskPolicyRequestBody struct {
 	// Message types this policy applies to. Omit to preserve the current
 	// selection; send an empty array to apply to all types.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
+	// Granular policy application: include (narrows which messages the policy
+	// evaluates, beyond message_types) and exempt (messages skipped entirely).
+	// Omit to preserve the current value.
+	ApplicationConfig *RiskPolicyApplicationRequestBody `form:"application_config,omitempty" json:"application_config,omitempty" xml:"application_config,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag or block.
@@ -284,6 +292,10 @@ type CreateRiskPolicyResponseBody struct {
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
+	// Granular policy application: include (which messages the policy evaluates,
+	// in addition to message_types) and exempt (messages skipped entirely). Null
+	// when the policy relies only on message_types + exempt_rule_ids.
+	ApplicationConfig *RiskPolicyApplicationResponseBody `form:"application_config,omitempty" json:"application_config,omitempty" xml:"application_config,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -360,6 +372,10 @@ type GetRiskPolicyResponseBody struct {
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
+	// Granular policy application: include (which messages the policy evaluates,
+	// in addition to message_types) and exempt (messages skipped entirely). Null
+	// when the policy relies only on message_types + exempt_rule_ids.
+	ApplicationConfig *RiskPolicyApplicationResponseBody `form:"application_config,omitempty" json:"application_config,omitempty" xml:"application_config,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -422,6 +438,10 @@ type UpdateRiskPolicyResponseBody struct {
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
+	// Granular policy application: include (which messages the policy evaluates,
+	// in addition to message_types) and exempt (messages skipped entirely). Null
+	// when the policy relies only on message_types + exempt_rule_ids.
+	ApplicationConfig *RiskPolicyApplicationResponseBody `form:"application_config,omitempty" json:"application_config,omitempty" xml:"application_config,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -6663,6 +6683,44 @@ type TestDetectionRuleGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// RiskPolicyApplicationResponseBody is used to define fields on response body
+// types.
+type RiskPolicyApplicationResponseBody struct {
+	// Include predicate: the policy evaluates a message only when this matches.
+	// Omit for all-in (scope falls back to message_types).
+	Include *RiskMatchConfigResponseBody `form:"include,omitempty" json:"include,omitempty" xml:"include,omitempty"`
+	// Exempt predicate: when it matches a message, the whole policy is skipped for
+	// that message (an inline allowlist, alongside exempt_rule_ids).
+	Exempt *RiskMatchConfigResponseBody `form:"exempt,omitempty" json:"exempt,omitempty" xml:"exempt,omitempty"`
+}
+
+// RiskMatchConfigResponseBody is used to define fields on response body types.
+type RiskMatchConfigResponseBody struct {
+	// How the conditions reduce to a verdict.
+	Combine *string `form:"combine,omitempty" json:"combine,omitempty" xml:"combine,omitempty"`
+	// Conditions evaluated against a message; all (and) or any (or) must match.
+	Conditions []*RiskMatchConditionResponseBody `form:"conditions" json:"conditions" xml:"conditions"`
+}
+
+// RiskMatchConditionResponseBody is used to define fields on response body
+// types.
+type RiskMatchConditionResponseBody struct {
+	// Message field the condition reads. The target also scopes the condition to a
+	// message type.
+	Target string `form:"target" json:"target" xml:"target"`
+	// Comparison applied to the resolved target value.
+	Op string `form:"op" json:"op" xml:"op"`
+	// Operand for regex/equals/not_equals/glob. Empty is meaningful for equals
+	// (e.g. `tool_server == ""` matches native tools).
+	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
+	// Keywords for the keyword op (case-insensitive substring).
+	Values []string `form:"values,omitempty" json:"values,omitempty" xml:"values,omitempty"`
+	// gjson/JSONPath into the tool_args JSON (tool_args target only).
+	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
+	// Lowercase both sides for equals/not_equals/keyword.
+	CaseInsensitive *bool `form:"case_insensitive,omitempty" json:"case_insensitive,omitempty" xml:"case_insensitive,omitempty"`
+}
+
 // RiskPolicyModelConfigResponseBody is used to define fields on response body
 // types.
 type RiskPolicyModelConfigResponseBody struct {
@@ -6710,6 +6768,10 @@ type RiskPolicyResponseBody struct {
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
 	MessageTypes []string `form:"message_types,omitempty" json:"message_types,omitempty" xml:"message_types,omitempty"`
+	// Granular policy application: include (which messages the policy evaluates,
+	// in addition to message_types) and exempt (messages skipped entirely). Null
+	// when the policy relies only on message_types + exempt_rule_ids.
+	ApplicationConfig *RiskPolicyApplicationResponseBody `form:"application_config,omitempty" json:"application_config,omitempty" xml:"application_config,omitempty"`
 	// Whether the policy is active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Policy action: flag (log only) or block (deny in real-time).
@@ -6930,33 +6992,6 @@ type RiskPolicyBypassRequestResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
-// RiskMatchConfigResponseBody is used to define fields on response body types.
-type RiskMatchConfigResponseBody struct {
-	// How the conditions reduce to a verdict.
-	Combine *string `form:"combine,omitempty" json:"combine,omitempty" xml:"combine,omitempty"`
-	// Conditions evaluated against a message; all (and) or any (or) must match.
-	Conditions []*RiskMatchConditionResponseBody `form:"conditions" json:"conditions" xml:"conditions"`
-}
-
-// RiskMatchConditionResponseBody is used to define fields on response body
-// types.
-type RiskMatchConditionResponseBody struct {
-	// Message field the condition reads. The target also scopes the condition to a
-	// message type.
-	Target string `form:"target" json:"target" xml:"target"`
-	// Comparison applied to the resolved target value.
-	Op string `form:"op" json:"op" xml:"op"`
-	// Operand for regex/equals/not_equals/glob. Empty is meaningful for equals
-	// (e.g. `tool_server == ""` matches native tools).
-	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
-	// Keywords for the keyword op (case-insensitive substring).
-	Values []string `form:"values,omitempty" json:"values,omitempty" xml:"values,omitempty"`
-	// gjson/JSONPath into the tool_args JSON (tool_args target only).
-	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
-	// Lowercase both sides for equals/not_equals/keyword.
-	CaseInsensitive *bool `form:"case_insensitive,omitempty" json:"case_insensitive,omitempty" xml:"case_insensitive,omitempty"`
-}
-
 // RiskCustomDetectionRuleResponseBody is used to define fields on response
 // body types.
 type RiskCustomDetectionRuleResponseBody struct {
@@ -7032,18 +7067,15 @@ type TestDetectionRuleMatchResponseBody struct {
 	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 }
 
-// RiskPolicyModelConfigRequestBody is used to define fields on request body
+// RiskPolicyApplicationRequestBody is used to define fields on request body
 // types.
-type RiskPolicyModelConfigRequestBody struct {
-	// OpenRouter model id the judge should use. Empty selects the default judge
-	// model.
-	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
-	// Sampling temperature for the judge. Defaults to a low value for
-	// deterministic verdicts.
-	Temperature *float64 `form:"temperature,omitempty" json:"temperature,omitempty" xml:"temperature,omitempty"`
-	// When the judge errors or times out: true allows the message (fail-open),
-	// false blocks it (fail-closed). Defaults to fail-open.
-	FailOpen *bool `form:"fail_open,omitempty" json:"fail_open,omitempty" xml:"fail_open,omitempty"`
+type RiskPolicyApplicationRequestBody struct {
+	// Include predicate: the policy evaluates a message only when this matches.
+	// Omit for all-in (scope falls back to message_types).
+	Include *RiskMatchConfigRequestBody `form:"include,omitempty" json:"include,omitempty" xml:"include,omitempty"`
+	// Exempt predicate: when it matches a message, the whole policy is skipped for
+	// that message (an inline allowlist, alongside exempt_rule_ids).
+	Exempt *RiskMatchConfigRequestBody `form:"exempt,omitempty" json:"exempt,omitempty" xml:"exempt,omitempty"`
 }
 
 // RiskMatchConfigRequestBody is used to define fields on request body types.
@@ -7070,6 +7102,20 @@ type RiskMatchConditionRequestBody struct {
 	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
 	// Lowercase both sides for equals/not_equals/keyword.
 	CaseInsensitive *bool `form:"case_insensitive,omitempty" json:"case_insensitive,omitempty" xml:"case_insensitive,omitempty"`
+}
+
+// RiskPolicyModelConfigRequestBody is used to define fields on request body
+// types.
+type RiskPolicyModelConfigRequestBody struct {
+	// OpenRouter model id the judge should use. Empty selects the default judge
+	// model.
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// Sampling temperature for the judge. Defaults to a low value for
+	// deterministic verdicts.
+	Temperature *float64 `form:"temperature,omitempty" json:"temperature,omitempty" xml:"temperature,omitempty"`
+	// When the judge errors or times out: true allows the message (fail-open),
+	// false blocks it (fail-closed). Defaults to fail-open.
+	FailOpen *bool `form:"fail_open,omitempty" json:"fail_open,omitempty" xml:"fail_open,omitempty"`
 }
 
 // NewCreateRiskPolicyResponseBody builds the HTTP response body from the
@@ -7134,6 +7180,9 @@ func NewCreateRiskPolicyResponseBody(res *types.RiskPolicy) *CreateRiskPolicyRes
 		for i, val := range res.MessageTypes {
 			body.MessageTypes[i] = val
 		}
+	}
+	if res.ApplicationConfig != nil {
+		body.ApplicationConfig = marshalTypesRiskPolicyApplicationToRiskPolicyApplicationResponseBody(res.ApplicationConfig)
 	}
 	if res.ModelConfig != nil {
 		body.ModelConfig = marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigResponseBody(res.ModelConfig)
@@ -7232,6 +7281,9 @@ func NewGetRiskPolicyResponseBody(res *types.RiskPolicy) *GetRiskPolicyResponseB
 			body.MessageTypes[i] = val
 		}
 	}
+	if res.ApplicationConfig != nil {
+		body.ApplicationConfig = marshalTypesRiskPolicyApplicationToRiskPolicyApplicationResponseBody(res.ApplicationConfig)
+	}
 	if res.ModelConfig != nil {
 		body.ModelConfig = marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigResponseBody(res.ModelConfig)
 	}
@@ -7300,6 +7352,9 @@ func NewUpdateRiskPolicyResponseBody(res *types.RiskPolicy) *UpdateRiskPolicyRes
 		for i, val := range res.MessageTypes {
 			body.MessageTypes[i] = val
 		}
+	}
+	if res.ApplicationConfig != nil {
+		body.ApplicationConfig = marshalTypesRiskPolicyApplicationToRiskPolicyApplicationResponseBody(res.ApplicationConfig)
 	}
 	if res.ModelConfig != nil {
 		body.ModelConfig = marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigResponseBody(res.ModelConfig)
@@ -12435,6 +12490,9 @@ func NewCreateRiskPolicyPayload(body *CreateRiskPolicyRequestBody, apikeyToken *
 			v.MessageTypes[i] = val
 		}
 	}
+	if body.ApplicationConfig != nil {
+		v.ApplicationConfig = unmarshalRiskPolicyApplicationRequestBodyToTypesRiskPolicyApplication(body.ApplicationConfig)
+	}
 	if body.Action == nil {
 		v.Action = "flag"
 	}
@@ -12534,6 +12592,9 @@ func NewUpdateRiskPolicyPayload(body *UpdateRiskPolicyRequestBody, apikeyToken *
 		for i, val := range body.MessageTypes {
 			v.MessageTypes[i] = val
 		}
+	}
+	if body.ApplicationConfig != nil {
+		v.ApplicationConfig = unmarshalRiskPolicyApplicationRequestBodyToTypesRiskPolicyApplication(body.ApplicationConfig)
 	}
 	if body.ModelConfig != nil {
 		v.ModelConfig = unmarshalRiskPolicyModelConfigRequestBodyToTypesRiskPolicyModelConfig(body.ModelConfig)
@@ -12976,6 +13037,11 @@ func ValidateCreateRiskPolicyRequestBody(body *CreateRiskPolicyRequestBody) (err
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.policy_type", *body.PolicyType, []any{"standard", "prompt_based"}))
 		}
 	}
+	if body.ApplicationConfig != nil {
+		if err2 := ValidateRiskPolicyApplicationRequestBody(body.ApplicationConfig); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.Action != nil {
 		if !(*body.Action == "flag" || *body.Action == "block") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block"}))
@@ -12995,6 +13061,11 @@ func ValidateUpdateRiskPolicyRequestBody(body *UpdateRiskPolicyRequestBody) (err
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ApplicationConfig != nil {
+		if err2 := ValidateRiskPolicyApplicationRequestBody(body.ApplicationConfig); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	if body.Action != nil {
 		if !(*body.Action == "flag" || *body.Action == "block") {
@@ -13224,6 +13295,22 @@ func ValidateTestDetectionRuleRequestBody(body *TestDetectionRuleRequestBody) (e
 	}
 	if body.MatchConfig != nil {
 		if err2 := ValidateRiskMatchConfigRequestBody(body.MatchConfig); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateRiskPolicyApplicationRequestBody runs the validations defined on
+// RiskPolicyApplicationRequestBody
+func ValidateRiskPolicyApplicationRequestBody(body *RiskPolicyApplicationRequestBody) (err error) {
+	if body.Include != nil {
+		if err2 := ValidateRiskMatchConfigRequestBody(body.Include); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Exempt != nil {
+		if err2 := ValidateRiskMatchConfigRequestBody(body.Exempt); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}

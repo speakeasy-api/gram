@@ -329,6 +329,16 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		return nil, oops.E(oops.CodeUnexpected, err, "generate policy id").Log(ctx, s.logger)
 	}
 
+	// Application predicates (scope/exemption) apply to both standard and prompt
+	// policies, so they are not gated by policyType like the detection fields.
+	applicationConfig, err := applicationConfigToStorage(payload.ApplicationConfig)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid application_config")
+	}
+	if err := ra.ValidateApplicationConfig(applicationConfig); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid application_config")
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
@@ -348,6 +358,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		CustomRuleIds:        createPolicyDetectionField(policyType, payload.CustomRuleIds),
 		ExemptRuleIds:        createPolicyDetectionField(policyType, payload.ExemptRuleIds),
 		MessageTypes:         payload.MessageTypes,
+		ApplicationConfig:    applicationConfig,
 		Enabled:              enabled,
 		Action:               action,
 		AutoName:             autoName,
@@ -525,6 +536,19 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		messageTypes = payload.MessageTypes
 	}
 
+	// Application predicates: omit to preserve; send (possibly empty) to replace.
+	applicationConfig := current.ApplicationConfig
+	if payload.ApplicationConfig != nil {
+		ac, err := applicationConfigToStorage(payload.ApplicationConfig)
+		if err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid application_config")
+		}
+		if err := ra.ValidateApplicationConfig(ac); err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid application_config")
+		}
+		applicationConfig = ac
+	}
+
 	enabled := current.Enabled
 	if payload.Enabled != nil {
 		enabled = *payload.Enabled
@@ -618,6 +642,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		CustomRuleIds:        customRuleIds,
 		ExemptRuleIds:        exemptRuleIds,
 		MessageTypes:         messageTypes,
+		ApplicationConfig:    applicationConfig,
 		Enabled:              enabled,
 		Action:               action,
 		AutoName:             autoName,
@@ -2236,6 +2261,7 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		CustomRuleIds:        row.CustomRuleIds,
 		ExemptRuleIds:        row.ExemptRuleIds,
 		MessageTypes:         row.MessageTypes,
+		ApplicationConfig:    applicationConfigFromStorage(row.ApplicationConfig),
 		Enabled:              row.Enabled,
 		Action:               row.Action,
 		AutoName:             row.AutoName,
@@ -2267,6 +2293,7 @@ func policyRowSnapshot(row repo.RiskPolicy) *types.RiskPolicy {
 		CustomRuleIds:        row.CustomRuleIds,
 		ExemptRuleIds:        row.ExemptRuleIds,
 		MessageTypes:         row.MessageTypes,
+		ApplicationConfig:    applicationConfigFromStorage(row.ApplicationConfig),
 		Enabled:              row.Enabled,
 		Action:               row.Action,
 		AutoName:             row.AutoName,
@@ -2300,9 +2327,11 @@ func customDetectionRuleToType(row repo.RiskCustomDetectionRule) *types.RiskCust
 // column stays NULL (the rule falls back to its regex). The engine and API
 // share the same JSON shape but distinct Go types, so we map explicitly rather
 // than re-marshal the Goa type (whose fields lack snake_case json tags).
-func customRuleMatchConfigToStorage(in *types.RiskMatchConfig) ([]byte, error) {
+// matchConfigToEngine converts an API match_config into the engine struct,
+// returning nil for nil/empty (no conditions).
+func matchConfigToEngine(in *types.RiskMatchConfig) *ra.MatchConfig {
 	if in == nil {
-		return nil, nil
+		return nil
 	}
 	cfg := ra.MatchConfig{
 		Combine:    ra.MatchCombine(conv.PtrValOr(in.Combine, "")),
@@ -2320,6 +2349,40 @@ func customRuleMatchConfigToStorage(in *types.RiskMatchConfig) ([]byte, error) {
 			Path:            conv.PtrValOr(c.Path, ""),
 			CaseInsensitive: conv.PtrValOr(c.CaseInsensitive, false),
 		})
+	}
+	if len(cfg.Conditions) == 0 {
+		return nil
+	}
+	return &cfg
+}
+
+// matchConfigFromEngine maps an engine match_config back into the API type,
+// returning nil for nil/empty.
+func matchConfigFromEngine(cfg *ra.MatchConfig) *types.RiskMatchConfig {
+	if cfg == nil || len(cfg.Conditions) == 0 {
+		return nil
+	}
+	out := &types.RiskMatchConfig{
+		Combine:    conv.PtrEmpty(string(cfg.Combine)),
+		Conditions: make([]*types.RiskMatchCondition, 0, len(cfg.Conditions)),
+	}
+	for _, c := range cfg.Conditions {
+		out.Conditions = append(out.Conditions, &types.RiskMatchCondition{
+			Target:          string(c.Target),
+			Op:              string(c.Op),
+			Value:           conv.PtrEmpty(c.Value),
+			Values:          c.Values,
+			Path:            conv.PtrEmpty(c.Path),
+			CaseInsensitive: conv.PtrEmpty(c.CaseInsensitive),
+		})
+	}
+	return out
+}
+
+func customRuleMatchConfigToStorage(in *types.RiskMatchConfig) ([]byte, error) {
+	cfg := matchConfigToEngine(in)
+	if cfg == nil {
+		return nil, nil
 	}
 	raw, err := json.Marshal(cfg)
 	if err != nil {
@@ -2339,24 +2402,46 @@ func customRuleMatchConfigFromStorage(raw []byte) *types.RiskMatchConfig {
 	if err := json.Unmarshal(raw, &cfg); err != nil {
 		return nil
 	}
-	if len(cfg.Conditions) == 0 {
+	return matchConfigFromEngine(&cfg)
+}
+
+// applicationConfigToStorage marshals an API application_config into the
+// risk_policies.application_config JSONB { include, exempt }. Returns nil when
+// neither predicate is set.
+func applicationConfigToStorage(in *types.RiskPolicyApplication) ([]byte, error) {
+	if in == nil {
+		return nil, nil
+	}
+	app := ra.PolicyApplication{
+		Include: matchConfigToEngine(in.Include),
+		Exempt:  matchConfigToEngine(in.Exempt),
+	}
+	if app.Include == nil && app.Exempt == nil {
+		return nil, nil
+	}
+	raw, err := json.Marshal(app)
+	if err != nil {
+		return nil, fmt.Errorf("marshal application_config: %w", err)
+	}
+	return raw, nil
+}
+
+// applicationConfigFromStorage maps stored application_config JSONB back into the
+// API type. Returns nil for empty/NULL or undecodable bytes (validated on write).
+func applicationConfigFromStorage(raw []byte) *types.RiskPolicyApplication {
+	if len(raw) == 0 {
 		return nil
 	}
-	out := &types.RiskMatchConfig{
-		Combine:    conv.PtrEmpty(string(cfg.Combine)),
-		Conditions: make([]*types.RiskMatchCondition, 0, len(cfg.Conditions)),
+	var app ra.PolicyApplication
+	if err := json.Unmarshal(raw, &app); err != nil {
+		return nil
 	}
-	for _, c := range cfg.Conditions {
-		out.Conditions = append(out.Conditions, &types.RiskMatchCondition{
-			Target:          string(c.Target),
-			Op:              string(c.Op),
-			Value:           conv.PtrEmpty(c.Value),
-			Values:          c.Values,
-			Path:            conv.PtrEmpty(c.Path),
-			CaseInsensitive: conv.PtrEmpty(c.CaseInsensitive),
-		})
+	include := matchConfigFromEngine(app.Include)
+	exempt := matchConfigFromEngine(app.Exempt)
+	if include == nil && exempt == nil {
+		return nil
 	}
-	return out
+	return &types.RiskPolicyApplication{Include: include, Exempt: exempt}
 }
 
 func (s *Service) generatePolicyName(ctx context.Context, orgID, projectID string, sources, presidioEntities []string, action string, existingNames []string) string {
