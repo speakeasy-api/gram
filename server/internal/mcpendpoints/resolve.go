@@ -41,7 +41,7 @@ func BySlugAndCustomDomain(ctx context.Context, db *pgxpool.Pool, logger *slog.L
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, nil, oops.E(oops.CodeNotFound, err, "mcp endpoint not found")
 	case err != nil:
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "load mcp endpoint").Log(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "load mcp endpoint").LogError(ctx, logger)
 	}
 
 	server, err := mcpservers_repo.New(db).GetMCPServerByID(ctx, mcpservers_repo.GetMCPServerByIDParams{
@@ -52,7 +52,7 @@ func BySlugAndCustomDomain(ctx context.Context, db *pgxpool.Pool, logger *slog.L
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, nil, oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "load mcp server").Log(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, logger)
 	}
 
 	if server.Visibility == mcpservers.VisibilityDisabled {

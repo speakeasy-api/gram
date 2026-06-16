@@ -151,7 +151,7 @@ func (s *Service) ListRiskExclusions(ctx context.Context, payload *gen.ListRiskE
 		RiskPolicyID: policyID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list risk exclusions").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list risk exclusions").LogError(ctx, s.logger)
 	}
 
 	exclusions := make([]*types.RiskExclusion, 0, len(rows))
@@ -182,7 +182,7 @@ func (s *Service) CreateRiskExclusion(ctx context.Context, payload *gen.CreateRi
 	// Confirm the parent policy exists in this project (policy-bound only).
 	if policyID.Valid {
 		if _, err := s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{ID: policyID.UUID, ProjectID: *authCtx.ProjectID}); err != nil {
-			return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").LogError(ctx, s.logger)
 		}
 	}
 
@@ -195,7 +195,7 @@ func (s *Service) CreateRiskExclusion(ctx context.Context, payload *gen.CreateRi
 			RiskPolicyID: policyID,
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "count regex exclusions").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "count regex exclusions").LogError(ctx, s.logger)
 		}
 		if count >= exclusionMaxRegexPerScope {
 			return nil, oops.E(oops.CodeInvalid, nil, "too many regex exclusions in scope (max %d)", exclusionMaxRegexPerScope)
@@ -204,7 +204,7 @@ func (s *Service) CreateRiskExclusion(ctx context.Context, payload *gen.CreateRi
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -219,7 +219,7 @@ func (s *Service) CreateRiskExclusion(ctx context.Context, payload *gen.CreateRi
 		Enabled:        payload.Enabled,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "create risk exclusion").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "create risk exclusion").LogError(ctx, s.logger)
 	}
 
 	if err := s.audit.LogRiskExclusionCreate(ctx, dbtx, audit.LogRiskExclusionCreateEvent{
@@ -231,11 +231,11 @@ func (s *Service) CreateRiskExclusion(ctx context.Context, payload *gen.CreateRi
 		RiskExclusionID:  row.ID,
 		DisplayName:      exclusionDisplayName(row.MatchType, row.MatchValue),
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log risk exclusion create").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "log risk exclusion create").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit risk exclusion create").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "commit risk exclusion create").LogError(ctx, s.logger)
 	}
 
 	s.reconcileExclusion(ctx, row.ProjectID, row.ID)
@@ -265,13 +265,13 @@ func (s *Service) UpdateRiskExclusion(ctx context.Context, payload *gen.UpdateRi
 	}
 	if policyID.Valid {
 		if _, err := s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{ID: policyID.UUID, ProjectID: *authCtx.ProjectID}); err != nil {
-			return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").LogError(ctx, s.logger)
 		}
 	}
 
 	before, err := s.repo.GetRiskExclusion(ctx, repo.GetRiskExclusionParams{ID: id, ProjectID: *authCtx.ProjectID})
 	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "risk exclusion not found").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, err, "risk exclusion not found").LogError(ctx, s.logger)
 	}
 
 	// An omitted `enabled` leaves the current state untouched rather than
@@ -293,7 +293,7 @@ func (s *Service) UpdateRiskExclusion(ctx context.Context, payload *gen.UpdateRi
 				RiskPolicyID: policyID,
 			})
 			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "count regex exclusions").Log(ctx, s.logger)
+				return nil, oops.E(oops.CodeUnexpected, err, "count regex exclusions").LogError(ctx, s.logger)
 			}
 			if count >= exclusionMaxRegexPerScope {
 				return nil, oops.E(oops.CodeInvalid, nil, "too many regex exclusions in scope (max %d)", exclusionMaxRegexPerScope)
@@ -303,7 +303,7 @@ func (s *Service) UpdateRiskExclusion(ctx context.Context, payload *gen.UpdateRi
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -318,7 +318,7 @@ func (s *Service) UpdateRiskExclusion(ctx context.Context, payload *gen.UpdateRi
 		Enabled:      enabled,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "update risk exclusion").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "update risk exclusion").LogError(ctx, s.logger)
 	}
 
 	if err := s.audit.LogRiskExclusionUpdate(ctx, dbtx, audit.LogRiskExclusionUpdateEvent{
@@ -332,11 +332,11 @@ func (s *Service) UpdateRiskExclusion(ctx context.Context, payload *gen.UpdateRi
 		SnapshotBefore:   exclusionAuditSnapshot(before),
 		SnapshotAfter:    exclusionAuditSnapshot(row),
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log risk exclusion update").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "log risk exclusion update").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit risk exclusion update").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "commit risk exclusion update").LogError(ctx, s.logger)
 	}
 
 	s.reconcileExclusion(ctx, row.ProjectID, row.ID)
@@ -360,17 +360,17 @@ func (s *Service) DeleteRiskExclusion(ctx context.Context, payload *gen.DeleteRi
 
 	before, err := s.repo.GetRiskExclusion(ctx, repo.GetRiskExclusionParams{ID: id, ProjectID: *authCtx.ProjectID})
 	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "risk exclusion not found").Log(ctx, s.logger)
+		return oops.E(oops.CodeNotFound, err, "risk exclusion not found").LogError(ctx, s.logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	if err := repo.New(dbtx).DeleteRiskExclusion(ctx, repo.DeleteRiskExclusionParams{ID: id, ProjectID: *authCtx.ProjectID}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "delete risk exclusion").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "delete risk exclusion").LogError(ctx, s.logger)
 	}
 
 	if err := s.audit.LogRiskExclusionDelete(ctx, dbtx, audit.LogRiskExclusionDeleteEvent{
@@ -382,11 +382,11 @@ func (s *Service) DeleteRiskExclusion(ctx context.Context, payload *gen.DeleteRi
 		RiskExclusionID:  before.ID,
 		DisplayName:      exclusionDisplayName(before.MatchType, before.MatchValue),
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "log risk exclusion delete").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "log risk exclusion delete").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit risk exclusion delete").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "commit risk exclusion delete").LogError(ctx, s.logger)
 	}
 
 	// Restore findings previously suppressed by this exclusion.

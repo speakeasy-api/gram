@@ -46,12 +46,12 @@ func (p *ProvisionFunctionsAccess) Do(ctx context.Context, projectID uuid.UUID, 
 		"project id cannot be nil", projectID != uuid.Nil,
 		"deployment id cannot be nil", deploymentID != uuid.Nil,
 	); err != nil {
-		return oops.E(oops.CodeInvalid, err, "invalid inputs").Log(ctx, logger)
+		return oops.E(oops.CodeInvalid, err, "invalid inputs").LogError(ctx, logger)
 	}
 
 	dbtx, err := p.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error accessing database").Log(ctx, p.logger)
+		return oops.E(oops.CodeUnexpected, err, "error accessing database").LogError(ctx, p.logger)
 	}
 	defer o11y.NoLogDefer(func() error {
 		return dbtx.Rollback(ctx)
@@ -63,18 +63,18 @@ func (p *ProvisionFunctionsAccess) Do(ctx context.Context, projectID uuid.UUID, 
 		ProjectID:    projectID,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to get functions missing access").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to get functions missing access").LogError(ctx, logger)
 	}
 
 	for _, aid := range attachments {
 		key := make([]byte, 32)
 		if _, err := rand.Read(key); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to generate encryption key").Log(ctx, logger, attr.SlogDeploymentFunctionsID(aid.String()))
+			return oops.E(oops.CodeUnexpected, err, "failed to generate encryption key").LogError(ctx, logger, attr.SlogDeploymentFunctionsID(aid.String()))
 		}
 
 		sealedKey, err := p.encryption.Encrypt(key)
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to encrypt functions access key").Log(ctx, logger, attr.SlogDeploymentFunctionsID(aid.String()))
+			return oops.E(oops.CodeUnexpected, err, "failed to encrypt functions access key").LogError(ctx, logger, attr.SlogDeploymentFunctionsID(aid.String()))
 		}
 
 		_, err = deprepo.CreateDeploymentFunctionsAccess(ctx, repo.CreateDeploymentFunctionsAccessParams{
@@ -85,12 +85,12 @@ func (p *ProvisionFunctionsAccess) Do(ctx context.Context, projectID uuid.UUID, 
 			BearerFormat:  conv.ToPGText("v01"),
 		})
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to create functions access").Log(ctx, logger, attr.SlogDeploymentFunctionsID(aid.String()))
+			return oops.E(oops.CodeUnexpected, err, "failed to create functions access").LogError(ctx, logger, attr.SlogDeploymentFunctionsID(aid.String()))
 		}
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error committing functions access creation").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "error committing functions access creation").LogError(ctx, logger)
 	}
 
 	return nil

@@ -138,15 +138,15 @@ export function assert<V extends { error: string; stack?: never }>(
   options?: { status?: number },
 ): asserts cond {
   if (!cond) {
-    throw new Response(
-      JSON.stringify({ ...data, stack: new ResponseError().stack }),
-      {
-        status: options?.status || 500,
-        headers: {
-          "Content-Type": "application/json",
-        },
+    // Only the caller-supplied data is serialized into the response body. The
+    // body is surfaced verbatim to the MCP client, so we must never include a
+    // stack trace in a user-facing error message (AGE-2779).
+    throw new Response(JSON.stringify(data), {
+      status: options?.status || 500,
+      headers: {
+        "Content-Type": "application/json",
       },
-    );
+    });
   }
 }
 

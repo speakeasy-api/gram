@@ -84,7 +84,7 @@ func (i *ToolsCallUsageLimitsInterceptor) InterceptToolsCallRequest(ctx context.
 	}
 
 	if periodUsage.ToolCalls >= hardToolCallsLimit {
-		return oops.E(oops.CodeForbidden, errors.New("tool usage limit reached"), "tool usage limit reached").Log(ctx, i.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+		return oops.E(oops.CodeForbidden, errors.New("tool usage limit reached"), "tool usage limit reached").LogError(ctx, i.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
 	return nil

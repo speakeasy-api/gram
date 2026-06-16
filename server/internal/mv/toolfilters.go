@@ -25,7 +25,7 @@ func ToolVariationsGroupName(ctx context.Context, logger *slog.Logger, tx DBTX, 
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, nil
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "get tool variations group").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "get tool variations group").LogError(ctx, logger)
 	default:
 		return &group.Name, nil
 	}

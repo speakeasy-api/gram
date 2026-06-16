@@ -16,6 +16,10 @@ import {
 } from "@/lib/messageConverter";
 import { sleep } from "@/lib/utils";
 import {
+  ThreadMetaContext,
+  type ThreadMeta,
+} from "@/contexts/ThreadMetaContext";
+import {
   useCallback,
   useEffect,
   useMemo,
@@ -106,6 +110,18 @@ export interface ThreadListAdapterOptions {
 
 interface ListChatsResponse {
   chats: GramChatOverview[];
+}
+
+/**
+ * Reads a chat's creation timestamp from the `chat.list` payload. The wire
+ * format is snake_case (`created_at`) — the hand-written GramChatOverview type
+ * declares camelCase, which never matched the JSON — so check both and return
+ * an ISO string, or undefined when absent.
+ */
+function readChatCreatedAt(chat: GramChatOverview): string | undefined {
+  const raw = chat as unknown as Record<string, unknown>;
+  const value = raw["created_at"] ?? raw["createdAt"];
+  return typeof value === "string" ? value : undefined;
 }
 
 /**
@@ -293,6 +309,14 @@ export function useGramThreadListAdapter(
     optionsRef.current = options;
   }, [options]);
 
+  // Side channel for per-chat metadata (creation date) that assistant-ui's
+  // RemoteThreadMetadata can't carry. `list()` writes a fresh object into the
+  // ref and bumps the counter so the provider passes a new context value and
+  // ThreadListItem re-renders with the dates. A ref (not state) holds the data
+  // so the stable `list()` closure can write it without a re-created identity.
+  const metaRef = useRef<Record<string, ThreadMeta>>({});
+  const [, bumpMeta] = useState(0);
+
   // Create stable Provider component using useCallback
   const unstable_Provider = useCallback(function GramHistoryProvider({
     children,
@@ -300,9 +324,11 @@ export function useGramThreadListAdapter(
     const history = useGramThreadHistoryAdapter(optionsRef);
     const adapters = useMemo(() => ({ history }), [history]);
     return (
-      <RuntimeAdapterProvider adapters={adapters}>
-        {children}
-      </RuntimeAdapterProvider>
+      <ThreadMetaContext.Provider value={metaRef.current}>
+        <RuntimeAdapterProvider adapters={adapters}>
+          {children}
+        </RuntimeAdapterProvider>
+      </ThreadMetaContext.Provider>
     );
   }, []);
 
@@ -329,6 +355,15 @@ export function useGramThreadListAdapter(
           }
 
           const data = (await response.json()) as ListChatsResponse;
+          // Stash creation dates in the side channel before returning the
+          // assistant-ui metadata (which can't carry them) — keyed by chat id,
+          // the same value used for remoteId/externalId below.
+          const nextMeta: Record<string, ThreadMeta> = { ...metaRef.current };
+          for (const chat of data.chats) {
+            nextMeta[chat.id] = { createdAt: readChatCreatedAt(chat) };
+          }
+          metaRef.current = nextMeta;
+          bumpMeta((n) => n + 1);
           return {
             threads: data.chats.map((chat) => ({
               remoteId: chat.id,

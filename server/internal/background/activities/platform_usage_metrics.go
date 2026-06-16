@@ -39,7 +39,7 @@ func (c *CollectPlatformUsageMetrics) Do(ctx context.Context) ([]PlatformUsageMe
 
 	rows, err := c.repo.GetPlatformUsageMetrics(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get platform usage metrics").Log(ctx, c.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get platform usage metrics").LogError(ctx, c.logger)
 	}
 
 	metrics := make([]PlatformUsageMetrics, 0, len(rows))

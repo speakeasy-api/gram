@@ -266,7 +266,7 @@ func (s *MemoryService) Remember(
 	zero := RememberResult{ID: uuid.Nil, CreatedAt: time.Time{}, Deduped: false, SupersededID: nil}
 
 	if assistantID == uuid.Nil {
-		return zero, oops.E(oops.CodeBadRequest, nil, "assistant id is required").Log(ctx, s.logger)
+		return zero, oops.E(oops.CodeBadRequest, nil, "assistant id is required").LogError(ctx, s.logger)
 	}
 	if strings.TrimSpace(content) == "" {
 		return zero, oops.E(oops.CodeBadRequest, nil, "memory content is required")
@@ -289,28 +289,28 @@ func (s *MemoryService) Remember(
 		))
 	}
 	if err != nil {
-		return zero, oops.E(oops.CodeUnexpected, err, "create memory embedding").Log(ctx, s.logger)
+		return zero, oops.E(oops.CodeUnexpected, err, "create memory embedding").LogError(ctx, s.logger)
 	}
 	if len(vectors) != 1 {
-		return zero, oops.E(oops.CodeUnexpected, nil, "embedding response had %d vectors, expected 1", len(vectors)).Log(ctx, s.logger)
+		return zero, oops.E(oops.CodeUnexpected, nil, "embedding response had %d vectors, expected 1", len(vectors)).LogError(ctx, s.logger)
 	}
 	embedding := pgvector_go.NewHalfVector(vectors[0])
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return zero, oops.E(oops.CodeUnexpected, err, "begin remember transaction").Log(ctx, s.logger)
+		return zero, oops.E(oops.CodeUnexpected, err, "begin remember transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	txq := repo.New(tx)
 
 	if err := txq.LockAssistantForMemoryWrite(ctx, assistantID.String()); err != nil {
-		return zero, oops.E(oops.CodeUnexpected, err, "lock assistant for memory write").Log(ctx, s.logger)
+		return zero, oops.E(oops.CodeUnexpected, err, "lock assistant for memory write").LogError(ctx, s.logger)
 	}
 
 	count, err := txq.CountActiveAssistantMemories(ctx, assistantID)
 	if err != nil {
-		return zero, oops.E(oops.CodeUnexpected, err, "count active memories").Log(ctx, s.logger)
+		return zero, oops.E(oops.CodeUnexpected, err, "count active memories").LogError(ctx, s.logger)
 	}
 	if count >= int64(s.hardCap) {
 		return zero, oops.E(oops.CodeConflict, nil, "memory cap reached for assistant; call forget first")
@@ -322,7 +322,7 @@ func (s *MemoryService) Remember(
 	})
 	hasNearest := nearestErr == nil
 	if !hasNearest && !errors.Is(nearestErr, pgx.ErrNoRows) {
-		return zero, oops.E(oops.CodeUnexpected, nearestErr, "find nearest memory").Log(ctx, s.logger)
+		return zero, oops.E(oops.CodeUnexpected, nearestErr, "find nearest memory").LogError(ctx, s.logger)
 	}
 
 	supersedesID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
@@ -332,7 +332,7 @@ func (s *MemoryService) Remember(
 		switch {
 		case nearest.Similarity >= s.dedupeUpper:
 			if err := tx.Commit(ctx); err != nil {
-				return zero, oops.E(oops.CodeUnexpected, err, "commit dedupe").Log(ctx, s.logger)
+				return zero, oops.E(oops.CodeUnexpected, err, "commit dedupe").LogError(ctx, s.logger)
 			}
 			s.recordRememberOutcome(ctx, rememberOutcomeDeduped)
 			return RememberResult{
@@ -353,7 +353,7 @@ func (s *MemoryService) Remember(
 					attr.SlogError(contradictErr))
 			} else if contradicts {
 				if err := txq.MarkAssistantMemorySuperseded(ctx, nearest.ID); err != nil {
-					return zero, oops.E(oops.CodeUnexpected, err, "mark memory superseded").Log(ctx, s.logger)
+					return zero, oops.E(oops.CodeUnexpected, err, "mark memory superseded").LogError(ctx, s.logger)
 				}
 				supersedesID = uuid.NullUUID{UUID: nearest.ID, Valid: true}
 				outcome = rememberOutcomeSuperseded
@@ -383,11 +383,11 @@ func (s *MemoryService) Remember(
 		SupersedesID:   supersedesID,
 	})
 	if err != nil {
-		return zero, oops.E(oops.CodeUnexpected, err, "insert memory").Log(ctx, s.logger)
+		return zero, oops.E(oops.CodeUnexpected, err, "insert memory").LogError(ctx, s.logger)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return zero, oops.E(oops.CodeUnexpected, err, "commit remember transaction").Log(ctx, s.logger)
+		return zero, oops.E(oops.CodeUnexpected, err, "commit remember transaction").LogError(ctx, s.logger)
 	}
 
 	if outcome == rememberOutcomeSuperseded && s.metrics.supersedeDepth != nil {
@@ -498,7 +498,7 @@ func (s *MemoryService) Recall(
 		ResultLimit:    int32(limit),
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list nearest memories").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list nearest memories").LogError(ctx, s.logger)
 	}
 
 	if len(rows) == 0 {
@@ -610,14 +610,14 @@ func (s *MemoryService) Forget(
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return zero, oops.E(oops.CodeUnexpected, err, "begin forget transaction").Log(ctx, s.logger)
+		return zero, oops.E(oops.CodeUnexpected, err, "begin forget transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	txq := repo.New(tx)
 
 	if err := txq.LockAssistantForMemoryWrite(ctx, assistantID.String()); err != nil {
-		return zero, oops.E(oops.CodeUnexpected, err, "lock assistant for forget").Log(ctx, s.logger)
+		return zero, oops.E(oops.CodeUnexpected, err, "lock assistant for forget").LogError(ctx, s.logger)
 	}
 
 	tagFilter := tags
@@ -632,7 +632,7 @@ func (s *MemoryService) Forget(
 		ResultLimit:    int32(forgetCandidateLimit),
 	})
 	if err != nil {
-		return zero, oops.E(oops.CodeUnexpected, err, "list forget candidates").Log(ctx, s.logger)
+		return zero, oops.E(oops.CodeUnexpected, err, "list forget candidates").LogError(ctx, s.logger)
 	}
 
 	decision := decideForgetSelection(candidates, s.dedupeLower, s.forgetAmbiguityGap)
@@ -657,11 +657,11 @@ func (s *MemoryService) Forget(
 			s.recordForgetOutcome(ctx, forgetOutcomeNoMatch)
 			return noMatch, nil
 		}
-		return zero, oops.E(oops.CodeUnexpected, err, "soft delete memory").Log(ctx, s.logger)
+		return zero, oops.E(oops.CodeUnexpected, err, "soft delete memory").LogError(ctx, s.logger)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return zero, oops.E(oops.CodeUnexpected, err, "commit forget transaction").Log(ctx, s.logger)
+		return zero, oops.E(oops.CodeUnexpected, err, "commit forget transaction").LogError(ctx, s.logger)
 	}
 
 	id := target.ID
@@ -728,7 +728,7 @@ func (s *MemoryService) DeleteByID(ctx context.Context, projectID uuid.UUID, id 
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "begin delete transaction").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "begin delete transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
@@ -742,11 +742,11 @@ func (s *MemoryService) DeleteByID(ctx context.Context, projectID uuid.UUID, id 
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeNotFound, nil, "memory not found")
 		}
-		return oops.E(oops.CodeUnexpected, err, "soft delete memory").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "soft delete memory").LogError(ctx, s.logger)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit delete transaction").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "commit delete transaction").LogError(ctx, s.logger)
 	}
 
 	return nil
@@ -784,7 +784,7 @@ func (s *MemoryService) List(ctx context.Context, projectID uuid.UUID, params Li
 		PageLimit:       limit,
 	})
 	if err != nil {
-		return ListResult{}, oops.E(oops.CodeUnexpected, err, "list memories").Log(ctx, s.logger)
+		return ListResult{}, oops.E(oops.CodeUnexpected, err, "list memories").LogError(ctx, s.logger)
 	}
 
 	return ListResult{Memories: rows}, nil
@@ -801,7 +801,7 @@ func (s *MemoryService) Get(ctx context.Context, projectID uuid.UUID, id uuid.UU
 		if errors.Is(err, pgx.ErrNoRows) {
 			return repo.GetAssistantMemoryByIDRow{}, oops.E(oops.CodeNotFound, nil, "memory not found")
 		}
-		return repo.GetAssistantMemoryByIDRow{}, oops.E(oops.CodeUnexpected, err, "fetch memory").Log(ctx, s.logger)
+		return repo.GetAssistantMemoryByIDRow{}, oops.E(oops.CodeUnexpected, err, "fetch memory").LogError(ctx, s.logger)
 	}
 
 	return mem, nil

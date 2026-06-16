@@ -80,7 +80,7 @@ func (s *Service) HandleGetProtectedResource(w http.ResponseWriter, r *http.Requ
 	ctx := r.Context()
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
 	}
 
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
@@ -105,7 +105,7 @@ func (s *Service) HandleGetProtectedResource(w http.ResponseWriter, r *http.Requ
 	case errors.Is(err, errToolsetNotFound):
 		return oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").LogError(ctx, s.logger)
 	}
 
 	if toolset.UserSessionIssuerID.Valid {
@@ -118,7 +118,7 @@ func (s *Service) HandleGetProtectedResource(w http.ResponseWriter, r *http.Requ
 
 	resourceURL, err := url.JoinPath(s.BaseURLForRequest(r), "mcp", mcpSlug)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "build legacy resource URL").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "build legacy resource URL").LogError(ctx, s.logger)
 	}
 	return s.serveLegacyToolsetProtectedResource(ctx, w, logger, toolset, resourceURL)
 }
@@ -132,7 +132,7 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 	ctx := r.Context()
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
 	}
 
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
@@ -157,7 +157,7 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 	case errors.Is(err, errToolsetNotFound):
 		return oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").LogError(ctx, s.logger)
 	}
 
 	if toolset.UserSessionIssuerID.Valid {
@@ -212,11 +212,11 @@ func (s *Service) ServeWellKnownProtectedResourceForServer(
 		}
 		resourceURL, err := url.JoinPath(s.BaseURLForRequest(r), routeBase, mcpEndpoint.Slug)
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "build resource URL").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "build resource URL").LogError(ctx, logger)
 		}
 		return s.serveLegacyToolsetProtectedResource(ctx, w, logger, toolset, resourceURL)
 	default:
-		return oops.E(oops.CodeUnexpected, nil, "mcp server has no backend configured").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, nil, "mcp server has no backend configured").LogError(ctx, logger)
 	}
 }
 
@@ -259,7 +259,7 @@ func (s *Service) ServeWellKnownAuthorizationServerForServer(
 		}
 		return s.serveLegacyToolsetAuthorizationServer(ctx, w, r, logger, toolset, oauthSlug)
 	default:
-		return oops.E(oops.CodeUnexpected, nil, "mcp server has no backend configured").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, nil, "mcp server has no backend configured").LogError(ctx, logger)
 	}
 }
 
@@ -275,7 +275,7 @@ func (s *Service) loadToolsetForServer(ctx context.Context, logger *slog.Logger,
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, err, "toolset not found")
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "load toolset").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "load toolset").LogError(ctx, logger)
 	}
 	return &toolset, nil
 }
@@ -288,7 +288,7 @@ func (s *Service) loadToolsetForServer(ctx context.Context, logger *slog.Logger,
 func (s *Service) serveLegacyToolsetProtectedResource(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, toolset *toolsets_repo.Toolset, resourceURL string) error {
 	metadata, err := wellknown.ResolveOAuthProtectedResourceFromToolset(ctx, logger, s.db, &s.toolsetCache, toolset, resourceURL)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to resolve OAuth protected resource metadata").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to resolve OAuth protected resource metadata").LogError(ctx, logger)
 	}
 	if metadata == nil {
 		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
@@ -305,7 +305,7 @@ func (s *Service) serveLegacyToolsetProtectedResource(ctx context.Context, w htt
 func (s *Service) serveLegacyToolsetAuthorizationServer(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, toolset *toolsets_repo.Toolset, oauthSlug string) error {
 	result, err := wellknown.ResolveOAuthServerMetadataFromToolset(ctx, logger, s.db, s.oauthRepo, &s.toolsetCache, toolset, s.BaseURLForRequest(r), oauthSlug)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to resolve OAuth server metadata").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to resolve OAuth server metadata").LogError(ctx, logger)
 	}
 	if result == nil {
 		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
@@ -314,7 +314,7 @@ func (s *Service) serveLegacyToolsetAuthorizationServer(ctx context.Context, w h
 	if result.Kind == wellknown.OAuthServerMetadataResultKindProxy {
 		target, parseErr := url.Parse(result.ProxyURL)
 		if parseErr != nil {
-			return oops.E(oops.CodeUnexpected, parseErr, "failed to parse well-known URL").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, parseErr, "failed to parse well-known URL").LogError(ctx, logger)
 		}
 		proxy := &httputil.ReverseProxy{
 			Director: nil,
@@ -346,7 +346,7 @@ func (s *Service) ServeGetProtectedResource(w http.ResponseWriter, r *http.Reque
 	baseURL := s.BaseURLForRequest(r)
 	resource, err := endpoint.RootURL(baseURL)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "build resource URL").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "build resource URL").LogError(ctx, s.logger)
 	}
 	return writeJSONMetadata(ctx, w, s.logger, oauthProtectedResourceMetadata{
 		Resource:               resource,
@@ -367,7 +367,7 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 	baseURL := s.BaseURLForRequest(r)
 	urls, err := endpoint.AuthorizationServerURLs(baseURL)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "build OAuth server URLs").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "build OAuth server URLs").LogError(ctx, s.logger)
 	}
 	return writeJSONMetadata(ctx, w, s.logger, oauthAuthorizationServerMetadata{
 		Issuer:                            urls.Issuer,
@@ -388,12 +388,12 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 func writeJSONMetadata(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, v any) error {
 	body, err := json.Marshal(v)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to marshal metadata").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to marshal metadata").LogError(ctx, logger)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write(body); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to write response body").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to write response body").LogError(ctx, logger)
 	}
 	return nil
 }

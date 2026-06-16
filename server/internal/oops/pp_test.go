@@ -29,7 +29,7 @@ func TestShareableError_Log_LogsAtError(t *testing.T) {
 	logger, logBuf := captureLogger()
 	ctx, recorder := startRecordedSpan(t)
 
-	_ = E(CodeNotFound, nil, "resource not found").Log(ctx, logger)
+	_ = E(CodeNotFound, nil, "resource not found").LogError(ctx, logger)
 
 	entries := parseLogEntries(t, logBuf)
 	require.Len(t, entries, 1)
@@ -53,7 +53,7 @@ func TestShareableError_Log_ClientCanceledLogsAtInfo(t *testing.T) {
 
 	// Wrap context.Canceled to prove detection is by sentinel, not identity.
 	cause := fmt.Errorf("list tool variations: %w", context.Canceled)
-	_ = E(CodeUnexpected, cause, "failed to list tool variations").Log(ctx, logger)
+	_ = E(CodeUnexpected, cause, "failed to list tool variations").LogError(ctx, logger)
 
 	entries := parseLogEntries(t, logBuf)
 	require.Len(t, entries, 1)
@@ -76,7 +76,7 @@ func TestShareableError_Log_AppCanceledWithLiveContextLogsAtError(t *testing.T) 
 	ctx, recorder := startRecordedSpan(t)
 
 	cause := fmt.Errorf("errgroup sibling: %w", context.Canceled)
-	_ = E(CodeUnexpected, cause, "failed to fan out").Log(ctx, logger)
+	_ = E(CodeUnexpected, cause, "failed to fan out").LogError(ctx, logger)
 
 	entries := parseLogEntries(t, logBuf)
 	require.Len(t, entries, 1)
@@ -94,7 +94,7 @@ func TestShareableError_Log_DeadlineExceededLogsAtError(t *testing.T) {
 	ctx, recorder := startRecordedSpan(t)
 
 	cause := fmt.Errorf("query row: %w", context.DeadlineExceeded)
-	_ = E(CodeUnexpected, cause, "query failed").Log(ctx, logger)
+	_ = E(CodeUnexpected, cause, "query failed").LogError(ctx, logger)
 
 	entries := parseLogEntries(t, logBuf)
 	require.Len(t, entries, 1)

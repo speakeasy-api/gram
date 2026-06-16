@@ -227,7 +227,7 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*gen.ListScopesResult, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
@@ -315,16 +315,16 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	principals, err := authz.ResolveUserPrincipals(ctx, s.db, ac.ActiveOrganizationID, ac.UserID)
 	switch {
 	case errors.Is(err, authz.ErrPrincipalInvalid):
-		return nil, oops.E(oops.CodeUnauthorized, err, "invalid user principal").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnauthorized, err, "invalid user principal").LogError(ctx, logger)
 	case errors.Is(err, authz.ErrPrincipalNotFound):
-		return nil, oops.E(oops.CodeNotFound, nil, "current user has not joined this organization").Log(ctx, logger)
+		return nil, oops.E(oops.CodeNotFound, nil, "current user has not joined this organization").LogError(ctx, logger)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "resolve user principals").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve user principals").LogError(ctx, logger)
 	}
 
 	grants, err := authz.LoadGrants(ctx, s.db, ac.ActiveOrganizationID, principals)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "load effective user grants").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "load effective user grants").LogError(ctx, logger)
 	}
 
 	return &gen.ListUserGrantsResult{Grants: listRoleGrantsFromGrants(grants)}, nil
@@ -342,7 +342,7 @@ func (s *Service) UpdateMemberRoles(ctx context.Context, payload *gen.UpdateMemb
 		return nil, err
 	}
 	if len(payload.RoleIds) == 0 {
-		return nil, oops.E(oops.CodeBadRequest, nil, "at least one role is required").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "at least one role is required").LogError(ctx, s.logger)
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
@@ -377,15 +377,15 @@ func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, 
 func (s *Service) roleOrgContext(ctx context.Context) (*contextvalues.AuthContext, string, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
-		return nil, "", oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+		return nil, "", oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
 
 	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
 	if err != nil {
-		return nil, "", oops.E(oops.CodeUnexpected, err, "get organization metadata").Log(ctx, s.logger)
+		return nil, "", oops.E(oops.CodeUnexpected, err, "get organization metadata").LogError(ctx, s.logger)
 	}
 	if !org.WorkosID.Valid || org.WorkosID.String == "" {
-		return nil, "", oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS").Log(ctx, s.logger)
+		return nil, "", oops.E(oops.CodeBadRequest, nil, "organization is not linked to WorkOS").LogError(ctx, s.logger)
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
@@ -545,7 +545,7 @@ func (s *Service) GetRBACStatus(ctx context.Context, _ *gen.GetRBACStatusPayload
 		FeatureName:    string(productfeatures.FeatureRBAC),
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "check RBAC feature flag").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "check RBAC feature flag").LogError(ctx, s.logger)
 	}
 
 	return &gen.RBACStatus{RbacEnabled: enabled}, nil
@@ -559,7 +559,7 @@ func (s *Service) EnableRBAC(ctx context.Context, _ *gen.EnableRBACPayload) erro
 	logger := s.logger.With(attr.SlogOrganizationID(ac.ActiveOrganizationID))
 
 	if err := authz.SeedSystemRoleGrants(ctx, s.db, ac.ActiveOrganizationID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "seed system role grants").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "seed system role grants").LogError(ctx, logger)
 	}
 
 	if _, err := pfRepo.New(s.db).EnableFeature(ctx, pfRepo.EnableFeatureParams{
@@ -572,7 +572,7 @@ func (s *Service) EnableRBAC(ctx context.Context, _ *gen.EnableRBACPayload) erro
 			s.featureCache.UpdateFeatureCache(ctx, ac.ActiveOrganizationID, productfeatures.FeatureRBAC, true)
 			return nil
 		}
-		return oops.E(oops.CodeUnexpected, err, "enable RBAC feature flag").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "enable RBAC feature flag").LogError(ctx, logger)
 	}
 
 	s.featureCache.UpdateFeatureCache(ctx, ac.ActiveOrganizationID, productfeatures.FeatureRBAC, true)
@@ -594,7 +594,7 @@ func (s *Service) DisableRBAC(ctx context.Context, _ *gen.DisableRBACPayload) er
 			// Already disabled — no active feature row to soft-delete.
 			return nil
 		}
-		return oops.E(oops.CodeUnexpected, err, "disable RBAC feature flag").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "disable RBAC feature flag").LogError(ctx, logger)
 	}
 
 	s.featureCache.UpdateFeatureCache(ctx, ac.ActiveOrganizationID, productfeatures.FeatureRBAC, false)
@@ -610,7 +610,7 @@ func (s *Service) DisableRBAC(ctx context.Context, _ *gen.DisableRBACPayload) er
 func (s *Service) requireSuperAdmin(ctx context.Context) (*contextvalues.AuthContext, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
 	email := ""
 	if ac.Email != nil {
@@ -621,7 +621,7 @@ func (s *Service) requireSuperAdmin(ctx context.Context) (*contextvalues.AuthCon
 	}
 	user, err := usersrepo.New(s.db).GetUser(ctx, ac.UserID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get user for admin check").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "get user for admin check").LogError(ctx, s.logger)
 	}
 	if !user.Admin {
 		return nil, oops.C(oops.CodeForbidden)
@@ -678,7 +678,7 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 	if len(payload.Ids) > 0 {
 		challenges, err := chQueries.ListChallengesByIDs(ctx, authCtx.ActiveOrganizationID, payload.Ids)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "list challenges by ids from clickhouse").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "list challenges by ids from clickhouse").LogError(ctx, s.logger)
 		}
 		return s.buildChallengeResult(ctx, authCtx, challenges, len(challenges))
 	}
@@ -702,7 +702,7 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 	if !skipPagination {
 		count, err := chQueries.CountChallenges(ctx, filters)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "count challenges from clickhouse").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "count challenges from clickhouse").LogError(ctx, s.logger)
 		}
 		if count == 0 {
 			return &gen.ListChallengesResult{Challenges: []*gen.AuthzChallenge{}, Total: 0}, nil
@@ -712,7 +712,7 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 
 	challenges, err := chQueries.ListChallenges(ctx, filters)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list challenges from clickhouse").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list challenges from clickhouse").LogError(ctx, s.logger)
 	}
 
 	if len(challenges) == 0 {
@@ -760,7 +760,7 @@ func (s *Service) lookupResolutions(ctx context.Context, orgID string, challenge
 		ChallengeIds:   ids,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list challenge resolutions").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list challenge resolutions").LogError(ctx, s.logger)
 	}
 	m := make(map[string]repo.AuthzChallengeResolution, len(resolutions))
 	for _, r := range resolutions {
@@ -907,7 +907,7 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 	if !skipPagination {
 		count, err := chQueries.CountChallengeBuckets(ctx, filters)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "count challenge buckets from clickhouse").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "count challenge buckets from clickhouse").LogError(ctx, s.logger)
 		}
 		if count == 0 {
 			return &gen.ListChallengeBucketsResult{Buckets: []*gen.ChallengeBucket{}, Total: 0}, nil
@@ -917,7 +917,7 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 
 	buckets, err := chQueries.ListChallengeBuckets(ctx, filters)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list challenge buckets from clickhouse").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list challenge buckets from clickhouse").LogError(ctx, s.logger)
 	}
 
 	if len(buckets) == 0 {
@@ -935,7 +935,7 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 		ChallengeIds:   allChallengeIDs,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list challenge resolutions").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list challenge resolutions").LogError(ctx, s.logger)
 	}
 	resolutionMap := make(map[string]repo.AuthzChallengeResolution, len(resolutions))
 	for _, r := range resolutions {
@@ -1079,15 +1079,15 @@ func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChal
 	)
 
 	if len(payload.ChallengeIds) == 0 {
-		return nil, oops.E(oops.CodeBadRequest, nil, "challenge_ids must not be empty").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "challenge_ids must not be empty").LogError(ctx, s.logger)
 	}
 
 	// Validate: role_assigned requires role_slug.
 	if payload.ResolutionType == "role_assigned" && (payload.RoleSlug == nil || *payload.RoleSlug == "") {
-		return nil, oops.E(oops.CodeBadRequest, nil, "role_slug is required when resolution_type is role_assigned").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "role_slug is required when resolution_type is role_assigned").LogError(ctx, s.logger)
 	}
 	if payload.ResolutionType == "dismissed" && payload.RoleSlug != nil && *payload.RoleSlug != "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "role_slug must be empty when resolution_type is dismissed").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "role_slug must be empty when resolution_type is dismissed").LogError(ctx, s.logger)
 	}
 
 	resolvedBy := fmt.Sprintf("user:%s", authCtx.UserID)
@@ -1103,7 +1103,7 @@ func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChal
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -1119,7 +1119,7 @@ func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChal
 		ResolvedBy:     resolvedBy,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "insert challenge resolutions").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "insert challenge resolutions").LogError(ctx, s.logger)
 	}
 
 	resolutions := make([]*gen.ChallengeResolution, 0, len(rows))
@@ -1148,12 +1148,12 @@ func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChal
 			ResolutionType:   row.ResolutionType,
 			RoleSlug:         payload.RoleSlug,
 		}); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "log access challenge resolve").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "log access challenge resolve").LogError(ctx, s.logger)
 		}
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
 
 	return &gen.ResolveChallengesResult{Resolutions: resolutions}, nil

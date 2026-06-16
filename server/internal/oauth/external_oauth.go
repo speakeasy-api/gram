@@ -233,7 +233,7 @@ func (s *ExternalOAuthService) withAuth(h func(w http.ResponseWriter, r *http.Re
 
 		sessionToken, ok := contextvalues.GetSessionTokenFromContext(ctx)
 		if !ok {
-			return oops.E(oops.CodeUnauthorized, nil, "authentication required").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnauthorized, nil, "authentication required").LogError(ctx, s.logger)
 		}
 
 		// ctx, err = s.sessionManager.Authenticate(ctx, cookie.Value, false)
@@ -252,7 +252,7 @@ func (s *ExternalOAuthService) withAuth(h func(w http.ResponseWriter, r *http.Re
 		}
 
 		if projectSlug == "" {
-			return oops.E(oops.CodeBadRequest, nil, "project is required").Log(ctx, s.logger)
+			return oops.E(oops.CodeBadRequest, nil, "project is required").LogError(ctx, s.logger)
 		}
 
 		ctx, err = s.auth.Authorize(ctx, projectSlug, &security.APIKeyScheme{
@@ -274,18 +274,18 @@ func (s *ExternalOAuthService) handleExternalAuthorize(w http.ResponseWriter, r 
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return oops.E(oops.CodeUnauthorized, nil, "authentication required").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnauthorized, nil, "authentication required").LogError(ctx, s.logger)
 	}
 
 	// Parse query parameters
 	toolsetIDStr := r.URL.Query().Get("toolset_id")
 	if toolsetIDStr == "" {
-		return oops.E(oops.CodeBadRequest, nil, "toolset_id is required").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "toolset_id is required").LogError(ctx, s.logger)
 	}
 
 	redirectURI := r.URL.Query().Get("redirect_uri")
 	if redirectURI == "" {
-		return oops.E(oops.CodeBadRequest, nil, "redirect_uri is required").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "redirect_uri is required").LogError(ctx, s.logger)
 	}
 
 	externalMCPSlug := r.URL.Query().Get("external_mcp_slug")
@@ -293,15 +293,15 @@ func (s *ExternalOAuthService) handleExternalAuthorize(w http.ResponseWriter, r 
 	// Validate redirect_uri hostname is in the allowed list to prevent open redirects.
 	parsedRedirect, err := url.Parse(redirectURI)
 	if err != nil || parsedRedirect.Scheme == "" || parsedRedirect.Host == "" {
-		return oops.E(oops.CodeBadRequest, nil, "invalid redirect_uri").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "invalid redirect_uri").LogError(ctx, s.logger)
 	}
 	if !s.isAllowedRedirectHost(parsedRedirect.Hostname()) {
-		return oops.E(oops.CodeBadRequest, nil, "redirect_uri hostname not allowed").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "redirect_uri hostname not allowed").LogError(ctx, s.logger)
 	}
 
 	toolsetID, err := uuid.Parse(toolsetIDStr)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid toolset_id").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid toolset_id").LogError(ctx, s.logger)
 	}
 
 	// Load toolset and verify user has access
@@ -310,26 +310,26 @@ func (s *ExternalOAuthService) handleExternalAuthorize(w http.ResponseWriter, r 
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
+		return oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, s.logger)
 	}
 
 	// Get external MCP OAuth configuration from toolset
 	oauthConfig, err := s.getExternalOAuthConfig(ctx, toolset, externalMCPSlug)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "toolset does not require OAuth or external MCP not found").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "toolset does not require OAuth or external MCP not found").LogError(ctx, s.logger)
 	}
 
 	// Standard DCR flow — register as client against the OAuth server (Gram proxy or external)
 	oauthClient, err := s.getOrRegisterClient(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, oauthConfig)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to register OAuth client").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to register OAuth client").LogError(ctx, s.logger)
 	}
 	oauthConfig.ClientID = oauthClient.ClientID
 
 	// Generate PKCE code_verifier (43-128 chars)
 	codeVerifier, err := generateCodeVerifier()
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to generate code verifier").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to generate code verifier").LogError(ctx, s.logger)
 	}
 
 	// Generate code_challenge using S256
@@ -338,13 +338,13 @@ func (s *ExternalOAuthService) handleExternalAuthorize(w http.ResponseWriter, r 
 	// Generate state ID for cache key
 	stateID, err := generateStateID()
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to generate state ID").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to generate state ID").LogError(ctx, s.logger)
 	}
 
 	// Build authorization URL
 	authURL, err := url.Parse(oauthConfig.AuthorizationEndpoint)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "invalid authorization endpoint").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "invalid authorization endpoint").LogError(ctx, s.logger)
 	}
 
 	// Create state object
@@ -367,7 +367,7 @@ func (s *ExternalOAuthService) handleExternalAuthorize(w http.ResponseWriter, r 
 
 	// Store state in cache
 	if err := s.stateStorage.Store(ctx, state); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to store OAuth state").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to store OAuth state").LogError(ctx, s.logger)
 	}
 
 	callbackURL := fmt.Sprintf("%s/oauth-external/callback", s.serverURL.String())
@@ -410,24 +410,24 @@ func (s *ExternalOAuthService) handleIssuerConnect(w http.ResponseWriter, r *htt
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return oops.E(oops.CodeUnauthorized, nil, "authentication required").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnauthorized, nil, "authentication required").LogError(ctx, s.logger)
 	}
 
 	toolsetIDStr := r.URL.Query().Get("toolset_id")
 	if toolsetIDStr == "" {
-		return oops.E(oops.CodeBadRequest, nil, "toolset_id is required").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "toolset_id is required").LogError(ctx, s.logger)
 	}
 	redirectURI := r.URL.Query().Get("redirect_uri")
 	if redirectURI == "" {
-		return oops.E(oops.CodeBadRequest, nil, "redirect_uri is required").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "redirect_uri is required").LogError(ctx, s.logger)
 	}
 
 	parsedRedirect, err := url.Parse(redirectURI)
 	if err != nil || parsedRedirect.Scheme == "" || parsedRedirect.Host == "" {
-		return oops.E(oops.CodeBadRequest, nil, "invalid redirect_uri").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "invalid redirect_uri").LogError(ctx, s.logger)
 	}
 	if !s.isAllowedRedirectHost(parsedRedirect.Hostname()) {
-		return oops.E(oops.CodeBadRequest, nil, "redirect_uri hostname not allowed").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "redirect_uri hostname not allowed").LogError(ctx, s.logger)
 	}
 	redirectQuery := parsedRedirect.Query()
 	redirectQuery.Set("issuer_connected", "1")
@@ -435,7 +435,7 @@ func (s *ExternalOAuthService) handleIssuerConnect(w http.ResponseWriter, r *htt
 
 	toolsetID, err := uuid.Parse(toolsetIDStr)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid toolset_id").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid toolset_id").LogError(ctx, s.logger)
 	}
 
 	toolset, err := s.toolsetsRepo.GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
@@ -443,24 +443,24 @@ func (s *ExternalOAuthService) handleIssuerConnect(w http.ResponseWriter, r *htt
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
+		return oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, s.logger)
 	}
 
 	if !toolset.UserSessionIssuerID.Valid {
-		return oops.E(oops.CodeBadRequest, nil, "toolset is not issuer-gated").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "toolset is not issuer-gated").LogError(ctx, s.logger)
 	}
 
 	mcpSlug := toolset.McpSlug.String
 	if mcpSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "toolset has no mcp slug").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "toolset has no mcp slug").LogError(ctx, s.logger)
 	}
 
 	clients, err := s.remoteChallengeMgr.ListClients(ctx, toolset.ProjectID, toolset.UserSessionIssuerID.UUID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "list remote session clients").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "list remote session clients").LogError(ctx, s.logger)
 	}
 	if len(clients) != 1 {
-		return oops.E(oops.CodeInvariantViolation, nil, "issuer-gated dashboard connect requires exactly one remote_session_client, found %d", len(clients)).Log(ctx, s.logger)
+		return oops.E(oops.CodeInvariantViolation, nil, "issuer-gated dashboard connect requires exactly one remote_session_client, found %d", len(clients)).LogError(ctx, s.logger)
 	}
 
 	subject := urn.NewUserSubject(authCtx.UserID)
@@ -475,7 +475,7 @@ func (s *ExternalOAuthService) handleIssuerConnect(w http.ResponseWriter, r *htt
 	}
 	authURL, err := s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, parent, clients[0])
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "build authorization URL").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "build authorization URL").LogError(ctx, s.logger)
 	}
 
 	s.logger.InfoContext(ctx, "redirecting to upstream issuer-gated OAuth provider",
@@ -505,21 +505,21 @@ func (s *ExternalOAuthService) handleExternalCallback(w http.ResponseWriter, r *
 	}
 
 	if code == "" {
-		return oops.E(oops.CodeBadRequest, nil, "code is required").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "code is required").LogError(ctx, s.logger)
 	}
 	if stateID == "" {
-		return oops.E(oops.CodeBadRequest, nil, "state is required").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, s.logger)
 	}
 
 	// Retrieve state from cache
 	state, err := s.stateStorage.Get(ctx, ExternalOAuthStateCacheKey(stateID))
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid or expired state").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid or expired state").LogError(ctx, s.logger)
 	}
 
 	// Check if state has expired
 	if time.Now().After(state.ExpiresAt) {
-		return oops.E(oops.CodeBadRequest, nil, "state has expired").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "state has expired").LogError(ctx, s.logger)
 	}
 
 	// Delete state from cache (one-time use)
@@ -533,18 +533,18 @@ func (s *ExternalOAuthService) handleExternalCallback(w http.ResponseWriter, r *
 		ProjectID: state.ProjectID,
 	})
 	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
+		return oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, s.logger)
 	}
 
 	oauthConfig, err := s.getExternalOAuthConfig(ctx, toolset, state.ExternalMCPSlug)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to get OAuth config").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to get OAuth config").LogError(ctx, s.logger)
 	}
 
 	// Standard DCR flow — retrieve or register client against the OAuth server
 	oauthClient, err := s.getOrRegisterClient(ctx, state.OrganizationID, state.ProjectID, oauthConfig)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to get OAuth client credentials").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to get OAuth client credentials").LogError(ctx, s.logger)
 	}
 	oauthConfig.ClientID = oauthClient.ClientID
 	oauthConfig.ClientSecret = oauthClient.ClientSecret
@@ -561,14 +561,14 @@ func (s *ExternalOAuthService) handleExternalCallback(w http.ResponseWriter, r *
 	// Encrypt tokens before storing
 	accessTokenEncrypted, err := s.enc.Encrypt([]byte(tokenResp.AccessToken))
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to encrypt access token").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to encrypt access token").LogError(ctx, s.logger)
 	}
 
 	var refreshTokenEncrypted pgtype.Text
 	if tokenResp.RefreshToken != "" {
 		encrypted, err := s.enc.Encrypt([]byte(tokenResp.RefreshToken))
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to encrypt refresh token").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to encrypt refresh token").LogError(ctx, s.logger)
 		}
 		refreshTokenEncrypted = conv.ToPGText(encrypted)
 	}
@@ -595,7 +595,7 @@ func (s *ExternalOAuthService) handleExternalCallback(w http.ResponseWriter, r *
 		ProviderName:          conv.ToPGText(state.ProviderName),
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to store OAuth token").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to store OAuth token").LogError(ctx, s.logger)
 	}
 
 	s.logger.InfoContext(ctx, "external OAuth token stored successfully",
@@ -611,7 +611,7 @@ func (s *ExternalOAuthService) handleExternalCallback(w http.ResponseWriter, r *
 		StyleHash:    s.successStyleHash,
 	}
 	if err := s.successPageTmpl.Execute(w, data); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to render external OAuth success page").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to render external OAuth success page").LogError(ctx, s.logger)
 	}
 	return nil
 }
@@ -629,7 +629,7 @@ func (s *ExternalOAuthService) serveExternalSuccessScript(w http.ResponseWriter,
 	w.WriteHeader(http.StatusOK)
 
 	if _, err := w.Write(s.successScriptData); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to write script response").Log(r.Context(), s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to write script response").LogError(r.Context(), s.logger)
 	}
 	return nil
 }
@@ -647,7 +647,7 @@ func (s *ExternalOAuthService) serveExternalSuccessStyle(w http.ResponseWriter, 
 	w.WriteHeader(http.StatusOK)
 
 	if _, err := w.Write(s.successStyleData); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to write style response").Log(r.Context(), s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to write style response").LogError(r.Context(), s.logger)
 	}
 	return nil
 }
@@ -665,18 +665,18 @@ func (s *ExternalOAuthService) handleExternalStatus(w http.ResponseWriter, r *ht
 	// Get user session - try context first, then Gram-Session header
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return oops.E(oops.CodeUnauthorized, nil, "authentication required").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnauthorized, nil, "authentication required").LogError(ctx, s.logger)
 	}
 
 	// Parse query parameters - issuer is required for status check
 	toolsetIDStr := r.URL.Query().Get("toolset_id")
 	if toolsetIDStr == "" {
-		return oops.E(oops.CodeBadRequest, nil, "toolset_id is required").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "toolset_id is required").LogError(ctx, s.logger)
 	}
 
 	toolsetID, err := uuid.Parse(toolsetIDStr)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid toolset_id").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid toolset_id").LogError(ctx, s.logger)
 	}
 
 	// Load toolset to verify user has access
@@ -685,7 +685,7 @@ func (s *ExternalOAuthService) handleExternalStatus(w http.ResponseWriter, r *ht
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
+		return oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, s.logger)
 	}
 
 	// Issuer-gated toolsets store upstream tokens in remote_sessions keyed
@@ -765,7 +765,7 @@ func (s *ExternalOAuthService) writeIssuerGatedStatus(ctx context.Context, w htt
 	case errors.Is(err, remotesessions.ErrNoValidToken):
 		// fall through with status="needs_auth"
 	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "resolve remote session").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
 	case token != "":
 		status = "authenticated"
 	}
@@ -788,17 +788,17 @@ func (s *ExternalOAuthService) handleExternalDisconnect(w http.ResponseWriter, r
 	// Get user session - try context first, then Gram-Session header
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return oops.E(oops.CodeUnauthorized, nil, "authentication required").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnauthorized, nil, "authentication required").LogError(ctx, s.logger)
 	}
 
 	toolsetIDStr := r.URL.Query().Get("toolset_id")
 	if toolsetIDStr == "" {
-		return oops.E(oops.CodeBadRequest, nil, "toolset_id is required").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "toolset_id is required").LogError(ctx, s.logger)
 	}
 
 	toolsetID, err := uuid.Parse(toolsetIDStr)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid toolset_id").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid toolset_id").LogError(ctx, s.logger)
 	}
 
 	// Verify toolset belongs to caller's project before deleting the token
@@ -806,7 +806,7 @@ func (s *ExternalOAuthService) handleExternalDisconnect(w http.ResponseWriter, r
 		ID:        toolsetID,
 		ProjectID: *authCtx.ProjectID,
 	}); err != nil {
-		return oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
+		return oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, s.logger)
 	}
 
 	// Delete token
@@ -815,7 +815,7 @@ func (s *ExternalOAuthService) handleExternalDisconnect(w http.ResponseWriter, r
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ToolsetID:      toolsetID,
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to disconnect OAuth").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to disconnect OAuth").LogError(ctx, s.logger)
 	}
 
 	s.logger.InfoContext(ctx, "OAuth token disconnected",
@@ -1297,7 +1297,7 @@ func (s *ExternalOAuthService) redirectWithError(w http.ResponseWriter, r *http.
 
 	parsed, err := url.Parse(redirectURI)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "invalid redirect URI").Log(r.Context(), s.logger)
+		return oops.E(oops.CodeUnexpected, err, "invalid redirect URI").LogError(r.Context(), s.logger)
 	}
 
 	// Defense-in-depth: validate redirect URI hostname is in the allowed list.

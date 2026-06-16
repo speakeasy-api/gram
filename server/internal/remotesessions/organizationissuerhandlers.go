@@ -37,20 +37,20 @@ func (s *Service) CreateOrganizationRemoteSessionIssuer(ctx context.Context, pay
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 
 	if strings.TrimSpace(payload.Slug) == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "slug is required").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "slug is required").LogError(ctx, logger)
 	}
 	if strings.TrimSpace(payload.Issuer) == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "issuer is required").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "issuer is required").LogError(ctx, logger)
 	}
 
 	logoAssetID, err := conv.PtrToNullUUID(payload.LogoAssetID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset id").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset id").LogError(ctx, logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -75,7 +75,7 @@ func (s *Service) CreateOrganizationRemoteSessionIssuer(ctx context.Context, pay
 		Passthrough:                       conv.PtrValOr(payload.Passthrough, false),
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "create organization remote session issuer").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "create organization remote session issuer").LogError(ctx, logger)
 	}
 
 	if err := s.auditLogger.LogRemoteSessionIssuerCreate(ctx, dbtx, audit.LogRemoteSessionIssuerCreateEvent{
@@ -89,11 +89,11 @@ func (s *Service) CreateOrganizationRemoteSessionIssuer(ctx context.Context, pay
 		IssuerURL:              issuer.Issuer,
 		Name:                   conv.FromPGText[string](issuer.Name),
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log organization remote session issuer creation").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "log organization remote session issuer creation").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
 	return mv.BuildRemoteSessionIssuerView(issuer), nil
@@ -111,17 +111,17 @@ func (s *Service) UpdateOrganizationRemoteSessionIssuer(ctx context.Context, pay
 
 	issuerID, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer id").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer id").LogError(ctx, logger)
 	}
 
 	// slug and issuer are NOT NULL on the row; reject an explicit empty before
 	// the query runs (the SQL treats empty string as "clear to NULL" only for
 	// the nullable endpoint columns).
 	if payload.Slug != nil && *payload.Slug == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "slug cannot be set to empty").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "slug cannot be set to empty").LogError(ctx, logger)
 	}
 	if payload.Issuer != nil && *payload.Issuer == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "issuer cannot be set to empty").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "issuer cannot be set to empty").LogError(ctx, logger)
 	}
 
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
@@ -130,12 +130,12 @@ func (s *Service) UpdateOrganizationRemoteSessionIssuer(ctx context.Context, pay
 
 	logoAssetID, err := conv.PtrToNullUUID(payload.LogoAssetID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset id").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset id").LogError(ctx, logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -147,9 +147,9 @@ func (s *Service) UpdateOrganizationRemoteSessionIssuer(ctx context.Context, pay
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "organization remote session issuer not found").Log(ctx, logger)
+			return nil, oops.E(oops.CodeNotFound, err, "organization remote session issuer not found").LogError(ctx, logger)
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "get organization remote session issuer").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization remote session issuer").LogError(ctx, logger)
 	}
 
 	beforeView := mv.BuildRemoteSessionIssuerView(existing)
@@ -174,9 +174,9 @@ func (s *Service) UpdateOrganizationRemoteSessionIssuer(ctx context.Context, pay
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "organization remote session issuer not found").Log(ctx, logger)
+			return nil, oops.E(oops.CodeNotFound, err, "organization remote session issuer not found").LogError(ctx, logger)
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "update organization remote session issuer").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "update organization remote session issuer").LogError(ctx, logger)
 	}
 
 	afterView := mv.BuildRemoteSessionIssuerView(updated)
@@ -194,11 +194,11 @@ func (s *Service) UpdateOrganizationRemoteSessionIssuer(ctx context.Context, pay
 		SnapshotBefore:         beforeView,
 		SnapshotAfter:          afterView,
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log organization remote session issuer update").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "log organization remote session issuer update").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
 	return afterView, nil
@@ -217,7 +217,7 @@ func (s *Service) ListOrganizationRemoteSessionIssuers(ctx context.Context, payl
 	limit := pageLimit(payload.Limit)
 	cursor, err := parseCursor(payload.Cursor)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
 	}
 
 	rows, err := repo.New(s.db).ListOrganizationRemoteSessionIssuers(ctx, repo.ListOrganizationRemoteSessionIssuersParams{
@@ -226,7 +226,7 @@ func (s *Service) ListOrganizationRemoteSessionIssuers(ctx context.Context, payl
 		LimitValue:     limit,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list organization remote session issuers").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list organization remote session issuers").LogError(ctx, s.logger)
 	}
 
 	items := make([]*types.RemoteSessionIssuer, 0, len(rows))
@@ -258,7 +258,7 @@ func (s *Service) GetOrganizationRemoteSessionIssuer(ctx context.Context, payloa
 
 	issuerID, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer id").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer id").LogError(ctx, logger)
 	}
 
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
@@ -271,9 +271,9 @@ func (s *Service) GetOrganizationRemoteSessionIssuer(ctx context.Context, payloa
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "organization remote session issuer not found").Log(ctx, logger)
+			return nil, oops.E(oops.CodeNotFound, err, "organization remote session issuer not found").LogError(ctx, logger)
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "get organization remote session issuer").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization remote session issuer").LogError(ctx, logger)
 	}
 
 	return mv.BuildRemoteSessionIssuerView(issuer), nil
@@ -291,7 +291,7 @@ func (s *Service) DeleteOrganizationRemoteSessionIssuer(ctx context.Context, pay
 
 	issuerID, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid issuer id").Log(ctx, logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid issuer id").LogError(ctx, logger)
 	}
 
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
@@ -300,7 +300,7 @@ func (s *Service) DeleteOrganizationRemoteSessionIssuer(ctx context.Context, pay
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "begin transaction").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -308,10 +308,10 @@ func (s *Service) DeleteOrganizationRemoteSessionIssuer(ctx context.Context, pay
 
 	clientCount, err := txRepo.CountRemoteSessionClientsByIssuerID(ctx, issuerID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "count remote session clients").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "count remote session clients").LogError(ctx, logger)
 	}
 	if clientCount > 0 {
-		return oops.E(oops.CodeConflict, nil, "remote session issuer has active clients; delete the clients first").Log(ctx, logger)
+		return oops.E(oops.CodeConflict, nil, "remote session issuer has active clients; delete the clients first").LogError(ctx, logger)
 	}
 
 	deleted, err := txRepo.DeleteOrganizationRemoteSessionIssuer(ctx, repo.DeleteOrganizationRemoteSessionIssuerParams{
@@ -322,7 +322,7 @@ func (s *Service) DeleteOrganizationRemoteSessionIssuer(ctx context.Context, pay
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}
-		return oops.E(oops.CodeUnexpected, err, "delete organization remote session issuer").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "delete organization remote session issuer").LogError(ctx, logger)
 	}
 
 	if err := s.auditLogger.LogRemoteSessionIssuerDelete(ctx, dbtx, audit.LogRemoteSessionIssuerDeleteEvent{
@@ -336,11 +336,11 @@ func (s *Service) DeleteOrganizationRemoteSessionIssuer(ctx context.Context, pay
 		IssuerURL:              deleted.Issuer,
 		Name:                   conv.FromPGText[string](deleted.Name),
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "log organization remote session issuer deletion").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "log organization remote session issuer deletion").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit transaction").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
 	return nil

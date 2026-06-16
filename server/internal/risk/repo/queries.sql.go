@@ -301,7 +301,7 @@ SELECT COUNT(*)::BIGINT
 FROM risk_results rr
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE rr.project_id = $1
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
 `
 
 func (q *Queries) CountAllFindings(ctx context.Context, projectID uuid.UUID) (int64, error) {
@@ -364,6 +364,7 @@ WHERE project_id = $1
   AND risk_policy_version = $3
   AND found IS TRUE
   AND excluded_at IS NULL
+  AND false_positive_at IS NULL
 `
 
 type CountFindingsByPolicyParams struct {
@@ -1005,10 +1006,10 @@ const getRiskOverviewCounts = `-- name: GetRiskOverviewCounts :one
 SELECT
     COUNT(DISTINCT rr.chat_message_id)::BIGINT AS messages_scanned
   , (COUNT(*) FILTER (
-      WHERE rr.found IS TRUE AND rr.excluded_at IS NULL
+      WHERE rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
     ))::BIGINT AS findings
   , (COUNT(DISTINCT cm.chat_id) FILTER (
-      WHERE rr.found IS TRUE AND rr.excluded_at IS NULL
+      WHERE rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
         AND cm.chat_id IS NOT NULL
     ))::BIGINT AS flagged_sessions
   , (
@@ -1645,7 +1646,7 @@ categorized AS (
       END AS category
   FROM risk_results rr
   WHERE rr.project_id = $3::uuid
-    AND rr.found IS TRUE AND rr.excluded_at IS NULL
+    AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
     AND rr.created_at >= $1
     AND rr.created_at < $2
 ),
@@ -1710,7 +1711,7 @@ SELECT
   COUNT(*)::BIGINT AS findings
 FROM risk_results rr
 WHERE rr.project_id = $1
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
   AND rr.created_at >= $2
   AND rr.created_at < $3
 GROUP BY rr.rule_id, rr.source
@@ -1772,7 +1773,7 @@ WITH user_findings AS (
   LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
   LEFT JOIN users u ON u.id = COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''))
   WHERE rr.project_id = $2
-    AND rr.found IS TRUE AND rr.excluded_at IS NULL
+    AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
     AND rr.created_at >= $3
     AND rr.created_at < $4
 )
@@ -1943,7 +1944,7 @@ LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE cm.chat_id = $1
   AND rr.project_id = $2
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
   AND (
     $3::timestamptz IS NULL
     OR (cm.created_at, rr.id) < ($3::timestamptz, $4::uuid)
@@ -2048,7 +2049,7 @@ LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE rr.project_id = $1
   AND rr.risk_policy_id = $2
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
   AND (
     $3::timestamptz IS NULL
     OR (cm.created_at, rr.id) < ($3::timestamptz, $4::uuid)
@@ -2172,7 +2173,7 @@ FROM (
   LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
   JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
   WHERE rr.project_id = $2
-    AND rr.found IS TRUE AND rr.excluded_at IS NULL
+    AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
     AND ($3::timestamptz IS NULL OR cm.created_at >= $3::timestamptz)
     AND ($4::timestamptz IS NULL OR cm.created_at < $4::timestamptz)
     AND ($5::text = '' OR rr.rule_id ILIKE '%' || $5::text || '%')
@@ -2350,7 +2351,7 @@ JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE rr.project_id = $1
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
   AND ($2::uuid IS NULL OR cm.chat_id <= $2::uuid)
 GROUP BY cm.chat_id, c.title, c.external_user_id
 ORDER BY cm.chat_id DESC
@@ -2449,7 +2450,7 @@ WITH categorized AS (
     END AS category
   FROM risk_results rr
   WHERE rr.project_id = $2
-    AND rr.found IS TRUE AND rr.excluded_at IS NULL
+    AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
     AND rr.created_at >= $3
     AND rr.created_at < $4
 )
@@ -2553,7 +2554,7 @@ WITH user_findings AS (
   JOIN chat_messages cm ON cm.id = rr.chat_message_id
   LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
   WHERE rr.project_id = $1
-    AND rr.found IS TRUE AND rr.excluded_at IS NULL
+    AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
     AND rr.created_at >= $2
     AND rr.created_at < $3
     AND COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '') = $4::text
@@ -2613,7 +2614,7 @@ FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
 WHERE rr.project_id = $1
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
   AND rr.created_at >= $2
   AND rr.created_at < $3
   AND COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '') = $4::text
