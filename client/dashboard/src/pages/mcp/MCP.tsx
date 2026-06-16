@@ -12,7 +12,7 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { ViewToggle } from "@/components/ui/view-toggle";
 import { useViewMode } from "@/components/ui/use-view-mode";
-import { useSdkClient } from "@/contexts/Sdk";
+import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
 import {
@@ -70,12 +70,14 @@ function MCPOverview() {
   // mcp_servers (Remote-MCP-backed today) — in the same grid.
   // These listing fetches are non-critical: degrade to the last good (or empty)
   // data with an inline indicator instead of throwing to the page error
-  // boundary and replacing the whole screen.
+  // boundary and replacing the whole screen. Key them by project so a tolerated
+  // failure can't leave another project's rows on screen after a switch.
+  const gramProject = useProjectSlugForRequests();
   const {
     data: mcpServersResult,
     isLoading: isLoadingMcpServers,
     isError: isMcpServersError,
-  } = useMcpServers({}, undefined, {
+  } = useMcpServers({ gramProject }, undefined, {
     enabled: isRemoteMcpEnabled,
     throwOnError: false,
   });
@@ -83,7 +85,7 @@ function MCPOverview() {
     data: endpointsResult,
     isLoading: isLoadingEndpoints,
     isError: isEndpointsError,
-  } = useMcpEndpoints({}, undefined, {
+  } = useMcpEndpoints({ gramProject }, undefined, {
     enabled: isRemoteMcpEnabled,
     throwOnError: false,
   });
