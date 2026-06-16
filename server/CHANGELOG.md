@@ -1,5 +1,11 @@
 # server
 
+## 0.70.2
+
+### Patch Changes
+
+- b8128f3: demote trigger webhook auth failures to warning
+
 ## 0.70.1
 
 ### Patch Changes

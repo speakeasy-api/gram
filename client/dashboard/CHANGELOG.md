@@ -1,5 +1,12 @@
 # dashboard
 
+## 0.73.1
+
+### Patch Changes
+
+- 2630d11: Fix the Cmd+K command palette's "Recently Visited" list showing an assistant's opaque id (e.g. "Assistant · 0190abcd") instead of its name. Visits are recorded centrally from the URL, which for the id-keyed assistant detail route fell back to the id. The assistant detail page now registers its name as the recents label, and `App` consults that override (re-recording when the name resolves asynchronously), so the palette shows the assistant name.
+- 1e1e9b7: Pin the assistant ⌘/ shortcut hint to the nav bar's right edge on wide screens, and show it in the assistant dock.
+
 ## 0.73.0
 
 ### Minor Changes
