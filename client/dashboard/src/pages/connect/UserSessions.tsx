@@ -48,10 +48,7 @@ function UserSessionsInner(): JSX.Element {
     isFetchingNextPage,
     refetch,
   } = useUserSessionsInfinite({
-    status:
-      status === "all"
-        ? undefined
-        : (status as ListUserSessionsQueryParamStatus),
+    status: status as ListUserSessionsQueryParamStatus,
   });
   const sessions = data?.pages.flatMap((p) => p.result.items) ?? [];
 
