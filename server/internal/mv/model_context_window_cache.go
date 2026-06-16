@@ -26,6 +26,3 @@ func (m ModelContextWindow) TTL() time.Duration {
 	return 72 * time.Hour
 }
 
-func (m ModelContextWindow) AdditionalCacheKeys() []string {
-	return []string{}
-}

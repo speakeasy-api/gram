@@ -34,6 +34,3 @@ func (c ToolsetBaseContents) TTL() time.Duration {
 	return 1 * time.Hour
 }
 
-func (c ToolsetBaseContents) AdditionalCacheKeys() []string {
-	return []string{}
-}
