@@ -230,6 +230,20 @@ const EDITOR_OPTIONS: Monaco.editor.IStandaloneEditorConstructionOptions = {
   guides: { indentation: false },
 };
 
+// Minimal shape of Monaco's (internal) suggest controller — just enough to
+// expand the documentation flyout. Guarded with optional chaining so a Monaco
+// upgrade that moves these around degrades to "no auto-docs", not a crash.
+interface SuggestControllerLike {
+  widget?: { value?: { onDidShow?: (cb: () => void) => Monaco.IDisposable } };
+  toggleSuggestionDetails?: () => void;
+}
+
+// The doc flyout's expanded/collapsed state lives in a profile-scoped store that
+// is in-memory (and shared) for standalone editors, so it resets to collapsed on
+// every page load. Prime it true on the first widget show across the page; after
+// that Monaco auto-expands every popup itself.
+let docsExpansionPrimed = false;
+
 /** Monaco-backed single-line query editor: syntax highlighting, autocomplete,
  *  and inline error markers, all driven by our match-query parser. Drop-in for
  *  MatchQueryInput. */
@@ -272,6 +286,20 @@ export function MatchQueryMonaco({
         editor.trigger("focus", "editor.action.triggerSuggest", {});
       }
     });
+    // Auto-open the documentation flyout so the field/operator descriptions are
+    // visible without a manual toggle (see docsExpansionPrimed).
+    const suggest = editor.getContribution<Monaco.editor.IEditorContribution>(
+      "editor.contrib.suggestController",
+    ) as unknown as SuggestControllerLike | null;
+    const widget = suggest?.widget?.value;
+    if (widget?.onDidShow && suggest?.toggleSuggestionDetails) {
+      const sub = widget.onDidShow(() => {
+        sub.dispose();
+        if (docsExpansionPrimed) return;
+        docsExpansionPrimed = true;
+        suggest.toggleSuggestionDetails?.();
+      });
+    }
     updateMarkers(m, editor.getModel(), value);
   };
 
@@ -314,6 +342,56 @@ export function MatchQueryMonaco({
   );
 }
 
+// Token colors mirror the editor themes (defineThemes) so the static examples
+// highlight identically to what's typed in the editor.
+const QUERY_TOKEN_COLORS = {
+  light: {
+    type: "#267f99",
+    keyword: "#af00db",
+    regexp: "#b91c1c",
+    string: "#a31515",
+    operator: "#6b7280",
+  },
+  dark: {
+    type: "#4ec9b0",
+    keyword: "#c586c0",
+    regexp: "#d16969",
+    string: "#ce9178",
+    operator: "#9aa0a6",
+  },
+} as const;
+
+// Mirrors the Monarch tokenizer: keyword | regex | string | field (before ':')
+// | operator/delimiter.
+const QUERY_TOKEN_RE =
+  /(\b(?:AND|OR|NOT)\b)|(\/(?:[^/\\]|\\.)*\/)|("(?:[^"\\]|\\.)*")|([a-zA-Z_][\w.$]*(?=\s*:))|([*\-:()])/g;
+
+/** Renders a match-query string with the editor's token colors. */
+function HighlightedQuery({ query }: { query: string }): JSX.Element {
+  const { theme } = useMoonshineConfig();
+  const colors =
+    theme === "dark" ? QUERY_TOKEN_COLORS.dark : QUERY_TOKEN_COLORS.light;
+  const parts: (string | JSX.Element)[] = [];
+  let last = 0;
+  for (const m of query.matchAll(QUERY_TOKEN_RE)) {
+    const idx = m.index ?? 0;
+    if (idx > last) parts.push(query.slice(last, idx));
+    let color: string = colors.operator;
+    if (m[1]) color = colors.keyword;
+    else if (m[2]) color = colors.regexp;
+    else if (m[3]) color = colors.string;
+    else if (m[4]) color = colors.type;
+    parts.push(
+      <span key={idx} style={{ color }}>
+        {m[0]}
+      </span>,
+    );
+    last = idx + m[0].length;
+  }
+  if (last < query.length) parts.push(query.slice(last));
+  return <code className="font-mono text-[11px]">{parts}</code>;
+}
+
 /** The "Query syntax & examples" affordance: a one-line operator legend plus
  *  worked examples. Rendered once per editor by default, or shared across a
  *  group of editors via MatchQueryMonaco's showExamples=false. */
@@ -328,9 +406,7 @@ export function MatchQueryExamples(): JSX.Element {
         <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
           {MATCH_QUERY_SYNTAX.map((s) => (
             <Fragment key={s.token}>
-              <code className="text-foreground font-mono text-[11px]">
-                {s.token}
-              </code>
+              <HighlightedQuery query={s.token} />
               <span className="text-muted-foreground text-[11px]">
                 {s.meaning}
               </span>
@@ -343,9 +419,7 @@ export function MatchQueryExamples(): JSX.Element {
         <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
           {MATCH_QUERY_EXAMPLES.map((ex) => (
             <Fragment key={ex.query}>
-              <code className="text-foreground font-mono text-[11px]">
-                {ex.query}
-              </code>
+              <HighlightedQuery query={ex.query} />
               <span className="text-muted-foreground text-[11px]">
                 {ex.meaning}
               </span>
