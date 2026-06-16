@@ -130,7 +130,7 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayl
 
 	id, err := uuid.Parse(form.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "error parsing deployment id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "error parsing deployment id").LogError(ctx, s.logger)
 	}
 
 	dep, err := mv.DescribeDeployment(ctx, s.logger, s.repo, mv.ProjectID(*authCtx.ProjectID), mv.DeploymentID(id))
@@ -178,14 +178,14 @@ func (s *Service) GetDeploymentLogs(ctx context.Context, form *gen.GetDeployment
 
 	id, err := uuid.Parse(form.DeploymentID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "bad deployment id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "bad deployment id").LogError(ctx, s.logger)
 	}
 
 	var cursorSeq pgtype.Int8
 	if form.Cursor != nil && *form.Cursor != "" {
 		seq, _, err := decodeCursor(*form.Cursor)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
 		}
 		cursorSeq = pgtype.Int8{Int64: seq, Valid: true}
 	}
@@ -196,7 +196,7 @@ func (s *Service) GetDeploymentLogs(ctx context.Context, form *gen.GetDeployment
 		CursorSeq:    cursorSeq,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting deployment logs").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting deployment logs").LogError(ctx, s.logger)
 	}
 
 	status := "unknown"
@@ -246,7 +246,7 @@ func (s *Service) GetLatestDeployment(ctx context.Context, _ *gen.GetLatestDeplo
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error accessing deployments").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing deployments").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error {
 		return dbtx.Rollback(ctx)
@@ -261,7 +261,7 @@ func (s *Service) GetLatestDeployment(ctx context.Context, _ *gen.GetLatestDeplo
 				Deployment: nil,
 			}, nil
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting latest deployment id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting latest deployment id").LogError(ctx, s.logger)
 	}
 
 	if id == uuid.Nil {
@@ -292,7 +292,7 @@ func (s *Service) GetActiveDeployment(ctx context.Context, _ *gen.GetActiveDeplo
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error accessing deployments").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing deployments").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error {
 		return dbtx.Rollback(ctx)
@@ -307,7 +307,7 @@ func (s *Service) GetActiveDeployment(ctx context.Context, _ *gen.GetActiveDeplo
 				Deployment: nil,
 			}, nil
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting active deployment id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting active deployment id").LogError(ctx, s.logger)
 	}
 
 	if id == uuid.Nil {
@@ -340,7 +340,7 @@ func (s *Service) ListDeployments(ctx context.Context, form *gen.ListDeployments
 	if form.Cursor != nil {
 		c, err := uuid.Parse(*form.Cursor)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
 		}
 
 		cursor = uuid.NullUUID{UUID: c, Valid: true}
@@ -351,7 +351,7 @@ func (s *Service) ListDeployments(ctx context.Context, form *gen.ListDeployments
 		Cursor:    cursor,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing deployments").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing deployments").LogError(ctx, s.logger)
 	}
 
 	items := make([]*gen.DeploymentSummary, 0, len(rows))
@@ -407,7 +407,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error accessing deployments").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing deployments").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error {
 		return dbtx.Rollback(ctx)
@@ -419,7 +419,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 	for _, add := range form.Openapiv3Assets {
 		assetID, err := uuid.Parse(add.AssetID)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "error parsing openapi asset id").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "error parsing openapi asset id").LogError(ctx, s.logger)
 		}
 
 		newOpenAPIAssets = append(newOpenAPIAssets, upsertOpenAPIv3{
@@ -433,7 +433,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 	for _, add := range form.Functions {
 		assetID, err := uuid.Parse(add.AssetID)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "error parsing functions asset id").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "error parsing functions asset id").LogError(ctx, s.logger)
 		}
 
 		newFunctions = append(newFunctions, upsertFunctions{
@@ -472,11 +472,11 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 	for _, add := range form.ExternalMcps {
 		registryID, err := conv.PtrToNullUUID(add.RegistryID)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid registry_id").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid registry_id").LogError(ctx, s.logger)
 		}
 		collectionRegistryID, err := conv.PtrToNullUUID(add.OrganizationMcpCollectionRegistryID)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid organization_mcp_collection_registry_id").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid organization_mcp_collection_registry_id").LogError(ctx, s.logger)
 		}
 		newExternalMCPs = append(newExternalMCPs, upsertExternalMCP{
 			registryID:                          registryID,
@@ -489,7 +489,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 	}
 
 	if len(newPackages) == 0 && len(newOpenAPIAssets) == 0 && len(newFunctions) == 0 && len(newExternalMCPs) == 0 {
-		return nil, oops.E(oops.CodeInvalid, nil, "at least one openapi document, functions file, package, or external mcp is required").Log(ctx, logger)
+		return nil, oops.E(oops.CodeInvalid, nil, "at least one openapi document, functions file, package, or external mcp is required").LogError(ctx, logger)
 	}
 
 	newID, err := createDeployment(
@@ -530,11 +530,11 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		ActorSlug:        nil,
 		DeploymentURN:    urn.NewDeployment(newID),
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error adding deployment creation audit log").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error adding deployment creation audit log").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error saving deployment").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error saving deployment").LogError(ctx, logger)
 	}
 
 	status := dep.Status
@@ -546,7 +546,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 
 		status = s
 		if status == "" {
-			return nil, oops.E(oops.CodeInvariantViolation, nil, "error resolving deployment status").Log(ctx, logger)
+			return nil, oops.E(oops.CodeInvariantViolation, nil, "error resolving deployment status").LogError(ctx, logger)
 		}
 
 		dep.Status = status
@@ -584,7 +584,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error accessing deployments").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing deployments").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error {
 		return dbtx.Rollback(ctx)
@@ -597,7 +597,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 	for _, add := range form.UpsertOpenapiv3Assets {
 		assetID, err := uuid.Parse(add.AssetID)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "error parsing openapiv3 asset id to upsert").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "error parsing openapiv3 asset id to upsert").LogError(ctx, s.logger)
 		}
 
 		openapiv3ToUpsert = append(openapiv3ToUpsert, upsertOpenAPIv3{
@@ -611,7 +611,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 	for _, assetID := range form.ExcludeOpenapiv3Assets {
 		id, err := uuid.Parse(assetID)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "error parsing openapiv3 asset id to exclude").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "error parsing openapiv3 asset id to exclude").LogError(ctx, s.logger)
 		}
 		openapiv3ToExclude = append(openapiv3ToExclude, id)
 	}
@@ -620,7 +620,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 	for _, add := range form.UpsertFunctions {
 		assetID, err := uuid.Parse(add.AssetID)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "error parsing functions asset id to upsert").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "error parsing functions asset id to upsert").LogError(ctx, s.logger)
 		}
 
 		functionsToUpsert = append(functionsToUpsert, upsertFunctions{
@@ -637,7 +637,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 	for _, assetID := range form.ExcludeFunctions {
 		id, err := uuid.Parse(assetID)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "error parsing functions asset id to exclude").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "error parsing functions asset id to exclude").LogError(ctx, s.logger)
 		}
 		functionsToExclude = append(functionsToExclude, id)
 	}
@@ -668,7 +668,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 	for _, pkgID := range form.ExcludePackages {
 		id, err := uuid.Parse(pkgID)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "error parsing package id to exclude").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "error parsing package id to exclude").LogError(ctx, s.logger)
 		}
 		packagesToExclude = append(packagesToExclude, id)
 	}
@@ -677,11 +677,11 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 	for _, add := range form.UpsertExternalMcps {
 		registryID, err := conv.PtrToNullUUID(add.RegistryID)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid registry_id").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid registry_id").LogError(ctx, s.logger)
 		}
 		collectionRegistryID, err := conv.PtrToNullUUID(add.OrganizationMcpCollectionRegistryID)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid organization_mcp_collection_registry_id").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid organization_mcp_collection_registry_id").LogError(ctx, s.logger)
 		}
 		externalMCPsToUpsert = append(externalMCPsToUpsert, upsertExternalMCP{
 			registryID:                          registryID,
@@ -702,7 +702,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 	externalMCPsChanged := len(externalMCPsToUpsert) > 0 || len(externalMCPsToExclude) > 0
 
 	if !packagesChanged && !openapiChanged && !functionsChanged && !externalMCPsChanged {
-		return nil, oops.E(oops.CodeInvalid, nil, "at least one asset, package, or external mcp to upsert or exclude is required").Log(ctx, logger)
+		return nil, oops.E(oops.CodeInvalid, nil, "at least one asset, package, or external mcp to upsert or exclude is required").LogError(ctx, logger)
 	}
 
 	var cloneID uuid.UUID
@@ -736,7 +736,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 
 		ierr := inv.Check("initial deployment state", "deployment id cannot be nil", newID != uuid.Nil)
 		if ierr != nil {
-			return nil, oops.E(oops.CodeInvariantViolation, ierr, "error cloning deployment").Log(ctx, logger)
+			return nil, oops.E(oops.CodeInvariantViolation, ierr, "error cloning deployment").LogError(ctx, logger)
 		}
 
 		logger = logger.With(attr.SlogDeploymentID(newID.String()))
@@ -745,7 +745,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		cloneID = newID
 	// 2️⃣ Something went wrong querying for the latest deployment
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting latest deployment").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting latest deployment").LogError(ctx, logger)
 	// 3️⃣ We found a latest deployment, we need to clone it
 	default:
 		previousDeployment, err = mv.DescribeDeployment(ctx, logger, tx, mv.ProjectID(projectID), mv.DeploymentID(latestDeploymentID))
@@ -766,12 +766,12 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 			externalMCPsToExclude,
 		)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment").LogError(ctx, logger)
 		}
 
 		ierr := inv.Check("cloned deployment state", "deployment id cannot be nil", newID != uuid.Nil)
 		if ierr != nil {
-			return nil, oops.E(oops.CodeInvariantViolation, ierr, "error cloning deployment").Log(ctx, logger)
+			return nil, oops.E(oops.CodeInvariantViolation, ierr, "error cloning deployment").LogError(ctx, logger)
 		}
 
 		logger = logger.With(attr.SlogDeploymentID(newID.String()))
@@ -798,11 +798,11 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		Ancestor: previousDeployment,
 		Current:  dep,
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error adding deployment evolve audit log").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error adding deployment evolve audit log").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error saving deployment").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error saving deployment").LogError(ctx, logger)
 	}
 
 	status := dep.Status
@@ -814,7 +814,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 
 		status = s
 		if status == "" {
-			return nil, oops.E(oops.CodeInvariantViolation, nil, "unable to resolve deployment status").Log(ctx, logger)
+			return nil, oops.E(oops.CodeInvariantViolation, nil, "unable to resolve deployment status").LogError(ctx, logger)
 		}
 
 		dep.Status = status
@@ -843,7 +843,7 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 	}
 
 	if payload.DeploymentID == "" {
-		return nil, oops.E(oops.CodeInvalid, nil, "deployment id is required").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeInvalid, nil, "deployment id is required").LogError(ctx, s.logger)
 	}
 
 	organizationID := authCtx.ActiveOrganizationID
@@ -854,7 +854,7 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error accessing deployments").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing deployments").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error {
 		return dbtx.Rollback(ctx)
@@ -864,7 +864,7 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 
 	deploymentID, err := uuid.Parse(payload.DeploymentID)
 	if err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid deployment id").Log(ctx, logger)
+		return nil, oops.E(oops.CodeInvalid, err, "invalid deployment id").LogError(ctx, logger)
 	}
 
 	newID, err := cloneDeployment(
@@ -880,12 +880,12 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 		[]string{},
 	)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment").LogError(ctx, logger)
 	}
 
 	ierr := inv.Check("cloned deployment state", "deployment id cannot be nil", newID != uuid.Nil)
 	if ierr != nil {
-		return nil, oops.E(oops.CodeInvariantViolation, ierr, "error cloning deployment").Log(ctx, logger)
+		return nil, oops.E(oops.CodeInvariantViolation, ierr, "error cloning deployment").LogError(ctx, logger)
 	}
 
 	logger = logger.With(attr.SlogDeploymentID(newID.String()))
@@ -908,11 +908,11 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 
 		SourceDeploymentURN: urn.NewDeployment(deploymentID),
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error adding deployment redeploy audit log").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error adding deployment redeploy audit log").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error saving deployment").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error saving deployment").LogError(ctx, logger)
 	}
 
 	status := dep.Status
@@ -924,7 +924,7 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 
 		status = s
 		if status == "" {
-			return nil, oops.E(oops.CodeInvariantViolation, nil, "unable to resolve deployment status").Log(ctx, logger)
+			return nil, oops.E(oops.CodeInvariantViolation, nil, "unable to resolve deployment status").LogError(ctx, logger)
 		}
 
 		dep.Status = status
@@ -954,10 +954,10 @@ func (s *Service) resolvePackages(ctx context.Context, tx *packagesRepo.Queries,
 		if version == "" {
 			row, err := tx.PeekLatestPackageVersionByName(ctx, name)
 			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, oops.E(oops.CodeBadRequest, err, "no versions found for package: %s", name).Log(ctx, s.logger, attr.SlogPackageName(name))
+				return nil, oops.E(oops.CodeBadRequest, err, "no versions found for package: %s", name).LogError(ctx, s.logger, attr.SlogPackageName(name))
 			}
 			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "error getting latest package version").Log(ctx, s.logger, attr.SlogPackageName(name))
+				return nil, oops.E(oops.CodeUnexpected, err, "error getting latest package version").LogError(ctx, s.logger, attr.SlogPackageName(name))
 			}
 
 			packageID = row.PackageID
@@ -966,11 +966,11 @@ func (s *Service) resolvePackages(ctx context.Context, tx *packagesRepo.Queries,
 		} else {
 			semver, err := semver.ParseSemver(version)
 			if err != nil {
-				return nil, oops.E(oops.CodeBadRequest, err, "error parsing semver").Log(ctx, s.logger)
+				return nil, oops.E(oops.CodeBadRequest, err, "error parsing semver").LogError(ctx, s.logger)
 			}
 
 			if err := inv.Check("semver", "semver must be valid", semver.Valid); err != nil {
-				return nil, oops.E(oops.CodeInvariantViolation, err, "package version incorrectly parsed").Log(ctx, s.logger)
+				return nil, oops.E(oops.CodeInvariantViolation, err, "package version incorrectly parsed").LogError(ctx, s.logger)
 			}
 
 			row, err := tx.PeekPackageByNameAndVersion(ctx, packagesRepo.PeekPackageByNameAndVersionParams{
@@ -982,10 +982,10 @@ func (s *Service) resolvePackages(ctx context.Context, tx *packagesRepo.Queries,
 				Build:      conv.ToPGTextEmpty(semver.Build),
 			})
 			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, oops.E(oops.CodeBadRequest, err, "package version not found: %s@%s", name, version).Log(ctx, s.logger, attr.SlogPackageName(name), attr.SlogPackageVersion(version))
+				return nil, oops.E(oops.CodeBadRequest, err, "package version not found: %s@%s", name, version).LogError(ctx, s.logger, attr.SlogPackageName(name), attr.SlogPackageVersion(version))
 			}
 			if err != nil {
-				return nil, oops.E(oops.CodeBadRequest, err, "error getting package by name and version").Log(ctx, s.logger, attr.SlogPackageName(name), attr.SlogPackageVersion(version))
+				return nil, oops.E(oops.CodeBadRequest, err, "error getting package by name and version").LogError(ctx, s.logger, attr.SlogPackageName(name), attr.SlogPackageVersion(version))
 			}
 
 			packageID = row.PackageID
@@ -994,7 +994,7 @@ func (s *Service) resolvePackages(ctx context.Context, tx *packagesRepo.Queries,
 		}
 
 		if packageID == uuid.Nil || versionID == uuid.Nil {
-			return nil, oops.E(oops.CodeBadRequest, nil, "could not resolve package version: %s@%s", name, conv.Default(version, "latest")).Log(ctx, s.logger, attr.SlogPackageName(name), attr.SlogPackageVersion(conv.Default(version, "latest")))
+			return nil, oops.E(oops.CodeBadRequest, nil, "could not resolve package version: %s@%s", name, conv.Default(version, "latest")).LogError(ctx, s.logger, attr.SlogPackageName(name), attr.SlogPackageVersion(conv.Default(version, "latest")))
 		}
 
 		res = append(res, resolvedPackage{
@@ -1025,7 +1025,7 @@ func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, proj
 		IdempotencyKey: conv.PtrValOr(dep.IdempotencyKey, ""),
 	})
 	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "error starting deployment").Log(ctx, logger)
+		return "", oops.E(oops.CodeUnexpected, err, "error starting deployment").LogError(ctx, logger)
 	}
 
 	if nonBlocking {
@@ -1034,7 +1034,7 @@ func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, proj
 
 	var res background.ProcessDeploymentWorkflowResult
 	if err := wr.Get(ctx, &res); err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "error getting deployment status").Log(ctx, logger)
+		return "", oops.E(oops.CodeUnexpected, err, "error getting deployment status").LogError(ctx, logger)
 	}
 
 	logger.InfoContext(ctx, "processed deployment", attr.SlogDeploymentID(deploymentID.String()), attr.SlogDeploymentStatus(res.Status), attr.SlogProjectID(projectID.String()))
@@ -1051,10 +1051,10 @@ func validatePackageInclusion(ctx context.Context, logger *slog.Logger, targetPr
 		"package id cannot be nil", resolved.packageID != uuid.Nil,
 		"version id cannot be nil", resolved.versionID != uuid.Nil,
 	); err != nil {
-		return oops.E(oops.CodeInvariantViolation, err, "error resolving package: %s@%s", requirement[0], requirement[1]).Log(ctx, logger)
+		return oops.E(oops.CodeInvariantViolation, err, "error resolving package: %s@%s", requirement[0], requirement[1]).LogError(ctx, logger)
 	}
 	if resolved.projectID == targetProjectID {
-		return oops.E(oops.CodeInvalid, nil, "cannot add package to its own project: %s", requirement[0]).Log(ctx, logger)
+		return oops.E(oops.CodeInvalid, nil, "cannot add package to its own project: %s", requirement[0]).LogError(ctx, logger)
 	}
 
 	return nil

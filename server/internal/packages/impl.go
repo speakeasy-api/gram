@@ -84,7 +84,7 @@ func (s *Service) ListPackages(ctx context.Context, form *gen.ListPackagesPayloa
 
 	packages, err := s.repo.ListPackages(ctx, *authCtx.ProjectID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing packages").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing packages").LogError(ctx, logger)
 	}
 
 	result := &gen.ListPackagesResult{
@@ -138,7 +138,7 @@ func (s *Service) CreatePackage(ctx context.Context, form *gen.CreatePackagePayl
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error accessing packages").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing packages").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error {
 		return dbtx.Rollback(ctx)
@@ -155,7 +155,7 @@ func (s *Service) CreatePackage(ctx context.Context, form *gen.CreatePackagePayl
 	if form.ImageAssetID != nil {
 		imgasset, err := uuid.Parse(*form.ImageAssetID)
 		if err != nil {
-			return nil, oops.E(oops.CodeInvalid, err, "image id is not a valid uuid").Log(ctx, logger)
+			return nil, oops.E(oops.CodeInvalid, err, "image id is not a valid uuid").LogError(ctx, logger)
 		}
 
 		imageAssetID = uuid.NullUUID{UUID: imgasset, Valid: imgasset != uuid.Nil}
@@ -165,7 +165,7 @@ func (s *Service) CreatePackage(ctx context.Context, form *gen.CreatePackagePayl
 	if form.Description != nil {
 		html, err := conv.MarkdownToHTML([]byte(*form.Description))
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error converting markdown to html").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "error converting markdown to html").LogError(ctx, logger)
 		}
 
 		descriptionHTML = new(string(html))
@@ -184,11 +184,11 @@ func (s *Service) CreatePackage(ctx context.Context, form *gen.CreatePackagePayl
 		ImageAssetID:    imageAssetID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error creating package").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error creating package").LogError(ctx, logger)
 	}
 
 	if packageID == uuid.Nil {
-		return nil, oops.E(oops.CodeInvariantViolation, nil, "error retrieving package id").Log(ctx, logger)
+		return nil, oops.E(oops.CodeInvariantViolation, nil, "error retrieving package id").LogError(ctx, logger)
 	}
 
 	nullID := uuid.NullUUID{UUID: packageID, Valid: true}
@@ -198,7 +198,7 @@ func (s *Service) CreatePackage(ctx context.Context, form *gen.CreatePackagePayl
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error saving package").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error saving package").LogError(ctx, logger)
 	}
 
 	return &gen.CreatePackageResult{Package: pkg}, nil
@@ -218,14 +218,14 @@ func (s *Service) UpdatePackage(ctx context.Context, form *gen.UpdatePackagePayl
 
 	pkgID, err := uuid.Parse(form.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "error parsing package id").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "error parsing package id").LogError(ctx, logger)
 	}
 
 	imageAssetID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	if form.ImageAssetID != nil {
 		imgasset, err := uuid.Parse(*form.ImageAssetID)
 		if err != nil {
-			return nil, oops.E(oops.CodeInvalid, err, "image id is not a valid uuid").Log(ctx, logger)
+			return nil, oops.E(oops.CodeInvalid, err, "image id is not a valid uuid").LogError(ctx, logger)
 		}
 
 		imageAssetID = uuid.NullUUID{UUID: imgasset, Valid: imgasset != uuid.Nil}
@@ -235,7 +235,7 @@ func (s *Service) UpdatePackage(ctx context.Context, form *gen.UpdatePackagePayl
 	if form.Description != nil {
 		html, err := conv.MarkdownToHTML([]byte(*form.Description))
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error converting markdown to html").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "error converting markdown to html").LogError(ctx, logger)
 		}
 
 		descriptionHTML = new(string(html))
@@ -243,7 +243,7 @@ func (s *Service) UpdatePackage(ctx context.Context, form *gen.UpdatePackagePayl
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error accessing packages").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing packages").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error {
 		return dbtx.Rollback(ctx)
@@ -265,11 +265,11 @@ func (s *Service) UpdatePackage(ctx context.Context, form *gen.UpdatePackagePayl
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "error updating package").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error updating package").LogError(ctx, logger)
 	}
 
 	if err := inv.Check("package update result", "id is set", id != uuid.Nil); err != nil {
-		return nil, oops.E(oops.CodeInvariantViolation, err, "error updating package").Log(ctx, logger)
+		return nil, oops.E(oops.CodeInvariantViolation, err, "error updating package").LogError(ctx, logger)
 	}
 
 	pkg, err := describePackage(ctx, logger, tx, ProjectID(*authCtx.ProjectID), NullablePackageID(uuid.NullUUID{UUID: id, Valid: true}), NullablePackageName(nil))
@@ -278,7 +278,7 @@ func (s *Service) UpdatePackage(ctx context.Context, form *gen.UpdatePackagePayl
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error saving package").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error saving package").LogError(ctx, logger)
 	}
 
 	return &gen.UpdatePackageResult{Package: pkg}, nil
@@ -298,7 +298,7 @@ func (s *Service) ListVersions(ctx context.Context, form *gen.ListVersionsPayloa
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error accessing package versions").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing package versions").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error {
 		return dbtx.Rollback(ctx)
@@ -319,7 +319,7 @@ func (s *Service) ListVersions(ctx context.Context, form *gen.ListVersionsPayloa
 		ProjectID:   *authCtx.ProjectID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing versions").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing versions").LogError(ctx, logger)
 	}
 
 	versions := make([]*gen.PackageVersion, 0, len(versionRows))
@@ -363,12 +363,12 @@ func (s *Service) Publish(ctx context.Context, form *gen.PublishPayload) (res *g
 
 	semver, err := semver.ParseSemver(form.Version)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "error parsing version").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "error parsing version").LogError(ctx, logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error accessing packages").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing packages").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error {
 		return dbtx.Rollback(ctx)
@@ -378,7 +378,7 @@ func (s *Service) Publish(ctx context.Context, form *gen.PublishPayload) (res *g
 
 	depID, err := uuid.Parse(form.DeploymentID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "error parsing deployment id").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "error parsing deployment id").LogError(ctx, logger)
 	}
 
 	pkgID, err := tx.PokePackageByName(ctx, repo.PokePackageByNameParams{
@@ -386,11 +386,11 @@ func (s *Service) Publish(ctx context.Context, form *gen.PublishPayload) (res *g
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error reading package data").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading package data").LogError(ctx, logger)
 	}
 
 	if pkgID == uuid.Nil {
-		return nil, oops.E(oops.CodeNotFound, nil, "package not found").Log(ctx, logger)
+		return nil, oops.E(oops.CodeNotFound, nil, "package not found").LogError(ctx, logger)
 	}
 
 	row, err := tx.CreatePackageVersion(ctx, repo.CreatePackageVersionParams{
@@ -404,7 +404,7 @@ func (s *Service) Publish(ctx context.Context, form *gen.PublishPayload) (res *g
 		Visibility:   form.Visibility,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error creating package version").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error creating package version").LogError(ctx, logger)
 	}
 
 	pid := uuid.NullUUID{UUID: pkgID, Valid: true}
@@ -414,7 +414,7 @@ func (s *Service) Publish(ctx context.Context, form *gen.PublishPayload) (res *g
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error saving package version").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error saving package version").LogError(ctx, logger)
 	}
 
 	return &gen.PublishPackageResult{
@@ -448,7 +448,7 @@ func describePackage(
 		ProjectID:   uuid.UUID(projectID),
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting package with latest version").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting package with latest version").LogError(ctx, logger)
 	}
 
 	var deletedAt *string

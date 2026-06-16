@@ -20,7 +20,7 @@ melange = "0.40.4"
 nodejs = "24.16.0"
 "github:pnpm/pnpm" = "11.3.0"
 watchexec = "2.5.0"
-uv = "0.10.9"
+uv = "0.11.21"
 yq = "4.52.4"
 hk = "1.46.0"
 pkl = "0.31.0"
@@ -30,10 +30,15 @@ pkl = "0.31.0"
 "github:sqlc-dev/sqlc" = "1.31.1"
 "github:gotestyourself/gotestsum" = "1.13.0"
 buf = "1.69.0"
+ruff = "0.15.16"
 
 # ℹ️ The settings below are sensible defaults for local development. When
 # deploying to production, you will want to configure these more carefully.
 [env]
+###########################
+## Runtime configuration ##
+###########################
+PYTHONASYNCIODEBUG = "1" ## Enabled for local development only
 ############################
 ## Database configuration ##
 ############################
@@ -161,6 +166,8 @@ GRAM_SSL_KEY_FILE = "{{config_root}}/local/ssl/keys/local-key.pem"
 # GRAM_PLUGINS_GITHUB_PRIVATE_KEY = ""
 # GRAM_PLUGINS_GITHUB_ORG = ""
 # GRAM_PLUGINS_GITHUB_INSTALLATION_ID = ""
+GRAM_PYSTREAMS_CONTROL_PORT = "8089"
+GRAM_PYSTREAMS_CONTROL_HOST = "127.0.0.1"
 
 ##########################
 ## Observability config ##
@@ -269,3 +276,11 @@ GRAM_ADMIN_ALLOWED_HDS = "speakeasyapi.dev,speakeasy.com"
 ## Svix configuration ##
 ########################
 GRAM_SVIX_API_KEY = "unset"
+
+################
+## GCP config ##
+################
+## Typically this variable is omitted and the GCP SDK will detect project ID
+## from the environment. However, for local development, it can be set to a
+## static value.
+GRAM_GCP_PROJECT_ID = "local-dev-project"

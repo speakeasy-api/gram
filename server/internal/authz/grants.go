@@ -53,6 +53,15 @@ type ScopedGrant struct {
 	Selectors []Selector
 }
 
+// GrantsSatisfy reports whether the loaded grant set authorizes check.
+func GrantsSatisfy(grants []Grant, check Check) bool {
+	if err := validateInput(check); err != nil {
+		return false
+	}
+	allowGrant, _, _ := evaluateGrants(grants, check.expand())
+	return allowGrant != nil
+}
+
 // SystemRoleGrants defines the canonical grant sets for the built-in system
 // roles. These are seeded when RBAC is enabled and replace any existing grants
 // for these roles (idempotent, won't clobber custom roles).
@@ -266,11 +275,11 @@ func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, o
 	// role:<kind>:<uuid> principal and the legacy role:<slug> principal.
 	rp, err := newRolePrincipals(roleSlug, rolePrincipalURN)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build role principals").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "build role principals").LogError(ctx, logger)
 	}
 	principalURNs, err := principalURNStrings(rp.MatchPrincipals)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build role principals").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "build role principals").LogError(ctx, logger)
 	}
 
 	rows, err := repo.New(db).GetPrincipalGrants(ctx, repo.GetPrincipalGrantsParams{
@@ -278,12 +287,12 @@ func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, o
 		PrincipalUrns:  principalURNs,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list grants for role").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list grants for role").LogError(ctx, logger)
 	}
 
 	scoped, err := scopedGrantsFromGrantRows(rows)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "unmarshal grant selector").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "unmarshal grant selector").LogError(ctx, logger)
 	}
 
 	return scoped, nil
@@ -420,6 +429,19 @@ func buildScopedGrants(keys []scopeEffectKey, grouped map[scopeEffectKey]scopeAg
 // Returns the first matching allow grant+check pair if permitted, nil otherwise.
 // Also returns whether a deny was matched (for logging).
 func evaluateGrants(grants []Grant, checks []Check) (allowGrant *Grant, allowCheck *Check, denied bool) {
+	if hasMatchingDenyGrant(grants, checks) {
+		return nil, nil, true
+	}
+
+	allowGrant, allowCheck = matchingAllowGrant(grants, checks)
+	if allowGrant == nil {
+		return nil, nil, false
+	}
+
+	return allowGrant, allowCheck, false
+}
+
+func hasMatchingDenyGrant(grants []Grant, checks []Check) bool {
 	for i := range grants {
 		grant := &grants[i]
 		if grant.Effect != PolicyEffectDeny {
@@ -437,11 +459,15 @@ func evaluateGrants(grants []Grant, checks []Check) (allowGrant *Grant, allowChe
 			// be present in the check. This prevents a tool-scoped deny
 			// from blocking a dimensionless server-level connect probe.
 			if !check.expanded && grant.Selector.StrictMatches(check.selector()) {
-				return nil, nil, true
+				return true
 			}
 		}
 	}
 
+	return false
+}
+
+func matchingAllowGrant(grants []Grant, checks []Check) (*Grant, *Check) {
 	for i := range grants {
 		grant := &grants[i]
 		if grant.Effect != PolicyEffectAllow {
@@ -457,11 +483,11 @@ func evaluateGrants(grants []Grant, checks []Check) (allowGrant *Grant, allowChe
 			if !check.matchesAllowSelector(grant.Selector) {
 				continue
 			}
-			return grant, check, false
+			return grant, check
 		}
 	}
 
-	return nil, nil, false
+	return nil, nil
 }
 
 // allScopeGrants returns wildcard grants for every defined scope. Used to give

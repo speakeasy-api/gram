@@ -47,6 +47,14 @@ var RiskPolicyModelConfig = Type("RiskPolicyModelConfig", func() {
 	Attribute("fail_open", Boolean, "When the judge errors or times out: true allows the message (fail-open), false blocks it (fail-closed). Defaults to fail-open.")
 })
 
+// RiskPolicyAudienceTypeEnum applies the allowed-values constraint to a policy
+// audience type. `everyone` means the policy applies to every user in the org;
+// `targeted` means the policy applies only to users or roles granted
+// risk_policy:evaluate for the policy resource.
+func RiskPolicyAudienceTypeEnum() {
+	Enum("everyone", "targeted")
+}
+
 var RiskPolicy = Type("RiskPolicy", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -72,6 +80,11 @@ var RiskPolicy = Type("RiskPolicy", func() {
 		RiskPolicyActionEnum()
 		Default("flag")
 	})
+	Attribute("audience_type", String, "Policy audience type: everyone or targeted.", func() {
+		RiskPolicyAudienceTypeEnum()
+		Default("everyone")
+	})
+	Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs the policy applies to. Contains user:all when audience_type is everyone.")
 	Attribute("auto_name", Boolean, "Whether the policy name is auto-generated. When true, the name is regenerated on each update.")
 	Attribute("user_message", String, "Optional message shown to the end user when this policy blocks an action or surfaces a flagged finding. When unset, a default message is rendered.")
 	Attribute("prompt", String, "For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Null for standard policies.")
@@ -86,7 +99,7 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("pending_messages", Int64, "Number of messages not yet analyzed at the current policy version.")
 	Attribute("total_messages", Int64, "Total number of messages in the project.")
 
-	Required("id", "project_id", "name", "policy_type", "sources", "enabled", "action", "auto_name", "version", "created_at", "updated_at", "pending_messages", "total_messages")
+	Required("id", "project_id", "name", "policy_type", "sources", "enabled", "action", "audience_type", "audience_principal_urns", "auto_name", "version", "created_at", "updated_at", "pending_messages", "total_messages")
 })
 
 var RiskCustomDetectionRule = Type("RiskCustomDetectionRule", func() {

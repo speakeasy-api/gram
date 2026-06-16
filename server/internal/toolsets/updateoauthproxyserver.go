@@ -56,7 +56,7 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 	if form.TokenEndpointAuthMethodsSupported != nil {
 		for _, method := range form.TokenEndpointAuthMethodsSupported {
 			if !validOAuthProxyAuthMethods[method] {
-				return nil, oops.E(oops.CodeBadRequest, nil, "invalid token_endpoint_auth_methods_supported value: %s (must be client_secret_basic, client_secret_post, or none)", method).Log(ctx, s.logger)
+				return nil, oops.E(oops.CodeBadRequest, nil, "invalid token_endpoint_auth_methods_supported value: %s (must be client_secret_basic, client_secret_post, or none)", method).LogError(ctx, s.logger)
 			}
 		}
 	}
@@ -68,10 +68,10 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 	// breaking OAuth for all users of the toolset. Mirrors AddOAuthProxyServer's
 	// validation at impl.go:1008-1012.
 	if form.AuthorizationEndpoint != nil && *form.AuthorizationEndpoint == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "authorization_endpoint cannot be empty").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "authorization_endpoint cannot be empty").LogError(ctx, s.logger)
 	}
 	if form.TokenEndpoint != nil && *form.TokenEndpoint == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "token_endpoint cannot be empty").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "token_endpoint cannot be empty").LogError(ctx, s.logger)
 	}
 
 	// Reject empty arrays for auth methods on update. The create path requires
@@ -79,12 +79,12 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 	// produce a proxy that can't function. (scopes_supported is allowed to be
 	// empty — many MCP servers don't advertise scopes in their well-known doc.)
 	if form.TokenEndpointAuthMethodsSupported != nil && len(form.TokenEndpointAuthMethodsSupported) == 0 {
-		return nil, oops.E(oops.CodeBadRequest, nil, "token_endpoint_auth_methods_supported cannot be empty").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "token_endpoint_auth_methods_supported cannot be empty").LogError(ctx, s.logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error accessing OAuth proxy servers").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing OAuth proxy servers").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -95,7 +95,7 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 	}
 
 	if toolsetDetails.OauthProxyServer == nil {
-		return nil, oops.E(oops.CodeNotFound, nil, "no OAuth proxy server attached to this toolset").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, nil, "no OAuth proxy server attached to this toolset").LogError(ctx, s.logger)
 	}
 
 	// Capture the pre-update state for the audit log. mv.DescribeToolset returns a fresh
@@ -104,12 +104,12 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 
 	toolsetID, err := uuid.Parse(toolsetDetails.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset ID").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset ID").LogError(ctx, s.logger)
 	}
 
 	serverID, err := uuid.Parse(toolsetDetails.OauthProxyServer.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "invalid OAuth proxy server ID").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "invalid OAuth proxy server ID").LogError(ctx, s.logger)
 	}
 
 	// Load the provider row so we can (a) check provider_type and (b) read existing
@@ -120,20 +120,20 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "OAuth proxy provider not found").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeNotFound, err, "OAuth proxy provider not found").LogError(ctx, s.logger)
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load OAuth proxy provider").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load OAuth proxy provider").LogError(ctx, s.logger)
 	}
 
 	// Gram-managed servers cannot be edited via this endpoint.
 	if oauth.OAuthProxyProviderType(provider.ProviderType) == oauth.OAuthProxyProviderTypeGram {
-		return nil, oops.E(oops.CodeBadRequest, nil, "gram-managed OAuth proxy servers cannot be edited via this endpoint").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "gram-managed OAuth proxy servers cannot be edited via this endpoint").LogError(ctx, s.logger)
 	}
 
 	// Validate environment_slug if provided.
 	if form.EnvironmentSlug != nil {
 		if string(*form.EnvironmentSlug) == "" {
-			return nil, oops.E(oops.CodeBadRequest, nil, "environment_slug cannot be empty").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, nil, "environment_slug cannot be empty").LogError(ctx, s.logger)
 		}
 		_, err = s.environmentRepo.WithTx(dbtx).GetEnvironmentBySlug(ctx, environmentsRepo.GetEnvironmentBySlugParams{
 			Slug:      string(*form.EnvironmentSlug),
@@ -141,9 +141,9 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 		})
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, oops.E(oops.CodeNotFound, err, "environment not found").Log(ctx, s.logger)
+				return nil, oops.E(oops.CodeNotFound, err, "environment not found").LogError(ctx, s.logger)
 			}
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment").LogError(ctx, s.logger)
 		}
 	}
 
@@ -156,9 +156,9 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 		})
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, oops.E(oops.CodeNotFound, err, "OAuth proxy server not found").Log(ctx, s.logger)
+				return nil, oops.E(oops.CodeNotFound, err, "OAuth proxy server not found").LogError(ctx, s.logger)
 			}
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to update OAuth proxy server audience").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to update OAuth proxy server audience").LogError(ctx, s.logger)
 		}
 	}
 
@@ -177,13 +177,13 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 			existingSecrets := map[string]string{}
 			if provider.Secrets != nil {
 				if err := json.Unmarshal(provider.Secrets, &existingSecrets); err != nil {
-					return nil, oops.E(oops.CodeUnexpected, err, "failed to unmarshal provider secrets").Log(ctx, s.logger)
+					return nil, oops.E(oops.CodeUnexpected, err, "failed to unmarshal provider secrets").LogError(ctx, s.logger)
 				}
 			}
 			existingSecrets["environment_slug"] = string(*form.EnvironmentSlug)
 			secretsBytes, err = json.Marshal(existingSecrets)
 			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "failed to marshal provider secrets").Log(ctx, s.logger)
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to marshal provider secrets").LogError(ctx, s.logger)
 			}
 		}
 		// secretsBytes == nil when environment_slug was not provided → COALESCE keeps existing value.
@@ -200,9 +200,9 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 		})
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, oops.E(oops.CodeNotFound, err, "OAuth proxy provider not found").Log(ctx, s.logger)
+				return nil, oops.E(oops.CodeNotFound, err, "OAuth proxy provider not found").LogError(ctx, s.logger)
 			}
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to update OAuth proxy provider fields").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to update OAuth proxy provider fields").LogError(ctx, s.logger)
 		}
 	}
 
@@ -230,11 +230,11 @@ func (s *Service) UpdateOAuthProxyServer(ctx context.Context, payload *gen.Updat
 		ToolsetSnapshotBefore: toolsetSnapshotBefore,
 		ToolsetSnapshotAfter:  toolsetDetails,
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset update").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset update").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error updating OAuth proxy server").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error updating OAuth proxy server").LogError(ctx, s.logger)
 	}
 
 	return toolsetDetails, nil

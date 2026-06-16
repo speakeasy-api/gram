@@ -93,11 +93,11 @@ func (c *CustomDomainIngress) Do(ctx context.Context, args CustomDomainIngressAr
 			resourceName = args.IngressName
 		}
 		if resourceName == "" {
-			return oops.E(oops.CodeUnexpected, errors.New("resource name is empty"), "resource name is empty").Log(ctx, c.logger)
+			return oops.E(oops.CodeUnexpected, errors.New("resource name is empty"), "resource name is empty").LogError(ctx, c.logger)
 		}
 
 		if err := provisioner.Delete(ctx, resourceName, args.CertSecretName); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to delete custom domain resource").Log(ctx, c.logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to delete custom domain resource").LogError(ctx, c.logger)
 		}
 
 		return nil
@@ -105,11 +105,11 @@ func (c *CustomDomainIngress) Do(ctx context.Context, args CustomDomainIngressAr
 
 	customDomain, err := c.domains.GetCustomDomainByDomain(ctx, args.Domain)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to get custom domain").Log(ctx, c.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to get custom domain").LogError(ctx, c.logger)
 	}
 
 	if customDomain.OrganizationID != args.OrgID {
-		return oops.E(oops.CodeUnauthorized, errors.New("custom domain does not belong to organization"), "custom domain does not belong to organization").Log(ctx, c.logger)
+		return oops.E(oops.CodeUnauthorized, errors.New("custom domain does not belong to organization"), "custom domain does not belong to organization").LogError(ctx, c.logger)
 	}
 
 	if args.Action == CustomDomainIngressActionReapply {
@@ -123,7 +123,7 @@ func (c *CustomDomainIngress) Do(ctx context.Context, args CustomDomainIngressAr
 		// and its cert already exist, so there is no convergence wait and no
 		// verified/activated flip.
 		if _, err := provisioner.Setup(ctx, customDomain.Domain, args.IPAllowlist); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to re-apply custom domain ip allowlist").Log(ctx, c.logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to re-apply custom domain ip allowlist").LogError(ctx, c.logger)
 		}
 
 		return nil
@@ -137,7 +137,7 @@ func (c *CustomDomainIngress) Do(ctx context.Context, args CustomDomainIngressAr
 
 		result, err := provisioner.Setup(ctx, customDomain.Domain, customDomain.IpAllowlist)
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to provision custom domain resource").Log(ctx, c.logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to provision custom domain resource").LogError(ctx, c.logger)
 		}
 
 		// Wait for resource convergence — cert issuance and LB propagation.
@@ -145,7 +145,7 @@ func (c *CustomDomainIngress) Do(ctx context.Context, args CustomDomainIngressAr
 		time.Sleep(c.setupSleep)
 
 		if err := provisioner.Get(ctx, result.ResourceName); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to verify custom domain resource exists").Log(ctx, c.logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to verify custom domain resource exists").LogError(ctx, c.logger)
 		}
 
 		_, err = c.domains.UpdateCustomDomain(ctx, customdomainsRepo.UpdateCustomDomainParams{
@@ -157,7 +157,7 @@ func (c *CustomDomainIngress) Do(ctx context.Context, args CustomDomainIngressAr
 			ProvisionerKind: string(kind),
 		})
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to update custom domain").Log(ctx, c.logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to update custom domain").LogError(ctx, c.logger)
 		}
 
 		return nil

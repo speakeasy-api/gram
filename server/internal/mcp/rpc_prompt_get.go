@@ -29,11 +29,11 @@ type promptGetResult struct {
 func handlePromptsGet(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs, req *rawRequest) (json.RawMessage, error) {
 	var params prompGetParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse get prompt request").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse get prompt request").LogError(ctx, logger)
 	}
 
 	if params.Name == "" {
-		return nil, oops.E(oops.CodeInvalid, nil, "promp name is required").Log(ctx, logger)
+		return nil, oops.E(oops.CodeInvalid, nil, "promp name is required").LogError(ctx, logger)
 	}
 
 	tr := templatesRepo.New(db)
@@ -42,12 +42,12 @@ func handlePromptsGet(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		Name:      params.Name,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "prompt not found").Log(ctx, logger)
+		return nil, oops.E(oops.CodeNotFound, err, "prompt not found").LogError(ctx, logger)
 	}
 
 	promptData, err := templates.RenderTemplate(ctx, logger, prompt.Prompt, prompt.Kind.String, prompt.Engine.String, params.Arguments)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "failed to execute prompt").Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "failed to execute prompt").LogError(ctx, logger)
 	}
 
 	description := ""
@@ -63,7 +63,7 @@ func handlePromptsGet(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		Meta:     nil,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to marshal content chunk").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to marshal content chunk").LogError(ctx, logger)
 	}
 
 	bs, err := json.Marshal(result[promptGetResult]{
@@ -74,7 +74,7 @@ func handlePromptsGet(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		},
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize prompts/get result").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize prompts/get result").LogError(ctx, logger)
 	}
 
 	return bs, nil

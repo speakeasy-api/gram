@@ -8,3 +8,7 @@ DESCRIPTOR: _descriptor.FileDescriptor
 class Processor(_message.Message):
     __slots__ = ()
     def __init__(self) -> None: ...
+
+class PyProcessor(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...

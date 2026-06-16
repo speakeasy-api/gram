@@ -59,7 +59,7 @@ func (s *Service) ListRiskPolicyBypassRequests(ctx context.Context, payload *gen
 		Status:       conv.PtrToPGText(payload.Status),
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list risk policy bypass requests").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list risk policy bypass requests").LogError(ctx, s.logger)
 	}
 
 	requests := make([]*gen.RiskPolicyBypassRequest, 0, len(rows))
@@ -80,7 +80,7 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 	if strings.TrimSpace(s.jwtSecret) == "" {
-		return nil, oops.E(oops.CodeUnexpected, nil, "risk policy bypass request tokens are not configured").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, nil, "risk policy bypass request tokens are not configured").LogError(ctx, s.logger)
 	}
 
 	claims, err := parsePolicyBypassRequestToken(s.jwtSecret, payload.RequestToken)
@@ -109,7 +109,7 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin risk policy bypass request").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "begin risk policy bypass request").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -117,7 +117,7 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 		ID:             projectID,
 		OrganizationID: claims.OrganizationID,
 	}); err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "project not found").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, err, "project not found").LogError(ctx, s.logger)
 	}
 	q := repo.New(dbtx)
 	policy, err := q.GetRiskPolicyForUpdate(ctx, repo.GetRiskPolicyForUpdateParams{
@@ -125,7 +125,7 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 		ProjectID: projectID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").LogError(ctx, s.logger)
 	}
 
 	target, err := riskPolicyBypassTargetFromClaims(claims)
@@ -147,15 +147,15 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 		Status:           riskPolicyBypassRequestStatusRequested,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "create risk policy bypass request").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "create risk policy bypass request").LogError(ctx, s.logger)
 	}
 
 	if err := s.logRiskPolicyBypassRequestAudit(ctx, dbtx, audit.ActionRiskPolicyBypassRequestCreate, authCtx, policy.ID, policy.ProjectID, policy.Name, nil, &row); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy bypass request create").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy bypass request create").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit risk policy bypass request").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "commit risk policy bypass request").LogError(ctx, s.logger)
 	}
 
 	return riskPolicyBypassRequestView(row)
@@ -177,7 +177,7 @@ func (s *Service) ApproveRiskPolicyBypassRequest(ctx context.Context, payload *g
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin risk policy bypass approval").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "begin risk policy bypass approval").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -187,14 +187,14 @@ func (s *Service) ApproveRiskPolicyBypassRequest(ctx context.Context, payload *g
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "risk policy bypass request not found").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, err, "risk policy bypass request not found").LogError(ctx, s.logger)
 	}
 	policy, err := q.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
 		ID:        current.RiskPolicyID,
 		ProjectID: current.ProjectID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").LogError(ctx, s.logger)
 	}
 	principals, principalURNs, err := riskPolicyBypassGrantPrincipals(current.RequesterUserID, payload.GrantedPrincipalUrns)
 	if err != nil {
@@ -205,7 +205,7 @@ func (s *Service) ApproveRiskPolicyBypassRequest(ctx context.Context, payload *g
 	}
 	selector, err := riskPolicyBypassGrantSelector(current)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build risk policy bypass selector").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "build risk policy bypass selector").LogError(ctx, s.logger)
 	}
 	if current.Status == riskPolicyBypassRequestStatusApproved {
 		currentPrincipals, _, err := riskPolicyBypassGrantPrincipals(current.RequesterUserID, current.GrantedPrincipalUrns)
@@ -224,7 +224,7 @@ func (s *Service) ApproveRiskPolicyBypassRequest(ctx context.Context, payload *g
 				Principals: principalsToRevoke,
 				Selector:   selector,
 			}); err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "revoke replaced risk policy bypass grants").Log(ctx, s.logger)
+				return nil, oops.E(oops.CodeUnexpected, err, "revoke replaced risk policy bypass grants").LogError(ctx, s.logger)
 			}
 		}
 	}
@@ -238,7 +238,7 @@ func (s *Service) ApproveRiskPolicyBypassRequest(ctx context.Context, payload *g
 		Principals: principals,
 		Selector:   selector,
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "grant risk policy bypass").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "grant risk policy bypass").LogError(ctx, s.logger)
 	}
 
 	row, err := q.UpdateRiskPolicyBypassRequestStatus(ctx, repo.UpdateRiskPolicyBypassRequestStatusParams{
@@ -249,15 +249,15 @@ func (s *Service) ApproveRiskPolicyBypassRequest(ctx context.Context, payload *g
 		ProjectID:            *authCtx.ProjectID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "approve risk policy bypass request").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "approve risk policy bypass request").LogError(ctx, s.logger)
 	}
 
 	if err := s.logRiskPolicyBypassRequestAudit(ctx, dbtx, audit.ActionRiskPolicyBypassRequestApprove, authCtx, current.RiskPolicyID, current.ProjectID, policy.Name, &current, &row); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy bypass request approval").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy bypass request approval").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit risk policy bypass approval").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "commit risk policy bypass approval").LogError(ctx, s.logger)
 	}
 
 	return riskPolicyBypassRequestView(row)
@@ -279,7 +279,7 @@ func (s *Service) DenyRiskPolicyBypassRequest(ctx context.Context, payload *gen.
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin risk policy bypass denial").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "begin risk policy bypass denial").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -289,7 +289,7 @@ func (s *Service) DenyRiskPolicyBypassRequest(ctx context.Context, payload *gen.
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "risk policy bypass request not found").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, err, "risk policy bypass request not found").LogError(ctx, s.logger)
 	}
 	if current.Status != riskPolicyBypassRequestStatusRequested {
 		return nil, oops.E(oops.CodeInvalid, nil, "risk policy bypass request must be pending")
@@ -299,7 +299,7 @@ func (s *Service) DenyRiskPolicyBypassRequest(ctx context.Context, payload *gen.
 		ProjectID: current.ProjectID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").LogError(ctx, s.logger)
 	}
 	row, err := q.UpdateRiskPolicyBypassRequestStatus(ctx, repo.UpdateRiskPolicyBypassRequestStatusParams{
 		Status:               riskPolicyBypassRequestStatusDenied,
@@ -309,15 +309,15 @@ func (s *Service) DenyRiskPolicyBypassRequest(ctx context.Context, payload *gen.
 		ProjectID:            *authCtx.ProjectID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "risk policy bypass request not found").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, err, "risk policy bypass request not found").LogError(ctx, s.logger)
 	}
 
 	if err := s.logRiskPolicyBypassRequestAudit(ctx, dbtx, audit.ActionRiskPolicyBypassRequestDeny, authCtx, current.RiskPolicyID, current.ProjectID, policy.Name, &current, &row); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy bypass request denial").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy bypass request denial").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit risk policy bypass denial").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "commit risk policy bypass denial").LogError(ctx, s.logger)
 	}
 
 	return riskPolicyBypassRequestView(row)
@@ -339,7 +339,7 @@ func (s *Service) RevokeRiskPolicyBypassRequest(ctx context.Context, payload *ge
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin risk policy bypass revocation").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "begin risk policy bypass revocation").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -349,14 +349,14 @@ func (s *Service) RevokeRiskPolicyBypassRequest(ctx context.Context, payload *ge
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "risk policy bypass request not found").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, err, "risk policy bypass request not found").LogError(ctx, s.logger)
 	}
 	policy, err := q.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
 		ID:        current.RiskPolicyID,
 		ProjectID: current.ProjectID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").LogError(ctx, s.logger)
 	}
 	principals, _, err := riskPolicyBypassGrantPrincipals(current.RequesterUserID, current.GrantedPrincipalUrns)
 	if err != nil {
@@ -364,7 +364,7 @@ func (s *Service) RevokeRiskPolicyBypassRequest(ctx context.Context, payload *ge
 	}
 	selector, err := riskPolicyBypassGrantSelector(current)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build risk policy bypass selector").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "build risk policy bypass selector").LogError(ctx, s.logger)
 	}
 	if err := authz.RevokeResourceFromPrincipals(ctx, dbtx, authz.ResourceGrant{
 		Resource: authz.Resource{
@@ -376,7 +376,7 @@ func (s *Service) RevokeRiskPolicyBypassRequest(ctx context.Context, payload *ge
 		Principals: principals,
 		Selector:   selector,
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "revoke risk policy bypass").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "revoke risk policy bypass").LogError(ctx, s.logger)
 	}
 
 	row, err := q.UpdateRiskPolicyBypassRequestStatus(ctx, repo.UpdateRiskPolicyBypassRequestStatusParams{
@@ -387,15 +387,15 @@ func (s *Service) RevokeRiskPolicyBypassRequest(ctx context.Context, payload *ge
 		ProjectID:            *authCtx.ProjectID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "revoke risk policy bypass request").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "revoke risk policy bypass request").LogError(ctx, s.logger)
 	}
 
 	if err := s.logRiskPolicyBypassRequestAudit(ctx, dbtx, audit.ActionRiskPolicyBypassRequestRevoke, authCtx, current.RiskPolicyID, current.ProjectID, policy.Name, &current, &row); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy bypass request revocation").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy bypass request revocation").LogError(ctx, s.logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit risk policy bypass revocation").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "commit risk policy bypass revocation").LogError(ctx, s.logger)
 	}
 
 	return riskPolicyBypassRequestView(row)
@@ -640,48 +640,9 @@ func riskPolicyBypassGrantPrincipals(requesterUserID string, principalURNs []str
 
 func validateRiskPolicyBypassGrantPrincipals(ctx context.Context, db accessrepo.DBTX, organizationID string, principals []urn.Principal) error {
 	for _, principal := range principals {
-		switch principal.Type {
-		case urn.PrincipalTypeUser:
-			if principal.String() == authz.AllUsersPrincipal().String() {
-				continue
-			}
-			if _, err := authz.ResolveUserPrincipals(ctx, db, organizationID, principal.ID); err != nil {
-				return fmt.Errorf("validate user principal %q: %w", principal.String(), err)
-			}
-		case urn.PrincipalTypeRole:
-			if err := validateRiskPolicyBypassRolePrincipal(ctx, db, organizationID, principal); err != nil {
-				return err
-			}
-		default:
-			return fmt.Errorf("unsupported principal type %q", principal.Type)
+		if err := authz.ValidatePrincipal(ctx, db, organizationID, principal); err != nil {
+			return fmt.Errorf("validate bypass grant principal %q: %w", principal.String(), err)
 		}
-	}
-
-	return nil
-}
-
-func validateRiskPolicyBypassRolePrincipal(ctx context.Context, db accessrepo.DBTX, organizationID string, principal urn.Principal) error {
-	roleKind, rawRoleID, ok := strings.Cut(principal.ID, ":")
-	if !ok {
-		return fmt.Errorf("invalid role principal %q", principal.String())
-	}
-	if roleKind != "organization" && roleKind != "global" {
-		return fmt.Errorf("invalid role principal %q", principal.String())
-	}
-	roleID, err := uuid.Parse(rawRoleID)
-	if err != nil {
-		return fmt.Errorf("invalid role principal %q: %w", principal.String(), err)
-	}
-
-	row, err := accessrepo.New(db).GetOrganizationRoleByID(ctx, accessrepo.GetOrganizationRoleByIDParams{
-		OrganizationID: organizationID,
-		ID:             roleID,
-	})
-	if err != nil {
-		return fmt.Errorf("validate role principal %q: %w", principal.String(), err)
-	}
-	if row.RoleUrn != principal.String() {
-		return fmt.Errorf("role principal %q does not match active role %q", principal.String(), row.RoleUrn)
 	}
 
 	return nil

@@ -491,10 +491,7 @@ func TestSlackEventExpectsReply(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			got := slackEventExpectsReply(EventEnvelope{Event: tc.event})
-			require.Equal(t, tc.want, got)
-		})
+		got := slackEventExpectsReply(EventEnvelope{Event: tc.event})
+		require.Equal(t, tc.want, got, tc.name)
 	}
 }

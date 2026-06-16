@@ -26,6 +26,18 @@ export const RiskPolicyAction = {
 export type RiskPolicyAction = ClosedEnum<typeof RiskPolicyAction>;
 
 /**
+ * Policy audience type: everyone or targeted.
+ */
+export const RiskPolicyAudienceType = {
+  Everyone: "everyone",
+  Targeted: "targeted",
+} as const;
+/**
+ * Policy audience type: everyone or targeted.
+ */
+export type RiskPolicyAudienceType = ClosedEnum<typeof RiskPolicyAudienceType>;
+
+/**
  * Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge).
  */
 export const RiskPolicyPolicyType = {
@@ -42,6 +54,14 @@ export type RiskPolicy = {
    * Policy action: flag (log only) or block (deny in real-time).
    */
   action: RiskPolicyAction;
+  /**
+   * Principal URNs the policy applies to. Contains user:all when audience_type is everyone.
+   */
+  audiencePrincipalUrns: Array<string>;
+  /**
+   * Policy audience type: everyone or targeted.
+   */
+  audienceType: RiskPolicyAudienceType;
   /**
    * Whether the policy name is auto-generated. When true, the name is regenerated on each update.
    */
@@ -127,6 +147,11 @@ export const RiskPolicyAction$inboundSchema: z.ZodMiniEnum<
 > = z.enum(RiskPolicyAction);
 
 /** @internal */
+export const RiskPolicyAudienceType$inboundSchema: z.ZodMiniEnum<
+  typeof RiskPolicyAudienceType
+> = z.enum(RiskPolicyAudienceType);
+
+/** @internal */
 export const RiskPolicyPolicyType$inboundSchema: z.ZodMiniEnum<
   typeof RiskPolicyPolicyType
 > = z.enum(RiskPolicyPolicyType);
@@ -136,6 +161,11 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
   .pipe(
     z.object({
       action: z._default(RiskPolicyAction$inboundSchema, "flag"),
+      audience_principal_urns: z.array(z.string()),
+      audience_type: z._default(
+        RiskPolicyAudienceType$inboundSchema,
+        "everyone",
+      ),
       auto_name: z.boolean(),
       created_at: z.pipe(
         z.iso.datetime({ offset: true }),
@@ -165,6 +195,8 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
     }),
     z.transform((v) => {
       return remap$(v, {
+        "audience_principal_urns": "audiencePrincipalUrns",
+        "audience_type": "audienceType",
         "auto_name": "autoName",
         "created_at": "createdAt",
         "custom_rule_ids": "customRuleIds",

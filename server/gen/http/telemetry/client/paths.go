@@ -77,6 +77,11 @@ func GetToolUsageSummaryTelemetryPath() string {
 	return "/rpc/telemetry.getToolUsageSummary"
 }
 
+// ListToolUsageTracesTelemetryPath returns the URL path to the telemetry service listToolUsageTraces HTTP endpoint.
+func ListToolUsageTracesTelemetryPath() string {
+	return "/rpc/telemetry.listToolUsageTraces"
+}
+
 // GetToolUsageFilterOptionsTelemetryPath returns the URL path to the telemetry service getToolUsageFilterOptions HTTP endpoint.
 func GetToolUsageFilterOptionsTelemetryPath() string {
 	return "/rpc/telemetry.getToolUsageFilterOptions"

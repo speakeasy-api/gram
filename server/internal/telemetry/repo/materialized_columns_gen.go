@@ -23,4 +23,5 @@ var materializedColumns = map[string]string{
 	"gram.hook.source":              "hook_source",
 	"gram.hook.block_reason":        "hook_block_reason",
 	"gram.remote_mcp_server.id":     "remote_mcp_server_id",
+	"gram.mcp_server.id":            "mcp_server_id",
 }

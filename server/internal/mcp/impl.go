@@ -114,6 +114,7 @@ type Service struct {
 	enc                    *encryption.Client
 	authz                  *authz.Engine
 	shadowMCPClient        *shadowmcp.Client
+	auditLogger            *audit.Logger
 	platformExtras         []platformtools.ExternalTool
 	platformFeatureChecker platformtools.FeatureChecker
 	platformToolsets       map[string]platformtools.Toolset
@@ -252,6 +253,7 @@ func NewService(
 		enc:                    enc,
 		authz:                  authzEngine,
 		shadowMCPClient:        shadowMCPClient,
+		auditLogger:            auditLogger,
 		platformExtras:         platformExtras,
 		platformFeatureChecker: platformFeatureChecker,
 		platformToolsets:       platformToolsets,
@@ -344,16 +346,16 @@ func writeOAuthServerMetadataResponse(ctx context.Context, logger *slog.Logger, 
 		var marshalErr error
 		body, marshalErr = json.Marshal(result.Static)
 		if marshalErr != nil {
-			return oops.E(oops.CodeUnexpected, marshalErr, "failed to marshal OAuth server metadata").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, marshalErr, "failed to marshal OAuth server metadata").LogError(ctx, logger)
 		}
 	default:
-		return oops.E(oops.CodeUnexpected, nil, "unexpected OAuth server metadata result kind").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, nil, "unexpected OAuth server metadata result kind").LogError(ctx, logger)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write(body); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to write response body").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to write response body").LogError(ctx, logger)
 	}
 
 	return nil
@@ -366,13 +368,13 @@ func writeOAuthServerMetadataResponse(ctx context.Context, logger *slog.Logger, 
 func writeOAuthProtectedResourceMetadataResponse(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, metadata *wellknown.OAuthProtectedResourceMetadata) error {
 	body, err := json.Marshal(metadata)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to marshal OAuth protected resource metadata").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to marshal OAuth protected resource metadata").LogError(ctx, logger)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write(body); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to write response body").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to write response body").LogError(ctx, logger)
 	}
 
 	return nil
@@ -435,7 +437,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	case errors.Is(err, errToolsetNotFound):
 		return oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").LogError(ctx, s.logger)
 	}
 
 	if err := s.enforceCustomDomainLockdown(ctx, logger, toolset.ProjectID); err != nil {
@@ -534,11 +536,11 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 			},
 		)
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to load OAuth proxy providers").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to load OAuth proxy providers").LogError(ctx, s.logger)
 		}
 
 		if len(providers) == 0 {
-			return oops.E(oops.CodeUnexpected, nil, "no OAuth proxy providers found").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, nil, "no OAuth proxy providers found").LogError(ctx, s.logger)
 		}
 
 		oAuthProxyProvider = &providers[0]
@@ -589,7 +591,7 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 
 	oauthProtectedResourceURL, err := url.JoinPath(baseURL, wellknown.OAuthProtectedResourcePath, mcpRouteBase, mcpSlug)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to build OAuth protected resource URL").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to build OAuth protected resource URL").LogError(ctx, s.logger)
 	}
 
 	if !runInToolsetGate && !callerAlreadyGated {
@@ -656,9 +658,9 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		projects, err := s.authRepo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
-			return oops.E(oops.CodeForbidden, nil, "no projects found").Log(ctx, s.logger)
+			return oops.E(oops.CodeForbidden, nil, "no projects found").LogError(ctx, s.logger)
 		case err != nil:
-			return oops.E(oops.CodeUnexpected, err, "error checking project access").Log(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+			return oops.E(oops.CodeUnexpected, err, "error checking project access").LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 		}
 
 		projectInOrg := false
@@ -692,7 +694,7 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 			// if grants are already in context.
 			ctx, err = s.authz.PrepareContext(ctx)
 			if err != nil {
-				return oops.E(oops.CodeUnexpected, err, "failed to load access grants").Log(ctx, s.logger)
+				return oops.E(oops.CodeUnexpected, err, "failed to load access grants").LogError(ctx, s.logger)
 			}
 			if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())); err != nil {
 				return err
@@ -711,19 +713,19 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	case errors.Is(bodyReadErr, io.EOF) || len(bodyBytes) == 0:
 		return nil
 	case bodyReadErr != nil:
-		return oops.E(oops.CodeBadRequest, bodyReadErr, "failed to read request body").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, bodyReadErr, "failed to read request body").LogError(ctx, s.logger)
 	}
 
 	// Reject batch (array) requests — batch is deprecated in the MCP spec
 	if err := inv.Check("mcp request",
 		"not a batch request", len(bodyBytes) == 0 || bodyBytes[0] != '[',
 	); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "batch requests are not supported").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "batch requests are not supported").LogError(ctx, s.logger)
 	}
 
 	var req rawRequest
 	if err := json.Unmarshal(bodyBytes, &req); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to decode request body").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "failed to decode request body").LogError(ctx, s.logger)
 	}
 
 	sessionID := parseMcpSessionID(r.Header)
@@ -798,7 +800,7 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		}
 		bs, merr := json.Marshal(oops.NewMCPErrorFromCause(mcpID, err))
 		if merr != nil {
-			return oops.E(oops.CodeUnexpected, merr, "failed to serialize error response").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, merr, "failed to serialize error response").LogError(ctx, s.logger)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -828,7 +830,7 @@ func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_re
 	// requirements, so this does not weaken the auth gate.
 	described, err := mv.DescribeToolset(ctx, s.logger, s.db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), &s.toolsetCache, nil, s.platformExtras...)
 	if err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "failed to describe toolset for security check").Log(ctx, s.logger)
+		return false, oops.E(oops.CodeUnexpected, err, "failed to describe toolset for security check").LogError(ctx, s.logger)
 	}
 
 	schemes := describeToolSecurity(described.SecurityVariables)
@@ -851,7 +853,7 @@ func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_re
 
 	systemEnv, err := s.env.LoadSystemEnv(ctx, payload.projectID, toolset.ID, "", "")
 	if err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "failed to load system environment").Log(ctx, s.logger)
+		return false, oops.E(oops.CodeUnexpected, err, "failed to load system environment").LogError(ctx, s.logger)
 	}
 
 	mergedEnv := toolconfig.NewCaseInsensitiveEnv()
@@ -1039,7 +1041,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "tools/list":
 		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal, s.shadowMCPClient, s.platformExtras)
 	case "tools/call":
-		return handleToolsCall(ctx, s.logger, s.metrics, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo, s.platformExtras)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo, s.auditLogger, s.platformExtras)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)
 	case "prompts/get":
@@ -1130,7 +1132,7 @@ func (s *Service) TryPublicIdentityAuth(ctx context.Context, r *http.Request, is
 	}
 
 	if authCtx, ok := contextvalues.GetAuthContext(authedCtx); !ok || authCtx == nil {
-		return ctx, oops.E(oops.CodeUnauthorized, nil, "no auth context found").Log(ctx, s.logger)
+		return ctx, oops.E(oops.CodeUnauthorized, nil, "no auth context found").LogError(ctx, s.logger)
 	}
 	return authedCtx, nil
 }
@@ -1208,8 +1210,7 @@ func (s *Service) authenticateToken(ctx context.Context, token string, oauthReso
 		return ctx, nil
 	}
 
-	s.logger.WarnContext(ctx, "failed to authorize token using any strategy", attr.SlogToolsetID(oauthResourceID.String()))
-	return ctx, oops.E(oops.CodeUnauthorized, nil, "failed to authorize")
+	return ctx, oops.E(oops.CodeUnauthorized, errors.New("failed to authorize token using any strategy"), "failed to authorize").LogWarn(ctx, s.logger, attr.SlogToolsetID(oauthResourceID.String()))
 }
 
 //nolint:unused // kept for follow-up: restore stored-credential resolution for session-authenticated users
@@ -1362,6 +1363,7 @@ func (s *Service) HandleToolsCall(
 		s.vectorToolStore,
 		s.temporal,
 		s.mcpMetadataRepo,
+		s.auditLogger,
 		s.platformExtras,
 	)
 	if err != nil {

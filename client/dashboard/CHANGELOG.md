@@ -1,5 +1,40 @@
 # dashboard
 
+## 0.73.1
+
+### Patch Changes
+
+- 2630d11: Fix the Cmd+K command palette's "Recently Visited" list showing an assistant's opaque id (e.g. "Assistant · 0190abcd") instead of its name. Visits are recorded centrally from the URL, which for the id-keyed assistant detail route fell back to the id. The assistant detail page now registers its name as the recents label, and `App` consults that override (re-recording when the name resolves asynchronously), so the palette shows the assistant name.
+- 1e1e9b7: Pin the assistant ⌘/ shortcut hint to the nav bar's right edge on wide screens, and show it in the assistant dock.
+
+## 0.73.0
+
+### Minor Changes
+
+- e81a134: feat(assistants): surface Triggers as a tab on the Assistants page and a filtered Triggers tab per assistant, and rename the Assistants "Audit log" tab to "Activity"
+- 4f65d12: Make the Project Assistant dock a continuous experience across the dashboard. The dock stays expanded across page navigation and swaps in the new page's suggestions; every suggestion set is colocated in one route-keyed object with question-phrased titles and per-subject icons, and chips animate in on route change. The expanded composer gets a Granola-style grey tray with a bordered inner input, the Cmd+/ hint moves to the breadcrumb bar, and the chat panel opens as an extension of the pill — including a matching slim composer.
+
+  Elements: add `theme.customCss` to `ElementsConfig` — extra CSS injected into the Elements shadow root after the built-in stylesheet, the supported escape hatch for embedders restyling the stable `aui-*` class hooks (host-page CSS cannot reach into the shadow DOM).
+
+### Patch Changes
+
+- 4f65d12: Fix the Project Assistant dock losing or duplicating the first message sent after a cold page load.
+
+  Elements: the history-enabled runtime now mounts immediately instead of waiting for auth — the previous auth gate swapped the without-history runtime for the history one when the session resolved, replacing the runtime and wiping any message sent into the first. The thread-list adapter resolves request headers through an async `getHeaders` that awaits the session fetch, so its bind-time `chat.list` waits for auth instead of failing. The custom transport is also resolved in its own memo so churn in the default transport's dependencies (MCP tool discovery settling, auth, connection status) no longer changes the transport identity mid-turn, which rebuilt the per-thread runtimes and discarded in-flight optimistic messages.
+
+  Dashboard: the dock's queued-prompt bridge appends exactly once — a throw from the placeholder thread core (before the real core binds) leaves the prompt queued for retry, while a successful append never re-fires, fixing both the dropped first message and the duplicate sends that minted a fresh chat per attempt. The server-assistant transport keeps at most one chat.load poll loop alive per dock: each send aborts the previous turn's poller, so a turn that never reaches a terminal row no longer leaves zombie polling loops behind.
+
+- Updated dependencies [4f65d12]
+- Updated dependencies [4f65d12]
+  - @gram-ai/elements@1.37.0
+
+## 0.72.0
+
+### Minor Changes
+
+- 0d51b12: Assistants UX: the detail panel is wider and split into Overview and Sessions tabs, system instructions open in an editable modal, the active/paused status toggle is available on the detail panel (shared with the index cards), and index cards show a mini activity sparkline derived from chat session activity.
+- 0d51b12: Assistant tool-call audit events no longer appear in the platform audit logs feed or its facets. They are surfaced instead on a new "Audit log" tab on the Assistants page, filterable by assistant, backed by new `subject_type` / `subject_id` filters on `auditlogs.list`.
+
 ## 0.71.0
 
 ### Minor Changes

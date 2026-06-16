@@ -40,8 +40,12 @@ payload = {
             "instructions": """You are a sub-agent that specializes in Speakeasy SDK operations. Use the provided toolsets to fetch organization details, workspaces, and user information as needed.
             When fetching information typically fetch the org first. Then from an org you can fetch workspaces by ID. Users also exist at the workspace level.""",
             "toolsets": [
-                {"toolset_slug": "speakeasy", "headers": {}, "environment_slug": "default"},
-            ]
+                {
+                    "toolset_slug": "speakeasy",
+                    "headers": {},
+                    "environment_slug": "default",
+                },
+            ],
         },
         {
             "name": "Stripe Sub-Agent",
@@ -69,7 +73,7 @@ while True:
     poll_data = poll_resp.json()
     status = poll_data.get("status")
     print(f"Status: {status}")
-    
+
     if status != "in_progress":
         if "output" in poll_data and poll_data["output"]:
             for item in poll_data["output"]:
@@ -80,7 +84,7 @@ while True:
 
             print("\n=== Final Response ===")
             print(poll_data["output"][-1]["content"][-1]["text"])
-        
+
         if verbose:
             print("\nFull response:")
             print(json.dumps(poll_data, indent=2))

@@ -34,7 +34,7 @@ export type ListOrganizationRemoteSessionIssuersRequest = {
 };
 
 export type ListOrganizationRemoteSessionIssuersResponse = {
-  result: components.ListRemoteSessionIssuersResult;
+  result: components.ListOrganizationRemoteSessionIssuersResult;
 };
 
 /** @internal */
@@ -115,7 +115,8 @@ export function listOrganizationRemoteSessionIssuersRequestToJSON(
 export const ListOrganizationRemoteSessionIssuersResponse$inboundSchema:
   z.ZodMiniType<ListOrganizationRemoteSessionIssuersResponse, unknown> = z.pipe(
     z.object({
-      Result: components.ListRemoteSessionIssuersResult$inboundSchema,
+      Result:
+        components.ListOrganizationRemoteSessionIssuersResult$inboundSchema,
     }),
     z.transform((v) => {
       return remap$(v, {

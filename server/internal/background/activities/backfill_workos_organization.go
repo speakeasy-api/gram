@@ -62,21 +62,21 @@ func (b *BackfillWorkOSOrganization) Do(ctx context.Context, params BackfillWork
 
 	workosOrg, err := b.workos.GetOrganization(ctx, params.WorkOSOrganizationID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "get WorkOS organization").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "get WorkOS organization").LogError(ctx, logger)
 	}
 	orgUpdatedAt, err := parseWorkOSTime(workosOrg.UpdatedAt)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "parse WorkOS organization updated_at").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "parse WorkOS organization updated_at").LogError(ctx, logger)
 	}
 
 	roles, err := b.workos.ListRoles(ctx, params.WorkOSOrganizationID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "list WorkOS organization roles").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "list WorkOS organization roles").LogError(ctx, logger)
 	}
 
 	members, err := b.workos.ListOrgMemberships(ctx, params.WorkOSOrganizationID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "list WorkOS organization memberships").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "list WorkOS organization memberships").LogError(ctx, logger)
 	}
 	parsedMembers := make([]backfillWorkOSMember, 0, len(members))
 	for _, member := range members {

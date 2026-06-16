@@ -93,7 +93,7 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 
 	rows, err := s.repo.GetAgentPluginSet(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent plugin set").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent plugin set").LogError(ctx, s.logger)
 	}
 
 	base := strings.TrimRight(s.serverURL, "/")

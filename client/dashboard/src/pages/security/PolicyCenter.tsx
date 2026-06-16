@@ -1,6 +1,8 @@
-import { InsightsConfig } from "@/components/insights-sidebar";
+import { InsightsConfig } from "@/components/insights-dock";
+import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Collapsible,
@@ -10,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { SearchBar } from "@/components/ui/search-bar";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { TextArea } from "@/components/ui/textarea";
@@ -54,20 +57,25 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import type { ReactNode } from "react";
 import { useQueryState } from "nuqs";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   invalidateAllRiskListPolicies,
+  useMembers,
   useRiskCreatePolicyMutation,
   useRiskListPolicies,
   useRiskPoliciesDeleteMutation,
   useRiskPoliciesUpdateMutation,
+  useRoles,
 } from "@gram/client/react-query/index.js";
 import {
   useRiskPoliciesStatus,
   invalidateAllRiskPoliciesStatus,
 } from "@gram/client/react-query/riskPoliciesStatus.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
+import type { AccessMember } from "@gram/client/models/components/accessmember.js";
+import type { Role } from "@gram/client/models/components/role.js";
 import {
   RULE_CATEGORY_META,
   DETECTION_RULES,
@@ -121,8 +129,12 @@ const FLAG_ONLY_CATEGORIES: Set<RuleCategory> = new Set([
 ]);
 
 type PolicyKind = "risk" | "prompt";
+type PolicyAudienceType = "everyone" | "targeted";
+type PolicyAudienceChoice = "everyone" | "users" | "roles";
 
 type PolicyRow = { kind: PolicyKind; policy: RiskPolicy };
+
+const USER_SEARCH_RESULT_LIMIT = 10;
 
 const TOOL_CALL_MESSAGE_TYPES = new Set<PolicyMessageType>([
   "tool_request",
@@ -282,6 +294,86 @@ function policyMessageTypesForDisplay(
   return [...policyMessageTypesForForm(messageTypes)];
 }
 
+function policyAudienceSummary(row: PolicyRow): string {
+  if (row.kind === "prompt") {
+    return "Everyone";
+  }
+  if (row.policy.audienceType !== "targeted") {
+    return "Everyone";
+  }
+
+  const count = row.policy.audiencePrincipalUrns.length;
+  if (count === 1) {
+    return "1 target";
+  }
+  return `${count} targets`;
+}
+
+function policyAudienceChoiceForSelection(
+  audienceType: PolicyAudienceType,
+  principalUrns: Set<string>,
+): PolicyAudienceChoice {
+  if (audienceType === "everyone") {
+    return "everyone";
+  }
+
+  const hasUser = [...principalUrns].some((urn) => urn.startsWith("user:"));
+  if (hasUser) {
+    return "users";
+  }
+
+  const hasRole = [...principalUrns].some((urn) => urn.startsWith("role:"));
+  return hasRole ? "roles" : "users";
+}
+
+function filterAudiencePrincipalsForChoice(
+  principalUrns: Set<string>,
+  choice: PolicyAudienceChoice,
+): Set<string> {
+  if (choice === "everyone") {
+    return new Set<string>();
+  }
+
+  const prefix = choice === "users" ? "user:" : "role:";
+  return new Set([...principalUrns].filter((urn) => urn.startsWith(prefix)));
+}
+
+function memberDisplayName(member: AccessMember): string {
+  return member.name || member.email;
+}
+
+function memberInitials(member: Pick<AccessMember, "email" | "name">): string {
+  const source = member.name.trim() || member.email.trim();
+  const initials = source
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+
+  return initials || "?";
+}
+
+function memberMatchesSearch(member: AccessMember, search: string): boolean {
+  const normalizedSearch = search.trim().toLowerCase();
+  if (!normalizedSearch) {
+    return false;
+  }
+
+  return (
+    member.name.toLowerCase().includes(normalizedSearch) ||
+    member.email.toLowerCase().includes(normalizedSearch)
+  );
+}
+
+function compareMembersByName(a: AccessMember, b: AccessMember): number {
+  return memberDisplayName(a).localeCompare(memberDisplayName(b));
+}
+
+function compareRolesByName(a: Role, b: Role): number {
+  return a.name.localeCompare(b.name);
+}
+
 function hasOnlyToolCallMessageTypes(types: Set<PolicyMessageType>): boolean {
   return (
     types.size === TOOL_CALL_MESSAGE_TYPES.size &&
@@ -390,6 +482,10 @@ function PolicyCenterContent() {
   );
   // Fail-open (true) is the server default: allow the message when the judge errors.
   const [formFailOpen, setFormFailOpen] = useState(true);
+  const [formAudienceType, setFormAudienceType] =
+    useState<PolicyAudienceType>("everyone");
+  const [selectedAudiencePrincipalUrns, setSelectedAudiencePrincipalUrns] =
+    useState<Set<string>>(new Set<string>());
 
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
 
@@ -460,6 +556,8 @@ function PolicyCenterContent() {
     setFormModel("");
     setFormTemperature(DEFAULT_JUDGE_TEMPERATURE);
     setFormFailOpen(true);
+    setFormAudienceType("everyone");
+    setSelectedAudiencePrincipalUrns(new Set<string>());
     setSheetOpen(true);
   };
 
@@ -490,6 +588,8 @@ function PolicyCenterContent() {
         policy.modelConfig?.temperature ?? DEFAULT_JUDGE_TEMPERATURE,
       );
       setFormFailOpen(policy.modelConfig?.failOpen ?? true);
+      setFormAudienceType("everyone");
+      setSelectedAudiencePrincipalUrns(new Set<string>());
       setSheetOpen(true);
       return;
     }
@@ -509,6 +609,13 @@ function PolicyCenterContent() {
     setFormAction((policy.action as PolicyAction) ?? "flag");
     setFormAutoName(policy.autoName ?? true);
     setFormUserMessage(policy.userMessage ?? "");
+    const audienceType = policy.audienceType ?? "everyone";
+    setFormAudienceType(audienceType);
+    setSelectedAudiencePrincipalUrns(
+      audienceType === "targeted"
+        ? new Set<string>(policy.audiencePrincipalUrns ?? [])
+        : new Set<string>(),
+    );
     setSheetOpen(true);
   }, []);
 
@@ -606,6 +713,8 @@ function PolicyCenterContent() {
       sources.includes("destructive_tool") && formAction === "block"
         ? "flag"
         : formAction;
+    const audiencePrincipalUrns =
+      formAudienceType === "targeted" ? [...selectedAudiencePrincipalUrns] : [];
     if (editingPolicy) {
       updateMutation.mutate({
         request: {
@@ -620,6 +729,8 @@ function PolicyCenterContent() {
             customRuleIds: [...selectedCustomRuleIds],
             messageTypes,
             action,
+            audienceType: formAudienceType,
+            audiencePrincipalUrns,
             autoName: formAutoName,
             userMessage: formUserMessage,
           },
@@ -638,6 +749,8 @@ function PolicyCenterContent() {
             customRuleIds: [...selectedCustomRuleIds],
             messageTypes,
             action,
+            audienceType: formAudienceType,
+            audiencePrincipalUrns,
             autoName: formAutoName,
             ...(formUserMessage.trim() ? { userMessage: formUserMessage } : {}),
           },
@@ -727,33 +840,6 @@ function PolicyCenterContent() {
     "Available risk tools: listRiskPolicies, getRiskPolicy, getRiskCapabilities, getRiskPolicyStatus, listRiskResultsForAgent (finding-level with match redaction), listRiskResultsByChat, listShadowMCPApprovals.",
     "Never echo match_redacted values verbatim. Refer to findings by rule_id and source.",
   ].join(" ");
-
-  const insightsSuggestions = [
-    {
-      title: "Policy status snapshot",
-      label: "what's running and what's stuck",
-      prompt:
-        "For each policy returned by listRiskPolicies, call getRiskPolicyStatus and report: enabled flag, action (flag vs block), total messages, pending messages, and workflow state. Flag any policy with non-zero pending messages.",
-    },
-    {
-      title: "Quiet policies",
-      label: "policies with no recent findings",
-      prompt:
-        "Identify policies that have not produced any findings in the last 30 days. Use listRiskResultsForAgent with policy_id to check each policy. Report by name and last-seen finding date.",
-    },
-    {
-      title: "Coverage by source",
-      label: "what's each source catching",
-      prompt:
-        "Group findings by source (gitleaks, presidio, prompt_injection, shadow_mcp, destructive_tool) over the last 7 days using listRiskResultsForAgent. Report counts and the top rule_id per source family.",
-    },
-    {
-      title: "Capabilities check",
-      label: "what detectors are available",
-      prompt:
-        "Call getRiskCapabilities and tell me which detection backends are configured on this server (e.g. prompt-injection ML classifier).",
-    },
-  ];
 
   const dimIfDisabled = (row: PolicyRow) =>
     row.policy.enabled ? "" : "opacity-50";
@@ -874,6 +960,18 @@ function PolicyCenterContent() {
           </span>
         );
       },
+    },
+    {
+      key: "audience",
+      header: "Audience",
+      width: "1fr",
+      render: (row) => (
+        <span
+          className={cn("text-muted-foreground text-sm", dimIfDisabled(row))}
+        >
+          {policyAudienceSummary(row)}
+        </span>
+      ),
     },
     {
       key: "enabled",
@@ -1004,7 +1102,7 @@ function PolicyCenterContent() {
       <Page.Body>
         <InsightsConfig
           contextInfo={insightsContext}
-          suggestions={insightsSuggestions}
+          suggestions={INSIGHTS_SUGGESTIONS["risk-policies"]}
           title="Policy insights"
           subtitle="Ask about policy status, coverage, and detector capabilities. Match content is redacted before it reaches the assistant."
         />
@@ -1065,6 +1163,7 @@ function PolicyCenterContent() {
                   <PolicyKindChoice onSelect={handleChoosePolicyKind} />
                 ) : formPolicyKind === "risk" ? (
                   <PolicySheetBody
+                    key={editingPolicy?.id ?? "new-risk-policy"}
                     formName={formName}
                     setFormName={setFormName}
                     formEnabled={formEnabled}
@@ -1084,6 +1183,14 @@ function PolicyCenterContent() {
                     setFormAutoName={setFormAutoName}
                     formUserMessage={formUserMessage}
                     setFormUserMessage={setFormUserMessage}
+                    formAudienceType={formAudienceType}
+                    setFormAudienceType={setFormAudienceType}
+                    selectedAudiencePrincipalUrns={
+                      selectedAudiencePrincipalUrns
+                    }
+                    setSelectedAudiencePrincipalUrns={
+                      setSelectedAudiencePrincipalUrns
+                    }
                   />
                 ) : (
                   <PromptPolicySheetBody
@@ -1131,6 +1238,9 @@ function PolicyCenterContent() {
                       !formPromptInstruction.trim()) ||
                     (!formAutoName && !formName.trim()) ||
                     selectedMessageTypes.size === 0 ||
+                    (formPolicyKind === "risk" &&
+                      formAudienceType === "targeted" &&
+                      selectedAudiencePrincipalUrns.size === 0) ||
                     createMutation.isPending ||
                     updateMutation.isPending
                   }
@@ -1625,6 +1735,10 @@ function PolicySheetBody({
   setFormAutoName,
   formUserMessage,
   setFormUserMessage,
+  formAudienceType,
+  setFormAudienceType,
+  selectedAudiencePrincipalUrns,
+  setSelectedAudiencePrincipalUrns,
 }: {
   formName: string;
   setFormName: (v: string) => void;
@@ -1645,6 +1759,10 @@ function PolicySheetBody({
   setFormAutoName: (v: boolean) => void;
   formUserMessage: string;
   setFormUserMessage: (v: string) => void;
+  formAudienceType: PolicyAudienceType;
+  setFormAudienceType: (v: PolicyAudienceType) => void;
+  selectedAudiencePrincipalUrns: Set<string>;
+  setSelectedAudiencePrincipalUrns: (v: Set<string>) => void;
 }) {
   const [expandedCategory, setExpandedCategory] = useState<
     RuleCategory | "custom" | null
@@ -1901,6 +2019,13 @@ function PolicySheetBody({
         flagOnlySelected={flagOnlySelected}
       />
 
+      <PolicyAudiencePicker
+        formAudienceType={formAudienceType}
+        setFormAudienceType={setFormAudienceType}
+        selectedAudiencePrincipalUrns={selectedAudiencePrincipalUrns}
+        setSelectedAudiencePrincipalUrns={setSelectedAudiencePrincipalUrns}
+      />
+
       {/* Custom message — only relevant for block-action policies that
           surface a user-facing reason at deny time. Flag-action policies
           record findings silently, so no message is needed. */}
@@ -1931,6 +2056,418 @@ function PolicySheetBody({
         <Switch checked={formEnabled} onCheckedChange={setFormEnabled} />
       </div>
     </div>
+  );
+}
+
+function PolicyAudiencePicker({
+  formAudienceType,
+  setFormAudienceType,
+  selectedAudiencePrincipalUrns,
+  setSelectedAudiencePrincipalUrns,
+}: {
+  formAudienceType: PolicyAudienceType;
+  setFormAudienceType: (v: PolicyAudienceType) => void;
+  selectedAudiencePrincipalUrns: Set<string>;
+  setSelectedAudiencePrincipalUrns: (v: Set<string>) => void;
+}) {
+  const { data: rolesData } = useRoles();
+  const { data: membersData } = useMembers();
+  const roles = useMemo(
+    () => [...(rolesData?.roles ?? [])].sort(compareRolesByName),
+    [rolesData?.roles],
+  );
+  const members = useMemo(
+    () => [...(membersData?.members ?? [])].sort(compareMembersByName),
+    [membersData?.members],
+  );
+  const [audienceChoice, setAudienceChoice] = useState<PolicyAudienceChoice>(
+    () =>
+      policyAudienceChoiceForSelection(
+        formAudienceType,
+        selectedAudiencePrincipalUrns,
+      ),
+  );
+  const [userSearch, setUserSearch] = useState("");
+
+  const togglePrincipal = (principalUrn: string, checked: boolean) => {
+    const next = new Set(selectedAudiencePrincipalUrns);
+    if (checked) {
+      next.add(principalUrn);
+    } else {
+      next.delete(principalUrn);
+    }
+    setSelectedAudiencePrincipalUrns(next);
+  };
+
+  const selectAudienceChoice = (choice: PolicyAudienceChoice) => {
+    setAudienceChoice(choice);
+    setFormAudienceType(choice === "everyone" ? "everyone" : "targeted");
+    setSelectedAudiencePrincipalUrns(
+      filterAudiencePrincipalsForChoice(selectedAudiencePrincipalUrns, choice),
+    );
+    if (choice !== "users") {
+      setUserSearch("");
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-1">
+        <Label className="text-sm font-medium">Audience</Label>
+        <p className="text-muted-foreground text-xs">
+          Choose which users this policy evaluates.
+        </p>
+      </div>
+      <RadioGroup
+        value={audienceChoice}
+        onValueChange={(value) =>
+          selectAudienceChoice(value as PolicyAudienceChoice)
+        }
+      >
+        <div className="border-border divide-border divide-y rounded-lg border">
+          <PolicyAudienceChoiceRow
+            id="policy-audience-everyone"
+            value="everyone"
+            title="Everyone"
+            description="Evaluate this policy for every user in the organization."
+          />
+          <PolicyAudienceChoiceRow
+            id="policy-audience-users"
+            value="users"
+            title="Specific users"
+            description="Search and select individual organization members."
+          />
+          <PolicyAudienceChoiceRow
+            id="policy-audience-roles"
+            value="roles"
+            title="Specific roles"
+            description="Evaluate this policy for every member of selected roles."
+          />
+        </div>
+      </RadioGroup>
+
+      {audienceChoice === "users" && (
+        <SpecificUsersAudienceSection
+          members={members}
+          userSearch={userSearch}
+          setUserSearch={setUserSearch}
+          selectedAudiencePrincipalUrns={selectedAudiencePrincipalUrns}
+          onTogglePrincipal={togglePrincipal}
+        />
+      )}
+
+      {audienceChoice === "roles" && (
+        <div className="border-border rounded-lg border">
+          <AudiencePrincipalSection title="Roles">
+            {roles.length === 0 ? (
+              <p className="text-muted-foreground px-4 py-3 text-sm">
+                No roles available.
+              </p>
+            ) : (
+              roles.map((role) => {
+                const principalUrn = role.principalUrn;
+                return (
+                  <AudiencePrincipalRow
+                    key={principalUrn}
+                    id={`audience-${principalUrn}`}
+                    checked={selectedAudiencePrincipalUrns.has(principalUrn)}
+                    title={role.name}
+                    subtitle={`${role.memberCount} members`}
+                    onCheckedChange={(checked) =>
+                      togglePrincipal(principalUrn, checked)
+                    }
+                  />
+                );
+              })
+            )}
+          </AudiencePrincipalSection>
+          {selectedAudiencePrincipalUrns.size === 0 && (
+            <p className="text-muted-foreground border-border border-t px-4 py-3 text-xs">
+              Select at least one role to save a targeted policy.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SpecificUsersAudienceSection({
+  members,
+  userSearch,
+  setUserSearch,
+  selectedAudiencePrincipalUrns,
+  onTogglePrincipal,
+}: {
+  members: AccessMember[];
+  userSearch: string;
+  setUserSearch: (value: string) => void;
+  selectedAudiencePrincipalUrns: Set<string>;
+  onTogglePrincipal: (principalUrn: string, checked: boolean) => void;
+}) {
+  const memberByPrincipalUrn = useMemo(
+    () => new Map(members.map((member) => [member.principalUrn, member])),
+    [members],
+  );
+  const selectedUserPrincipalUrns = useMemo(
+    () =>
+      [...selectedAudiencePrincipalUrns]
+        .filter((principalUrn) => principalUrn.startsWith("user:"))
+        .sort((a, b) => {
+          const aMember = memberByPrincipalUrn.get(a);
+          const bMember = memberByPrincipalUrn.get(b);
+          const aLabel = aMember ? memberDisplayName(aMember) : a;
+          const bLabel = bMember ? memberDisplayName(bMember) : b;
+          return aLabel.localeCompare(bLabel);
+        }),
+    [memberByPrincipalUrn, selectedAudiencePrincipalUrns],
+  );
+  const selectedUserOptions = selectedUserPrincipalUrns.map((principalUrn) => {
+    const member = memberByPrincipalUrn.get(principalUrn);
+    return {
+      member,
+      principalUrn,
+      title: member ? memberDisplayName(member) : principalUrn,
+      subtitle: member?.email ?? "Unknown user",
+    };
+  });
+  const matchingMembers = useMemo(
+    () => members.filter((member) => memberMatchesSearch(member, userSearch)),
+    [members, userSearch],
+  );
+  const unselectedMatchingMembers = matchingMembers.filter(
+    (member) => !selectedAudiencePrincipalUrns.has(member.principalUrn),
+  );
+  const visibleSearchResults = unselectedMatchingMembers.slice(
+    0,
+    USER_SEARCH_RESULT_LIMIT,
+  );
+  const hiddenResultCount = Math.max(
+    unselectedMatchingMembers.length - visibleSearchResults.length,
+    0,
+  );
+  const hasSearch = userSearch.trim().length > 0;
+
+  return (
+    <div className="border-border rounded-lg border">
+      <div className="space-y-4 p-4">
+        <SearchBar
+          value={userSearch}
+          onChange={setUserSearch}
+          placeholder="Search users by name or email"
+          className="w-full"
+        />
+
+        {selectedUserOptions.length > 0 && (
+          <div className="space-y-2">
+            <div className="text-muted-foreground text-xs font-medium">
+              Selected users
+            </div>
+            <div className="border-border divide-border divide-y overflow-hidden rounded-md border">
+              {selectedUserOptions.map((option) => (
+                <AudiencePrincipalRow
+                  key={option.principalUrn}
+                  id={`audience-selected-${option.principalUrn}`}
+                  checked
+                  title={option.title}
+                  subtitle={option.subtitle}
+                  leading={
+                    <AudienceMemberAvatar
+                      name={option.member?.name ?? option.title}
+                      email={option.member?.email ?? option.subtitle}
+                      photoUrl={option.member?.photoUrl}
+                    />
+                  }
+                  onCheckedChange={(checked) =>
+                    onTogglePrincipal(option.principalUrn, checked)
+                  }
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        <UserSearchResults
+          hasSearch={hasSearch}
+          hiddenResultCount={hiddenResultCount}
+          results={visibleSearchResults}
+          selectedAudiencePrincipalUrns={selectedAudiencePrincipalUrns}
+          onTogglePrincipal={onTogglePrincipal}
+        />
+      </div>
+
+      {selectedUserPrincipalUrns.length === 0 && (
+        <p className="text-muted-foreground border-border border-t px-4 py-3 text-xs">
+          Select at least one user to save a targeted policy.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function UserSearchResults({
+  hasSearch,
+  hiddenResultCount,
+  results,
+  selectedAudiencePrincipalUrns,
+  onTogglePrincipal,
+}: {
+  hasSearch: boolean;
+  hiddenResultCount: number;
+  results: AccessMember[];
+  selectedAudiencePrincipalUrns: Set<string>;
+  onTogglePrincipal: (principalUrn: string, checked: boolean) => void;
+}) {
+  if (!hasSearch) {
+    return (
+      <p className="text-muted-foreground text-sm">
+        Search users by name or email to add them.
+      </p>
+    );
+  }
+
+  if (results.length === 0) {
+    return (
+      <p className="text-muted-foreground text-sm">No matching users to add.</p>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="text-muted-foreground text-xs font-medium">
+        Search results
+      </div>
+      <div className="border-border divide-border divide-y overflow-hidden rounded-md border">
+        {results.map((member) => {
+          const principalUrn = member.principalUrn;
+          return (
+            <AudiencePrincipalRow
+              key={principalUrn}
+              id={`audience-result-${principalUrn}`}
+              checked={selectedAudiencePrincipalUrns.has(principalUrn)}
+              title={memberDisplayName(member)}
+              subtitle={member.email}
+              leading={
+                <AudienceMemberAvatar
+                  name={member.name}
+                  email={member.email}
+                  photoUrl={member.photoUrl}
+                />
+              }
+              onCheckedChange={(checked) =>
+                onTogglePrincipal(principalUrn, checked)
+              }
+            />
+          );
+        })}
+      </div>
+      {hiddenResultCount > 0 && (
+        <p className="text-muted-foreground text-xs">
+          Showing first {USER_SEARCH_RESULT_LIMIT} matches. Refine the search to
+          narrow results.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function AudienceMemberAvatar({
+  name,
+  email,
+  photoUrl,
+}: {
+  name: string;
+  email: string;
+  photoUrl?: string;
+}) {
+  return (
+    <Avatar className="h-7 w-7">
+      {photoUrl && <AvatarImage src={photoUrl} alt={name || email} />}
+      <AvatarFallback className="text-xs">
+        {memberInitials({ name, email })}
+      </AvatarFallback>
+    </Avatar>
+  );
+}
+
+function PolicyAudienceChoiceRow({
+  id,
+  value,
+  title,
+  description,
+}: {
+  id: string;
+  value: PolicyAudienceChoice;
+  title: string;
+  description: string;
+}) {
+  return (
+    <label
+      htmlFor={id}
+      className="hover:bg-muted/40 flex cursor-pointer gap-3 px-4 py-3"
+    >
+      <RadioGroupItem id={id} value={value} className="mt-0.5" />
+      <span className="min-w-0">
+        <span className="block text-sm font-medium">{title}</span>
+        <span className="text-muted-foreground block text-xs">
+          {description}
+        </span>
+      </span>
+    </label>
+  );
+}
+
+function AudiencePrincipalSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="border-border border-b last:border-b-0">
+      <div className="bg-muted/30 border-border border-b px-4 py-2 text-xs font-medium">
+        {title}
+      </div>
+      <div className="divide-border divide-y">{children}</div>
+    </div>
+  );
+}
+
+function AudiencePrincipalRow({
+  id,
+  checked,
+  title,
+  subtitle,
+  leading,
+  onCheckedChange,
+}: {
+  id: string;
+  checked: boolean;
+  title: string;
+  subtitle: string;
+  leading?: ReactNode;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  return (
+    <label
+      htmlFor={id}
+      className="hover:bg-muted/40 flex cursor-pointer items-start gap-3 px-4 py-3"
+    >
+      <Checkbox
+        id={id}
+        checked={checked}
+        onCheckedChange={(value) => onCheckedChange(!!value)}
+        className="mt-0.5"
+      />
+      {leading}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium">{title}</span>
+        <span className="text-muted-foreground block truncate text-xs">
+          {subtitle}
+        </span>
+      </span>
+    </label>
   );
 }
 

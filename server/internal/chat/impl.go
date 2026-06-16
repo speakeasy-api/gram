@@ -55,6 +55,7 @@ var _ gen.Auther = (*Service)(nil)
 
 type Service struct {
 	auth             *auth.Auth
+	authz            *authz.Engine
 	db               *pgxpool.Pool
 	repo             *repo.Queries
 	tracer           trace.Tracer
@@ -91,6 +92,7 @@ func NewService(
 
 	return &Service{
 		auth:             auth.New(logger, db, sessions, authzEngine),
+		authz:            authzEngine,
 		db:               db,
 		sessions:         sessions,
 		chatSessions:     chatSessions,
@@ -199,32 +201,49 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	var userInfo *sessions.CachedUserInfo
-	if authCtx.SessionID != nil {
-		var err error
-		userInfo, _, err = s.sessions.GetUserInfo(ctx, authCtx.UserID)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error getting user info").Log(ctx, s.logger)
-		}
-	}
-
 	// An assistant principal is set only on the assistant runtime path and
 	// only the managed-assistant platform toolset surfaces chat tools, so
 	// treat it as admin-equivalent for project-wide visibility.
 	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
 
+	// Whether the caller sees all project sessions or only their own is decided
+	// by the org:admin RBAC scope — this is a visibility choice, never a gate on
+	// the route, so a caller without org:admin (or when the check can't be made)
+	// still gets a successful response scoped to their own sessions.
+	//
+	// When RBAC is not enforced for the org we must NOT fall through to "see
+	// all" — Require short-circuits to allow when enforcement is off, so check
+	// ShouldEnforce explicitly and treat the disabled case as non-admin.
+	isOrgAdmin := false
+	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
+		s.logger.WarnContext(ctx, "could not determine RBAC enforcement for chat visibility; showing own sessions", attr.SlogError(err))
+	} else if enforce {
+		err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil})
+		var shareableErr *oops.ShareableError
+		switch {
+		case err == nil:
+			isOrgAdmin = true
+		case errors.As(err, &shareableErr) && shareableErr.Code == oops.CodeForbidden:
+			// Forbidden simply means not an org admin — show own sessions.
+		default:
+			// Any other error is unexpected; log it but still serve own
+			// sessions rather than failing the listing.
+			s.logger.WarnContext(ctx, "org admin visibility check failed for chat listing; showing own sessions", attr.SlogError(err))
+		}
+	}
+
 	var fromTime, toTime pgtype.Timestamptz
 	if payload.From != nil {
 		t, err := time.Parse(time.RFC3339, *payload.From)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid from timestamp").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid from timestamp").LogError(ctx, s.logger)
 		}
 		fromTime = pgtype.Timestamptz{Time: t, InfinityModifier: pgtype.Finite, Valid: true}
 	}
 	if payload.To != nil {
 		t, err := time.Parse(time.RFC3339, *payload.To)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid to timestamp").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid to timestamp").LogError(ctx, s.logger)
 		}
 		toTime = pgtype.Timestamptz{Time: t, InfinityModifier: pgtype.Finite, Valid: true}
 	}
@@ -233,12 +252,12 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	assistantID := conv.PtrValOr(payload.AssistantID, "")
 	hasRiskFilter := conv.PtrValOr(payload.HasRisk, "")
 
-	// Payload filters only apply for admin users and the managed-assistant runtime.
+	// Payload filters only apply for org admins and the managed-assistant runtime.
 	var externalUserID, userID string
 	switch {
 	case authCtx.ExternalUserID != "":
 		externalUserID = authCtx.ExternalUserID
-	case userInfo != nil && userInfo.Admin, isAssistantCall:
+	case isOrgAdmin, isAssistantCall:
 		externalUserID = conv.PtrValOr(payload.ExternalUserID, "")
 	default:
 		if authCtx.UserID == "" {
@@ -260,7 +279,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 
 	total, err := s.repo.CountChats(ctx, baseParams)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count chats").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "count chats").LogError(ctx, s.logger)
 	}
 
 	rows, err := s.repo.ListChats(ctx, repo.ListChatsParams{
@@ -278,7 +297,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		PageOffset:     conv.SafeInt32(payload.Offset),
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list chats").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list chats").LogError(ctx, s.logger)
 	}
 
 	result := make([]*gen.ChatOverview, 0, len(rows))
@@ -329,7 +348,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.C(oops.CodeNotFound)
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").LogError(ctx, s.logger)
 	}
 
 	// older chat_messages may not have project_id in the model, but it will always exist on the chat
@@ -349,7 +368,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 
 	maxGeneration, err := s.repo.GetMaxGenerationForChat(ctx, chat.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat generation").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat generation").LogError(ctx, s.logger)
 	}
 
 	generation := maxGeneration
@@ -367,7 +386,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		Generation: generation,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat messages").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat messages").LogError(ctx, s.logger)
 	}
 
 	resultMessages := make([]*gen.ChatMessage, len(messages))
@@ -399,7 +418,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat message stats").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat message stats").LogError(ctx, s.logger)
 	}
 
 	lastMessageTimestamp := chat.CreatedAt.Time.Format(time.RFC3339)
@@ -510,7 +529,7 @@ func (s *Service) checkCreditBalance(ctx context.Context, orgID, accountType str
 	}
 
 	if pu.IncludedCredits > 0 && pu.Credits >= pu.IncludedCredits {
-		return oops.C(oops.CodeInsufficientCredits).Log(
+		return oops.C(oops.CodeInsufficientCredits).LogError(
 			ctx, s.logger,
 			attr.SlogOrganizationID(orgID),
 		)
@@ -538,11 +557,11 @@ func IsHistoryCorrupted(err error) bool {
 func (s *Service) classifyCompletionError(ctx context.Context, label string, err error) error {
 	switch {
 	case openrouter.IsInsufficientCredits(err):
-		return oops.C(oops.CodeInsufficientCredits).Log(ctx, s.logger)
+		return oops.C(oops.CodeInsufficientCredits).LogError(ctx, s.logger)
 	case openrouter.IsHistoryCorruptionCandidate(err):
-		return oops.E(oops.CodeInvalid, err, historyCorruptedMarker).Log(ctx, s.logger)
+		return oops.E(oops.CodeInvalid, err, historyCorruptedMarker).LogError(ctx, s.logger)
 	default:
-		return oops.E(oops.CodeGatewayError, err, "%s", label).Log(ctx, s.logger)
+		return oops.E(oops.CodeGatewayError, err, "%s", label).LogError(ctx, s.logger)
 	}
 }
 
@@ -602,7 +621,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	// Read the request body
 	reqBody, err := io.ReadAll(r.Body)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "failed to read request body").LogError(ctx, s.logger)
 	}
 
 	// Create a new reader with the same content for the proxy
@@ -610,7 +629,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 
 	var chatRequest openrouter.OpenAIChatRequest
 	if err := json.Unmarshal(reqBody, &chatRequest); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to parse request body").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "failed to parse request body").LogError(ctx, s.logger)
 	}
 
 	// Defense-in-depth: reject any single tool-result message larger than the
@@ -633,7 +652,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 				nil,
 				"tool message %d exceeds %d bytes; truncate tool output client-side",
 				i, maxToolMessageBytes,
-			).Log(ctx, s.logger)
+			).LogError(ctx, s.logger)
 		}
 	}
 
@@ -646,7 +665,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	if chatIDHeader != "" {
 		chatID, err = uuid.Parse(chatIDHeader)
 		if err != nil {
-			return oops.E(oops.CodeInvalid, err, "invalid chat ID").Log(ctx, s.logger)
+			return oops.E(oops.CodeInvalid, err, "invalid chat ID").LogError(ctx, s.logger)
 		}
 	}
 
@@ -784,7 +803,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	// Write response
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(openAIResp); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "encode response").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "encode response").LogError(ctx, s.logger)
 	}
 
 	eventProperties["success"] = true
@@ -827,7 +846,7 @@ func (s *Service) streamCompletion(ctx context.Context, w http.ResponseWriter, s
 		}
 
 		if _, err := io.WriteString(w, text); err != nil {
-			return oops.E(oops.CodeGatewayError, err, "stream write failed").Log(ctx, s.logger)
+			return oops.E(oops.CodeGatewayError, err, "stream write failed").LogError(ctx, s.logger)
 		}
 		if canFlush {
 			flusher.Flush()
@@ -860,7 +879,7 @@ func (s *Service) streamCompletion(ctx context.Context, w http.ResponseWriter, s
 				return nil
 			}
 			s.logger.ErrorContext(ctx, "stream read error", attr.SlogError(err))
-			return oops.E(oops.CodeGatewayError, err, "stream read failed").Log(ctx, s.logger)
+			return oops.E(oops.CodeGatewayError, err, "stream read failed").LogError(ctx, s.logger)
 		}
 	}
 }
@@ -940,7 +959,7 @@ func (s *Service) CreditUsage(ctx context.Context, payload *gen.CreditUsagePaylo
 
 	creditsUsed, creditLimit, err := s.openRouter.GetCreditsUsed(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get credit usage").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get credit usage").LogError(ctx, s.logger)
 	}
 
 	return &gen.CreditUsageResult{
@@ -966,7 +985,7 @@ func (s *Service) GenerateTitle(ctx context.Context, payload *gen.GenerateTitleP
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").LogError(ctx, s.logger)
 	}
 
 	if chat.ProjectID != *authCtx.ProjectID {
@@ -990,7 +1009,7 @@ func (s *Service) DeleteChat(ctx context.Context, payload *gen.DeleteChatPayload
 
 	chatID, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid chat id").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid chat id").LogError(ctx, s.logger)
 	}
 
 	err = s.repo.SoftDeleteChat(ctx, repo.SoftDeleteChatParams{
@@ -998,7 +1017,7 @@ func (s *Service) DeleteChat(ctx context.Context, payload *gen.DeleteChatPayload
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "soft delete chat").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "soft delete chat").LogError(ctx, s.logger)
 	}
 
 	return nil
@@ -1021,7 +1040,7 @@ func (s *Service) SubmitFeedback(ctx context.Context, payload *gen.SubmitFeedbac
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").LogError(ctx, s.logger)
 	}
 
 	if chat.ProjectID != *authCtx.ProjectID {
@@ -1038,7 +1057,7 @@ func (s *Service) SubmitFeedback(ctx context.Context, payload *gen.SubmitFeedbac
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list messages").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list messages").LogError(ctx, s.logger)
 	}
 
 	var lastMessageID uuid.NullUUID
@@ -1058,7 +1077,7 @@ func (s *Service) SubmitFeedback(ctx context.Context, payload *gen.SubmitFeedbac
 		ChatResolutionID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to store feedback").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to store feedback").LogError(ctx, s.logger)
 	}
 
 	s.logger.InfoContext(ctx, "user feedback submitted",
@@ -1331,7 +1350,7 @@ func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, asset
 	// Batch insert all messages.
 	crepo := repo.New(tx)
 	if _, err := crepo.CreateChatMessage(ctx, dbrows); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to insert chat messages").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to insert chat messages").LogError(ctx, logger)
 	}
 
 	return nil

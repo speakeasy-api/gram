@@ -139,7 +139,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 			types.ToolType(urn.ToolKindPlatform):
 			toolKinds[urn.ToolKind(t)] = nil
 		default:
-			return nil, oops.E(oops.CodeBadRequest, nil, "invalid tool type: %s", t).Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, nil, "invalid tool type: %s", t).LogError(ctx, s.logger)
 		}
 	}
 
@@ -209,7 +209,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 
 	err := mv.ApplyVariations(ctx, s.logger, s.db, *authCtx.ProjectID, nil, result.Tools)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to apply variations to tools").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to apply variations to tools").LogError(ctx, s.logger)
 	}
 
 	return result, nil
@@ -243,7 +243,7 @@ func (s *Service) getHTTPTools(
 	if params.cursor != nil {
 		cursorUUID, err := uuid.Parse(*params.cursor)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
 		}
 		toolParams.Cursor = uuid.NullUUID{UUID: cursorUUID, Valid: true}
 	}
@@ -251,14 +251,14 @@ func (s *Service) getHTTPTools(
 	if params.deploymentID != nil {
 		deploymentUUID, err := uuid.Parse(*params.deploymentID)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid deployment ID").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid deployment ID").LogError(ctx, s.logger)
 		}
 		toolParams.DeploymentID = uuid.NullUUID{UUID: deploymentUUID, Valid: true}
 	}
 
 	tools, err := s.repo.ListHttpTools(ctx, toolParams)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list http tools").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list http tools").LogError(ctx, s.logger)
 	}
 	hasNextPage := len(tools) >= int(params.limit+1)
 	var nextCursor *string
@@ -357,7 +357,7 @@ func (s *Service) getFunctionTools(
 		Limit:        params.limit + 1,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list function tools").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list function tools").LogError(ctx, s.logger)
 	}
 
 	result := []*types.Tool{}
@@ -367,7 +367,7 @@ func (s *Service) getFunctionTools(
 		if tool.Meta != nil {
 			err = json.Unmarshal(tool.Meta, &meta)
 			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "failed to unmarshal meta tags").Log(ctx, s.logger)
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to unmarshal meta tags").LogError(ctx, s.logger)
 			}
 		}
 		result = append(result, &types.Tool{
@@ -414,7 +414,7 @@ type getPromptTemplatesParams struct {
 func (s *Service) getPromptTemplates(ctx context.Context, params getPromptTemplatesParams) ([]*types.Tool, error) {
 	templates, err := s.templateRepo.ListTemplates(ctx, params.projectID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list prompt templates").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list prompt templates").LogError(ctx, s.logger)
 	}
 
 	result := []*types.Tool{}
@@ -472,7 +472,7 @@ func (s *Service) getExternalMCPTools(
 	if params.deploymentID != nil {
 		deploymentUUID, err := uuid.Parse(*params.deploymentID)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid deployment ID").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid deployment ID").LogError(ctx, s.logger)
 		}
 		queryParams.DeploymentID = uuid.NullUUID{UUID: deploymentUUID, Valid: true}
 	}
@@ -482,7 +482,7 @@ func (s *Service) getExternalMCPTools(
 		queryParams,
 	)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list external mcp tools").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list external mcp tools").LogError(ctx, s.logger)
 	}
 
 	result := []*types.Tool{}

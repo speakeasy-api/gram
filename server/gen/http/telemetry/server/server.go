@@ -33,6 +33,7 @@ type Server struct {
 	ListAttributeKeys         http.Handler
 	GetHooksSummary           http.Handler
 	GetToolUsageSummary       http.Handler
+	ListToolUsageTraces       http.Handler
 	GetToolUsageFilterOptions http.Handler
 	ListHooksTraces           http.Handler
 }
@@ -78,6 +79,7 @@ func New(
 			{"ListAttributeKeys", "POST", "/rpc/telemetry.listAttributeKeys"},
 			{"GetHooksSummary", "POST", "/rpc/telemetry.getHooksSummary"},
 			{"GetToolUsageSummary", "POST", "/rpc/telemetry.getToolUsageSummary"},
+			{"ListToolUsageTraces", "POST", "/rpc/telemetry.listToolUsageTraces"},
 			{"GetToolUsageFilterOptions", "POST", "/rpc/telemetry.getToolUsageFilterOptions"},
 			{"ListHooksTraces", "POST", "/rpc/telemetry.listHooksTraces"},
 		},
@@ -95,6 +97,7 @@ func New(
 		ListAttributeKeys:         NewListAttributeKeysHandler(e.ListAttributeKeys, mux, decoder, encoder, errhandler, formatter),
 		GetHooksSummary:           NewGetHooksSummaryHandler(e.GetHooksSummary, mux, decoder, encoder, errhandler, formatter),
 		GetToolUsageSummary:       NewGetToolUsageSummaryHandler(e.GetToolUsageSummary, mux, decoder, encoder, errhandler, formatter),
+		ListToolUsageTraces:       NewListToolUsageTracesHandler(e.ListToolUsageTraces, mux, decoder, encoder, errhandler, formatter),
 		GetToolUsageFilterOptions: NewGetToolUsageFilterOptionsHandler(e.GetToolUsageFilterOptions, mux, decoder, encoder, errhandler, formatter),
 		ListHooksTraces:           NewListHooksTracesHandler(e.ListHooksTraces, mux, decoder, encoder, errhandler, formatter),
 	}
@@ -119,6 +122,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListAttributeKeys = m(s.ListAttributeKeys)
 	s.GetHooksSummary = m(s.GetHooksSummary)
 	s.GetToolUsageSummary = m(s.GetToolUsageSummary)
+	s.ListToolUsageTraces = m(s.ListToolUsageTraces)
 	s.GetToolUsageFilterOptions = m(s.GetToolUsageFilterOptions)
 	s.ListHooksTraces = m(s.ListHooksTraces)
 }
@@ -142,6 +146,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListAttributeKeysHandler(mux, h.ListAttributeKeys)
 	MountGetHooksSummaryHandler(mux, h.GetHooksSummary)
 	MountGetToolUsageSummaryHandler(mux, h.GetToolUsageSummary)
+	MountListToolUsageTracesHandler(mux, h.ListToolUsageTraces)
 	MountGetToolUsageFilterOptionsHandler(mux, h.GetToolUsageFilterOptions)
 	MountListHooksTracesHandler(mux, h.ListHooksTraces)
 }
@@ -873,6 +878,59 @@ func NewGetToolUsageSummaryHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getToolUsageSummary")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListToolUsageTracesHandler configures the mux to serve the "telemetry"
+// service "listToolUsageTraces" endpoint.
+func MountListToolUsageTracesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/telemetry.listToolUsageTraces", f)
+}
+
+// NewListToolUsageTracesHandler creates a HTTP handler which loads the HTTP
+// request and calls the "telemetry" service "listToolUsageTraces" endpoint.
+func NewListToolUsageTracesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListToolUsageTracesRequest(mux, decoder)
+		encodeResponse = EncodeListToolUsageTracesResponse(encoder)
+		encodeError    = EncodeListToolUsageTracesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listToolUsageTraces")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
 		payload, err := decodeRequest(r)
 		if err != nil {

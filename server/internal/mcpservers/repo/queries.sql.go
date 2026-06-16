@@ -120,19 +120,58 @@ func (q *Queries) DeleteMCPServer(ctx context.Context, arg DeleteMCPServerParams
 	return i, err
 }
 
-const getMCPServerByID = `-- name: GetMCPServerByID :one
+const getMCPServerByIDAndOrganizationID = `-- name: GetMCPServerByIDAndOrganizationID :one
+SELECT m.id, m.project_id, m.name, m.slug, m.environment_id, m.user_session_issuer_id, m.remote_mcp_server_id, m.toolset_id, m.tool_variations_group_id, m.visibility, m.created_at, m.updated_at, m.deleted_at, m.deleted
+FROM mcp_servers AS m
+JOIN projects AS p ON p.id = m.project_id
+WHERE m.id = $1
+  AND p.organization_id = $2
+  AND m.deleted IS FALSE
+`
+
+type GetMCPServerByIDAndOrganizationIDParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Fetch an MCP server by id scoped to an organization via its project's
+// organization_id. For organization-administrator flows that span projects but
+// must stay within the caller's org (e.g. remote session client detach).
+func (q *Queries) GetMCPServerByIDAndOrganizationID(ctx context.Context, arg GetMCPServerByIDAndOrganizationIDParams) (McpServer, error) {
+	row := q.db.QueryRow(ctx, getMCPServerByIDAndOrganizationID, arg.ID, arg.OrganizationID)
+	var i McpServer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.EnvironmentID,
+		&i.UserSessionIssuerID,
+		&i.RemoteMcpServerID,
+		&i.ToolsetID,
+		&i.ToolVariationsGroupID,
+		&i.Visibility,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getMCPServerByIDAndProjectID = `-- name: GetMCPServerByIDAndProjectID :one
 SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, toolset_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
 `
 
-type GetMCPServerByIDParams struct {
+type GetMCPServerByIDAndProjectIDParams struct {
 	ID        uuid.UUID
 	ProjectID uuid.UUID
 }
 
-func (q *Queries) GetMCPServerByID(ctx context.Context, arg GetMCPServerByIDParams) (McpServer, error) {
-	row := q.db.QueryRow(ctx, getMCPServerByID, arg.ID, arg.ProjectID)
+func (q *Queries) GetMCPServerByIDAndProjectID(ctx context.Context, arg GetMCPServerByIDAndProjectIDParams) (McpServer, error) {
+	row := q.db.QueryRow(ctx, getMCPServerByIDAndProjectID, arg.ID, arg.ProjectID)
 	var i McpServer
 	err := row.Scan(
 		&i.ID,

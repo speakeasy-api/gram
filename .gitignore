@@ -77,3 +77,9 @@ flagged-chats.jsonl
 /server/riskjudgebench
 /results.json
 /finalists.json
+
+### Python ###
+__pycache__/
+*.py[cod]
+*$py.class
+.uv-cache

@@ -1118,9 +1118,6 @@ const slackThinkingStatus = "is thinking…"
 
 var slackInitialLoadingMessages = []string{"Routing…"}
 
-// slackThreadStatusTarget extracts the channel + thread to anchor a loading
-// status on. Returns ok=false for events without a threadable target (e.g.
-// user_change, channel_created).
 // slackEventExpectsReply reports whether a slack event is one the assistant
 // always replies to: an explicit @-mention, a DM (channel IDs start with "D"),
 // or a Block Kit interaction. Ambient channel events (plain messages,
@@ -1137,6 +1134,9 @@ func slackEventExpectsReply(event EventEnvelope) bool {
 		strings.HasPrefix(evt.ChannelID, "D")
 }
 
+// slackThreadStatusTarget extracts the channel + thread to anchor a loading
+// status on. Returns ok=false for events without a threadable target (e.g.
+// user_change, channel_created).
 func slackThreadStatusTarget(event EventEnvelope) (channelID, threadTS string, ok bool) {
 	evt, isSlack := event.Event.(slackTriggerEvent)
 	if !isSlack {

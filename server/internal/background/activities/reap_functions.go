@@ -79,7 +79,7 @@ func (r *ReapFlyApps) Do(ctx context.Context, req ReapFlyAppsRequest) (*ReapFlyA
 		ProjectID: req.ProjectID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to query apps to reap").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to query apps to reap").LogError(ctx, logger)
 	}
 
 	if len(appsToReap) == 0 {

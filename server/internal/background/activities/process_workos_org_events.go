@@ -46,8 +46,8 @@ type ProcessWorkOSOrganizationEventsResult struct {
 }
 
 // ProcessWorkOSOrganizationEvents pages through WorkOS organization-scoped events
-// since the stored cursor, applying supported organization, role, and
-// membership events in a transaction before advancing the cursor.
+// since the stored cursor, applying supported organization, role, membership,
+// and Directory Sync events in a transaction before advancing the cursor.
 type ProcessWorkOSOrganizationEvents struct {
 	db           *pgxpool.Pool
 	logger       *slog.Logger
@@ -75,7 +75,7 @@ func (p *ProcessWorkOSOrganizationEvents) Do(ctx context.Context, params Process
 		case errors.Is(err, pgx.ErrNoRows):
 			// No cursor yet — full sync from the beginning.
 		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get organization sync last event ID").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get organization sync last event ID").LogError(ctx, logger)
 		default:
 			sinceEventID = cursor
 		}
@@ -101,6 +101,14 @@ func (p *ProcessWorkOSOrganizationEvents) Do(ctx context.Context, params Process
 
 			string(workos.EventKindDirectorySyncActivated),
 			string(workos.EventKindDirectorySyncDeleted),
+			string(workos.EventKindDirectorySyncUserCreated),
+			string(workos.EventKindDirectorySyncUserUpdated),
+			string(workos.EventKindDirectorySyncUserDeleted),
+			string(workos.EventKindDirectorySyncGroupCreated),
+			string(workos.EventKindDirectorySyncGroupUpdated),
+			string(workos.EventKindDirectorySyncGroupDeleted),
+			string(workos.EventKindDirectorySyncGroupUserAdded),
+			string(workos.EventKindDirectorySyncGroupUserRemoved),
 		},
 		Limit:          workosOrgEventsPageSize,
 		After:          sinceEventID,
@@ -109,7 +117,7 @@ func (p *ProcessWorkOSOrganizationEvents) Do(ctx context.Context, params Process
 		RangeEnd:       "",
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list WorkOS events").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list WorkOS events").LogError(ctx, logger)
 	}
 
 	lastEventID, err := p.handlePage(ctx, logger, workOSOrgID, resp.Data)
@@ -145,7 +153,7 @@ func (p *ProcessWorkOSOrganizationEvents) handlePage(ctx context.Context, logger
 
 		var orgEvent workosOrgEvent
 		if err := json.Unmarshal(event.Data, &orgEvent); err != nil {
-			return lastEventID, oops.E(oops.CodeUnexpected, err, "failed to unmarshal workos organization event data").Log(ctx, eventLogger)
+			return lastEventID, oops.E(oops.CodeUnexpected, err, "failed to unmarshal workos organization event data").LogError(ctx, eventLogger)
 		}
 
 		// Resolve the WorkOS organization ID from the payload for logging.
@@ -158,7 +166,7 @@ func (p *ProcessWorkOSOrganizationEvents) handlePage(ctx context.Context, logger
 
 		eventID, err := p.handleEvent(ctx, eventLogger, workosOrgID, event)
 		if err != nil {
-			return lastEventID, oops.E(oops.CodeUnexpected, err, "failed to handle WorkOS event").Log(ctx, eventLogger)
+			return lastEventID, oops.E(oops.CodeUnexpected, err, "failed to handle WorkOS event").LogError(ctx, eventLogger)
 		}
 		lastEventID = eventID
 	}
@@ -225,6 +233,12 @@ func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx data
 		return nil, handleDSyncChange(ctx, logger, dbtx, event, true)
 	case string(workos.EventKindDirectorySyncDeleted):
 		return nil, handleDSyncChange(ctx, logger, dbtx, event, false)
+	case string(workos.EventKindDirectorySyncUserCreated), string(workos.EventKindDirectorySyncUserUpdated), string(workos.EventKindDirectorySyncUserDeleted):
+		return nil, handleDirectoryUserEvent(ctx, logger, dbtx, event)
+	case string(workos.EventKindDirectorySyncGroupCreated), string(workos.EventKindDirectorySyncGroupUpdated), string(workos.EventKindDirectorySyncGroupDeleted):
+		return nil, handleDirectoryGroupEvent(ctx, logger, dbtx, event)
+	case string(workos.EventKindDirectorySyncGroupUserAdded), string(workos.EventKindDirectorySyncGroupUserRemoved):
+		return nil, handleDirectoryGroupMembershipEvent(ctx, logger, dbtx, event)
 	}
 
 	return nil, oops.Permanent(fmt.Errorf("unhandled workos organization event type: %s", event.Event))
@@ -308,7 +322,7 @@ func resolveOrgForWorkOSEvent(ctx context.Context, repo *orgrepo.Queries, payloa
 	case errors.Is(err, pgx.ErrNoRows):
 		// Resolve below by external_id or by a deterministic ID derived from
 		// the WorkOS org ID.
-	case err != nil:
+	default:
 		return resolvedWorkOSOrganization{}, fmt.Errorf("get organization for workos id %q: %w", payload.ID, err)
 	}
 

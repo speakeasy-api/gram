@@ -86,7 +86,7 @@ function OnboardingShell() {
           <ResizablePanel.Pane minSize={35}>
             <ChatPane mode={mode} />
           </ResizablePanel.Pane>
-          <ResizablePanel.Pane minSize={20} defaultSize={28}>
+          <ResizablePanel.Pane minSize={24} defaultSize={36}>
             <AssistantDraftPanel />
           </ResizablePanel.Pane>
         </ResizablePanel>
@@ -225,7 +225,7 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
           systemPrompt,
           mcps,
           model: {
-            defaultModel: "anthropic/claude-sonnet-4.6" as Model,
+            defaultModel: "anthropic/claude-opus-4.7" as Model,
             showModelPicker: false,
           },
           welcome,

@@ -303,9 +303,9 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		case errors.Is(err, pgx.ErrNoRows):
 			return nil, oops.E(oops.CodeNotFound, err, "mcp endpoint not found")
 		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "load mcp endpoint").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "load mcp endpoint").LogError(ctx, s.logger)
 		}
-		mcpServer, err := mcpservers_repo.New(s.db).GetMCPServerByID(ctx, mcpservers_repo.GetMCPServerByIDParams{
+		mcpServer, err := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
 			ID:        mcpEndpoint.McpServerID,
 			ProjectID: mcpEndpoint.ProjectID,
 		})
@@ -313,7 +313,7 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		case errors.Is(err, pgx.ErrNoRows):
 			return nil, oops.E(oops.CodeNotFound, err, "mcp server not found")
 		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "load mcp server").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, s.logger)
 		}
 		if !mcpServer.UserSessionIssuerID.Valid {
 			return nil, oops.E(oops.CodeNotFound, nil, "not found")
@@ -329,7 +329,7 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		case errors.Is(err, pgx.ErrNoRows):
 			return nil, oops.E(oops.CodeNotFound, err, "project not found")
 		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "load project").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "load project").LogError(ctx, s.logger)
 		}
 		return NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID), nil
 	}
@@ -339,7 +339,7 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 	case errors.Is(err, errToolsetNotFound):
 		return nil, oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "load mcp server").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, s.logger)
 	}
 	if !toolset.UserSessionIssuerID.Valid {
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
@@ -373,7 +373,7 @@ func (s *Service) loadResolvedMcpEndpointByToolsetSlug(ctx context.Context, mcpS
 	case errors.Is(err, errToolsetNotFound):
 		return nil, oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load MCP server").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load MCP server").LogError(ctx, s.logger)
 	}
 	if !toolset.UserSessionIssuerID.Valid {
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")

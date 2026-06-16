@@ -3,6 +3,7 @@ package telemetry_test
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"strings"
 	"testing"
 	"time"
@@ -290,6 +291,7 @@ type hookEventParams struct {
 	mcpMatch       string // gram.mcp.match for matched MCP inventory entries
 	mcpServerURL   string // gram.mcp.server_url for matched MCP server URLs
 	conversationID string // genai.conversation.id for session counting
+	customAttrs    map[string]any
 }
 
 // insertHookEvent inserts a single telemetry log representing a hook event.
@@ -321,11 +323,15 @@ func insertHookEvent(t *testing.T, ctx context.Context, p hookEventParams) {
 		attrs["gram.hook.error"] = p.errorMsg
 	}
 	if p.skillName != "" {
-		// gen_ai.tool.call.arguments is stored as a JSON-encoded string in OTel attributes,
-		// matching what JSONExtractString(toString(attributes.gen_ai.tool.call.arguments), 'skill') expects.
 		skillArgs, marshalErr := json.Marshal(map[string]any{"skill": p.skillName})
 		require.NoError(t, marshalErr)
-		attrs["gen_ai.tool.call.arguments"] = string(skillArgs)
+		attrs["gen_ai"] = map[string]any{
+			"tool": map[string]any{
+				"call": map[string]any{
+					"arguments": string(skillArgs),
+				},
+			},
+		}
 	}
 	if p.mcpMatch != "" {
 		attrs["gram.mcp.match"] = p.mcpMatch
@@ -333,6 +339,7 @@ func insertHookEvent(t *testing.T, ctx context.Context, p hookEventParams) {
 	if p.mcpServerURL != "" {
 		attrs["gram.mcp.server_url"] = p.mcpServerURL
 	}
+	maps.Copy(attrs, p.customAttrs)
 
 	attrsJSON, err := json.Marshal(attrs)
 	require.NoError(t, err)

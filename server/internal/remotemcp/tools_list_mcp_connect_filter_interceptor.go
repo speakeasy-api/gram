@@ -28,24 +28,26 @@ import (
 // tracked separately; until that cache lands the disposition dimension
 // would have nothing to read.
 type ToolsListMCPConnectFilterInterceptor struct {
-	authz     *authz.Engine
-	serverID  string
-	projectID string
-	logger    *slog.Logger
+	authz       *authz.Engine
+	mcpServerID string
+	projectID   string
+	logger      *slog.Logger
 }
 
 var _ proxy.ToolsListResponseInterceptor = (*ToolsListMCPConnectFilterInterceptor)(nil)
 
 // NewToolsListMCPConnectFilterInterceptor constructs an interceptor
-// scoped to a single Remote MCP Server. serverID is the [authz.Check]
-// ResourceID — same shape as [authz.MCPToolCallCheck] uses for the
-// paired tools/call enforcement.
-func NewToolsListMCPConnectFilterInterceptor(authzEngine *authz.Engine, serverID, projectID string, logger *slog.Logger) *ToolsListMCPConnectFilterInterceptor {
+// scoped to a single Remote MCP Server. mcpServerID is the [authz.Check]
+// ResourceID, the mcp_servers row id (NOT the remote_mcp_servers id), so
+// the filter resolves grants against the same mcp_servers row that the
+// handler's upfront server-level `mcp:connect` check uses, the same shape
+// [authz.MCPToolCallCheck] uses for the paired tools/call enforcement.
+func NewToolsListMCPConnectFilterInterceptor(authzEngine *authz.Engine, mcpServerID, projectID string, logger *slog.Logger) *ToolsListMCPConnectFilterInterceptor {
 	return &ToolsListMCPConnectFilterInterceptor{
-		authz:     authzEngine,
-		serverID:  serverID,
-		projectID: projectID,
-		logger:    logger,
+		authz:       authzEngine,
+		mcpServerID: mcpServerID,
+		projectID:   projectID,
+		logger:      logger,
 	}
 }
 
@@ -75,7 +77,7 @@ func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx co
 
 	checks := make([]authz.Check, len(tools))
 	for idx, t := range tools {
-		checks[idx] = authz.MCPToolCallCheck(i.serverID, authz.MCPToolCallDimensions{
+		checks[idx] = authz.MCPToolCallCheck(i.mcpServerID, authz.MCPToolCallDimensions{
 			Tool:        t.Name,
 			Disposition: "",
 			ProjectID:   i.projectID,

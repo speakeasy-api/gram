@@ -25,10 +25,21 @@ VALUES (
 )
 RETURNING *;
 
--- name: GetMCPServerByID :one
+-- name: GetMCPServerByIDAndProjectID :one
 SELECT *
 FROM mcp_servers
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+
+-- name: GetMCPServerByIDAndOrganizationID :one
+-- Fetch an MCP server by id scoped to an organization via its project's
+-- organization_id. For organization-administrator flows that span projects but
+-- must stay within the caller's org (e.g. remote session client detach).
+SELECT m.*
+FROM mcp_servers AS m
+JOIN projects AS p ON p.id = m.project_id
+WHERE m.id = @id
+  AND p.organization_id = @organization_id
+  AND m.deleted IS FALSE;
 
 -- name: GetMCPServerBySlug :one
 SELECT *

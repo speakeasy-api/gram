@@ -16,6 +16,10 @@ import {
 } from "@/lib/messageConverter";
 import { sleep } from "@/lib/utils";
 import {
+  ThreadMetaContext,
+  type ThreadMeta,
+} from "@/contexts/ThreadMetaContext";
+import {
   useCallback,
   useEffect,
   useMemo,
@@ -72,6 +76,14 @@ export type ChatMessageTransform = (
 export interface ThreadListAdapterOptions {
   apiUrl: string;
   headers: Record<string, string>;
+  /**
+   * Async header resolution that waits for auth to settle (e.g. the session
+   * token fetch) before returning. When provided, every adapter request uses
+   * this instead of the `headers` snapshot — which lets the runtime mount
+   * before auth resolves: the initial `list()` fires immediately on bind and
+   * would otherwise go out with incomplete headers.
+   */
+  getHeaders?: () => Promise<Record<string, string>>;
   /** Map to translate local thread IDs to UUIDs (shared with transport) */
   localIdToUuidMap?: Map<string, string>;
   /**
@@ -101,13 +113,36 @@ interface ListChatsResponse {
 }
 
 /**
+ * Reads a chat's creation timestamp from the `chat.list` payload. The wire
+ * format is snake_case (`created_at`) — the hand-written GramChatOverview type
+ * declares camelCase, which never matched the JSON — so check both and return
+ * an ISO string, or undefined when absent.
+ */
+function readChatCreatedAt(chat: GramChatOverview): string | undefined {
+  const raw = chat as unknown as Record<string, unknown>;
+  const value = raw["created_at"] ?? raw["createdAt"];
+  return typeof value === "string" ? value : undefined;
+}
+
+/**
+ * Resolves request headers from the live adapter options: the async
+ * `getHeaders` (which waits for auth to settle) when provided, otherwise the
+ * static `headers` snapshot.
+ */
+async function resolveAdapterHeaders(
+  options: ThreadListAdapterOptions,
+): Promise<Record<string, string>> {
+  return options.getHeaders ? options.getHeaders() : options.headers;
+}
+
+/**
  * Thread history adapter that loads messages from Gram API.
  * Note: We use `as ThreadHistoryAdapter` cast because the withFormat generic
  * signature doesn't match our concrete implementation, but it works at runtime.
  */
 class GramThreadHistoryAdapter {
   private apiUrl: string;
-  private headers: Record<string, string>;
+  private getHeaders: () => Promise<Record<string, string>>;
   private store: AssistantApi;
   // Read lazily rather than captured: the adapter is constructed once, but the
   // consumer may swap `transformChatMessage` across renders, so resolve it from
@@ -116,12 +151,12 @@ class GramThreadHistoryAdapter {
 
   constructor(
     apiUrl: string,
-    headers: Record<string, string>,
+    getHeaders: () => Promise<Record<string, string>>,
     store: AssistantApi,
     getTransformChatMessage?: () => ChatMessageTransform | undefined,
   ) {
     this.apiUrl = apiUrl;
-    this.headers = headers;
+    this.getHeaders = getHeaders;
     this.store = store;
     this.getTransformChatMessage = getTransformChatMessage;
   }
@@ -155,7 +190,7 @@ class GramThreadHistoryAdapter {
     try {
       const response = await fetch(
         `${this.apiUrl}/rpc/chat.load?id=${encodeURIComponent(remoteId)}`,
-        { headers: this.headers },
+        { headers: await this.getHeaders() },
       );
 
       if (!response.ok) {
@@ -189,7 +224,7 @@ class GramThreadHistoryAdapter {
 
         const response = await fetch(
           `${this.apiUrl}/rpc/chat.load?id=${encodeURIComponent(remoteId)}`,
-          { headers: this.headers },
+          { headers: await this.getHeaders() },
         );
 
         if (!response.ok) {
@@ -253,7 +288,7 @@ function useGramThreadHistoryAdapter(
     () =>
       new GramThreadHistoryAdapter(
         optionsRef.current.apiUrl,
-        optionsRef.current.headers,
+        () => resolveAdapterHeaders(optionsRef.current),
         store,
         () => optionsRef.current.transformChatMessage,
       ),
@@ -274,6 +309,14 @@ export function useGramThreadListAdapter(
     optionsRef.current = options;
   }, [options]);
 
+  // Side channel for per-chat metadata (creation date) that assistant-ui's
+  // RemoteThreadMetadata can't carry. `list()` writes a fresh object into the
+  // ref and bumps the counter so the provider passes a new context value and
+  // ThreadListItem re-renders with the dates. A ref (not state) holds the data
+  // so the stable `list()` closure can write it without a re-created identity.
+  const metaRef = useRef<Record<string, ThreadMeta>>({});
+  const [, bumpMeta] = useState(0);
+
   // Create stable Provider component using useCallback
   const unstable_Provider = useCallback(function GramHistoryProvider({
     children,
@@ -281,9 +324,11 @@ export function useGramThreadListAdapter(
     const history = useGramThreadHistoryAdapter(optionsRef);
     const adapters = useMemo(() => ({ history }), [history]);
     return (
-      <RuntimeAdapterProvider adapters={adapters}>
-        {children}
-      </RuntimeAdapterProvider>
+      <ThreadMetaContext.Provider value={metaRef.current}>
+        <RuntimeAdapterProvider adapters={adapters}>
+          {children}
+        </RuntimeAdapterProvider>
+      </ThreadMetaContext.Provider>
     );
   }, []);
 
@@ -294,7 +339,8 @@ export function useGramThreadListAdapter(
 
       async list() {
         try {
-          const { apiUrl, headers, threadListFilters } = optionsRef.current;
+          const { apiUrl, threadListFilters } = optionsRef.current;
+          const headers = await resolveAdapterHeaders(optionsRef.current);
           const qs = threadListFilters
             ? new URLSearchParams(threadListFilters).toString()
             : "";
@@ -309,6 +355,15 @@ export function useGramThreadListAdapter(
           }
 
           const data = (await response.json()) as ListChatsResponse;
+          // Stash creation dates in the side channel before returning the
+          // assistant-ui metadata (which can't carry them) — keyed by chat id,
+          // the same value used for remoteId/externalId below.
+          const nextMeta: Record<string, ThreadMeta> = { ...metaRef.current };
+          for (const chat of data.chats) {
+            nextMeta[chat.id] = { createdAt: readChatCreatedAt(chat) };
+          }
+          metaRef.current = nextMeta;
+          bumpMeta((n) => n + 1);
           return {
             threads: data.chats.map((chat) => ({
               remoteId: chat.id,
@@ -416,7 +471,7 @@ export function useGramThreadListAdapter(
             {
               method: "POST",
               headers: {
-                ...optionsRef.current.headers,
+                ...(await resolveAdapterHeaders(optionsRef.current)),
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({ id: remoteId }),
@@ -457,7 +512,7 @@ export function useGramThreadListAdapter(
           const response = await fetch(
             `${optionsRef.current.apiUrl}/rpc/chat.load?id=${encodeURIComponent(threadId)}`,
             {
-              headers: optionsRef.current.headers,
+              headers: await resolveAdapterHeaders(optionsRef.current),
             },
           );
 

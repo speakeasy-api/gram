@@ -102,7 +102,7 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 			err,
 			"failed to set organization feature flag %q",
 			payload.FeatureName,
-		).Log(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+		).LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
 	cacheEntry := FeatureCache{

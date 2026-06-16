@@ -14,6 +14,7 @@ var All = []outbox.EventRegistration{
 	AccessRoleV1,
 	AccessRuleV1,
 	AssetV1,
+	AssistantToolCallV1,
 	AssistantWakeV1,
 	AuditLogCreated,
 	BillingMetadataV1,

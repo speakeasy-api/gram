@@ -407,6 +407,12 @@ type RemoteSessionResponseBody struct {
 	// The session's subject URN (user:<id> | apikey:<uuid> |
 	// anonymous:<mcp-session-id>).
 	SubjectUrn string `form:"subject_urn" json:"subject_urn" xml:"subject_urn"`
+	// Resolved display name when the subject is a Gram user. Absent for
+	// apikey/anonymous subjects or unresolved users.
+	SubjectDisplayName *string `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
+	// Resolved email when the subject is a Gram user. Absent for apikey/anonymous
+	// subjects or unresolved users.
+	SubjectEmail *string `form:"subject_email,omitempty" json:"subject_email,omitempty" xml:"subject_email,omitempty"`
 	// The user_session_issuer this session is bound to.
 	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
 	// The remote_session_client this session was minted against.

@@ -3,7 +3,6 @@ package risk
 import (
 	"cmp"
 	"context"
-	"errors"
 	"log/slog"
 	"net/url"
 	"strings"
@@ -12,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type PolicyBypassEvaluation struct {
@@ -67,19 +67,18 @@ func ShadowMCPServerPolicyBypassTarget(serverURL string, serverIdentity string, 
 type PolicyBypassEvaluator struct {
 	logger *slog.Logger
 	db     repo.DBTX
-	authz  *authz.Engine
 }
 
-func NewPolicyBypassEvaluator(logger *slog.Logger, db repo.DBTX, authzEngine *authz.Engine) *PolicyBypassEvaluator {
+func NewPolicyBypassEvaluator(logger *slog.Logger, db repo.DBTX) *PolicyBypassEvaluator {
 	return &PolicyBypassEvaluator{
 		logger: logger.With(attr.SlogComponent("risk")),
 		db:     db,
-		authz:  authzEngine,
 	}
 }
 
 func (e *PolicyBypassEvaluator) CanBypass(ctx context.Context, input PolicyBypassEvaluation) bool {
-	if strings.TrimSpace(input.UserID) == "" || strings.TrimSpace(input.PolicyID) == "" {
+	input.UserID = strings.TrimSpace(input.UserID)
+	if input.UserID == urn.AllUsersPrincipalID || strings.TrimSpace(input.PolicyID) == "" {
 		return false
 	}
 
@@ -89,22 +88,21 @@ func (e *PolicyBypassEvaluator) CanBypass(ctx context.Context, input PolicyBypas
 	}
 
 	check := authz.RiskPolicyBypassCheck(input.PolicyID, policyBypassCheckDimensions(input.Target))
-	return e.authz.EvaluateLoadedGrants(ctx, grants, check) == nil
+	return authz.GrantsSatisfy(grants, check)
 }
 
 func (e *PolicyBypassEvaluator) loadGrants(ctx context.Context, input PolicyBypassEvaluation) ([]authz.Grant, bool) {
 	principals, err := authz.ResolveUserPrincipals(ctx, e.db, input.OrganizationID, input.UserID)
 	if err != nil {
-		if !errors.Is(err, authz.ErrPrincipalNotFound) {
-			e.logger.WarnContext(ctx, "failed to resolve principals for risk policy bypass",
-				attr.SlogError(err),
-				attr.SlogOrganizationID(input.OrganizationID),
-				attr.SlogUserID(input.UserID),
-				attr.SlogRiskPolicyID(input.PolicyID),
-			)
-		}
+		e.logger.WarnContext(ctx, "failed to resolve principals for risk policy bypass",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(input.OrganizationID),
+			attr.SlogUserID(input.UserID),
+			attr.SlogRiskPolicyID(input.PolicyID),
+		)
 		return nil, false
 	}
+
 	grants, err := authz.LoadGrants(ctx, e.db, input.OrganizationID, principals)
 	if err != nil {
 		e.logger.WarnContext(ctx, "failed to load risk policy bypass grants",
@@ -118,11 +116,11 @@ func (e *PolicyBypassEvaluator) loadGrants(ctx context.Context, input PolicyBypa
 	return grants, true
 }
 
-func policyBypassCheckDimensions(target *PolicyBypassTarget) authz.RiskPolicyBypassDimensions {
+func policyBypassCheckDimensions(target *PolicyBypassTarget) authz.RiskPolicyDimensions {
 	if target == nil {
-		return authz.RiskPolicyBypassDimensions{ServerURL: "", ServerIdentity: ""}
+		return authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}
 	}
-	return authz.RiskPolicyBypassDimensions{
+	return authz.RiskPolicyDimensions{
 		ServerURL:      target.Dimensions[authz.SelectorKeyServerURL],
 		ServerIdentity: target.Dimensions[authz.SelectorKeyServerIdentity],
 	}

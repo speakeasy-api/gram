@@ -327,7 +327,7 @@ func TestValidateSelector_riskPolicyAllowsServerURL(t *testing.T) {
 func TestRiskPolicyBypassCheck_injectsServerURL(t *testing.T) {
 	t.Parallel()
 
-	check := RiskPolicyBypassCheck("policy_123", RiskPolicyBypassDimensions{ServerURL: "https://api.example.com", ServerIdentity: ""})
+	check := RiskPolicyBypassCheck("policy_123", RiskPolicyDimensions{ServerURL: "https://api.example.com", ServerIdentity: ""})
 	require.Equal(t, ScopeRiskPolicyBypass, check.Scope)
 	require.Equal(t, "policy_123", check.ResourceID)
 	require.Equal(t, "https://api.example.com", check.Dimensions[SelectorKeyServerURL])
@@ -336,7 +336,7 @@ func TestRiskPolicyBypassCheck_injectsServerURL(t *testing.T) {
 func TestRiskPolicyBypassCheck_injectsServerIdentity(t *testing.T) {
 	t.Parallel()
 
-	check := RiskPolicyBypassCheck("policy_123", RiskPolicyBypassDimensions{ServerURL: "", ServerIdentity: "github"})
+	check := RiskPolicyBypassCheck("policy_123", RiskPolicyDimensions{ServerURL: "", ServerIdentity: "github"})
 	require.Equal(t, ScopeRiskPolicyBypass, check.Scope)
 	require.Equal(t, "policy_123", check.ResourceID)
 	require.Equal(t, "github", check.Dimensions[SelectorKeyServerIdentity])
@@ -345,7 +345,7 @@ func TestRiskPolicyBypassCheck_injectsServerIdentity(t *testing.T) {
 func TestRiskPolicyBypassCheck_emptyServerURLOmitsDimension(t *testing.T) {
 	t.Parallel()
 
-	check := RiskPolicyBypassCheck("policy_123", RiskPolicyBypassDimensions{ServerURL: "", ServerIdentity: ""})
+	check := RiskPolicyBypassCheck("policy_123", RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""})
 	require.Nil(t, check.Dimensions)
 }
 

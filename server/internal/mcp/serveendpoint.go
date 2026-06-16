@@ -78,7 +78,7 @@ func (s *Service) enforceCustomDomainLockdown(ctx context.Context, logger *slog.
 	case errors.Is(err, pgx.ErrNoRows):
 		return oops.E(oops.CodeNotFound, err, "project not found")
 	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "load project for custom domain lockdown").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "load project for custom domain lockdown").LogError(ctx, logger)
 	}
 
 	domain, err := customdomainsrepo.New(s.db).GetCustomDomainByOrganization(ctx, project.OrganizationID)
@@ -86,7 +86,7 @@ func (s *Service) enforceCustomDomainLockdown(ctx context.Context, logger *slog.
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil
 	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "load custom domain for lockdown").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "load custom domain for lockdown").LogError(ctx, logger)
 	}
 
 	if len(domain.IpAllowlist) > 0 {
@@ -153,7 +153,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 		case errors.Is(err, pgx.ErrNoRows):
 			return oops.E(oops.CodeNotFound, err, "toolset not found")
 		case err != nil:
-			return oops.E(oops.CodeUnexpected, err, "load toolset").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "load toolset").LogError(ctx, logger)
 		}
 
 		// The mcp_servers row's variation group, when set, overrides the
@@ -172,7 +172,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 	default:
 		// CHECK constraint mcp_servers_backend_exclusivity_check guarantees
 		// exactly one backend is set; this is defensive.
-		return oops.E(oops.CodeUnexpected, nil, "mcp server has no backend configured").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, nil, "mcp server has no backend configured").LogError(ctx, logger)
 	}
 }
 
@@ -252,7 +252,7 @@ func (s *Service) BuildResolvedMcpEndpointForServer(
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, err, "project not found")
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "load project").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "load project").LogError(ctx, logger)
 	}
 	resolved := NewResolvedMcpEndpointFromMcpServer(mcpEndpoint, mcpServer, project.OrganizationID)
 	resolved.RouteBase = mcpRouteBase
@@ -314,7 +314,7 @@ func (s *Service) serveRemoteBackend(
 
 			project, err := projectsrepo.New(s.db).GetProjectByID(ctx, endpoint.ProjectID)
 			if err != nil {
-				return oops.E(oops.CodeUnexpected, err, "load mcp server project").Log(ctx, logger)
+				return oops.E(oops.CodeUnexpected, err, "load mcp server project").LogError(ctx, logger)
 			}
 			authCtx, ok := contextvalues.GetAuthContext(ctx)
 			if !ok || authCtx == nil || project.OrganizationID != authCtx.ActiveOrganizationID {
@@ -335,7 +335,7 @@ func (s *Service) serveRemoteBackend(
 		var prepErr error
 		ctx, prepErr = s.authz.PrepareContext(ctx)
 		if prepErr != nil {
-			return oops.E(oops.CodeUnexpected, prepErr, "load access grants").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, prepErr, "load access grants").LogError(ctx, logger)
 		}
 
 		// Non-issuer-gated callers get an upfront mcp:connect fail-fast before
@@ -360,7 +360,7 @@ func (s *Service) serveRemoteBackend(
 			}
 		}
 	default:
-		return oops.E(oops.CodeUnexpected, nil, "unrecognized mcp server visibility %q", mcpServer.Visibility).Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, nil, "unrecognized mcp server visibility %q", mcpServer.Visibility).LogError(ctx, logger)
 	}
 
 	server, err := remotemcprepo.New(s.db).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{
@@ -369,17 +369,17 @@ func (s *Service) serveRemoteBackend(
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return oops.E(oops.CodeNotFound, err, "remote mcp server not found").Log(ctx, logger)
+		return oops.E(oops.CodeNotFound, err, "remote mcp server not found").LogError(ctx, logger)
 	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "load remote mcp server").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "load remote mcp server").LogError(ctx, logger)
 	}
 
 	headers, err := remotemcp.NewHeaders(s.logger, s.db, s.enc).ListHeaders(ctx, server.ID, false)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "load remote mcp server headers").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "load remote mcp server headers").LogError(ctx, logger)
 	}
 
-	p := s.remoteProxyManager.Build(logger, &server, headers, mcpServer.Visibility, endpoint.ProjectID.String(), upstreamAuth)
+	p := s.remoteProxyManager.Build(logger, &server, mcpServer.ID.String(), headers, mcpServer.Visibility, endpoint.ProjectID.String(), upstreamAuth)
 
 	r = r.WithContext(ctx)
 

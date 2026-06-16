@@ -15,7 +15,7 @@ func handlePing(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID) (jso
 		Result: struct{}{},
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize ping response").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize ping response").LogError(ctx, logger)
 	}
 
 	return bs, nil

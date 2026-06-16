@@ -9,32 +9,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/message"
 )
 
-func TestAttributeTool(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		name     string
-		in       string
-		server   string
-		function string
-		isMCP    bool
-	}{
-		{"claude code mcp", "mcp__github__create_issue", "github", "create_issue", true},
-		{"nested server name", "mcp__claude_ai_Linear__list_issues", "claude_ai_Linear", "list_issues", true},
-		{"cursor MCP prefix", "MCP:slack:send_message", "slack:send_message", "slack:send_message", true},
-		{"native tool", "Bash", "", "", false},
-		{"malformed mcp without function", "mcp__github__", "", "", false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			server, function, isMCP := risk_analysis.AttributeTool(tc.in)
-			require.Equal(t, tc.isMCP, isMCP)
-			require.Equal(t, tc.server, server)
-			require.Equal(t, tc.function, function)
-		})
-	}
-}
-
 func TestNewJudgeMessage(t *testing.T) {
 	t.Parallel()
 

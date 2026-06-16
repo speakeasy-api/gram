@@ -3416,6 +3416,249 @@ func DecodeGetToolUsageSummaryResponse(decoder func(*http.Response) goahttp.Deco
 	}
 }
 
+// BuildListToolUsageTracesRequest instantiates a HTTP request object with
+// method and path set to call the "telemetry" service "listToolUsageTraces"
+// endpoint
+func (c *Client) BuildListToolUsageTracesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListToolUsageTracesTelemetryPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("telemetry", "listToolUsageTraces", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListToolUsageTracesRequest returns an encoder for requests sent to the
+// telemetry listToolUsageTraces server.
+func EncodeListToolUsageTracesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*telemetry.ListToolUsageTracesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("telemetry", "listToolUsageTraces", "*telemetry.ListToolUsageTracesPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewListToolUsageTracesRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("telemetry", "listToolUsageTraces", err)
+		}
+		return nil
+	}
+}
+
+// DecodeListToolUsageTracesResponse returns a decoder for responses returned
+// by the telemetry listToolUsageTraces endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeListToolUsageTracesResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListToolUsageTracesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListToolUsageTracesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listToolUsageTraces", err)
+			}
+			err = ValidateListToolUsageTracesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listToolUsageTraces", err)
+			}
+			res := NewListToolUsageTracesResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListToolUsageTracesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listToolUsageTraces", err)
+			}
+			err = ValidateListToolUsageTracesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listToolUsageTraces", err)
+			}
+			return nil, NewListToolUsageTracesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListToolUsageTracesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listToolUsageTraces", err)
+			}
+			err = ValidateListToolUsageTracesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listToolUsageTraces", err)
+			}
+			return nil, NewListToolUsageTracesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListToolUsageTracesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listToolUsageTraces", err)
+			}
+			err = ValidateListToolUsageTracesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listToolUsageTraces", err)
+			}
+			return nil, NewListToolUsageTracesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListToolUsageTracesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listToolUsageTraces", err)
+			}
+			err = ValidateListToolUsageTracesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listToolUsageTraces", err)
+			}
+			return nil, NewListToolUsageTracesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListToolUsageTracesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listToolUsageTraces", err)
+			}
+			err = ValidateListToolUsageTracesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listToolUsageTraces", err)
+			}
+			return nil, NewListToolUsageTracesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListToolUsageTracesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listToolUsageTraces", err)
+			}
+			err = ValidateListToolUsageTracesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listToolUsageTraces", err)
+			}
+			return nil, NewListToolUsageTracesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListToolUsageTracesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listToolUsageTraces", err)
+			}
+			err = ValidateListToolUsageTracesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listToolUsageTraces", err)
+			}
+			return nil, NewListToolUsageTracesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListToolUsageTracesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "listToolUsageTraces", err)
+				}
+				err = ValidateListToolUsageTracesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "listToolUsageTraces", err)
+				}
+				return nil, NewListToolUsageTracesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListToolUsageTracesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "listToolUsageTraces", err)
+				}
+				err = ValidateListToolUsageTracesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "listToolUsageTraces", err)
+				}
+				return nil, NewListToolUsageTracesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("telemetry", "listToolUsageTraces", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListToolUsageTracesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "listToolUsageTraces", err)
+			}
+			err = ValidateListToolUsageTracesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "listToolUsageTraces", err)
+			}
+			return nil, NewListToolUsageTracesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("telemetry", "listToolUsageTraces", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetToolUsageFilterOptionsRequest instantiates a HTTP request object
 // with method and path set to call the "telemetry" service
 // "getToolUsageFilterOptions" endpoint
@@ -4793,6 +5036,47 @@ func unmarshalToolUsageTargetToolBreakdownRowResponseBodyToTelemetryToolUsageTar
 		SuccessCount: *v.SuccessCount,
 		FailureCount: *v.FailureCount,
 		FailureRate:  *v.FailureRate,
+	}
+
+	return res
+}
+
+// unmarshalToolUsageTraceSummaryResponseBodyToTelemetryToolUsageTraceSummary
+// builds a value of type *telemetry.ToolUsageTraceSummary from a value of type
+// *ToolUsageTraceSummaryResponseBody.
+func unmarshalToolUsageTraceSummaryResponseBodyToTelemetryToolUsageTraceSummary(v *ToolUsageTraceSummaryResponseBody) *telemetry.ToolUsageTraceSummary {
+	res := &telemetry.ToolUsageTraceSummary{
+		ID:                *v.ID,
+		TraceID:           v.TraceID,
+		StartTimeUnixNano: *v.StartTimeUnixNano,
+		LogCount:          *v.LogCount,
+		GramUrn:           *v.GramUrn,
+		ToolName:          *v.ToolName,
+		TargetType:        telemetry.ToolUsageTargetType(*v.TargetType),
+		TargetKind:        telemetry.ToolUsageTargetKind(*v.TargetKind),
+		TargetID:          *v.TargetID,
+		TargetLabel:       *v.TargetLabel,
+		UserKey:           *v.UserKey,
+		UserLabel:         *v.UserLabel,
+		UserKind:          telemetry.ToolUsageUserKind(*v.UserKind),
+		HookSource:        v.HookSource,
+		EventSource:       *v.EventSource,
+		HTTPStatusCode:    v.HTTPStatusCode,
+		HookStatus:        v.HookStatus,
+		BlockReason:       v.BlockReason,
+	}
+	res.LogGroup = unmarshalToolUsageTraceLogGroupResponseBodyToTelemetryToolUsageTraceLogGroup(v.LogGroup)
+
+	return res
+}
+
+// unmarshalToolUsageTraceLogGroupResponseBodyToTelemetryToolUsageTraceLogGroup
+// builds a value of type *telemetry.ToolUsageTraceLogGroup from a value of
+// type *ToolUsageTraceLogGroupResponseBody.
+func unmarshalToolUsageTraceLogGroupResponseBodyToTelemetryToolUsageTraceLogGroup(v *ToolUsageTraceLogGroupResponseBody) *telemetry.ToolUsageTraceLogGroup {
+	res := &telemetry.ToolUsageTraceLogGroup{
+		Kind:  telemetry.ToolUsageTraceLogGroupKind(*v.Kind),
+		Value: *v.Value,
 	}
 
 	return res

@@ -92,7 +92,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	t.Cleanup(func() { _ = chatWriterShutdown(t.Context()) })
 	accessStore := accesscontrol.NewRedisStore(cacheAdapter, accesscontrol.AlphaTTL)
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore)
-	policyBypass := risk.NewPolicyBypassEvaluator(logger, conn, authzEngine)
+	policyBypass := risk.NewPolicyBypassEvaluator(logger, conn)
 	siteURL, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
 	svc := NewService(

@@ -301,7 +301,7 @@ SELECT COUNT(*)::BIGINT
 FROM risk_results rr
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE rr.project_id = $1
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
 `
 
 func (q *Queries) CountAllFindings(ctx context.Context, projectID uuid.UUID) (int64, error) {
@@ -364,6 +364,7 @@ WHERE project_id = $1
   AND risk_policy_version = $3
   AND found IS TRUE
   AND excluded_at IS NULL
+  AND false_positive_at IS NULL
 `
 
 type CountFindingsByPolicyParams struct {
@@ -555,6 +556,7 @@ INSERT INTO risk_policies (
   , message_types
   , enabled
   , action
+  , audience_type
   , auto_name
   , user_message
   , prompt
@@ -577,8 +579,9 @@ VALUES (
   , $13
   , $14
   , $15
-  , $16::text
-  , $17::jsonb
+  , $16
+  , $17::text
+  , $18::jsonb
   , 1
 )
 RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, action, audience_type, auto_name, user_message, prompt, model_config, version, created_at, updated_at, deleted_at, deleted
@@ -598,6 +601,7 @@ type CreateRiskPolicyParams struct {
 	MessageTypes         []string
 	Enabled              bool
 	Action               string
+	AudienceType         string
 	AutoName             bool
 	UserMessage          pgtype.Text
 	Prompt               pgtype.Text
@@ -619,6 +623,7 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 		arg.MessageTypes,
 		arg.Enabled,
 		arg.Action,
+		arg.AudienceType,
 		arg.AutoName,
 		arg.UserMessage,
 		arg.Prompt,
@@ -1001,10 +1006,10 @@ const getRiskOverviewCounts = `-- name: GetRiskOverviewCounts :one
 SELECT
     COUNT(DISTINCT rr.chat_message_id)::BIGINT AS messages_scanned
   , (COUNT(*) FILTER (
-      WHERE rr.found IS TRUE AND rr.excluded_at IS NULL
+      WHERE rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
     ))::BIGINT AS findings
   , (COUNT(DISTINCT cm.chat_id) FILTER (
-      WHERE rr.found IS TRUE AND rr.excluded_at IS NULL
+      WHERE rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
         AND cm.chat_id IS NOT NULL
     ))::BIGINT AS flagged_sessions
   , (
@@ -1641,7 +1646,7 @@ categorized AS (
       END AS category
   FROM risk_results rr
   WHERE rr.project_id = $3::uuid
-    AND rr.found IS TRUE AND rr.excluded_at IS NULL
+    AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
     AND rr.created_at >= $1
     AND rr.created_at < $2
 ),
@@ -1706,7 +1711,7 @@ SELECT
   COUNT(*)::BIGINT AS findings
 FROM risk_results rr
 WHERE rr.project_id = $1
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
   AND rr.created_at >= $2
   AND rr.created_at < $3
 GROUP BY rr.rule_id, rr.source
@@ -1768,7 +1773,7 @@ WITH user_findings AS (
   LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
   LEFT JOIN users u ON u.id = COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''))
   WHERE rr.project_id = $2
-    AND rr.found IS TRUE AND rr.excluded_at IS NULL
+    AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
     AND rr.created_at >= $3
     AND rr.created_at < $4
 )
@@ -1932,14 +1937,14 @@ func (q *Queries) ListRiskPolicyBypassRequests(ctx context.Context, arg ListRisk
 }
 
 const listRiskResultsByChatFound = `-- name: ListRiskResultsByChatFound :many
-SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.dead_letter_reason, rr.excluded_at, rr.excluded_exclusion_id, rr.created_at, cm.chat_id, cm.created_at AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id
+SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.dead_letter_reason, rr.excluded_at, rr.excluded_exclusion_id, rr.false_positive_at, rr.false_positive_reason, rr.created_at, cm.chat_id, cm.created_at AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE cm.chat_id = $1
   AND rr.project_id = $2
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
   AND (
     $3::timestamptz IS NULL
     OR (cm.created_at, rr.id) < ($3::timestamptz, $4::uuid)
@@ -1975,6 +1980,8 @@ type ListRiskResultsByChatFoundRow struct {
 	DeadLetterReason    pgtype.Text
 	ExcludedAt          pgtype.Timestamptz
 	ExcludedExclusionID uuid.NullUUID
+	FalsePositiveAt     pgtype.Timestamptz
+	FalsePositiveReason pgtype.Text
 	CreatedAt           pgtype.Timestamptz
 	ChatID              uuid.UUID
 	MessageCreatedAt    pgtype.Timestamptz
@@ -2016,6 +2023,8 @@ func (q *Queries) ListRiskResultsByChatFound(ctx context.Context, arg ListRiskRe
 			&i.DeadLetterReason,
 			&i.ExcludedAt,
 			&i.ExcludedExclusionID,
+			&i.FalsePositiveAt,
+			&i.FalsePositiveReason,
 			&i.CreatedAt,
 			&i.ChatID,
 			&i.MessageCreatedAt,
@@ -2033,14 +2042,14 @@ func (q *Queries) ListRiskResultsByChatFound(ctx context.Context, arg ListRiskRe
 }
 
 const listRiskResultsByProjectAndPolicy = `-- name: ListRiskResultsByProjectAndPolicy :many
-SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.dead_letter_reason, rr.excluded_at, rr.excluded_exclusion_id, rr.created_at, cm.chat_id, cm.created_at AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id
+SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.dead_letter_reason, rr.excluded_at, rr.excluded_exclusion_id, rr.false_positive_at, rr.false_positive_reason, rr.created_at, cm.chat_id, cm.created_at AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE rr.project_id = $1
   AND rr.risk_policy_id = $2
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
   AND (
     $3::timestamptz IS NULL
     OR (cm.created_at, rr.id) < ($3::timestamptz, $4::uuid)
@@ -2076,6 +2085,8 @@ type ListRiskResultsByProjectAndPolicyRow struct {
 	DeadLetterReason    pgtype.Text
 	ExcludedAt          pgtype.Timestamptz
 	ExcludedExclusionID uuid.NullUUID
+	FalsePositiveAt     pgtype.Timestamptz
+	FalsePositiveReason pgtype.Text
 	CreatedAt           pgtype.Timestamptz
 	ChatID              uuid.UUID
 	MessageCreatedAt    pgtype.Timestamptz
@@ -2117,6 +2128,8 @@ func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg Lis
 			&i.DeadLetterReason,
 			&i.ExcludedAt,
 			&i.ExcludedExclusionID,
+			&i.FalsePositiveAt,
+			&i.FalsePositiveReason,
 			&i.CreatedAt,
 			&i.ChatID,
 			&i.MessageCreatedAt,
@@ -2160,7 +2173,7 @@ FROM (
   LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
   JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
   WHERE rr.project_id = $2
-    AND rr.found IS TRUE AND rr.excluded_at IS NULL
+    AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
     AND ($3::timestamptz IS NULL OR cm.created_at >= $3::timestamptz)
     AND ($4::timestamptz IS NULL OR cm.created_at < $4::timestamptz)
     AND ($5::text = '' OR rr.rule_id ILIKE '%' || $5::text || '%')
@@ -2338,7 +2351,7 @@ JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE rr.project_id = $1
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
   AND ($2::uuid IS NULL OR cm.chat_id <= $2::uuid)
 GROUP BY cm.chat_id, c.title, c.external_user_id
 ORDER BY cm.chat_id DESC
@@ -2437,7 +2450,7 @@ WITH categorized AS (
     END AS category
   FROM risk_results rr
   WHERE rr.project_id = $2
-    AND rr.found IS TRUE AND rr.excluded_at IS NULL
+    AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
     AND rr.created_at >= $3
     AND rr.created_at < $4
 )
@@ -2541,7 +2554,7 @@ WITH user_findings AS (
   JOIN chat_messages cm ON cm.id = rr.chat_message_id
   LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
   WHERE rr.project_id = $1
-    AND rr.found IS TRUE AND rr.excluded_at IS NULL
+    AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
     AND rr.created_at >= $2
     AND rr.created_at < $3
     AND COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '') = $4::text
@@ -2601,7 +2614,7 @@ FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
 WHERE rr.project_id = $1
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
   AND rr.created_at >= $2
   AND rr.created_at < $3
   AND COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '') = $4::text
@@ -2828,10 +2841,11 @@ SET name = $1
   , message_types = $7::text[]
   , enabled = $8
   , action = $9
-  , auto_name = $10
-  , user_message = $11
-  , prompt = $12::text
-  , model_config = $13::jsonb
+  , audience_type = $10
+  , auto_name = $11
+  , user_message = $12
+  , prompt = $13::text
+  , model_config = $14::jsonb
   , version = CASE
       WHEN sources IS DISTINCT FROM $2
         OR presidio_entities IS DISTINCT FROM $3
@@ -2841,14 +2855,15 @@ SET name = $1
         OR message_types IS DISTINCT FROM $7::text[]
         OR enabled IS DISTINCT FROM $8
         OR action IS DISTINCT FROM $9
-        OR prompt IS DISTINCT FROM $12::text
-        OR model_config IS DISTINCT FROM $13::jsonb
+        OR prompt IS DISTINCT FROM $13::text
+        OR model_config IS DISTINCT FROM $14::jsonb
+        OR audience_type IS DISTINCT FROM $10
       THEN version + 1
       ELSE version
     END
   , updated_at = clock_timestamp()
-WHERE id = $14
-  AND project_id = $15
+WHERE id = $15
+  AND project_id = $16
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, action, audience_type, auto_name, user_message, prompt, model_config, version, created_at, updated_at, deleted_at, deleted
 `
@@ -2863,6 +2878,7 @@ type UpdateRiskPolicyParams struct {
 	MessageTypes         []string
 	Enabled              bool
 	Action               string
+	AudienceType         string
 	AutoName             bool
 	UserMessage          pgtype.Text
 	Prompt               pgtype.Text
@@ -2882,6 +2898,7 @@ func (q *Queries) UpdateRiskPolicy(ctx context.Context, arg UpdateRiskPolicyPara
 		arg.MessageTypes,
 		arg.Enabled,
 		arg.Action,
+		arg.AudienceType,
 		arg.AutoName,
 		arg.UserMessage,
 		arg.Prompt,

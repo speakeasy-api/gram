@@ -5,6 +5,8 @@ import (
 	"go/types"
 
 	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
+	"golang.org/x/tools/go/ast/inspector"
 )
 
 const (
@@ -24,69 +26,67 @@ type annotatedStruct struct {
 
 // findAnnotatedStructs scans the package's files for structs embedding
 // annotations.Service[ImplOf, AuthBy] and returns metadata about each one.
+//
+// Callers must declare a dependency on inspect.Analyzer in their Requires so
+// the shared inspector result is available on the pass.
 func findAnnotatedStructs(pass *analysis.Pass) []annotatedStruct {
 	var annotated []annotatedStruct
 
-	for _, file := range pass.Files {
-		ast.Inspect(file, func(node ast.Node) bool {
-			ts, ok := node.(*ast.TypeSpec)
+	ins := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
+
+	ins.Preorder([]ast.Node{(*ast.TypeSpec)(nil)}, func(node ast.Node) {
+		ts := node.(*ast.TypeSpec)
+
+		st, ok := ts.Type.(*ast.StructType)
+		if !ok {
+			return
+		}
+
+		for _, field := range st.Fields.List {
+			if len(field.Names) > 0 {
+				continue // not an embedded field
+			}
+
+			tv, ok := pass.TypesInfo.Types[field.Type]
 			if !ok {
-				return true
+				continue
 			}
 
-			st, ok := ts.Type.(*ast.StructType)
+			named, ok := tv.Type.(*types.Named)
 			if !ok {
-				return true
+				continue
 			}
 
-			for _, field := range st.Fields.List {
-				if len(field.Names) > 0 {
-					continue // not an embedded field
-				}
-
-				tv, ok := pass.TypesInfo.Types[field.Type]
-				if !ok {
-					continue
-				}
-
-				named, ok := tv.Type.(*types.Named)
-				if !ok {
-					continue
-				}
-
-				origin := named.Origin()
-				if origin.Obj().Pkg() == nil || origin.Obj().Pkg().Path() != annotationsPkgPath || origin.Obj().Name() != annotationsTypeName {
-					continue
-				}
-
-				targs := named.TypeArgs()
-				if targs == nil || targs.Len() < 2 {
-					continue
-				}
-
-				typeNameObj := pass.TypesInfo.Defs[ts.Name]
-				if typeNameObj == nil {
-					continue
-				}
-
-				tn, ok := typeNameObj.(*types.TypeName)
-				if !ok {
-					continue
-				}
-
-				annotated = append(annotated, annotatedStruct{
-					typeSpec:   ts,
-					structType: st,
-					name:       ts.Name.Name,
-					implOf:     targs.At(0),
-					authBy:     targs.At(1),
-					obj:        tn,
-				})
+			origin := named.Origin()
+			if origin.Obj().Pkg() == nil || origin.Obj().Pkg().Path() != annotationsPkgPath || origin.Obj().Name() != annotationsTypeName {
+				continue
 			}
 
-			return true
-		})
-	}
+			targs := named.TypeArgs()
+			if targs == nil || targs.Len() < 2 {
+				continue
+			}
+
+			typeNameObj := pass.TypesInfo.Defs[ts.Name]
+			if typeNameObj == nil {
+				continue
+			}
+
+			tn, ok := typeNameObj.(*types.TypeName)
+			if !ok {
+				continue
+			}
+
+			annotated = append(annotated, annotatedStruct{
+				typeSpec:   ts,
+				structType: st,
+				name:       ts.Name.Name,
+				implOf:     targs.At(0),
+				authBy:     targs.At(1),
+				obj:        tn,
+			})
+		}
+	})
 
 	return annotated
 }

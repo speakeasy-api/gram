@@ -34,6 +34,14 @@ export type RemoteSession = {
    */
   scopes: Array<string>;
   /**
+   * Resolved display name when the subject is a Gram user. Absent for apikey/anonymous subjects or unresolved users.
+   */
+  subjectDisplayName?: string | undefined;
+  /**
+   * Resolved email when the subject is a Gram user. Absent for apikey/anonymous subjects or unresolved users.
+   */
+  subjectEmail?: string | undefined;
+  /**
    * The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).
    */
   subjectUrn: string;
@@ -64,6 +72,8 @@ export const RemoteSession$inboundSchema: z.ZodMiniType<
     ),
     remote_session_client_id: z.string(),
     scopes: z.array(z.string()),
+    subject_display_name: z.optional(z.string()),
+    subject_email: z.optional(z.string()),
     subject_urn: z.string(),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
@@ -77,6 +87,8 @@ export const RemoteSession$inboundSchema: z.ZodMiniType<
       "created_at": "createdAt",
       "refresh_expires_at": "refreshExpiresAt",
       "remote_session_client_id": "remoteSessionClientId",
+      "subject_display_name": "subjectDisplayName",
+      "subject_email": "subjectEmail",
       "subject_urn": "subjectUrn",
       "updated_at": "updatedAt",
       "user_session_issuer_id": "userSessionIssuerId",

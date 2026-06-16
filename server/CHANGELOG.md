@@ -1,5 +1,27 @@
 # server
 
+## 0.70.2
+
+### Patch Changes
+
+- b8128f3: demote trigger webhook auth failures to warning
+
+## 0.70.1
+
+### Patch Changes
+
+- f18da55: fix(slack): suppress the ingress "thinking" indicator for ambient events. Plain channel messages, reactions, and other passive Slack events that may end in a silent turn no longer light up the loading indicator, which previously stranded it until Slack's two-minute timeout. Only events the assistant always replies to (@-mentions, DMs, Block Kit interactions) show the indicator.
+
+## 0.70.0
+
+### Minor Changes
+
+- 0d51b12: Assistant tool-call audit events no longer appear in the platform audit logs feed or its facets. They are surfaced instead on a new "Audit log" tab on the Assistants page, filterable by assistant, backed by new `subject_type` / `subject_id` filters on `auditlogs.list`.
+
+### Patch Changes
+
+- 0d51b12: Record an audit trail entry (assistant, thread, tool, scrubbed params) for every tool call made by an assistant runtime, covering both MCP toolset calls and platform toolset calls.
+
 ## 0.69.0
 
 ### Minor Changes

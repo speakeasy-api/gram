@@ -47,6 +47,8 @@ func TestAuditService_List_Unauthorized(t *testing.T) {
 		ProjectSlug:  nil,
 		ActorID:      nil,
 		Action:       nil,
+		SubjectType:  nil,
+		SubjectID:    nil,
 	})
 	require.Error(t, err)
 
@@ -67,6 +69,8 @@ func TestAuditService_List_Empty(t *testing.T) {
 		ProjectSlug:  nil,
 		ActorID:      nil,
 		Action:       nil,
+		SubjectType:  nil,
+		SubjectID:    nil,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -125,6 +129,8 @@ func TestAuditService_List_Success(t *testing.T) {
 		ProjectSlug:  nil,
 		ActorID:      nil,
 		Action:       nil,
+		SubjectType:  nil,
+		SubjectID:    nil,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -204,6 +210,8 @@ func TestAuditService_List_FiltersByOrganization(t *testing.T) {
 		ProjectSlug:  nil,
 		ActorID:      nil,
 		Action:       nil,
+		SubjectType:  nil,
+		SubjectID:    nil,
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Logs, 1)
@@ -233,6 +241,8 @@ func TestAuditService_List_OrgScopedLogHasNoProjectFields(t *testing.T) {
 		ProjectSlug:  nil,
 		ActorID:      nil,
 		Action:       nil,
+		SubjectType:  nil,
+		SubjectID:    nil,
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Logs, 1)
@@ -285,6 +295,8 @@ func TestAuditService_List_FiltersByProjectSlug(t *testing.T) {
 		ProjectSlug:  authCtx.ProjectSlug,
 		ActorID:      nil,
 		Action:       nil,
+		SubjectType:  nil,
+		SubjectID:    nil,
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Logs, 1)
@@ -329,6 +341,8 @@ func TestAuditService_List_FiltersByActorID(t *testing.T) {
 		ProjectSlug:  nil,
 		ActorID:      &actorID,
 		Action:       nil,
+		SubjectType:  nil,
+		SubjectID:    nil,
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Logs, 1)
@@ -370,6 +384,8 @@ func TestAuditService_List_FiltersByAction(t *testing.T) {
 		ProjectSlug:  nil,
 		ActorID:      nil,
 		Action:       &action,
+		SubjectType:  nil,
+		SubjectID:    nil,
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Logs, 1)
@@ -422,6 +438,8 @@ func TestAuditService_List_FiltersByActorIDAndAction(t *testing.T) {
 		ProjectSlug:  nil,
 		ActorID:      &actorID,
 		Action:       &action,
+		SubjectType:  nil,
+		SubjectID:    nil,
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Logs, 1)
@@ -454,6 +472,8 @@ func TestAuditService_List_DeletedProjectStillReturnsProjectSlug(t *testing.T) {
 		ProjectSlug:  nil,
 		ActorID:      nil,
 		Action:       nil,
+		SubjectType:  nil,
+		SubjectID:    nil,
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Logs, 1)
@@ -477,6 +497,8 @@ func TestAuditService_List_ProjectSlugNotFound(t *testing.T) {
 		ProjectSlug:  &missingSlug,
 		ActorID:      nil,
 		Action:       nil,
+		SubjectType:  nil,
+		SubjectID:    nil,
 	})
 	require.Error(t, err)
 
@@ -498,6 +520,8 @@ func TestAuditService_List_InvalidCursor(t *testing.T) {
 		ProjectSlug:  nil,
 		ActorID:      nil,
 		Action:       nil,
+		SubjectType:  nil,
+		SubjectID:    nil,
 	})
 	require.Error(t, err)
 
@@ -533,6 +557,8 @@ func TestAuditService_List_Pagination(t *testing.T) {
 		ProjectSlug:  nil,
 		ActorID:      nil,
 		Action:       nil,
+		SubjectType:  nil,
+		SubjectID:    nil,
 	})
 	require.NoError(t, err)
 	require.Len(t, page1.Logs, 50)
@@ -552,6 +578,8 @@ func TestAuditService_List_Pagination(t *testing.T) {
 		ProjectSlug:  nil,
 		ActorID:      nil,
 		Action:       nil,
+		SubjectType:  nil,
+		SubjectID:    nil,
 	})
 	require.NoError(t, err)
 	require.Len(t, page2.Logs, 1)
@@ -599,6 +627,8 @@ func TestAuditService_List_PaginationWithProjectFilter(t *testing.T) {
 		ProjectSlug:  authCtx.ProjectSlug,
 		ActorID:      nil,
 		Action:       nil,
+		SubjectType:  nil,
+		SubjectID:    nil,
 	})
 	require.NoError(t, err)
 	require.Len(t, page1.Logs, 50)
@@ -615,11 +645,134 @@ func TestAuditService_List_PaginationWithProjectFilter(t *testing.T) {
 		ProjectSlug:  authCtx.ProjectSlug,
 		ActorID:      nil,
 		Action:       nil,
+		SubjectType:  nil,
+		SubjectID:    nil,
 	})
 	require.NoError(t, err)
 	require.Len(t, page2.Logs, 1)
 	require.Nil(t, page2.NextCursor)
 	require.Equal(t, matchingIDs[0].String(), page2.Logs[0].ID)
+}
+
+func seedAssistantToolCallLog(t *testing.T, ctx context.Context, ti *testInstance, authCtx *contextvalues.AuthContext, assistantID uuid.UUID, toolName string) uuid.UUID {
+	t.Helper()
+
+	return insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID:     authCtx.ActiveOrganizationID,
+		projectID:          uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		actorID:            "user:assistant-owner",
+		actorType:          "user",
+		actorDisplayName:   new("Assistant Owner"),
+		actorSlug:          nil,
+		action:             "assistant:tool_call",
+		subjectID:          assistantID.String(),
+		subjectType:        "assistant",
+		subjectDisplayName: new(toolName),
+		subjectSlug:        new("managed-assistant"),
+		beforeSnapshot:     nil,
+		afterSnapshot:      nil,
+		metadata:           []byte(`{"tool_name":"` + toolName + `"}`),
+	})
+}
+
+func TestAuditService_List_ExcludesAssistantEventsByDefault(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAuditService(t)
+	authCtx := testAuthContext(t, ctx)
+
+	seedAssistantToolCallLog(t, ctx, ti, authCtx, uuid.New(), "send_message")
+
+	insertedPlatform := insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID:     authCtx.ActiveOrganizationID,
+		projectID:          uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		actorID:            "user:first",
+		actorType:          "user",
+		actorDisplayName:   nil,
+		actorSlug:          nil,
+		action:             "project:update",
+		subjectID:          "project-1",
+		subjectType:        "project",
+		subjectDisplayName: nil,
+		subjectSlug:        nil,
+		beforeSnapshot:     nil,
+		afterSnapshot:      nil,
+		metadata:           nil,
+	})
+
+	result, err := ti.service.List(ctx, &gen.ListPayload{
+		ApikeyToken:  nil,
+		SessionToken: nil,
+		Cursor:       nil,
+		ProjectSlug:  nil,
+		ActorID:      nil,
+		Action:       nil,
+		SubjectType:  nil,
+		SubjectID:    nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Logs, 1, "assistant events must not appear in the default feed")
+	require.Equal(t, insertedPlatform.String(), result.Logs[0].ID)
+}
+
+func TestAuditService_List_FilterBySubjectTypeAndSubjectID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAuditService(t)
+	authCtx := testAuthContext(t, ctx)
+
+	firstAssistant := uuid.New()
+	secondAssistant := uuid.New()
+	firstInserted := seedAssistantToolCallLog(t, ctx, ti, authCtx, firstAssistant, "send_message")
+	seedAssistantToolCallLog(t, ctx, ti, authCtx, secondAssistant, "search_logs")
+
+	insertAuditLog(t, ctx, ti, auditLogSeed{
+		organizationID:     authCtx.ActiveOrganizationID,
+		projectID:          uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		actorID:            "user:first",
+		actorType:          "user",
+		actorDisplayName:   nil,
+		actorSlug:          nil,
+		action:             "project:update",
+		subjectID:          "project-1",
+		subjectType:        "project",
+		subjectDisplayName: nil,
+		subjectSlug:        nil,
+		beforeSnapshot:     nil,
+		afterSnapshot:      nil,
+		metadata:           nil,
+	})
+
+	byType, err := ti.service.List(ctx, &gen.ListPayload{
+		ApikeyToken:  nil,
+		SessionToken: nil,
+		Cursor:       nil,
+		ProjectSlug:  nil,
+		ActorID:      nil,
+		Action:       nil,
+		SubjectType:  new("assistant"),
+		SubjectID:    nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, byType.Logs, 2)
+	for _, log := range byType.Logs {
+		require.Equal(t, "assistant", log.SubjectType)
+	}
+
+	bySubject, err := ti.service.List(ctx, &gen.ListPayload{
+		ApikeyToken:  nil,
+		SessionToken: nil,
+		Cursor:       nil,
+		ProjectSlug:  nil,
+		ActorID:      nil,
+		Action:       nil,
+		SubjectType:  new("assistant"),
+		SubjectID:    new(firstAssistant.String()),
+	})
+	require.NoError(t, err)
+	require.Len(t, bySubject.Logs, 1)
+	require.Equal(t, firstInserted.String(), bySubject.Logs[0].ID)
+	require.Equal(t, firstAssistant.String(), bySubject.Logs[0].SubjectID)
 }
 
 func testAuthContext(t *testing.T, ctx context.Context) *contextvalues.AuthContext {

@@ -1,9 +1,11 @@
 #!/usr/bin/env -S uv run --script
+# fmt: off
 #MISE description="Run the prompt-injection risk report harness and print metrics"
 #USAGE flag "--classifier-url <url>" help="Base URL for the L1 prompt-injection classifier sidecar. Also reads PI_CLASSIFIER_URL."
 #USAGE flag "--metrics-file <path>" help="Path to the JSON metrics artifact. Defaults to server/risk_accuracy_metrics.json."
 #USAGE flag "--no-classifier" help="Disable classifier use even if PI_CLASSIFIER_URL is set by the environment."
 #USAGE flag "--no-run" help="Only print an existing metrics artifact without running the evaluator harness."
+# fmt: on
 # /// script
 # requires-python = ">=3.11"
 # ///
@@ -28,7 +30,11 @@ def main() -> int:
     metrics_file = args.metrics_file
 
     env = os.environ.copy()
-    classifier_url = None if args.no_classifier else first_nonempty(args.classifier_url, env.get("PI_CLASSIFIER_URL"))
+    classifier_url = (
+        None
+        if args.no_classifier
+        else first_nonempty(args.classifier_url, env.get("PI_CLASSIFIER_URL"))
+    )
 
     if classifier_url:
         env["PI_CLASSIFIER_URL"] = classifier_url
@@ -86,7 +92,9 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def run_evaluator(env: dict[str, str], metrics_file: Path, classifier_url: str | None) -> int:
+def run_evaluator(
+    env: dict[str, str], metrics_file: Path, classifier_url: str | None
+) -> int:
     cmd = [
         "go",
         "run",
@@ -99,7 +107,9 @@ def run_evaluator(env: dict[str, str], metrics_file: Path, classifier_url: str |
     return subprocess.run(cmd, cwd=REPO_ROOT, env=env, check=False).returncode
 
 
-def print_report(payload: dict[str, Any], classifier_url: str | None, metrics_file: Path) -> None:
+def print_report(
+    payload: dict[str, Any], classifier_url: str | None, metrics_file: Path
+) -> None:
     summary = payload["summary"]
 
     print()
@@ -117,7 +127,20 @@ def print_report(payload: dict[str, Any], classifier_url: str | None, metrics_fi
     if modes:
         print("Operational comparison:")
         print_table(
-            ["mode", "status", "total", "tp", "fp", "tn", "fn", "precision", "recall", "f1", "accuracy", "fp_rate"],
+            [
+                "mode",
+                "status",
+                "total",
+                "tp",
+                "fp",
+                "tn",
+                "fn",
+                "precision",
+                "recall",
+                "f1",
+                "accuracy",
+                "fp_rate",
+            ],
             mode_rows(modes),
         )
         print()
@@ -128,11 +151,16 @@ def print_report(payload: dict[str, Any], classifier_url: str | None, metrics_fi
             print()
 
             print("Regression sources:")
-            print_table(["source", "fp_before", "fp_after", "delta"], regression_source_rows(modes))
+            print_table(
+                ["source", "fp_before", "fp_after", "delta"],
+                regression_source_rows(modes),
+            )
             print()
 
             print("Recall gain sources:")
-            print_table(["source", "tp_before", "tp_after", "delta"], recall_gain_rows(modes))
+            print_table(
+                ["source", "tp_before", "tp_after", "delta"], recall_gain_rows(modes)
+            )
             print()
 
         print("By source:")
@@ -149,11 +177,17 @@ def print_report(payload: dict[str, Any], classifier_url: str | None, metrics_fi
         l1 = maybe_mode_by_name(modes, "l1_opt_in")
         if l1:
             print("New false positives:")
-            print_table(["source", "id", "rule", "score", "text"], example_rows(l1.get("new_false_positives", [])))
+            print_table(
+                ["source", "id", "rule", "score", "text"],
+                example_rows(l1.get("new_false_positives", [])),
+            )
             print()
 
             print("Recovered true positives:")
-            print_table(["source", "id", "rule", "score", "text"], example_rows(l1.get("recovered_true_positives", [])))
+            print_table(
+                ["source", "id", "rule", "score", "text"],
+                example_rows(l1.get("recovered_true_positives", [])),
+            )
             print()
         return
 
@@ -182,7 +216,10 @@ def print_report(payload: dict[str, Any], classifier_url: str | None, metrics_fi
     print("By rule:")
     print_table(
         ["rule_id", "tp", "fp"],
-        [[item["rule_id"], item["tp_count"], item["fp_count"]] for item in summary.get("by_rule", [])],
+        [
+            [item["rule_id"], item["tp_count"], item["fp_count"]]
+            for item in summary.get("by_rule", [])
+        ],
     )
     print()
 
@@ -190,7 +227,9 @@ def print_report(payload: dict[str, Any], classifier_url: str | None, metrics_fi
 def print_counts(summary: dict[str, Any]) -> None:
     counts = summary["counts"]
     overall = summary["overall"]
-    print(f"total:     {summary['total']}  (TP={counts['tp']} FP={counts['fp']} TN={counts['tn']} FN={counts['fn']})")
+    print(
+        f"total:     {summary['total']}  (TP={counts['tp']} FP={counts['fp']} TN={counts['tn']} FN={counts['fn']})"
+    )
     print(f"precision: {fmt(overall.get('precision'))}")
     print(f"recall:    {fmt(overall.get('recall'))}")
     print(f"f1:        {fmt(overall.get('f1'))}")
@@ -285,7 +324,14 @@ def rule_rows(modes: list[dict[str, Any]]) -> list[list[Any]]:
         if mode.get("skipped"):
             continue
         for item in mode.get("by_rule", []):
-            rows.append([display_mode_name(mode["name"]), item["rule_id"], item["tp_count"], item["fp_count"]])
+            rows.append(
+                [
+                    display_mode_name(mode["name"]),
+                    item["rule_id"],
+                    item["tp_count"],
+                    item["fp_count"],
+                ]
+            )
     return rows
 
 
@@ -300,9 +346,15 @@ def delta_rows(modes: list[dict[str, Any]]) -> list[list[Any]]:
         ["true positives", signed(l1_counts["tp"] - l0_counts["tp"])],
         ["false negatives", signed(l1_counts["fn"] - l0_counts["fn"])],
         ["false positives", signed(l1_counts["fp"] - l0_counts["fp"])],
-        ["recall", signed_percentage_points(l1_overall["recall"] - l0_overall["recall"])],
+        [
+            "recall",
+            signed_percentage_points(l1_overall["recall"] - l0_overall["recall"]),
+        ],
         ["f1", signed_percentage_points(l1_overall["f1"] - l0_overall["f1"])],
-        ["fp_rate", signed_percentage_points(l1_overall["fp_rate"] - l0_overall["fp_rate"])],
+        [
+            "fp_rate",
+            signed_percentage_points(l1_overall["fp_rate"] - l0_overall["fp_rate"]),
+        ],
     ]
 
 

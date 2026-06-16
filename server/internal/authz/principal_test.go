@@ -45,7 +45,7 @@ func TestResolveKnownUserPrincipals_resolvesUserAndRolesForOrgMember(t *testing.
 	}))
 }
 
-func TestResolveKnownUserPrincipals_unidentifiedWhenUserMissingOrNotInOrg(t *testing.T) {
+func TestResolveUserPrincipals_includesAllUsersWhenUserMissingOrNotInOrg(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -58,17 +58,15 @@ func TestResolveKnownUserPrincipals_unidentifiedWhenUserMissingOrNotInOrg(t *tes
 	seedOrganization(t, ctx, conn, otherOrganizationID)
 	seedActiveOrganizationUser(t, ctx, conn, otherOrganizationID, otherOrgUserID)
 
-	for _, userID := range []string{"", urn.AllUsersPrincipalID} {
+	for _, userID := range []string{"", "user_missing", otherOrgUserID} {
 		principals, err := ResolveUserPrincipals(ctx, conn, organizationID, userID)
-		require.ErrorIs(t, err, ErrPrincipalInvalid)
-		require.Empty(t, principals)
+		require.NoError(t, err)
+		require.Equal(t, []urn.Principal{AllUsersPrincipal()}, principals)
 	}
 
-	for _, userID := range []string{"user_missing", otherOrgUserID} {
-		principals, err := ResolveUserPrincipals(ctx, conn, organizationID, userID)
-		require.ErrorIs(t, err, ErrPrincipalNotFound)
-		require.Empty(t, principals)
-	}
+	principals, err := ResolveUserPrincipals(ctx, conn, organizationID, urn.AllUsersPrincipalID)
+	require.ErrorIs(t, err, ErrPrincipalInvalid)
+	require.Empty(t, principals)
 }
 
 func TestResolveKnownUserPrincipals_allUsersGrantAuthorizesOrgMember(t *testing.T) {
@@ -92,6 +90,43 @@ func TestResolveKnownUserPrincipals_allUsersGrantAuthorizesOrgMember(t *testing.
 	allowGrant, _, denied := evaluateGrants(grants, Check{Scope: ScopeRiskPolicyEvaluate, ResourceKind: "", ResourceID: policyID, Dimensions: nil}.expand())
 	require.NotNil(t, allowGrant)
 	require.False(t, denied)
+}
+
+func TestValidatePrincipal(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newTestDB(t)
+	organizationID := "org_validate_principal"
+	userID := "user_validate_principal"
+
+	seedOrganization(t, ctx, conn, organizationID)
+	seedActiveOrganizationUser(t, ctx, conn, organizationID, userID)
+
+	now := time.Now().UTC()
+	role, err := accessrepo.New(conn).UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
+		OrganizationID:    organizationID,
+		WorkosSlug:        "principal-validator",
+		WorkosName:        "Principal Validator",
+		WorkosDescription: conv.ToPGTextEmpty(""),
+		WorkosCreatedAt:   conv.ToPGTimestamptz(now),
+		WorkosUpdatedAt:   conv.ToPGTimestamptz(now),
+		WorkosLastEventID: conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+
+	rolePrincipal, err := urn.ParsePrincipal(role.RoleUrn)
+	require.NoError(t, err)
+
+	require.NoError(t, ValidatePrincipal(ctx, conn, organizationID, AllUsersPrincipal()))
+	require.NoError(t, ValidatePrincipal(ctx, conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeUser, userID)))
+	require.NoError(t, ValidatePrincipal(ctx, conn, organizationID, rolePrincipal))
+
+	err = ValidatePrincipal(ctx, conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeUser, "user_missing"))
+	require.ErrorIs(t, err, ErrPrincipalNotFound)
+
+	err = ValidatePrincipal(ctx, conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "principal-validator"))
+	require.ErrorContains(t, err, "invalid role principal")
 }
 
 func seedActiveOrganizationUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, userID string) {

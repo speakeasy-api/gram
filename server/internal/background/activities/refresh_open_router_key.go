@@ -30,7 +30,7 @@ type RefreshOpenRouterKeyArgs struct {
 func (o *RefreshOpenRouterKey) Do(ctx context.Context, args RefreshOpenRouterKeyArgs) error {
 	limit, err := o.openRouter.RefreshAPIKeyLimit(ctx, args.OrgID, args.Limit)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error updating openrouter key").Log(ctx, o.logger)
+		return oops.E(oops.CodeUnexpected, err, "error updating openrouter key").LogError(ctx, o.logger)
 	}
 
 	o.logger.InfoContext(ctx, "refreshed openrouter key limit", attr.SlogOpenRouterKeyLimit(limit))

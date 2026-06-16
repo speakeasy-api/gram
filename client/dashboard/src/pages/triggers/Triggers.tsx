@@ -231,12 +231,12 @@ function TriggersTable({
       width: "auto",
       render: (trigger) => (
         <div onClick={(e) => e.stopPropagation()}>
-          <routes.logs.tools.Link
+          <routes.logs.Link
             queryParams={{ af: triggerLogsFilterParam(trigger.id) }}
             className="text-muted-foreground hover:text-foreground no-underline hover:no-underline"
           >
             <Icon name="file-text" className="h-4 w-4" />
-          </routes.logs.tools.Link>
+          </routes.logs.Link>
         </div>
       ),
     },
@@ -795,7 +795,12 @@ function TriggerDialog({
   );
 }
 
-export default function TriggersIndex(): JSX.Element {
+/**
+ * Triggers list, dialog, and empty/loading states without a surrounding
+ * `Page` shell. Rendered standalone by the `/triggers` route (`TriggersIndex`)
+ * and embedded as a tab on the Assistants page.
+ */
+export function TriggersPanel(): JSX.Element {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTrigger, setEditingTrigger] = useState<TriggerInstance | null>(
     null,
@@ -827,55 +832,63 @@ export default function TriggersIndex(): JSX.Element {
   };
 
   return (
+    <>
+      <Page.Section>
+        <Page.Section.Title>Triggers</Page.Section.Title>
+        <Page.Section.Description>
+          Connect external events to your assistants via webhooks or cron
+          schedules.
+        </Page.Section.Description>
+        <Page.Section.CTA>
+          {triggers.length > 0 && (
+            <Button onClick={openCreate}>
+              <Button.LeftIcon>
+                <Icon name="plus" className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>Create Trigger</Button.Text>
+            </Button>
+          )}
+        </Page.Section.CTA>
+        <Page.Section.Body>
+          {isLoading ? (
+            <Stack align="center" justify="center" className="py-16">
+              <Icon
+                name="loader-circle"
+                className="text-muted-foreground h-6 w-6 animate-spin"
+              />
+            </Stack>
+          ) : triggers.length === 0 ? (
+            <TriggersEmptyState onCreate={openCreate} />
+          ) : (
+            <TriggersTable
+              triggers={triggers}
+              definitions={definitions}
+              onEdit={openEdit}
+            />
+          )}
+        </Page.Section.Body>
+      </Page.Section>
+
+      <TriggerDialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (!open) setEditingTrigger(null);
+        }}
+        editingTrigger={editingTrigger}
+      />
+    </>
+  );
+}
+
+export default function TriggersIndex(): JSX.Element {
+  return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <Page.Section>
-          <Page.Section.Title>Triggers</Page.Section.Title>
-          <Page.Section.Description>
-            Connect external events to your assistants via webhooks or cron
-            schedules.
-          </Page.Section.Description>
-          <Page.Section.CTA>
-            {triggers.length > 0 && (
-              <Button onClick={openCreate}>
-                <Button.LeftIcon>
-                  <Icon name="plus" className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Create Trigger</Button.Text>
-              </Button>
-            )}
-          </Page.Section.CTA>
-          <Page.Section.Body>
-            {isLoading ? (
-              <Stack align="center" justify="center" className="py-16">
-                <Icon
-                  name="loader-circle"
-                  className="text-muted-foreground h-6 w-6 animate-spin"
-                />
-              </Stack>
-            ) : triggers.length === 0 ? (
-              <TriggersEmptyState onCreate={openCreate} />
-            ) : (
-              <TriggersTable
-                triggers={triggers}
-                definitions={definitions}
-                onEdit={openEdit}
-              />
-            )}
-          </Page.Section.Body>
-        </Page.Section>
-
-        <TriggerDialog
-          open={dialogOpen}
-          onOpenChange={(open) => {
-            setDialogOpen(open);
-            if (!open) setEditingTrigger(null);
-          }}
-          editingTrigger={editingTrigger}
-        />
+        <TriggersPanel />
       </Page.Body>
     </Page>
   );

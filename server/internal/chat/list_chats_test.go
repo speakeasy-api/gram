@@ -9,14 +9,14 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
-	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	gen "github.com/speakeasy-api/gram/server/gen/chat"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 // defaultPayload returns a ListChatsPayload with required non-pointer fields
@@ -104,21 +104,15 @@ func initSessionCtx(t *testing.T, ti *chatTestInstance) context.Context {
 	return ctx
 }
 
-// makeAdmin upgrades the session user to admin and invalidates the sessions
-// cache so GetUserInfo returns Admin: true on the next call.
-func makeAdmin(t *testing.T, ctx context.Context, ti *chatTestInstance) {
+// grantOrgAdmin returns a context carrying an org:admin RBAC grant for the
+// caller's active organization, with RBAC enforcement active (enterprise).
+// This is what a real customer org admin has — distinct from the platform-staff
+// users.admin flag the visibility gate used to read.
+func grantOrgAdmin(t *testing.T, ctx context.Context) context.Context {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	_, err := userRepo.New(ti.conn).UpsertUser(ctx, userRepo.UpsertUserParams{
-		ID:          authCtx.UserID,
-		Email:       mockidp.MockUserEmail,
-		DisplayName: "Dev User",
-		PhotoUrl:    pgtype.Text{},
-		Admin:       true,
-	})
-	require.NoError(t, err)
-	require.NoError(t, ti.sessions.InvalidateUserInfoCache(ctx, authCtx.UserID))
+	return authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
 }
 
 // externalUserCtx builds a context carrying an external-user AuthContext
@@ -232,13 +226,13 @@ func TestListChats_RegularUser_SeesOnlyOwnChats(t *testing.T) {
 	require.Equal(t, authCtx.UserID, conv.PtrValOr(result.Chats[0].UserID, ""))
 }
 
-// TestListChats_AdminUser_SeesAllChats verifies that an admin user can see all chats in the project,
-// regardless of which user or external user owns them.
-func TestListChats_AdminUser_SeesAllChats(t *testing.T) {
+// TestListChats_OrgAdmin_SeesAllChats verifies that a customer org admin (holding
+// the org:admin RBAC scope, no platform-staff flag) can see all chats in the
+// project, regardless of which user or external user owns them.
+func TestListChats_OrgAdmin_SeesAllChats(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
-	ctx := initSessionCtx(t, ti)
-	makeAdmin(t, ctx, ti)
+	ctx := grantOrgAdmin(t, initSessionCtx(t, ti))
 
 	seedChat(t, ctx, ti, "", "ext-aaa", "chat A")
 	seedChat(t, ctx, ti, "user-bbb", "", "chat B")
@@ -247,6 +241,51 @@ func TestListChats_AdminUser_SeesAllChats(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, result.Total)
 	require.Len(t, result.Chats, 2)
+}
+
+// TestListChats_Member_SeesOnlyOwnChats verifies that a session user who holds
+// no org:admin grant (a regular member) is scoped to their own chats even when
+// RBAC is enforced for the org.
+func TestListChats_Member_SeesOnlyOwnChats(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	// WithExactGrants marks the context enterprise (RBAC active) but grants
+	// nothing, so the org:admin check is denied.
+	ctx := authztest.WithExactGrants(t, initSessionCtx(t, ti))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	seedChat(t, ctx, ti, authCtx.UserID, "", "own chat")
+	seedChat(t, ctx, ti, "other-user-id", "", "other users chat")
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, authCtx.UserID, conv.PtrValOr(result.Chats[0].UserID, ""))
+}
+
+// TestListChats_RBACDisabled_SeesOnlyOwnChats is the regression guard for the
+// RBAC-disabled org: enforcement is off, so even a would-be admin must fall back
+// to own-sessions-only rather than seeing every chat (Require short-circuits to
+// allow when enforcement is off — the handler must not treat that as admin).
+func TestListChats_RBACDisabled_SeesOnlyOwnChats(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatServiceRBACDisabled(t)
+	// Mark the context enterprise + grant org:admin; with the org's RBAC
+	// feature flag off, ShouldEnforce still returns false and the grant is moot.
+	ctx := grantOrgAdmin(t, initSessionCtx(t, ti))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	seedChat(t, ctx, ti, authCtx.UserID, "", "own chat")
+	seedChat(t, ctx, ti, "other-user-id", "", "other users chat")
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, authCtx.UserID, conv.PtrValOr(result.Chats[0].UserID, ""))
 }
 
 // TestListChats_ManagedAssistant_SeesAllChats verifies that the managed
@@ -282,13 +321,12 @@ func TestLoadChat_ManagedAssistant_LoadsExternalUserChat(t *testing.T) {
 	require.Equal(t, chatID.String(), result.ID)
 }
 
-// TestListChats_AdminUser_FilterByExternalUserID verifies that an admin can narrow results to a
+// TestListChats_OrgAdmin_FilterByExternalUserID verifies that an org admin can narrow results to a
 // specific external user via the payload filter.
-func TestListChats_AdminUser_FilterByExternalUserID(t *testing.T) {
+func TestListChats_OrgAdmin_FilterByExternalUserID(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
-	ctx := initSessionCtx(t, ti)
-	makeAdmin(t, ctx, ti)
+	ctx := grantOrgAdmin(t, initSessionCtx(t, ti))
 
 	seedChat(t, ctx, ti, "", "ext-123", "chat for ext-123")
 	seedChat(t, ctx, ti, "", "ext-456", "chat for ext-456")

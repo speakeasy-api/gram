@@ -116,6 +116,8 @@ async function $do(
     "actor_id": payload?.actor_id,
     "cursor": payload?.cursor,
     "project_slug": payload?.project_slug,
+    "subject_id": payload?.subject_id,
+    "subject_type": payload?.subject_type,
   });
 
   const headers = new Headers(compactMap({
