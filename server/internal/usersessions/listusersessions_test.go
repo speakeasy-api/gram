@@ -245,6 +245,38 @@ func TestListUserSessions_ReturnsEnrichment(t *testing.T) {
 	require.Nil(t, got.Items[0].RevokedAt)
 }
 
+func TestListUserSessions_FilterByClientID_NoMatch(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "client-filter-issuer",
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+	_, err = seedUserSession(t, ctx, ti.conn, uuid.MustParse(issuer.ID), urn.NewUserSubject("x"))
+	require.NoError(t, err)
+
+	cid := uuid.NewString()
+	got, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		SubjectUrn:          nil,
+		UserSessionIssuerID: nil,
+		Cursor:              nil,
+		Limit:               nil,
+		Status:              nil,
+		ClientID:            &cid,
+	})
+	require.NoError(t, err)
+	require.Len(t, got.Items, 0)
+}
+
 func TestListUserSessions_StatusRevokedFilter(t *testing.T) {
 	t.Parallel()
 
