@@ -103,6 +103,7 @@ func (q *Queries) CountRemoteSessionClientsByIssuerID(ctx context.Context, remot
 }
 
 const createRemoteSessionClient = `-- name: CreateRemoteSessionClient :one
+
 INSERT INTO remote_session_clients (
     project_id,
     remote_session_issuer_id,
@@ -146,6 +147,9 @@ type CreateRemoteSessionClientParams struct {
 	LegacyCallbackUrl       bool
 }
 
+// Remote session clients — credentials Gram uses when acting as an OAuth
+// client of a remote_session_issuer. client_secret_encrypted is stored
+// encrypted via the project encryption key.
 func (q *Queries) CreateRemoteSessionClient(ctx context.Context, arg CreateRemoteSessionClientParams) (RemoteSessionClient, error) {
 	row := q.db.QueryRow(ctx, createRemoteSessionClient,
 		arg.ProjectID,
@@ -462,47 +466,6 @@ func (q *Queries) GetActiveRemoteSession(ctx context.Context, arg GetActiveRemot
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
-	)
-	return i, err
-}
-
-const getOAuthProxyProviderForClone = `-- name: GetOAuthProxyProviderForClone :one
-
-SELECT id, project_id, provider_type, secrets, oauth_proxy_server_id
-FROM oauth_proxy_providers
-WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
-`
-
-type GetOAuthProxyProviderForCloneParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-}
-
-type GetOAuthProxyProviderForCloneRow struct {
-	ID                 uuid.UUID
-	ProjectID          uuid.UUID
-	ProviderType       string
-	Secrets            []byte
-	OauthProxyServerID uuid.UUID
-}
-
-// Remote session clients — credentials Gram uses when acting as an OAuth
-// client of a remote_session_issuer. client_secret_encrypted is stored
-// encrypted via the project encryption key.
-// Read just the fields cloneOAuthProxyProvider needs: project scoping for
-// isolation, provider_type to refuse non-custom providers, the secrets
-// JSONB so the handler can extract client_id / client_secret server-side,
-// and oauth_proxy_server_id so the handler can find the MCP servers whose
-// legacy client registrations need migrating.
-func (q *Queries) GetOAuthProxyProviderForClone(ctx context.Context, arg GetOAuthProxyProviderForCloneParams) (GetOAuthProxyProviderForCloneRow, error) {
-	row := q.db.QueryRow(ctx, getOAuthProxyProviderForClone, arg.ID, arg.ProjectID)
-	var i GetOAuthProxyProviderForCloneRow
-	err := row.Scan(
-		&i.ID,
-		&i.ProjectID,
-		&i.ProviderType,
-		&i.Secrets,
-		&i.OauthProxyServerID,
 	)
 	return i, err
 }
@@ -1547,98 +1510,6 @@ func (q *Queries) ListRemoteSessionsByProjectID(ctx context.Context, arg ListRem
 		return nil, err
 	}
 	return items, nil
-}
-
-const listToolsetMCPEndpointsForOAuthProxyServer = `-- name: ListToolsetMCPEndpointsForOAuthProxyServer :many
-SELECT t.mcp_slug, cd.domain AS custom_domain
-FROM toolsets AS t
-LEFT JOIN custom_domains AS cd ON cd.id = t.custom_domain_id AND cd.deleted IS FALSE
-WHERE t.oauth_proxy_server_id = $1
-  AND t.project_id = $2
-  AND t.mcp_slug IS NOT NULL
-  AND t.deleted IS FALSE
-`
-
-type ListToolsetMCPEndpointsForOAuthProxyServerParams struct {
-	OauthProxyServerID uuid.NullUUID
-	ProjectID          uuid.UUID
-}
-
-type ListToolsetMCPEndpointsForOAuthProxyServerRow struct {
-	McpSlug      pgtype.Text
-	CustomDomain pgtype.Text
-}
-
-// Finds every MCP server attached to an oauth_proxy_server so the clone
-// handler can derive the public URLs legacy client registrations were keyed
-// under. A toolset with a custom domain is reachable on both the default
-// domain and the custom domain, so the handler scans both variants.
-func (q *Queries) ListToolsetMCPEndpointsForOAuthProxyServer(ctx context.Context, arg ListToolsetMCPEndpointsForOAuthProxyServerParams) ([]ListToolsetMCPEndpointsForOAuthProxyServerRow, error) {
-	rows, err := q.db.Query(ctx, listToolsetMCPEndpointsForOAuthProxyServer, arg.OauthProxyServerID, arg.ProjectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListToolsetMCPEndpointsForOAuthProxyServerRow
-	for rows.Next() {
-		var i ListToolsetMCPEndpointsForOAuthProxyServerRow
-		if err := rows.Scan(&i.McpSlug, &i.CustomDomain); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const migrateLegacyUserSessionClient = `-- name: MigrateLegacyUserSessionClient :execrows
-INSERT INTO user_session_clients (
-    project_id,
-    user_session_issuer_id,
-    client_id,
-    client_secret_hash,
-    client_name,
-    redirect_uris,
-    client_secret_expires_at
-)
-SELECT usi.project_id, usi.id, $1, $2, $3, $4::text[], NULL
-FROM user_session_issuers AS usi
-WHERE usi.id = $5
-  AND usi.project_id = $6
-  AND usi.deleted IS FALSE
-ON CONFLICT (user_session_issuer_id, client_id) WHERE deleted IS FALSE DO NOTHING
-`
-
-type MigrateLegacyUserSessionClientParams struct {
-	ClientID            string
-	ClientSecretHash    pgtype.Text
-	ClientName          string
-	RedirectUris        []string
-	UserSessionIssuerID uuid.UUID
-	ProjectID           uuid.UUID
-}
-
-// Lifts one legacy OAuth proxy client registration (Redis) into
-// user_session_clients, preserving the original client_id so already-known
-// MCP clients skip re-registration after cutover. The conflict target
-// matches the partial unique index on (user_session_issuer_id, client_id)
-// WHERE deleted IS FALSE, so re-running a clone neither duplicates nor
-// clobbers an existing active row.
-func (q *Queries) MigrateLegacyUserSessionClient(ctx context.Context, arg MigrateLegacyUserSessionClientParams) (int64, error) {
-	result, err := q.db.Exec(ctx, migrateLegacyUserSessionClient,
-		arg.ClientID,
-		arg.ClientSecretHash,
-		arg.ClientName,
-		arg.RedirectUris,
-		arg.UserSessionIssuerID,
-		arg.ProjectID,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }
 
 const revokeRemoteSession = `-- name: RevokeRemoteSession :one

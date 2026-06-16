@@ -36,17 +36,16 @@ import (
 )
 
 type Service struct {
-	tracer              trace.Tracer
-	logger              *slog.Logger
-	db                  *pgxpool.Pool
-	auth                *auth.Auth
-	authz               *authz.Engine
-	enc                 *encryption.Client
-	environments        *environments.EnvironmentEntries
-	policy              *guardian.Policy
-	auditLogger         *audit.Logger
-	serverURL           *url.URL
-	legacyRegistrations LegacyRegistrationStore
+	tracer       trace.Tracer
+	logger       *slog.Logger
+	db           *pgxpool.Pool
+	auth         *auth.Auth
+	authz        *authz.Engine
+	enc          *encryption.Client
+	environments *environments.EnvironmentEntries
+	policy       *guardian.Policy
+	auditLogger  *audit.Logger
+	serverURL    *url.URL
 }
 
 var (
@@ -60,21 +59,20 @@ var (
 	_ sessionsgen.Auther    = (*Service)(nil)
 )
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, env *environments.EnvironmentEntries, policy *guardian.Policy, auditLogger *audit.Logger, serverURL *url.URL, legacyRegistrations LegacyRegistrationStore) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, env *environments.EnvironmentEntries, policy *guardian.Policy, auditLogger *audit.Logger, serverURL *url.URL) *Service {
 	logger = logger.With(attr.SlogComponent("remotesessions"))
 
 	return &Service{
-		tracer:              tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
-		logger:              logger,
-		db:                  db,
-		auth:                auth.New(logger, db, sessionManager, authzEngine),
-		authz:               authzEngine,
-		enc:                 enc,
-		environments:        env,
-		policy:              policy,
-		auditLogger:         auditLogger,
-		serverURL:           serverURL,
-		legacyRegistrations: legacyRegistrations,
+		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
+		logger:       logger,
+		db:           db,
+		auth:         auth.New(logger, db, sessionManager, authzEngine),
+		authz:        authzEngine,
+		enc:          enc,
+		environments: env,
+		policy:       policy,
+		auditLogger:  auditLogger,
+		serverURL:    serverURL,
 	}
 }
 
