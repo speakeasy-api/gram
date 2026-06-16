@@ -18,16 +18,15 @@ import (
 
 // Server lists the remoteSessionClients service endpoint HTTP handlers.
 type Server struct {
-	Mounts                            []*MountPoint
-	CreateRemoteSessionClient         http.Handler
-	CreateCimd                        http.Handler
-	CloneClientFromOAuthProxyProvider http.Handler
-	UpdateRemoteSessionClient         http.Handler
-	AttachUserSessionIssuer           http.Handler
-	DetachUserSessionIssuer           http.Handler
-	ListRemoteSessionClients          http.Handler
-	GetRemoteSessionClient            http.Handler
-	DeleteRemoteSessionClient         http.Handler
+	Mounts                    []*MountPoint
+	CreateRemoteSessionClient http.Handler
+	CreateCimd                http.Handler
+	UpdateRemoteSessionClient http.Handler
+	AttachUserSessionIssuer   http.Handler
+	DetachUserSessionIssuer   http.Handler
+	ListRemoteSessionClients  http.Handler
+	GetRemoteSessionClient    http.Handler
+	DeleteRemoteSessionClient http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -59,7 +58,6 @@ func New(
 		Mounts: []*MountPoint{
 			{"CreateRemoteSessionClient", "POST", "/rpc/remoteSessionClients.create"},
 			{"CreateCimd", "POST", "/rpc/remoteSessionClients.createCimd"},
-			{"CloneClientFromOAuthProxyProvider", "POST", "/rpc/remoteSessionClients.cloneClientFromOAuthProxyProvider"},
 			{"UpdateRemoteSessionClient", "POST", "/rpc/remoteSessionClients.update"},
 			{"AttachUserSessionIssuer", "POST", "/rpc/remoteSessionClients.attachUserSessionIssuer"},
 			{"DetachUserSessionIssuer", "POST", "/rpc/remoteSessionClients.detachUserSessionIssuer"},
@@ -67,15 +65,14 @@ func New(
 			{"GetRemoteSessionClient", "GET", "/rpc/remoteSessionClients.get"},
 			{"DeleteRemoteSessionClient", "DELETE", "/rpc/remoteSessionClients.delete"},
 		},
-		CreateRemoteSessionClient:         NewCreateRemoteSessionClientHandler(e.CreateRemoteSessionClient, mux, decoder, encoder, errhandler, formatter),
-		CreateCimd:                        NewCreateCimdHandler(e.CreateCimd, mux, decoder, encoder, errhandler, formatter),
-		CloneClientFromOAuthProxyProvider: NewCloneClientFromOAuthProxyProviderHandler(e.CloneClientFromOAuthProxyProvider, mux, decoder, encoder, errhandler, formatter),
-		UpdateRemoteSessionClient:         NewUpdateRemoteSessionClientHandler(e.UpdateRemoteSessionClient, mux, decoder, encoder, errhandler, formatter),
-		AttachUserSessionIssuer:           NewAttachUserSessionIssuerHandler(e.AttachUserSessionIssuer, mux, decoder, encoder, errhandler, formatter),
-		DetachUserSessionIssuer:           NewDetachUserSessionIssuerHandler(e.DetachUserSessionIssuer, mux, decoder, encoder, errhandler, formatter),
-		ListRemoteSessionClients:          NewListRemoteSessionClientsHandler(e.ListRemoteSessionClients, mux, decoder, encoder, errhandler, formatter),
-		GetRemoteSessionClient:            NewGetRemoteSessionClientHandler(e.GetRemoteSessionClient, mux, decoder, encoder, errhandler, formatter),
-		DeleteRemoteSessionClient:         NewDeleteRemoteSessionClientHandler(e.DeleteRemoteSessionClient, mux, decoder, encoder, errhandler, formatter),
+		CreateRemoteSessionClient: NewCreateRemoteSessionClientHandler(e.CreateRemoteSessionClient, mux, decoder, encoder, errhandler, formatter),
+		CreateCimd:                NewCreateCimdHandler(e.CreateCimd, mux, decoder, encoder, errhandler, formatter),
+		UpdateRemoteSessionClient: NewUpdateRemoteSessionClientHandler(e.UpdateRemoteSessionClient, mux, decoder, encoder, errhandler, formatter),
+		AttachUserSessionIssuer:   NewAttachUserSessionIssuerHandler(e.AttachUserSessionIssuer, mux, decoder, encoder, errhandler, formatter),
+		DetachUserSessionIssuer:   NewDetachUserSessionIssuerHandler(e.DetachUserSessionIssuer, mux, decoder, encoder, errhandler, formatter),
+		ListRemoteSessionClients:  NewListRemoteSessionClientsHandler(e.ListRemoteSessionClients, mux, decoder, encoder, errhandler, formatter),
+		GetRemoteSessionClient:    NewGetRemoteSessionClientHandler(e.GetRemoteSessionClient, mux, decoder, encoder, errhandler, formatter),
+		DeleteRemoteSessionClient: NewDeleteRemoteSessionClientHandler(e.DeleteRemoteSessionClient, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -86,7 +83,6 @@ func (s *Server) Service() string { return "remoteSessionClients" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateRemoteSessionClient = m(s.CreateRemoteSessionClient)
 	s.CreateCimd = m(s.CreateCimd)
-	s.CloneClientFromOAuthProxyProvider = m(s.CloneClientFromOAuthProxyProvider)
 	s.UpdateRemoteSessionClient = m(s.UpdateRemoteSessionClient)
 	s.AttachUserSessionIssuer = m(s.AttachUserSessionIssuer)
 	s.DetachUserSessionIssuer = m(s.DetachUserSessionIssuer)
@@ -102,7 +98,6 @@ func (s *Server) MethodNames() []string { return remotesessionclients.MethodName
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateRemoteSessionClientHandler(mux, h.CreateRemoteSessionClient)
 	MountCreateCimdHandler(mux, h.CreateCimd)
-	MountCloneClientFromOAuthProxyProviderHandler(mux, h.CloneClientFromOAuthProxyProvider)
 	MountUpdateRemoteSessionClientHandler(mux, h.UpdateRemoteSessionClient)
 	MountAttachUserSessionIssuerHandler(mux, h.AttachUserSessionIssuer)
 	MountDetachUserSessionIssuerHandler(mux, h.DetachUserSessionIssuer)
@@ -200,61 +195,6 @@ func NewCreateCimdHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "createCimd")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteSessionClients")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountCloneClientFromOAuthProxyProviderHandler configures the mux to serve
-// the "remoteSessionClients" service "cloneClientFromOAuthProxyProvider"
-// endpoint.
-func MountCloneClientFromOAuthProxyProviderHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/rpc/remoteSessionClients.cloneClientFromOAuthProxyProvider", f)
-}
-
-// NewCloneClientFromOAuthProxyProviderHandler creates a HTTP handler which
-// loads the HTTP request and calls the "remoteSessionClients" service
-// "cloneClientFromOAuthProxyProvider" endpoint.
-func NewCloneClientFromOAuthProxyProviderHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeCloneClientFromOAuthProxyProviderRequest(mux, decoder)
-		encodeResponse = EncodeCloneClientFromOAuthProxyProviderResponse(encoder)
-		encodeError    = EncodeCloneClientFromOAuthProxyProviderError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "cloneClientFromOAuthProxyProvider")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteSessionClients")
 		payload, err := decodeRequest(r)
 		if err != nil {
