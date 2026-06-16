@@ -17,6 +17,7 @@ import ChatSessions from "./pages/chatLogs/ChatLogs";
 import CLIs from "./pages/CLIs";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
+import UserSessions from "./pages/connect/UserSessions";
 import DeviceAgent from "./pages/device-agent/DeviceAgent";
 import Elements from "./pages/elements/Elements";
 import EnvironmentPage from "./pages/environments/Environment";
@@ -528,6 +529,12 @@ const ROUTE_STRUCTURE = {
         component: PluginDetail,
       },
     },
+  },
+  userSessions: {
+    title: "User Sessions",
+    url: "user-sessions",
+    icon: "users",
+    component: UserSessions,
   },
   settings: {
     title: "Project settings",

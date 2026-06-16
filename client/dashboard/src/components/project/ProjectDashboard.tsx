@@ -36,6 +36,7 @@ import {
   useDateRangeFilter,
 } from "@/components/observe/useDateRangeFilter";
 import { ActivityTimelineCard } from "./ActivityTimelineCard";
+import { UserSessionsCard } from "./UserSessionsCard";
 
 export function ProjectDashboard(): JSX.Element {
   const { projectSlug } = useSlugs();
@@ -666,6 +667,7 @@ export function ProjectDashboard(): JSX.Element {
             isPending={isAuditLogsPending}
             viewAllHref={orgRoutes.auditLogs.href()}
           />
+          <UserSessionsCard viewAllHref={routes.userSessions.href()} />
         </div>
       </Page.Section.Body>
     </Page.Section>
