@@ -2,6 +2,7 @@ import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Collapsible,
@@ -339,6 +340,18 @@ function filterAudiencePrincipalsForChoice(
 
 function memberDisplayName(member: AccessMember): string {
   return member.name || member.email;
+}
+
+function memberInitials(member: Pick<AccessMember, "email" | "name">): string {
+  const source = member.name.trim() || member.email.trim();
+  const initials = source
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+
+  return initials || "?";
 }
 
 function memberMatchesSearch(member: AccessMember, search: string): boolean {
@@ -2212,6 +2225,7 @@ function SpecificUsersAudienceSection({
   const selectedUserOptions = selectedUserPrincipalUrns.map((principalUrn) => {
     const member = memberByPrincipalUrn.get(principalUrn);
     return {
+      member,
       principalUrn,
       title: member ? memberDisplayName(member) : principalUrn,
       subtitle: member?.email ?? "Unknown user",
@@ -2257,6 +2271,13 @@ function SpecificUsersAudienceSection({
                   checked
                   title={option.title}
                   subtitle={option.subtitle}
+                  leading={
+                    <AudienceMemberAvatar
+                      name={option.member?.name ?? option.title}
+                      email={option.member?.email ?? option.subtitle}
+                      photoUrl={option.member?.photoUrl}
+                    />
+                  }
                   onCheckedChange={(checked) =>
                     onTogglePrincipal(option.principalUrn, checked)
                   }
@@ -2326,6 +2347,13 @@ function UserSearchResults({
               checked={selectedAudiencePrincipalUrns.has(principalUrn)}
               title={memberDisplayName(member)}
               subtitle={member.email}
+              leading={
+                <AudienceMemberAvatar
+                  name={member.name}
+                  email={member.email}
+                  photoUrl={member.photoUrl}
+                />
+              }
               onCheckedChange={(checked) =>
                 onTogglePrincipal(principalUrn, checked)
               }
@@ -2340,6 +2368,25 @@ function UserSearchResults({
         </p>
       )}
     </div>
+  );
+}
+
+function AudienceMemberAvatar({
+  name,
+  email,
+  photoUrl,
+}: {
+  name: string;
+  email: string;
+  photoUrl?: string;
+}) {
+  return (
+    <Avatar className="h-7 w-7">
+      {photoUrl && <AvatarImage src={photoUrl} alt={name || email} />}
+      <AvatarFallback className="text-xs">
+        {memberInitials({ name, email })}
+      </AvatarFallback>
+    </Avatar>
   );
 }
 
@@ -2392,12 +2439,14 @@ function AudiencePrincipalRow({
   checked,
   title,
   subtitle,
+  leading,
   onCheckedChange,
 }: {
   id: string;
   checked: boolean;
   title: string;
   subtitle: string;
+  leading?: ReactNode;
   onCheckedChange: (checked: boolean) => void;
 }) {
   return (
@@ -2411,6 +2460,7 @@ function AudiencePrincipalRow({
         onCheckedChange={(value) => onCheckedChange(!!value)}
         className="mt-0.5"
       />
+      {leading}
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium">{title}</span>
         <span className="text-muted-foreground block truncate text-xs">
