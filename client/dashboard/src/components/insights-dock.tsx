@@ -1,5 +1,7 @@
 import { useNoToolsetsConfigured } from "@/hooks/useObservabilityMcpConfig";
 import { useServerAssistantTransport } from "@/hooks/useServerAssistantTransport";
+import { useListChats } from "@gram/client/react-query";
+import { SortBy, SortOrder } from "@gram/client/models/operations/listchats";
 import { cn, isMacPlatform } from "@/lib/utils";
 import speakeasyIcon from "@/assets/speakeasy-icon.svg";
 import { useAssistantRuntime } from "@assistant-ui/react";
@@ -89,6 +91,10 @@ const DOCK_SUGGESTION_LIMIT = 3;
  *  click itself blurs the input, but the user's intent was to change pages,
  *  not to put the composer away. */
 const DOCK_COLLAPSE_GRACE_MS = 350;
+
+// How recent a conversation must be (by last message) for the docked pill to
+// offer "Continue chat" — reopen it — instead of "Ask anything".
+const CONTINUE_WINDOW_MS = 5 * 60 * 1000;
 
 /** How recently a grace-timer collapse must have fired for a navigation to
  *  undo it. Covers slow clicks and route transitions that outlast the grace
@@ -183,7 +189,13 @@ interface InsightsDockProps {
    *  panel is closed; the dock responds by focusing (and therefore
    *  expanding) the input. Starts at 0 — the initial value is ignored. */
   focusKey: number;
+  /** Submit a fresh conversation (the resting "Ask anything" state). */
   onSubmitPrompt: (text: string) => void;
+  /** Reopen the most recent conversation (the "Continue chat" button). */
+  onContinue: () => void;
+  /** When true the resting pill is a "Continue chat" button that reopens the
+   *  recent conversation (a chat was active in the last few minutes). */
+  continueMode: boolean;
   /** Genies the dock down into the sidebar-footer resume button. */
   onDismiss: () => void;
   /** Opens the chat panel straight into the full-window history view. */
@@ -221,6 +233,8 @@ function InsightsDock({
   open,
   focusKey,
   onSubmitPrompt,
+  onContinue,
+  continueMode,
   onDismiss,
   onOpenHistory,
   panel,
@@ -315,6 +329,36 @@ function InsightsDock({
     collapseNow();
     onSubmitPrompt(trimmed);
   };
+
+  // Within the continue window the resting pill is a "Continue chat" button
+  // that reopens the recent conversation instead of an "Ask anything" input.
+  const composerField = continueMode ? (
+    <button
+      type="button"
+      onClick={onContinue}
+      tabIndex={open ? -1 : 0}
+      className="text-muted-foreground hover:text-foreground min-w-0 flex-1 cursor-pointer text-left text-sm transition-colors"
+    >
+      Continue chat
+    </button>
+  ) : (
+    <input
+      ref={inputRef}
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          collapseNow();
+          inputRef.current?.blur();
+        }
+      }}
+      tabIndex={open ? -1 : 0}
+      placeholder="Ask anything"
+      aria-label="Ask the Project Assistant"
+      aria-keyshortcuts={shortcutAria}
+      className="placeholder:text-muted-foreground min-w-0 flex-1 bg-transparent text-sm outline-none"
+    />
+  );
 
   return (
     <div
@@ -475,22 +519,7 @@ function InsightsDock({
                       : "border-transparent bg-transparent",
                   )}
                 >
-                  <input
-                    ref={inputRef}
-                    value={value}
-                    onChange={(e) => setValue(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Escape") {
-                        collapseNow();
-                        inputRef.current?.blur();
-                      }
-                    }}
-                    tabIndex={open ? -1 : 0}
-                    placeholder="Ask anything"
-                    aria-label="Ask the Project Assistant"
-                    aria-keyshortcuts={shortcutAria}
-                    className="placeholder:text-muted-foreground min-w-0 flex-1 bg-transparent text-sm outline-none"
-                  />
+                  {composerField}
                   {value.trim() && <DockSubmitButton />}
                   {composerExpanded && (
                     <button
@@ -504,8 +533,9 @@ function InsightsDock({
                     </button>
                   )}
                   {/* Greyed shortcut hint on the resting pill; hidden once the
-                      composer is engaged (focused or typing). */}
-                  {!composerExpanded && (
+                      composer is engaged (focused or typing) and in continue
+                      mode (a button, not a focusable input). */}
+                  {!composerExpanded && !continueMode && (
                     <InsightsShortcutKeys className="opacity-60" />
                   )}
                   <button
@@ -574,6 +604,19 @@ export function InsightsProvider({
 }: InsightsProviderProps): ReactElement {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [override, setOverride] = useState<InsightsConfigOptions | null>(null);
+  // Ref-counted dock hide for pages with their own chat entry (full-page chat,
+  // home widget). Kept separate from `override` so dashboard consumers that
+  // reset the override (ProjectDashboard) can't un-hide the dock.
+  const dockHideCountRef = useRef(0);
+  const [dockHiddenByPage, setDockHiddenByPage] = useState(false);
+  const registerDockHide = useCallback(() => {
+    dockHideCountRef.current += 1;
+    setDockHiddenByPage(dockHideCountRef.current > 0);
+    return () => {
+      dockHideCountRef.current = Math.max(0, dockHideCountRef.current - 1);
+      setDockHiddenByPage(dockHideCountRef.current > 0);
+    };
+  }, []);
   // Bumped whenever the keyboard shortcut fires (with the chat panel closed) so
   // the docked composer grabs focus and expands. Starts at 0; the dock
   // ignores the initial value.
@@ -613,6 +656,12 @@ export function InsightsProvider({
   // resolved when the dock is opened OR when on a chat route, so the page has a
   // live runtime without the user touching the dock first.
   const onChatRoute = /\/chat(\/|$)/.test(pathname);
+  // On a chat route the page owns the chat and the dock is hidden, so collapse
+  // the dock (a maximize leaves it expanded). The shared runtime stays mounted
+  // via onChatRoute, so this collapse never unmounts it.
+  useEffect(() => {
+    if (onChatRoute) setIsExpanded(false);
+  }, [onChatRoute]);
 
   // Resolve effective values: per-page override wins, then the colocated
   // route-level suggestions (lib/insights-suggestions.ts), then the
@@ -628,7 +677,7 @@ export function InsightsProvider({
   const suggestions =
     override?.suggestions ?? routeSuggestions ?? defaultSuggestions;
   const contextInfo = override?.contextInfo;
-  const hideTrigger = override?.hideTrigger ?? false;
+  const hideTrigger = (override?.hideTrigger ?? false) || dockHiddenByPage;
   const noToolsetsConfigured = useNoToolsetsConfigured(mcpConfig.projectSlug);
 
   // Server-side Project Assistant. Resolved lazily the first time the chat
@@ -642,10 +691,38 @@ export function InsightsProvider({
     assistantId: managedAssistantId,
     ready: assistantReady,
     error: assistantError,
-  } = useServerAssistantTransport(
-    mcpConfig.projectSlug,
-    isExpanded || onChatRoute,
+  } = useServerAssistantTransport(mcpConfig.projectSlug, true);
+
+  // Derive "Continue chat" from the server: if the assistant's most recent
+  // conversation was active within CONTINUE_WINDOW_MS, the resting pill offers
+  // to reopen it. Reading the backend (rather than client state) means it
+  // survives reloads for free. limit:1 — we only need the newest.
+  const { data: recentChatsData } = useListChats(
+    {
+      assistantId: managedAssistantId || undefined,
+      sortBy: SortBy.LastMessageTimestamp,
+      sortOrder: SortOrder.Desc,
+      limit: 1,
+    },
+    undefined,
+    { enabled: Boolean(managedAssistantId), throwOnError: false },
   );
+  const recentChat = recentChatsData?.chats?.[0];
+  const continueMode =
+    recentChat !== undefined &&
+    Date.now() - recentChat.lastMessageTimestamp.getTime() < CONTINUE_WINDOW_MS;
+
+  // Mount the shared runtime only where it's actually used: a chat route (the
+  // page owns the chat) or the open dock — and only where the dock is shown.
+  // Pages with their own chat runtime (Playground, Elements, assistant
+  // onboarding) hide the dock, so `!hideTrigger` keeps the shared provider out
+  // of their tree and the two RemoteThreadListRuntimes never nest. Maximize
+  // stays seamless because the expand handler navigates WITHOUT collapsing, so
+  // `onChatRoute` takes over before `isExpanded` flips (no unmount gap).
+  // Everything runtime-dependent — the dock panel's chat view, the provider
+  // mount, and (via context) the chat pages — gates on this single flag.
+  const runtimeMounted =
+    assistantReady && (onChatRoute || (isExpanded && !hideTrigger));
 
   // Read inside the transport wrapper via ref so override churn doesn't
   // re-create the transport identity on every parent re-render.
@@ -795,6 +872,13 @@ export function InsightsProvider({
     setHistoryView(false);
   }, []);
 
+  // Docked-pill "Continue chat": reopen the recent conversation as its own
+  // full page. Navigating (rather than reopening the dock panel) loads the
+  // exact chat by id via the page's runtime, so it works across reloads too.
+  const handleReopenChat = useCallback(() => {
+    if (recentChat) routes.chat.conversation.goTo(recentChat.id);
+  }, [recentChat, routes]);
+
   const consumePendingPrompt = useCallback(() => setPendingPrompt(null), []);
 
   // Bridge: the command palette's "Ask AI" row dispatches a window event from
@@ -850,11 +934,13 @@ export function InsightsProvider({
   }, []);
 
   // Expand: leave the floating dock for the full-page chat, opening the
-  // current conversation (or a fresh one when none exists yet). Collapse the
-  // panel so a later return to the dock starts from the resting pill.
+  // current conversation (or a fresh one when none exists yet). Navigate only —
+  // do NOT collapse here: keeping isExpanded set means `onChatRoute` takes over
+  // as the runtime-mount condition before isExpanded flips, so the shared
+  // runtime never unmounts mid-transition and the in-flight stream survives.
+  // The chat-route effect below collapses the dock once we've landed.
   const handleExpandToPage = useCallback(
     (threadId: string | null) => {
-      setIsExpanded(false);
       routes.chat.conversation.goTo(threadId ?? "new");
     },
     [routes],
@@ -896,16 +982,21 @@ export function InsightsProvider({
       setIsExpanded,
       setOverride: handleSetOverride,
       sendPrompt: handleSendPrompt,
-      assistantReady,
+      // Expose the gated "runtime is mounted" signal, not the raw eager
+      // `assistantReady`: chat pages render runtime hooks (useAssistantRuntime)
+      // only once the provider actually exists.
+      assistantReady: runtimeMounted,
       newConversation: handleStartFresh,
+      registerDockHide,
     }),
     [
       hideTrigger,
       isExpanded,
       handleSetOverride,
       handleSendPrompt,
-      assistantReady,
+      runtimeMounted,
       handleStartFresh,
+      registerDockHide,
     ],
   );
 
@@ -964,7 +1055,7 @@ export function InsightsProvider({
   // the return below), so this panel just renders against it.
   const panelContent = (
     <div className="flex h-full flex-col">
-      {assistantReady ? (
+      {runtimeMounted ? (
         <div className="flex h-full min-h-0 flex-col">
           {/* History view: the conversation list takes over the whole panel
                 in place of the chat, cancellable via the back button. */}
@@ -1080,6 +1171,8 @@ export function InsightsProvider({
           open={isExpanded}
           focusKey={focusComposerKey}
           onSubmitPrompt={handleDockSubmit}
+          onContinue={handleReopenChat}
+          continueMode={continueMode}
           onDismiss={handleDockDismiss}
           onOpenHistory={handleOpenHistory}
           panel={panelContent}
@@ -1092,11 +1185,13 @@ export function InsightsProvider({
     <InsightsContext.Provider value={contextValue}>
       <InsightsRainbowStyles />
       {/* The dock and the full-page chat share ONE runtime so an in-flight
-          conversation survives moving between them. The provider mounts once
-          the assistant resolves (lazily — on dock-open or a chat route) and
-          remounts (via runtimeKey) only when a new conversation is started;
-          PendingPromptBridge appends any queued prompt to the fresh thread. */}
-      {assistantReady ? (
+          conversation survives moving between them. The assistant id resolves
+          eagerly (for the "Continue chat" lookup), but the runtime only mounts
+          where chat is actually shown — the open dock or a chat route — to
+          avoid running MCP discovery on every page. It remounts (via
+          runtimeKey) only when a new conversation is started; PendingPromptBridge
+          appends any queued prompt to the fresh thread. */}
+      {runtimeMounted ? (
         <GramElementsProvider
           key={`${mcpConfig.projectSlug}:${runtimeKey}`}
           config={elementsConfig}

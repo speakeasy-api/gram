@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { useHideInsightsDock } from "@/components/insights-context";
 import { useProject, useSession } from "@/contexts/Auth";
 import { internalMcpUrl } from "@/hooks/useToolsetUrl";
 import { getServerURL } from "@/lib/utils";
@@ -63,6 +64,9 @@ export function EditAssistantOnboarding(): JSX.Element {
 }
 
 function OnboardingShell() {
+  // Hosts its own chat runtime — hide the floating dock and keep the shared
+  // runtime out of this tree (no nested RemoteThreadListRuntime).
+  useHideInsightsDock();
   const draft = useAssistantDraft();
   const mode: "create" | "edit" = draft.assistantId ? "edit" : "create";
   const substitutions = useMemo(

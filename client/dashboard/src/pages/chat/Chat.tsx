@@ -16,8 +16,10 @@ import type { ChatOverview } from "@gram/client/models/components";
 import { SortBy, SortOrder } from "@gram/client/models/operations/listchats";
 import { useListChats } from "@gram/client/react-query";
 import { useSession } from "@/contexts/Auth";
-import { InsightsConfig } from "@/components/insights-dock";
-import { useInsightsState } from "@/components/insights-context";
+import {
+  useHideInsightsDock,
+  useInsightsState,
+} from "@/components/insights-context";
 import { useServerAssistantTransport } from "@/hooks/useServerAssistantTransport";
 import { useSlugs } from "@/contexts/Sdk";
 import {
@@ -32,22 +34,79 @@ const ICON_BUTTON_CLASS =
 
 /** Layout route for `/chat`; renders the index (home) or a conversation. */
 export function ChatRoot(): ReactElement {
-  return (
-    <>
-      {/* The page IS the chat, so hide the floating "Ask anything" dock for
-          the whole /chat subtree. Restores on unmount (navigating away). */}
-      <InsightsConfig hideTrigger />
-      <Outlet />
-    </>
-  );
+  // The page IS the chat, so hide the floating dock across the /chat subtree.
+  useHideInsightsDock();
+  return <Outlet />;
 }
 
 /**
  * `/chat` landing — a full-page "Ask anything" entry point (a second way into
- * the Project Assistant alongside the docked composer). Submitting opens a
- * fresh conversation; the server mints its id on the first send.
+ * the Project Assistant alongside the docked composer).
  */
 export function ChatHome(): ReactElement {
+  const routes = useRoutes();
+  return (
+    <div className="relative flex h-full flex-col overflow-y-auto">
+      <ChatLandingBackdrop />
+      <div className="absolute top-4 left-4 z-10">
+        <Link
+          to={routes.home.href()}
+          aria-label="Back to home"
+          className={ICON_BUTTON_CLASS}
+        >
+          <ChevronLeft className="size-4" />
+          <Home className="size-4" />
+        </Link>
+      </div>
+      <div className="relative z-10 mx-auto flex w-full max-w-3xl flex-1 flex-col px-6 pt-[clamp(10rem,26vh,16rem)] pb-16">
+        <ChatLanding autoFocusInput />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Decorative rainbow "powder burst" header for the full-page chat landing —
+ * the Speakeasy brand rainbow, heavily blurred and masked so it fades out well
+ * above the content. Purely ambient: aria-hidden + pointer-events-none, sat
+ * behind everything, so it never gets in the way of the composer or list.
+ */
+function ChatLandingBackdrop(): ReactElement {
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-x-0 top-0 z-0 h-[460px] overflow-hidden [mask-image:linear-gradient(to_bottom,black_30%,transparent_92%)]"
+    >
+      <div
+        className="absolute top-[-160px] left-1/2 h-[560px] w-[920px] max-w-[140vw] -translate-x-1/2 opacity-60 blur-[72px] dark:opacity-40"
+        style={{
+          // Brand rainbow (matches INSIGHTS_AI_RAINBOW), each blob fading to its
+          // own zero-alpha so the overlaps read as soft powder, not muddy grey.
+          background: [
+            "radial-gradient(38% 48% at 30% 42%, #C83228 0%, rgba(200,50,40,0) 70%)",
+            "radial-gradient(36% 46% at 48% 28%, #FB873F 0%, rgba(251,135,63,0) 70%)",
+            "radial-gradient(42% 52% at 64% 40%, #D2DC91 0%, rgba(210,220,145,0) 72%)",
+            "radial-gradient(44% 54% at 70% 60%, #5A8250 0%, rgba(90,130,80,0) 72%)",
+            "radial-gradient(42% 52% at 42% 62%, #2873D7 0%, rgba(40,115,215,0) 72%)",
+            "radial-gradient(36% 46% at 26% 54%, #9BC3FF 0%, rgba(155,195,255,0) 72%)",
+          ].join(","),
+        }}
+      />
+    </div>
+  );
+}
+
+/**
+ * The "Ask anything" widget — greeting, composer, recents, recipes. Used by
+ * the `/chat` landing and embedded on the project home page. Submitting opens
+ * a fresh conversation on the shared runtime and navigates to the full-page
+ * chat; the server mints the chat id on the first send.
+ */
+export function ChatLanding({
+  autoFocusInput = false,
+}: {
+  autoFocusInput?: boolean;
+}): ReactElement {
   const { user } = useSession();
   const navigate = useNavigate();
   const routes = useRoutes();
@@ -61,51 +120,38 @@ export function ChatHome(): ReactElement {
     const trimmed = prompt.trim();
     if (!trimmed) return;
     // Start the conversation on the shared runtime, then drop into the
-    // full-page view — the in-flight turn is already streaming there. The
-    // server mints the chat id on the first send.
+    // full-page view — the queued prompt fires once the chat route mounts the
+    // runtime. The server mints the chat id on the first send.
     sendPrompt(trimmed);
     void navigate(routes.chat.conversation.href("new"));
   };
 
   return (
-    <div className="relative flex h-full flex-col overflow-y-auto">
-      <div className="absolute top-4 left-4 z-10">
-        <Link
-          to={routes.home.href()}
-          aria-label="Back to home"
-          className={ICON_BUTTON_CLASS}
+    <div className="flex w-full flex-col gap-6">
+      <div className="flex flex-col gap-4">
+        <h1 className="text-foreground text-3xl font-semibold tracking-tight">
+          {greeting}
+        </h1>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            startChat(value);
+          }}
+          className="border-border bg-card focus-within:border-foreground/30 rounded-2xl border px-4 py-3 shadow-sm transition-colors"
         >
-          <ChevronLeft className="size-4" />
-          <Home className="size-4" />
-        </Link>
+          <input
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="Ask anything"
+            aria-label="Ask anything"
+            autoFocus={autoFocusInput}
+            className="placeholder:text-muted-foreground w-full bg-transparent text-base outline-none"
+          />
+        </form>
       </div>
 
-      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-10 px-6 pt-[16vh] pb-16">
-        <div className="flex flex-col gap-6">
-          <h1 className="text-foreground text-3xl font-semibold tracking-tight">
-            {greeting}
-          </h1>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              startChat(value);
-            }}
-            className="border-border bg-card focus-within:border-foreground/30 rounded-2xl border px-4 py-3 shadow-sm transition-colors"
-          >
-            <input
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              placeholder="Ask anything"
-              aria-label="Ask anything"
-              autoFocus
-              className="placeholder:text-muted-foreground w-full bg-transparent text-base outline-none"
-            />
-          </form>
-        </div>
-
-        <ChatHomeRecents />
-        <ChatHomeRecipes onPick={startChat} />
-      </div>
+      <ChatHomeRecents />
+      <ChatHomeSuggestions onPick={startChat} />
     </div>
   );
 }
@@ -307,7 +353,7 @@ function RecentRow({ chat }: { chat: ChatOverview }): ReactElement {
   return (
     <Link
       to={routes.chat.conversation.href(chat.id)}
-      className="hover:bg-accent flex items-center gap-3 rounded-lg px-3 py-2 transition-colors"
+      className="hover:bg-accent flex items-center gap-3 rounded-lg px-3 py-1.5 transition-colors"
     >
       <span className="border-border bg-card text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-lg border">
         <MessageCircle className="size-4" />
@@ -322,11 +368,15 @@ function RecentRow({ chat }: { chat: ChatOverview }): ReactElement {
   );
 }
 
-function ChatHomeRecipes({ onPick }: { onPick: (prompt: string) => void }) {
+function ChatHomeSuggestions({
+  onPick,
+}: {
+  onPick: (prompt: string) => void;
+}): ReactElement {
   return (
     <section className="flex flex-col gap-3">
       <h2 className="text-muted-foreground px-3 text-sm font-medium">
-        Recipes
+        Suggestions
       </h2>
       <div className="flex flex-wrap gap-2 px-3">
         {INSIGHTS_SUGGESTIONS.default.map((suggestion) => {

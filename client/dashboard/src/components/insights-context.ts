@@ -1,6 +1,6 @@
 import type { InsightsSuggestion } from "@/lib/insights-suggestions";
 import type { ElementsConfig } from "@gram-ai/elements";
-import { createContext, useContext } from "react";
+import { createContext, useContext, useEffect } from "react";
 
 /**
  * Per-page overrides for the global AI Insights panel. Pages mount
@@ -34,6 +34,11 @@ export interface InsightsContextValue {
   assistantReady: boolean;
   /** Switch the shared runtime to a fresh empty conversation. */
   newConversation: () => void;
+  /** Hide the floating dock while a caller is mounted (ref-counted). Returns
+   *  an unregister fn. Independent of `setOverride`, so it survives consumers
+   *  that reset the per-page override (e.g. the project dashboard). Prefer the
+   *  `useHideInsightsDock` hook over calling this directly. */
+  registerDockHide: () => () => void;
 }
 
 export const InsightsContext = createContext<InsightsContextValue>({
@@ -44,6 +49,7 @@ export const InsightsContext = createContext<InsightsContextValue>({
   sendPrompt: () => {},
   assistantReady: false,
   newConversation: () => {},
+  registerDockHide: () => () => {},
 });
 
 /**
@@ -52,4 +58,15 @@ export const InsightsContext = createContext<InsightsContextValue>({
  */
 export function useInsightsState(): InsightsContextValue {
   return useContext(InsightsContext);
+}
+
+/**
+ * Hide the floating Project Assistant dock for as long as the calling
+ * component is mounted. Use on pages that provide their own chat entry point
+ * (e.g. the full-page chat, the home page widget). Ref-counted and independent
+ * of the per-page `override`, so it survives consumers that reset the override.
+ */
+export function useHideInsightsDock(): void {
+  const { registerDockHide } = useInsightsState();
+  useEffect(() => registerDockHide(), [registerDockHide]);
 }
