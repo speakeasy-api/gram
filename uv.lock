@@ -335,6 +335,7 @@ source = { editable = "infra" }
 dependencies = [
     { name = "anyio" },
     { name = "google-cloud-pubsub" },
+    { name = "opentelemetry-api" },
     { name = "protobuf" },
     { name = "structlog" },
 ]
@@ -353,6 +354,7 @@ dev = [
 requires-dist = [
     { name = "anyio", specifier = ">=4.13.0" },
     { name = "google-cloud-pubsub", specifier = ">=2.31.0" },
+    { name = "opentelemetry-api", specifier = ">=1.42.1" },
     { name = "protobuf", specifier = ">=7.35.0,<8" },
     { name = "structlog", specifier = ">=26.1.0" },
 ]
