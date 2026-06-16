@@ -418,7 +418,7 @@ func handleToolsCall(
 		return bs, nil
 	}
 
-	chunk, err := formatResult(*rw, plan.Kind)
+	chunk, structured, err := formatResult(*rw, plan.Kind)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed format tool call result").LogError(ctx, logger)
 	}
@@ -426,8 +426,9 @@ func handleToolsCall(
 	bs, err := json.Marshal(result[toolCallResult]{
 		ID: req.ID,
 		Result: toolCallResult{
-			Content: []json.RawMessage{chunk},
-			IsError: rw.statusCode < 200 || rw.statusCode >= 300,
+			Content:           []json.RawMessage{chunk},
+			StructuredContent: structured,
+			IsError:           rw.statusCode < 200 || rw.statusCode >= 300,
 		},
 	})
 	if err != nil {
@@ -598,16 +599,22 @@ func (w *toolCallResponseWriter) Write(p []byte) (int, error) {
 	return n, nil
 }
 
-func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (json.RawMessage, error) {
+// formatResult turns a tool's raw HTTP response body into an MCP content
+// chunk. When the body is a JSON object it also returns it verbatim as
+// structuredContent so spec-compliant clients (MCP 2025-06-18) receive a
+// parsed object instead of having to re-parse the stringified text block.
+// structured is nil for non-JSON bodies and for JSON that is not an object
+// (arrays/scalars), which the spec reserves the field for.
+func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (chunk json.RawMessage, structured json.RawMessage, err error) {
 	body := rw.body.Bytes()
 	if len(body) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	ct := rw.headers.Get("content-type")
 	mt, _, err := mime.ParseMediaType(ct)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse content type %q: %w", ct, err)
+		return nil, nil, fmt.Errorf("failed to parse content type %q: %w", ct, err)
 	}
 
 	switch {
@@ -622,10 +629,16 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (json.Ra
 			},
 		})
 		if err != nil {
-			return nil, fmt.Errorf("serialize text content: %w", err)
+			return nil, nil, fmt.Errorf("serialize text content: %w", err)
 		}
 
-		return bs, nil
+		if contenttypes.IsJSON(mt) {
+			if trimmed := bytes.TrimSpace(body); len(trimmed) > 0 && trimmed[0] == '{' && json.Valid(trimmed) {
+				structured = json.RawMessage(trimmed)
+			}
+		}
+
+		return bs, structured, nil
 	case strings.HasPrefix(mt, "image/"):
 		encoded := base64.StdEncoding.EncodeToString(body)
 		bs, err := json.Marshal(contentChunk[json.RawMessage, string]{
@@ -636,10 +649,10 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (json.Ra
 			Meta:     nil,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("serialize image content: %w", err)
+			return nil, nil, fmt.Errorf("serialize image content: %w", err)
 		}
 
-		return bs, nil
+		return bs, nil, nil
 	case strings.HasPrefix(mt, "audio/"):
 		encoded := base64.StdEncoding.EncodeToString(body)
 		bs, err := json.Marshal(contentChunk[json.RawMessage, string]{
@@ -650,12 +663,12 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (json.Ra
 			Meta:     nil,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("serialize audio content: %w", err)
+			return nil, nil, fmt.Errorf("serialize audio content: %w", err)
 		}
 
-		return bs, nil
+		return bs, nil, nil
 	default:
-		return nil, fmt.Errorf("unsupported content type %q", ct)
+		return nil, nil, fmt.Errorf("unsupported content type %q", ct)
 	}
 }
 
@@ -668,8 +681,9 @@ type contentChunk[T any, D any] struct {
 }
 
 type toolCallResult struct {
-	Content []json.RawMessage `json:"content"`
-	IsError bool              `json:"isError,omitzero"`
+	Content           []json.RawMessage `json:"content"`
+	StructuredContent json.RawMessage   `json:"structuredContent,omitempty"`
+	IsError           bool              `json:"isError,omitzero"`
 }
 
 // filterOmittedEnvVars filters environment variables based on MCP metadata configuration.

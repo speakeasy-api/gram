@@ -384,12 +384,13 @@ async fn spawn_thread(
         tools::mcp_force_reconnect::McpForceReconnectTool::new(Arc::clone(host), mcp_server_ids),
     );
 
-    let mcp_source = ClippedToolSource::new(mcp_catalog, host.spill_root.clone());
+    let compose_source = agentkit_tool_compose::ComposeTool::wrap(mcp_catalog)
+        .with_source(native_tools.merge(agentkit_tool_fs::registry()));
+    let clipped_source = ClippedToolSource::new(compose_source, host.spill_root.clone());
+
     let mut builder = Agent::builder()
         .model(adapter)
-        .add_tool_source(native_tools)
-        .add_tool_source(agentkit_tool_fs::registry())
-        .add_tool_source(mcp_source)
+        .add_tool_source(clipped_source)
         .permissions(permissions)
         .resources(fs_resources)
         .observer(TracingReporter::new())
