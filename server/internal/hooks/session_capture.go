@@ -257,12 +257,21 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 	// Determine role and content based on event type
 	var role, content string
 	var model pgtype.Text
+	messageID := conv.ToPGTextEmpty("")
 
 	switch payload.HookEventName {
 	case "UserPromptSubmit":
 		role = "user"
 		content = conv.PtrValOr(payload.Prompt, "")
+		messageID = conv.ToPGTextEmpty(claudePromptIDFromAdditionalData(payload.AdditionalData))
 	case "Stop":
+		if err := s.backfillLastUserPromptID(ctx, chatID, projectID, payload); err != nil {
+			s.logger.WarnContext(ctx, "failed to backfill Claude user prompt ID",
+				attr.SlogError(err),
+				attr.SlogGenAIConversationID(conv.PtrValOr(payload.SessionID, "")),
+				attr.SlogProjectID(metadata.ProjectID),
+			)
+		}
 		role = "assistant"
 		content = conv.PtrValOr(payload.LastAssistantMessage, "")
 		model = conv.ToPGTextEmpty(conv.PtrValOr(payload.Model, ""))
@@ -294,7 +303,7 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 		ContentRaw:       nil,
 		ContentAssetUrl:  conv.ToPGTextEmpty(""),
 		StorageError:     conv.ToPGTextEmpty(""),
-		MessageID:        conv.ToPGTextEmpty(""),
+		MessageID:        messageID,
 		ToolCallID:       conv.ToPGTextEmpty(""),
 		ExternalUserID:   conv.ToPGTextEmpty(metadata.UserEmail),
 		FinishReason:     conv.ToPGTextEmpty(""),
@@ -323,6 +332,47 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 	}
 
 	return nil
+}
+
+func (s *Service) backfillLastUserPromptID(ctx context.Context, chatID uuid.UUID, projectID uuid.UUID, payload *gen.ClaudePayload) error {
+	lastUserPromptID := claudeLastUserPromptIDFromAdditionalData(payload.AdditionalData)
+	if lastUserPromptID == "" {
+		return nil
+	}
+
+	_, err := s.repo.BackfillLatestClaudeUserMessagePromptID(ctx, repo.BackfillLatestClaudeUserMessagePromptIDParams{
+		ChatID:    chatID,
+		ProjectID: projectID,
+		MessageID: conv.ToPGText(lastUserPromptID),
+	})
+	if err != nil {
+		return fmt.Errorf("backfill latest Claude user message prompt ID: %w", err)
+	}
+	return nil
+}
+
+func claudePromptIDFromAdditionalData(additionalData map[string]any) string {
+	if additionalData == nil {
+		return ""
+	}
+	for _, key := range []string{"promptId", "prompt_id"} {
+		if v, ok := additionalData[key].(string); ok {
+			return v
+		}
+	}
+	return ""
+}
+
+func claudeLastUserPromptIDFromAdditionalData(additionalData map[string]any) string {
+	if additionalData == nil {
+		return ""
+	}
+	for _, key := range []string{"LastUserPromptID", "lastUserPromptID", "last_user_prompt_id"} {
+		if v, ok := additionalData[key].(string); ok {
+			return v
+		}
+	}
+	return ""
 }
 
 // writeToolCallRequestToPG writes an assistant message with tool_calls to PostgreSQL.

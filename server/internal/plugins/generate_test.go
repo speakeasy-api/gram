@@ -780,6 +780,112 @@ printf '{}\n200'
 	require.Equal(t, "cursor@example.com", posted["user_email"])
 }
 
+func TestGeneratedClaudeHookScriptExtractsPromptIDFromTranscript(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	files, err := GenerateObservabilityPluginPackage(cfg, "claude")
+	require.NoError(t, err)
+
+	posted := runGeneratedClaudeHook(t, files["hooks/hook.sh"], []string{
+		`{"sessionId":"session-1","type":"user","promptId":"prompt-exact","message":{"role":"user","content":[{"type":"text","text":"current prompt"}]}}`,
+		`{"sessionId":"session-1","type":"user","promptId":"prompt-newest","message":{"role":"user","content":[{"type":"text","text":"newer but different"}]}}`,
+	}, `{"hook_event_name":"UserPromptSubmit","session_id":"session-1","prompt":"current prompt"}`)
+
+	require.Equal(t, "prompt-exact", posted["promptId"])
+	additionalData, ok := posted["additional_data"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "prompt-exact", additionalData["promptId"])
+}
+
+func TestGeneratedClaudeHookScriptFallsBackToNewestPromptID(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	files, err := GeneratePluginPackages(nil, cfg)
+	require.NoError(t, err)
+
+	posted := runGeneratedClaudeHook(t, files[ClaudeObservabilitySlug(cfg)+"/hooks/hook.sh"], []string{
+		`{"sessionId":"session-1","type":"user","promptId":"prompt-old","message":{"role":"user","content":"old prompt"}}`,
+		`{"sessionId":"other-session","type":"user","promptId":"prompt-other","message":{"role":"user","content":"hook prompt"}}`,
+		`{"sessionId":"session-1","type":"user","promptId":"prompt-new","message":{"role":"user","content":"transcript lagged prompt"}}`,
+	}, `{"hook_event_name":"UserPromptSubmit","session_id":"session-1","prompt":"hook prompt"}`)
+
+	require.Equal(t, "prompt-new", posted["promptId"])
+	additionalData, ok := posted["additional_data"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "prompt-new", additionalData["promptId"])
+}
+
+func TestGeneratedClaudeHookScriptOmitsPromptIDWhenTranscriptUnreadable(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	files, err := GenerateObservabilityPluginPackage(cfg, "claude")
+	require.NoError(t, err)
+
+	posted := runGeneratedClaudeHookWithPayload(t, files["hooks/hook.sh"], `{"hook_event_name":"UserPromptSubmit","session_id":"session-1","prompt":"current prompt","transcript_path":"/path/that/does/not/exist"}`)
+	require.NotContains(t, posted, "promptId")
+	require.NotContains(t, posted, "additional_data")
+}
+
+func runGeneratedClaudeHook(t *testing.T, script []byte, transcriptLines []string, payload string) map[string]any {
+	t.Helper()
+
+	dir := t.TempDir()
+	transcriptPath := filepath.Join(dir, "transcript.jsonl")
+	require.NoError(t, os.WriteFile(transcriptPath, []byte(strings.Join(transcriptLines, "\n")+"\n"), 0o644))
+
+	var data map[string]any
+	require.NoError(t, json.Unmarshal([]byte(payload), &data))
+	data["transcript_path"] = transcriptPath
+	payloadBytes, err := json.Marshal(data)
+	require.NoError(t, err)
+
+	return runGeneratedClaudeHookWithPayload(t, script, string(payloadBytes))
+}
+
+func runGeneratedClaudeHookWithPayload(t *testing.T, script []byte, payload string) map[string]any {
+	t.Helper()
+
+	dir := t.TempDir()
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "payload.json")
+	require.NoError(t, os.WriteFile(hookPath, script, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "curl"), []byte(`#!/usr/bin/env bash
+cat > "$GRAM_CAPTURE_PAYLOAD"
+printf '{}\n200'
+`), 0o755))
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(payload)
+	cmd.Env = append(os.Environ(),
+		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"GRAM_CAPTURE_PAYLOAD="+capturePath,
+	)
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	var posted map[string]any
+	require.NoError(t, json.Unmarshal(requireFileBytes(t, capturePath), &posted))
+	return posted
+}
+
 func TestDeviceAgentIdentityScriptHandlesWhitespaceEmptyObject(t *testing.T) {
 	t.Parallel()
 

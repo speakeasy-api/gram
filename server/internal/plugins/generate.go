@@ -112,7 +112,7 @@ func pluginManifestVersion(cfg GenerateConfig) string {
 // for generator changes that alter behaviour in ways the placeholder
 // fingerprint pass can't observe. The Plugin Generate Check CI workflow
 // requires this to change whenever generate.go does.
-const pluginGeneratorVersion = "1"
+const pluginGeneratorVersion = "2"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -871,6 +871,90 @@ fi
 `
 }
 
+func renderClaudePromptIDSnippet() string {
+	return `if command -v python3 >/dev/null 2>&1; then
+	payload=$(printf '%s' "$payload" | python3 -c '
+import json
+import os
+import sys
+
+payload = sys.stdin.read()
+try:
+    data = json.loads(payload)
+except Exception:
+    print(payload, end="")
+    raise SystemExit
+
+if data.get("hook_event_name") != "UserPromptSubmit":
+    print(payload, end="")
+    raise SystemExit
+
+session_id = data.get("session_id") or ""
+hook_prompt = data.get("prompt")
+transcript_path = data.get("transcript_path") or ""
+prompt_id = ""
+
+def text_from_content(content):
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                text = item.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+        return "".join(parts)
+    return ""
+
+try:
+    newest = None
+    with open(os.path.expanduser(transcript_path), encoding="utf-8") as f:
+        for line in f:
+            try:
+                record = json.loads(line)
+            except Exception:
+                continue
+            candidate = record.get("promptId")
+            if not candidate:
+                continue
+            if (record.get("sessionId") or record.get("session_id") or "") != session_id:
+                continue
+            if record.get("type") != "user":
+                continue
+
+            content = ""
+            message = record.get("message")
+            if isinstance(message, dict):
+                content = text_from_content(message.get("content"))
+            if not content:
+                content = text_from_content(record.get("content"))
+
+            newest = candidate
+            if isinstance(hook_prompt, str) and content == hook_prompt:
+                prompt_id = candidate
+
+    if not prompt_id and newest:
+        prompt_id = newest
+except Exception:
+    prompt_id = ""
+
+if prompt_id:
+    data["promptId"] = prompt_id
+    additional_data = data.get("additional_data")
+    if not isinstance(additional_data, dict):
+        additional_data = {}
+    additional_data["promptId"] = prompt_id
+    data["additional_data"] = additional_data
+
+print(json.dumps(data, separators=(",", ":")), end="")
+' 2>/dev/null) || true
+fi
+`
+}
+
 func renderCurlAuthConfigSnippet(cfg GenerateConfig, failureExit int) string {
 	var config strings.Builder
 	fmt.Fprintf(&config, "header = \"Gram-Key: %s\"\n", curlConfigQuote(cfg.HooksAPIKey))
@@ -918,6 +1002,10 @@ func renderHookScript(cfg GenerateConfig, platform string) []byte {
 	}
 
 	authConfigSnippet := renderCurlAuthConfigSnippet(cfg, 2)
+	claudePromptIDSnippet := ""
+	if platform == "claude" {
+		claudePromptIDSnippet = renderClaudePromptIDSnippet()
+	}
 
 	// %%{http_code} → %{http_code} in the emitted script (curl write-out format).
 	// %%s           → %s           in the emitted script (printf format).
@@ -1043,6 +1131,7 @@ payload=$(cat)
 if type gram_enrich_identity_payload >/dev/null 2>&1; then
   payload=$(gram_enrich_identity_payload "$payload")
 fi
+%s
 
 hook_hostname=$(hostname 2>/dev/null || true)
 hook_hostname_header=()
@@ -1082,7 +1171,7 @@ fi
 
 echo "${reason:-Speakeasy hook returned HTTP ${http_code}}" >&2
 exit 2
-`, keyPrefix, cfg.ServerURL, authConfigSnippet, renderIdentitySourceSnippet(), platform)
+`, keyPrefix, cfg.ServerURL, authConfigSnippet, renderIdentitySourceSnippet(), claudePromptIDSnippet, platform)
 }
 
 func renderCodexAsyncHookScript() []byte {
