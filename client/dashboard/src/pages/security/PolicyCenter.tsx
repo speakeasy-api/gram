@@ -2691,7 +2691,7 @@ function CustomRulesPicker({
           )}
         />
         <Label className="cursor-pointer text-sm font-medium">
-          Detection Rules
+          Custom Rules
         </Label>
         {selectedCount > 0 && (
           <Badge variant="neutral">
