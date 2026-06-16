@@ -1,6 +1,6 @@
 import type { InsightsSuggestion } from "@/lib/insights-suggestions";
 import type { ElementsConfig } from "@gram-ai/elements";
-import { createContext, useContext, useEffect } from "react";
+import { createContext, useContext, useLayoutEffect } from "react";
 
 /**
  * Per-page overrides for the global AI Insights panel. Pages mount
@@ -68,5 +68,7 @@ export function useInsightsState(): InsightsContextValue {
  */
 export function useHideInsightsDock(): void {
   const { registerDockHide } = useInsightsState();
-  useEffect(() => registerDockHide(), [registerDockHide]);
+  // Layout-timed so the dock is hidden before paint — a post-paint effect would
+  // flash the floating dock for one frame when arriving from a dock-visible page.
+  useLayoutEffect(() => registerDockHide(), [registerDockHide]);
 }

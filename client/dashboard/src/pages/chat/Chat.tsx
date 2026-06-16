@@ -534,8 +534,45 @@ function ConversationSurface({
 }: {
   chatId: string | undefined;
 }): ReactElement {
-  if (!chatId || chatId === "new") return <ChatSurface />;
+  const activeRemoteId = useAssistantState(
+    ({ threadListItem }) => threadListItem.remoteId ?? null,
+  );
+  // Render the active thread directly when it's a fresh chat ("new") or its id
+  // already matches the URL — including right after a new chat mints its id and
+  // the URL syncs from /chat/new to /chat/:id. Keeping <ChatSurface> at the same
+  // position across that swap means the conversation isn't remounted. Only a
+  // URL pointing at a DIFFERENT thread routes through <SavedConversation>.
+  if (!chatId || chatId === "new" || chatId === activeRemoteId) {
+    return (
+      <>
+        {chatId === "new" && <NewChatUrlSync activeRemoteId={activeRemoteId} />}
+        <ChatSurface />
+      </>
+    );
+  }
   return <SavedConversation chatId={chatId} />;
+}
+
+/**
+ * When a brand-new chat (`/chat/new`) mints its server id, replace the URL with
+ * `/chat/:id` so it's shareable and survives a reload. The shared runtime is
+ * keyed independently of the route, so this is a pure address-bar update — no
+ * remount.
+ */
+function NewChatUrlSync({
+  activeRemoteId,
+}: {
+  activeRemoteId: string | null;
+}): null {
+  const navigate = useNavigate();
+  const routes = useRoutes();
+  useEffect(() => {
+    if (!activeRemoteId) return;
+    void navigate(routes.chat.conversation.href(activeRemoteId), {
+      replace: true,
+    });
+  }, [activeRemoteId, navigate, routes]);
+  return null;
 }
 
 // The provider renders its own `gram-elements h-full` wrapper (a plain block,
@@ -567,13 +604,16 @@ function SavedConversation({ chatId }: { chatId: string }): ReactElement {
   const activeRemoteId = useAssistantState(
     ({ threadListItem }) => threadListItem.remoteId ?? null,
   );
-  const switchedRef = useRef(false);
+  // Latch per chatId, not a one-shot boolean: navigating straight from one
+  // saved conversation to another (same route, different :chatId) must switch
+  // again, otherwise the view stays stuck on the previous thread's loader.
+  const switchedForRef = useRef<string | null>(null);
   useEffect(() => {
-    if (switchedRef.current || isListLoading) return;
-    switchedRef.current = true;
+    if (isListLoading || switchedForRef.current === chatId) return;
+    switchedForRef.current = chatId;
     runtime.threads.switchToThread(chatId).catch(() => {
       // Allow a retry if the switch failed (e.g. list refetch in flight).
-      switchedRef.current = false;
+      switchedForRef.current = null;
     });
   }, [runtime, chatId, isListLoading]);
 
