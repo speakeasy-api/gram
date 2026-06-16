@@ -624,6 +624,16 @@ type UserSessionResponseBody struct {
 	ExpiresAt string `form:"expires_at" json:"expires_at" xml:"expires_at"`
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Slug of the user_session_issuer that gated this session.
+	IssuerSlug string `form:"issuer_slug" json:"issuer_slug" xml:"issuer_slug"`
+	// Name of the MCP client that established the session, if known.
+	ClientName *string `form:"client_name,omitempty" json:"client_name,omitempty" xml:"client_name,omitempty"`
+	// Subject kind: 'user', 'apikey', or 'anonymous'.
+	SubjectType string `form:"subject_type" json:"subject_type" xml:"subject_type"`
+	// Resolved human-readable name of the subject, if known.
+	SubjectDisplayName *string `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
+	// When the session was revoked, if it has been.
+	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
 }
 
 // NewListUserSessionsResponseBody builds the HTTP response body from the
@@ -1093,10 +1103,11 @@ func NewRevokeUserSessionGatewayErrorResponseBody(res *goa.ServiceError) *Revoke
 
 // NewListUserSessionsPayload builds a userSessions service listUserSessions
 // endpoint payload.
-func NewListUserSessionsPayload(subjectUrn *string, userSessionIssuerID *string, cursor *string, limit *int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessions.ListUserSessionsPayload {
+func NewListUserSessionsPayload(subjectUrn *string, userSessionIssuerID *string, status *string, cursor *string, limit *int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessions.ListUserSessionsPayload {
 	v := &usersessions.ListUserSessionsPayload{}
 	v.SubjectUrn = subjectUrn
 	v.UserSessionIssuerID = userSessionIssuerID
+	v.Status = status
 	v.Cursor = cursor
 	v.Limit = limit
 	v.SessionToken = sessionToken

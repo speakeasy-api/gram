@@ -59,6 +59,8 @@ type ListUserSessionsPayload struct {
 	SubjectUrn *string
 	// Filter by user_session_issuer id.
 	UserSessionIssuerID *string
+	// Filter by session status.
+	Status *string
 	// Pagination cursor: id of the last item from the previous page.
 	Cursor *string
 	// Page size (default 50, max 100).

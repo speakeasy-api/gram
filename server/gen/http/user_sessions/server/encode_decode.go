@@ -41,6 +41,7 @@ func DecodeListUserSessionsRequest(mux goahttp.Muxer, decoder func(*http.Request
 		var (
 			subjectUrn          *string
 			userSessionIssuerID *string
+			status              *string
 			cursor              *string
 			limit               *int
 			sessionToken        *string
@@ -59,6 +60,15 @@ func DecodeListUserSessionsRequest(mux goahttp.Muxer, decoder func(*http.Request
 		}
 		if userSessionIssuerID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("user_session_issuer_id", *userSessionIssuerID, goa.FormatUUID))
+		}
+		statusRaw := qp.Get("status")
+		if statusRaw != "" {
+			status = &statusRaw
+		}
+		if status != nil {
+			if !(*status == "active" || *status == "expired" || *status == "revoked" || *status == "all") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("status", *status, []any{"active", "expired", "revoked", "all"}))
+			}
 		}
 		cursorRaw := qp.Get("cursor")
 		if cursorRaw != "" {
@@ -93,7 +103,7 @@ func DecodeListUserSessionsRequest(mux goahttp.Muxer, decoder func(*http.Request
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListUserSessionsPayload(subjectUrn, userSessionIssuerID, cursor, limit, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewListUserSessionsPayload(subjectUrn, userSessionIssuerID, status, cursor, limit, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -737,6 +747,11 @@ func marshalTypesUserSessionToUserSessionResponseBody(v *types.UserSession) *Use
 		ExpiresAt:           v.ExpiresAt,
 		CreatedAt:           v.CreatedAt,
 		UpdatedAt:           v.UpdatedAt,
+		IssuerSlug:          v.IssuerSlug,
+		ClientName:          v.ClientName,
+		SubjectType:         v.SubjectType,
+		SubjectDisplayName:  v.SubjectDisplayName,
+		RevokedAt:           v.RevokedAt,
 	}
 
 	return res

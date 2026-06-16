@@ -31204,6 +31204,18 @@ paths:
                     format: uuid
                     type: string
                 - allowEmptyValue: true
+                  description: Filter by session status.
+                  in: query
+                  name: status
+                  schema:
+                    description: Filter by session status.
+                    enum:
+                        - active
+                        - expired
+                        - revoked
+                        - all
+                    type: string
+                - allowEmptyValue: true
                   description: 'Pagination cursor: id of the last item from the previous page.'
                   in: query
                   name: cursor
@@ -45657,6 +45669,9 @@ components:
         UserSession:
             type: object
             properties:
+                client_name:
+                    type: string
+                    description: Name of the MCP client that established the session, if known.
                 created_at:
                     type: string
                     format: date-time
@@ -45668,6 +45683,9 @@ components:
                     type: string
                     description: The user_session id.
                     format: uuid
+                issuer_slug:
+                    type: string
+                    description: Slug of the user_session_issuer that gated this session.
                 jti:
                     type: string
                     description: Current access-token JTI; used by the revocation path.
@@ -45675,6 +45693,16 @@ components:
                     type: string
                     description: Next refresh deadline.
                     format: date-time
+                revoked_at:
+                    type: string
+                    description: When the session was revoked, if it has been.
+                    format: date-time
+                subject_display_name:
+                    type: string
+                    description: Resolved human-readable name of the subject, if known.
+                subject_type:
+                    type: string
+                    description: 'Subject kind: ''user'', ''apikey'', or ''anonymous''.'
                 subject_urn:
                     type: string
                     description: The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).
@@ -45695,6 +45723,8 @@ components:
                 - expires_at
                 - created_at
                 - updated_at
+                - issuer_slug
+                - subject_type
         UserSessionClient:
             type: object
             properties:

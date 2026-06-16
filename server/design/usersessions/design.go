@@ -23,6 +23,9 @@ var _ = Service("userSessions", func() {
 			Attribute("user_session_issuer_id", String, "Filter by user_session_issuer id.", func() {
 				Format(FormatUUID)
 			})
+			Attribute("status", String, "Filter by session status.", func() {
+				Enum("active", "expired", "revoked", "all")
+			})
 			Attribute("cursor", String, "Pagination cursor: id of the last item from the previous page.", func() {
 				Format(FormatUUID)
 			})
@@ -38,6 +41,7 @@ var _ = Service("userSessions", func() {
 			GET("/rpc/userSessions.list")
 			Param("subject_urn")
 			Param("user_session_issuer_id")
+			Param("status")
 			Param("cursor")
 			Param("limit")
 			security.SessionHeader()
@@ -137,8 +141,15 @@ var UserSession = Type("UserSession", func() {
 	Attribute("updated_at", String, func() {
 		Format(FormatDateTime)
 	})
+	Attribute("issuer_slug", String, "Slug of the user_session_issuer that gated this session.")
+	Attribute("client_name", String, "Name of the MCP client that established the session, if known.")
+	Attribute("subject_type", String, "Subject kind: 'user', 'apikey', or 'anonymous'.")
+	Attribute("subject_display_name", String, "Resolved human-readable name of the subject, if known.")
+	Attribute("revoked_at", String, "When the session was revoked, if it has been.", func() {
+		Format(FormatDateTime)
+	})
 
-	Required("id", "user_session_issuer_id", "subject_urn", "jti", "refresh_expires_at", "expires_at", "created_at", "updated_at")
+	Required("id", "user_session_issuer_id", "subject_urn", "jti", "refresh_expires_at", "expires_at", "created_at", "updated_at", "issuer_slug", "subject_type")
 })
 
 var ListUserSessionsResult = Type("ListUserSessionsResult", func() {

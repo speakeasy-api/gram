@@ -62,6 +62,9 @@ func EncodeListUserSessionsRequest(encoder func(*http.Request) goahttp.Encoder) 
 		if p.UserSessionIssuerID != nil {
 			values.Add("user_session_issuer_id", *p.UserSessionIssuerID)
 		}
+		if p.Status != nil {
+			values.Add("status", *p.Status)
+		}
 		if p.Cursor != nil {
 			values.Add("cursor", *p.Cursor)
 		}
@@ -750,6 +753,11 @@ func unmarshalUserSessionResponseBodyToTypesUserSession(v *UserSessionResponseBo
 		ExpiresAt:           *v.ExpiresAt,
 		CreatedAt:           *v.CreatedAt,
 		UpdatedAt:           *v.UpdatedAt,
+		IssuerSlug:          *v.IssuerSlug,
+		ClientName:          v.ClientName,
+		SubjectType:         *v.SubjectType,
+		SubjectDisplayName:  v.SubjectDisplayName,
+		RevokedAt:           v.RevokedAt,
 	}
 
 	return res
