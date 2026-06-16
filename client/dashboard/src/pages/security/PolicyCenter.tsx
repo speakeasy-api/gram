@@ -190,6 +190,209 @@ function SummaryRow({ label, chips }: { label: string; chips: string[] }) {
   );
 }
 
+/** Built-in detector categories that only produce findings when Speakeasy hooks
+ *  are installed on the agent (no rule list to customize). */
+const HOOK_REQUIRED_CATEGORIES: Set<RuleCategory> = new Set([
+  "shadow_mcp",
+  "destructive_tool",
+]);
+
+/** One built-in detector as a toggleable card (Detect step). "Customize" opens
+ *  a side-sheet to pick which rules in the category are active. */
+function DetectorCard({
+  category,
+  selected,
+  disabledRules,
+  onToggle,
+  onCustomize,
+}: {
+  category: RuleCategory;
+  selected: boolean;
+  disabledRules: Set<string>;
+  onToggle: (checked: boolean) => void;
+  onCustomize: () => void;
+}) {
+  const meta = RULE_CATEGORY_META[category];
+  const available = AVAILABLE_CATEGORIES.has(category);
+  const rules = DETECTION_RULES[category].filter((r) => !r.hidden);
+  const customizable = available && rules.length > 1;
+  const enabledCount = rules.filter((r) => !disabledRules.has(r.id)).length;
+  const customized = selected && enabledCount < rules.length;
+  const needsHook = HOOK_REQUIRED_CATEGORIES.has(category);
+  return (
+    <div
+      className={cn(
+        "flex gap-3 rounded-lg border p-3 transition-colors",
+        selected ? "border-foreground bg-muted/40" : "border-border",
+      )}
+    >
+      <Icon
+        name={meta.icon as IconName}
+        className="text-muted-foreground mt-0.5 size-5 shrink-0"
+      />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium">{meta.label}</span>
+          {!available && (
+            <Badge variant="neutral">
+              <Badge.Text>Coming soon</Badge.Text>
+            </Badge>
+          )}
+        </div>
+        <p className="text-muted-foreground mt-0.5 text-xs">
+          {meta.description}
+        </p>
+        <div className="mt-2 flex items-center gap-3 text-xs">
+          {needsHook ? (
+            <span className="text-warning">Requires Speakeasy hooks</span>
+          ) : (
+            rules.length > 0 && (
+              <span
+                className={cn(
+                  "bg-muted rounded-full px-2 py-0.5",
+                  customized ? "text-foreground" : "text-muted-foreground",
+                )}
+              >
+                {customized
+                  ? `${enabledCount} of ${rules.length} rules`
+                  : `${rules.length} rules`}
+              </span>
+            )
+          )}
+          {selected && customizable && (
+            <button
+              type="button"
+              onClick={onCustomize}
+              className="text-primary hover:underline"
+            >
+              Customize
+            </button>
+          )}
+        </div>
+      </div>
+      <Switch
+        checked={selected}
+        disabled={!available}
+        onCheckedChange={onToggle}
+      />
+    </div>
+  );
+}
+
+/** Side-sheet to pick which rules within a built-in detector category are
+ *  active. Disabling a rule adds its canonical rule_id to the policy's
+ *  disabled_rules; a search box tames the large categories (e.g. 222 secrets). */
+function CustomizeRulesSheet({
+  category,
+  selectedCategories,
+  setSelectedCategories,
+  disabledRules,
+  setDisabledRules,
+  onClose,
+}: {
+  category: RuleCategory;
+  selectedCategories: Set<RuleCategory>;
+  setSelectedCategories: (v: Set<RuleCategory>) => void;
+  disabledRules: Set<string>;
+  setDisabledRules: (v: Set<string>) => void;
+  onClose: () => void;
+}) {
+  const meta = RULE_CATEGORY_META[category];
+  const rules = DETECTION_RULES[category].filter((r) => !r.hidden);
+  const [search, setSearch] = useState("");
+  const query = search.trim().toLowerCase();
+  const filtered = query
+    ? rules.filter((r) => r.title.toLowerCase().includes(query))
+    : rules;
+  const enabledCount = rules.filter((r) => !disabledRules.has(r.id)).length;
+
+  const setRule = (id: string, on: boolean) => {
+    const next = new Set(disabledRules);
+    if (on) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    setDisabledRules(next);
+    if (on && !selectedCategories.has(category)) {
+      const cats = new Set(selectedCategories);
+      cats.add(category);
+      setSelectedCategories(cats);
+    }
+  };
+  const bulk = (on: boolean) => {
+    const next = new Set(disabledRules);
+    for (const r of rules) {
+      if (on) {
+        next.delete(r.id);
+      } else {
+        next.add(r.id);
+      }
+    }
+    setDisabledRules(next);
+  };
+
+  return (
+    <Sheet
+      open
+      onOpenChange={(o) => {
+        if (!o) onClose();
+      }}
+    >
+      <SheetContent side="right" className="flex flex-col p-0 sm:max-w-md">
+        <SheetHeader className="px-6 pt-6">
+          <SheetTitle>Customize {meta.label}</SheetTitle>
+          <SheetDescription>
+            Pick which rules in this category are active. All are on by default.
+          </SheetDescription>
+        </SheetHeader>
+        <div className="px-6 pt-3">
+          <Input
+            value={search}
+            onChange={setSearch}
+            placeholder={`Search ${rules.length} ${meta.label.toLowerCase()} rules…`}
+          />
+        </div>
+        <div className="text-muted-foreground flex items-center justify-between px-6 py-2 text-xs">
+          <span>
+            {enabledCount} of {rules.length} active
+          </span>
+          <span className="flex gap-3">
+            <button
+              type="button"
+              className="text-primary hover:underline"
+              onClick={() => bulk(true)}
+            >
+              Enable all
+            </button>
+            <button
+              type="button"
+              className="text-primary hover:underline"
+              onClick={() => bulk(false)}
+            >
+              Disable all
+            </button>
+          </span>
+        </div>
+        <div className="flex-1 overflow-y-auto px-4 pb-6">
+          {filtered.map((rule) => (
+            <div
+              key={rule.id}
+              className="hover:bg-muted flex items-center justify-between gap-3 rounded-md px-2 py-2 text-sm"
+            >
+              <span className="min-w-0 truncate">{rule.title}</span>
+              <Switch
+                checked={!disabledRules.has(rule.id)}
+                onCheckedChange={(on) => setRule(rule.id, on)}
+              />
+            </div>
+          ))}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 type PolicyKind = "risk" | "prompt";
 
 type PolicyRow = { kind: PolicyKind; policy: RiskPolicy };
@@ -1755,17 +1958,33 @@ function PolicySheetBody({
   formUserMessage: string;
   setFormUserMessage: (v: string) => void;
 }) {
-  const [expandedCategory, setExpandedCategory] = useState<
-    RuleCategory | "custom" | null
-  >(null);
-  // Built-in categories and the org's custom rules each live in their own
-  // top-level accordion (same look), expanded by default so they're
-  // discoverable but collapsible to get them out of the way.
-  const [builtinExpanded, setBuiltinExpanded] = useState(true);
+  // The org's custom rules collapse into their own section; the Customize sheet
+  // opens for one detector category at a time.
   const [detectionExpanded, setDetectionExpanded] = useState(true);
+  const [customizeCategory, setCustomizeCategory] =
+    useState<RuleCategory | null>(null);
   const selectedBuiltinCount = ALL_CATEGORIES.filter((c) =>
     selectedCategories.has(c),
   ).length;
+
+  // Toggle a whole built-in detector category on/off (clears any per-rule
+  // disables for it). Flag-only categories force the policy action to flag.
+  const toggleCategory = (cat: RuleCategory, checked: boolean) => {
+    const rules = DETECTION_RULES[cat].filter((r) => !r.hidden);
+    const nextCats = new Set(selectedCategories);
+    const nextDisabled = new Set(disabledRules);
+    if (checked) {
+      nextCats.add(cat);
+    } else {
+      nextCats.delete(cat);
+    }
+    for (const rule of rules) nextDisabled.delete(rule.id);
+    setSelectedCategories(nextCats);
+    setDisabledRules(nextDisabled);
+    if (checked && FLAG_ONLY_CATEGORIES.has(cat) && formAction === "block") {
+      setFormAction("flag");
+    }
+  };
   const flagOnlySelected = [...FLAG_ONLY_CATEGORIES].some((c) =>
     selectedCategories.has(c),
   );
@@ -1801,429 +2020,226 @@ function PolicySheetBody({
         ).map((t) => POLICY_MESSAGE_TYPE_META[t as PolicyMessageType].label);
 
   return (
-    <div className="flex gap-8 py-4">
-      <div className="w-44 flex-shrink-0">
-        <OnboardingStepper
-          steps={POLICY_WIZARD_STEPS}
-          currentStep={wizardStep}
-          onStepClick={(i) => setWizardStep(i)}
-        />
-      </div>
-      <div className="min-w-0 flex-1 space-y-6">
-        {wizardStep === 0 && (
-          <div className="space-y-6">
-            <WizardStepHeading
-              title="What should this policy detect?"
-              description="Turn on detector categories and attach your organization's custom rules."
-            />
+    <>
+      <div className="flex gap-8 py-4">
+        <div className="w-44 flex-shrink-0">
+          <OnboardingStepper
+            steps={POLICY_WIZARD_STEPS}
+            currentStep={wizardStep}
+            onStepClick={(i) => setWizardStep(i)}
+          />
+        </div>
+        <div className="min-w-0 flex-1 space-y-6">
+          {wizardStep === 0 && (
+            <div className="space-y-6">
+              <WizardStepHeading
+                title="What should this policy detect?"
+                description="Turn on detector categories and attach your organization's custom rules."
+              />
 
-            {/* Built-in rules */}
-            <div className="space-y-3">
-              <button
-                type="button"
-                onClick={() => setBuiltinExpanded((v) => !v)}
-                className="flex w-full items-center gap-2"
-              >
-                <ChevronRight
-                  className={cn(
-                    "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
-                    builtinExpanded && "rotate-90",
-                  )}
+              {/* Built-in detectors */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">
+                    Built-in detectors
+                  </Label>
+                  <span className="text-muted-foreground text-xs">
+                    {selectedBuiltinCount} on
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {ALL_CATEGORIES.map((cat) => (
+                    <DetectorCard
+                      key={cat}
+                      category={cat}
+                      selected={selectedCategories.has(cat)}
+                      disabledRules={disabledRules}
+                      onToggle={(checked) => toggleCategory(cat, checked)}
+                      onCustomize={() => setCustomizeCategory(cat)}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {customRules.length > 0 && (
+                <CustomRulesPicker
+                  customRules={customRules}
+                  selectedCustomRuleIds={selectedCustomRuleIds}
+                  setSelectedCustomRuleIds={setSelectedCustomRuleIds}
+                  customRuleActions={customRuleActions}
+                  setCustomRuleActions={setCustomRuleActions}
+                  expanded={detectionExpanded}
+                  onToggle={() => setDetectionExpanded((v) => !v)}
                 />
-                <Label className="cursor-pointer text-sm font-medium">
-                  Built-in rules
-                </Label>
-                {selectedBuiltinCount > 0 && (
-                  <Badge variant="neutral">
-                    <Badge.Text>{selectedBuiltinCount} selected</Badge.Text>
-                  </Badge>
-                )}
-              </button>
-              {builtinExpanded && (
-                <div className="border-border divide-border divide-y rounded-lg border">
-                  {ALL_CATEGORIES.map((cat) => {
-                    const meta = RULE_CATEGORY_META[cat];
-                    const isAvailable = AVAILABLE_CATEGORIES.has(cat);
-                    const isExpanded = expandedCategory === cat;
-                    // Hidden rules stay in the catalog so legacy risk_results keep
-                    // resolving their title via risk-utils, but they are scrubbed
-                    // from the form's display, counts, and bulk toggles. The
-                    // underlying disabledRules/selectedCategories state is left
-                    // untouched so existing policies that pin a hidden rule round-
-                    // trip cleanly through edit.
-                    const rules = DETECTION_RULES[cat].filter((r) => !r.hidden);
-                    const isExpandable = isAvailable && rules.length > 0;
-                    const categorySelected = selectedCategories.has(cat);
-                    const enabledRuleCount = categorySelected
-                      ? rules.filter((r) => !disabledRules.has(r.id)).length
-                      : 0;
-                    const hasPartialSelection =
-                      categorySelected &&
-                      rules.length > 0 &&
-                      enabledRuleCount > 0 &&
-                      enabledRuleCount < rules.length;
-                    const headerChecked: boolean | "indeterminate" =
-                      hasPartialSelection
-                        ? "indeterminate"
-                        : categorySelected &&
-                          (rules.length === 0 || enabledRuleCount > 0);
+              )}
+            </div>
+          )}
 
-                    const toggleCategory = (checked: boolean) => {
-                      const nextCats = new Set(selectedCategories);
-                      const nextDisabled = new Set(disabledRules);
-                      if (checked) {
-                        nextCats.add(cat);
-                        for (const rule of rules) nextDisabled.delete(rule.id);
-                      } else {
-                        nextCats.delete(cat);
-                        for (const rule of rules) nextDisabled.delete(rule.id);
-                      }
-                      setSelectedCategories(nextCats);
-                      setDisabledRules(nextDisabled);
-                      if (
-                        checked &&
-                        cat === "destructive_tool" &&
-                        formAction === "block"
-                      ) {
-                        setFormAction("flag");
-                      }
-                    };
+          {wizardStep === 1 && (
+            <div className="space-y-6">
+              <WizardStepHeading
+                title="Where should it evaluate?"
+                description="Leave all four on to apply everywhere. Narrow the scope to reduce noise or cost."
+              />
+              <MessageTypesPicker
+                selectedMessageTypes={selectedMessageTypes}
+                setSelectedMessageTypes={setSelectedMessageTypes}
+              />
+              {coverageGaps.length > 0 && (
+                <Alert variant="warning">
+                  <AlertDescription>
+                    <p className="font-medium">
+                      {coverageGaps.length === 1
+                        ? "1 attached rule targets message types outside this scope and won't run:"
+                        : `${coverageGaps.length} attached rules target message types outside this scope and won't run:`}
+                    </p>
+                    <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                      {coverageGaps.map((gap) => (
+                        <li key={gap.title}>
+                          {gap.title} — needs{" "}
+                          {gap.missing
+                            .map((t) => POLICY_MESSAGE_TYPE_META[t].label)
+                            .join(", ")}
+                        </li>
+                      ))}
+                    </ul>
+                    <Button
+                      variant="secondary"
+                      className="mt-2"
+                      onClick={() => {
+                        const next = new Set(selectedMessageTypes);
+                        for (const t of missingScopeTypes) next.add(t);
+                        setSelectedMessageTypes(next);
+                      }}
+                    >
+                      <Button.Text>Include {missingScopeLabels}</Button.Text>
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
+            </div>
+          )}
 
-                    const toggleRule = (ruleId: string, enabled: boolean) => {
-                      const nextDisabled = new Set(disabledRules);
-                      const nextCats = new Set(selectedCategories);
-                      if (enabled) {
-                        // Enabling the first rule in a not-yet-selected category must
-                        // turn on ONLY that rule. Selecting the category alone would
-                        // enable every rule (enabled = category selected && not in
-                        // disabled_rules), so seed the rest as disabled first.
-                        if (!nextCats.has(cat)) {
-                          for (const r of rules) nextDisabled.add(r.id);
-                          nextCats.add(cat);
-                        }
-                        nextDisabled.delete(ruleId);
-                      } else {
-                        nextDisabled.add(ruleId);
-                      }
-                      setSelectedCategories(nextCats);
-                      setDisabledRules(nextDisabled);
-                    };
+          {wizardStep === 2 && (
+            <div className="space-y-6">
+              <WizardStepHeading
+                title="What happens on a match?"
+                description="Choose how the policy responds when its detection rules fire."
+              />
+              <ActionPicker
+                formAction={formAction}
+                setFormAction={setFormAction}
+                flagOnlySelected={flagOnlySelected}
+              />
 
-                    return (
-                      <div key={cat}>
-                        {/* Category header */}
-                        <div
-                          className={cn(
-                            "flex items-center gap-3 px-4 py-3",
-                            isExpandable && "cursor-pointer",
-                          )}
-                          onClick={() => {
-                            if (isExpandable) {
-                              setExpandedCategory(isExpanded ? null : cat);
-                            }
-                          }}
-                        >
-                          {/* Expand chevron (only for categories with rules to expand) */}
-                          {isExpandable ? (
-                            <ChevronRight
-                              className={cn(
-                                "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
-                                isExpanded && "rotate-90",
-                              )}
-                            />
-                          ) : (
-                            <div className="w-4 shrink-0" />
-                          )}
-
-                          {/* Category icon */}
-                          <Icon
-                            name={meta.icon as IconName}
-                            className="text-muted-foreground size-4 shrink-0"
-                          />
-
-                          {/* Label & description */}
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium">
-                                {meta.label}
-                              </span>
-                              {!isAvailable && (
-                                <Badge variant="neutral">
-                                  <Badge.Text>Coming Soon</Badge.Text>
-                                </Badge>
-                              )}
-                              {isExpandable && categorySelected && (
-                                <Badge variant="neutral">
-                                  <Badge.Text>
-                                    {enabledRuleCount}/{rules.length}
-                                  </Badge.Text>
-                                </Badge>
-                              )}
-                            </div>
-                            <p className="text-muted-foreground text-xs">
-                              {meta.description}
-                            </p>
-                          </div>
-
-                          {/* Category checkbox */}
-                          <Checkbox
-                            checked={headerChecked}
-                            disabled={!isAvailable}
-                            onCheckedChange={(checked) =>
-                              toggleCategory(!!checked)
-                            }
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                        </div>
-
-                        {/* Expanded per-rule toggles. Each rule is independently
-                    toggleable; unchecking adds the canonical rule_id to the
-                    policy's disabled_rules list and the scanner drops matching
-                    findings. */}
-                        {isAvailable && isExpanded && rules.length > 0 && (
-                          <div className="bg-muted/30 border-border border-t px-4 py-2">
-                            <div className="flex items-center justify-between py-1">
-                              <span className="text-muted-foreground text-xs">
-                                {enabledRuleCount} of {rules.length} rules
-                                enabled
-                              </span>
-                              <div className="flex gap-3">
-                                <button
-                                  type="button"
-                                  className="text-primary text-xs underline-offset-2 hover:underline disabled:opacity-50"
-                                  disabled={enabledRuleCount === rules.length}
-                                  onClick={() => {
-                                    const nextDisabled = new Set(disabledRules);
-                                    for (const r of rules)
-                                      nextDisabled.delete(r.id);
-                                    setDisabledRules(nextDisabled);
-                                    const nextCats = new Set(
-                                      selectedCategories,
-                                    );
-                                    nextCats.add(cat);
-                                    setSelectedCategories(nextCats);
-                                  }}
-                                >
-                                  Enable all
-                                </button>
-                                <button
-                                  type="button"
-                                  className="text-primary text-xs underline-offset-2 hover:underline disabled:opacity-50"
-                                  disabled={
-                                    !categorySelected || enabledRuleCount === 0
-                                  }
-                                  onClick={() => {
-                                    const nextDisabled = new Set(disabledRules);
-                                    for (const r of rules)
-                                      nextDisabled.add(r.id);
-                                    setDisabledRules(nextDisabled);
-                                  }}
-                                >
-                                  Disable all
-                                </button>
-                              </div>
-                            </div>
-                            <div className="space-y-2 py-1">
-                              {rules.map((rule) => {
-                                const ruleEnabled =
-                                  categorySelected &&
-                                  !disabledRules.has(rule.id);
-                                return (
-                                  <div
-                                    key={rule.id}
-                                    className="flex items-center gap-3 py-1 pl-8"
-                                  >
-                                    <Checkbox
-                                      id={rule.id}
-                                      checked={ruleEnabled}
-                                      onCheckedChange={(checked) =>
-                                        toggleRule(rule.id, !!checked)
-                                      }
-                                    />
-                                    <label
-                                      htmlFor={rule.id}
-                                      className="text-xs"
-                                    >
-                                      {rule.title}
-                                    </label>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+              {/* Custom message — only relevant for block-action policies that
+          surface a user-facing reason at deny time. Flag-action policies
+          record findings silently, so no message is needed. */}
+              {formAction === "block" && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Custom Message</Label>
+                  <p className="text-muted-foreground text-xs">
+                    Shown to the user when this policy blocks a tool call or
+                    prompt. Leave blank to use the default message.
+                  </p>
+                  <TextArea
+                    value={formUserMessage}
+                    onChange={setFormUserMessage}
+                    placeholder="e.g. This action was blocked by your organization's security policy. Contact your admin for help."
+                    rows={3}
+                  />
                 </div>
               )}
             </div>
+          )}
 
-            {customRules.length > 0 && (
-              <CustomRulesPicker
-                customRules={customRules}
-                selectedCustomRuleIds={selectedCustomRuleIds}
-                setSelectedCustomRuleIds={setSelectedCustomRuleIds}
-                customRuleActions={customRuleActions}
-                setCustomRuleActions={setCustomRuleActions}
-                expanded={detectionExpanded}
-                onToggle={() => setDetectionExpanded((v) => !v)}
+          {wizardStep === 3 && (
+            <div className="space-y-6">
+              <WizardStepHeading
+                title="Name & enable"
+                description="Review the policy, then create it."
               />
-            )}
-          </div>
-        )}
 
-        {wizardStep === 1 && (
-          <div className="space-y-6">
-            <WizardStepHeading
-              title="Where should it evaluate?"
-              description="Leave all four on to apply everywhere. Narrow the scope to reduce noise or cost."
-            />
-            <MessageTypesPicker
-              selectedMessageTypes={selectedMessageTypes}
-              setSelectedMessageTypes={setSelectedMessageTypes}
-            />
-            {coverageGaps.length > 0 && (
-              <Alert variant="warning">
-                <AlertDescription>
-                  <p className="font-medium">
-                    {coverageGaps.length === 1
-                      ? "1 attached rule targets message types outside this scope and won't run:"
-                      : `${coverageGaps.length} attached rules target message types outside this scope and won't run:`}
-                  </p>
-                  <ul className="mt-1 list-disc space-y-0.5 pl-4">
-                    {coverageGaps.map((gap) => (
-                      <li key={gap.title}>
-                        {gap.title} — needs{" "}
-                        {gap.missing
-                          .map((t) => POLICY_MESSAGE_TYPE_META[t].label)
-                          .join(", ")}
-                      </li>
-                    ))}
-                  </ul>
-                  <Button
-                    variant="secondary"
-                    className="mt-2"
-                    onClick={() => {
-                      const next = new Set(selectedMessageTypes);
-                      for (const t of missingScopeTypes) next.add(t);
-                      setSelectedMessageTypes(next);
-                    }}
-                  >
-                    <Button.Text>Include {missingScopeLabels}</Button.Text>
-                  </Button>
-                </AlertDescription>
-              </Alert>
-            )}
-          </div>
-        )}
-
-        {wizardStep === 2 && (
-          <div className="space-y-6">
-            <WizardStepHeading
-              title="What happens on a match?"
-              description="Choose how the policy responds when its detection rules fire."
-            />
-            <ActionPicker
-              formAction={formAction}
-              setFormAction={setFormAction}
-              flagOnlySelected={flagOnlySelected}
-            />
-
-            {/* Custom message — only relevant for block-action policies that
-          surface a user-facing reason at deny time. Flag-action policies
-          record findings silently, so no message is needed. */}
-            {formAction === "block" && (
+              {/* Policy Name */}
               <div className="space-y-2">
-                <Label className="text-sm font-medium">Custom Message</Label>
-                <p className="text-muted-foreground text-xs">
-                  Shown to the user when this policy blocks a tool call or
-                  prompt. Leave blank to use the default message.
-                </p>
-                <TextArea
-                  value={formUserMessage}
-                  onChange={setFormUserMessage}
-                  placeholder="e.g. This action was blocked by your organization's security policy. Contact your admin for help."
-                  rows={3}
-                />
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">Policy Name</Label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground text-xs">Auto</span>
+                    <Switch
+                      checked={formAutoName}
+                      onCheckedChange={setFormAutoName}
+                    />
+                  </div>
+                </div>
+                {formAutoName ? (
+                  <p className="text-muted-foreground text-xs">
+                    Name will be generated automatically based on detection
+                    rules and action.
+                  </p>
+                ) : (
+                  <Input
+                    value={formName}
+                    onChange={(value) => setFormName(value)}
+                    placeholder="e.g. Secret Detection"
+                  />
+                )}
               </div>
-            )}
-          </div>
-        )}
 
-        {wizardStep === 3 && (
-          <div className="space-y-6">
-            <WizardStepHeading
-              title="Name & enable"
-              description="Review the policy, then create it."
-            />
-
-            {/* Policy Name */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm font-medium">Policy Name</Label>
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground text-xs">Auto</span>
-                  <Switch
-                    checked={formAutoName}
-                    onCheckedChange={setFormAutoName}
+              {/* Summary */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Summary</Label>
+                <div className="border-border divide-border divide-y rounded-lg border">
+                  <SummaryRow
+                    label="Detectors"
+                    chips={
+                      summaryDetectors.length > 0 ? summaryDetectors : ["None"]
+                    }
+                  />
+                  <SummaryRow
+                    label="Custom rules"
+                    chips={[
+                      selectedCustomRuleIds.size > 0
+                        ? `${selectedCustomRuleIds.size} attached`
+                        : "None",
+                    ]}
+                  />
+                  <SummaryRow label="Scope" chips={summaryScopes} />
+                  <SummaryRow
+                    label="Action"
+                    chips={[formAction === "block" ? "Block" : "Flag"]}
                   />
                 </div>
               </div>
-              {formAutoName ? (
-                <p className="text-muted-foreground text-xs">
-                  Name will be generated automatically based on detection rules
-                  and action.
-                </p>
-              ) : (
-                <Input
-                  value={formName}
-                  onChange={(value) => setFormName(value)}
-                  placeholder="e.g. Secret Detection"
-                />
-              )}
-            </div>
 
-            {/* Summary */}
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Summary</Label>
-              <div className="border-border divide-border divide-y rounded-lg border">
-                <SummaryRow
-                  label="Detectors"
-                  chips={
-                    summaryDetectors.length > 0 ? summaryDetectors : ["None"]
-                  }
-                />
-                <SummaryRow
-                  label="Custom rules"
-                  chips={[
-                    selectedCustomRuleIds.size > 0
-                      ? `${selectedCustomRuleIds.size} attached`
-                      : "None",
-                  ]}
-                />
-                <SummaryRow label="Scope" chips={summaryScopes} />
-                <SummaryRow
-                  label="Action"
-                  chips={[formAction === "block" ? "Block" : "Flag"]}
+              {/* Enabled toggle */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm font-medium">Enabled</Label>
+                  <p className="text-muted-foreground text-xs">
+                    Enable this policy to begin scanning messages.
+                  </p>
+                </div>
+                <Switch
+                  checked={formEnabled}
+                  onCheckedChange={setFormEnabled}
                 />
               </div>
             </div>
-
-            {/* Enabled toggle */}
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="text-sm font-medium">Enabled</Label>
-                <p className="text-muted-foreground text-xs">
-                  Enable this policy to begin scanning messages.
-                </p>
-              </div>
-              <Switch checked={formEnabled} onCheckedChange={setFormEnabled} />
-            </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
-    </div>
+      {customizeCategory && (
+        <CustomizeRulesSheet
+          category={customizeCategory}
+          selectedCategories={selectedCategories}
+          setSelectedCategories={setSelectedCategories}
+          disabledRules={disabledRules}
+          setDisabledRules={setDisabledRules}
+          onClose={() => setCustomizeCategory(null)}
+        />
+      )}
+    </>
   );
 }
 
