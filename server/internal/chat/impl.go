@@ -1438,7 +1438,8 @@ func (s *Service) enrichChatWithClaudeTurnUsage(ctx context.Context, projectID s
 	}
 	toolUsageMap, err := s.telemetryService.GetClaudeToolUsageByChatIDs(ctx, projectID, []string{chat.ID})
 	if err != nil {
-		return fmt.Errorf("get Claude tool usage from ClickHouse: %w", err)
+		s.logger.WarnContext(ctx, "failed to enrich chat with Claude tool usage", attr.SlogError(err))
+		toolUsageMap = nil
 	}
 
 	turns := usageMap[chat.ID]

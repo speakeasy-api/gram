@@ -47,10 +47,11 @@ export function formatDurationFromNanos(
     if (diffNanos < 0n) return null;
     const millis = Number(diffNanos / 1_000_000n);
     if (millis < 1000) return `${millis}ms`;
-    const seconds = millis / 1000;
-    if (seconds < 60) return `${seconds.toFixed(seconds < 10 ? 1 : 0)}s`;
-    const minutes = Math.floor(seconds / 60);
-    const remainder = Math.round(seconds % 60);
+    if (millis < 10_000) return `${(millis / 1000).toFixed(1)}s`;
+    const roundedSeconds = Math.round(millis / 1000);
+    if (roundedSeconds < 60) return `${roundedSeconds}s`;
+    const minutes = Math.floor(roundedSeconds / 60);
+    const remainder = roundedSeconds % 60;
     return `${minutes}m ${remainder}s`;
   } catch {
     return null;

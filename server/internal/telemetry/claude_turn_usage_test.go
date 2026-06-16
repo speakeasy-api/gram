@@ -43,14 +43,10 @@ func TestGetClaudeTurnUsageByChatIDs_MultipleTurns(t *testing.T) {
 		costUSD: 0.0025, costMicros: 2500, model: "claude-haiku-4-5-20251001", querySource: "generate_session_title",
 	})
 
-	time.Sleep(200 * time.Millisecond)
-
-	got, err := ti.chClient.GetClaudeTurnUsageByChatIDs(ctx, repo.GetClaudeTurnUsageByChatIDsParams{
+	got := requireClaudeTurnUsageEventually(ctx, t, ti, repo.GetClaudeTurnUsageByChatIDsParams{
 		GramProjectID: projectID,
 		ChatIDs:       []string{chatID},
-	})
-	require.NoError(t, err)
-	require.Len(t, got[chatID], 2)
+	}, chatID, 2)
 	require.Equal(t, "prompt-1", got[chatID][0].PromptID)
 	require.Equal(t, int64(20), got[chatID][0].TotalTokens)
 	require.Equal(t, []string{"claude-sonnet-4-6"}, got[chatID][0].Models)
@@ -84,14 +80,10 @@ func TestGetClaudeTurnUsageByChatIDs_MultipleAPIRequestsInTurn(t *testing.T) {
 		costUSD: 0.0094443, costMicros: 9444, model: "claude-sonnet-4-6", querySource: "sdk",
 	})
 
-	time.Sleep(200 * time.Millisecond)
-
-	got, err := ti.chClient.GetClaudeTurnUsageByChatIDs(ctx, repo.GetClaudeTurnUsageByChatIDsParams{
+	got := requireClaudeTurnUsageEventually(ctx, t, ti, repo.GetClaudeTurnUsageByChatIDsParams{
 		GramProjectID: projectID,
 		ChatIDs:       []string{chatID},
-	})
-	require.NoError(t, err)
-	require.Len(t, got[chatID], 1)
+	}, chatID, 1)
 
 	turn := got[chatID][0]
 	require.Equal(t, uint64(2), turn.RequestCount)
@@ -120,14 +112,10 @@ func TestGetClaudeTurnUsageByChatIDs_NoCostBearingRequest(t *testing.T) {
 		timestamp: time.Now().UTC(), promptID: "prompt-without-request", eventName: "tool_result",
 	})
 
-	time.Sleep(200 * time.Millisecond)
-
-	got, err := ti.chClient.GetClaudeTurnUsageByChatIDs(ctx, repo.GetClaudeTurnUsageByChatIDsParams{
+	got := requireClaudeTurnUsageEventually(ctx, t, ti, repo.GetClaudeTurnUsageByChatIDsParams{
 		GramProjectID: projectID,
 		ChatIDs:       []string{chatID},
-	})
-	require.NoError(t, err)
-	require.Len(t, got[chatID], 1)
+	}, chatID, 1)
 
 	turn := got[chatID][0]
 	require.Equal(t, "prompt-without-request", turn.PromptID)
@@ -176,14 +164,10 @@ func TestGetClaudeToolUsageByChatIDs(t *testing.T) {
 		toolUseID: "toolu_2", toolName: "WebFetch", toolInputSizeBytes: 512, toolResultSizeBytes: 4096,
 	})
 
-	time.Sleep(200 * time.Millisecond)
-
-	got, err := ti.chClient.GetClaudeToolUsageByChatIDs(ctx, repo.GetClaudeTurnUsageByChatIDsParams{
+	got := requireClaudeToolUsageEventually(ctx, t, ti, repo.GetClaudeTurnUsageByChatIDsParams{
 		GramProjectID: projectID,
 		ChatIDs:       []string{chatID},
-	})
-	require.NoError(t, err)
-	require.Len(t, got[chatID], 2)
+	}, chatID, 2)
 
 	require.Equal(t, "toolu_1", got[chatID][0].ToolUseID)
 	require.Equal(t, "prompt-1", got[chatID][0].PromptID)
@@ -195,6 +179,46 @@ func TestGetClaudeToolUsageByChatIDs(t *testing.T) {
 	require.Equal(t, "WebFetch", got[chatID][1].ToolName)
 	require.Equal(t, int64(512), got[chatID][1].InputSizeBytes)
 	require.Equal(t, int64(4096), got[chatID][1].ResultSizeBytes)
+}
+
+func requireClaudeTurnUsageEventually(
+	ctx context.Context,
+	t *testing.T,
+	ti *testInstance,
+	params repo.GetClaudeTurnUsageByChatIDsParams,
+	chatID string,
+	expectedRows int,
+) map[string][]repo.ClaudeTurnUsageRow {
+	t.Helper()
+
+	var got map[string][]repo.ClaudeTurnUsageRow
+	require.Eventually(t, func() bool {
+		var err error
+		got, err = ti.chClient.GetClaudeTurnUsageByChatIDs(ctx, params)
+		return err == nil && len(got[chatID]) == expectedRows
+	}, 2*time.Second, 50*time.Millisecond)
+
+	return got
+}
+
+func requireClaudeToolUsageEventually(
+	ctx context.Context,
+	t *testing.T,
+	ti *testInstance,
+	params repo.GetClaudeTurnUsageByChatIDsParams,
+	chatID string,
+	expectedRows int,
+) map[string][]repo.ClaudeToolUsageRow {
+	t.Helper()
+
+	var got map[string][]repo.ClaudeToolUsageRow
+	require.Eventually(t, func() bool {
+		var err error
+		got, err = ti.chClient.GetClaudeToolUsageByChatIDs(ctx, params)
+		return err == nil && len(got[chatID]) == expectedRows
+	}, 2*time.Second, 50*time.Millisecond)
+
+	return got
 }
 
 type claudeOTELLogParams struct {

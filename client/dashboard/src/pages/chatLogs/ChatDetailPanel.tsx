@@ -103,6 +103,7 @@ function getTraceId(chatId: string): string {
 }
 
 const PANEL_TELEMETRY_LOG_LIMIT = 100;
+const CLAUDE_OTEL_LOG_URN = "claude-code:otel:logs";
 
 function getRiskBadgeLabel(result: RiskResult): string {
   if (result.ruleId === "llm_judge") return getRuleTitleFallback(result.ruleId);
@@ -511,17 +512,13 @@ function ClaudeUsageBadge({ usage }: { usage: ClaudeUsageMatch }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="cursor-pointer"
-          onClick={(e) => e.stopPropagation()}
-        >
+        <span className="cursor-pointer" onClick={(e) => e.stopPropagation()}>
           <Badge variant="neutral" className="shrink-0 text-xs">
             <Icon name="dollar-sign" className="mr-1 size-3" />
             {formatUsageCost(turn.costUsd)} ·{" "}
             {formatTokenCount(turn.totalTokens)} tokens
           </Badge>
-        </button>
+        </span>
       </PopoverTrigger>
       <PopoverContent
         align="end"
@@ -912,6 +909,12 @@ function filterToolLogs(logs: TelemetryLogRecord[]): TelemetryLogRecord[] {
       attrs.tool_name || attrs.function_name || attrs.gram_urn;
     return hasToolKeyword || hasToolAttr;
   });
+}
+
+function filterPanelTelemetryLogs(
+  logs: TelemetryLogRecord[],
+): TelemetryLogRecord[] {
+  return logs.filter((log) => log.attributes?.gram_urn !== CLAUDE_OTEL_LOG_URN);
 }
 
 // Tool Calls Tab Component - filters logs to show only tool-related entries
@@ -1320,7 +1323,10 @@ function ChatDetailPanel({
     setRiskOnly(initialRiskOnly);
   }, [chatId, initialRiskOnly]);
 
-  const logs = useMemo(() => logsData?.logs || [], [logsData?.logs]);
+  const logs = useMemo(
+    () => filterPanelTelemetryLogs(logsData?.logs ?? []),
+    [logsData?.logs],
+  );
   const toolLogs = useMemo(() => filterToolLogs(logs), [logs]);
 
   // Fetch risk findings for this chat

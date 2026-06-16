@@ -8,6 +8,7 @@ import {
   buildClaudeToolUsageByToolUseId,
   buildClaudeUsageByMessageId,
   formatByteCount,
+  formatDurationFromNanos,
 } from "./claudeUsage";
 
 function message(
@@ -111,5 +112,11 @@ describe("formatByteCount", () => {
     expect(formatByteCount(256)).toBe("256 BYTES");
     expect(formatByteCount(4096)).toBe("4 KB");
     expect(formatByteCount(1_572_864)).toBe("1.5 MB");
+  });
+});
+
+describe("formatDurationFromNanos", () => {
+  it("carries rounded seconds into minutes", () => {
+    expect(formatDurationFromNanos("0", "59999000000")).toBe("1m 0s");
   });
 });
