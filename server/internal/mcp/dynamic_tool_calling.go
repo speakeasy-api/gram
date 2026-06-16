@@ -201,7 +201,7 @@ func handleSearchToolsCall(
 	}
 
 	// construct full tool entries with similarity scores
-	var results []*toolListEntry
+	results := make([]*toolListEntry, 0, len(searchResults))
 	for _, searchResult := range searchResults {
 		tool, exists := toolsByName[searchResult.ToolName]
 		if !exists {
