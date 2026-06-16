@@ -1,14 +1,8 @@
 import { useEffect, useRef, useState, type ReactElement } from "react";
-import {
-  Link,
-  Outlet,
-  useLocation,
-  useNavigate,
-  useParams,
-} from "react-router";
+import { Link, Outlet, useNavigate, useParams } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { useAssistantRuntime, useAssistantState } from "@assistant-ui/react";
-import { Chat, GramElementsProvider } from "@gram-ai/elements";
+import { Chat } from "@gram-ai/elements";
 import {
   ChevronLeft,
   Home,
@@ -22,11 +16,8 @@ import type { ChatOverview } from "@gram/client/models/components";
 import { SortBy, SortOrder } from "@gram/client/models/operations/listchats";
 import { useListChats } from "@gram/client/react-query";
 import { useSession } from "@/contexts/Auth";
-import {
-  InsightsConfig,
-  PendingPromptBridge,
-} from "@/components/insights-dock";
-import { useChatPageConfig } from "@/hooks/useChatPageConfig";
+import { InsightsConfig } from "@/components/insights-dock";
+import { useInsightsState } from "@/components/insights-context";
 import { useServerAssistantTransport } from "@/hooks/useServerAssistantTransport";
 import { useSlugs } from "@/contexts/Sdk";
 import {
@@ -60,6 +51,7 @@ export function ChatHome(): ReactElement {
   const { user } = useSession();
   const navigate = useNavigate();
   const routes = useRoutes();
+  const { sendPrompt } = useInsightsState();
   const [value, setValue] = useState("");
 
   const firstName = user.displayName?.trim().split(/\s+/)[0];
@@ -68,11 +60,11 @@ export function ChatHome(): ReactElement {
   const startChat = (prompt: string) => {
     const trimmed = prompt.trim();
     if (!trimmed) return;
-    // No chat id exists until the server mints one on first send, so open the
-    // conversation page in "new" mode and hand it the prompt to dispatch.
-    void navigate(routes.chat.conversation.href("new"), {
-      state: { prompt: trimmed },
-    });
+    // Start the conversation on the shared runtime, then drop into the
+    // full-page view — the in-flight turn is already streaming there. The
+    // server mints the chat id on the first send.
+    sendPrompt(trimmed);
+    void navigate(routes.chat.conversation.href("new"));
   };
 
   return (
@@ -359,22 +351,20 @@ function ChatHomeRecipes({ onPick }: { onPick: (prompt: string) => void }) {
 
 /**
  * `/chat/:chatId` — a single conversation. `:chatId` is either a server chat
- * id (opened by <OpenConversation> once the thread list loads) or the literal
- * `new` for a fresh thread seeded by an "Ask anything" prompt passed through
- * router state.
+ * id (opened by <SavedConversation> on the shared runtime) or the literal
+ * `new` for the active/fresh thread (a seeded prompt is already streaming, or
+ * an empty composer for a brand-new chat).
  */
 export function ChatConversation(): ReactElement {
   const { chatId } = useParams();
-  const location = useLocation();
   const routes = useRoutes();
+  const navigate = useNavigate();
+  const { assistantReady, newConversation } = useInsightsState();
 
-  const initialPrompt = (location.state as { prompt?: string } | null)?.prompt;
-  const { config, ready, error } = useChatPageConfig();
-
-  // Capture the seed prompt once so a re-render never re-sends it.
-  const [pending] = useState(() =>
-    initialPrompt ? { text: initialPrompt, nonce: Date.now() } : null,
-  );
+  const startNewChat = () => {
+    newConversation();
+    void navigate(routes.chat.conversation.href("new"));
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -386,22 +376,17 @@ export function ChatConversation(): ReactElement {
         >
           <ChevronLeft className="size-4" />
         </Link>
-        <Link
-          to={routes.chat.conversation.href("new")}
+        <button
+          type="button"
+          onClick={startNewChat}
           className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-sm"
         >
           <SquarePen className="size-4" />
           New chat
-        </Link>
+        </button>
       </header>
       <div className="min-h-0 flex-1">
-        <ConversationBody
-          chatId={chatId}
-          config={config}
-          ready={ready}
-          error={error}
-          pending={pending}
-        />
+        <ConversationBody chatId={chatId} ready={assistantReady} />
       </div>
     </div>
   );
@@ -409,26 +394,14 @@ export function ChatConversation(): ReactElement {
 
 function ConversationBody({
   chatId,
-  config,
   ready,
-  error,
-  pending,
 }: {
   chatId: string | undefined;
-  config: ReturnType<typeof useChatPageConfig>["config"];
   ready: boolean;
-  error: string | null;
-  pending: { text: string; nonce: number } | null;
-}) {
-  if (error) {
-    return (
-      <div className="flex h-full items-center justify-center p-8 text-center">
-        <p className="text-muted-foreground text-sm">
-          Couldn't connect to the assistant. {error}
-        </p>
-      </div>
-    );
-  }
+}): ReactElement {
+  // The shared runtime (mounted in InsightsProvider) is the ancestor here, so
+  // gate on it rather than mounting a second provider — that's what lets an
+  // in-flight turn started in the dock keep streaming after maximize.
   if (!ready) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -436,16 +409,7 @@ function ConversationBody({
       </div>
     );
   }
-  // Key by chatId so navigating between conversations remounts the runtime
-  // onto the right thread.
-  return (
-    <GramElementsProvider key={chatId} config={config}>
-      {pending && (
-        <PendingPromptBridge pending={pending} onConsume={() => {}} />
-      )}
-      <ConversationSurface chatId={chatId} />
-    </GramElementsProvider>
-  );
+  return <ConversationSurface chatId={chatId} />;
 }
 
 function ConversationSurface({

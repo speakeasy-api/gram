@@ -28,6 +28,12 @@ export interface InsightsContextValue {
    *  Fires once per call — intended for "Explore with AI" CTAs that should
    *  drop the user straight into a running conversation. */
   sendPrompt: (prompt: string) => void;
+  /** True once the shared Project Assistant runtime is mounted. Surfaces
+   *  (e.g. the full-page chat) gate on this before rendering chat UI that
+   *  needs the runtime. */
+  assistantReady: boolean;
+  /** Switch the shared runtime to a fresh empty conversation. */
+  newConversation: () => void;
 }
 
 export const InsightsContext = createContext<InsightsContextValue>({
@@ -36,6 +42,8 @@ export const InsightsContext = createContext<InsightsContextValue>({
   setIsExpanded: () => {},
   setOverride: () => {},
   sendPrompt: () => {},
+  assistantReady: false,
+  newConversation: () => {},
 });
 
 /**
