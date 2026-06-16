@@ -133,7 +133,7 @@ export function TraceLogsList({
         <div className="w-1.5 shrink-0" />
         <div className="w-[150px] shrink-0" />
         <div className="w-5 shrink-0" />
-        <span className="text-sm">No additional logs in this trace</span>
+        <span className="text-xs">No additional logs in this trace</span>
       </div>
     );
   }
@@ -146,7 +146,7 @@ export function TraceLogsList({
         <div className="flex w-5 shrink-0 justify-center">
           <Icon name="loader-circle" className="size-4 animate-spin" />
         </div>
-        <span className="text-sm">Loading spans...</span>
+        <span className="text-xs">Loading spans...</span>
       </div>
     );
   }
@@ -157,7 +157,7 @@ export function TraceLogsList({
         <div className="w-1.5 shrink-0" />
         <div className="w-[150px] shrink-0" />
         <div className="w-5 shrink-0" />
-        <span className="text-destructive text-sm">
+        <span className="text-destructive text-xs">
           Failed to load spans: {error.message}
         </span>
       </div>
@@ -172,7 +172,7 @@ export function TraceLogsList({
         <div className="w-1.5 shrink-0" />
         <div className="w-[150px] shrink-0" />
         <div className="w-5 shrink-0" />
-        <span className="text-sm">No spans found for this trace</span>
+        <span className="text-xs">No spans found for this trace</span>
       </div>
     );
   }
@@ -250,7 +250,7 @@ function ChildLogRow({
       </span>
 
       {/* Message - takes remaining space */}
-      <span className="text-muted-foreground min-w-0 flex-1 truncate text-sm">
+      <span className="text-muted-foreground min-w-0 flex-1 truncate text-xs">
         {formatLogBody(log)}
       </span>
     </div>

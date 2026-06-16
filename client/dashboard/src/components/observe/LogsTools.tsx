@@ -895,7 +895,7 @@ function LogsToolsTraceRow({
         }}
         className="hover:bg-muted/50 flex w-full cursor-pointer items-center gap-3 px-5 py-2.5 text-left transition-colors"
       >
-        <div className="text-muted-foreground min-w-[150px] shrink-0 font-mono text-sm">
+        <div className="text-muted-foreground min-w-[150px] shrink-0 font-mono text-xs">
           {timeAgo}
         </div>
 
@@ -910,7 +910,7 @@ function LogsToolsTraceRow({
           <div className="group/server relative flex shrink-0 items-center">
             <span
               className={cn(
-                "shrink-0 truncate rounded-xs px-2 py-1 font-mono text-xs font-medium",
+                "shrink-0 truncate rounded-xs px-2 py-1 font-mono text-xs",
                 targetConfig.className,
               )}
             >
@@ -932,16 +932,17 @@ function LogsToolsTraceRow({
           </div>
           <div className="flex min-w-0 items-baseline gap-2">
             {showTargetLabel && (
-              <span className="text-muted-foreground min-w-0 truncate text-xs">
+              <span className="text-muted-foreground min-w-0 truncate font-mono text-xs">
                 {targetLabel}
+                {" /"}
               </span>
             )}
-            <span className="truncate font-mono text-sm">{trace.toolName}</span>
+            <span className="truncate font-mono text-xs">{trace.toolName}</span>
           </div>
         </div>
 
-        <div className="text-muted-foreground min-w-[200px] flex-1 truncate text-sm">
-          {trace.userLabel || "—"}
+        <div className="text-muted-foreground min-w-[200px] flex-1 truncate text-xs">
+          {userLabel || "—"}
         </div>
 
         <div className="flex w-24 shrink-0 items-center gap-2">
@@ -983,16 +984,16 @@ function LogsToolsTraceRow({
       {isExpanded && (
         <>
           {trace.hookStatus === "blocked" && (
-            <div className="border-warning/30 bg-warning/10 flex items-start gap-3 border-y px-5 py-3">
+            <div className="border-warning/30 bg-warning/10 flex items-start gap-3 border-y px-5 py-3 text-xs">
               <Icon
                 name="shield-alert"
                 className="text-warning mt-0.5 size-4 shrink-0"
               />
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <div className="text-warning text-xs font-semibold tracking-wide uppercase">
+                <div className="text-warning font-semibold tracking-wide uppercase">
                   Blocked
                 </div>
-                <div className="text-foreground wrap-break-words text-sm">
+                <div className="text-foreground wrap-break-words ">
                   {trace.blockReason || "No reason provided"}
                 </div>
               </div>
@@ -1032,23 +1033,25 @@ function getTargetConfig(targetType: ToolUsageTraceSummary["targetType"]) {
     case "hosted_mcp_server":
       return {
         label: "Hosted MCP",
-        className: "bg-primary/10 text-primary",
+        className: "bg-primary/15 text-primary",
       };
     case "shadow_mcp_server":
       return {
         label: "Shadow MCP",
-        className: "bg-accent text-accent-foreground",
+        className:
+          "bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-300",
       };
     case "skill":
       return {
         label: "Skill",
-        className: "bg-secondary text-secondary-foreground",
+        className:
+          "bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-300",
       };
     case "local_tool":
     default:
       return {
         label: "Local Tools",
-        className: "bg-muted text-muted-foreground",
+        className: "bg-muted/50 text-primary",
       };
   }
 }
