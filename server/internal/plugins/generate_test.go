@@ -1017,6 +1017,43 @@ func TestGenerateCodexObservabilityPluginScriptPostsToCodexEndpoint(t *testing.T
 	require.Contains(t, asyncScript, ") >/dev/null 2>&1 &", "hook_async.sh must run the sender in the background")
 }
 
+// runCodexInstallScript executes the generated install script under an
+// isolated HOME containing a stub codex at ~/.local/bin (off PATH), so binary
+// probing never reaches a real install on the host. The stub appends its
+// arguments to the returned call log.
+func runCodexInstallScript(t *testing.T, script []byte, existingConfig string) (home string, callLog string) {
+	t.Helper()
+
+	bashPath, err := exec.LookPath("bash")
+	require.NoError(t, err, "bash is required to run the generated install script")
+	pythonPath, err := exec.LookPath("python3")
+	require.NoError(t, err, "python3 is required by the generated install script")
+
+	home = t.TempDir()
+	callLog = filepath.Join(home, "codex-calls.log")
+	stub := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"" + callLog + "\"\n"
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".local", "bin"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".local", "bin", "codex"), []byte(stub), 0o755))
+
+	if existingConfig != "" {
+		require.NoError(t, os.MkdirAll(filepath.Join(home, ".codex"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(home, ".codex", "config.toml"), []byte(existingConfig), 0o644))
+	}
+
+	scriptPath := filepath.Join(t.TempDir(), "install.sh")
+	require.NoError(t, os.WriteFile(scriptPath, script, 0o755))
+
+	cmd := exec.Command(bashPath, scriptPath)
+	cmd.Env = []string{
+		"HOME=" + home,
+		"PATH=" + filepath.Dir(pythonPath) + ":/usr/bin:/bin",
+	}
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "install script failed: %s", out)
+
+	return home, callLog
+}
+
 // An upgraded install already carries [hooks.state] entries whose trusted_hash
 // was computed against the previous hook command. When the command changes
 // (e.g. SessionStart moving from hook.sh to hook_async.sh) the installer must
@@ -1024,11 +1061,6 @@ func TestGenerateCodexObservabilityPluginScriptPostsToCodexEndpoint(t *testing.T
 // and silently stops running telemetry until the user re-approves them.
 func TestGenerateCodexInstallScriptRefreshesStaleTrustedHashes(t *testing.T) {
 	t.Parallel()
-
-	bashPath, err := exec.LookPath("bash")
-	require.NoError(t, err, "bash is required to run the generated install script")
-	pythonPath, err := exec.LookPath("python3")
-	require.NoError(t, err, "python3 is required by the generated install script")
 
 	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
 	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
@@ -1045,34 +1077,78 @@ func TestGenerateCodexInstallScriptRefreshesStaleTrustedHashes(t *testing.T) {
 	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
 	require.NoError(t, err)
 
-	home := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(home, ".codex"), 0o755))
-	existing := "features.hooks = true\n\n" +
-		"[hooks.state.\"" + target.StateKey + "\"]\n" +
+	existing := "[hooks.state.\"" + target.StateKey + "\"]\n" +
 		"enabled = true\n" +
 		"trusted_hash = \"" + staleHash + "\"\n"
-	configPath := filepath.Join(home, ".codex", "config.toml")
-	require.NoError(t, os.WriteFile(configPath, []byte(existing), 0o644))
+	home, _ := runCodexInstallScript(t, script, existing)
 
-	scriptPath := filepath.Join(t.TempDir(), "install.sh")
-	require.NoError(t, os.WriteFile(scriptPath, script, 0o755))
-
-	cmd := exec.Command(bashPath, scriptPath)
-	// Exclude any installed `codex` binary so only the config.toml patch runs.
-	cmd.Env = []string{
-		"HOME=" + home,
-		"PATH=" + filepath.Dir(pythonPath) + ":/usr/bin:/bin",
-	}
-	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, "install script failed: %s", out)
-
-	patched, err := os.ReadFile(configPath)
-	require.NoError(t, err)
+	patched := requireFileBytes(t, filepath.Join(home, ".codex", "config.toml"))
 	patchedStr := string(patched)
 
 	require.NotContains(t, patchedStr, staleHash, "stale trusted_hash must be replaced")
 	require.Contains(t, patchedStr, target.TrustedHash, "trusted_hash must be refreshed to the current command's hash")
 	require.Equal(t, 1, strings.Count(patchedStr, "[hooks.state.\""+target.StateKey+"\"]"), "refresh must not duplicate the entry")
+}
+
+// Desktop-only and MDM-deployed machines run without codex on PATH. The
+// install script must probe well-known install locations and use the binary
+// it finds there instead of skipping marketplace registration.
+func TestGenerateCodexInstallScriptProbesForCodexBinary(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	_, callLog := runCodexInstallScript(t, script, "")
+
+	calls := string(requireFileBytes(t, callLog))
+	require.Contains(t, calls, "plugin marketplace add https://example.com/gram-marketplace")
+	require.Contains(t, calls, "plugin marketplace upgrade "+conv.ToSlug(cfg.OrgName)+"-speakeasy")
+}
+
+// Root-level dotted keys (features.hooks = true) implicitly define the
+// [features] table and make Codex reject the whole config with a duplicate-key
+// error when an explicit [features] table is also present — which is the
+// default, since js_repl lives there. The flags must be written inside the
+// table, and dotted keys left behind by earlier script versions removed.
+func TestGenerateCodexInstallScriptWritesFeatureFlagsInFeaturesTable(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	existing := "features.hooks = true\n" +
+		"features.plugin_hooks = true\n\n" +
+		"[features]\n" +
+		"js_repl = true\n"
+	home, _ := runCodexInstallScript(t, script, existing)
+
+	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+
+	require.NotRegexp(t, `(?m)^features\.`, patched, "root-level dotted feature keys must be removed")
+	require.Equal(t, 1, strings.Count(patched, "[features]"), "the existing [features] table must be reused")
+	require.Equal(t, 1, strings.Count(patched, "\nhooks = true"), "hooks flag must live in the [features] table")
+	require.Equal(t, 1, strings.Count(patched, "\nplugin_hooks = true"), "plugin_hooks flag must live in the [features] table")
+	require.Contains(t, patched, "js_repl = true", "pre-existing table entries must be preserved")
+}
+
+func TestGenerateCodexInstallScriptCreatesFeaturesTable(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	home, _ := runCodexInstallScript(t, script, "")
+
+	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+
+	require.NotRegexp(t, `(?m)^features\.`, patched, "feature flags must not be written as root-level dotted keys")
+	require.Equal(t, 1, strings.Count(patched, "[features]"))
+	require.Equal(t, 1, strings.Count(patched, "\nhooks = true"))
+	require.Equal(t, 1, strings.Count(patched, "\nplugin_hooks = true"))
 }
 
 func TestGenerateReadmeIncludesCodexInstallation(t *testing.T) {
