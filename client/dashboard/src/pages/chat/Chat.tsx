@@ -96,6 +96,45 @@ function ChatLandingBackdrop(): ReactElement {
   );
 }
 
+// Example questions cycled through the composer placeholder — deliberately
+// different from the suggestion chips below, to hint at the assistant's range.
+const ASK_PLACEHOLDERS = [
+  "Summarize this week's activity",
+  "What should I look into today?",
+  "How did usage change vs last week?",
+  "Which agents are the most active?",
+  "Show me recent failed tool calls",
+  "What's my busiest MCP server?",
+  "Draft a weekly usage recap",
+];
+
+const PLACEHOLDER_HOLD_MS = 4800;
+const PLACEHOLDER_FADE_MS = 300;
+
+/** Rotates the composer placeholder through ASK_PLACEHOLDERS, holding each then
+ *  crossfading to the next. `visible` drives the fade; honours
+ *  prefers-reduced-motion by holding on the first. */
+function useCyclingPlaceholder(): { text: string; visible: boolean } {
+  const [index, setIndex] = useState(0);
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    let fadeId: ReturnType<typeof setTimeout>;
+    const holdId = setInterval(() => {
+      setVisible(false); // fade current out
+      fadeId = setTimeout(() => {
+        setIndex((n) => (n + 1) % ASK_PLACEHOLDERS.length);
+        setVisible(true); // fade next in
+      }, PLACEHOLDER_FADE_MS);
+    }, PLACEHOLDER_HOLD_MS);
+    return () => {
+      clearInterval(holdId);
+      clearTimeout(fadeId);
+    };
+  }, []);
+  return { text: ASK_PLACEHOLDERS[index] ?? "Ask anything", visible };
+}
+
 /**
  * The "Ask anything" widget — greeting, composer, recents, recipes. Used by
  * the `/chat` landing and embedded on the project home page. Submitting opens
@@ -112,6 +151,8 @@ export function ChatLanding({
   const routes = useRoutes();
   const { sendPrompt } = useInsightsState();
   const [value, setValue] = useState("");
+  const { text: placeholder, visible: placeholderVisible } =
+    useCyclingPlaceholder();
 
   const firstName = user.displayName?.trim().split(/\s+/)[0];
   const greeting = firstName ? `Hi ${firstName}, ask anything` : "Ask anything";
@@ -137,16 +178,26 @@ export function ChatLanding({
             e.preventDefault();
             startChat(value);
           }}
-          className="border-border bg-card focus-within:border-foreground/30 rounded-2xl border px-4 py-3 shadow-sm transition-colors"
+          className="border-border bg-card focus-within:border-foreground/30 relative rounded-2xl border px-4 py-3 shadow-sm transition-colors"
         >
           <input
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            placeholder="Ask anything"
             aria-label="Ask anything"
             autoFocus={autoFocusInput}
-            className="placeholder:text-muted-foreground w-full bg-transparent text-base outline-none"
+            className="w-full bg-transparent text-base outline-none"
           />
+          {/* Overlay placeholder so it can crossfade (native ::placeholder
+              can't transition between values). Shown only while empty. */}
+          {value === "" && (
+            <span
+              aria-hidden="true"
+              className="text-muted-foreground pointer-events-none absolute inset-x-4 top-1/2 -translate-y-1/2 truncate text-base transition-opacity duration-300"
+              style={{ opacity: placeholderVisible ? 1 : 0 }}
+            >
+              {placeholder}
+            </span>
+          )}
         </form>
       </div>
 

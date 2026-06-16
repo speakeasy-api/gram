@@ -128,6 +128,13 @@ export const CHAT_LANDING_SUGGESTIONS: InsightsSuggestion[] = [
       "How is adoption trending week over week — active end users, agent sessions, and tool calls — and which teams or clients are driving the growth?",
   },
   {
+    title: "Who are the heaviest users this week?",
+    label: "Top users by volume",
+    icon: "users",
+    prompt:
+      "Who are the heaviest end users this week by tool calls and agent sessions, and what is each of them mainly doing?",
+  },
+  {
     title: "What's getting slower?",
     label: "Latency regressions",
     icon: "gauge",
