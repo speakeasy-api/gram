@@ -10,7 +10,6 @@ import {
 import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
-import { ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG } from "@/lib/externalMcpUserSessions";
 import { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import type { McpEnvironmentConfigInput } from "@gram/client/models/components";
@@ -34,8 +33,6 @@ import { EnvironmentSwitcher } from "./EnvironmentSwitcher";
 import { EnvironmentVariableRow } from "./EnvironmentVariableRow";
 import {
   ConnectOAuthModal,
-  EditOAuthProxyModal,
-  GramOAuthProxyModal,
   OAuthDetailsModal,
   PageSection,
 } from "./MCPDetails";
@@ -45,8 +42,6 @@ import {
   getValueForEnvironment,
 } from "./environmentVariableUtils";
 import { useEnvironmentVariables } from "./useEnvironmentVariables";
-import { shouldRenderWireUserSessionIssuerModal } from "./wire-user-session-issuer/rendering";
-import { WireUserSessionIssuerModal } from "./wire-user-session-issuer/WireUserSessionIssuerModal";
 
 // Empty array constant to avoid creating new references
 const EMPTY_ENVIRONMENTS: never[] = [];
@@ -881,15 +876,10 @@ export function MCPAuthenticationTab({
   );
 }
 
-type OAuthParadigm = "external" | "gram" | "proxy";
+type OAuthParadigm = "external";
 
 function getOAuthParadigm(toolset: Toolset): OAuthParadigm | null {
-  if (toolset.externalOauthServer) return "external";
-  if (!toolset.oauthProxyServer) return null;
-  return toolset.oauthProxyServer.oauthProxyProviders?.[0]?.providerType ===
-    "gram"
-    ? "gram"
-    : "proxy";
+  return toolset.externalOauthServer ? "external" : null;
 }
 
 type OAuthSectionProps = {
@@ -898,23 +888,10 @@ type OAuthSectionProps = {
 
 function OAuthSection({ toolset }: OAuthSectionProps) {
   const [isOAuthModalOpen, setIsOAuthModalOpen] = useState(false);
-  const [isEditOAuthModalOpen, setIsEditOAuthModalOpen] = useState(false);
-  const [isGramOAuthModalOpen, setIsGramOAuthModalOpen] = useState(false);
   const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
-  const [
-    isWireUserSessionIssuerModalOpen,
-    setIsWireUserSessionIssuerModalOpen,
-  ] = useState(false);
-
-  const telemetry = useTelemetry();
-
-  const { data: environmentsData } = useListEnvironments();
-  const environments = environmentsData?.environments ?? [];
 
   const loginSecured = !!toolset.userSessionIssuerSlug;
-  const isOAuthConnected = !!(
-    toolset?.oauthProxyServer || toolset?.externalOauthServer
-  );
+  const isOAuthConnected = !!toolset?.externalOauthServer;
   const availableOAuthAuthCode =
     toolset?.oauthEnablementMetadata?.oauth2SecurityCount > 0;
   const externalMcpOAuthStatus = useExternalMcpOAuthConfigStatus(toolset.slug);
@@ -927,40 +904,18 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
 
   const oauthParadigm = getOAuthParadigm(toolset);
 
-  const proxyEnvironmentSlug =
-    toolset.oauthProxyServer?.oauthProxyProviders?.[0]?.environmentSlug;
-  const proxyEnvironmentName =
-    environments.find((e) => e.slug === proxyEnvironmentSlug)?.name ??
-    proxyEnvironmentSlug ??
-    "unknown";
-
   const handleConfigureClick = () => {
     if (isOAuthConnected) return setIsOAuthDetailsModalOpen(true);
-    if (toolset.mcpIsPublic) return setIsOAuthModalOpen(true);
-    setIsGramOAuthModalOpen(true);
+    setIsOAuthModalOpen(true);
   };
 
   const disabledTooltipText = !toolset.mcpEnabled
     ? "Enable the MCP server to configure OAuth"
     : "This MCP server does not require the OAuth authorization code flow";
 
-  // userSessionIssuerSlug is populated by the toolsets read path when the
-  // OAuth-Proxy → user-sessions migration has produced a user_session_issuer
-  // for this toolset.
+  // userSessionIssuerSlug is populated by the toolsets read path once a
+  // user_session_issuer is wired to this toolset.
   const userSessionIssuerWired = !!toolset.userSessionIssuerSlug;
-  // The migration entry point appears for both OAuth Proxy paradigms (custom
-  // and gram-managed): both produce a user_session_issuer, even though
-  // gram-managed skips the remote_session_* pair. External-OAuth toolsets
-  // have nothing to port. Gated to feature-flag holders, and hidden once a
-  // user_session_issuer is already wired (nothing left to migrate).
-  const showWireUserSessionIssuer =
-    (telemetry.isFeatureEnabled(ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG) ??
-      false) &&
-    !userSessionIssuerWired &&
-    (oauthParadigm === "proxy" || oauthParadigm === "gram");
-  // Once the user_session_issuer is wired, the OAuth-proxy CLIENT_ID/SECRET
-  // it was cloned from is no longer the live credential — hide Configure to
-  // avoid steering operators back into the legacy paradigm.
   const hideConfigureButton = userSessionIssuerWired;
 
   return (
@@ -977,14 +932,6 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
               </Badge.LeftIcon>
               <Badge.Text>Login Secured</Badge.Text>
             </Badge>
-          )}
-          {showWireUserSessionIssuer && (
-            <Button
-              variant="tertiary"
-              onClick={() => setIsWireUserSessionIssuerModalOpen(true)}
-            >
-              <Button.Text>Wire User Session Issuer</Button.Text>
-            </Button>
           )}
           {!hideConfigureButton && (
             <Tooltip>
@@ -1019,25 +966,14 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
         showConfigureAction={!hideConfigureButton}
         oauthParadigm={oauthParadigm}
         mcpEnabled={!!toolset.mcpEnabled}
-        proxyEnvironmentSlug={proxyEnvironmentSlug}
-        proxyEnvironmentName={proxyEnvironmentName}
         onConfigureClick={handleConfigureClick}
       />
 
       {/* OAuth Modals */}
-      <GramOAuthProxyModal
-        isOpen={isGramOAuthModalOpen}
-        onClose={() => setIsGramOAuthModalOpen(false)}
-        toolset={toolset}
-      />
       <OAuthDetailsModal
         isOpen={isOAuthDetailsModalOpen}
         onClose={() => setIsOAuthDetailsModalOpen(false)}
         toolset={toolset}
-        onEditRequest={() => {
-          setIsOAuthDetailsModalOpen(false);
-          setIsEditOAuthModalOpen(true);
-        }}
       />
       <ConnectOAuthModal
         isOpen={isOAuthModalOpen}
@@ -1045,32 +981,12 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
         toolsetSlug={toolset.slug}
         toolset={toolset}
       />
-      {toolset.oauthProxyServer && (
-        <EditOAuthProxyModal
-          isOpen={isEditOAuthModalOpen}
-          onClose={() => setIsEditOAuthModalOpen(false)}
-          toolsetSlug={toolset.slug}
-          proxyServer={toolset.oauthProxyServer}
-        />
-      )}
-      {shouldRenderWireUserSessionIssuerModal({
-        showWireUserSessionIssuer,
-        isOpen: isWireUserSessionIssuerModalOpen,
-      }) && (
-        <WireUserSessionIssuerModal
-          isOpen={isWireUserSessionIssuerModalOpen}
-          onClose={() => setIsWireUserSessionIssuerModalOpen(false)}
-          toolset={toolset}
-        />
-      )}
     </PageSection>
   );
 }
 
 const PARADIGM_LABELS: Record<OAuthParadigm, string> = {
   external: "External OAuth",
-  gram: "Platform OAuth",
-  proxy: "OAuth Proxy",
 };
 
 function OAuthStatusDisplay({
@@ -1081,8 +997,6 @@ function OAuthStatusDisplay({
   showConfigureAction,
   oauthParadigm,
   mcpEnabled,
-  proxyEnvironmentSlug,
-  proxyEnvironmentName,
   onConfigureClick,
 }: {
   isOAuthConnected: boolean;
@@ -1092,12 +1006,8 @@ function OAuthStatusDisplay({
   showConfigureAction: boolean;
   oauthParadigm: OAuthParadigm | null;
   mcpEnabled: boolean;
-  proxyEnvironmentSlug: string | undefined;
-  proxyEnvironmentName: string;
   onConfigureClick: () => void;
 }) {
-  const routes = useRoutes();
-
   if (loginSecured) {
     return (
       <div className="border-success-softest bg-success-softest rounded-lg border border-dashed p-8 text-center">
@@ -1121,27 +1031,8 @@ function OAuthStatusDisplay({
           {PARADIGM_LABELS[oauthParadigm]} is configured
         </p>
         <p className="text-success-foreground text-sm">
-          {oauthParadigm === "external" ? (
-            "Users will authenticate with your external OAuth server before accessing this MCP server."
-          ) : oauthParadigm === "gram" ? (
-            "Users will authenticate with Platform OAuth before accessing this MCP server."
-          ) : (
-            <>
-              The CLIENT_ID and CLIENT_SECRET values in the{" "}
-              {proxyEnvironmentSlug ? (
-                <routes.environments.environment.Link
-                  params={[proxyEnvironmentSlug]}
-                  className="underline"
-                >
-                  {proxyEnvironmentName}
-                </routes.environments.environment.Link>
-              ) : (
-                `"${proxyEnvironmentName}"`
-              )}{" "}
-              environment will be used to authenticate with the OAuth provider
-              before users can access this MCP server.
-            </>
-          )}
+          Users will authenticate with your external OAuth server before
+          accessing this MCP server.
         </p>
       </div>
     );
