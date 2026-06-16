@@ -1,0 +1,21 @@
+client/dashboard/src/pages/security/PolicyCenter.tsx
+  s_67e5161625cc67::t_85a5ffc85a3f00 345-356
+  s_67e5161625cc67::t_85d4462981fe1b 2228,2274-2280,2350-2356,2374-2392,2442,2449,2463
+  s_67e5161625cc67::t_96dc484cf41d2c 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "87431c79c2f915389e6b77138b960f48a1fbeac7",
+  "prompts": {},
+  "sessions": {
+    "s_67e5161625cc67": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ecfe0-9405-7441-aec9-1a4a9133f548",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
