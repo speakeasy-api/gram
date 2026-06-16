@@ -896,6 +896,12 @@ function PolicyCenterContent() {
   // exempt_rule_ids knobs.
   const [includeQueries, setIncludeQueries] = useState<string[]>([]);
   const [exemptQueries, setExemptQueries] = useState<string[]>([]);
+  // Scope is defined EITHER by the coarse message-type cards OR by a custom
+  // include predicate — a mutex. message_types is kept either way but only sent
+  // (and only required) in "messageTypes" mode.
+  const [scopeMode, setScopeMode] = useState<"messageTypes" | "predicate">(
+    "messageTypes",
+  );
   const [selectedMessageTypes, setSelectedMessageTypes] = useState<
     Set<PolicyMessageType>
   >(new Set(ALL_POLICY_MESSAGE_TYPES));
@@ -992,6 +998,7 @@ function PolicyCenterContent() {
     setExemptRuleIds(new Set<string>());
     setIncludeQueries([]);
     setExemptQueries([]);
+    setScopeMode("messageTypes");
     setSelectedMessageTypes(new Set(ALL_POLICY_MESSAGE_TYPES));
     setFormAction("flag");
     setFormAutoName(true);
@@ -1020,10 +1027,12 @@ function PolicyCenterContent() {
     setFormName(policy.name);
     setFormEnabled(policy.enabled);
     // application_config applies to both kinds; load it before the kind branch.
-    setIncludeQueries(
-      queriesFromPredicates(policy.applicationConfig?.includes),
+    const loadedIncludes = queriesFromPredicates(
+      policy.applicationConfig?.includes,
     );
+    setIncludeQueries(loadedIncludes);
     setExemptQueries(queriesFromPredicates(policy.applicationConfig?.exempts));
+    setScopeMode(loadedIncludes.length > 0 ? "predicate" : "messageTypes");
     if (isPrompt) {
       setFormPromptInstruction(policy.prompt ?? "");
       setSelectedMessageTypes(policyMessageTypesForForm(policy.messageTypes));
@@ -1079,7 +1088,7 @@ function PolicyCenterContent() {
     // a value (empty object clears) so the omit-to-preserve impl can replace it;
     // on create we omit when empty.
     const applicationConfig = buildApplicationConfig(
-      includeQueries,
+      scopeMode === "predicate" ? includeQueries : [],
       exemptQueries,
     );
     const applicationUpdate = { applicationConfig: applicationConfig ?? {} };
@@ -1493,16 +1502,26 @@ function PolicyCenterContent() {
   const isLastWizardStep = wizardStep === wizardSteps.length - 1;
   const showWizardContinue = isWizard && !isLastWizardStep;
   const mutationPending = createMutation.isPending || updateMutation.isPending;
+  // Scope is satisfied by either a message-type selection or — in predicate mode
+  // — at least one valid include predicate (the two are a mutex).
+  const hasValidInclude = includeQueries.some(
+    (q) => predicateFromQuery(q) !== undefined,
+  );
+  const scopeMissing =
+    scopeMode === "messageTypes"
+      ? selectedMessageTypes.size === 0
+      : !hasValidInclude;
   const continueDisabled =
     (wizardStep === 0 &&
       (formPolicyKind === "prompt"
         ? !formPromptInstruction.trim()
         : selectedCategories.size === 0 && selectedCustomRuleIds.size === 0)) ||
-    (wizardStep === 1 && selectedMessageTypes.size === 0);
-  // Block save while an advanced application predicate is present but unparseable.
-  const applicationInvalid = [...includeQueries, ...exemptQueries].some(
-    (q) => q.trim() !== "" && parseMatchQuery(q).error !== null,
-  );
+    (wizardStep === 1 && scopeMissing);
+  // Block save while an application predicate that will be sent is unparseable.
+  const applicationInvalid = [
+    ...(scopeMode === "predicate" ? includeQueries : []),
+    ...exemptQueries,
+  ].some((q) => q.trim() !== "" && parseMatchQuery(q).error !== null);
   const saveDisabled =
     (formPolicyKind === "prompt" && !formPromptInstruction.trim()) ||
     // A standard policy needs at least one detector or custom rule (the step-0
@@ -1511,7 +1530,7 @@ function PolicyCenterContent() {
       selectedCategories.size === 0 &&
       selectedCustomRuleIds.size === 0) ||
     (!formAutoName && !formName.trim()) ||
-    selectedMessageTypes.size === 0 ||
+    scopeMissing ||
     applicationInvalid ||
     mutationPending;
   const showFooterBack =
@@ -1670,6 +1689,8 @@ function PolicyCenterContent() {
                     setIncludeQueries={setIncludeQueries}
                     exemptQueries={exemptQueries}
                     setExemptQueries={setExemptQueries}
+                    scopeMode={scopeMode}
+                    setScopeMode={setScopeMode}
                     selectedMessageTypes={selectedMessageTypes}
                     setSelectedMessageTypes={setSelectedMessageTypes}
                     formAction={formAction}
@@ -2346,8 +2367,8 @@ function PredicateList({
   queries,
   setQueries,
 }: {
-  label: string;
-  helpText: string;
+  label?: string;
+  helpText?: string;
   emptyAddLabel: string;
   queries: string[];
   setQueries: (v: string[]) => void;
@@ -2359,8 +2380,8 @@ function PredicateList({
   };
   return (
     <div className="space-y-2">
-      <Label className="text-sm font-medium">{label}</Label>
-      <p className="text-muted-foreground text-xs">{helpText}</p>
+      {label && <Label className="text-sm font-medium">{label}</Label>}
+      {helpText && <p className="text-muted-foreground text-xs">{helpText}</p>}
       {queries.map((q, i) => (
         // Index key: rows are positional and Monaco is controlled by `value`.
         // eslint-disable-next-line react/no-array-index-key
@@ -2422,6 +2443,8 @@ function PolicySheetBody({
   setIncludeQueries,
   exemptQueries,
   setExemptQueries,
+  scopeMode,
+  setScopeMode,
   selectedMessageTypes,
   setSelectedMessageTypes,
   formAction,
@@ -2450,6 +2473,8 @@ function PolicySheetBody({
   setIncludeQueries: (v: string[]) => void;
   exemptQueries: string[];
   setExemptQueries: (v: string[]) => void;
+  scopeMode: "messageTypes" | "predicate";
+  setScopeMode: (v: "messageTypes" | "predicate") => void;
   selectedMessageTypes: Set<PolicyMessageType>;
   setSelectedMessageTypes: (v: Set<PolicyMessageType>) => void;
   formAction: PolicyAction;
@@ -2466,11 +2491,6 @@ function PolicySheetBody({
   // already has some attached.
   const [exemptionsExpanded, setExemptionsExpanded] = useState(
     () => exemptRuleIds.size > 0,
-  );
-  // Fine-grained scope/exemption predicates (application_config); collapsed
-  // unless the policy already uses one.
-  const [advancedScopeOpen, setAdvancedScopeOpen] = useState(
-    () => includeQueries.length > 0 || exemptQueries.length > 0,
   );
   const [customizeCategory, setCustomizeCategory] =
     useState<RuleCategory | null>(null);
@@ -2627,125 +2647,147 @@ function PolicySheetBody({
               title="Where should it evaluate?"
               description="Leave all four on to apply everywhere. Narrow the scope to reduce noise or cost."
             />
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {ALL_POLICY_MESSAGE_TYPES.map((type) => (
-                <ScopeCard
-                  key={type}
-                  type={type as PolicyMessageType}
-                  checked={selectedMessageTypes.has(type as PolicyMessageType)}
-                  onToggle={(checked) => {
-                    const updated = new Set(selectedMessageTypes);
-                    if (checked) {
-                      updated.add(type as PolicyMessageType);
-                    } else {
-                      updated.delete(type as PolicyMessageType);
-                    }
-                    setSelectedMessageTypes(updated);
-                  }}
-                />
-              ))}
-            </div>
-            {selectedMessageTypes.size === 0 && (
-              <p className="text-destructive text-xs">
-                Select at least one session part.
-              </p>
-            )}
-            {coverageGaps.length > 0 && (
-              <Alert variant="warning">
-                <AlertDescription>
-                  <p className="font-medium">
-                    {coverageGaps.length === 1
-                      ? "1 attached rule targets message types outside this scope and won't run:"
-                      : `${coverageGaps.length} attached rules target message types outside this scope and won't run:`}
-                  </p>
-                  <ul className="mt-1 list-disc space-y-0.5 pl-4">
-                    {coverageGaps.map((gap) => (
-                      <li key={gap.title}>
-                        {gap.title} — needs{" "}
-                        {gap.missing
-                          .map((t) => POLICY_MESSAGE_TYPE_META[t].label)
-                          .join(", ")}
-                      </li>
-                    ))}
-                  </ul>
-                  <Button
-                    variant="secondary"
-                    className="mt-2"
-                    onClick={() => {
-                      const next = new Set(selectedMessageTypes);
-                      for (const t of missingScopeTypes) next.add(t);
-                      setSelectedMessageTypes(next);
-                    }}
+            {/* Scope is a mutex: message-type cards (coarse) XOR a custom
+                include predicate (fine). The segmented control conveys that. */}
+            <div className="space-y-3">
+              <div className="border-border inline-flex rounded-md border p-0.5">
+                {(
+                  [
+                    { key: "messageTypes", label: "Message types" },
+                    { key: "predicate", label: "Custom predicate" },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => setScopeMode(opt.key)}
+                    className={cn(
+                      "rounded px-3 py-1 text-xs font-medium transition-colors",
+                      scopeMode === opt.key
+                        ? "bg-foreground text-background"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
                   >
-                    <Button.Text>Include {missingScopeLabels}</Button.Text>
-                  </Button>
-                </AlertDescription>
-              </Alert>
-            )}
-            {customRules.length > 0 && (
-              <RuleSelectList
-                title="Exemptions"
-                description={
-                  <>
-                    Skip this entire policy for a message when one of these
-                    custom rules matches it (an allowlist). A rule used here
-                    can't also be a detector.
-                  </>
-                }
-                idPrefix="exempt"
-                customRules={customRules}
-                selectedRuleIds={exemptRuleIds}
-                onToggleRule={toggleExemption}
-                expanded={exemptionsExpanded}
-                onToggle={() => setExemptionsExpanded((v) => !v)}
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-muted-foreground text-xs">
+                {scopeMode === "messageTypes"
+                  ? "Apply to whole session parts. Switch to a custom predicate to match on tool or content attributes instead."
+                  : "Apply only to messages matching your predicate(s) — this replaces the message-type selection."}
+              </p>
+            </div>
+
+            {scopeMode === "messageTypes" ? (
+              <>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {ALL_POLICY_MESSAGE_TYPES.map((type) => (
+                    <ScopeCard
+                      key={type}
+                      type={type as PolicyMessageType}
+                      checked={selectedMessageTypes.has(
+                        type as PolicyMessageType,
+                      )}
+                      onToggle={(checked) => {
+                        const updated = new Set(selectedMessageTypes);
+                        if (checked) {
+                          updated.add(type as PolicyMessageType);
+                        } else {
+                          updated.delete(type as PolicyMessageType);
+                        }
+                        setSelectedMessageTypes(updated);
+                      }}
+                    />
+                  ))}
+                </div>
+                {selectedMessageTypes.size === 0 && (
+                  <p className="text-destructive text-xs">
+                    Select at least one session part.
+                  </p>
+                )}
+                {coverageGaps.length > 0 && (
+                  <Alert variant="warning">
+                    <AlertDescription>
+                      <p className="font-medium">
+                        {coverageGaps.length === 1
+                          ? "1 attached rule targets message types outside this scope and won't run:"
+                          : `${coverageGaps.length} attached rules target message types outside this scope and won't run:`}
+                      </p>
+                      <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                        {coverageGaps.map((gap) => (
+                          <li key={gap.title}>
+                            {gap.title} — needs{" "}
+                            {gap.missing
+                              .map((t) => POLICY_MESSAGE_TYPE_META[t].label)
+                              .join(", ")}
+                          </li>
+                        ))}
+                      </ul>
+                      <Button
+                        variant="secondary"
+                        className="mt-2"
+                        onClick={() => {
+                          const next = new Set(selectedMessageTypes);
+                          for (const t of missingScopeTypes) next.add(t);
+                          setSelectedMessageTypes(next);
+                        }}
+                      >
+                        <Button.Text>Include {missingScopeLabels}</Button.Text>
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </>
+            ) : (
+              <PredicateList
+                label="Evaluate messages matching"
+                helpText="The policy evaluates a message only when it matches one of these. Add more to widen scope — they're OR'd."
+                emptyAddLabel="Add scope predicate"
+                queries={includeQueries}
+                setQueries={setIncludeQueries}
               />
             )}
 
-            <Collapsible
-              open={advancedScopeOpen}
-              onOpenChange={setAdvancedScopeOpen}
-              className="border-border rounded-lg border"
-            >
-              <CollapsibleTrigger className="hover:bg-muted/40 flex w-full items-center gap-3 px-4 py-3 text-left transition-colors">
-                <SlidersHorizontal className="text-muted-foreground h-4 w-4 shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">
-                      Advanced — fine-grained scope
-                    </span>
-                    <Badge variant="neutral" className="text-[10px]">
-                      <Badge.Text>Optional</Badge.Text>
-                    </Badge>
-                  </div>
-                  <div className="text-muted-foreground truncate text-xs">
-                    Match on tool or content attributes beyond message types
-                  </div>
-                </div>
-                <ChevronRight
-                  className={cn(
-                    "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
-                    advancedScopeOpen && "rotate-90",
-                  )}
+            {/* Exemptions — always available and additive (not part of the
+                scope mutex). A match here skips the whole policy. */}
+            <div className="border-border space-y-4 border-t pt-6">
+              <div>
+                <Label className="text-sm font-medium">Exemptions</Label>
+                <p className="text-muted-foreground text-xs">
+                  Skip the whole policy for a message that matches a saved rule
+                  or a match query below — an allowlist, regardless of the scope
+                  above.
+                </p>
+              </div>
+              {customRules.length > 0 && (
+                <RuleSelectList
+                  title="Saved rules"
+                  description={
+                    <>
+                      Skip the policy for a message when one of these custom
+                      rules matches it. A rule used here can't also be a
+                      detector.
+                    </>
+                  }
+                  idPrefix="exempt"
+                  customRules={customRules}
+                  selectedRuleIds={exemptRuleIds}
+                  onToggleRule={toggleExemption}
+                  expanded={exemptionsExpanded}
+                  onToggle={() => setExemptionsExpanded((v) => !v)}
                 />
-              </CollapsibleTrigger>
-              <CollapsibleContent className="border-border space-y-4 border-t px-4 py-4">
-                <PredicateList
-                  label="Only evaluate messages matching"
-                  helpText="The policy evaluates a message only when it matches one of these. Add more to widen scope — they're OR'd. Leave empty to scope by message types alone."
-                  emptyAddLabel="Add scope predicate"
-                  queries={includeQueries}
-                  setQueries={setIncludeQueries}
-                />
-                <PredicateList
-                  label="Exempt messages matching"
-                  helpText="When a message matches any of these it's skipped for the whole policy (an allowlist), alongside any exempt rules above."
-                  emptyAddLabel="Add exemption"
-                  queries={exemptQueries}
-                  setQueries={setExemptQueries}
-                />
-                <MatchQueryExamples />
-              </CollapsibleContent>
-            </Collapsible>
+              )}
+              <PredicateList
+                emptyAddLabel="Add exemption query"
+                queries={exemptQueries}
+                setQueries={setExemptQueries}
+              />
+            </div>
+
+            {(scopeMode === "predicate" || exemptQueries.length > 0) && (
+              <MatchQueryExamples />
+            )}
           </div>
         )}
 
