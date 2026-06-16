@@ -58,7 +58,14 @@ import {
   RefreshCw,
   Sparkles,
 } from "lucide-react";
-import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  type ReactNode,
+} from "react";
 import { useQueryState } from "nuqs";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -156,6 +163,48 @@ const POLICY_WIZARD_STEPS: Step[] = [
   },
   { id: "review", title: "Review", description: "Name & enable" },
 ];
+
+/** Prompt-policy flow: same staged shell, but step 0 is the guardrail prompt
+ *  (+ advanced judge config) instead of detectors. */
+const PROMPT_WIZARD_STEPS: Step[] = [
+  {
+    id: "guardrail",
+    title: "Guardrail",
+    description: "What to catch, in plain language",
+    badge: "Required",
+  },
+  POLICY_WIZARD_STEPS[1]!,
+  POLICY_WIZARD_STEPS[2]!,
+  POLICY_WIZARD_STEPS[3]!,
+];
+
+/** Shared wizard chrome: the left step rail + the paged content column. The
+ *  footer (Back/Continue/Create) lives in the sheet, driven by the parent. */
+function WizardShell({
+  steps,
+  currentStep,
+  setCurrentStep,
+  children,
+}: {
+  steps: Step[];
+  currentStep: number;
+  setCurrentStep: (v: number) => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex gap-8 py-4">
+      <div className="w-44 flex-shrink-0">
+        <OnboardingStepper
+          steps={steps}
+          currentStep={currentStep}
+          onStepClick={(i) => setCurrentStep(i)}
+          allowJumpAhead
+        />
+      </div>
+      <div className="min-w-0 flex-1 space-y-6">{children}</div>
+    </div>
+  );
+}
 
 function WizardStepHeading({
   title,
@@ -1209,16 +1258,21 @@ function PolicyCenterContent() {
   const isChoosingPolicyKind =
     !editingPolicy && nlEnabled && createStep === "type";
 
-  // Footer behaviour for the guided standard-policy flow. The prompt flow stays
-  // a single save; the risk flow pages through steps (Continue, then Create).
-  const isRiskWizard = !isChoosingPolicyKind && formPolicyKind === "risk";
-  const isLastWizardStep = wizardStep === POLICY_WIZARD_STEPS.length - 1;
-  const showWizardContinue = isRiskWizard && !isLastWizardStep;
+  // Footer behaviour for the guided flow. Both standard and prompt policies now
+  // page through steps (Continue, then Create/Update); only the type chooser is
+  // exempt.
+  const isWizard = !isChoosingPolicyKind;
+  const isRiskWizard = isWizard && formPolicyKind === "risk";
+  const wizardSteps =
+    formPolicyKind === "prompt" ? PROMPT_WIZARD_STEPS : POLICY_WIZARD_STEPS;
+  const isLastWizardStep = wizardStep === wizardSteps.length - 1;
+  const showWizardContinue = isWizard && !isLastWizardStep;
   const mutationPending = createMutation.isPending || updateMutation.isPending;
   const continueDisabled =
     (wizardStep === 0 &&
-      selectedCategories.size === 0 &&
-      selectedCustomRuleIds.size === 0) ||
+      (formPolicyKind === "prompt"
+        ? !formPromptInstruction.trim()
+        : selectedCategories.size === 0 && selectedCustomRuleIds.size === 0)) ||
     (wizardStep === 1 && selectedMessageTypes.size === 0);
   const saveDisabled =
     (formPolicyKind === "prompt" && !formPromptInstruction.trim()) ||
@@ -1231,9 +1285,9 @@ function PolicyCenterContent() {
     selectedMessageTypes.size === 0 ||
     mutationPending;
   const showFooterBack =
-    (isRiskWizard && wizardStep > 0) || (!editingPolicy && nlEnabled);
+    (isWizard && wizardStep > 0) || (!editingPolicy && nlEnabled);
   const onFooterBack = () => {
-    if (isRiskWizard && wizardStep > 0) {
+    if (isWizard && wizardStep > 0) {
       setWizardStep(wizardStep - 1);
     } else {
       setCreateStep("type");
@@ -1349,9 +1403,9 @@ function PolicyCenterContent() {
           <Dialog.Content
             className={cn(
               "flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0",
-              // The guided standard-policy flow is a centered wizard that needs
-              // room for the step rail; other surfaces stay compact.
-              isRiskWizard ? "sm:max-w-5xl" : "sm:max-w-lg",
+              // The guided create/edit flow is a centered wizard that needs room
+              // for the step rail; the type chooser stays compact.
+              isWizard ? "sm:max-w-5xl" : "sm:max-w-lg",
             )}
           >
             <Dialog.Header className="px-6 pt-6">
@@ -1391,6 +1445,8 @@ function PolicyCenterContent() {
                 ) : (
                   <PromptPolicySheetBody
                     key={editingPolicy?.id ?? "new-prompt-policy"}
+                    wizardStep={wizardStep}
+                    setWizardStep={setWizardStep}
                     isEditing={!!editingPolicy}
                     formName={formName}
                     setFormName={setFormName}
@@ -1416,10 +1472,10 @@ function PolicyCenterContent() {
             </div>
             {!isChoosingPolicyKind && (
               <Dialog.Footer className="border-border flex-row items-center justify-between border-t px-6 py-4">
-                {isRiskWizard ? (
+                {isWizard ? (
                   <span className="text-muted-foreground text-xs">
-                    Step {wizardStep + 1} of {POLICY_WIZARD_STEPS.length} ·{" "}
-                    {POLICY_WIZARD_STEPS[wizardStep]?.title}
+                    Step {wizardStep + 1} of {wizardSteps.length} ·{" "}
+                    {wizardSteps[wizardStep]?.title}
                   </span>
                 ) : (
                   <span />
@@ -1537,6 +1593,8 @@ function PolicyKindChoice({
 /* -------------------------------------------------------------------------- */
 
 function PromptPolicySheetBody({
+  wizardStep,
+  setWizardStep,
   isEditing,
   formName,
   setFormName,
@@ -1557,6 +1615,8 @@ function PromptPolicySheetBody({
   selectedMessageTypes,
   setSelectedMessageTypes,
 }: {
+  wizardStep: number;
+  setWizardStep: (v: number) => void;
   isEditing: boolean;
   formName: string;
   setFormName: (v: string) => void;
@@ -1580,85 +1640,186 @@ function PromptPolicySheetBody({
   const [selectedExampleName, setSelectedExampleName] = useState(
     () => promptTemplateNameForInstruction(formPromptInstruction) ?? "",
   );
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const handlePromptChange = (value: string) => {
     setSelectedExampleName("");
     setFormPromptInstruction(value);
   };
 
-  return (
-    <div className="space-y-6">
-      <PromptPolicyHowItWorks isEditing={isEditing} />
+  const prompt = formPromptInstruction.trim();
+  const summaryScopes =
+    selectedMessageTypes.size === ALL_POLICY_MESSAGE_TYPES.length
+      ? ["All session parts"]
+      : ALL_POLICY_MESSAGE_TYPES.filter((t) =>
+          selectedMessageTypes.has(t as PolicyMessageType),
+        ).map((t) => POLICY_MESSAGE_TYPE_META[t as PolicyMessageType].label);
 
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label className="text-sm font-medium">Policy Name</Label>
-          <div className="flex items-center gap-2">
-            <span className="text-muted-foreground text-xs">Auto</span>
-            <Switch checked={formAutoName} onCheckedChange={setFormAutoName} />
+  return (
+    <WizardShell
+      steps={PROMPT_WIZARD_STEPS}
+      currentStep={wizardStep}
+      setCurrentStep={setWizardStep}
+    >
+      {wizardStep === 0 && (
+        <div className="space-y-6">
+          <WizardStepHeading
+            title="What should this policy catch?"
+            description="Describe the behavior to detect in plain language; the LLM judge evaluates each in-scope message against it."
+          />
+          <PromptPolicyHowItWorks isEditing={isEditing} />
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Policy Prompt</Label>
+            <TextArea
+              value={formPromptInstruction}
+              onChange={handlePromptChange}
+              placeholder="Describe the tool-call behavior this policy should match..."
+              rows={5}
+            />
+            {!isEditing && (
+              <PromptExampleChips
+                selectedExampleName={selectedExampleName}
+                onSelect={(template) => {
+                  setSelectedExampleName(template.name);
+                  setFormPromptInstruction(template.prompt);
+                  if (!formName.trim()) {
+                    setFormName(template.name);
+                  }
+                }}
+              />
+            )}
+          </div>
+          <div>
+            <button
+              type="button"
+              onClick={() => setAdvancedOpen((v) => !v)}
+              className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-xs font-medium"
+            >
+              <ChevronRight
+                className={cn(
+                  "h-3.5 w-3.5 transition-transform",
+                  advancedOpen && "rotate-90",
+                )}
+              />
+              Advanced — judge model &amp; behavior
+            </button>
+            {advancedOpen && (
+              <div className="mt-3">
+                <JudgeConfigSection
+                  formModel={formModel}
+                  setFormModel={setFormModel}
+                  formTemperature={formTemperature}
+                  setFormTemperature={setFormTemperature}
+                  formFailOpen={formFailOpen}
+                  setFormFailOpen={setFormFailOpen}
+                />
+              </div>
+            )}
           </div>
         </div>
-        {formAutoName ? (
-          <p className="text-muted-foreground text-xs">
-            Name will be generated from the policy prompt.
-          </p>
-        ) : (
-          <Input
-            value={formName}
-            onChange={setFormName}
-            placeholder="e.g. No Production Deletes"
+      )}
+
+      {wizardStep === 1 && (
+        <div className="space-y-6">
+          <WizardStepHeading
+            title="Where should it evaluate?"
+            description="Narrow the scope to control cost — a prompt policy runs the LLM judge on each in-scope message."
           />
-        )}
-      </div>
-
-      <div className="space-y-2">
-        <Label className="text-sm font-medium">Policy Prompt</Label>
-        <TextArea
-          value={formPromptInstruction}
-          onChange={handlePromptChange}
-          placeholder="Describe the tool-call behavior this policy should match..."
-          rows={5}
-        />
-        {!isEditing && (
-          <PromptExampleChips
-            selectedExampleName={selectedExampleName}
-            onSelect={(template) => {
-              setSelectedExampleName(template.name);
-              setFormPromptInstruction(template.prompt);
-              if (!formName.trim()) {
-                setFormName(template.name);
-              }
-            }}
-          />
-        )}
-      </div>
-
-      <JudgeConfigSection
-        formModel={formModel}
-        setFormModel={setFormModel}
-        formTemperature={formTemperature}
-        setFormTemperature={setFormTemperature}
-        formFailOpen={formFailOpen}
-        setFormFailOpen={setFormFailOpen}
-      />
-
-      <MessageTypesPicker
-        selectedMessageTypes={selectedMessageTypes}
-        setSelectedMessageTypes={setSelectedMessageTypes}
-      />
-
-      <ActionPicker formAction={formAction} setFormAction={setFormAction} />
-
-      <div className="flex items-center justify-between">
-        <div>
-          <Label className="text-sm font-medium">Enabled</Label>
-          <p className="text-muted-foreground text-xs">
-            Enable this policy to enforce the prompt.
-          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {ALL_POLICY_MESSAGE_TYPES.map((type) => (
+              <ScopeCard
+                key={type}
+                type={type as PolicyMessageType}
+                checked={selectedMessageTypes.has(type as PolicyMessageType)}
+                onToggle={(checked) => {
+                  const updated = new Set(selectedMessageTypes);
+                  if (checked) {
+                    updated.add(type as PolicyMessageType);
+                  } else {
+                    updated.delete(type as PolicyMessageType);
+                  }
+                  setSelectedMessageTypes(updated);
+                }}
+              />
+            ))}
+          </div>
+          {selectedMessageTypes.size === 0 && (
+            <p className="text-destructive text-xs">
+              Select at least one session part.
+            </p>
+          )}
         </div>
-        <Switch checked={formEnabled} onCheckedChange={setFormEnabled} />
-      </div>
-    </div>
+      )}
+
+      {wizardStep === 2 && (
+        <div className="space-y-6">
+          <WizardStepHeading
+            title="What happens on a match?"
+            description="Choose how the policy responds when the judge flags a message."
+          />
+          <ActionPicker formAction={formAction} setFormAction={setFormAction} />
+        </div>
+      )}
+
+      {wizardStep === 3 && (
+        <div className="space-y-6">
+          <WizardStepHeading
+            title="Name & enable"
+            description="Review the policy, then create it."
+          />
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">Policy Name</Label>
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground text-xs">Auto</span>
+                <Switch
+                  checked={formAutoName}
+                  onCheckedChange={setFormAutoName}
+                />
+              </div>
+            </div>
+            {formAutoName ? (
+              <p className="text-muted-foreground text-xs">
+                Name will be generated from the policy prompt.
+              </p>
+            ) : (
+              <Input
+                value={formName}
+                onChange={setFormName}
+                placeholder="e.g. No Production Deletes"
+              />
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Summary</Label>
+            <div className="border-border divide-border divide-y rounded-lg border">
+              <SummaryRow
+                label="Guardrail"
+                chips={[
+                  prompt
+                    ? `${prompt.slice(0, 48)}${prompt.length > 48 ? "…" : ""}`
+                    : "None",
+                ]}
+              />
+              <SummaryRow label="Scope" chips={summaryScopes} />
+              <SummaryRow
+                label="Action"
+                chips={[formAction === "block" ? "Block" : "Flag"]}
+              />
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="text-sm font-medium">Enabled</Label>
+              <p className="text-muted-foreground text-xs">
+                Enable this policy to enforce the prompt.
+              </p>
+            </div>
+            <Switch checked={formEnabled} onCheckedChange={setFormEnabled} />
+          </div>
+        </div>
+      )}
+    </WizardShell>
   );
 }
 
@@ -2026,234 +2187,223 @@ function PolicySheetBody({
 
   return (
     <>
-      <div className="flex gap-8 py-4">
-        <div className="w-44 flex-shrink-0">
-          <OnboardingStepper
-            steps={POLICY_WIZARD_STEPS}
-            currentStep={wizardStep}
-            onStepClick={(i) => setWizardStep(i)}
-            allowJumpAhead
-          />
-        </div>
-        <div className="min-w-0 flex-1 space-y-6">
-          {wizardStep === 0 && (
-            <div className="space-y-6">
-              <WizardStepHeading
-                title="What should this policy detect?"
-                description="Turn on detector categories and attach your organization's custom rules."
-              />
+      <WizardShell
+        steps={POLICY_WIZARD_STEPS}
+        currentStep={wizardStep}
+        setCurrentStep={setWizardStep}
+      >
+        {wizardStep === 0 && (
+          <div className="space-y-6">
+            <WizardStepHeading
+              title="What should this policy detect?"
+              description="Turn on detector categories and attach your organization's custom rules."
+            />
 
-              {/* Built-in rules */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium">Built-in rules</Label>
-                  <span className="text-muted-foreground text-xs">
-                    {selectedBuiltinCount} on
-                  </span>
-                </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {ALL_CATEGORIES.map((cat) => (
-                    <DetectorCard
-                      key={cat}
-                      category={cat}
-                      selected={selectedCategories.has(cat)}
-                      disabledRules={disabledRules}
-                      onToggle={(checked) => toggleCategory(cat, checked)}
-                      onCustomize={() => setCustomizeCategory(cat)}
-                    />
-                  ))}
-                </div>
+            {/* Built-in rules */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">Built-in rules</Label>
+                <span className="text-muted-foreground text-xs">
+                  {selectedBuiltinCount} on
+                </span>
               </div>
-
-              {customRules.length > 0 && (
-                <CustomRulesPicker
-                  customRules={customRules}
-                  selectedCustomRuleIds={selectedCustomRuleIds}
-                  setSelectedCustomRuleIds={setSelectedCustomRuleIds}
-                  customRuleActions={customRuleActions}
-                  setCustomRuleActions={setCustomRuleActions}
-                  expanded={detectionExpanded}
-                  onToggle={() => setDetectionExpanded((v) => !v)}
-                />
-              )}
-            </div>
-          )}
-
-          {wizardStep === 1 && (
-            <div className="space-y-6">
-              <WizardStepHeading
-                title="Where should it evaluate?"
-                description="Leave all four on to apply everywhere. Narrow the scope to reduce noise or cost."
-              />
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {ALL_POLICY_MESSAGE_TYPES.map((type) => (
-                  <ScopeCard
-                    key={type}
-                    type={type as PolicyMessageType}
-                    checked={selectedMessageTypes.has(
-                      type as PolicyMessageType,
-                    )}
-                    onToggle={(checked) => {
-                      const updated = new Set(selectedMessageTypes);
-                      if (checked) {
-                        updated.add(type as PolicyMessageType);
-                      } else {
-                        updated.delete(type as PolicyMessageType);
-                      }
-                      setSelectedMessageTypes(updated);
-                    }}
+                {ALL_CATEGORIES.map((cat) => (
+                  <DetectorCard
+                    key={cat}
+                    category={cat}
+                    selected={selectedCategories.has(cat)}
+                    disabledRules={disabledRules}
+                    onToggle={(checked) => toggleCategory(cat, checked)}
+                    onCustomize={() => setCustomizeCategory(cat)}
                   />
                 ))}
               </div>
-              {selectedMessageTypes.size === 0 && (
-                <p className="text-destructive text-xs">
-                  Select at least one session part.
-                </p>
-              )}
-              {coverageGaps.length > 0 && (
-                <Alert variant="warning">
-                  <AlertDescription>
-                    <p className="font-medium">
-                      {coverageGaps.length === 1
-                        ? "1 attached rule targets message types outside this scope and won't run:"
-                        : `${coverageGaps.length} attached rules target message types outside this scope and won't run:`}
-                    </p>
-                    <ul className="mt-1 list-disc space-y-0.5 pl-4">
-                      {coverageGaps.map((gap) => (
-                        <li key={gap.title}>
-                          {gap.title} — needs{" "}
-                          {gap.missing
-                            .map((t) => POLICY_MESSAGE_TYPE_META[t].label)
-                            .join(", ")}
-                        </li>
-                      ))}
-                    </ul>
-                    <Button
-                      variant="secondary"
-                      className="mt-2"
-                      onClick={() => {
-                        const next = new Set(selectedMessageTypes);
-                        for (const t of missingScopeTypes) next.add(t);
-                        setSelectedMessageTypes(next);
-                      }}
-                    >
-                      <Button.Text>Include {missingScopeLabels}</Button.Text>
-                    </Button>
-                  </AlertDescription>
-                </Alert>
-              )}
             </div>
-          )}
 
-          {wizardStep === 2 && (
-            <div className="space-y-6">
-              <WizardStepHeading
-                title="What happens on a match?"
-                description="Choose how the policy responds when its detection rules fire."
+            {customRules.length > 0 && (
+              <CustomRulesPicker
+                customRules={customRules}
+                selectedCustomRuleIds={selectedCustomRuleIds}
+                setSelectedCustomRuleIds={setSelectedCustomRuleIds}
+                customRuleActions={customRuleActions}
+                setCustomRuleActions={setCustomRuleActions}
+                expanded={detectionExpanded}
+                onToggle={() => setDetectionExpanded((v) => !v)}
               />
-              <ActionPicker
-                formAction={formAction}
-                setFormAction={setFormAction}
-                flagOnlySelected={flagOnlySelected}
-              />
+            )}
+          </div>
+        )}
 
-              {/* Custom message — only relevant for block-action policies that
+        {wizardStep === 1 && (
+          <div className="space-y-6">
+            <WizardStepHeading
+              title="Where should it evaluate?"
+              description="Leave all four on to apply everywhere. Narrow the scope to reduce noise or cost."
+            />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {ALL_POLICY_MESSAGE_TYPES.map((type) => (
+                <ScopeCard
+                  key={type}
+                  type={type as PolicyMessageType}
+                  checked={selectedMessageTypes.has(type as PolicyMessageType)}
+                  onToggle={(checked) => {
+                    const updated = new Set(selectedMessageTypes);
+                    if (checked) {
+                      updated.add(type as PolicyMessageType);
+                    } else {
+                      updated.delete(type as PolicyMessageType);
+                    }
+                    setSelectedMessageTypes(updated);
+                  }}
+                />
+              ))}
+            </div>
+            {selectedMessageTypes.size === 0 && (
+              <p className="text-destructive text-xs">
+                Select at least one session part.
+              </p>
+            )}
+            {coverageGaps.length > 0 && (
+              <Alert variant="warning">
+                <AlertDescription>
+                  <p className="font-medium">
+                    {coverageGaps.length === 1
+                      ? "1 attached rule targets message types outside this scope and won't run:"
+                      : `${coverageGaps.length} attached rules target message types outside this scope and won't run:`}
+                  </p>
+                  <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                    {coverageGaps.map((gap) => (
+                      <li key={gap.title}>
+                        {gap.title} — needs{" "}
+                        {gap.missing
+                          .map((t) => POLICY_MESSAGE_TYPE_META[t].label)
+                          .join(", ")}
+                      </li>
+                    ))}
+                  </ul>
+                  <Button
+                    variant="secondary"
+                    className="mt-2"
+                    onClick={() => {
+                      const next = new Set(selectedMessageTypes);
+                      for (const t of missingScopeTypes) next.add(t);
+                      setSelectedMessageTypes(next);
+                    }}
+                  >
+                    <Button.Text>Include {missingScopeLabels}</Button.Text>
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
+          </div>
+        )}
+
+        {wizardStep === 2 && (
+          <div className="space-y-6">
+            <WizardStepHeading
+              title="What happens on a match?"
+              description="Choose how the policy responds when its detection rules fire."
+            />
+            <ActionPicker
+              formAction={formAction}
+              setFormAction={setFormAction}
+              flagOnlySelected={flagOnlySelected}
+            />
+
+            {/* Custom message — only relevant for block-action policies that
           surface a user-facing reason at deny time. Flag-action policies
           record findings silently, so no message is needed. */}
-              {formAction === "block" && (
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Custom Message</Label>
-                  <p className="text-muted-foreground text-xs">
-                    Shown to the user when this policy blocks a tool call or
-                    prompt. Leave blank to use the default message.
-                  </p>
-                  <TextArea
-                    value={formUserMessage}
-                    onChange={setFormUserMessage}
-                    placeholder="e.g. This action was blocked by your organization's security policy. Contact your admin for help."
-                    rows={3}
+            {formAction === "block" && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Custom Message</Label>
+                <p className="text-muted-foreground text-xs">
+                  Shown to the user when this policy blocks a tool call or
+                  prompt. Leave blank to use the default message.
+                </p>
+                <TextArea
+                  value={formUserMessage}
+                  onChange={setFormUserMessage}
+                  placeholder="e.g. This action was blocked by your organization's security policy. Contact your admin for help."
+                  rows={3}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {wizardStep === 3 && (
+          <div className="space-y-6">
+            <WizardStepHeading
+              title="Name & enable"
+              description="Review the policy, then create it."
+            />
+
+            {/* Policy Name */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">Policy Name</Label>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground text-xs">Auto</span>
+                  <Switch
+                    checked={formAutoName}
+                    onCheckedChange={setFormAutoName}
                   />
                 </div>
+              </div>
+              {formAutoName ? (
+                <p className="text-muted-foreground text-xs">
+                  Name will be generated automatically based on detection rules
+                  and action.
+                </p>
+              ) : (
+                <Input
+                  value={formName}
+                  onChange={(value) => setFormName(value)}
+                  placeholder="e.g. Secret Detection"
+                />
               )}
             </div>
-          )}
 
-          {wizardStep === 3 && (
-            <div className="space-y-6">
-              <WizardStepHeading
-                title="Name & enable"
-                description="Review the policy, then create it."
-              />
-
-              {/* Policy Name */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium">Policy Name</Label>
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground text-xs">Auto</span>
-                    <Switch
-                      checked={formAutoName}
-                      onCheckedChange={setFormAutoName}
-                    />
-                  </div>
-                </div>
-                {formAutoName ? (
-                  <p className="text-muted-foreground text-xs">
-                    Name will be generated automatically based on detection
-                    rules and action.
-                  </p>
-                ) : (
-                  <Input
-                    value={formName}
-                    onChange={(value) => setFormName(value)}
-                    placeholder="e.g. Secret Detection"
-                  />
-                )}
-              </div>
-
-              {/* Summary */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Summary</Label>
-                <div className="border-border divide-border divide-y rounded-lg border">
-                  <SummaryRow
-                    label="Detectors"
-                    chips={
-                      summaryDetectors.length > 0 ? summaryDetectors : ["None"]
-                    }
-                  />
-                  <SummaryRow
-                    label="Custom rules"
-                    chips={[
-                      selectedCustomRuleIds.size > 0
-                        ? `${selectedCustomRuleIds.size} attached`
-                        : "None",
-                    ]}
-                  />
-                  <SummaryRow label="Scope" chips={summaryScopes} />
-                  <SummaryRow
-                    label="Action"
-                    chips={[formAction === "block" ? "Block" : "Flag"]}
-                  />
-                </div>
-              </div>
-
-              {/* Enabled toggle */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-sm font-medium">Enabled</Label>
-                  <p className="text-muted-foreground text-xs">
-                    Enable this policy to begin scanning messages.
-                  </p>
-                </div>
-                <Switch
-                  checked={formEnabled}
-                  onCheckedChange={setFormEnabled}
+            {/* Summary */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Summary</Label>
+              <div className="border-border divide-border divide-y rounded-lg border">
+                <SummaryRow
+                  label="Detectors"
+                  chips={
+                    summaryDetectors.length > 0 ? summaryDetectors : ["None"]
+                  }
+                />
+                <SummaryRow
+                  label="Custom rules"
+                  chips={[
+                    selectedCustomRuleIds.size > 0
+                      ? `${selectedCustomRuleIds.size} attached`
+                      : "None",
+                  ]}
+                />
+                <SummaryRow label="Scope" chips={summaryScopes} />
+                <SummaryRow
+                  label="Action"
+                  chips={[formAction === "block" ? "Block" : "Flag"]}
                 />
               </div>
             </div>
-          )}
-        </div>
-      </div>
+
+            {/* Enabled toggle */}
+            <div className="flex items-center justify-between">
+              <div>
+                <Label className="text-sm font-medium">Enabled</Label>
+                <p className="text-muted-foreground text-xs">
+                  Enable this policy to begin scanning messages.
+                </p>
+              </div>
+              <Switch checked={formEnabled} onCheckedChange={setFormEnabled} />
+            </div>
+          </div>
+        )}
+      </WizardShell>
       {customizeCategory && (
         <CustomizeRulesSheet
           category={customizeCategory}
@@ -2460,113 +2610,6 @@ function ScopeCard({
         className="mt-0.5"
       />
       <div className="min-w-0">
-        <div className="text-sm font-medium">{meta.label}</div>
-        <div className="text-muted-foreground text-xs">{meta.description}</div>
-      </div>
-    </label>
-  );
-}
-
-function MessageTypesPicker({
-  selectedMessageTypes,
-  setSelectedMessageTypes,
-}: {
-  selectedMessageTypes: Set<PolicyMessageType>;
-  setSelectedMessageTypes: (v: Set<PolicyMessageType>) => void;
-}) {
-  const [messageTypesOpen, setMessageTypesOpen] = useState(
-    () => selectedMessageTypes.size !== ALL_POLICY_MESSAGE_TYPES.length,
-  );
-
-  return (
-    <Collapsible
-      open={messageTypesOpen}
-      onOpenChange={setMessageTypesOpen}
-      className="space-y-3"
-    >
-      <div className="space-y-1">
-        <Label className="text-sm font-medium">Applies To</Label>
-        <p className="text-muted-foreground text-xs">
-          Choose which parts of an agent session this policy evaluates. Leaving
-          all four selected applies the policy everywhere.
-        </p>
-      </div>
-      <div className="border-border rounded-lg border">
-        <CollapsibleTrigger className="hover:bg-muted/40 flex w-full items-center gap-3 px-4 py-3 text-left transition-colors">
-          <ChevronRight
-            className={cn(
-              "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
-              messageTypesOpen && "rotate-90",
-            )}
-          />
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium">
-              {messageTypesSummary(selectedMessageTypes)}
-            </div>
-            <div className="text-muted-foreground text-xs">
-              Advanced: narrow evaluation to specific parts of a session
-            </div>
-          </div>
-        </CollapsibleTrigger>
-        <CollapsibleContent className="border-border data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down overflow-hidden border-t">
-          <div className="divide-border divide-y">
-            {ALL_POLICY_MESSAGE_TYPES.map((type) => (
-              <MessageTypeOptionRow
-                key={type}
-                type={type}
-                checked={selectedMessageTypes.has(type)}
-                onCheckedChange={(next) => {
-                  const updated = new Set(selectedMessageTypes);
-                  if (next) {
-                    updated.add(type);
-                  } else {
-                    updated.delete(type);
-                  }
-                  setSelectedMessageTypes(updated);
-                }}
-              />
-            ))}
-          </div>
-        </CollapsibleContent>
-      </div>
-      {selectedMessageTypes.size === 0 && (
-        <p className="text-destructive text-xs">
-          Select at least one type. An empty API value means “all types,” so the
-          UI keeps that choice explicit here.
-        </p>
-      )}
-    </Collapsible>
-  );
-}
-
-function MessageTypeOptionRow({
-  type,
-  checked,
-  disabled = false,
-  onCheckedChange,
-}: {
-  type: PolicyMessageType;
-  checked: boolean;
-  disabled?: boolean;
-  onCheckedChange: (checked: boolean | "indeterminate") => void;
-}) {
-  const meta = POLICY_MESSAGE_TYPE_META[type];
-
-  return (
-    <label
-      className={cn(
-        "flex items-start gap-3 px-4 py-3",
-        disabled
-          ? "cursor-not-allowed opacity-60"
-          : "hover:bg-muted/40 cursor-pointer",
-      )}
-    >
-      <Checkbox
-        checked={checked}
-        disabled={disabled}
-        onCheckedChange={disabled ? undefined : onCheckedChange}
-      />
-      <div className="min-w-0 flex-1">
         <div className="text-sm font-medium">{meta.label}</div>
         <div className="text-muted-foreground text-xs">{meta.description}</div>
       </div>
