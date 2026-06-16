@@ -2957,9 +2957,9 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   -- Normalised per-rule config keyed by canonical rule_id (built-in + custom),
   -- e.g. {"custom.acme": {"action": "deny"}, "custom.allowlist": {"action":
   -- "allow"}}. Per-rule action is deny (detect) or allow (an allowlist that
-  -- short-circuits the policy). NULL/absent falls back to the legacy columns
-  -- above with every rule treated as deny; a later ticket backfills this and
-  -- contracts custom_rule_ids/sources/disabled_rules into it.
+  -- short-circuits the policy). A rule absent from the map (incl. NULL) is
+  -- treated as deny. Membership still lives in custom_rule_ids/sources/
+  -- disabled_rules; a later ticket folds those into this map.
   rules JSONB,
   message_types TEXT[],
   action TEXT NOT NULL DEFAULT 'flag',
