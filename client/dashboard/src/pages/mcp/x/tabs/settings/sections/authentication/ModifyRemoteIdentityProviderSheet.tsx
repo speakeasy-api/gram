@@ -14,7 +14,7 @@ import type {
   RemoteSessionIssuer,
   UserSessionIssuer,
 } from "@gram/client/models/components";
-import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components";
+import { TokenEndpointAuthMethod } from "@gram/client/models/components";
 import {
   invalidateAllRemoteSessionClients,
   invalidateAllRemoteSessionIssuers,
@@ -176,7 +176,7 @@ function ModifyRemoteIdentityProviderSheetBody({
   // value rotates the secret, blank means "leave unchanged".
   const [clientSecret, setClientSecret] = useState("");
   const [tokenEndpointAuthMethod, setTokenEndpointAuthMethod] = useState<
-    CreateRemoteSessionClientFormTokenEndpointAuthMethod | ""
+    TokenEndpointAuthMethod | ""
   >("");
   const [scopeOverride, setScopeOverride] = useState("");
   const [audienceOverride, setAudienceOverride] = useState("");

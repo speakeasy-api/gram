@@ -1,4 +1,4 @@
-import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components";
+import { TokenEndpointAuthMethod } from "@gram/client/models/components";
 
 // Snapshot of the issuer + RFC 8414 metadata for a given Issuer URL. Created
 // fresh on every successful discovery and seeded from saved records in the
@@ -27,13 +27,11 @@ export function parseScopes(raw: string): string[] {
 
 export function narrowTokenEndpointAuthMethod(
   value: string | null | undefined,
-): CreateRemoteSessionClientFormTokenEndpointAuthMethod | undefined {
+): TokenEndpointAuthMethod | undefined {
   if (
-    value ===
-      CreateRemoteSessionClientFormTokenEndpointAuthMethod.ClientSecretBasic ||
-    value ===
-      CreateRemoteSessionClientFormTokenEndpointAuthMethod.ClientSecretPost ||
-    value === CreateRemoteSessionClientFormTokenEndpointAuthMethod.None
+    value === TokenEndpointAuthMethod.ClientSecretBasic ||
+    value === TokenEndpointAuthMethod.ClientSecretPost ||
+    value === TokenEndpointAuthMethod.None
   ) {
     return value;
   }
@@ -48,9 +46,8 @@ export function narrowTokenEndpointAuthMethod(
 // Method provided."). This fallback was the pre-#2910 server-side default.
 export function pickPreferredAuthMethod(
   supported: string[],
-): CreateRemoteSessionClientFormTokenEndpointAuthMethod {
-  const { ClientSecretBasic, ClientSecretPost, None } =
-    CreateRemoteSessionClientFormTokenEndpointAuthMethod;
+): TokenEndpointAuthMethod {
+  const { ClientSecretBasic, ClientSecretPost, None } = TokenEndpointAuthMethod;
   for (const preferred of [ClientSecretBasic, ClientSecretPost, None]) {
     if (supported.includes(preferred)) return preferred;
   }

@@ -8,7 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Type } from "@/components/ui/type";
-import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components";
+import { TokenEndpointAuthMethod } from "@gram/client/models/components";
 import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
 
 // Shared form-field components used by both AttachRemoteIdentityProviderSheet
@@ -209,10 +209,8 @@ export function TokenEndpointAuthMethodField({
   value,
   onChange,
 }: {
-  value: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "";
-  onChange: (
-    value: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "",
-  ) => void;
+  value: TokenEndpointAuthMethod | "";
+  onChange: (value: TokenEndpointAuthMethod | "") => void;
 }): JSX.Element {
   return (
     <Stack gap={2}>
@@ -221,33 +219,19 @@ export function TokenEndpointAuthMethodField({
       </Label>
       <Select
         value={value}
-        onValueChange={(next) =>
-          onChange(next as CreateRemoteSessionClientFormTokenEndpointAuthMethod)
-        }
+        onValueChange={(next) => onChange(next as TokenEndpointAuthMethod)}
       >
         <SelectTrigger>
           <SelectValue placeholder="client_secret_basic (default)" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem
-            value={
-              CreateRemoteSessionClientFormTokenEndpointAuthMethod.ClientSecretBasic
-            }
-          >
+          <SelectItem value={TokenEndpointAuthMethod.ClientSecretBasic}>
             client_secret_basic
           </SelectItem>
-          <SelectItem
-            value={
-              CreateRemoteSessionClientFormTokenEndpointAuthMethod.ClientSecretPost
-            }
-          >
+          <SelectItem value={TokenEndpointAuthMethod.ClientSecretPost}>
             client_secret_post
           </SelectItem>
-          <SelectItem
-            value={CreateRemoteSessionClientFormTokenEndpointAuthMethod.None}
-          >
-            none
-          </SelectItem>
+          <SelectItem value={TokenEndpointAuthMethod.None}>none</SelectItem>
         </SelectContent>
       </Select>
     </Stack>
@@ -271,16 +255,14 @@ export function ClientCredentialsFields({
 }: {
   clientId: string;
   clientSecret: string;
-  tokenEndpointAuthMethod:
-    | CreateRemoteSessionClientFormTokenEndpointAuthMethod
-    | "";
+  tokenEndpointAuthMethod: TokenEndpointAuthMethod | "";
   clientIdEditable?: boolean;
   clientSecretLabel?: string;
   clientSecretPlaceholder?: string;
   onClientIdChange: (value: string) => void;
   onClientSecretChange: (value: string) => void;
   onTokenEndpointAuthMethodChange: (
-    value: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "",
+    value: TokenEndpointAuthMethod | "",
   ) => void;
 }): JSX.Element {
   return (

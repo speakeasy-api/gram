@@ -28,7 +28,7 @@ import type {
   RemoteSessionIssuer,
   UserSessionIssuer,
 } from "@gram/client/models/components";
-import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components";
+import { TokenEndpointAuthMethod } from "@gram/client/models/components";
 import {
   invalidateAllGetMcpServer,
   invalidateAllMcpServers,
@@ -135,7 +135,7 @@ export function AttachRemoteIdentityProviderSheet({
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [tokenEndpointAuthMethod, setTokenEndpointAuthMethod] = useState<
-    CreateRemoteSessionClientFormTokenEndpointAuthMethod | ""
+    TokenEndpointAuthMethod | ""
   >("");
 
   // Per-client OAuth dance overrides. Both apply regardless of how the client
@@ -214,7 +214,7 @@ export function AttachRemoteIdentityProviderSheet({
       let clientCredentials: {
         clientId: string;
         clientSecret?: string;
-        tokenEndpointAuthMethod?: CreateRemoteSessionClientFormTokenEndpointAuthMethod;
+        tokenEndpointAuthMethod?: TokenEndpointAuthMethod;
       };
       // Tracks when DCR returns an auth method the SDK enum doesn't model
       // (e.g. `none`, `private_key_jwt`). We swallow it for the local client
