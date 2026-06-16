@@ -33283,6 +33283,9 @@ components:
             - PostToolUse
             - UserPromptSubmit
             - Stop
+        last_assistant_message:
+          type: string
+          description: The final assistant message text for the turn (Stop only)
         model:
           type: string
           description: The model identifier
