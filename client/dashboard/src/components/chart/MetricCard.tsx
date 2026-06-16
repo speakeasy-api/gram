@@ -19,6 +19,7 @@ export type MetricCardProps = {
   accentColor?: AccentColor;
   subtext?: string;
   tooltip?: string;
+  action?: React.ReactNode;
 };
 
 export function MetricCard(props: MetricCardProps): JSX.Element {
@@ -34,6 +35,7 @@ export function MetricCard(props: MetricCardProps): JSX.Element {
     comparisonLabel,
     subtext,
     tooltip,
+    action,
   } = props;
   const formatValue = (v: number) => {
     switch (format) {
@@ -93,36 +95,44 @@ export function MetricCard(props: MetricCardProps): JSX.Element {
           </div>
         )}
       </div>
-      <div className="flex items-end justify-between">
-        <span className={`text-3xl font-semibold tracking-tight ${valueColor}`}>
-          {displayValue ?? formatValue(value)}
-        </span>
-        {previousValue > 0 && delta !== 0 && (
-          <div className="flex flex-col items-end gap-0.5">
-            <div
-              className={`flex items-center gap-1 text-xs font-medium ${
-                isGood ? "text-emerald-600" : "text-red-500"
-              }`}
+      <div className="flex flex-nowrap items-end">
+        <div className="flex-1 flex flex-col gap-1">
+          <div className="flex items-end justify-between">
+            <span
+              className={`text-3xl font-semibold tracking-tight ${valueColor}`}
             >
-              <Icon
-                name={isPositive ? "trending-up" : "trending-down"}
-                className="size-3"
-              />
-              <span>{delta.toFixed(1)}%</span>
-            </div>
-            {comparisonLabel && (
-              <span className="text-muted-foreground text-[10px]">
-                {comparisonLabel}
-              </span>
+              {displayValue ?? formatValue(value)}
+            </span>
+            {previousValue > 0 && delta !== 0 && (
+              <div className="flex flex-col items-end gap-0.5">
+                <div
+                  className={`flex items-center gap-1 text-xs font-medium ${
+                    isGood ? "text-emerald-600" : "text-red-500"
+                  }`}
+                >
+                  <Icon
+                    name={isPositive ? "trending-up" : "trending-down"}
+                    className="size-3"
+                  />
+                  <span>{delta.toFixed(1)}%</span>
+                </div>
+                {comparisonLabel && (
+                  <span className="text-muted-foreground text-[10px]">
+                    {comparisonLabel}
+                  </span>
+                )}
+              </div>
             )}
           </div>
-        )}
+          {subtext && (
+            <span className="text-muted-foreground mt-1 block text-xs">
+              {subtext}
+            </span>
+          )}
+        </div>
+
+        {action && <div className="shrink">{action}</div>}
       </div>
-      {subtext && (
-        <span className="text-muted-foreground mt-1 block text-xs">
-          {subtext}
-        </span>
-      )}
     </div>
   );
 }
