@@ -200,6 +200,8 @@ WHERE iss.project_id = @project_id
       END
   AND (sqlc.narg('subject_urn')::text IS NULL OR s.subject_urn = sqlc.narg('subject_urn')::text)
   AND (sqlc.narg('user_session_issuer_id')::uuid IS NULL OR s.user_session_issuer_id = sqlc.narg('user_session_issuer_id')::uuid)
+  AND (sqlc.narg('client_id')::uuid IS NULL OR s.user_session_client_id = sqlc.narg('client_id')::uuid)
+  AND (sqlc.narg('id')::uuid IS NULL OR s.id = sqlc.narg('id')::uuid)
   AND (sqlc.narg('cursor')::uuid IS NULL OR s.id < sqlc.narg('cursor')::uuid)
 ORDER BY s.id DESC
 LIMIT sqlc.arg('limit_value');
@@ -318,3 +320,32 @@ VALUES (
     @remote_set_hash
 )
 RETURNING *;
+
+-- name: ListUserSessionServerFacets :many
+SELECT s.user_session_issuer_id::text AS value, iss.slug AS display_name, COUNT(*)::bigint AS count
+FROM user_sessions AS s
+JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
+WHERE iss.project_id = @project_id AND iss.deleted IS FALSE
+GROUP BY s.user_session_issuer_id, iss.slug
+ORDER BY count DESC, iss.slug ASC;
+
+-- name: ListUserSessionClientFacets :many
+SELECT c.id::text AS value, c.client_name AS display_name, COUNT(*)::bigint AS count
+FROM user_sessions AS s
+JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
+JOIN user_session_clients AS c ON c.id = s.user_session_client_id
+WHERE iss.project_id = @project_id AND iss.deleted IS FALSE
+GROUP BY c.id, c.client_name
+ORDER BY count DESC, c.client_name ASC;
+
+-- name: ListUserSessionUserFacets :many
+SELECT s.subject_urn::text AS value,
+       COALESCE(u.display_name, u.email, s.subject_urn::text) AS display_name,
+       COUNT(*)::bigint AS count
+FROM user_sessions AS s
+JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
+LEFT JOIN users AS u ON u.id = split_part(s.subject_urn::text, ':', 2)
+WHERE iss.project_id = @project_id AND iss.deleted IS FALSE
+  AND s.subject_urn::text LIKE 'user:%'
+GROUP BY s.subject_urn, u.display_name, u.email
+ORDER BY count DESC, display_name ASC;

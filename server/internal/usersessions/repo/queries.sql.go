@@ -577,6 +577,42 @@ func (q *Queries) GetUserSessionIssuerBySlug(ctx context.Context, arg GetUserSes
 	return i, err
 }
 
+const listUserSessionClientFacets = `-- name: ListUserSessionClientFacets :many
+SELECT c.id::text AS value, c.client_name AS display_name, COUNT(*)::bigint AS count
+FROM user_sessions AS s
+JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
+JOIN user_session_clients AS c ON c.id = s.user_session_client_id
+WHERE iss.project_id = $1 AND iss.deleted IS FALSE
+GROUP BY c.id, c.client_name
+ORDER BY count DESC, c.client_name ASC
+`
+
+type ListUserSessionClientFacetsRow struct {
+	Value       string
+	DisplayName string
+	Count       int64
+}
+
+func (q *Queries) ListUserSessionClientFacets(ctx context.Context, projectID uuid.UUID) ([]ListUserSessionClientFacetsRow, error) {
+	rows, err := q.db.Query(ctx, listUserSessionClientFacets, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserSessionClientFacetsRow
+	for rows.Next() {
+		var i ListUserSessionClientFacetsRow
+		if err := rows.Scan(&i.Value, &i.DisplayName, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserSessionClientsByProjectID = `-- name: ListUserSessionClientsByProjectID :many
 SELECT cli.id, cli.project_id, cli.user_session_issuer_id, cli.client_id, cli.client_secret_hash, cli.client_name, cli.redirect_uris, cli.client_id_issued_at, cli.client_secret_expires_at, cli.created_at, cli.updated_at, cli.deleted_at, cli.deleted
 FROM user_session_clients AS cli
@@ -763,6 +799,80 @@ func (q *Queries) ListUserSessionIssuersByProjectID(ctx context.Context, arg Lis
 	return items, nil
 }
 
+const listUserSessionServerFacets = `-- name: ListUserSessionServerFacets :many
+SELECT s.user_session_issuer_id::text AS value, iss.slug AS display_name, COUNT(*)::bigint AS count
+FROM user_sessions AS s
+JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
+WHERE iss.project_id = $1 AND iss.deleted IS FALSE
+GROUP BY s.user_session_issuer_id, iss.slug
+ORDER BY count DESC, iss.slug ASC
+`
+
+type ListUserSessionServerFacetsRow struct {
+	Value       string
+	DisplayName string
+	Count       int64
+}
+
+func (q *Queries) ListUserSessionServerFacets(ctx context.Context, projectID uuid.UUID) ([]ListUserSessionServerFacetsRow, error) {
+	rows, err := q.db.Query(ctx, listUserSessionServerFacets, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserSessionServerFacetsRow
+	for rows.Next() {
+		var i ListUserSessionServerFacetsRow
+		if err := rows.Scan(&i.Value, &i.DisplayName, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserSessionUserFacets = `-- name: ListUserSessionUserFacets :many
+SELECT s.subject_urn::text AS value,
+       COALESCE(u.display_name, u.email, s.subject_urn::text) AS display_name,
+       COUNT(*)::bigint AS count
+FROM user_sessions AS s
+JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
+LEFT JOIN users AS u ON u.id = split_part(s.subject_urn::text, ':', 2)
+WHERE iss.project_id = $1 AND iss.deleted IS FALSE
+  AND s.subject_urn::text LIKE 'user:%'
+GROUP BY s.subject_urn, u.display_name, u.email
+ORDER BY count DESC, display_name ASC
+`
+
+type ListUserSessionUserFacetsRow struct {
+	Value       string
+	DisplayName string
+	Count       int64
+}
+
+func (q *Queries) ListUserSessionUserFacets(ctx context.Context, projectID uuid.UUID) ([]ListUserSessionUserFacetsRow, error) {
+	rows, err := q.db.Query(ctx, listUserSessionUserFacets, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserSessionUserFacetsRow
+	for rows.Next() {
+		var i ListUserSessionUserFacetsRow
+		if err := rows.Scan(&i.Value, &i.DisplayName, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserSessionsByProjectID = `-- name: ListUserSessionsByProjectID :many
 SELECT s.id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, s.jti,
        s.refresh_expires_at, s.expires_at,
@@ -794,9 +904,11 @@ WHERE iss.project_id = $1
       END
   AND ($3::text IS NULL OR s.subject_urn = $3::text)
   AND ($4::uuid IS NULL OR s.user_session_issuer_id = $4::uuid)
-  AND ($5::uuid IS NULL OR s.id < $5::uuid)
+  AND ($5::uuid IS NULL OR s.user_session_client_id = $5::uuid)
+  AND ($6::uuid IS NULL OR s.id = $6::uuid)
+  AND ($7::uuid IS NULL OR s.id < $7::uuid)
 ORDER BY s.id DESC
-LIMIT $6
+LIMIT $8
 `
 
 type ListUserSessionsByProjectIDParams struct {
@@ -804,6 +916,8 @@ type ListUserSessionsByProjectIDParams struct {
 	Status              pgtype.Text
 	SubjectUrn          pgtype.Text
 	UserSessionIssuerID uuid.NullUUID
+	ClientID            uuid.NullUUID
+	ID                  uuid.NullUUID
 	Cursor              uuid.NullUUID
 	LimitValue          int32
 }
@@ -835,6 +949,8 @@ func (q *Queries) ListUserSessionsByProjectID(ctx context.Context, arg ListUserS
 		arg.Status,
 		arg.SubjectUrn,
 		arg.UserSessionIssuerID,
+		arg.ClientID,
+		arg.ID,
 		arg.Cursor,
 		arg.LimitValue,
 	)
