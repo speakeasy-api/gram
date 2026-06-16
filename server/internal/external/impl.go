@@ -75,8 +75,15 @@ func AttachWebhookHandler(mux goahttp.Muxer, h *WebhookHandler) {
 
 // webhookEventData is the relevant subset of the `data` field on a WorkOS
 // webhook payload. ID and OrganizationID are populated differently per event
-// type; see workOSOrganizationIDFromWebhook for the mapping.
+// type; see parseOrganizationID for the mapping.
 type webhookEventData struct {
+	ID             string                 `json:"id"`
+	OrganizationID string                 `json:"organization_id"`
+	User           webhookDirectoryEntity `json:"user"`
+	Group          webhookDirectoryEntity `json:"group"`
+}
+
+type webhookDirectoryEntity struct {
 	ID             string `json:"id"`
 	OrganizationID string `json:"organization_id"`
 }
@@ -134,7 +141,15 @@ func (h *WebhookHandler) dispatch(ctx context.Context, logger *slog.Logger, even
 		string(workos.EventKindConnectionDeactivated),
 		string(workos.EventKindConnectionDeleted),
 		string(workos.EventKindDirectorySyncActivated),
-		string(workos.EventKindDirectorySyncDeleted):
+		string(workos.EventKindDirectorySyncDeleted),
+		string(workos.EventKindDirectorySyncUserCreated),
+		string(workos.EventKindDirectorySyncUserUpdated),
+		string(workos.EventKindDirectorySyncUserDeleted),
+		string(workos.EventKindDirectorySyncGroupCreated),
+		string(workos.EventKindDirectorySyncGroupUpdated),
+		string(workos.EventKindDirectorySyncGroupDeleted),
+		string(workos.EventKindDirectorySyncGroupUserAdded),
+		string(workos.EventKindDirectorySyncGroupUserRemoved):
 
 		orgID := parseOrganizationID(event)
 		if _, err := background.ExecuteProcessWorkOSOrganizationEventsWorkflowDebounced(ctx, h.temporalEnv, background.ProcessWorkOSEventsParams{
@@ -163,8 +178,7 @@ func (h *WebhookHandler) dispatch(ctx context.Context, logger *slog.Logger, even
 		return nil
 
 	default:
-		// Remaining dsync.* sub-events and any new event types are accepted
-		// so WorkOS stops retrying, but they are not processed yet.
+		// Unknown event types are accepted so WorkOS stops retrying them.
 		return nil
 	}
 }
@@ -179,5 +193,11 @@ func parseOrganizationID(event webhookEvent) string {
 	if strings.HasPrefix(event.Event, "organization.") {
 		return event.Data.ID
 	}
-	return event.Data.OrganizationID
+	if event.Data.OrganizationID != "" {
+		return event.Data.OrganizationID
+	}
+	if event.Data.Group.OrganizationID != "" {
+		return event.Data.Group.OrganizationID
+	}
+	return event.Data.User.OrganizationID
 }

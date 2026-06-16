@@ -245,6 +245,8 @@ const (
 	WorkOSUserIDKey                      = attribute.Key("gram.workos.user_id")
 	WorkOSSSOEnabledKey                  = attribute.Key("gram.workos.sso_enabled")
 	WorkOSSCIMEnabledKey                 = attribute.Key("gram.workos.scim_enabled")
+	WorkOSDirectoryUserIDKey             = attribute.Key("gram.workos.directory_user_id")
+	WorkOSDirectoryGroupIDKey            = attribute.Key("gram.workos.directory_group_id")
 	OutcomeKey                           = attribute.Key("gram.outcome")
 	PackageNameKey                       = attribute.Key("gram.package.name")
 	PackageVersionKey                    = attribute.Key("gram.package.version")
@@ -1087,6 +1089,16 @@ func SlogWorkOSSSOEnabled(v bool) slog.Attr      { return slog.Bool(string(WorkO
 
 func WorkOSSCIMEnabled(v bool) attribute.KeyValue { return WorkOSSCIMEnabledKey.Bool(v) }
 func SlogWorkOSSCIMEnabled(v bool) slog.Attr      { return slog.Bool(string(WorkOSSCIMEnabledKey), v) }
+
+func WorkOSDirectoryUserID(v string) attribute.KeyValue { return WorkOSDirectoryUserIDKey.String(v) }
+func SlogWorkOSDirectoryUserID(v string) slog.Attr {
+	return slog.String(string(WorkOSDirectoryUserIDKey), v)
+}
+
+func WorkOSDirectoryGroupID(v string) attribute.KeyValue { return WorkOSDirectoryGroupIDKey.String(v) }
+func SlogWorkOSDirectoryGroupID(v string) slog.Attr {
+	return slog.String(string(WorkOSDirectoryGroupIDKey), v)
+}
 
 func OutboxID(v int64) attribute.KeyValue { return OutboxIDKey.Int64(v) }
 func SlogOutboxID(v int64) slog.Attr      { return slog.Int64(string(OutboxIDKey), v) }

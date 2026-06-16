@@ -1078,6 +1078,14 @@ func TestProcessWorkOSOrganizationEvents_MembershipFilterIncludesMembershipTypes
 		"connection.deleted",
 		"dsync.activated",
 		"dsync.deleted",
+		"dsync.user.created",
+		"dsync.user.updated",
+		"dsync.user.deleted",
+		"dsync.group.created",
+		"dsync.group.updated",
+		"dsync.group.deleted",
+		"dsync.group.user_added",
+		"dsync.group.user_removed",
 	}, stub.EventCalls()[0].Events)
 }
 
