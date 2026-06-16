@@ -46,6 +46,7 @@ func (s *Service) ListUserSessions(ctx context.Context, payload *gen.ListUserSes
 
 	rows, err := repo.New(s.db).ListUserSessionsByProjectID(ctx, repo.ListUserSessionsByProjectIDParams{
 		ProjectID:           *authCtx.ProjectID,
+		Status:              conv.PtrToPGTextEmpty(payload.Status),
 		SubjectUrn:          conv.PtrToPGTextEmpty(payload.SubjectUrn),
 		UserSessionIssuerID: issuerFilter,
 		Cursor:              cursor,

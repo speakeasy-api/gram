@@ -38,6 +38,7 @@ func TestListUserSessions(t *testing.T) {
 		ProjectSlugInput:    nil,
 		SubjectUrn:          nil,
 		UserSessionIssuerID: nil,
+		Status:              nil,
 		Cursor:              nil,
 		Limit:               nil,
 	})
@@ -73,6 +74,7 @@ func TestListUserSessions_FilterByPrincipal(t *testing.T) {
 		ProjectSlugInput:    nil,
 		SubjectUrn:          &target,
 		UserSessionIssuerID: nil,
+		Status:              nil,
 		Cursor:              nil,
 		Limit:               nil,
 	})
@@ -117,6 +119,7 @@ func TestListUserSessions_FilterByIssuer(t *testing.T) {
 		ProjectSlugInput:    nil,
 		SubjectUrn:          nil,
 		UserSessionIssuerID: &filter,
+		Status:              nil,
 		Cursor:              nil,
 		Limit:               nil,
 	})
@@ -137,6 +140,7 @@ func TestListUserSessions_BadCursor(t *testing.T) {
 		ProjectSlugInput:    nil,
 		SubjectUrn:          nil,
 		UserSessionIssuerID: nil,
+		Status:              nil,
 		Cursor:              &bad,
 		Limit:               nil,
 	})
@@ -157,6 +161,7 @@ func TestListUserSessions_RBACForbidden(t *testing.T) {
 		ProjectSlugInput:    nil,
 		SubjectUrn:          nil,
 		UserSessionIssuerID: nil,
+		Status:              nil,
 		Cursor:              nil,
 		Limit:               nil,
 	})
@@ -193,6 +198,7 @@ func TestListUserSessions_RefreshTokenHashNotReturned(t *testing.T) {
 		ProjectSlugInput:    nil,
 		SubjectUrn:          nil,
 		UserSessionIssuerID: nil,
+		Status:              nil,
 		Cursor:              nil,
 		Limit:               nil,
 	})
@@ -201,4 +207,113 @@ func TestListUserSessions_RefreshTokenHashNotReturned(t *testing.T) {
 	// Surface contract: jti is OK to return, refresh_token_hash is not
 	// representable on the API type at all.
 	require.NotEmpty(t, got.Items[0].Jti)
+}
+
+func TestListUserSessions_ReturnsEnrichment(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "enrichment-issuer",
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+
+	_, err = seedUserSession(t, ctx, ti.conn, uuid.MustParse(issuer.ID), urn.NewUserSubject("nobody"))
+	require.NoError(t, err)
+
+	got, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		SubjectUrn:          nil,
+		UserSessionIssuerID: nil,
+		Status:              nil,
+		Cursor:              nil,
+		Limit:               nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, got.Items, 1)
+	require.Equal(t, "enrichment-issuer", got.Items[0].IssuerSlug)
+	require.Equal(t, "user", got.Items[0].SubjectType)
+	require.Nil(t, got.Items[0].SubjectDisplayName) // "nobody" is not a real users.id
+	require.Nil(t, got.Items[0].RevokedAt)
+}
+
+func TestListUserSessions_StatusRevokedFilter(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "status-issuer",
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+
+	live, err := seedUserSession(t, ctx, ti.conn, uuid.MustParse(issuer.ID), urn.NewUserSubject("live"))
+	require.NoError(t, err)
+	toRevoke, err := seedUserSession(t, ctx, ti.conn, uuid.MustParse(issuer.ID), urn.NewUserSubject("dead"))
+	require.NoError(t, err)
+
+	require.NoError(t, ti.service.RevokeUserSession(ctx, &gen.RevokeUserSessionPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		ID:               toRevoke.ID.String(),
+	}))
+
+	active := "active"
+	gotActive, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		SubjectUrn:          nil,
+		UserSessionIssuerID: nil,
+		Status:              &active,
+		Cursor:              nil,
+		Limit:               nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, gotActive.Items, 1)
+	require.Equal(t, live.ID.String(), gotActive.Items[0].ID)
+
+	revoked := "revoked"
+	gotRevoked, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		SubjectUrn:          nil,
+		UserSessionIssuerID: nil,
+		Status:              &revoked,
+		Cursor:              nil,
+		Limit:               nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, gotRevoked.Items, 1)
+	require.Equal(t, toRevoke.ID.String(), gotRevoked.Items[0].ID)
+	require.NotNil(t, gotRevoked.Items[0].RevokedAt)
+
+	all := "all"
+	gotAll, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		SubjectUrn:          nil,
+		UserSessionIssuerID: nil,
+		Status:              &all,
+		Cursor:              nil,
+		Limit:               nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, gotAll.Items, 2)
 }
