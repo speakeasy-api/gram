@@ -113,6 +113,9 @@ func (s *Service) serveResolvedMCPEndpoint(
 	slug, mcpRouteBase string,
 ) error {
 	ctx := r.Context()
+
+	logger = logger.With(attr.SlogMcpServerID(mcpServer.ID.String()))
+
 	issuerGated := mcpServer.UserSessionIssuerID.Valid
 
 	// Issuer-gated mcp_servers run the JWT-validation branch here, before
@@ -169,7 +172,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 			mcpServerVariationsGroupID = &id
 		}
 
-		if err := s.ServeToolsetResolved(w, r, &toolset, slug, mcpRouteBase, issuerGated, upstreamTokens, mcpServerVariationsGroupID); err != nil {
+		if err := s.ServeToolsetResolved(w, r, &toolset, slug, mcpRouteBase, issuerGated, upstreamTokens, mcpServerVariationsGroupID, &mcpServer.ID); err != nil {
 			return fmt.Errorf("serve toolset-backed mcp: %w", err)
 		}
 		return nil

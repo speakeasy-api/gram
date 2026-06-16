@@ -213,6 +213,10 @@ type mcpInputs struct {
 	// toolVariationsGroupID is the effective variation group resolved per
 	// request (mcp_servers, then toolsets, then nil for the project default).
 	toolVariationsGroupID *uuid.UUID
+	// mcpServerID is the fronting mcp_servers row id when the request arrived
+	// via an mcp_endpoint. Nil on the legacy toolset-by-slug path and for
+	// internal (agent-workflow) callers, which have no fronting server.
+	mcpServerID *uuid.UUID
 	// tags is the parsed ?tags= filter. When non-empty, tools/list and
 	// tools/call expose only tools whose variation row carries one of these
 	// tags. Empty means no filtering.
@@ -501,9 +505,9 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// Legacy toolset-by-slug path has no mcp_server, so there is no
-	// server-level variation group override; ServeToolsetResolved falls back to
-	// the toolset's own column.
-	return s.ServeToolsetResolved(w, r, toolset, mcpSlug, "mcp", false, nil, nil)
+	// server-level variation group override (ServeToolsetResolved falls back to
+	// the toolset's own column) and no fronting mcp_servers id to record.
+	return s.ServeToolsetResolved(w, r, toolset, mcpSlug, "mcp", false, nil, nil, nil)
 }
 
 // ServeToolsetResolved serves an MCP runtime request after the slug has
@@ -535,8 +539,14 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 // project-default group applies. /mcp's legacy toolset-by-slug path has no
 // mcp_server and passes nil.
 //
+// mcpServerID is the fronting mcp_servers row id when this request arrived via
+// an mcp_endpoint, recorded on the tools/call telemetry row so toolset-backed
+// activity can be sliced from the fronting-server perspective. /mcp's legacy
+// toolset-by-slug path has no mcp_server and passes nil, leaving the attribute
+// off the row.
+//
 // The caller is responsible for closing r.Body.
-func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, toolset *toolsets_repo.Toolset, mcpSlug, mcpRouteBase string, skipIssuerGate bool, extraUpstreamTokens map[uuid.UUID]string, mcpServerVariationsGroupID *uuid.UUID) error {
+func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, toolset *toolsets_repo.Toolset, mcpSlug, mcpRouteBase string, skipIssuerGate bool, extraUpstreamTokens map[uuid.UUID]string, mcpServerVariationsGroupID *uuid.UUID, mcpServerID *uuid.UUID) error {
 	ctx := r.Context()
 	var err error
 
@@ -813,6 +823,7 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		externalUserID:        externalUserID,
 		apiKeyID:              apiKeyID,
 		toolVariationsGroupID: toolVariationsGroupID,
+		mcpServerID:           mcpServerID,
 		tags:                  tags,
 	}
 
