@@ -307,6 +307,10 @@ type OTELLogRecord struct {
 	TimeUnixNano *string
 	// Observed timestamp in nanoseconds
 	ObservedTimeUnixNano *string
+	// Trace ID
+	TraceID *string
+	// Span ID
+	SpanID *string
 	// Log body content
 	Body *OTELLogBody
 	// Log attributes

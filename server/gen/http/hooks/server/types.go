@@ -1180,6 +1180,10 @@ type OTELLogRecordRequestBody struct {
 	TimeUnixNano *string `form:"timeUnixNano,omitempty" json:"timeUnixNano,omitempty" xml:"timeUnixNano,omitempty"`
 	// Observed timestamp in nanoseconds
 	ObservedTimeUnixNano *string `form:"observedTimeUnixNano,omitempty" json:"observedTimeUnixNano,omitempty" xml:"observedTimeUnixNano,omitempty"`
+	// Trace ID
+	TraceID *string `form:"traceId,omitempty" json:"traceId,omitempty" xml:"traceId,omitempty"`
+	// Span ID
+	SpanID *string `form:"spanId,omitempty" json:"spanId,omitempty" xml:"spanId,omitempty"`
 	// Log body content
 	Body *OTELLogBodyRequestBody `form:"body,omitempty" json:"body,omitempty" xml:"body,omitempty"`
 	// Log attributes

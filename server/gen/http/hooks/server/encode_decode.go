@@ -1270,6 +1270,8 @@ func unmarshalOTELLogRecordRequestBodyToHooksOTELLogRecord(v *OTELLogRecordReque
 	res := &hooks.OTELLogRecord{
 		TimeUnixNano:           v.TimeUnixNano,
 		ObservedTimeUnixNano:   v.ObservedTimeUnixNano,
+		TraceID:                v.TraceID,
+		SpanID:                 v.SpanID,
 		DroppedAttributesCount: v.DroppedAttributesCount,
 	}
 	if v.Body != nil {

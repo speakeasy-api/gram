@@ -34,9 +34,11 @@ var ResourceAttributeKeys = map[attribute.Key]struct{}{
 }
 
 type LogParams struct {
-	Timestamp  time.Time
-	ToolInfo   ToolInfo
-	Attributes map[attr.Key]any
+	Timestamp          time.Time
+	ObservedTimestamp  time.Time
+	ToolInfo           ToolInfo
+	Attributes         map[attr.Key]any
+	ResourceAttributes map[attr.Key]any
 }
 
 type Logger struct {
@@ -163,12 +165,16 @@ func buildTelemetryLogParams(params LogParams) (*repo.InsertTelemetryLogParams, 
 	maps.Copy(allAttrs, params.Attributes)
 	maps.Copy(allAttrs, params.ToolInfo.AsAttributes())
 
-	observedTimeUnixNano := time.Now().UnixNano()
+	observedTimestamp := params.ObservedTimestamp
+	if observedTimestamp.IsZero() {
+		observedTimestamp = time.Now()
+	}
+	observedTimeUnixNano := observedTimestamp.UnixNano()
 	allAttrs[attr.ObservedTimeUnixNanoKey] = observedTimeUnixNano
 	allAttrs[attr.TimeUnixNanoKey] = params.Timestamp.UnixNano()
 	allAttrs[attr.ServiceNameKey] = serviceName
 
-	spanAttrs, resourceAttrs, err := parseAttributes(allAttrs)
+	spanAttrs, resourceAttrs, err := parseAttributesWithExplicitResources(allAttrs, params.ResourceAttributes)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "parse log attributes")
 	}
@@ -201,8 +207,13 @@ func buildTelemetryLogParams(params LogParams) (*repo.InsertTelemetryLogParams, 
 // parseAttributes splits attributes into resource and span attributes
 // based on ResourceAttributeKeys, and returns their json string representation.
 func parseAttributes(attrs map[attr.Key]any) (spanAttrsJSON, resourceAttrsJSON string, err error) {
+	return parseAttributesWithExplicitResources(attrs, nil)
+}
+
+func parseAttributesWithExplicitResources(attrs map[attr.Key]any, explicitResourceAttrs map[attr.Key]any) (spanAttrsJSON, resourceAttrsJSON string, err error) {
 	spanAttrs := make(map[attr.Key]any)
 	resourceAttrs := make(map[attr.Key]any)
+	maps.Copy(resourceAttrs, explicitResourceAttrs)
 
 	for k, v := range attrs {
 		// if there's an attribute related to a Gen AI request we want
@@ -214,7 +225,9 @@ func parseAttributes(attrs map[attr.Key]any) (spanAttrsJSON, resourceAttrsJSON s
 		}
 
 		if _, ok := ResourceAttributeKeys[k]; ok {
-			resourceAttrs[k] = v
+			if _, explicit := resourceAttrs[k]; !explicit {
+				resourceAttrs[k] = v
+			}
 			continue
 		}
 
