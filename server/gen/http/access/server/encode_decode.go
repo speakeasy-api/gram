@@ -5057,14 +5057,15 @@ func EncodeResolveChallengeError(encoder func(context.Context, http.ResponseWrit
 // from a value of type *access.Role.
 func marshalAccessRoleToRoleResponseBody(v *access.Role) *RoleResponseBody {
 	res := &RoleResponseBody{
-		ID:          v.ID,
-		Name:        v.Name,
-		Slug:        v.Slug,
-		Description: v.Description,
-		IsSystem:    v.IsSystem,
-		MemberCount: v.MemberCount,
-		CreatedAt:   v.CreatedAt,
-		UpdatedAt:   v.UpdatedAt,
+		ID:           v.ID,
+		PrincipalUrn: v.PrincipalUrn,
+		Name:         v.Name,
+		Slug:         v.Slug,
+		Description:  v.Description,
+		IsSystem:     v.IsSystem,
+		MemberCount:  v.MemberCount,
+		CreatedAt:    v.CreatedAt,
+		UpdatedAt:    v.UpdatedAt,
 	}
 	if v.Grants != nil {
 		res.Grants = make([]*RoleGrantResponseBody, len(v.Grants))
@@ -5188,11 +5189,12 @@ func marshalAccessScopeDefinitionToScopeDefinitionResponseBody(v *access.ScopeDe
 // *AccessMemberResponseBody from a value of type *access.AccessMember.
 func marshalAccessAccessMemberToAccessMemberResponseBody(v *access.AccessMember) *AccessMemberResponseBody {
 	res := &AccessMemberResponseBody{
-		ID:       v.ID,
-		Name:     v.Name,
-		Email:    v.Email,
-		PhotoURL: v.PhotoURL,
-		JoinedAt: v.JoinedAt,
+		ID:           v.ID,
+		PrincipalUrn: v.PrincipalUrn,
+		Name:         v.Name,
+		Email:        v.Email,
+		PhotoURL:     v.PhotoURL,
+		JoinedAt:     v.JoinedAt,
 	}
 	if v.RoleIds != nil {
 		res.RoleIds = make([]string, len(v.RoleIds))

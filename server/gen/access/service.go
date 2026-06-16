@@ -99,6 +99,8 @@ var MethodNames = [23]string{"listRoles", "getRole", "createRole", "updateRole",
 type AccessMember struct {
 	// User ID.
 	ID string
+	// Canonical principal URN for this member.
+	PrincipalUrn string
 	// Display name.
 	Name string
 	// Email address.
@@ -557,6 +559,8 @@ type ResolveChallengesResult struct {
 type Role struct {
 	// Unique role identifier.
 	ID string
+	// Canonical principal URN for this role.
+	PrincipalUrn string
 	// Display name of the role.
 	Name string
 	// Stable WorkOS role slug.

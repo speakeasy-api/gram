@@ -501,6 +501,7 @@ function TeamInner() {
           (memberRoleIds.length > 0
             ? {
                 id: member.userId,
+                principalUrn: `user:${member.userId}`,
                 name: member.name,
                 email: member.email,
                 photoUrl: member.photoUrl,

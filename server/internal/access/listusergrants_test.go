@@ -90,7 +90,7 @@ func TestService_ListGrants_RoleGrants(t *testing.T) {
 	require.Equal(t, "tool_456", byScope["mcp:connect"].Selectors[0].ResourceID)
 }
 
-func TestService_ListGrants_NotConnected(t *testing.T) {
+func TestService_ListGrants_NotConnectedLoadsAllUserGrants(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -107,10 +107,13 @@ func TestService_ListGrants_NotConnected(t *testing.T) {
 		UserID:         conv.ToPGText(authCtx.UserID),
 	})
 	require.NoError(t, err)
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authz.AllUsersPrincipal(), authz.ScopeRiskPolicyEvaluate, "policy-for-everyone")
 
-	_, err = ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "current user has not joined this organization")
+	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
+	require.NoError(t, err)
+	require.Len(t, result.Grants, 1)
+	require.Equal(t, string(authz.ScopeRiskPolicyEvaluate), result.Grants[0].Scope)
+	require.Equal(t, "policy-for-everyone", result.Grants[0].Selectors[0].ResourceID)
 }
 
 func TestService_ListGrants_InvalidUserPrincipal(t *testing.T) {

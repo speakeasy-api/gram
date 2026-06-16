@@ -114,12 +114,13 @@ func (r *RoleManager) ListMembers(ctx context.Context, gramOrgID string) (*gen.L
 		m, exists := memberMap[row.ID]
 		if !exists {
 			m = &gen.AccessMember{
-				ID:       row.ID,
-				Name:     conv.Default(row.DisplayName, row.Email),
-				Email:    row.Email,
-				PhotoURL: conv.FromPGText[string](row.PhotoUrl),
-				RoleIds:  nil,
-				JoinedAt: conv.FromPGTimestamptz(row.JoinedAt),
+				ID:           row.ID,
+				PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, row.ID).String(),
+				Name:         conv.Default(row.DisplayName, row.Email),
+				Email:        row.Email,
+				PhotoURL:     conv.FromPGText[string](row.PhotoUrl),
+				RoleIds:      nil,
+				JoinedAt:     conv.FromPGTimestamptz(row.JoinedAt),
 			}
 			memberMap[row.ID] = m
 			order = append(order, row.ID)
@@ -153,6 +154,10 @@ func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID str
 	roleSlug, err := slugify(payload.Name)
 	if err != nil {
 		return roleCreateResult{}, err
+	}
+	grants := roleGrantPayloads(payload.Grants)
+	if err := authz.ValidateGrantSurface(authz.GrantSurfaceAccess, grants); err != nil {
+		return roleCreateResult{}, oops.E(oops.CodeBadRequest, err, "invalid access role grant: %s", err).LogError(ctx, r.logger)
 	}
 
 	tx, err := r.db.Begin(ctx)
@@ -194,7 +199,7 @@ func (r *RoleManager) CreateRole(ctx context.Context, gramOrgID, workosOrgID str
 	}
 	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleID(createdRole.ID))
 
-	if _, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, roleSlug, createdRole.PrincipalURN, roleGrantPayloads(payload.Grants), nil); err != nil {
+	if _, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, roleSlug, createdRole.PrincipalURN, grants, nil); err != nil {
 		return roleCreateResult{}, oops.E(oops.CodeUnexpected, err, "add grants for created role").LogError(ctx, r.logger)
 	}
 
@@ -294,6 +299,14 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 			return roleUpdateResult{}, err
 		}
 	}
+	addGrants := roleGrantPayloads(payload.AddGrants)
+	removeGrants := roleGrantPayloads(payload.RemoveGrants)
+	if err := authz.ValidateGrantSurface(authz.GrantSurfaceAccess, addGrants); err != nil {
+		return roleUpdateResult{}, oops.E(oops.CodeBadRequest, err, "invalid access role grant: %s", err).LogError(ctx, r.logger)
+	}
+	if err := authz.ValidateGrantSurface(authz.GrantSurfaceAccess, removeGrants); err != nil {
+		return roleUpdateResult{}, oops.E(oops.CodeBadRequest, err, "invalid access role grant: %s", err).LogError(ctx, r.logger)
+	}
 
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
@@ -338,7 +351,7 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 		}
 
 		if payload.AddGrants != nil || payload.RemoveGrants != nil {
-			syncedGrants, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, currentRole.Slug, currentRole.PrincipalURN, roleGrantPayloads(payload.AddGrants), roleGrantPayloads(payload.RemoveGrants))
+			syncedGrants, err := authz.PatchRoleGrantsTx(ctx, tx, gramOrgID, currentRole.Slug, currentRole.PrincipalURN, addGrants, removeGrants)
 			if err != nil {
 				return roleUpdateResult{}, oops.E(oops.CodeUnexpected, err, "patch grants for updated role").LogError(ctx, r.logger)
 			}
@@ -375,15 +388,16 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 	}
 
 	updatedRoleView := &gen.Role{
-		ID:          updatedRole.ID,
-		Name:        updatedRole.Name,
-		Slug:        updatedRole.Slug,
-		Description: updatedRole.Description,
-		IsSystem:    isSystemRole(updatedRole.Slug),
-		Grants:      existingRole.Grants,
-		MemberCount: updatedRole.MemberCount,
-		CreatedAt:   conv.Default(updatedRole.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
-		UpdatedAt:   conv.Default(updatedRole.UpdatedAt, time.Time{}.UTC().Format(time.RFC3339)),
+		ID:           updatedRole.ID,
+		PrincipalUrn: updatedRole.PrincipalURN,
+		Name:         updatedRole.Name,
+		Slug:         updatedRole.Slug,
+		Description:  updatedRole.Description,
+		IsSystem:     isSystemRole(updatedRole.Slug),
+		Grants:       existingRole.Grants,
+		MemberCount:  updatedRole.MemberCount,
+		CreatedAt:    conv.Default(updatedRole.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
+		UpdatedAt:    conv.Default(updatedRole.UpdatedAt, time.Time{}.UTC().Format(time.RFC3339)),
 	}
 	if updatedGrants != nil {
 		updatedRoleView.Grants = updatedGrants
@@ -664,26 +678,29 @@ func (r *RoleManager) UpdateMemberRoles(ctx context.Context, gramOrgID, userID s
 	}
 
 	memberName := conv.Default(connectedUser.DisplayName, connectedUser.Email)
+	memberPrincipalURN := urn.NewPrincipal(urn.PrincipalTypeUser, connectedUser.ID).String()
 	result := memberRoleUpdateContext{
 		RoleSlugs:    roleSlugs,
 		MembershipID: membershipID,
 		WorkosUserID: connectedUser.WorkosID.String,
 		UserID:       connectedUser.ID,
 		Before: &gen.AccessMember{
-			ID:       connectedUser.ID,
-			Name:     memberName,
-			Email:    connectedUser.Email,
-			PhotoURL: conv.FromPGText[string](connectedUser.PhotoUrl),
-			RoleIds:  existingRoleIDs,
-			JoinedAt: conv.FromPGTimestamptz(existing.CreatedAt),
+			ID:           connectedUser.ID,
+			PrincipalUrn: memberPrincipalURN,
+			Name:         memberName,
+			Email:        connectedUser.Email,
+			PhotoURL:     conv.FromPGText[string](connectedUser.PhotoUrl),
+			RoleIds:      existingRoleIDs,
+			JoinedAt:     conv.FromPGTimestamptz(existing.CreatedAt),
 		},
 		After: &gen.AccessMember{
-			ID:       connectedUser.ID,
-			Name:     memberName,
-			Email:    connectedUser.Email,
-			PhotoURL: conv.FromPGText[string](connectedUser.PhotoUrl),
-			RoleIds:  afterRoleIDs,
-			JoinedAt: conv.FromPGTimestamptz(existing.CreatedAt),
+			ID:           connectedUser.ID,
+			PrincipalUrn: memberPrincipalURN,
+			Name:         memberName,
+			Email:        connectedUser.Email,
+			PhotoURL:     conv.FromPGText[string](connectedUser.PhotoUrl),
+			RoleIds:      afterRoleIDs,
+			JoinedAt:     conv.FromPGTimestamptz(existing.CreatedAt),
 		},
 	}
 
@@ -1023,15 +1040,16 @@ func (r *RoleManager) roleViewFromLocalRole(ctx context.Context, organizationID 
 	}
 
 	return &gen.Role{
-		ID:          role.ID,
-		Name:        role.Name,
-		Slug:        role.Slug,
-		Description: role.Description,
-		IsSystem:    isSystemRole(role.Slug),
-		Grants:      genGrants,
-		MemberCount: role.MemberCount,
-		CreatedAt:   conv.Default(role.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
-		UpdatedAt:   conv.Default(role.UpdatedAt, time.Time{}.UTC().Format(time.RFC3339)),
+		ID:           role.ID,
+		PrincipalUrn: role.PrincipalURN,
+		Name:         role.Name,
+		Slug:         role.Slug,
+		Description:  role.Description,
+		IsSystem:     isSystemRole(role.Slug),
+		Grants:       genGrants,
+		MemberCount:  role.MemberCount,
+		CreatedAt:    conv.Default(role.CreatedAt, time.Time{}.UTC().Format(time.RFC3339)),
+		UpdatedAt:    conv.Default(role.UpdatedAt, time.Time{}.UTC().Format(time.RFC3339)),
 	}, nil
 }
 

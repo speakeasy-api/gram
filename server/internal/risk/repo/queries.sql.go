@@ -556,6 +556,7 @@ INSERT INTO risk_policies (
   , message_types
   , enabled
   , action
+  , audience_type
   , auto_name
   , user_message
   , prompt
@@ -578,8 +579,9 @@ VALUES (
   , $13
   , $14
   , $15
-  , $16::text
-  , $17::jsonb
+  , $16
+  , $17::text
+  , $18::jsonb
   , 1
 )
 RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, action, audience_type, auto_name, user_message, prompt, model_config, version, created_at, updated_at, deleted_at, deleted
@@ -599,6 +601,7 @@ type CreateRiskPolicyParams struct {
 	MessageTypes         []string
 	Enabled              bool
 	Action               string
+	AudienceType         string
 	AutoName             bool
 	UserMessage          pgtype.Text
 	Prompt               pgtype.Text
@@ -620,6 +623,7 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 		arg.MessageTypes,
 		arg.Enabled,
 		arg.Action,
+		arg.AudienceType,
 		arg.AutoName,
 		arg.UserMessage,
 		arg.Prompt,
@@ -2837,10 +2841,11 @@ SET name = $1
   , message_types = $7::text[]
   , enabled = $8
   , action = $9
-  , auto_name = $10
-  , user_message = $11
-  , prompt = $12::text
-  , model_config = $13::jsonb
+  , audience_type = $10
+  , auto_name = $11
+  , user_message = $12
+  , prompt = $13::text
+  , model_config = $14::jsonb
   , version = CASE
       WHEN sources IS DISTINCT FROM $2
         OR presidio_entities IS DISTINCT FROM $3
@@ -2850,14 +2855,15 @@ SET name = $1
         OR message_types IS DISTINCT FROM $7::text[]
         OR enabled IS DISTINCT FROM $8
         OR action IS DISTINCT FROM $9
-        OR prompt IS DISTINCT FROM $12::text
-        OR model_config IS DISTINCT FROM $13::jsonb
+        OR prompt IS DISTINCT FROM $13::text
+        OR model_config IS DISTINCT FROM $14::jsonb
+        OR audience_type IS DISTINCT FROM $10
       THEN version + 1
       ELSE version
     END
   , updated_at = clock_timestamp()
-WHERE id = $14
-  AND project_id = $15
+WHERE id = $15
+  AND project_id = $16
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, action, audience_type, auto_name, user_message, prompt, model_config, version, created_at, updated_at, deleted_at, deleted
 `
@@ -2872,6 +2878,7 @@ type UpdateRiskPolicyParams struct {
 	MessageTypes         []string
 	Enabled              bool
 	Action               string
+	AudienceType         string
 	AutoName             bool
 	UserMessage          pgtype.Text
 	Prompt               pgtype.Text
@@ -2891,6 +2898,7 @@ func (q *Queries) UpdateRiskPolicy(ctx context.Context, arg UpdateRiskPolicyPara
 		arg.MessageTypes,
 		arg.Enabled,
 		arg.Action,
+		arg.AudienceType,
 		arg.AutoName,
 		arg.UserMessage,
 		arg.Prompt,

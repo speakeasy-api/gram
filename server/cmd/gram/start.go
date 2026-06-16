@@ -968,7 +968,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create risk scanner: %w", err)
 			}
-			policyBypass := risk.NewPolicyBypassEvaluator(logger, db, authzEngine)
+			policyBypass := risk.NewPolicyBypassEvaluator(logger, db)
 
 			about.Attach(mux, about.NewService(logger, tracerProvider))
 			external.AttachWebhookHandler(mux, external.NewWebhookHandler(logger, tracerProvider, newWorkOSWebhooksClient(c), temporalEnv))
