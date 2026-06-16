@@ -15,7 +15,7 @@ import (
 //
 //	"does this user have mcp:connect for this server?"
 //
-// Use a GrantExpression when the rule also has exceptions or other grant-based
+// Use a GrantExpression when the rule also has exclusions or other grant-based
 // conditions:
 //
 //	"does this user have mcp:connect for this server, unless they also have
@@ -31,7 +31,7 @@ import (
 //
 // The main operation today is difference:
 //
-//	base permission - exception permission
+//	base permission - exclusion permission
 //
 // For risk policy evaluation this means:
 //
@@ -68,7 +68,7 @@ type GrantExpressionReason string
 const (
 	GrantExpressionReasonMatched          GrantExpressionReason = "matched"
 	GrantExpressionReasonMissingBase      GrantExpressionReason = "missing_base"
-	GrantExpressionReasonExceptionMatched GrantExpressionReason = "exception_matched"
+	GrantExpressionReasonExclusionMatched GrantExpressionReason = "exclusion_matched"
 	GrantExpressionReasonError            GrantExpressionReason = "error"
 )
 
@@ -165,10 +165,10 @@ func (g GrantCheck) instanceSelectorView() Selector {
 	return g.Check.selector()
 }
 
-// GrantDifference represents "Base is allowed unless Exception also applies".
+// GrantDifference represents "Base is allowed unless Exclusion also applies".
 //
-// It evaluates Base and Exception into sets of concrete permission instances,
-// removes every exception instance from the base set, and is satisfied when at
+// It evaluates Base and Exclusion into sets of concrete permission instances,
+// removes every exclusion instance from the base set, and is satisfied when at
 // least one base instance remains.
 //
 // Examples:
@@ -177,15 +177,15 @@ func (g GrantCheck) instanceSelectorView() Selector {
 //	mcp:connect - mcp:block
 //
 // The scopes on the two sides do not have to be the same. What matters is that
-// both sides produce the same Instance selector when the exception should
+// both sides produce the same Instance selector when the exclusion should
 // remove the base permission.
 type GrantDifference struct {
 	Base      GrantExpression
-	Exception GrantExpression
+	Exclusion GrantExpression
 }
 
 // Evaluate answers whether Base still proves access after subtracting
-// Exception. See ../../../docs/rbac.md#grant-expressions-and-set-difference for
+// Exclusion. See ../../../docs/rbac.md#grant-expressions-and-set-difference for
 // concrete risk-policy and MCP examples.
 //
 // The direct GrantCheck - GrantCheck case skips grantSet construction because
@@ -195,39 +195,39 @@ func (g GrantDifference) Evaluate(grants []Grant) (GrantExpressionResult, error)
 	if g.Base == nil {
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, errors.New("grant difference requires a base expression")
 	}
-	if g.Exception == nil {
-		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, errors.New("grant difference requires an exception expression")
+	if g.Exclusion == nil {
+		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, errors.New("grant difference requires an exclusion expression")
 	}
 
 	baseCheck, baseIsCheck := g.Base.(GrantCheck)
-	exceptionCheck, exceptionIsCheck := g.Exception.(GrantCheck)
-	if baseIsCheck && exceptionIsCheck {
-		return evaluateGrantCheckDifference(grants, baseCheck, exceptionCheck)
+	exclusionCheck, exclusionIsCheck := g.Exclusion.(GrantCheck)
+	if baseIsCheck && exclusionIsCheck {
+		return evaluateGrantCheckDifference(grants, baseCheck, exclusionCheck)
 	}
 
 	baseResult, err := g.Base.Evaluate(grants)
 	if err != nil {
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, fmt.Errorf("evaluate base expression: %w", err)
 	}
-	exception, err := g.Exception.grantSet(grants)
+	exclusion, err := g.Exclusion.grantSet(grants)
 	if err != nil {
-		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, fmt.Errorf("evaluate exception expression set: %w", err)
+		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, fmt.Errorf("evaluate exclusion expression set: %w", err)
 	}
 	if !baseResult.Satisfied {
 		return baseResult, nil
 	}
 
 	// Evaluate above gives us the best reason to return when the base is not
-	// satisfied. From here on we need the actual base and exception sets so the
-	// exception removes only matching permission instances.
+	// satisfied. From here on we need the actual base and exclusion sets so the
+	// exclusion removes only matching permission instances.
 	base, err := g.Base.grantSet(grants)
 	if err != nil {
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, fmt.Errorf("evaluate base expression set: %w", err)
 	}
 
-	base.subtract(exception)
+	base.subtract(exclusion)
 	if len(base) == 0 {
-		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonExceptionMatched}, nil
+		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonExclusionMatched}, nil
 	}
 
 	return GrantExpressionResult{Satisfied: true, Reason: GrantExpressionReasonMatched}, nil
@@ -237,19 +237,19 @@ func (g GrantDifference) grantSet(grants []Grant) (grantSet, error) {
 	if g.Base == nil {
 		return nil, errors.New("grant difference requires a base expression")
 	}
-	if g.Exception == nil {
-		return nil, errors.New("grant difference requires an exception expression")
+	if g.Exclusion == nil {
+		return nil, errors.New("grant difference requires an exclusion expression")
 	}
 
 	base, err := g.Base.grantSet(grants)
 	if err != nil {
 		return nil, fmt.Errorf("evaluate base expression: %w", err)
 	}
-	exception, err := g.Exception.grantSet(grants)
+	exclusion, err := g.Exclusion.grantSet(grants)
 	if err != nil {
-		return nil, fmt.Errorf("evaluate exception expression: %w", err)
+		return nil, fmt.Errorf("evaluate exclusion expression: %w", err)
 	}
-	base.subtract(exception)
+	base.subtract(exclusion)
 	return base, nil
 }
 
@@ -265,7 +265,7 @@ func (s grantSet) add(member grantSetMember) {
 //	{risk_policy policy_123 server_url=abc}
 //	{risk_policy policy_123 server_url=cde}
 //
-// and the exception set contains:
+// and the exclusion set contains:
 //
 //	{risk_policy policy_123 server_url=abc}
 //
@@ -297,17 +297,17 @@ func rejectDenyGrantsForExpressionScope(grants []Grant, scope Scope) error {
 	return nil
 }
 
-func evaluateGrantCheckDifference(grants []Grant, base GrantCheck, exception GrantCheck) (GrantExpressionResult, error) {
+func evaluateGrantCheckDifference(grants []Grant, base GrantCheck, exclusion GrantCheck) (GrantExpressionResult, error) {
 	if err := validateInput(base.Check); err != nil {
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, err
 	}
-	if err := validateInput(exception.Check); err != nil {
+	if err := validateInput(exclusion.Check); err != nil {
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, err
 	}
 	if err := rejectDenyGrantsForExpressionScope(grants, base.Check.Scope); err != nil {
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, err
 	}
-	if err := rejectDenyGrantsForExpressionScope(grants, exception.Check.Scope); err != nil {
+	if err := rejectDenyGrantsForExpressionScope(grants, exclusion.Check.Scope); err != nil {
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, err
 	}
 
@@ -316,13 +316,13 @@ func evaluateGrantCheckDifference(grants []Grant, base GrantCheck, exception Gra
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonMissingBase}, nil
 	}
 
-	if !selectorsEqual(base.instanceSelectorView(), exception.instanceSelectorView()) {
+	if !selectorsEqual(base.instanceSelectorView(), exclusion.instanceSelectorView()) {
 		return GrantExpressionResult{Satisfied: true, Reason: GrantExpressionReasonMatched}, nil
 	}
 
-	exceptionGrant, _ := matchingAllowGrant(grants, exception.Check.expand())
-	if exceptionGrant != nil {
-		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonExceptionMatched}, nil
+	exclusionGrant, _ := matchingAllowGrant(grants, exclusion.Check.expand())
+	if exclusionGrant != nil {
+		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonExclusionMatched}, nil
 	}
 
 	return GrantExpressionResult{Satisfied: true, Reason: GrantExpressionReasonMatched}, nil

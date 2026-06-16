@@ -15,18 +15,27 @@ type ScopeParts struct {
 }
 
 const (
-	ScopeRoot               Scope = "root"
-	ScopeOrgRead            Scope = "org:read"
-	ScopeOrgAdmin           Scope = "org:admin"
-	ScopeProjectRead        Scope = "project:read"
-	ScopeProjectWrite       Scope = "project:write"
-	ScopeMCPRead            Scope = "mcp:read"
-	ScopeMCPWrite           Scope = "mcp:write"
-	ScopeMCPConnect         Scope = "mcp:connect"
-	ScopeEnvironmentRead    Scope = "environment:read"
-	ScopeEnvironmentWrite   Scope = "environment:write"
-	ScopeRiskPolicyEvaluate Scope = "risk_policy:evaluate"
-	ScopeRiskPolicyBypass   Scope = "risk_policy:bypass" //nolint:gosec // scope name, not a credential
+	ScopeRoot                      Scope = "root"
+	ScopeOrgRead                   Scope = "org:read"
+	ScopeOrgReadExclusion          Scope = "org:read_exclusion"
+	ScopeOrgAdmin                  Scope = "org:admin"
+	ScopeOrgAdminExclusion         Scope = "org:admin_exclusion"
+	ScopeProjectRead               Scope = "project:read"
+	ScopeProjectReadExclusion      Scope = "project:read_exclusion"
+	ScopeProjectWrite              Scope = "project:write"
+	ScopeProjectWriteExclusion     Scope = "project:write_exclusion"
+	ScopeMCPRead                   Scope = "mcp:read"
+	ScopeMCPReadExclusion          Scope = "mcp:read_exclusion"
+	ScopeMCPWrite                  Scope = "mcp:write"
+	ScopeMCPWriteExclusion         Scope = "mcp:write_exclusion" //nolint:gosec // scope name, not a credential
+	ScopeMCPConnect                Scope = "mcp:connect"
+	ScopeMCPBlock                  Scope = "mcp:block"
+	ScopeEnvironmentRead           Scope = "environment:read"
+	ScopeEnvironmentReadExclusion  Scope = "environment:read_exclusion"
+	ScopeEnvironmentWrite          Scope = "environment:write"
+	ScopeEnvironmentWriteExclusion Scope = "environment:write_exclusion"
+	ScopeRiskPolicyEvaluate        Scope = "risk_policy:evaluate"
+	ScopeRiskPolicyBypass          Scope = "risk_policy:bypass" //nolint:gosec // scope name, not a credential
 )
 
 var adminScopes = []Scope{
@@ -76,18 +85,51 @@ func (s Scope) Parts() ScopeParts {
 // (a generic project-viewer must not gain access to environment values, which include
 // secrets).
 var scopeExpansions = map[Scope][]Scope{
-	ScopeRoot:               nil,
-	ScopeOrgRead:            {ScopeOrgAdmin},
-	ScopeOrgAdmin:           nil,
-	ScopeProjectRead:        {ScopeProjectWrite},
-	ScopeProjectWrite:       nil,
-	ScopeMCPRead:            {ScopeMCPWrite},
-	ScopeMCPWrite:           nil,
-	ScopeMCPConnect:         {ScopeMCPRead, ScopeMCPWrite},
-	ScopeEnvironmentRead:    {ScopeEnvironmentWrite},
-	ScopeEnvironmentWrite:   nil,
-	ScopeRiskPolicyEvaluate: nil,
-	ScopeRiskPolicyBypass:   nil,
+	ScopeRoot:                      nil,
+	ScopeOrgRead:                   {ScopeOrgAdmin},
+	ScopeOrgReadExclusion:          nil,
+	ScopeOrgAdmin:                  nil,
+	ScopeOrgAdminExclusion:         nil,
+	ScopeProjectRead:               {ScopeProjectWrite},
+	ScopeProjectReadExclusion:      nil,
+	ScopeProjectWrite:              nil,
+	ScopeProjectWriteExclusion:     nil,
+	ScopeMCPRead:                   {ScopeMCPWrite},
+	ScopeMCPReadExclusion:          nil,
+	ScopeMCPWrite:                  nil,
+	ScopeMCPWriteExclusion:         nil,
+	ScopeMCPConnect:                {ScopeMCPRead, ScopeMCPWrite},
+	ScopeMCPBlock:                  nil,
+	ScopeEnvironmentRead:           {ScopeEnvironmentWrite},
+	ScopeEnvironmentReadExclusion:  nil,
+	ScopeEnvironmentWrite:          nil,
+	ScopeEnvironmentWriteExclusion: nil,
+	ScopeRiskPolicyEvaluate:        nil,
+	ScopeRiskPolicyBypass:          nil,
+}
+
+var scopeExclusions = map[Scope]Scope{
+	ScopeRoot:                      "",
+	ScopeOrgRead:                   ScopeOrgReadExclusion,
+	ScopeOrgReadExclusion:          "",
+	ScopeOrgAdmin:                  ScopeOrgAdminExclusion,
+	ScopeOrgAdminExclusion:         "",
+	ScopeProjectRead:               ScopeProjectReadExclusion,
+	ScopeProjectReadExclusion:      "",
+	ScopeProjectWrite:              ScopeProjectWriteExclusion,
+	ScopeProjectWriteExclusion:     "",
+	ScopeMCPRead:                   ScopeMCPReadExclusion,
+	ScopeMCPReadExclusion:          "",
+	ScopeMCPWrite:                  ScopeMCPWriteExclusion,
+	ScopeMCPWriteExclusion:         "",
+	ScopeMCPConnect:                ScopeMCPBlock,
+	ScopeMCPBlock:                  "",
+	ScopeEnvironmentRead:           ScopeEnvironmentReadExclusion,
+	ScopeEnvironmentReadExclusion:  "",
+	ScopeEnvironmentWrite:          ScopeEnvironmentWriteExclusion,
+	ScopeEnvironmentWriteExclusion: "",
+	ScopeRiskPolicyEvaluate:        ScopeRiskPolicyBypass,
+	ScopeRiskPolicyBypass:          "",
 }
 
 // scopeSubScopes is the inverse of scopeExpansions: for each higher-privilege

@@ -33,6 +33,22 @@ func MCPCheck(scope Scope, resourceID, projectID string) Check {
 	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, expanded: false}
 }
 
+func expressionForCheck(check Check) GrantExpression {
+	exclusion, ok := scopeExclusions[check.Scope]
+	if !ok || exclusion == "" {
+		return nil
+	}
+
+	instance := check.selector()
+	return GrantDifference{
+		Base: GrantCheck{Check: check, Instance: instance},
+		Exclusion: GrantCheck{
+			Check:    Check{Scope: exclusion, ResourceKind: check.ResourceKind, ResourceID: check.ResourceID, Dimensions: check.Dimensions, selectorMatch: selectorMatchStrict, expanded: false},
+			Instance: instance,
+		},
+	}
+}
+
 type RiskPolicyDimensions struct {
 	ServerURL      string
 	ServerIdentity string
@@ -59,7 +75,7 @@ func RiskPolicyApplies(policyID string, bypassDims RiskPolicyDimensions) GrantEx
 	instance := bypass.selector()
 	return GrantDifference{
 		Base:      GrantCheck{Check: RiskPolicyEvaluateCheck(policyID), Instance: instance},
-		Exception: GrantCheck{Check: bypass, Instance: instance},
+		Exclusion: GrantCheck{Check: bypass, Instance: instance},
 	}
 }
 

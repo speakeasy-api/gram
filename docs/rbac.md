@@ -223,10 +223,10 @@ A grant lives in data. A check lives in code. Authorization succeeds when at lea
 ## Grant Expressions and Set Difference
 
 Some authorization questions are not answered by one grant. They are answered by
-starting with a base grant set and subtracting an exception grant set:
+starting with a base grant set and subtracting an exclusion grant set:
 
 ```text
-effective result = base - exception
+effective result = base - exclusion
 ```
 
 This is the same shape as a Zanzibar-style userset difference such as:
@@ -248,7 +248,7 @@ Read that as:
 > Apply the policy if the user can evaluate the policy, unless the user also has
 > a bypass grant for this exact policy and this exact runtime target.
 
-The most important rule: **exception grants do not create access by themselves**.
+The most important rule: **exclusion grants do not create access by themselves**.
 They only subtract something that the base side already proved.
 
 ### Risk Policy Example
@@ -286,10 +286,10 @@ The second row is the core set-difference case:
 base set:
   {policy_id: policy_123, server_url: https://abc.com}
 
-exception set:
+exclusion set:
   {policy_id: policy_123, server_url: https://abc.com}
 
-base - exception:
+base - exclusion:
   {}
 ```
 
@@ -301,14 +301,14 @@ The first row keeps the base result:
 base set:
   {policy_id: policy_123, server_url: https://bcd.com}
 
-exception set:
+exclusion set:
   {policy_id: policy_123, server_url: https://abc.com}
 
-base - exception:
+base - exclusion:
   {policy_id: policy_123, server_url: https://bcd.com}
 ```
 
-The exception is real, but it is for a different concrete permission instance.
+The exclusion is real, but it is for a different concrete permission instance.
 It does not subtract the `https://bcd.com` decision.
 
 ### MCP Example
@@ -342,7 +342,7 @@ Assume the user has:
 | `toolset_123`, `tool=delete_database` | Yes. Same toolset and same tool.             | Tool call is not allowed. The block subtracts the exact tool-call instance.            |
 | `toolset_456`, `tool=delete_database` | No. The block is for `toolset_123`.          | Tool call is not allowed unless another base `mcp:connect` grant covers `toolset_456`. |
 
-Again, the exception side only subtracts. A block/bypass/exception grant without
+Again, the exclusion side only subtracts. A block/bypass/exclusion grant without
 a matching base grant never grants anything.
 
 ## Scopes vs Grants

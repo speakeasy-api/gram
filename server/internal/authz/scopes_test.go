@@ -19,10 +19,23 @@ func TestScopeParts(t *testing.T) {
 func TestAllScopesCoversDefinedGrantableScopes(t *testing.T) {
 	t.Parallel()
 
+	internalScopes := []Scope{
+		ScopeOrgReadExclusion,
+		ScopeOrgAdminExclusion,
+		ScopeProjectReadExclusion,
+		ScopeProjectWriteExclusion,
+		ScopeMCPReadExclusion,
+		ScopeMCPWriteExclusion,
+		ScopeMCPBlock,
+		ScopeEnvironmentReadExclusion,
+		ScopeEnvironmentWriteExclusion,
+	}
+
 	seen := make(map[Scope]struct{}, len(allScopes))
 	for _, scope := range allScopes {
 		require.NotEqual(t, ScopeRoot, scope)
 		require.Contains(t, scopeExpansions, scope)
+		require.NotContains(t, internalScopes, scope)
 		require.NotContains(t, seen, scope)
 		seen[scope] = struct{}{}
 	}
@@ -31,8 +44,30 @@ func TestAllScopesCoversDefinedGrantableScopes(t *testing.T) {
 		if scope == ScopeRoot {
 			continue
 		}
+		if slices.Contains(internalScopes, scope) {
+			continue
+		}
 		require.Contains(t, seen, scope)
 	}
+}
+
+func TestScopeExclusionsCoversKnownScopes(t *testing.T) {
+	t.Parallel()
+
+	for scope := range scopeExpansions {
+		require.Contains(t, scopeExclusions, scope)
+	}
+
+	require.Equal(t, ScopeOrgReadExclusion, scopeExclusions[ScopeOrgRead])
+	require.Equal(t, ScopeOrgAdminExclusion, scopeExclusions[ScopeOrgAdmin])
+	require.Equal(t, ScopeProjectReadExclusion, scopeExclusions[ScopeProjectRead])
+	require.Equal(t, ScopeProjectWriteExclusion, scopeExclusions[ScopeProjectWrite])
+	require.Equal(t, ScopeMCPReadExclusion, scopeExclusions[ScopeMCPRead])
+	require.Equal(t, ScopeMCPWriteExclusion, scopeExclusions[ScopeMCPWrite])
+	require.Equal(t, ScopeMCPBlock, scopeExclusions[ScopeMCPConnect])
+	require.Equal(t, ScopeEnvironmentReadExclusion, scopeExclusions[ScopeEnvironmentRead])
+	require.Equal(t, ScopeEnvironmentWriteExclusion, scopeExclusions[ScopeEnvironmentWrite])
+	require.Equal(t, ScopeRiskPolicyBypass, scopeExclusions[ScopeRiskPolicyEvaluate])
 }
 
 func TestSystemRoleAdminExcludesRiskPolicyScopes(t *testing.T) {
