@@ -412,7 +412,7 @@ function ProviderConfigDrawer({
                       disabled={form.isLoading || form.isMutating}
                     />
                     {provider.helpText ? (
-                      <p className="text-muted-foreground text-xs leading-relaxed">
+                      <p className="text-muted-foreground !mt-3 text-xs leading-relaxed">
                         {provider.helpText}
                       </p>
                     ) : null}
