@@ -403,7 +403,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 			ToolCalls:      &toolCalls,
 			ToolCallID:     &msg.ToolCallID.String,
 			FinishReason:   &msg.FinishReason.String,
-			PromptID:       stringPtrIfNotEmpty(msg.MessageID.String),
+			PromptID:       conv.FromPGText[string](msg.MessageID),
 			CreatedAt:      msg.CreatedAt.Time.Format(time.RFC3339),
 			Generation:     int(msg.Generation),
 		}
@@ -1485,13 +1485,6 @@ func (s *Service) enrichChatWithClaudeTurnUsage(ctx context.Context, projectID s
 	}
 
 	return nil
-}
-
-func stringPtrIfNotEmpty(value string) *string {
-	if value == "" {
-		return nil
-	}
-	return &value
 }
 
 func clampUint64ToInt64(value uint64) int64 {
