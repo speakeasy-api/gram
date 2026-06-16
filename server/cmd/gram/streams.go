@@ -189,10 +189,20 @@ func newStreamsCommand() *cli.Command {
 				shutdownFuncs = append(shutdownFuncs, shutdown)
 			}
 
-			group := new(errgroup.Group)
+			// Use errgroup.WithContext (not a bare errgroup.Group) so the first
+			// receiver or publisher to exit cancels gctx and unwinds the rest.
+			// A plain group's Wait blocks until *every* goroutine returns, and
+			// the heartbeat publisher loops until its context is cancelled — so
+			// a subscriber whose Receive returns (e.g. its subscription vanished
+			// after the emulator restarted) would be recorded as failed but the
+			// process would keep running on the eternal publisher, leaving the
+			// dead subscriber silently un-restarted. Cancelling on first exit
+			// lets Wait return, the process exit, and the supervisor restart us
+			// so subscriptions get reconciled afresh.
+			group, gctx := errgroup.WithContext(ctx)
 			rg := receiverGroup{
 				group:      group,
-				getContext: func() context.Context { return ctx },
+				getContext: func() context.Context { return gctx },
 				tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/cmd/gram/streams"),
 				logger:     logger,
 				broker:     psbroker,
@@ -209,7 +219,7 @@ func newStreamsCommand() *cli.Command {
 			// subscriber flow is working by driving a simple message through
 			// the system every N seconds and logging it in the subscriber.
 			group.Go(func() error {
-				if err := ping.StartPublisher(ctx, logger, psbroker); err != nil {
+				if err := ping.StartPublisher(gctx, logger, psbroker); err != nil {
 					return fmt.Errorf("publish pings: %w", err)
 				}
 				return nil
