@@ -49,6 +49,7 @@ import {
   type TraceEntryType,
   getEntryTypeCounts,
   getRiskEntryCount,
+  getRuleCounts,
   getTraceEntryType,
   getVisibleMessages,
   parseToolCalls,
@@ -1094,6 +1095,7 @@ function ChatDetailPanel({
     riskResultsByMessage,
   }).length;
   const riskEntryCount = getRiskEntryCount(chatMessages, riskResultsByMessage);
+  const ruleCounts = getRuleCounts(riskResults);
 
   return (
     <div className="bg-background flex h-full flex-col">
@@ -1320,6 +1322,7 @@ function ChatDetailPanel({
             onChange={setEnabledEntryTypes}
             riskOnly={riskOnly}
             riskCount={riskEntryCount}
+            ruleCounts={ruleCounts}
             onRiskOnlyChange={setRiskOnly}
           />
 

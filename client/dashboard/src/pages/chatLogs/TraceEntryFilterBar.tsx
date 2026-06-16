@@ -5,6 +5,7 @@ import {
   ENTRY_TYPE_META,
   FILTERABLE_ENTRY_TYPES,
   type FilterableTraceEntryType,
+  type RuleCount,
 } from "./traceEntries";
 import { TraceEntryIcon } from "./TraceEntryIcon";
 
@@ -22,6 +23,7 @@ export function EntryTypeFilterBar({
   onChange,
   riskOnly = false,
   riskCount = 0,
+  ruleCounts = [],
   onRiskOnlyChange,
   title = "Entries Filter",
 }: {
@@ -32,6 +34,7 @@ export function EntryTypeFilterBar({
   onChange: (value: FilterableTraceEntryType[]) => void;
   riskOnly?: boolean;
   riskCount?: number;
+  ruleCounts?: ReadonlyArray<RuleCount>;
   onRiskOnlyChange?: (value: boolean) => void;
   title?: string;
 }) {
@@ -39,7 +42,7 @@ export function EntryTypeFilterBar({
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-3 px-6 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-3">
         <div className="flex shrink-0 items-baseline gap-4">
           <div className="text-sm font-medium">{title}</div>
           <div className="text-muted-foreground text-xs">
@@ -50,14 +53,29 @@ export function EntryTypeFilterBar({
         {onRiskOnlyChange && (
           <div
             className={cn(
-              "inline-flex h-8 items-center gap-2 text-xs",
+              "inline-flex min-h-8 flex-wrap items-center justify-end gap-2 text-xs",
               riskOnlyDisabled && "opacity-50",
             )}
           >
+            {ruleCounts.length > 0 ? (
+              ruleCounts.map(({ ruleId, count }) => (
+                <span
+                  key={ruleId}
+                  className="bg-muted/40 text-muted-foreground inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 font-mono text-[10px] leading-none"
+                  title={`${count} ${ruleId}`}
+                >
+                  <span className="text-foreground">
+                    {count.toLocaleString()}
+                  </span>
+                  <span>{ruleId}</span>
+                </span>
+              ))
+            ) : (
+              <span className="font-mono text-[10px] leading-none">
+                {riskCount.toLocaleString()}
+              </span>
+            )}
             <span>Risk only</span>
-            <span className="font-mono text-[10px] leading-none">
-              {riskCount.toLocaleString()}
-            </span>
             <Switch
               checked={riskOnly}
               disabled={riskOnlyDisabled}

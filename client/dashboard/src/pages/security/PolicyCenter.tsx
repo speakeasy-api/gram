@@ -956,8 +956,15 @@ function PolicySheetBody({
                           Coming Soon
                         </Badge>
                       )}
-                      {isExpandable && categorySelected && (
-                        <Badge variant="outline" className="text-[10px]">
+                      {isExpandable && (
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-[10px]",
+                            !categorySelected && "invisible",
+                          )}
+                          aria-hidden={!categorySelected}
+                        >
                           {enabledRuleCount}/{rules.length} on
                         </Badge>
                       )}

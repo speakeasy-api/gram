@@ -176,3 +176,18 @@ export function getRiskEntryCount(
     messageHasRiskResults(message, riskResultsByMessage),
   ).length;
 }
+
+export type RuleCount = { ruleId: string; count: number };
+
+export function getRuleCounts(
+  riskResults: ReadonlyArray<{ ruleId?: string | null; source?: string }>,
+): RuleCount[] {
+  const counts = new Map<string, number>();
+  for (const r of riskResults) {
+    const key = r.ruleId?.trim() || r.source || "unknown";
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return Array.from(counts, ([ruleId, count]) => ({ ruleId, count })).sort(
+    (a, b) => b.count - a.count || a.ruleId.localeCompare(b.ruleId),
+  );
+}
