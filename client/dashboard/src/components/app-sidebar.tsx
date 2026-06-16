@@ -98,7 +98,7 @@ export function AppSidebar({
     ...(isDeploymentsPageEnabled ? [routes.deployments] : []),
   ].some((r) => r.active);
 
-  const buildActive = [
+  const distributeActive = [
     routes.mcp,
     routes.clis,
     routes.plugins,
@@ -125,8 +125,8 @@ export function AppSidebar({
   let activeGroup: string | undefined;
   if (connectActive) {
     activeGroup = "Connect";
-  } else if (buildActive) {
-    activeGroup = "Build";
+  } else if (distributeActive) {
+    activeGroup = "Distribute";
   } else if (observeActive) {
     activeGroup = "Observe";
   } else if (securityActive) {
@@ -173,7 +173,7 @@ export function AppSidebar({
             activeGroup={activeGroup}
             defaultOpenGroups={
               !activeGroup
-                ? ["Connect", "Build", "Observe", "Secure"]
+                ? ["Connect", "Distribute", "Observe", "Secure"]
                 : undefined
             }
             activeItem={activeItem}
@@ -211,9 +211,9 @@ export function AppSidebar({
                 )}
               </CollapsibleNavGroup>
 
-              {/* Build group */}
+              {/* Distribute group */}
               <CollapsibleNavGroup
-                label="Build"
+                label="Distribute"
                 Icon={(p) => <Icon {...p} name="hammer" />}
                 defaultHref={routes.mcp.href()}
               >
