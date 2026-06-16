@@ -17,7 +17,11 @@ import { ErrorAlert } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { cn } from "@/lib/utils";
@@ -50,7 +54,7 @@ import {
   LinearScale,
   LineElement,
   PointElement,
-  Tooltip,
+  Tooltip as ChartTooltip,
   type ChartOptions,
 } from "chart.js";
 import { slugify } from "@/lib/constants";
@@ -81,7 +85,7 @@ ChartJS.register(
   PointElement,
   LineElement,
   Filler,
-  Tooltip,
+  ChartTooltip,
   Legend,
 );
 
@@ -819,14 +823,17 @@ function DataFlowMetricBadge({ metric }: { metric: DataFlowNodeMetric }) {
   const tooltip = `${metric.value.toLocaleString()} calls received (${metric.successValue.toLocaleString()} ok / ${metric.failureValue.toLocaleString()} blocked)`;
 
   return (
-    <SimpleTooltip tooltip={tooltip}>
-      <Badge variant="neutral" background>
-        <Badge.LeftIcon>
-          <ArrowRight className="h-3.5 w-3.5" />
-        </Badge.LeftIcon>
-        <Badge.Text>{metric.value.toLocaleString()}</Badge.Text>
-      </Badge>
-    </SimpleTooltip>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge variant="neutral" background>
+          <Badge.LeftIcon>
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Badge.LeftIcon>
+          <Badge.Text>{metric.value.toLocaleString()}</Badge.Text>
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -913,16 +920,19 @@ function ServerClassBadge({
       : meta.tooltip;
 
   return (
-    <SimpleTooltip tooltip={tooltip}>
-      <Badge variant={meta.variant} background aria-label={meta.tooltip}>
-        <Badge.LeftIcon>
-          <ClassIcon className="h-3.5 w-3.5" />
-        </Badge.LeftIcon>
-        {count !== undefined && (
-          <Badge.Text>{count.toLocaleString()}</Badge.Text>
-        )}
-      </Badge>
-    </SimpleTooltip>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge variant={meta.variant} background aria-label={meta.tooltip}>
+          <Badge.LeftIcon>
+            <ClassIcon className="h-3.5 w-3.5" />
+          </Badge.LeftIcon>
+          {count !== undefined && (
+            <Badge.Text>{count.toLocaleString()}</Badge.Text>
+          )}
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
   );
 }
 
