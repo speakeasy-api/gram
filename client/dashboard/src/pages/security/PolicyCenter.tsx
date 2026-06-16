@@ -94,10 +94,17 @@ import {
 import { cn } from "@/lib/utils";
 import { ruleIdToPresidioEntity } from "./rule-ids";
 import {
+  buildMatchConfig,
   ruleConditions,
   ruleRequiredMessageTypes,
   useDetectionRulesStore,
 } from "./detection-rules-data";
+import { matchQueryFromConditions, parseMatchQuery } from "./match-query";
+import {
+  MatchQueryMonaco as MatchQueryInput,
+  MatchQueryExamples,
+} from "./match-query-monaco";
+import type { RiskPolicyApplication } from "@gram/client/models/components";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { PROMPT_POLICY_TEMPLATES } from "./prompt-policy-templates";
@@ -791,6 +798,39 @@ function promptPolicyName(prompt: string): string {
   return prompt.trim().replace(/\s+/g, " ").slice(0, 60) || "Prompt Policy";
 }
 
+/** A stored application predicate (include/exempt) as a query-bar string, empty
+ *  when none is set. */
+function queryFromPredicate(
+  cfg: RiskPolicyApplication["include"] | undefined,
+): string {
+  if (!cfg || cfg.conditions.length === 0) return "";
+  return matchQueryFromConditions(
+    cfg.conditions,
+    cfg.combine === "or" ? "or" : "and",
+  );
+}
+
+/** A query-bar string parsed back into a predicate, or undefined when empty or
+ *  invalid (so the policy falls back to its coarse knobs). */
+function predicateFromQuery(query: string): RiskPolicyApplication["include"] {
+  if (!query.trim()) return undefined;
+  const parsed = parseMatchQuery(query);
+  if (parsed.error || parsed.conditions.length === 0) return undefined;
+  return buildMatchConfig(parsed.conditions, parsed.combine);
+}
+
+/** Build application_config from the include/exempt query strings; undefined when
+ *  neither is set (policy relies on the coarse message_types + exempt_rule_ids). */
+function buildApplicationConfig(
+  includeQuery: string,
+  exemptQuery: string,
+): RiskPolicyApplication | undefined {
+  const include = predicateFromQuery(includeQuery);
+  const exempt = predicateFromQuery(exemptQuery);
+  if (!include && !exempt) return undefined;
+  return { include, exempt };
+}
+
 export default function PolicyCenter(): JSX.Element {
   return (
     <RequireScope scope="org:admin" level="page">
@@ -843,6 +883,10 @@ function PolicyCenterContent() {
   const [exemptRuleIds, setExemptRuleIds] = useState<Set<string>>(
     new Set<string>(),
   );
+  // Fine-grained application predicates (application_config), as query-bar
+  // strings. Empty => rely on the coarse message_types + exempt_rule_ids knobs.
+  const [includeQuery, setIncludeQuery] = useState("");
+  const [exemptQuery, setExemptQuery] = useState("");
   const [selectedMessageTypes, setSelectedMessageTypes] = useState<
     Set<PolicyMessageType>
   >(new Set(ALL_POLICY_MESSAGE_TYPES));
@@ -877,6 +921,20 @@ function PolicyCenterContent() {
     openedPolicyRef.current = null;
     void setPolicyParam(null);
   }, [setPolicyParam]);
+
+  // The create/edit view is a full-bleed page (not a Dialog), so wire Escape to
+  // close it. Skip when a layered sub-sheet (e.g. the category Customize sheet)
+  // already handled Escape — it calls preventDefault on dismiss.
+  useEffect(() => {
+    if (!sheetOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      setSheetOpen(false);
+      clearPolicyDeepLink();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [sheetOpen, clearPolicyDeepLink]);
 
   const invalidate = useCallback(() => {
     void invalidateAllRiskListPolicies(queryClient);
@@ -923,6 +981,8 @@ function PolicyCenterContent() {
     setDisabledRules(new Set());
     setSelectedCustomRuleIds(new Set<string>());
     setExemptRuleIds(new Set<string>());
+    setIncludeQuery("");
+    setExemptQuery("");
     setSelectedMessageTypes(new Set(ALL_POLICY_MESSAGE_TYPES));
     setFormAction("flag");
     setFormAutoName(true);
@@ -950,6 +1010,9 @@ function PolicyCenterContent() {
     setFormPolicyKind(kind);
     setFormName(policy.name);
     setFormEnabled(policy.enabled);
+    // application_config applies to both kinds; load it before the kind branch.
+    setIncludeQuery(queryFromPredicate(policy.applicationConfig?.include));
+    setExemptQuery(queryFromPredicate(policy.applicationConfig?.exempt));
     if (isPrompt) {
       setFormPromptInstruction(policy.prompt ?? "");
       setSelectedMessageTypes(policyMessageTypesForForm(policy.messageTypes));
@@ -1001,6 +1064,12 @@ function PolicyCenterContent() {
   }, [policyParam, isLoading, data, handleEdit]);
 
   const handleSave = () => {
+    // Fine-grained application predicates (both kinds). On update we always send
+    // a value (empty object clears) so the omit-to-preserve impl can replace it;
+    // on create we omit when empty.
+    const applicationConfig = buildApplicationConfig(includeQuery, exemptQuery);
+    const applicationUpdate = { applicationConfig: applicationConfig ?? {} };
+    const applicationCreate = applicationConfig ? { applicationConfig } : {};
     if (formPolicyKind === "prompt") {
       const prompt = formPromptInstruction.trim();
       const name = formAutoName ? promptPolicyName(prompt) : formName;
@@ -1036,6 +1105,7 @@ function PolicyCenterContent() {
               messageTypes: promptMessageTypes,
               action: formAction,
               autoName: formAutoName,
+              ...applicationUpdate,
               ...(modelConfig ? { modelConfig } : {}),
               ...userMessagePayload,
             },
@@ -1052,6 +1122,7 @@ function PolicyCenterContent() {
               messageTypes: promptMessageTypes,
               action: formAction,
               autoName: formAutoName,
+              ...applicationCreate,
               ...(modelConfig ? { modelConfig } : {}),
               ...userMessagePayload,
             },
@@ -1092,6 +1163,7 @@ function PolicyCenterContent() {
             customRuleIds: [...selectedCustomRuleIds],
             exemptRuleIds: [...exemptRuleIds],
             messageTypes,
+            ...applicationUpdate,
             action,
             autoName: formAutoName,
             userMessage: formUserMessage,
@@ -1111,6 +1183,7 @@ function PolicyCenterContent() {
             customRuleIds: [...selectedCustomRuleIds],
             exemptRuleIds: [...exemptRuleIds],
             messageTypes,
+            ...applicationCreate,
             action,
             autoName: formAutoName,
             ...(formUserMessage.trim() ? { userMessage: formUserMessage } : {}),
@@ -1412,6 +1485,11 @@ function PolicyCenterContent() {
         ? !formPromptInstruction.trim()
         : selectedCategories.size === 0 && selectedCustomRuleIds.size === 0)) ||
     (wizardStep === 1 && selectedMessageTypes.size === 0);
+  // Block save while an advanced application predicate is present but unparseable.
+  const applicationInvalid =
+    (includeQuery.trim() !== "" &&
+      parseMatchQuery(includeQuery).error !== null) ||
+    (exemptQuery.trim() !== "" && parseMatchQuery(exemptQuery).error !== null);
   const saveDisabled =
     (formPolicyKind === "prompt" && !formPromptInstruction.trim()) ||
     // A standard policy needs at least one detector or custom rule (the step-0
@@ -1421,6 +1499,7 @@ function PolicyCenterContent() {
       selectedCustomRuleIds.size === 0) ||
     (!formAutoName && !formName.trim()) ||
     selectedMessageTypes.size === 0 ||
+    applicationInvalid ||
     mutationPending;
   const showFooterBack =
     (isWizard && wizardStep > 0) || (!editingPolicy && nlEnabled);
@@ -1574,6 +1653,10 @@ function PolicyCenterContent() {
                     setSelectedCustomRuleIds={setSelectedCustomRuleIds}
                     exemptRuleIds={exemptRuleIds}
                     setExemptRuleIds={setExemptRuleIds}
+                    includeQuery={includeQuery}
+                    setIncludeQuery={setIncludeQuery}
+                    exemptQuery={exemptQuery}
+                    setExemptQuery={setExemptQuery}
                     selectedMessageTypes={selectedMessageTypes}
                     setSelectedMessageTypes={setSelectedMessageTypes}
                     formAction={formAction}
@@ -2212,7 +2295,8 @@ function PromptPolicyHowItWorks({ isEditing }: { isEditing: boolean }) {
         <div className="min-w-0 flex-1">
           <div className="text-sm font-medium">How this works</div>
           <div className="text-muted-foreground text-xs">
-            An LLM judge checks each matching message against your prompt.
+            An LLM judge reads each in-scope message and flags it when it
+            matches your prompt.
           </div>
         </div>
         <ChevronRight
@@ -2224,11 +2308,12 @@ function PromptPolicyHowItWorks({ isEditing }: { isEditing: boolean }) {
       </CollapsibleTrigger>
       <CollapsibleContent className="border-border border-t px-4 py-3">
         <p className="text-muted-foreground text-sm">
-          Prompt-based policies use an LLM judge, so each evaluated message adds
-          some latency versus standard detection rules. The judge sees one
-          message at a time (a tool call and its inputs, or message content),
-          never a whole conversation. It runs on the message types you select
-          under Applies To.
+          Prompt-based policies call an LLM judge, so every in-scope message
+          adds latency and cost versus the deterministic detection rules. The
+          judge sees one message at a time — a tool call and its inputs, or
+          message content — never the whole conversation. Narrow <b>Scope</b> to
+          control which messages it runs on, and add <b>Exemptions</b> to skip
+          trusted ones and keep cost down.
         </p>
       </CollapsibleContent>
     </Collapsible>
@@ -2255,6 +2340,10 @@ function PolicySheetBody({
   setSelectedCustomRuleIds,
   exemptRuleIds,
   setExemptRuleIds,
+  includeQuery,
+  setIncludeQuery,
+  exemptQuery,
+  setExemptQuery,
   selectedMessageTypes,
   setSelectedMessageTypes,
   formAction,
@@ -2279,6 +2368,10 @@ function PolicySheetBody({
   setSelectedCustomRuleIds: (v: Set<string>) => void;
   exemptRuleIds: Set<string>;
   setExemptRuleIds: (v: Set<string>) => void;
+  includeQuery: string;
+  setIncludeQuery: (v: string) => void;
+  exemptQuery: string;
+  setExemptQuery: (v: string) => void;
   selectedMessageTypes: Set<PolicyMessageType>;
   setSelectedMessageTypes: (v: Set<PolicyMessageType>) => void;
   formAction: PolicyAction;
@@ -2295,6 +2388,11 @@ function PolicySheetBody({
   // already has some attached.
   const [exemptionsExpanded, setExemptionsExpanded] = useState(
     () => exemptRuleIds.size > 0,
+  );
+  // Fine-grained scope/exemption predicates (application_config); collapsed
+  // unless the policy already uses one.
+  const [advancedScopeOpen, setAdvancedScopeOpen] = useState(
+    () => includeQuery.trim() !== "" || exemptQuery.trim() !== "",
   );
   const [customizeCategory, setCustomizeCategory] =
     useState<RuleCategory | null>(null);
@@ -2524,6 +2622,76 @@ function PolicySheetBody({
                 onToggle={() => setExemptionsExpanded((v) => !v)}
               />
             )}
+
+            <Collapsible
+              open={advancedScopeOpen}
+              onOpenChange={setAdvancedScopeOpen}
+              className="border-border rounded-lg border"
+            >
+              <CollapsibleTrigger className="hover:bg-muted/40 flex w-full items-center gap-3 px-4 py-3 text-left transition-colors">
+                <SlidersHorizontal className="text-muted-foreground h-4 w-4 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">
+                      Advanced — fine-grained scope
+                    </span>
+                    <Badge variant="neutral" className="text-[10px]">
+                      <Badge.Text>Optional</Badge.Text>
+                    </Badge>
+                  </div>
+                  <div className="text-muted-foreground truncate text-xs">
+                    Match on tool or content attributes beyond message types
+                  </div>
+                </div>
+                <ChevronRight
+                  className={cn(
+                    "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
+                    advancedScopeOpen && "rotate-90",
+                  )}
+                />
+              </CollapsibleTrigger>
+              <CollapsibleContent className="border-border space-y-4 border-t px-4 py-4">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">
+                    Only evaluate messages matching
+                  </Label>
+                  <MatchQueryInput
+                    value={includeQuery}
+                    onChange={setIncludeQuery}
+                    error={
+                      includeQuery.trim()
+                        ? parseMatchQuery(includeQuery).error
+                        : null
+                    }
+                    showExamples={false}
+                  />
+                  <p className="text-muted-foreground text-xs">
+                    Narrows scope further — the policy skips messages that don't
+                    match. Leave blank to scope by message types alone.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">
+                    Exempt messages matching
+                  </Label>
+                  <MatchQueryInput
+                    value={exemptQuery}
+                    onChange={setExemptQuery}
+                    error={
+                      exemptQuery.trim()
+                        ? parseMatchQuery(exemptQuery).error
+                        : null
+                    }
+                    showExamples={false}
+                  />
+                  <p className="text-muted-foreground text-xs">
+                    When a message matches, the whole policy is skipped for it
+                    (an allowlist), alongside any exempt rules above.
+                  </p>
+                </div>
+                <MatchQueryExamples />
+              </CollapsibleContent>
+            </Collapsible>
           </div>
         )}
 

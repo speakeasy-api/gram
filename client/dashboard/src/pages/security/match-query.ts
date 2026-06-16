@@ -40,50 +40,53 @@ export const QUERY_TARGETS: QueryTarget[] = [
     name: "user_prompt",
     backend: "user_prompt",
     category: "prompt",
-    description: "The user's prompt text",
+    description: "Text the user sent (user-message parts only)",
   },
   {
     name: "assistant_message",
     backend: "assistant_text",
     category: "prompt",
-    description: "The assistant's reply text",
+    description: "Text the assistant replied with (non-tool replies only)",
   },
   {
     name: "content",
     backend: "content",
     category: "message",
-    description: "The whole message payload (any message type)",
+    description: "Full text of any message — the catch-all when unsure",
   },
   {
     name: "tool_call.name",
     backend: "tool_name",
     category: "tool",
-    description: "Raw tool-call name, e.g. mcp__mise__run_task",
+    description:
+      "Whole tool name the agent invokes. MCP tools look like mcp__<server>__<function>; native tools are bare (Bash, Read). Match server/function separately below.",
   },
   {
     name: "tool_call.server",
     backend: "tool_server",
     category: "tool",
-    description: "MCP server name; empty for native tools",
+    description:
+      'The <server> part of an MCP tool name (e.g. mise). Empty ("") for native/built-in tools.',
   },
   {
     name: "tool_call.function",
     backend: "tool_function",
     category: "tool",
-    description: "Bare function name, e.g. run_task",
+    description: "The <function> part of the tool name (e.g. run_task)",
   },
   {
     name: "tool_call.args",
     backend: "tool_args",
     category: "tool",
-    description: "Tool arguments; add .$.path for a field",
+    description:
+      "Arguments the tool was called with (JSON). Add a path like .$.command to target one field.",
     hasPath: true,
   },
   {
     name: "tool_response",
     backend: "tool_result",
     category: "tool",
-    description: "A tool call's result output",
+    description: "Output a tool returned",
   },
 ];
 

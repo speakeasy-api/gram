@@ -42,6 +42,29 @@ function defineThemes(m: typeof Monaco) {
     "editorBracketMatch.border": "#00000000",
     "editorIndentGuide.background": "#00000000",
   };
+  // The editor blends into the input (transparent), but the suggest widget is a
+  // separate popover — theme it to match the dashboard's surface/border so the
+  // dropdown reads as part of the app, not stock Monaco.
+  const darkColors = {
+    ...transparent,
+    "editorSuggestWidget.background": "#18181b",
+    "editorSuggestWidget.border": "#27272a",
+    "editorSuggestWidget.foreground": "#e4e4e7",
+    "editorSuggestWidget.selectedBackground": "#27272a",
+    "editorSuggestWidget.selectedForeground": "#fafafa",
+    "editorSuggestWidget.highlightForeground": "#60a5fa",
+    "editorSuggestWidget.focusHighlightForeground": "#93c5fd",
+  };
+  const lightColors = {
+    ...transparent,
+    "editorSuggestWidget.background": "#ffffff",
+    "editorSuggestWidget.border": "#e4e4e7",
+    "editorSuggestWidget.foreground": "#18181b",
+    "editorSuggestWidget.selectedBackground": "#f4f4f5",
+    "editorSuggestWidget.selectedForeground": "#18181b",
+    "editorSuggestWidget.highlightForeground": "#2563eb",
+    "editorSuggestWidget.focusHighlightForeground": "#1d4ed8",
+  };
   m.editor.defineTheme(THEME_DARK, {
     base: "vs-dark",
     inherit: true,
@@ -53,7 +76,7 @@ function defineThemes(m: typeof Monaco) {
       { token: "operator", foreground: "9aa0a6" },
       { token: "delimiter", foreground: "9aa0a6" },
     ],
-    colors: transparent,
+    colors: darkColors,
   });
   m.editor.defineTheme(THEME_LIGHT, {
     base: "vs",
@@ -66,7 +89,7 @@ function defineThemes(m: typeof Monaco) {
       { token: "operator", foreground: "6b7280" },
       { token: "delimiter", foreground: "6b7280" },
     ],
-    colors: transparent,
+    colors: lightColors,
   });
 }
 
@@ -188,6 +211,12 @@ const EDITOR_OPTIONS: Monaco.editor.IStandaloneEditorConstructionOptions = {
   contextmenu: false,
   fixedOverflowWidgets: true,
   suggestOnTriggerCharacters: true,
+  acceptSuggestionOnEnter: "on",
+  // Always pre-select the first item so Enter has something to accept.
+  suggestSelection: "first",
+  // Match the dropdown's text to the editor's (same mono font + size).
+  suggestFontSize: 12,
+  suggestLineHeight: 20,
   quickSuggestions: { other: true, comments: false, strings: true },
   // Our completion provider is the only source — Monaco's built-in word
   // completions would otherwise duplicate every suggestion.
@@ -208,10 +237,14 @@ export function MatchQueryMonaco({
   value,
   onChange,
   error,
+  showExamples = true,
 }: {
   value: string;
   onChange: (next: string) => void;
   error?: string | null;
+  /** Render the "Query syntax & examples" affordance below the editor. Turn off
+   *  when several editors share a single legend (e.g. the scope/exempt pair). */
+  showExamples?: boolean;
 }): JSX.Element {
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<typeof Monaco | null>(null);
@@ -223,9 +256,15 @@ export function MatchQueryMonaco({
   const onMount: OnMount = (editor, m) => {
     editorRef.current = editor;
     monacoRef.current = m;
-    // Single-line: Enter accepts a suggestion instead of inserting a newline.
-    editor.addCommand(m.KeyCode.Enter, () => {
-      editor.trigger("keyboard", "acceptSelectedSuggestion", {});
+    // Enter accepts the highlighted suggestion via Monaco's native
+    // acceptSuggestionOnEnter when the widget is open. When it's closed, swallow
+    // Enter so a single-line query never gains a newline.
+    editor.addAction({
+      id: "matchquery.swallowEnter",
+      label: "Swallow Enter",
+      keybindings: [m.KeyCode.Enter],
+      precondition: "!suggestWidgetVisible",
+      run: () => {},
     });
     // Open the field suggestions immediately when focusing an empty query.
     editor.onDidFocusEditorText(() => {
@@ -253,7 +292,7 @@ export function MatchQueryMonaco({
     <div className="space-y-2">
       <div
         className={cn(
-          "border-input bg-background focus-within:ring-ring flex h-10 items-center overflow-hidden rounded-md border focus-within:ring-1",
+          "border-input bg-background focus-within:ring-ring flex h-10 items-center overflow-hidden rounded-md border pl-2.5 focus-within:ring-1",
           error && "border-destructive",
         )}
       >
@@ -270,12 +309,38 @@ export function MatchQueryMonaco({
         />
       </div>
       {error && <p className="text-destructive text-xs">{error}</p>}
-      <details className="group">
-        <summary className="text-muted-foreground hover:text-foreground flex cursor-pointer list-none items-center gap-1 text-xs">
-          <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90" />
-          Query syntax & examples
-        </summary>
-        <div className="border-border bg-muted/30 mt-1.5 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 rounded-md border p-3">
+      {showExamples && <MatchQueryExamples />}
+    </div>
+  );
+}
+
+/** The "Query syntax & examples" affordance: a one-line operator legend plus
+ *  worked examples. Rendered once per editor by default, or shared across a
+ *  group of editors via MatchQueryMonaco's showExamples=false. */
+export function MatchQueryExamples(): JSX.Element {
+  return (
+    <details className="group">
+      <summary className="text-muted-foreground hover:text-foreground flex cursor-pointer list-none items-center gap-1 text-xs">
+        <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90" />
+        Query syntax & examples
+      </summary>
+      <div className="border-border bg-muted/30 mt-1.5 space-y-3 rounded-md border p-3">
+        <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
+          {MATCH_QUERY_SYNTAX.map((s) => (
+            <Fragment key={s.token}>
+              <code className="text-foreground font-mono text-[11px]">
+                {s.token}
+              </code>
+              <span className="text-muted-foreground text-[11px]">
+                {s.meaning}
+              </span>
+            </Fragment>
+          ))}
+        </div>
+        <div className="border-border border-t pt-2 text-[11px] font-medium text-muted-foreground">
+          Examples
+        </div>
+        <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
           {MATCH_QUERY_EXAMPLES.map((ex) => (
             <Fragment key={ex.query}>
               <code className="text-foreground font-mono text-[11px]">
@@ -287,7 +352,17 @@ export function MatchQueryMonaco({
             </Fragment>
           ))}
         </div>
-      </details>
-    </div>
+      </div>
+    </details>
   );
 }
+
+/** Operator legend shown above the worked examples. */
+const MATCH_QUERY_SYNTAX: { token: string; meaning: string }[] = [
+  { token: "field:value", meaning: "matches exactly" },
+  { token: "field:*text*", meaning: "contains (use * as a wildcard)" },
+  { token: "field:/regex/", meaning: "matches a regular expression" },
+  { token: "-field:value", meaning: "does NOT match (negate)" },
+  { token: 'field:""', meaning: "is empty" },
+  { token: "A AND B / A OR B", meaning: "combine clauses (don't mix the two)" },
+];
