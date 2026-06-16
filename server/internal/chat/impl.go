@@ -206,13 +206,17 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 	// treat it as admin-equivalent for project-wide visibility.
 	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
 
-	// Project-wide visibility is gated on the org:admin RBAC scope. When RBAC is
-	// not enforced for the org we must NOT fall through to "see all" — Require
-	// short-circuits to allow when enforcement is off, so check ShouldEnforce
-	// explicitly and treat the disabled case as a non-admin (own sessions only).
+	// Whether the caller sees all project sessions or only their own is decided
+	// by the org:admin RBAC scope — this is a visibility choice, never a gate on
+	// the route, so a caller without org:admin (or when the check can't be made)
+	// still gets a successful response scoped to their own sessions.
+	//
+	// When RBAC is not enforced for the org we must NOT fall through to "see
+	// all" — Require short-circuits to allow when enforcement is off, so check
+	// ShouldEnforce explicitly and treat the disabled case as non-admin.
 	isOrgAdmin := false
 	if enforce, err := s.authz.ShouldEnforce(ctx); err != nil {
-		return nil, err
+		s.logger.WarnContext(ctx, "could not determine RBAC enforcement for chat visibility; showing own sessions", attr.SlogError(err))
 	} else if enforce {
 		err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil})
 		var shareableErr *oops.ShareableError
@@ -220,9 +224,11 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		case err == nil:
 			isOrgAdmin = true
 		case errors.As(err, &shareableErr) && shareableErr.Code == oops.CodeForbidden:
-			// Not an org admin — fall through to own-sessions-only below.
+			// Forbidden simply means not an org admin — show own sessions.
 		default:
-			return nil, err
+			// Any other error is unexpected; log it but still serve own
+			// sessions rather than failing the listing.
+			s.logger.WarnContext(ctx, "org admin visibility check failed for chat listing; showing own sessions", attr.SlogError(err))
 		}
 	}
 
