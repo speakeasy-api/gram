@@ -57,6 +57,7 @@ import {
   ChevronRight,
   RefreshCw,
   Sparkles,
+  SlidersHorizontal,
 } from "lucide-react";
 import {
   useState,
@@ -1760,6 +1761,14 @@ function PromptPolicySheetBody({
           selectedMessageTypes.has(t as PolicyMessageType),
         ).map((t) => POLICY_MESSAGE_TYPE_META[t as PolicyMessageType].label);
 
+  // One-line view of the judge config shown on the collapsed Advanced card, so
+  // authors can see the (sensible) defaults at a glance without expanding it.
+  const judgeModelLabel =
+    JUDGE_MODEL_OPTIONS.find((o) => o.value === formModel)?.label ??
+    (formModel || JUDGE_MODEL_OPTIONS[0]?.label) ??
+    "Default model";
+  const judgeSummary = `${judgeModelLabel} · temp ${formTemperature.toFixed(1)} · ${formFailOpen ? "fail-open" : "fail-closed"}`;
+
   return (
     <WizardShell
       steps={PROMPT_WIZARD_STEPS}
@@ -1794,33 +1803,46 @@ function PromptPolicySheetBody({
               />
             )}
           </div>
-          <div>
-            <button
-              type="button"
-              onClick={() => setAdvancedOpen((v) => !v)}
-              className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-xs font-medium"
-            >
+          <Collapsible
+            open={advancedOpen}
+            onOpenChange={setAdvancedOpen}
+            className="border-border rounded-lg border"
+          >
+            <CollapsibleTrigger className="hover:bg-muted/40 flex w-full items-center gap-3 px-4 py-3 text-left transition-colors">
+              <SlidersHorizontal className="text-muted-foreground h-4 w-4 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">
+                    Advanced judge settings
+                  </span>
+                  <Badge variant="neutral" className="text-[10px]">
+                    <Badge.Text>Optional</Badge.Text>
+                  </Badge>
+                </div>
+                <div className="text-muted-foreground truncate text-xs">
+                  {advancedOpen
+                    ? "Judge model, temperature, and failure behavior"
+                    : judgeSummary}
+                </div>
+              </div>
               <ChevronRight
                 className={cn(
-                  "h-3.5 w-3.5 transition-transform",
+                  "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
                   advancedOpen && "rotate-90",
                 )}
               />
-              Advanced — judge model &amp; behavior
-            </button>
-            {advancedOpen && (
-              <div className="mt-3">
-                <JudgeConfigSection
-                  formModel={formModel}
-                  setFormModel={setFormModel}
-                  formTemperature={formTemperature}
-                  setFormTemperature={setFormTemperature}
-                  formFailOpen={formFailOpen}
-                  setFormFailOpen={setFormFailOpen}
-                />
-              </div>
-            )}
-          </div>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="border-border border-t px-4 py-4">
+              <JudgeConfigSection
+                formModel={formModel}
+                setFormModel={setFormModel}
+                formTemperature={formTemperature}
+                setFormTemperature={setFormTemperature}
+                formFailOpen={formFailOpen}
+                setFormFailOpen={setFormFailOpen}
+              />
+            </CollapsibleContent>
+          </Collapsible>
         </div>
       )}
 
