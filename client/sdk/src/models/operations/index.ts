@@ -218,6 +218,7 @@ export * from "./listtools.js";
 export * from "./listtoolsets.js";
 export * from "./listtoolsetsfororg.js";
 export * from "./listtoolsettoolfilters.js";
+export * from "./listtoolusagetraces.js";
 export * from "./listtoolvariationgroups.js";
 export * from "./listtriggerdefinitions.js";
 export * from "./listtriggerinstances.js";

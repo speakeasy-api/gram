@@ -27008,6 +27008,111 @@ paths:
             x-speakeasy-react-hook:
                 name: ListHooksTraces
                 type: query
+    /rpc/telemetry.listToolUsageTraces:
+        post:
+            description: List target-aware MCP and tool usage traces
+            operationId: listToolUsageTraces
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ListToolUsageTracesPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListToolUsageTracesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listToolUsageTraces telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: listToolUsageTraces
+            x-speakeasy-react-hook:
+                name: ListToolUsageTraces
+                type: query
     /rpc/telemetry.searchChats:
         post:
             description: Search and list chat session summaries that match a search filter
@@ -39486,6 +39591,93 @@ components:
                 - filtering_enabled
                 - scopes
                 - excluded
+        ListToolUsageTracesPayload:
+            type: object
+            properties:
+                cursor:
+                    type: string
+                    description: Cursor for pagination
+                filters:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/LogFilter'
+                    description: Arbitrary attribute filter conditions from the af URL param
+                from:
+                    type: string
+                    description: Start time in ISO 8601 format
+                    example: "2025-12-19T10:00:00Z"
+                    format: date-time
+                hook_sources:
+                    type: array
+                    items:
+                        type: string
+                    description: Hook plugin sources to include. Direct hosted MCP calls have no hook source and are excluded when this filter is set.
+                hosted_toolset_slugs:
+                    type: array
+                    items:
+                        type: string
+                    description: Hosted MCP toolset slugs to include
+                limit:
+                    type: integer
+                    description: Number of traces to return
+                    default: 100
+                    format: int64
+                    minimum: 1
+                    maximum: 1000
+                query:
+                    type: string
+                    description: Free-text attribute search string from the q URL param. Matches useful identifier attributes such as Gram URN, conversation ID, and trigger instance ID.
+                shadow_server_names:
+                    type: array
+                    items:
+                        type: string
+                    description: Shadow MCP server names to include
+                sort:
+                    type: string
+                    description: Sort order
+                    default: desc
+                    enum:
+                        - asc
+                        - desc
+                target_types:
+                    type: array
+                    items:
+                        type: string
+                        description: Tool usage target type
+                        enum:
+                            - hosted_mcp_server
+                            - shadow_mcp_server
+                            - local_tool
+                            - skill
+                    description: Target types to include. Empty means all target types.
+                to:
+                    type: string
+                    description: End time in ISO 8601 format
+                    example: "2025-12-19T11:00:00Z"
+                    format: date-time
+                user_filters:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolUsageUserFilter'
+                    description: Typed user identities to include
+            description: Payload for listing target-aware MCP and tool usage traces
+            required:
+                - from
+                - to
+        ListToolUsageTracesResult:
+            type: object
+            properties:
+                next_cursor:
+                    type: string
+                    description: Cursor for next page
+                traces:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolUsageTraceSummary'
+                    description: Target-aware tool usage trace rows
+            description: Result of listing target-aware MCP and tool usage traces
+            required:
+                - traces
         ListToolVariationGroupsResult:
             type: object
             properties:
@@ -45199,6 +45391,120 @@ components:
                 - unique_tools
                 - unique_users
                 - unique_targets
+        ToolUsageTraceLogGroup:
+            type: object
+            properties:
+                kind:
+                    type: string
+                    description: Child-log lookup strategy for a tool usage trace row
+                    enum:
+                        - trace_id
+                        - correlation_id
+                        - trigger_event_id
+                        - log_id
+                value:
+                    type: string
+                    description: Lookup value
+            description: Descriptor used by the dashboard to fetch child logs for a trace row
+            required:
+                - kind
+                - value
+        ToolUsageTraceSummary:
+            type: object
+            properties:
+                block_reason:
+                    type: string
+                    description: Hook block reason when hook_status is blocked
+                event_source:
+                    type: string
+                    description: Telemetry event source
+                gram_urn:
+                    type: string
+                    description: Gram URN associated with the trace
+                hook_source:
+                    type: string
+                    description: Hook plugin source when the row came from hook telemetry
+                hook_status:
+                    type: string
+                    description: Hook execution status when the row came from hook telemetry
+                    enum:
+                        - success
+                        - failure
+                        - blocked
+                        - pending
+                http_status_code:
+                    type: integer
+                    description: HTTP status code when available
+                    format: int32
+                id:
+                    type: string
+                    description: Stable row identity for React keys and expansion state
+                log_count:
+                    type: integer
+                    description: Number of logs in the trace
+                    format: int64
+                log_group:
+                    $ref: '#/components/schemas/ToolUsageTraceLogGroup'
+                start_time_unix_nano:
+                    type: string
+                    description: Earliest log timestamp in Unix nanoseconds as a string for JavaScript integer safety
+                target_id:
+                    type: string
+                    description: Stable target identifier used by filters
+                target_kind:
+                    type: string
+                    description: Tool usage aggregation target kind
+                    enum:
+                        - server
+                        - local_tools
+                        - skill
+                target_label:
+                    type: string
+                    description: User-facing target label
+                target_type:
+                    type: string
+                    description: Tool usage target type
+                    enum:
+                        - hosted_mcp_server
+                        - shadow_mcp_server
+                        - local_tool
+                        - skill
+                tool_name:
+                    type: string
+                    description: Tool name shown in the row
+                trace_id:
+                    type: string
+                    description: Real OTel trace ID when the grouped logs have one
+                user_key:
+                    type: string
+                    description: Stable user identity value
+                user_kind:
+                    type: string
+                    description: Tool usage user identity kind
+                    enum:
+                        - email
+                        - external_user_id
+                        - user_id
+                        - unknown
+                user_label:
+                    type: string
+                    description: User-facing user identity label
+            description: A single target-aware tool usage trace row
+            required:
+                - id
+                - log_group
+                - start_time_unix_nano
+                - log_count
+                - gram_urn
+                - tool_name
+                - target_type
+                - target_kind
+                - target_id
+                - target_label
+                - user_key
+                - user_label
+                - user_kind
+                - event_source
         ToolUsageUserFilter:
             type: object
             properties:

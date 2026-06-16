@@ -159,6 +159,7 @@ export * from "./listTools.js";
 export * from "./listToolsets.js";
 export * from "./listToolsetsForOrg.js";
 export * from "./listToolsetToolFilters.js";
+export * from "./listToolUsageTraces.js";
 export * from "./listVersions.js";
 export * from "./loadChat.js";
 export * from "./logout.js";

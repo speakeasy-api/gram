@@ -213,6 +213,38 @@ type GetToolUsageSummaryRequestBody struct {
 	UserFilters []*ToolUsageUserFilterRequestBody `form:"user_filters,omitempty" json:"user_filters,omitempty" xml:"user_filters,omitempty"`
 }
 
+// ListToolUsageTracesRequestBody is the type of the "telemetry" service
+// "listToolUsageTraces" endpoint HTTP request body.
+type ListToolUsageTracesRequestBody struct {
+	// Start time in ISO 8601 format
+	From *string `form:"from,omitempty" json:"from,omitempty" xml:"from,omitempty"`
+	// End time in ISO 8601 format
+	To *string `form:"to,omitempty" json:"to,omitempty" xml:"to,omitempty"`
+	// Target types to include. Empty means all target types.
+	TargetTypes []string `form:"target_types,omitempty" json:"target_types,omitempty" xml:"target_types,omitempty"`
+	// Hosted MCP toolset slugs to include
+	HostedToolsetSlugs []string `form:"hosted_toolset_slugs,omitempty" json:"hosted_toolset_slugs,omitempty" xml:"hosted_toolset_slugs,omitempty"`
+	// Shadow MCP server names to include
+	ShadowServerNames []string `form:"shadow_server_names,omitempty" json:"shadow_server_names,omitempty" xml:"shadow_server_names,omitempty"`
+	// Typed user identities to include
+	UserFilters []*ToolUsageUserFilterRequestBody `form:"user_filters,omitempty" json:"user_filters,omitempty" xml:"user_filters,omitempty"`
+	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
+	// and are excluded when this filter is set.
+	HookSources []string `form:"hook_sources,omitempty" json:"hook_sources,omitempty" xml:"hook_sources,omitempty"`
+	// Free-text attribute search string from the q URL param. Matches useful
+	// identifier attributes such as Gram URN, conversation ID, and trigger
+	// instance ID.
+	Query *string `form:"query,omitempty" json:"query,omitempty" xml:"query,omitempty"`
+	// Arbitrary attribute filter conditions from the af URL param
+	Filters []*LogFilterRequestBody `form:"filters,omitempty" json:"filters,omitempty" xml:"filters,omitempty"`
+	// Cursor for pagination
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty" xml:"cursor,omitempty"`
+	// Sort order
+	Sort *string `form:"sort,omitempty" json:"sort,omitempty" xml:"sort,omitempty"`
+	// Number of traces to return
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty" xml:"limit,omitempty"`
+}
+
 // GetToolUsageFilterOptionsRequestBody is the type of the "telemetry" service
 // "getToolUsageFilterOptions" endpoint HTTP request body.
 type GetToolUsageFilterOptionsRequestBody struct {
@@ -394,6 +426,15 @@ type GetToolUsageSummaryResponseBody struct {
 	UsersByTarget []*ToolUsageUsersByTargetRowResponseBody `form:"users_by_target" json:"users_by_target" xml:"users_by_target"`
 	// Per-tool usage rows grouped by target
 	TargetToolBreakdown []*ToolUsageTargetToolBreakdownRowResponseBody `form:"target_tool_breakdown" json:"target_tool_breakdown" xml:"target_tool_breakdown"`
+}
+
+// ListToolUsageTracesResponseBody is the type of the "telemetry" service
+// "listToolUsageTraces" endpoint HTTP response body.
+type ListToolUsageTracesResponseBody struct {
+	// Target-aware tool usage trace rows
+	Traces []*ToolUsageTraceSummaryResponseBody `form:"traces" json:"traces" xml:"traces"`
+	// Cursor for next page
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
 // GetToolUsageFilterOptionsResponseBody is the type of the "telemetry" service
@@ -3025,6 +3066,196 @@ type GetToolUsageSummaryGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListToolUsageTracesUnauthorizedResponseBody is the type of the "telemetry"
+// service "listToolUsageTraces" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListToolUsageTracesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolUsageTracesForbiddenResponseBody is the type of the "telemetry"
+// service "listToolUsageTraces" endpoint HTTP response body for the
+// "forbidden" error.
+type ListToolUsageTracesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolUsageTracesBadRequestResponseBody is the type of the "telemetry"
+// service "listToolUsageTraces" endpoint HTTP response body for the
+// "bad_request" error.
+type ListToolUsageTracesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolUsageTracesNotFoundResponseBody is the type of the "telemetry"
+// service "listToolUsageTraces" endpoint HTTP response body for the
+// "not_found" error.
+type ListToolUsageTracesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolUsageTracesConflictResponseBody is the type of the "telemetry"
+// service "listToolUsageTraces" endpoint HTTP response body for the "conflict"
+// error.
+type ListToolUsageTracesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolUsageTracesUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "listToolUsageTraces" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ListToolUsageTracesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolUsageTracesInvalidResponseBody is the type of the "telemetry"
+// service "listToolUsageTraces" endpoint HTTP response body for the "invalid"
+// error.
+type ListToolUsageTracesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolUsageTracesInvariantViolationResponseBody is the type of the
+// "telemetry" service "listToolUsageTraces" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ListToolUsageTracesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolUsageTracesUnexpectedResponseBody is the type of the "telemetry"
+// service "listToolUsageTraces" endpoint HTTP response body for the
+// "unexpected" error.
+type ListToolUsageTracesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolUsageTracesGatewayErrorResponseBody is the type of the "telemetry"
+// service "listToolUsageTraces" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListToolUsageTracesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetToolUsageFilterOptionsUnauthorizedResponseBody is the type of the
 // "telemetry" service "getToolUsageFilterOptions" endpoint HTTP response body
 // for the "unauthorized" error.
@@ -4052,6 +4283,59 @@ type ToolUsageTargetToolBreakdownRowResponseBody struct {
 	FailureRate float64 `form:"failure_rate" json:"failure_rate" xml:"failure_rate"`
 }
 
+// ToolUsageTraceSummaryResponseBody is used to define fields on response body
+// types.
+type ToolUsageTraceSummaryResponseBody struct {
+	// Stable row identity for React keys and expansion state
+	ID string `form:"id" json:"id" xml:"id"`
+	// Real OTel trace ID when the grouped logs have one
+	TraceID *string `form:"trace_id,omitempty" json:"trace_id,omitempty" xml:"trace_id,omitempty"`
+	// How the frontend should fetch child logs for this row
+	LogGroup *ToolUsageTraceLogGroupResponseBody `form:"log_group" json:"log_group" xml:"log_group"`
+	// Earliest log timestamp in Unix nanoseconds as a string for JavaScript
+	// integer safety
+	StartTimeUnixNano string `form:"start_time_unix_nano" json:"start_time_unix_nano" xml:"start_time_unix_nano"`
+	// Number of logs in the trace
+	LogCount uint64 `form:"log_count" json:"log_count" xml:"log_count"`
+	// Gram URN associated with the trace
+	GramUrn string `form:"gram_urn" json:"gram_urn" xml:"gram_urn"`
+	// Tool name shown in the row
+	ToolName string `form:"tool_name" json:"tool_name" xml:"tool_name"`
+	// Specific kind of tool usage target
+	TargetType string `form:"target_type" json:"target_type" xml:"target_type"`
+	// Display grouping for the target
+	TargetKind string `form:"target_kind" json:"target_kind" xml:"target_kind"`
+	// Stable target identifier used by filters
+	TargetID string `form:"target_id" json:"target_id" xml:"target_id"`
+	// User-facing target label
+	TargetLabel string `form:"target_label" json:"target_label" xml:"target_label"`
+	// Stable user identity value
+	UserKey string `form:"user_key" json:"user_key" xml:"user_key"`
+	// User-facing user identity label
+	UserLabel string `form:"user_label" json:"user_label" xml:"user_label"`
+	// Type of user identity represented by the row
+	UserKind string `form:"user_kind" json:"user_kind" xml:"user_kind"`
+	// Hook plugin source when the row came from hook telemetry
+	HookSource *string `form:"hook_source,omitempty" json:"hook_source,omitempty" xml:"hook_source,omitempty"`
+	// Telemetry event source
+	EventSource string `form:"event_source" json:"event_source" xml:"event_source"`
+	// HTTP status code when available
+	HTTPStatusCode *int32 `form:"http_status_code,omitempty" json:"http_status_code,omitempty" xml:"http_status_code,omitempty"`
+	// Hook execution status when the row came from hook telemetry
+	HookStatus *string `form:"hook_status,omitempty" json:"hook_status,omitempty" xml:"hook_status,omitempty"`
+	// Hook block reason when hook_status is blocked
+	BlockReason *string `form:"block_reason,omitempty" json:"block_reason,omitempty" xml:"block_reason,omitempty"`
+}
+
+// ToolUsageTraceLogGroupResponseBody is used to define fields on response body
+// types.
+type ToolUsageTraceLogGroupResponseBody struct {
+	// Lookup strategy
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// Lookup value
+	Value string `form:"value" json:"value" xml:"value"`
+}
+
 // ToolUsageHostedServerFilterOptionResponseBody is used to define fields on
 // response body types.
 type ToolUsageHostedServerFilterOptionResponseBody struct {
@@ -4649,6 +4933,27 @@ func NewGetToolUsageSummaryResponseBody(res *telemetry.GetToolUsageSummaryResult
 		}
 	} else {
 		body.TargetToolBreakdown = []*ToolUsageTargetToolBreakdownRowResponseBody{}
+	}
+	return body
+}
+
+// NewListToolUsageTracesResponseBody builds the HTTP response body from the
+// result of the "listToolUsageTraces" endpoint of the "telemetry" service.
+func NewListToolUsageTracesResponseBody(res *telemetry.ListToolUsageTracesResult) *ListToolUsageTracesResponseBody {
+	body := &ListToolUsageTracesResponseBody{
+		NextCursor: res.NextCursor,
+	}
+	if res.Traces != nil {
+		body.Traces = make([]*ToolUsageTraceSummaryResponseBody, len(res.Traces))
+		for i, val := range res.Traces {
+			if val == nil {
+				body.Traces[i] = nil
+				continue
+			}
+			body.Traces[i] = marshalTelemetryToolUsageTraceSummaryToToolUsageTraceSummaryResponseBody(val)
+		}
+	} else {
+		body.Traces = []*ToolUsageTraceSummaryResponseBody{}
 	}
 	return body
 }
@@ -6748,6 +7053,155 @@ func NewGetToolUsageSummaryGatewayErrorResponseBody(res *goa.ServiceError) *GetT
 	return body
 }
 
+// NewListToolUsageTracesUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listToolUsageTraces" endpoint of the "telemetry"
+// service.
+func NewListToolUsageTracesUnauthorizedResponseBody(res *goa.ServiceError) *ListToolUsageTracesUnauthorizedResponseBody {
+	body := &ListToolUsageTracesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolUsageTracesForbiddenResponseBody builds the HTTP response body
+// from the result of the "listToolUsageTraces" endpoint of the "telemetry"
+// service.
+func NewListToolUsageTracesForbiddenResponseBody(res *goa.ServiceError) *ListToolUsageTracesForbiddenResponseBody {
+	body := &ListToolUsageTracesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolUsageTracesBadRequestResponseBody builds the HTTP response body
+// from the result of the "listToolUsageTraces" endpoint of the "telemetry"
+// service.
+func NewListToolUsageTracesBadRequestResponseBody(res *goa.ServiceError) *ListToolUsageTracesBadRequestResponseBody {
+	body := &ListToolUsageTracesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolUsageTracesNotFoundResponseBody builds the HTTP response body
+// from the result of the "listToolUsageTraces" endpoint of the "telemetry"
+// service.
+func NewListToolUsageTracesNotFoundResponseBody(res *goa.ServiceError) *ListToolUsageTracesNotFoundResponseBody {
+	body := &ListToolUsageTracesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolUsageTracesConflictResponseBody builds the HTTP response body
+// from the result of the "listToolUsageTraces" endpoint of the "telemetry"
+// service.
+func NewListToolUsageTracesConflictResponseBody(res *goa.ServiceError) *ListToolUsageTracesConflictResponseBody {
+	body := &ListToolUsageTracesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolUsageTracesUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listToolUsageTraces" endpoint of the
+// "telemetry" service.
+func NewListToolUsageTracesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListToolUsageTracesUnsupportedMediaResponseBody {
+	body := &ListToolUsageTracesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolUsageTracesInvalidResponseBody builds the HTTP response body from
+// the result of the "listToolUsageTraces" endpoint of the "telemetry" service.
+func NewListToolUsageTracesInvalidResponseBody(res *goa.ServiceError) *ListToolUsageTracesInvalidResponseBody {
+	body := &ListToolUsageTracesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolUsageTracesInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listToolUsageTraces" endpoint of the
+// "telemetry" service.
+func NewListToolUsageTracesInvariantViolationResponseBody(res *goa.ServiceError) *ListToolUsageTracesInvariantViolationResponseBody {
+	body := &ListToolUsageTracesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolUsageTracesUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listToolUsageTraces" endpoint of the "telemetry"
+// service.
+func NewListToolUsageTracesUnexpectedResponseBody(res *goa.ServiceError) *ListToolUsageTracesUnexpectedResponseBody {
+	body := &ListToolUsageTracesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolUsageTracesGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listToolUsageTraces" endpoint of the "telemetry"
+// service.
+func NewListToolUsageTracesGatewayErrorResponseBody(res *goa.ServiceError) *ListToolUsageTracesGatewayErrorResponseBody {
+	body := &ListToolUsageTracesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetToolUsageFilterOptionsUnauthorizedResponseBody builds the HTTP
 // response body from the result of the "getToolUsageFilterOptions" endpoint of
 // the "telemetry" service.
@@ -7381,6 +7835,78 @@ func NewGetToolUsageSummaryPayload(body *GetToolUsageSummaryRequestBody, apikeyT
 	return v
 }
 
+// NewListToolUsageTracesPayload builds a telemetry service listToolUsageTraces
+// endpoint payload.
+func NewListToolUsageTracesPayload(body *ListToolUsageTracesRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.ListToolUsageTracesPayload {
+	v := &telemetry.ListToolUsageTracesPayload{
+		From:   *body.From,
+		To:     *body.To,
+		Query:  body.Query,
+		Cursor: body.Cursor,
+	}
+	if body.Sort != nil {
+		v.Sort = *body.Sort
+	}
+	if body.Limit != nil {
+		v.Limit = *body.Limit
+	}
+	if body.TargetTypes != nil {
+		v.TargetTypes = make([]telemetry.ToolUsageTargetType, len(body.TargetTypes))
+		for i, val := range body.TargetTypes {
+			v.TargetTypes[i] = telemetry.ToolUsageTargetType(val)
+		}
+	}
+	if body.HostedToolsetSlugs != nil {
+		v.HostedToolsetSlugs = make([]string, len(body.HostedToolsetSlugs))
+		for i, val := range body.HostedToolsetSlugs {
+			v.HostedToolsetSlugs[i] = val
+		}
+	}
+	if body.ShadowServerNames != nil {
+		v.ShadowServerNames = make([]string, len(body.ShadowServerNames))
+		for i, val := range body.ShadowServerNames {
+			v.ShadowServerNames[i] = val
+		}
+	}
+	if body.UserFilters != nil {
+		v.UserFilters = make([]*telemetry.ToolUsageUserFilter, len(body.UserFilters))
+		for i, val := range body.UserFilters {
+			if val == nil {
+				v.UserFilters[i] = nil
+				continue
+			}
+			v.UserFilters[i] = unmarshalToolUsageUserFilterRequestBodyToTelemetryToolUsageUserFilter(val)
+		}
+	}
+	if body.HookSources != nil {
+		v.HookSources = make([]string, len(body.HookSources))
+		for i, val := range body.HookSources {
+			v.HookSources[i] = val
+		}
+	}
+	if body.Filters != nil {
+		v.Filters = make([]*telemetry.LogFilter, len(body.Filters))
+		for i, val := range body.Filters {
+			if val == nil {
+				v.Filters[i] = nil
+				continue
+			}
+			v.Filters[i] = unmarshalLogFilterRequestBodyToTelemetryLogFilter(val)
+		}
+	}
+	if body.Sort == nil {
+		v.Sort = "desc"
+	}
+	if body.Limit == nil {
+		v.Limit = 100
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewGetToolUsageFilterOptionsPayload builds a telemetry service
 // getToolUsageFilterOptions endpoint payload.
 func NewGetToolUsageFilterOptionsPayload(body *GetToolUsageFilterOptionsRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.GetToolUsageFilterOptionsPayload {
@@ -7788,6 +8314,58 @@ func ValidateGetToolUsageSummaryRequestBody(body *GetToolUsageSummaryRequestBody
 			if err2 := ValidateToolUsageUserFilterRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	return
+}
+
+// ValidateListToolUsageTracesRequestBody runs the validations defined on
+// ListToolUsageTracesRequestBody
+func ValidateListToolUsageTracesRequestBody(body *ListToolUsageTracesRequestBody) (err error) {
+	if body.From == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("from", "body"))
+	}
+	if body.To == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
+	}
+	if body.From != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", *body.From, goa.FormatDateTime))
+	}
+	if body.To != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", *body.To, goa.FormatDateTime))
+	}
+	for _, e := range body.TargetTypes {
+		if !(e == "hosted_mcp_server" || e == "shadow_mcp_server" || e == "local_tool" || e == "skill") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_types[*]", e, []any{"hosted_mcp_server", "shadow_mcp_server", "local_tool", "skill"}))
+		}
+	}
+	for _, e := range body.UserFilters {
+		if e != nil {
+			if err2 := ValidateToolUsageUserFilterRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Filters {
+		if e != nil {
+			if err2 := ValidateLogFilterRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.Sort != nil {
+		if !(*body.Sort == "asc" || *body.Sort == "desc") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort", *body.Sort, []any{"asc", "desc"}))
+		}
+	}
+	if body.Limit != nil {
+		if *body.Limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 1, true))
+		}
+	}
+	if body.Limit != nil {
+		if *body.Limit > 1000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 1000, false))
 		}
 	}
 	return
