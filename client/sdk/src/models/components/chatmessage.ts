@@ -38,6 +38,10 @@ export type ChatMessage = {
    */
   model: string;
   /**
+   * The agent prompt/turn ID associated with this message, when available.
+   */
+  promptId?: string | undefined;
+  /**
    * The role of the message
    */
   role: string;
@@ -69,6 +73,7 @@ export const ChatMessage$inboundSchema: z.ZodMiniType<ChatMessage, unknown> = z
       generation: z.int(),
       id: z.string(),
       model: z.string(),
+      prompt_id: z.optional(z.string()),
       role: z.string(),
       tool_call_id: z.optional(z.string()),
       tool_calls: z.optional(z.string()),
@@ -79,6 +84,7 @@ export const ChatMessage$inboundSchema: z.ZodMiniType<ChatMessage, unknown> = z
         "created_at": "createdAt",
         "external_user_id": "externalUserId",
         "finish_reason": "finishReason",
+        "prompt_id": "promptId",
         "tool_call_id": "toolCallId",
         "tool_calls": "toolCalls",
         "user_id": "userId",

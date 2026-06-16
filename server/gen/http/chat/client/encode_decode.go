@@ -1497,10 +1497,97 @@ func unmarshalChatMessageResponseBodyToChatChatMessage(v *ChatMessageResponseBod
 		ToolCallID:     v.ToolCallID,
 		ToolCalls:      v.ToolCalls,
 		FinishReason:   v.FinishReason,
+		PromptID:       v.PromptID,
 		UserID:         v.UserID,
 		ExternalUserID: v.ExternalUserID,
 		CreatedAt:      *v.CreatedAt,
 		Generation:     *v.Generation,
+	}
+
+	return res
+}
+
+// unmarshalAgentUsageResponseBodyToChatAgentUsage builds a value of type
+// *chat.AgentUsage from a value of type *AgentUsageResponseBody.
+func unmarshalAgentUsageResponseBodyToChatAgentUsage(v *AgentUsageResponseBody) *chat.AgentUsage {
+	if v == nil {
+		return nil
+	}
+	res := &chat.AgentUsage{
+		Type: *v.Type,
+	}
+	if v.Claude != nil {
+		res.Claude = unmarshalClaudeAgentUsageResponseBodyToChatClaudeAgentUsage(v.Claude)
+	}
+
+	return res
+}
+
+// unmarshalClaudeAgentUsageResponseBodyToChatClaudeAgentUsage builds a value
+// of type *chat.ClaudeAgentUsage from a value of type
+// *ClaudeAgentUsageResponseBody.
+func unmarshalClaudeAgentUsageResponseBodyToChatClaudeAgentUsage(v *ClaudeAgentUsageResponseBody) *chat.ClaudeAgentUsage {
+	if v == nil {
+		return nil
+	}
+	res := &chat.ClaudeAgentUsage{}
+	res.Turns = make([]*chat.ClaudeTurnUsage, len(v.Turns))
+	for i, val := range v.Turns {
+		if val == nil {
+			res.Turns[i] = nil
+			continue
+		}
+		res.Turns[i] = unmarshalClaudeTurnUsageResponseBodyToChatClaudeTurnUsage(val)
+	}
+	res.Tools = make([]*chat.ClaudeToolUsage, len(v.Tools))
+	for i, val := range v.Tools {
+		if val == nil {
+			res.Tools[i] = nil
+			continue
+		}
+		res.Tools[i] = unmarshalClaudeToolUsageResponseBodyToChatClaudeToolUsage(val)
+	}
+
+	return res
+}
+
+// unmarshalClaudeTurnUsageResponseBodyToChatClaudeTurnUsage builds a value of
+// type *chat.ClaudeTurnUsage from a value of type *ClaudeTurnUsageResponseBody.
+func unmarshalClaudeTurnUsageResponseBodyToChatClaudeTurnUsage(v *ClaudeTurnUsageResponseBody) *chat.ClaudeTurnUsage {
+	res := &chat.ClaudeTurnUsage{
+		PromptID:            *v.PromptID,
+		StartTimeUnixNano:   *v.StartTimeUnixNano,
+		EndTimeUnixNano:     *v.EndTimeUnixNano,
+		RequestCount:        *v.RequestCount,
+		InputTokens:         *v.InputTokens,
+		OutputTokens:        *v.OutputTokens,
+		CacheReadTokens:     *v.CacheReadTokens,
+		CacheCreationTokens: *v.CacheCreationTokens,
+		TotalTokens:         *v.TotalTokens,
+		CostUsd:             *v.CostUsd,
+		CostMicros:          *v.CostMicros,
+	}
+	res.Models = make([]string, len(v.Models))
+	for i, val := range v.Models {
+		res.Models[i] = val
+	}
+	res.QuerySources = make([]string, len(v.QuerySources))
+	for i, val := range v.QuerySources {
+		res.QuerySources[i] = val
+	}
+
+	return res
+}
+
+// unmarshalClaudeToolUsageResponseBodyToChatClaudeToolUsage builds a value of
+// type *chat.ClaudeToolUsage from a value of type *ClaudeToolUsageResponseBody.
+func unmarshalClaudeToolUsageResponseBodyToChatClaudeToolUsage(v *ClaudeToolUsageResponseBody) *chat.ClaudeToolUsage {
+	res := &chat.ClaudeToolUsage{
+		ToolUseID:       *v.ToolUseID,
+		PromptID:        *v.PromptID,
+		ToolName:        *v.ToolName,
+		InputSizeBytes:  *v.InputSizeBytes,
+		ResultSizeBytes: *v.ResultSizeBytes,
 	}
 
 	return res

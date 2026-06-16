@@ -18,6 +18,7 @@ import {
 import { getRuleTitleFallback } from "@/pages/security/risk-utils";
 import type {
   ChatMessage,
+  ClaudeToolUsage,
   TelemetryLogRecord,
 } from "@gram/client/models/components";
 import { useSearchLogsMutation } from "@gram/client/react-query";
@@ -74,6 +75,15 @@ import {
   getVisibleMessages,
   parseToolCalls,
 } from "./traceEntries";
+import {
+  type ClaudeUsageMatch,
+  buildClaudeToolUsageByToolUseId,
+  buildClaudeUsageByMessageId,
+  formatByteCount,
+  formatDurationFromNanos,
+  formatTokenCount,
+  formatUsageCost,
+} from "./claudeUsage";
 
 interface ChatDetailPanelProps {
   chatId: string;
@@ -217,12 +227,16 @@ function getSeverityBadgeVariant(
 function ChatMessagesList({
   messages,
   riskResultsByMessage,
+  claudeUsageByMessage,
+  claudeToolUsageByToolUseId,
   collapseNonRisk,
   enabledEntryTypes,
   riskOnly,
 }: {
   messages: ChatMessage[];
   riskResultsByMessage: Map<string, RiskResult[]>;
+  claudeUsageByMessage: Map<string, ClaudeUsageMatch>;
+  claudeToolUsageByToolUseId: Map<string, ClaudeToolUsage>;
   collapseNonRisk?: boolean;
   enabledEntryTypes: FilterableTraceEntryType[];
   riskOnly: boolean;
@@ -272,6 +286,8 @@ function ChatMessagesList({
             key={message.id}
             message={message}
             riskResults={riskResultsByMessage.get(message.id)}
+            claudeUsage={claudeUsageByMessage.get(message.id)}
+            claudeToolUsageByToolUseId={claudeToolUsageByToolUseId}
             collapseNonRisk={collapseNonRisk}
           />
         ))}
@@ -299,6 +315,8 @@ function ChatMessagesList({
                   key={message.id}
                   message={message}
                   riskResults={riskResultsByMessage.get(message.id)}
+                  claudeUsage={claudeUsageByMessage.get(message.id)}
+                  claudeToolUsageByToolUseId={claudeToolUsageByToolUseId}
                   collapseNonRisk={collapseNonRisk}
                 />
               ))}
@@ -313,10 +331,14 @@ function ChatMessagesList({
 function MessageItem({
   message,
   riskResults,
+  claudeUsage,
+  claudeToolUsageByToolUseId,
   collapseNonRisk,
 }: {
   message: ChatMessage;
   riskResults: RiskResult[] | undefined;
+  claudeUsage: ClaudeUsageMatch | undefined;
+  claudeToolUsageByToolUseId: Map<string, ClaudeToolUsage>;
   collapseNonRisk?: boolean;
 }) {
   const hasRisk = !!riskResults && riskResults.length > 0;
@@ -344,6 +366,12 @@ function MessageItem({
     entryType === "tool_call"
       ? `Tool Call: ${parsedToolCalls?.[0]?.function?.name ?? "unknown"}`
       : entryMeta.label;
+  const toolUsage =
+    entryType === "tool_call"
+      ? claudeToolUsageByToolUseId.get(parsedToolCalls?.[0]?.id ?? "")
+      : entryType === "tool_result"
+        ? claudeToolUsageByToolUseId.get(message.toolCallId ?? "")
+        : undefined;
 
   return (
     <div>
@@ -354,6 +382,8 @@ function MessageItem({
         label={label}
         onToggle={() => setExpanded((current) => !current)}
         riskResults={riskResults}
+        claudeUsage={entryType === "user" ? claudeUsage : undefined}
+        claudeToolUsage={toolUsage}
       />
 
       {isCollapsed ? null : (
@@ -381,6 +411,8 @@ function MessageItem({
 
 function MessageItemToggle({
   createdAt,
+  claudeUsage,
+  claudeToolUsage,
   entryType,
   isCollapsed,
   label,
@@ -388,6 +420,8 @@ function MessageItemToggle({
   riskResults,
 }: {
   createdAt: Date | string | undefined;
+  claudeUsage: ClaudeUsageMatch | undefined;
+  claudeToolUsage: ClaudeToolUsage | undefined;
   entryType: TraceEntryType;
   isCollapsed: boolean;
   label: string;
@@ -417,14 +451,106 @@ function MessageItemToggle({
         <RiskBadgePopover results={riskResults} />
       )}
 
+      <span className="min-w-0 flex-1" />
+
+      {claudeUsage && <ClaudeUsageBadge usage={claudeUsage} />}
+      {claudeToolUsage && (
+        <ToolByteBadge
+          bytes={
+            entryType === "tool_call"
+              ? claudeToolUsage.inputSizeBytes
+              : claudeToolUsage.resultSizeBytes
+          }
+        />
+      )}
+
       <Icon
         name="chevron-down"
         className={cn(
-          "ml-auto size-3 shrink-0 transition-transform",
+          "size-3 shrink-0 transition-transform",
           isCollapsed && "-rotate-90",
         )}
       />
     </button>
+  );
+}
+
+function ToolByteBadge({ bytes }: { bytes: number }) {
+  if (bytes <= 0) return null;
+  return (
+    <Badge variant="neutral" className="shrink-0 text-xs">
+      <Badge.Text>{formatByteCount(bytes)}</Badge.Text>
+    </Badge>
+  );
+}
+
+function ClaudeUsageBadge({ usage }: { usage: ClaudeUsageMatch }) {
+  const { turn, match } = usage;
+  const duration = formatDurationFromNanos(
+    turn.startTimeUnixNano,
+    turn.endTimeUnixNano,
+  );
+
+  const rows = [
+    ["Input", turn.inputTokens.toLocaleString()],
+    ["Output", turn.outputTokens.toLocaleString()],
+    ["Cache read", turn.cacheReadTokens.toLocaleString()],
+    ["Cache creation", turn.cacheCreationTokens.toLocaleString()],
+    ["Total tokens", turn.totalTokens.toLocaleString()],
+    ["Cost", formatUsageCost(turn.costUsd)],
+    ["Requests", turn.requestCount.toLocaleString()],
+    ["Models", turn.models.length > 0 ? turn.models.join(", ") : "unknown"],
+    [
+      "Query sources",
+      turn.querySources.length > 0 ? turn.querySources.join(", ") : "unknown",
+    ],
+    ...(duration ? [["Duration", duration]] : []),
+    ...(match === "ordered" ? [["Match", "estimated by turn order"]] : []),
+  ];
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="cursor-pointer"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Badge variant="neutral" className="shrink-0 text-xs">
+            <Icon name="dollar-sign" className="mr-1 size-3" />
+            {formatUsageCost(turn.costUsd)} ·{" "}
+            {formatTokenCount(turn.totalTokens)} tokens
+          </Badge>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        className="w-80"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="space-y-3">
+          <div>
+            <div className="text-sm font-semibold">Claude Usage</div>
+            <div className="text-muted-foreground font-mono text-[11px]">
+              {turn.promptId}
+            </div>
+          </div>
+          <div className="divide-border divide-y">
+            {rows.map(([label, value]) => (
+              <div
+                key={label}
+                className="flex items-start justify-between gap-3 py-1.5 text-xs"
+              >
+                <span className="text-muted-foreground">{label}</span>
+                <span className="max-w-44 text-right font-medium break-words">
+                  {value}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -1215,6 +1341,23 @@ function ChatDetailPanel({
     }
     return map;
   }, [riskResults]);
+  const claudeUsageByMessage = useMemo(() => {
+    const turns =
+      chat?.agentUsage?.type === "claude"
+        ? (chat.agentUsage.claude?.turns ?? [])
+        : [];
+    return buildClaudeUsageByMessageId({
+      messages: chatMessages,
+      turns,
+    });
+  }, [chat?.agentUsage, chatMessages]);
+  const claudeToolUsageByToolUseId = useMemo(() => {
+    const tools =
+      chat?.agentUsage?.type === "claude"
+        ? (chat.agentUsage.claude?.tools ?? [])
+        : [];
+    return buildClaudeToolUsageByToolUseId(tools);
+  }, [chat?.agentUsage]);
 
   if (chatLoading) {
     return (
@@ -1489,6 +1632,8 @@ function ChatDetailPanel({
             <ChatMessagesList
               messages={chatMessages}
               riskResultsByMessage={riskResultsByMessage}
+              claudeUsageByMessage={claudeUsageByMessage}
+              claudeToolUsageByToolUseId={claudeToolUsageByToolUseId}
               collapseNonRisk={collapseNonRisk}
               enabledEntryTypes={enabledEntryTypes}
               riskOnly={riskOnly}

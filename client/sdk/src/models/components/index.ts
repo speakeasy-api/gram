@@ -13,6 +13,13 @@ export * from "./addpackageform.js";
 export * from "./addpluginserverform.js";
 export * from "./agentmarketplace.js";
 export * from "./agentplugin.js";
+export {
+  AgentUsage$inboundSchema,
+  Type as AgentUsageType,
+  Type$inboundSchema as AgentUsageType$inboundSchema,
+  agentUsageFromJSON,
+} from "./agentusage.js";
+export type { AgentUsage } from "./agentusage.js";
 export * from "./aiintegrationconfig.js";
 export * from "./allowedorigin.js";
 export * from "./approveshadowmcpapprovalrequestform.js";
@@ -33,8 +40,11 @@ export * from "./chat.js";
 export * from "./chatmessage.js";
 export * from "./chatoverview.js";
 export * from "./chatsummary.js";
+export * from "./claudeagentusage.js";
 export * from "./claudehookpayload.js";
 export * from "./claudehookresult.js";
+export * from "./claudetoolusage.js";
+export * from "./claudeturnusage.js";
 export * from "./cloneclientfromoauthproxyproviderform.js";
 export * from "./cloneenvironmentrequestbody.js";
 export * from "./codexhookpayload.js";
