@@ -84,6 +84,9 @@ import {
   RULE_CATEGORY_META,
   DETECTION_RULES,
   POLICY_MESSAGE_TYPE_META,
+  RULE_FAMILY_OF,
+  RULE_FAMILY_ORDER,
+  type DetectionRule,
   type RuleCategory,
   type PolicyAction,
   type PolicyMessageType,
@@ -378,6 +381,43 @@ function CustomizeRulesSheet({
     setDisabledRules(next);
   };
 
+  // Large categories (currently just secrets, ~200 rules) classify into named
+  // families so the list is navigable; everything else renders flat.
+  const grouper = RULE_FAMILY_OF[category];
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const toggleGroup = (family: string) => {
+    const next = new Set(expandedGroups);
+    if (next.has(family)) {
+      next.delete(family);
+    } else {
+      next.add(family);
+    }
+    setExpandedGroups(next);
+  };
+  const bulkGroup = (familyRules: DetectionRule[], on: boolean) => {
+    const next = new Set(disabledRules);
+    for (const r of familyRules) {
+      if (on) {
+        next.delete(r.id);
+      } else {
+        next.add(r.id);
+      }
+    }
+    setDisabledRules(next);
+    if (on && !selectedCategories.has(category)) {
+      const cats = new Set(selectedCategories);
+      cats.add(category);
+      setSelectedCategories(cats);
+    }
+  };
+  // Ordered, non-empty families over the (search-)filtered rules.
+  const groupedRules = grouper
+    ? RULE_FAMILY_ORDER.map((family) => ({
+        family,
+        rules: filtered.filter((r) => grouper(r) === family),
+      })).filter((g) => g.rules.length > 0)
+    : [];
+
   return (
     <Sheet
       open
@@ -421,21 +461,89 @@ function CustomizeRulesSheet({
           </span>
         </div>
         <div className="flex-1 overflow-y-auto px-4 pb-6">
-          {filtered.map((rule) => (
-            <div
-              key={rule.id}
-              className="hover:bg-muted flex items-center justify-between gap-3 rounded-md px-2 py-2 text-sm"
-            >
-              <span className="min-w-0 truncate">{rule.title}</span>
-              <Switch
-                checked={!disabledRules.has(rule.id)}
-                onCheckedChange={(on) => setRule(rule.id, on)}
-              />
-            </div>
-          ))}
+          {grouper
+            ? groupedRules.map(({ family, rules: familyRules }) => {
+                const open = expandedGroups.has(family) || query.length > 0;
+                const enabled = familyRules.filter(
+                  (r) => !disabledRules.has(r.id),
+                ).length;
+                return (
+                  <div
+                    key={family}
+                    className="border-border border-b last:border-b-0"
+                  >
+                    <div className="flex items-center gap-2 px-2 py-2">
+                      <button
+                        type="button"
+                        onClick={() => toggleGroup(family)}
+                        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                      >
+                        <ChevronRight
+                          className={cn(
+                            "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
+                            open && "rotate-90",
+                          )}
+                        />
+                        <span className="truncate text-sm font-medium">
+                          {family}
+                        </span>
+                        <span className="text-muted-foreground shrink-0 text-xs">
+                          {enabled}/{familyRules.length}
+                        </span>
+                      </button>
+                      <Switch
+                        checked={enabled === familyRules.length}
+                        onCheckedChange={(on) => bulkGroup(familyRules, on)}
+                      />
+                    </div>
+                    {open && (
+                      <div className="pb-1 pl-4">
+                        {familyRules.map((rule) => (
+                          <RuleToggleRow
+                            key={rule.id}
+                            rule={rule}
+                            checked={!disabledRules.has(rule.id)}
+                            onToggle={(on) => setRule(rule.id, on)}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            : filtered.map((rule) => (
+                <RuleToggleRow
+                  key={rule.id}
+                  rule={rule}
+                  checked={!disabledRules.has(rule.id)}
+                  onToggle={(on) => setRule(rule.id, on)}
+                />
+              ))}
+          {grouper && groupedRules.length === 0 && (
+            <p className="text-muted-foreground px-2 py-6 text-center text-xs">
+              No rules match.
+            </p>
+          )}
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function RuleToggleRow({
+  rule,
+  checked,
+  onToggle,
+}: {
+  rule: DetectionRule;
+  checked: boolean;
+  onToggle: (on: boolean) => void;
+}) {
+  return (
+    <div className="hover:bg-muted flex items-center justify-between gap-3 rounded-md px-2 py-2 text-sm">
+      <span className="min-w-0 truncate">{rule.title}</span>
+      <Switch checked={checked} onCheckedChange={onToggle} />
+    </div>
   );
 }
 
