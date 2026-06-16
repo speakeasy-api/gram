@@ -9,7 +9,7 @@ import { ClosedEnum } from "../../types/enums.js";
 /**
  * How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
  */
-export const CreateRemoteSessionClientFormTokenEndpointAuthMethod = {
+export const TokenEndpointAuthMethod = {
   ClientSecretBasic: "client_secret_basic",
   ClientSecretPost: "client_secret_post",
   None: "none",
@@ -17,8 +17,8 @@ export const CreateRemoteSessionClientFormTokenEndpointAuthMethod = {
 /**
  * How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
  */
-export type CreateRemoteSessionClientFormTokenEndpointAuthMethod = ClosedEnum<
-  typeof CreateRemoteSessionClientFormTokenEndpointAuthMethod
+export type TokenEndpointAuthMethod = ClosedEnum<
+  typeof TokenEndpointAuthMethod
 >;
 
 /**
@@ -48,9 +48,7 @@ export type CreateRemoteSessionClientForm = {
   /**
    * How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
    */
-  tokenEndpointAuthMethod?:
-    | CreateRemoteSessionClientFormTokenEndpointAuthMethod
-    | undefined;
+  tokenEndpointAuthMethod?: TokenEndpointAuthMethod | undefined;
   /**
    * The user_session_issuer this client is paired with.
    */
@@ -58,9 +56,9 @@ export type CreateRemoteSessionClientForm = {
 };
 
 /** @internal */
-export const CreateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema:
-  z.ZodMiniEnum<typeof CreateRemoteSessionClientFormTokenEndpointAuthMethod> = z
-    .enum(CreateRemoteSessionClientFormTokenEndpointAuthMethod);
+export const TokenEndpointAuthMethod$outboundSchema: z.ZodMiniEnum<
+  typeof TokenEndpointAuthMethod
+> = z.enum(TokenEndpointAuthMethod);
 
 /** @internal */
 export type CreateRemoteSessionClientForm$Outbound = {
@@ -84,9 +82,7 @@ export const CreateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
     clientSecret: z.optional(z.string()),
     remoteSessionIssuerId: z.string(),
     scope: z.optional(z.array(z.string())),
-    tokenEndpointAuthMethod: z.optional(
-      CreateRemoteSessionClientFormTokenEndpointAuthMethod$outboundSchema,
-    ),
+    tokenEndpointAuthMethod: z.optional(TokenEndpointAuthMethod$outboundSchema),
     userSessionIssuerId: z.string(),
   }),
   z.transform((v) => {

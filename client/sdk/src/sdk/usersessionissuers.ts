@@ -6,7 +6,6 @@ import { userSessionIssuersCreate } from "../funcs/userSessionIssuersCreate.js";
 import { userSessionIssuersDelete } from "../funcs/userSessionIssuersDelete.js";
 import { userSessionIssuersGet } from "../funcs/userSessionIssuersGet.js";
 import { userSessionIssuersList } from "../funcs/userSessionIssuersList.js";
-import { userSessionIssuersMigrateLegacyGramRegistrations } from "../funcs/userSessionIssuersMigrateLegacyGramRegistrations.js";
 import { userSessionIssuersUpdate } from "../funcs/userSessionIssuersUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -86,25 +85,6 @@ export class UserSessionIssuers extends ClientSDK {
     PageIterator<operations.ListUserSessionIssuersResponse, { cursor: string }>
   > {
     return unwrapResultIterator(userSessionIssuersList(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * migrateLegacyGramRegistrations userSessionIssuers
-   *
-   * @remarks
-   * One-off migration: lift the legacy Redis dynamic-client registrations from a gram-type oauth_proxy_provider into user_session_clients on the given user_session_issuer, so migrated MCP clients skip re-registration and re-auth. Removed once the OAuth proxy is retired.
-   */
-  async migrateLegacyGramRegistrations(
-    request: operations.MigrateLegacyGramRegistrationsRequest,
-    security?: operations.MigrateLegacyGramRegistrationsSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<components.MigrateLegacyGramRegistrationsResult> {
-    return unwrapAsync(userSessionIssuersMigrateLegacyGramRegistrations(
       this,
       request,
       security,

@@ -3,7 +3,6 @@
  */
 
 export * from "./addexternaloauthserver.js";
-export * from "./addoauthproxyserver.js";
 export * from "./addpluginserver.js";
 export * from "./approveriskpolicybypassrequest.js";
 export * from "./approveshadowmcpapprovalrequest.js";
@@ -14,7 +13,6 @@ export * from "./captureevent.js";
 export * from "./checkmcpendpointslugavailability.js";
 export * from "./checkmcpslugavailability.js";
 export * from "./clearmcpregistrycache.js";
-export * from "./cloneclientfromoauthproxyprovider.js";
 export * from "./cloneenvironment.js";
 export * from "./clonetoolset.js";
 export * from "./createapikey.js";
@@ -221,7 +219,6 @@ export * from "./listusersessions.js";
 export * from "./listversions.js";
 export * from "./loadchat.js";
 export * from "./logout.js";
-export * from "./migratelegacygramregistrations.js";
 export * from "./mintusersession.js";
 export * from "./pausetriggerinstance.js";
 export * from "./publish.js";
@@ -283,7 +280,6 @@ export * from "./updatemarketplacesettings.js";
 export * from "./updatemcpendpoint.js";
 export * from "./updatemcpserver.js";
 export * from "./updatememberroles.js";
-export * from "./updateoauthproxyserver.js";
 export * from "./updateorganizationremotesessionissuer.js";
 export * from "./updatepackage.js";
 export * from "./updateplugin.js";
