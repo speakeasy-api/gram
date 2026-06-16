@@ -3,3 +3,26 @@
 //   sqlc v1.31.1
 
 package repo
+
+import (
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+type DirectoryUser struct {
+	ID                    uuid.UUID
+	OrganizationID        string
+	UserID                pgtype.Text
+	WorkosDirectoryUserID string
+	Email                 pgtype.Text
+	Attributes            []byte
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
+	WorkosCreatedAt       pgtype.Timestamptz
+	WorkosUpdatedAt       pgtype.Timestamptz
+	WorkosDeletedAt       pgtype.Timestamptz
+	WorkosDeleted         bool
+	WorkosLastEventID     pgtype.Text
+}

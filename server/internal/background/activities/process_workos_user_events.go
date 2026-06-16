@@ -213,6 +213,9 @@ func (p *ProcessWorkOSUserEvents) handleUserUpsert(ctx context.Context, logger *
 	}); err != nil {
 		return nil, fmt.Errorf("upsert synced user: %w", err)
 	}
+	if err := linkDirectoryUsersToUser(ctx, dbtx, resolved.userID, payload.Email); err != nil {
+		return nil, err
+	}
 
 	organizationQueries := organizationsrepo.New(dbtx)
 	if err := organizationQueries.LinkRoleAssignmentsToUser(ctx, organizationsrepo.LinkRoleAssignmentsToUserParams{
@@ -349,6 +352,21 @@ func linkExistingUserToWorkOS(ctx context.Context, userQueries *usersrepo.Querie
 	default:
 		return fmt.Errorf("get linked user for WorkOS user %q: %w", workosUserID, err)
 	}
+}
+
+func linkDirectoryUsersToUser(ctx context.Context, dbtx database.DBTX, userID, email string) error {
+	email = conv.NormalizeEmail(email)
+	if email == "" {
+		return nil
+	}
+
+	if _, err := workosrepo.New(dbtx).LinkDirectoryUsersToUserByEmail(ctx, workosrepo.LinkDirectoryUsersToUserByEmailParams{
+		UserID: conv.ToPGText(userID),
+		Email:  conv.ToPGText(email),
+	}); err != nil {
+		return fmt.Errorf("link directory users to user: %w", err)
+	}
+	return nil
 }
 
 func displayNameFromWorkOSUser(payload workosUserEventPayload) string {

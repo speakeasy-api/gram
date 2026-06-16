@@ -178,15 +178,15 @@ func (tp *ToolProxy) Do(
 	case "":
 		return oops.E(oops.CodeInvariantViolation, nil, "tool kind is not set").LogError(ctx, tp.logger)
 	case ToolKindFunction:
-		return tp.doFunction(ctx, logger, w, requestBody, env, plan.Descriptor, plan.Function, attrs)
+		return tp.doFunction(ctx, logger.With(attr.SlogComponent("gateway-function-caller")), w, requestBody, env, plan.Descriptor, plan.Function, attrs)
 	case ToolKindHTTP:
-		return tp.doHTTP(ctx, logger, w, requestBody, env, plan.Descriptor, plan.HTTP, attrs)
+		return tp.doHTTP(ctx, logger.With(attr.SlogComponent("gateway-http-caller")), w, requestBody, env, plan.Descriptor, plan.HTTP, attrs)
 	case ToolKindPrompt:
-		return tp.doPrompt(ctx, logger, w, requestBody, env, plan.Descriptor, plan.Prompt)
+		return tp.doPrompt(ctx, logger.With(attr.SlogComponent("gateway-prompt-caller")), w, requestBody, env, plan.Descriptor, plan.Prompt)
 	case ToolKindPlatform:
-		return tp.doPlatform(ctx, logger, w, requestBody, env, plan, attrs)
+		return tp.doPlatform(ctx, logger.With(attr.SlogComponent("gateway-platform-caller")), w, requestBody, env, plan, attrs)
 	case ToolKindExternalMCP:
-		return tp.doExternalMCP(ctx, logger, w, requestBody, env, plan.ExternalMCP)
+		return tp.doExternalMCP(ctx, logger.With(attr.SlogComponent("gateway-externalmcp-caller")), w, requestBody, env, plan.ExternalMCP)
 	default:
 		return fmt.Errorf("tool type not supported: %s", plan.Kind)
 	}
