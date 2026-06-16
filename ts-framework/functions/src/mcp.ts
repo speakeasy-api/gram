@@ -244,62 +244,94 @@ export function fromGram(
     },
   );
 
+  // Converts a tool's `Response` into an MCP `CallToolResult`. Shared between
+  // the normal return path and the error path so that failures surfaced via
+  // `ctx.fail()` (which reject with a `Response`) render identically.
+  async function responseToCallToolResult(
+    resp: Response,
+  ): Promise<CallToolResult> {
+    let ctype = resp.headers.get("Content-Type") || "";
+    ctype = ctype.split(";")[0]?.trim() || "";
+
+    switch (true) {
+      case textLike.test(ctype) || structuredLike.test(ctype): {
+        const text = await resp.text();
+        return {
+          content: [{ type: "text", text }],
+          isError: !resp.ok,
+        };
+      }
+      case imageLike.test(ctype): {
+        return {
+          content: [
+            {
+              type: "image",
+              mimeType: ctype,
+              data: await responseToBase64(resp),
+            },
+          ],
+          isError: !resp.ok,
+        };
+      }
+      case audioLike.test(ctype): {
+        return {
+          content: [
+            {
+              type: "audio",
+              mimeType: ctype,
+              data: await responseToBase64(resp),
+            },
+          ],
+          isError: !resp.ok,
+        };
+      }
+      default: {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `Unhandled content type: ${ctype}. Create a handler for this type in the MCP server.`,
+            },
+          ],
+        };
+      }
+    }
+  }
+
   server.setRequestHandler(
     CallToolRequestSchema,
     async (req, extra): Promise<CallToolResult> => {
       const { name, arguments: args } = req.params;
 
-      const resp = (await g.handleToolCall({ name, input: args } as any, {
-        signal: extra.signal,
-      })) as Response;
-
-      let ctype = resp.headers.get("Content-Type") || "";
-      ctype = ctype.split(";")[0]?.trim() || "";
-
-      switch (true) {
-        case textLike.test(ctype) || structuredLike.test(ctype): {
-          const text = await resp.text();
-          return {
-            content: [{ type: "text", text }],
-            isError: !resp.ok,
-          };
+      let resp: Response;
+      try {
+        resp = (await g.handleToolCall({ name, input: args } as any, {
+          signal: extra.signal,
+        })) as Response;
+      } catch (err) {
+        // `ctx.fail()` and input validation failures reject with a `Response`
+        // rather than returning one. Render it like any other tool response so
+        // the failure surfaces as a normal `isError` result instead of an
+        // opaque MCP "Internal Error" in clients like the Inspector (AGE-2779).
+        if (err instanceof Response) {
+          return responseToCallToolResult(err);
         }
-        case imageLike.test(ctype): {
-          return {
-            content: [
-              {
-                type: "image",
-                mimeType: ctype,
-                data: await responseToBase64(resp),
-              },
-            ],
-            isError: !resp.ok,
-          };
-        }
-        case audioLike.test(ctype): {
-          return {
-            content: [
-              {
-                type: "audio",
-                mimeType: ctype,
-                data: await responseToBase64(resp),
-              },
-            ],
-            isError: !resp.ok,
-          };
-        }
-        default: {
-          return {
-            isError: true,
-            content: [
-              {
-                type: "text",
-                text: `Unhandled content type: ${ctype}. Create a handler for this type in the MCP server.`,
-              },
-            ],
-          };
-        }
+        // Any other thrown value is an unexpected error in user code. Report
+        // its message to the client instead of letting the transport surface a
+        // generic internal error.
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: err instanceof Error ? err.message : String(err),
+            },
+          ],
+        };
       }
+
+      return responseToCallToolResult(resp);
     },
   );
 
