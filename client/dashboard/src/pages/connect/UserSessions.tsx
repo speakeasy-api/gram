@@ -45,7 +45,10 @@ function UserSessionsInner(): JSX.Element {
     isFetchingNextPage,
     refetch,
   } = useUserSessionsInfinite({
-    status: status as ListUserSessionsQueryParamStatus,
+    status:
+      status === "all"
+        ? undefined
+        : (status as ListUserSessionsQueryParamStatus),
     clientId: clientId === "all" ? undefined : clientId,
     subjectUrn: subjectUrn === "all" ? undefined : subjectUrn,
     userSessionIssuerId: issuerId === "all" ? undefined : issuerId,
