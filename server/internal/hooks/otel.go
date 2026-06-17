@@ -240,9 +240,6 @@ func shouldTriggerClaudePromptCorrelation(logAttrs map[attr.Key]any) bool {
 }
 
 func (s *Service) scheduleClaudePromptCorrelation(ctx context.Context, projectID uuid.UUID, chatID uuid.UUID, sessionID string) {
-	if s.temporalEnv == nil || sessionID == "" {
-		return
-	}
 	workflowCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
 	if _, err := background.ExecuteCorrelateClaudePromptsWorkflow(workflowCtx, s.temporalEnv, background.CorrelateClaudePromptsParams{
