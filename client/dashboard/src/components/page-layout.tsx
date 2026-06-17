@@ -11,6 +11,7 @@ import { PageHeader } from "./page-header.tsx";
 import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge.tsx";
 import { Heading } from "./ui/heading.tsx";
 import { MoreActions } from "./ui/more-actions.tsx";
+import { Toolbar } from "./ui/toolbar.tsx";
 import { Type } from "./ui/type.tsx";
 import { XYFade } from "./ui/xy-fade.tsx";
 
@@ -201,6 +202,7 @@ export const Page = Object.assign(PageLayout, {
   Banner: PageBanner,
   Body: PageBody,
   Section: PageSection,
+  Toolbar: Toolbar,
 });
 
 export function EmptyState({
