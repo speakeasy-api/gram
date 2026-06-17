@@ -10,10 +10,10 @@
 //     remote_session_client id and a subject, returns the stored
 //     upstream access token (refreshing if necessary) or empty string
 //     if no usable token exists.
-//   - ResolveOneAccessToken: the variant the MCP serving path calls.
-//     Wraps ResolveAccessToken with an inv.Check that the
-//     user_session_issuer has exactly one remote_session_client bound,
-//     and errors if not.
+//   - ResolveAccessTokens: the variant the MCP serving path calls.
+//     Resolves one upstream token per remote_session_issuer the subject
+//     has linked under the user_session_issuer, returning them as a
+//     remote_session_issuer_id -> token map.
 //
 // Refresh is invoked only when the stored access_expires_at is in the
 // past. A still-valid access token short-circuits: no upstream token
@@ -105,49 +105,78 @@ func (m *ChallengeManager) ResolveAccessToken(
 	return tok, nil
 }
 
-// ResolveOneAccessToken is the variant the MCP serving path calls.
-// It asserts via inv.Check that the user_session_issuer has exactly
-// one remote_session_client bound, and errors if not — this guards
-// against the case where someone has wired multiple clients to a
-// single issuer, which today's product config explicitly forbids and
-// which would otherwise force the resolver to arbitrarily pick a
-// binding.
+// ResolveAccessTokens is the variant the MCP serving path calls. It
+// resolves one upstream access token per remote_session_issuer the
+// subject has linked under the user_session_issuer, keyed by
+// remote_session_issuer_id, so downstream tool dispatch can forward the
+// right token per upstream.
 //
-//   - Issuer has no remote_session_clients: returns ("", nil). The
+//   - Issuer has no bound remote_session_clients: returns (nil, nil). The
 //     toolset has no remote-session requirement to satisfy.
-//   - Issuer has exactly one bound client and a usable token exists:
-//     returns the access token.
-//   - Issuer has exactly one bound client but no usable token:
-//     returns ("", ErrNoValidToken).
-//   - Issuer has more than one bound client: returns an
-//     inv.InvariantError. The MCP runtime treats this as an internal
-//     error, not a re-auth path.
-func (m *ChallengeManager) ResolveOneAccessToken(
+//   - Every bound client has a usable token: returns the
+//     remote_session_issuer_id -> token map.
+//   - Any bound client lacks a usable token: returns ErrNoValidToken. The
+//     MCP runtime surfaces this as a re-auth challenge so the user can
+//     re-link the missing upstream via {routeBase}/{slug}/connect — the
+//     "any attached remote session missing or invalid" rule from AIS-136.
+//
+// Current intent (all-or-nothing): resolution fails if ANY attached upstream
+// is missing or invalid, even when the tool the caller is about to invoke
+// only needs a different upstream. This is the safe default — the runtime
+// never dispatches a half-authorized request — and matches AIS-136's wording.
+// The cost is that one expired upstream blocks every tool on the issuer until
+// it is re-linked.
+//
+// Future intent (AIS-152): once dispatch knows which remote_session_issuer a
+// given tool requires, this can soften to challenging only when the upstream a
+// tool actually needs is missing, so an expired Slack link doesn't 401 a
+// Google-only tool call. Changing that behavior here without the per-tool
+// linkage in place would let requests through unauthorized, so it is
+// deliberately deferred to AIS-152.
+//
+// A runtime invariant asserts that no two bound clients target the same
+// remote_session_issuer. This is the application-level counterpart to the
+// attach-time guard in clienthandlers.go and keeps the map keys unambiguous.
+func (m *ChallengeManager) ResolveAccessTokens(
 	ctx context.Context,
 	projectID, userSessionIssuerID uuid.UUID,
 	subject urn.SessionSubject,
-) (string, error) {
+) (map[uuid.UUID]string, error) {
 	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, userSessionIssuerID)
 	if err != nil {
-		return "", fmt.Errorf("list remote_session_clients: %w", err)
+		return nil, fmt.Errorf("list remote_session_clients: %w", err)
 	}
 	if len(clients) == 0 {
-		return "", nil
-	}
-	if err := inv.Check("remotesessions.ResolveOneAccessToken",
-		"single remote_session_client per user_session_issuer", len(clients) == 1,
-	); err != nil {
-		return "", fmt.Errorf("invariant: %w", err)
+		return nil, nil
 	}
 
-	tok, err := m.ResolveAccessToken(ctx, clients[0].ClientID, subject)
-	if err != nil {
-		return "", err
+	// Assert the per-(user_session_issuer, remote_session_issuer) uniqueness
+	// invariant up front, before resolving any tokens. Folding this into the
+	// token loop would let an unusable first client short-circuit with
+	// ErrNoValidToken and hide a duplicate that comes later — masking the very
+	// drift this backstop exists to surface.
+	seen := make(map[uuid.UUID]bool, len(clients))
+	for _, c := range clients {
+		if err := inv.Check("remotesessions.ResolveAccessTokens",
+			"at most one remote_session_client per (user_session_issuer, remote_session_issuer)", !seen[c.RemoteSessionIssuerID],
+		); err != nil {
+			return nil, fmt.Errorf("invariant: %w", err)
+		}
+		seen[c.RemoteSessionIssuerID] = true
 	}
-	if tok == "" {
-		return "", ErrNoValidToken
+
+	tokens := make(map[uuid.UUID]string, len(clients))
+	for _, c := range clients {
+		tok, err := m.ResolveAccessToken(ctx, c.ClientID, subject)
+		if err != nil {
+			return nil, fmt.Errorf("resolve access token: %w", err)
+		}
+		if tok == "" {
+			return nil, ErrNoValidToken
+		}
+		tokens[c.RemoteSessionIssuerID] = tok
 	}
-	return tok, nil
+	return tokens, nil
 }
 
 // validateAndRefresh returns the upstream access token for sess,

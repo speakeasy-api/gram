@@ -76,8 +76,9 @@ func (m *McpInputs) toInternal() *mcpInputs {
 	oauthInputs := make([]oauthTokenInputs, len(m.OauthTokenInputs))
 	for i, ot := range m.OauthTokenInputs {
 		oauthInputs[i] = oauthTokenInputs{
-			securityKeys: ot.SecurityKeys,
-			Token:        ot.Token,
+			securityKeys:          ot.SecurityKeys,
+			remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			Token:                 ot.Token,
 		}
 	}
 

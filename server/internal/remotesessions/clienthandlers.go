@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -27,6 +28,49 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+// guardSingleClientPerRemoteIssuer enforces, at attach time, that at most one
+// active remote_session_client is bound to a given (user_session_issuer,
+// remote_session_issuer) pair through the join table. It scopes the
+// constraint per remote_session_issuer, so a user_session_issuer can bind
+// distinct clients across distinct remote issuers; the
+// remote_session_client_user_session_issuers one_per_issuer index applies a
+// stricter cap (one client per user_session_issuer regardless of remote
+// issuer) until AIS-137 removes it, after which this guard is the sole
+// attach-time enforcement.
+//
+// excludeClientID skips a row so an update of the same client passes; pass
+// uuid.Nil to exclude nothing (the create paths). Must run inside the attach
+// transaction. No database constraint enforces the per-pair uniqueness, so a
+// narrow window remains between concurrent attaches; the runtime resolver's
+// invariant (ResolveAccessTokens) is the backstop that surfaces any drift at
+// serve time.
+func (s *Service) guardSingleClientPerRemoteIssuer(
+	ctx context.Context,
+	logger *slog.Logger,
+	txRepo *repo.Queries,
+	projectID, userSessionIssuerID, remoteSessionIssuerID, excludeClientID uuid.UUID,
+) error {
+	// Two rows are enough to detect a conflict: at most one row can be
+	// excludeClientID, so a second row guarantees another client is already
+	// bound to the pair.
+	bound, err := txRepo.ListRemoteSessionClientsByProjectIDForUserSessionIssuer(ctx, repo.ListRemoteSessionClientsByProjectIDForUserSessionIssuerParams{
+		UserSessionIssuerID:   userSessionIssuerID,
+		ProjectID:             projectID,
+		RemoteSessionIssuerID: uuid.NullUUID{UUID: remoteSessionIssuerID, Valid: true},
+		Cursor:                uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		LimitValue:            2,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list remote session clients for user/remote issuer").LogError(ctx, logger)
+	}
+	for _, c := range bound {
+		if c.ID != excludeClientID {
+			return oops.E(oops.CodeConflict, nil, "a remote session client is already bound to this user session issuer for the same remote session issuer").LogError(ctx, logger)
+		}
+	}
+	return nil
+}
 
 func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.CreateRemoteSessionClientPayload) (*types.RemoteSessionClient, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -97,6 +141,10 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
+	}
+
+	if err = s.guardSingleClientPerRemoteIssuer(ctx, logger, txRepo, *authCtx.ProjectID, userIssuerID, issuerID, uuid.Nil); err != nil {
+		return nil, err
 	}
 
 	created, err := txRepo.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
@@ -253,6 +301,10 @@ func (s *Service) CloneClientFromOAuthProxyProvider(ctx context.Context, payload
 			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
+	}
+
+	if err := s.guardSingleClientPerRemoteIssuer(ctx, logger, txRepo, *authCtx.ProjectID, userIssuerID, issuerID, uuid.Nil); err != nil {
+		return nil, err
 	}
 
 	encrypted, err := s.enc.Encrypt([]byte(clientSecret))
@@ -453,8 +505,17 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 	shouldRemakeUserSessionIssuerAttachment := payload.UserSessionIssuerID != nil && userIssuerID.Valid && userIssuerID.UUID != existing.UserSessionIssuerID
 
 	if shouldRemakeUserSessionIssuerAttachment {
-		// Deleting all attachments is a temporary measure to maintain
-		// 1:1 relationship functionality while in this opportunistic backfill phase.
+		// The new user_session_issuer must not already bind a different client
+		// for this client's remote_session_issuer. Exclude this client so a
+		// no-op re-bind passes.
+		if err = s.guardSingleClientPerRemoteIssuer(ctx, logger, txRepo, *authCtx.ProjectID, updated.UserSessionIssuerID, existing.RemoteSessionIssuerID, updated.ID); err != nil {
+			return nil, err
+		}
+
+		// Re-point the client at its new user_session_issuer by clearing its
+		// existing attachments and re-attaching, keeping a single attachment
+		// per client. AIS-138 moves the API and join-table usage to
+		// many-to-many.
 		if err = txRepo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(
 			ctx,
 			repo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams{

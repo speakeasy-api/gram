@@ -120,23 +120,27 @@ func (s *Service) serveResolvedMCPEndpoint(
 	// gate (skipIssuerGate=true) so the same request isn't gated twice;
 	// remote-backed proxying forwards the upstream remote-session token
 	// via AuthorizationOverride.
-	var upstreamToken string
+	var upstreamTokens map[uuid.UUID]string
 	if issuerGated {
 		resolvedEndpoint, err := s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, mcpRouteBase)
 		if err != nil {
 			return err
 		}
-		newCtx, token, err := s.ApplyIssuerGate(ctx, w, AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
+		newCtx, tokens, err := s.ApplyIssuerGate(ctx, w, AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
 		if err != nil {
 			return fmt.Errorf("apply issuer gate: %w", err)
 		}
 		ctx = newCtx
 		r = r.WithContext(ctx)
-		upstreamToken = token
+		upstreamTokens = tokens
 	}
 
 	switch {
 	case mcpServer.RemoteMcpServerID.Valid:
+		upstreamToken, err := singleUpstreamToken(upstreamTokens)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "resolve upstream token for remote MCP backend").LogError(ctx, logger)
+		}
 		return s.serveRemoteBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken)
 	case mcpServer.ToolsetID.Valid:
 		// AGE-1902: toolset-backed branch still reads runtime config from the
@@ -165,7 +169,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 			mcpServerVariationsGroupID = &id
 		}
 
-		if err := s.ServeToolsetResolved(w, r, &toolset, slug, mcpRouteBase, issuerGated, upstreamToken, mcpServerVariationsGroupID); err != nil {
+		if err := s.ServeToolsetResolved(w, r, &toolset, slug, mcpRouteBase, issuerGated, upstreamTokens, mcpServerVariationsGroupID); err != nil {
 			return fmt.Errorf("serve toolset-backed mcp: %w", err)
 		}
 		return nil
@@ -174,6 +178,27 @@ func (s *Service) serveResolvedMCPEndpoint(
 		// exactly one backend is set; this is defensive.
 		return oops.E(oops.CodeUnexpected, nil, "mcp server has no backend configured").LogError(ctx, logger)
 	}
+}
+
+// singleUpstreamToken collapses the per-remote-issuer token map from
+// ApplyIssuerGate to the one Authorization value a remote MCP backend
+// forwards upstream. A remote-backed mcp_server proxies to exactly one
+// upstream, so at most one remote_session token is meaningful: the
+// remote_session_client_user_session_issuers one_per_issuer index binds a
+// user_session_issuer to a single remote issuer, so the map holds 0 or 1
+// entries. More than one token means the runtime cannot tell which upstream
+// credential the backend needs, so it fails closed rather than forwarding an
+// arbitrary (possibly mismatched) token; resolving the right token per
+// upstream is tracked in AIS-152.
+func singleUpstreamToken(tokens map[uuid.UUID]string) (string, error) {
+	if len(tokens) > 1 {
+		return "", fmt.Errorf("remote MCP backend bound to %d remote_session_issuers; cannot determine which upstream token to forward", len(tokens))
+	}
+	// len <= 1 here, so this returns the sole entry (or "" for an empty map).
+	for _, token := range tokens {
+		return token, nil
+	}
+	return "", nil
 }
 
 // ResolveMCPEndpointAndServer walks the runtime addressing chain shared by
