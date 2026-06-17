@@ -10,6 +10,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -161,6 +162,7 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 	}
 
 	params := make([]telemetry.LogParams, 0)
+	correlationSessionIDs := make(map[string]struct{})
 	for _, resourceLog := range payload.ResourceLogs {
 		if resourceLog == nil {
 			continue
@@ -186,6 +188,9 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 				logAttrs[attr.OrganizationIDKey] = orgID
 				logAttrs[attr.ResourceURNKey] = claudeOTELLogsURN
 				logAttrs[attr.HookSourceKey] = "claude-code"
+				if shouldTriggerClaudePromptCorrelation(logAttrs) {
+					correlationSessionIDs[stringAttr(logAttrs, attribute.Key("session.id"))] = struct{}{}
+				}
 
 				if body := otelLogBody(logRecord); body != "" {
 					logAttrs[attr.LogBodyKey] = body
@@ -223,6 +228,30 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 
 	if err := s.telemetryLogger.LogBulk(ctx, params); err != nil {
 		s.logger.ErrorContext(ctx, "failed to write Claude OTEL logs to ClickHouse", attr.SlogError(err))
+		return
+	}
+	for sessionID := range correlationSessionIDs {
+		s.scheduleClaudePromptCorrelation(ctx, parsedProjectID, sessionIDToUUID(sessionID), sessionID)
+	}
+}
+
+func shouldTriggerClaudePromptCorrelation(logAttrs map[attr.Key]any) bool {
+	return stringAttr(logAttrs, attribute.Key("event.name")) == "user_prompt"
+}
+
+func (s *Service) scheduleClaudePromptCorrelation(ctx context.Context, projectID uuid.UUID, chatID uuid.UUID, sessionID string) {
+	workflowCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	if _, err := background.ExecuteCorrelateClaudePromptsWorkflow(workflowCtx, s.temporalEnv, background.CorrelateClaudePromptsParams{
+		ProjectID: projectID,
+		ChatID:    chatID,
+		SessionID: sessionID,
+	}); err != nil {
+		s.logger.WarnContext(ctx, "failed to schedule Claude prompt correlation",
+			attr.SlogError(err),
+			attr.SlogGenAIConversationID(sessionID),
+			attr.SlogProjectID(projectID.String()),
+		)
 	}
 }
 

@@ -4084,6 +4084,111 @@ func (q *Queries) ListRecentHookEventsForOnboarding(ctx context.Context, arg Lis
 	return events, nil
 }
 
+type ListClaudeUserPromptCandidatesForCorrelationParams struct {
+	GramProjectID          string
+	GramChatID             string
+	SessionID              string
+	MessagePrompt          string
+	MessageTimeUnixNano    int64
+	AfterEventSequence     int64
+	AfterEventTimeUnixNano int64
+	MinFuzzyLength         int
+	MaxTimeDeltaNanos      int64
+}
+
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) ListClaudeUserPromptCandidatesForCorrelation(ctx context.Context, arg ListClaudeUserPromptCandidatesForCorrelationParams) ([]ClaudeUserPromptCandidate, error) {
+	if arg.MessagePrompt == "" {
+		return nil, nil
+	}
+
+	rawEvents := sq.Select(
+		"toString(attributes.prompt.id) AS prompt_id",
+		"replaceRegexpAll(trimBoth(toString(attributes.prompt)), '\\\\s+', ' ') AS prompt",
+		"toInt64OrZero(toString(attributes.event.sequence)) AS event_sequence",
+		"time_unix_nano",
+	).
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("gram_chat_id = ?", arg.GramChatID).
+		Where("toString(attributes.session.id) = ?", arg.SessionID).
+		Where("toString(attributes.event.name) = 'user_prompt'").
+		Where("toString(attributes.prompt.id) != ''").
+		Where("toString(attributes.prompt) != ''").
+		Where(squirrel.Or{
+			squirrel.Expr("event_sequence > ?", arg.AfterEventSequence),
+			squirrel.Expr("(event_sequence = ? AND time_unix_nano > ?)", arg.AfterEventSequence, arg.AfterEventTimeUnixNano),
+		})
+
+	scoredCandidates := sq.Select(
+		"prompt_id",
+		"prompt",
+		"event_sequence",
+		"time_unix_nano",
+		"prompt = message_prompt AS is_exact",
+		`if(
+			prompt = message_prompt,
+			1.0,
+			1.0 - (
+				toFloat64(editDistanceUTF8(prompt, message_prompt))
+				/ toFloat64(greatest(lengthUTF8(prompt), message_len, 1))
+			)
+		) AS similarity`,
+		"abs(time_unix_nano - message_time_unix_nano) AS time_delta",
+	).
+		FromSelect(rawEvents, "raw_events")
+
+	sb := sq.Select(
+		"prompt_id",
+		"prompt",
+		"event_sequence",
+		"time_unix_nano",
+		"similarity",
+		"is_exact",
+	).
+		Prefix(
+			"WITH ? AS message_prompt, lengthUTF8(message_prompt) AS message_len, toInt64(?) AS message_time_unix_nano",
+			arg.MessagePrompt,
+			arg.MessageTimeUnixNano,
+		).
+		FromSelect(scoredCandidates, "scored_candidates").
+		Where(squirrel.Or{
+			squirrel.Expr("is_exact"),
+			squirrel.And{
+				squirrel.Expr("message_len >= ?", arg.MinFuzzyLength),
+				squirrel.Expr("lengthUTF8(prompt) >= ?", arg.MinFuzzyLength),
+				squirrel.Expr("time_delta <= ?", arg.MaxTimeDeltaNanos),
+			},
+		}).
+		OrderBy("is_exact DESC", "similarity DESC", "time_delta ASC", "event_sequence ASC", "time_unix_nano ASC").
+		Limit(2)
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building list Claude user prompt candidates query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []ClaudeUserPromptCandidate
+	for rows.Next() {
+		var event ClaudeUserPromptCandidate
+		if err = rows.ScanStruct(&event); err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+		events = append(events, event)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return events, nil
+}
+
 // CountRecentHookEventsForOnboarding returns the total number of hook events
 // for the given projects with time_unix_nano > since_unix_nano. Used alongside
 // ListRecentHookEventsForOnboarding to report a total when the list is

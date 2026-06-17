@@ -110,6 +110,17 @@ type RecentHookEvent struct {
 	Status        string  `ch:"status"`      // "blocked" if hook_block_reason set, else "received"
 }
 
+// ClaudeUserPromptCandidate represents a ranked Claude OTEL user_prompt event
+// candidate for correlating a captured chat message with a Claude prompt ID.
+type ClaudeUserPromptCandidate struct {
+	PromptID      string  `ch:"prompt_id"`
+	Prompt        string  `ch:"prompt"`
+	EventSequence int64   `ch:"event_sequence"`
+	TimeUnixNano  int64   `ch:"time_unix_nano"`
+	Similarity    float64 `ch:"similarity"`
+	IsExact       bool    `ch:"is_exact"`
+}
+
 // ChatSummary represents an aggregated view of a chat session (one row per gram_chat_id).
 // Used for displaying a list of chat sessions in the UI.
 type ChatSummary struct {

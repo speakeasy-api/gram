@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -142,6 +144,25 @@ func TestLogs_CodexPayloadContinuesThroughUsagePath(t *testing.T) {
 		})
 		return err == nil && len(logs) > 0
 	}, 300*time.Millisecond, 50*time.Millisecond)
+}
+
+func TestShouldTriggerClaudePromptCorrelation(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, shouldTriggerClaudePromptCorrelation(map[attr.Key]any{
+		attribute.Key("event.name"): "user_prompt",
+		attribute.Key("prompt.id"):  "prompt-1",
+		attribute.Key("session.id"): "session-1",
+	}))
+
+	require.False(t, shouldTriggerClaudePromptCorrelation(map[attr.Key]any{
+		attribute.Key("event.name"): "tool_call",
+		attribute.Key("prompt.id"):  "prompt-1",
+	}))
+
+	require.True(t, shouldTriggerClaudePromptCorrelation(map[attr.Key]any{
+		attribute.Key("event.name"): "user_prompt",
+	}))
 }
 
 func TestExtractSessionMetadataSkipsNilOTELAttributeElements(t *testing.T) {
