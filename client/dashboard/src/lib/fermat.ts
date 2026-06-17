@@ -9,6 +9,7 @@
 
 const FERMAT_SCRIPT_SRC = "https://static.clairedefermat.com/pixel/v2/pixel.js";
 const FERMAT_SOURCE_ID = "speakeasy-com-6f500c49";
+const FERMAT_ORG_ID = "6f500c49-90b6-486a-835d-8e904289dd6d";
 
 type FermatCommand =
   | {
@@ -72,6 +73,7 @@ export function initializeFermat(): void {
       metadata: {
         properties: {
           app_name: "Speakeasy",
+          orgId: FERMAT_ORG_ID,
         },
       },
     },
