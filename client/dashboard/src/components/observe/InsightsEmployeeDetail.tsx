@@ -19,6 +19,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
+import { SessionRow } from "@/components/sessions/SessionRow";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { cn } from "@/lib/utils";
 import { telemetryGetEmployeeDataFlowGraph } from "@gram/client/funcs/telemetryGetEmployeeDataFlowGraph";
@@ -33,7 +34,11 @@ import type {
   TimeSeriesBucket,
   UserSummary,
 } from "@gram/client/models/components";
-import { useGramContext, useMembers } from "@gram/client/react-query";
+import {
+  useGramContext,
+  useMembers,
+  useUserSessions,
+} from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import {
   TimeRangePicker,
@@ -471,11 +476,49 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                   onExpand={setExpandedChart}
                 />
               )}
+
+              {resolvedUserId && <EmployeeSessions userId={resolvedUserId} />}
             </>
           )}
         </div>
       </div>
     </>
+  );
+}
+
+function EmployeeSessions({ userId }: { userId: string }): JSX.Element {
+  const { data, isPending, refetch } = useUserSessions({
+    subjectUrn: `user:${userId}`,
+    status: "active",
+  });
+  const sessions = data?.result.items ?? [];
+
+  return (
+    <section className="bg-card border-border rounded-lg border p-5">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-sm font-semibold">Active Sessions</span>
+        <div className="bg-muted/50 rounded-lg p-2">
+          <Icon name="key-round" className="text-muted-foreground size-4" />
+        </div>
+      </div>
+      {isPending ? (
+        <Skeleton className="h-12 w-full" />
+      ) : sessions.length === 0 ? (
+        <span className="text-muted-foreground text-sm">
+          No active sessions
+        </span>
+      ) : (
+        <ul className="divide-border divide-y rounded-md border">
+          {sessions.map((s) => (
+            <SessionRow
+              key={s.id}
+              session={s}
+              onRevoked={() => void refetch()}
+            />
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
