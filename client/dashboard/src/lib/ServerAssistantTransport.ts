@@ -123,8 +123,6 @@ export function createServerAssistantTransport(
             ? AbortSignal.any([abortSignal, poll.signal])
             : poll.signal;
 
-          writer.write({ type: "start" });
-
           let chatId = ctx.getChatId();
           // Bind the local thread identity at send-start so a server-minted
           // chat id is reconciled with THIS thread even if a parallel send on
@@ -170,6 +168,19 @@ export function createServerAssistantTransport(
             chatId = sent.value.chatId;
             adopt(chatId);
           }
+
+          // The runtime dedupes by idempotency key. assistant-ui auto-resends a
+          // turn whose last assistant message is "complete with tool calls", and
+          // a user can double-submit — both replay the same key, so the runtime
+          // enqueues nothing and returns `accepted: false`. No reply will ever
+          // land, so polling would spin until the timeout and leave the composer
+          // stuck "loading". End the turn now without opening an assistant
+          // message (`start` is written below only once a turn is in flight).
+          if (!sent.value.accepted) {
+            return;
+          }
+
+          writer.write({ type: "start" });
 
           await pollForReplies({
             deps,
@@ -230,6 +241,11 @@ async function pollForReplies(args: {
   const pendingToolCalls = new Set<string>();
   let consecutiveFailures = 0;
   let attempt = 0;
+  // Tracks whether a `start-step` is open and awaiting its `finish-step`. Each
+  // server completion (assistant row) is bracketed as its own step so the
+  // turn's final, text-only row lands in a step with no tool calls — see the
+  // step writes below.
+  let stepOpen = false;
 
   for (;;) {
     if (abortSignal?.aborted) {
@@ -269,6 +285,18 @@ async function pollForReplies(args: {
         if (seen.has(m.id)) continue;
         seen.add(m.id);
         lastNewAssistant = m;
+        // Open a fresh step for each completion (closing the prior one). Without
+        // these boundaries the whole turn collapses into a single step, and
+        // assistant-ui's `lastAssistantMessageIsCompleteWithToolCalls` resume
+        // check — which inspects only the last step's tool parts — sees the
+        // turn's resolved tool calls and auto-resends a turn the server already
+        // finished. Per-step framing keeps the final text-only row in a step of
+        // its own, so that check finds no pending tool calls and stays put.
+        if (stepOpen) {
+          writer.write({ type: "finish-step" });
+        }
+        writer.write({ type: "start-step" });
+        stepOpen = true;
         const text = contentText(m.content);
         if (text) {
           await writeStreamedText({
@@ -289,6 +317,9 @@ async function pollForReplies(args: {
         }
       }
       if (lastNewAssistant && isTurnTerminal(lastNewAssistant)) {
+        if (stepOpen) {
+          writer.write({ type: "finish-step" });
+        }
         return;
       }
     } else {
