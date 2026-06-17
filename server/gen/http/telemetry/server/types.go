@@ -4253,6 +4253,12 @@ type QueryRowResponseBody struct {
 	GroupValue string `form:"group_value" json:"group_value" xml:"group_value"`
 	// Aggregated measures for this group
 	Measures *QueryMeasuresResponseBody `form:"measures" json:"measures" xml:"measures"`
+	// Distinct values of every allowlisted dimension other than the group_by
+	// dimension, observed within this group. Keyed by dimension identifier (the
+	// same keys used for group_by/filters, e.g. when grouping by department_name:
+	// 'email' -> [...], 'job_title' -> [...], 'role' -> [...]). Empty values are
+	// omitted and each list is capped.
+	DimensionValues map[string][]string `form:"dimension_values" json:"dimension_values" xml:"dimension_values"`
 }
 
 // QueryMeasuresResponseBody is used to define fields on response body types.

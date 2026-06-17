@@ -3,6 +3,9 @@ package repo
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/Masterminds/squirrel"
 )
@@ -43,6 +46,11 @@ var attributeDimensionRegistry = map[string]attributeDimension{
 	"group":            {column: "groups", kind: attributeDimArray},
 	"project_id":       {column: "gram_project_id", kind: attributeDimProject},
 }
+
+// maxDimensionValues caps the per-dimension distinct-value lists collected for
+// each grouped table row, bounding the response payload when a group contains a
+// large number of distinct emails, models, etc.
+const maxDimensionValues = 1000
 
 // measureAliasPrefix prefixes the merged-measure SELECT aliases. Without it the
 // alias (e.g. "total_cost") collides with the underlying AggregateFunction
@@ -120,6 +128,11 @@ type AttributeMetricsRow struct {
 	CacheCreationInputTokens int64   `ch:"m_cache_creation_input_tokens"`
 	TotalToolCalls           uint64  `ch:"m_total_tool_calls"`
 	TotalChats               uint64  `ch:"m_total_chats"`
+
+	// DimensionValues holds, for every allowlisted dimension other than the
+	// grouped one, the distinct values observed within this group, keyed by the
+	// public dimension identifier (e.g. "email", "job_title", "role").
+	DimensionValues map[string][]string `ch:"dimension_values"`
 }
 
 // Measures returns the row's measure values as an accumulation struct.
@@ -215,6 +228,44 @@ func attributeGroupValueExpr(groupBy string) (expr string, grouped bool, err err
 	}
 }
 
+// attributeDimensionValuesExpr builds a ClickHouse map() expression that
+// collects, per group, the distinct values of every allowlisted dimension
+// except the one being grouped on. The result is a Map(String, Array(String))
+// keyed by the public dimension identifier, scanned into
+// AttributeMetricsRow.DimensionValues. Keys are sorted for deterministic SQL.
+// Dimension keys come from the allowlist (never client input) so inlining the
+// string literals is safe.
+func attributeDimensionValuesExpr(groupBy string) string {
+	keys := make([]string, 0, len(attributeDimensionRegistry))
+	for k := range attributeDimensionRegistry {
+		if k == groupBy {
+			continue
+		}
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	capStr := strconv.Itoa(maxDimensionValues)
+	parts := make([]string, 0, len(keys)*2)
+	for _, k := range keys {
+		dim := attributeDimensionRegistry[k]
+		var collected string
+		switch dim.kind {
+		case attributeDimArray:
+			// Flatten the per-row arrays and dedup across the group.
+			collected = "groupUniqArrayArray(" + capStr + ")(" + dim.column + ")"
+		case attributeDimProject:
+			collected = "groupUniqArray(" + capStr + ")(toString(" + dim.column + "))"
+		case attributeDimScalar:
+			collected = "groupUniqArray(" + capStr + ")(" + dim.column + ")"
+		}
+		// Drop empty strings so absent attributes don't surface as a blank value.
+		valExpr := "arrayFilter(x -> x != '', " + collected + ")"
+		parts = append(parts, "'"+k+"', "+valExpr)
+	}
+	return "map(" + strings.Join(parts, ", ") + ") AS dimension_values"
+}
+
 // applyAttributeFilters adds the WHERE predicates for the supplied filters.
 func applyAttributeFilters(sb squirrel.SelectBuilder, filters []AttributeMetricsFilter) (squirrel.SelectBuilder, error) {
 	for _, f := range filters {
@@ -260,6 +311,7 @@ func (q *Queries) QueryAttributeMetricsTable(ctx context.Context, arg AttributeM
 
 	sb := sq.Select(groupExpr+" AS group_value").
 		Columns(attributeMeasureSelects...).
+		Column(squirrel.Expr(attributeDimensionValuesExpr(arg.GroupBy))).
 		From("attribute_metrics_summaries").
 		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
 		Where("time_bucket >= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeStart).

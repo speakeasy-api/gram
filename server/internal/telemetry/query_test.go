@@ -64,6 +64,17 @@ func tableCostByGroup(rows []*gen.QueryRow) map[string]float64 {
 	return out
 }
 
+func rowByGroup(t *testing.T, rows []*gen.QueryRow, group string) *gen.QueryRow {
+	t.Helper()
+	for _, r := range rows {
+		if r.GroupValue == group {
+			return r
+		}
+	}
+	t.Fatalf("row for group %q not found", group)
+	return nil
+}
+
 func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 	t.Parallel()
 
@@ -122,6 +133,24 @@ func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 	for _, s := range deptResult.Timeseries {
 		require.NotEmpty(t, s.Points)
 	}
+
+	// dimension_values: each group carries the distinct values of every other
+	// allowlisted dimension observed within it. Engineering had two users
+	// (a@x.com on opus/claude-code with roles admin+dev, b@x.com on opus/cowork
+	// with role dev). The group_by dimension (department_name) is absent.
+	eng := rowByGroup(t, deptResult.Table, "Engineering")
+	require.NotContains(t, eng.DimensionValues, "department_name", "group_by dimension must be excluded")
+	require.ElementsMatch(t, []string{"a@x.com", "b@x.com"}, eng.DimensionValues["email"])
+	require.ElementsMatch(t, []string{"opus"}, eng.DimensionValues["model"])
+	require.ElementsMatch(t, []string{"claude-code", "cowork"}, eng.DimensionValues["provider"])
+	require.ElementsMatch(t, []string{"admin", "dev"}, eng.DimensionValues["role"])
+	// Unset dimensions are present as keys with empty (filtered) lists.
+	require.Empty(t, eng.DimensionValues["job_title"])
+
+	// Sales had a single role-less user; its email surfaces and role is empty.
+	sales := rowByGroup(t, deptResult.Table, "Sales")
+	require.ElementsMatch(t, []string{"c@x.com"}, sales.DimensionValues["email"])
+	require.Empty(t, sales.DimensionValues["role"])
 
 	// Group by role: dev gets both Engineering rows ($0.35), admin one ($0.25),
 	// and Sales' role-less spend surfaces under the empty-string group ($0.50).

@@ -110,6 +110,7 @@ export function AppSidebar({
     routes.employees,
     routes.costs,
     routes.insights,
+    routes.telemetryQueryDemo,
     routes.agentSessions,
     routes.logs,
   ].some((r) => r.active);
@@ -214,6 +215,10 @@ export function AppSidebar({
                 <ScopeGatedNavItem
                   item={routes.insights}
                   scope={scopeFor(routes.insights)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.telemetryQueryDemo}
+                  scope={scopeFor(routes.telemetryQueryDemo)}
                 />
                 <ScopeGatedNavItem
                   item={routes.agentSessions}

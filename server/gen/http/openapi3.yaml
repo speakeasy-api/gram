@@ -27199,7 +27199,7 @@ paths:
                 - telemetry
             x-speakeasy-name-override: query
             x-speakeasy-react-hook:
-                name: Query
+                name: TelemetryQuery
                 type: query
     /rpc/telemetry.searchChats:
         post:
@@ -42329,6 +42329,13 @@ components:
         QueryRow:
             type: object
             properties:
+                dimension_values:
+                    type: object
+                    description: 'Distinct values of every allowlisted dimension other than the group_by dimension, observed within this group. Keyed by dimension identifier (the same keys used for group_by/filters, e.g. when grouping by department_name: ''email'' -> [...], ''job_title'' -> [...], ''role'' -> [...]). Empty values are omitted and each list is capped.'
+                    additionalProperties:
+                        type: array
+                        items:
+                            type: string
                 group_value:
                     type: string
                     description: The dimension value for this row. Empty string when no group_by was requested; 'Other' for the rolled-up remainder beyond top_n.
@@ -42338,6 +42345,7 @@ components:
             required:
                 - group_value
                 - measures
+                - dimension_values
         QuerySeries:
             type: object
             properties:

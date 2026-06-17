@@ -4362,6 +4362,12 @@ type QueryRowResponseBody struct {
 	GroupValue *string `form:"group_value,omitempty" json:"group_value,omitempty" xml:"group_value,omitempty"`
 	// Aggregated measures for this group
 	Measures *QueryMeasuresResponseBody `form:"measures,omitempty" json:"measures,omitempty" xml:"measures,omitempty"`
+	// Distinct values of every allowlisted dimension other than the group_by
+	// dimension, observed within this group. Keyed by dimension identifier (the
+	// same keys used for group_by/filters, e.g. when grouping by department_name:
+	// 'email' -> [...], 'job_title' -> [...], 'role' -> [...]). Empty values are
+	// omitted and each list is capped.
+	DimensionValues map[string][]string `form:"dimension_values,omitempty" json:"dimension_values,omitempty" xml:"dimension_values,omitempty"`
 }
 
 // QueryMeasuresResponseBody is used to define fields on response body types.
@@ -13942,6 +13948,9 @@ func ValidateQueryRowResponseBody(body *QueryRowResponseBody) (err error) {
 	}
 	if body.Measures == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("measures", "body"))
+	}
+	if body.DimensionValues == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("dimension_values", "body"))
 	}
 	if body.Measures != nil {
 		if err2 := ValidateQueryMeasuresResponseBody(body.Measures); err2 != nil {

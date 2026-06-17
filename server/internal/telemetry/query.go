@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"sort"
 	"strconv"
 
 	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
@@ -125,20 +126,24 @@ func buildQueryResult(
 	// --- table ---
 	table := make([]*telem_gen.QueryRow, 0, len(kept)+1)
 	var otherTable repo.AttributeMetricsMeasures
+	otherDimValues := map[string]map[string]struct{}{}
 	for _, row := range tableRows {
 		if _, ok := keptIndex[row.GroupValue]; ok || groupBy == "" {
 			table = append(table, &telem_gen.QueryRow{
-				GroupValue: row.GroupValue,
-				Measures:   toGenMeasures(row.Measures()),
+				GroupValue:      row.GroupValue,
+				Measures:        toGenMeasures(row.Measures()),
+				DimensionValues: normalizeDimensionValues(row.DimensionValues),
 			})
 			continue
 		}
 		otherTable.Add(row.Measures())
+		mergeDimensionValues(otherDimValues, row.DimensionValues)
 	}
 	if hasOther {
 		table = append(table, &telem_gen.QueryRow{
-			GroupValue: otherGroupLabel,
-			Measures:   toGenMeasures(otherTable),
+			GroupValue:      otherGroupLabel,
+			Measures:        toGenMeasures(otherTable),
+			DimensionValues: flattenDimensionValues(otherDimValues),
 		})
 	}
 
@@ -246,6 +251,46 @@ func bucketStarts(timeStart, timeEnd, intervalSeconds int64) []int64 {
 		buckets = append(buckets, b)
 	}
 	return buckets
+}
+
+// normalizeDimensionValues returns a non-nil map for the API result. The repo
+// already drops empty values and dedups per group, so kept rows pass through
+// unchanged; only the nil case (e.g. unit-test rows) is normalized to {}.
+func normalizeDimensionValues(m map[string][]string) map[string][]string {
+	if m == nil {
+		return map[string][]string{}
+	}
+	return m
+}
+
+// mergeDimensionValues folds one row's per-dimension value lists into the
+// accumulating set-of-sets used to build the "Other" rollup row.
+func mergeDimensionValues(acc map[string]map[string]struct{}, m map[string][]string) {
+	for dim, values := range m {
+		set := acc[dim]
+		if set == nil {
+			set = make(map[string]struct{}, len(values))
+			acc[dim] = set
+		}
+		for _, v := range values {
+			set[v] = struct{}{}
+		}
+	}
+}
+
+// flattenDimensionValues converts the accumulated set-of-sets into the API
+// shape, sorting each list for deterministic output.
+func flattenDimensionValues(acc map[string]map[string]struct{}) map[string][]string {
+	out := make(map[string][]string, len(acc))
+	for dim, set := range acc {
+		values := make([]string, 0, len(set))
+		for v := range set {
+			values = append(values, v)
+		}
+		sort.Strings(values)
+		out[dim] = values
+	}
+	return out
 }
 
 // toGenMeasures converts repo measures to the API type.

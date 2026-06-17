@@ -124,6 +124,7 @@ Activate a skill when your task falls within its scope.
 | `gram-audit-logging`          | Recording or exposing audit events via the auditlogs management API        |
 | `gram-rbac`                   | Adding or enforcing authorization scopes, grants, or roles                 |
 | `gram-pubsub`                 | Declaring Pub/Sub topics/subscriptions via proto, or publishing/consuming  |
+| `gram-telemetry-query-dimensions` | Adding a new attribute value to group/filter by in the `telemetry.query` analytics endpoint |
 | `feature-flag`                | Deciding between `productfeatures` vs PostHog flags, or adding either      |
 | `glint`                       | Authoring or editing analyzers in the `glint/` go/analysis package         |
 | `mise-tasks`                  | Creating or editing mise task scripts in `.mise-tasks/`                    |

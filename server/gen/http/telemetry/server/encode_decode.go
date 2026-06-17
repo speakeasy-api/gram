@@ -4838,6 +4838,17 @@ func marshalTelemetryQueryRowToQueryRowResponseBody(v *telemetry.QueryRow) *Quer
 	if v.Measures != nil {
 		res.Measures = marshalTelemetryQueryMeasuresToQueryMeasuresResponseBody(v.Measures)
 	}
+	if v.DimensionValues != nil {
+		res.DimensionValues = make(map[string][]string, len(v.DimensionValues))
+		for key, val := range v.DimensionValues {
+			tk := key
+			tv := make([]string, len(val))
+			for i, val := range val {
+				tv[i] = val
+			}
+			res.DimensionValues[tk] = tv
+		}
+	}
 
 	return res
 }

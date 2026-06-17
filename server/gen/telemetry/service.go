@@ -863,6 +863,12 @@ type QueryRow struct {
 	GroupValue string
 	// Aggregated measures for this group
 	Measures *QueryMeasures
+	// Distinct values of every allowlisted dimension other than the group_by
+	// dimension, observed within this group. Keyed by dimension identifier (the
+	// same keys used for group_by/filters, e.g. when grouping by department_name:
+	// 'email' -> [...], 'job_title' -> [...], 'role' -> [...]). Empty values are
+	// omitted and each list is capped.
+	DimensionValues map[string][]string
 }
 
 // A gap-filled timeseries for a single group value (one line on the chart).

@@ -89,6 +89,49 @@ func TestBuildQueryResult_TopNAndOtherRollup(t *testing.T) {
 	require.InDelta(t, 0.0, other[b1], 1e-9)
 }
 
+func TestBuildQueryResult_DimensionValuesPassThroughAndOtherUnion(t *testing.T) {
+	t.Parallel()
+
+	// Group by department; top_n=1 keeps Eng and folds Sales+Ops into Other.
+	tableRows := []repo.AttributeMetricsRow{
+		{GroupValue: "Eng", TotalCost: 5, DimensionValues: map[string][]string{
+			"email":     {"a@x.com", "b@x.com"},
+			"job_title": {"swe"},
+		}},
+		{GroupValue: "Sales", TotalCost: 3, DimensionValues: map[string][]string{
+			"email":     {"c@x.com"},
+			"job_title": {"ae"},
+		}},
+		{GroupValue: "Ops", TotalCost: 1, DimensionValues: map[string][]string{
+			"email":     {"c@x.com", "d@x.com"}, // c@x.com overlaps Sales
+			"job_title": {"ops"},
+		}},
+	}
+
+	res := buildQueryResult("department_name", 3600, 0, hourNanos, 1, tableRows, nil)
+
+	require.Len(t, res.Table, 2)
+
+	// Kept row passes its dimension values through unchanged.
+	require.Equal(t, "Eng", res.Table[0].GroupValue)
+	require.Equal(t, []string{"a@x.com", "b@x.com"}, res.Table[0].DimensionValues["email"])
+	require.Equal(t, []string{"swe"}, res.Table[0].DimensionValues["job_title"])
+
+	// Other unions the folded groups' values (deduped + sorted).
+	other := res.Table[1]
+	require.Equal(t, otherGroupLabel, other.GroupValue)
+	require.Equal(t, []string{"c@x.com", "d@x.com"}, other.DimensionValues["email"])
+	require.Equal(t, []string{"ae", "ops"}, other.DimensionValues["job_title"])
+}
+
+func TestBuildQueryResult_DimensionValuesNeverNil(t *testing.T) {
+	t.Parallel()
+
+	// Rows without dimension values must still yield a non-nil map (required field).
+	res := buildQueryResult("model", 3600, 0, hourNanos, 10, []repo.AttributeMetricsRow{tableRow("A", 5)}, nil)
+	require.NotNil(t, res.Table[0].DimensionValues)
+}
+
 func TestBuildQueryResult_NoGroupBySingleSeries(t *testing.T) {
 	t.Parallel()
 

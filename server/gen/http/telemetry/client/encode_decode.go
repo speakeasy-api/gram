@@ -5056,6 +5056,15 @@ func unmarshalQueryRowResponseBodyToTelemetryQueryRow(v *QueryRowResponseBody) *
 		GroupValue: *v.GroupValue,
 	}
 	res.Measures = unmarshalQueryMeasuresResponseBodyToTelemetryQueryMeasures(v.Measures)
+	res.DimensionValues = make(map[string][]string, len(v.DimensionValues))
+	for key, val := range v.DimensionValues {
+		tk := key
+		tv := make([]string, len(val))
+		for i, val := range val {
+			tv[i] = val
+		}
+		res.DimensionValues[tk] = tv
+	}
 
 	return res
 }

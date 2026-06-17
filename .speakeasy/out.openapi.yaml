@@ -26612,6 +26612,95 @@ paths:
       x-speakeasy-react-hook:
         name: ListToolUsageTraces
         type: query
+  /rpc/telemetry.query:
+    post:
+      description: Generic, org-scoped analytics query over pre-aggregated usage metrics. Returns both a grouped table and a per-group hourly timeseries for the same slice of data, supporting arbitrary allowlisted group-by dimensions and filters (e.g. group by department_name, then drill in by filtering department_name and grouping by role).
+      operationId: query
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: query telemetry
+      tags:
+        - telemetry
+      x-speakeasy-name-override: query
+      x-speakeasy-react-hook:
+        name: TelemetryQuery
+        type: query
   /rpc/telemetry.searchChats:
     post:
       description: Search and list chat session summaries that match a search filter
@@ -41626,6 +41715,212 @@ components:
       required:
         - configured
         - connected
+    QueryFilter:
+      type: object
+      properties:
+        dimension:
+          type: string
+          description: Dimension to filter on
+          enum:
+            - department_name
+            - job_title
+            - employee_type
+            - division_name
+            - cost_center_name
+            - email
+            - model
+            - provider
+            - role
+            - group
+            - project_id
+        values:
+          type: array
+          items:
+            type: string
+          description: Match if the dimension equals any of these values (IN semantics; for multi-valued dimensions like role/group, matches if any element is present).
+      description: A single filter predicate on an allowlisted dimension
+      required:
+        - dimension
+        - values
+    QueryMeasures:
+      type: object
+      properties:
+        cache_creation_input_tokens:
+          type: integer
+          description: Sum of cache creation input tokens
+          format: int64
+        cache_read_input_tokens:
+          type: integer
+          description: Sum of cache read input tokens
+          format: int64
+        total_chats:
+          type: integer
+          description: Number of distinct chat sessions
+          format: int64
+        total_cost:
+          type: number
+          description: Total cost in USD
+          format: double
+        total_input_tokens:
+          type: integer
+          description: Sum of input tokens
+          format: int64
+        total_output_tokens:
+          type: integer
+          description: Sum of output tokens
+          format: int64
+        total_tokens:
+          type: integer
+          description: Sum of all tokens
+          format: int64
+        total_tool_calls:
+          type: integer
+          description: Total number of tool calls
+          format: int64
+      description: Aggregated measure values for a group or time bucket
+      required:
+        - total_cost
+        - total_input_tokens
+        - total_output_tokens
+        - total_tokens
+        - cache_read_input_tokens
+        - cache_creation_input_tokens
+        - total_tool_calls
+        - total_chats
+    QueryPayload:
+      type: object
+      properties:
+        filters:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueryFilter'
+          description: Optional filters; all filters are ANDed together.
+        from:
+          type: string
+          description: Start time in ISO 8601 format
+          example: "2025-12-19T10:00:00Z"
+          format: date-time
+        granularity_seconds:
+          type: integer
+          description: Optional timeseries bucket size in seconds. Defaults to an interval derived from the time range and is floored to 3600 (the source data is bucketed hourly).
+          format: int64
+        group_by:
+          type: string
+          description: Optional dimension to break results down by. When omitted, a single aggregate row/series for the whole slice is returned.
+          example: department_name
+          enum:
+            - department_name
+            - job_title
+            - employee_type
+            - division_name
+            - cost_center_name
+            - email
+            - model
+            - provider
+            - role
+            - group
+            - project_id
+        sort_by:
+          type: string
+          description: Measure used to rank groups for top_n. Defaults to total_cost.
+          default: total_cost
+          enum:
+            - total_cost
+            - total_tokens
+            - total_input_tokens
+            - total_output_tokens
+            - cache_read_input_tokens
+            - cache_creation_input_tokens
+            - total_tool_calls
+            - total_chats
+        to:
+          type: string
+          description: End time in ISO 8601 format
+          example: "2025-12-26T10:00:00Z"
+          format: date-time
+        top_n:
+          type: integer
+          description: When group_by is set, keep at most this many groups (ranked by sort_by); the remainder are rolled into an 'Other' group. Defaults to 10.
+          default: 10
+          format: int64
+          minimum: 1
+      description: Payload for a generic org-scoped analytics query
+      required:
+        - from
+        - to
+    QueryPoint:
+      type: object
+      properties:
+        bucket_time_unix_nano:
+          type: string
+          description: Bucket start time in Unix nanoseconds (string for JS precision)
+        measures:
+          $ref: '#/components/schemas/QueryMeasures'
+      description: A single time bucket within a series
+      required:
+        - bucket_time_unix_nano
+        - measures
+    QueryResult:
+      type: object
+      properties:
+        group_by:
+          type: string
+          description: Echoes the requested group_by dimension; empty when none was requested.
+        interval_seconds:
+          type: integer
+          description: The timeseries bucket interval in seconds.
+          format: int64
+        table:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueryRow'
+          description: Grouped totals over the full time range, ordered by sort_by descending.
+        timeseries:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuerySeries'
+          description: One series per group value (aligned with table rows), each gap-filled.
+      description: 'Result of a generic analytics query: a grouped table and a matching per-group timeseries over the same data slice.'
+      required:
+        - group_by
+        - interval_seconds
+        - table
+        - timeseries
+    QueryRow:
+      type: object
+      properties:
+        dimension_values:
+          type: object
+          description: 'Distinct values of every allowlisted dimension other than the group_by dimension, observed within this group. Keyed by dimension identifier (the same keys used for group_by/filters, e.g. when grouping by department_name: ''email'' -> [...], ''job_title'' -> [...], ''role'' -> [...]). Empty values are omitted and each list is capped.'
+          additionalProperties:
+            type: array
+            items:
+              type: string
+        group_value:
+          type: string
+          description: The dimension value for this row. Empty string when no group_by was requested; 'Other' for the rolled-up remainder beyond top_n.
+        measures:
+          $ref: '#/components/schemas/QueryMeasures'
+      description: 'One row of the grouped table: measures aggregated over the full time range for a single group value.'
+      required:
+        - group_value
+        - measures
+        - dimension_values
+    QuerySeries:
+      type: object
+      properties:
+        group_value:
+          type: string
+          description: The dimension value for this series. Empty string when no group_by was requested; 'Other' for the rolled-up remainder beyond top_n.
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueryPoint'
+          description: Time buckets in ascending order, gap-filled with zeros.
+      description: A gap-filled timeseries for a single group value (one line on the chart).
+      required:
+        - group_value
+        - points
     RBACStatus:
       type: object
       properties:

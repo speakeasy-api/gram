@@ -329,7 +329,7 @@ var _ = Service("telemetry", func() {
 
 		Meta("openapi:operationId", "query")
 		Meta("openapi:extension:x-speakeasy-name-override", "query")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Query", "type": "query"}`)
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TelemetryQuery", "type": "query"}`)
 	})
 
 	Method("listFilterOptions", func() {
@@ -1289,8 +1289,9 @@ var QueryRow = Type("QueryRow", func() {
 
 	Attribute("group_value", String, "The dimension value for this row. Empty string when no group_by was requested; 'Other' for the rolled-up remainder beyond top_n.")
 	Attribute("measures", QueryMeasures, "Aggregated measures for this group")
+	Attribute("dimension_values", MapOf(String, ArrayOf(String)), "Distinct values of every allowlisted dimension other than the group_by dimension, observed within this group. Keyed by dimension identifier (the same keys used for group_by/filters, e.g. when grouping by department_name: 'email' -> [...], 'job_title' -> [...], 'role' -> [...]). Empty values are omitted and each list is capped.")
 
-	Required("group_value", "measures")
+	Required("group_value", "measures", "dimension_values")
 })
 
 var QueryPoint = Type("QueryPoint", func() {
