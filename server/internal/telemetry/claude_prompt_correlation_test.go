@@ -80,7 +80,7 @@ func TestListClaudeUserPromptCandidatesForCorrelationBindsLargePrompt(t *testing
 		GramProjectID:          uuid.NewString(),
 		GramChatID:             uuid.NewString(),
 		SessionID:              uuid.NewString(),
-		MessagePrompt:          strings.Repeat("Вот тебе пример с прода для serviceMainCategories ", 10_000),
+		MessagePrompt:          strings.Repeat("Here is a production example for serviceMainCategories ", 10_000),
 		MessageTimeUnixNano:    time.Now().UTC().UnixNano(),
 		AfterEventSequence:     0,
 		AfterEventTimeUnixNano: 0,
