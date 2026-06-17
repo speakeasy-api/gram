@@ -85,7 +85,6 @@ type Service struct {
 	shadowMCPClient  *shadowmcp.Client
 	audit            *audit.Logger
 	jwtSecret        string
-	piClassifier     bool
 	// flags gates the nl/LLM-judge policy MVP (FlagPromptPolicies). Optional:
 	// when nil the feature is treated as disabled.
 	flags feature.Provider
@@ -124,7 +123,6 @@ func NewObserver(
 		shadowMCPClient:  nil,
 		audit:            auditLogger,
 		jwtSecret:        "",
-		piClassifier:     false,
 		piiScanner:       nil,
 		piScanner:        nil,
 		flags:            nil,
@@ -144,7 +142,6 @@ func NewService(
 	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
 	jwtSecret string,
-	piClassifier bool,
 	piiScanner ra.PIIScanner,
 	piScanner *ra.PromptInjectionScanner,
 	flags feature.Provider,
@@ -165,7 +162,6 @@ func NewService(
 		shadowMCPClient:  shadowMCPClient,
 		audit:            auditLogger,
 		jwtSecret:        jwtSecret,
-		piClassifier:     piClassifier,
 		piiScanner:       piiScanner,
 		piScanner:        piScanner,
 		flags:            flags,
@@ -184,21 +180,6 @@ func Attach(mux goahttp.Muxer, service *Service) {
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
-}
-
-func (s *Service) GetRiskCapabilities(ctx context.Context, payload *gen.GetRiskCapabilitiesPayload) (*gen.RiskCapabilitiesResult, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
-	return &gen.RiskCapabilitiesResult{
-		PiClassifierEnabled: s.piClassifier,
-	}, nil
 }
 
 // OnMessagesStored implements chat.MessageObserver. The caller
@@ -2041,7 +2022,7 @@ func (s *Service) TestDetectionRule(ctx context.Context, payload *gen.TestDetect
 	case strings.HasPrefix(ruleID, "pii."):
 		return s.testPresidioRule(ctx, ruleID, text)
 	case ruleID == "prompt_injection.default" || strings.HasPrefix(ruleID, "prompt_injection."):
-		return s.testPromptInjectionRule(ctx, authCtx.ActiveOrganizationID, text)
+		return s.testPromptInjectionRule(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), text)
 	case strings.HasPrefix(ruleID, "custom."):
 		regex := ""
 		if payload.Regex != nil {
@@ -2108,7 +2089,7 @@ func (s *Service) testPresidioRule(ctx context.Context, ruleID, text string) (*g
 	}, nil
 }
 
-func (s *Service) testPromptInjectionRule(ctx context.Context, orgID, text string) (*gen.TestDetectionRuleResult, error) {
+func (s *Service) testPromptInjectionRule(ctx context.Context, orgID, projectID, text string) (*gen.TestDetectionRuleResult, error) {
 	if s.piScanner == nil {
 		return &gen.TestDetectionRuleResult{
 			Matches:   nil,
@@ -2116,7 +2097,10 @@ func (s *Service) testPromptInjectionRule(ctx context.Context, orgID, text strin
 			Reason:    new("Prompt-injection scanner is not configured on this server."),
 		}, nil
 	}
-	findings, err := s.piScanner.Scan(ctx, text, orgID)
+	// A rule-test preview runs the deterministic, free L0 heuristics only; the
+	// billable LLM-judge L1 engine is not invoked on a test click (l1Enabled=false),
+	// so the structured message is unused here and carries just the sample text.
+	findings, err := s.piScanner.Scan(ctx, text, orgID, projectID, ra.NewJudgeMessage(message.User, "", text), false)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "run prompt-injection scanner").LogError(ctx, s.logger)
 	}

@@ -459,10 +459,6 @@ run();
 
 * [list](docs/sdks/resources/README.md#list) - listResources resources
 
-### [Risk.Capabilities](docs/sdks/capabilities/README.md)
-
-* [get](docs/sdks/capabilities/README.md#get) - getRiskCapabilities risk
-
 ### [Risk.Categories](docs/sdks/categories/README.md)
 
 * [list](docs/sdks/categories/README.md#list) - listRiskCategories risk
@@ -860,7 +856,6 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`remoteSessionsList`](docs/sdks/remotesessions/README.md#list) - listRemoteSessions remoteSessions
 - [`remoteSessionsRevoke`](docs/sdks/remotesessions/README.md#revoke) - revokeRemoteSession remoteSessions
 - [`resourcesList`](docs/sdks/resources/README.md#list) - listResources resources
-- [`riskCapabilitiesGet`](docs/sdks/capabilities/README.md#get) - getRiskCapabilities risk
 - [`riskCategoriesList`](docs/sdks/categories/README.md#list) - listRiskCategories risk
 - [`riskCustomRulesCreate`](docs/sdks/customrules/README.md#create) - createCustomDetectionRule risk
 - [`riskCustomRulesDelete`](docs/sdks/customrules/README.md#delete) - deleteCustomDetectionRule risk
@@ -1208,7 +1203,6 @@ To learn about this feature and how to get started, check
 - [`useRevokeUserSessionConsentMutation`](docs/sdks/usersessionconsents/README.md#revoke) - revokeUserSessionConsent userSessionConsents
 - [`useRevokeUserSessionMutation`](docs/sdks/usersessions/README.md#revoke) - revokeUserSession userSessions
 - [`useRiskApprovePolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#approve) - approveRiskPolicyBypassRequest risk
-- [`useRiskCapabilities`](docs/sdks/capabilities/README.md#get) - getRiskCapabilities risk
 - [`useRiskCategories`](docs/sdks/categories/README.md#list) - listRiskCategories risk
 - [`useRiskCreateCustomDetectionRuleMutation`](docs/sdks/customrules/README.md#create) - createCustomDetectionRule risk
 - [`useRiskCreateExclusionMutation`](docs/sdks/exclusions/README.md#create) - createRiskExclusion risk

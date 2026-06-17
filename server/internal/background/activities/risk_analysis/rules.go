@@ -48,8 +48,8 @@ const (
 
 	// RulePromptInjection is the canonical rule id emitted for every
 	// prompt-injection finding. There is exactly one rule: whether the
-	// match came from the L1 deberta classifier or an L0 heuristic regex
-	// is an implementation detail not part of the public contract.
+	// match came from the L1 LLM judge or an L0 heuristic regex is an
+	// implementation detail not part of the public contract.
 	RulePromptInjection = "prompt_injection"
 
 	// DeadLetterRuleID is the rule id emitted for Presidio dead-letter

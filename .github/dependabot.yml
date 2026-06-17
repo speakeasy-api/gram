@@ -87,7 +87,6 @@ updates:
       - "/agents/runtime-image"
       - "/client/dashboard"
       - "/otel-collector"
-      - "/services/pi-classifier"
       - "/pystreams"
     schedule:
       interval: "weekly"

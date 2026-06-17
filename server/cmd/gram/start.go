@@ -82,6 +82,7 @@ import (
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/otelforwarding"
 	"github.com/speakeasy-api/gram/server/internal/packages"
+	"github.com/speakeasy-api/gram/server/internal/pijudge"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -417,11 +418,6 @@ func newStartCommand() *cli.Command {
 			Usage:    "WorkOS webhook signing secret for validating incoming webhook payloads",
 			EnvVars:  []string{"WORKOS_WEBHOOK_SECRET"},
 			Required: false,
-		},
-		&cli.StringFlag{
-			Name:    "pi-classifier-url",
-			Usage:   "Base URL of the gram-pi-classifier sidecar (e.g. http://gram-pi-classifier:8000). Empty disables L1 ML prompt-injection detection; L0 heuristics still run when a policy enables the prompt_injection source.",
-			EnvVars: []string{"PI_CLASSIFIER_URL"},
 		},
 	}
 
@@ -954,14 +950,9 @@ func newStartCommand() *cli.Command {
 				hookPIIScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
 			}
 
-			// Same shape for the L1 prompt-injection classifier sidecar. Empty URL
-			// → stub classifier (L1 disabled; L0 heuristics still run when a policy
-			// has the prompt_injection source enabled).
-			var hookPromptInjectionClassifier risk_analysis.PromptInjectionClassifier = risk_analysis.StubClassifier{}
-			if piURL := c.String("pi-classifier-url"); piURL != "" {
-				hookPromptInjectionClassifier = risk_analysis.NewPromptInjectionClassifier(piURL, tracerProvider, meterProvider, logger)
-			}
-			hookPIScanner := risk_analysis.NewPromptInjectionScanner(logger, hookPromptInjectionClassifier, featureFlags)
+			// L1 prompt-injection engine is the LLM judge (POC-193). A completions
+			// client is always constructed, so the judge is always available.
+			hookPIScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient).Classify)
 
 			hookPromptJudge := riskjudge.New(logger, tracerProvider, meterProvider, completionsClient)
 			riskScanner, err := risk.NewScanner(logger, db, hookPIIScanner, hookPIScanner, hookPromptJudge, featureFlags, meterProvider)
@@ -1099,7 +1090,6 @@ func newStartCommand() *cli.Command {
 				shadowMCPClient,
 				auditLogger,
 				c.String(usersessions.JWTSigningKeyFlag),
-				c.String("pi-classifier-url") != "",
 				hookPIIScanner,
 				hookPIScanner,
 				featureFlags,
@@ -1143,11 +1133,7 @@ func newStartCommand() *cli.Command {
 						piiScanner = risk_analysis.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
 					}
 
-					var promptInjectionClassifier risk_analysis.PromptInjectionClassifier = risk_analysis.StubClassifier{}
-					if piURL := c.String("pi-classifier-url"); piURL != "" {
-						promptInjectionClassifier = risk_analysis.NewPromptInjectionClassifier(piURL, tracerProvider, meterProvider, logger)
-					}
-					piScanner := risk_analysis.NewPromptInjectionScanner(logger, promptInjectionClassifier, featureFlags)
+					piScanner := risk_analysis.NewPromptInjectionScanner(logger, pijudge.New(logger, tracerProvider, meterProvider, completionsClient).Classify)
 
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 						GuardianPolicy:                 guardianPolicy,
