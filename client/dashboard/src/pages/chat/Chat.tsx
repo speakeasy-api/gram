@@ -36,6 +36,7 @@ import {
   type InsightsSuggestion,
 } from "@/lib/insights-suggestions";
 import { cn } from "@/lib/utils";
+import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { useRoutes } from "@/routes";
 
 // Shared pill-style icon button used by the page chrome (back affordances).
@@ -236,9 +237,12 @@ export function ChatLanding({
   return (
     <div className="flex w-full flex-col gap-6">
       <div className="flex flex-col gap-4">
-        <h1 className="text-foreground text-3xl font-semibold tracking-tight">
-          {greeting}
-        </h1>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <h1 className="text-foreground text-3xl font-semibold tracking-tight">
+            {greeting}
+          </h1>
+          <ReleaseStageBadge stage="beta" />
+        </div>
         <form
           onSubmit={(e) => {
             e.preventDefault();
