@@ -3,6 +3,7 @@ package telemetry_test
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -39,6 +40,15 @@ func TestListClaudeUserPromptCandidatesForCorrelationRanksFuzzyMatch(t *testing.
 		eventSequence: 2,
 		timestamp:     now.Add(time.Second),
 	})
+	insertClaudeUserPromptEvent(t, ctx, ti.chClient, claudeUserPromptEventFixture{
+		projectID:     projectID,
+		chatID:        chatID,
+		sessionID:     sessionID,
+		promptID:      "prompt-outside-window",
+		prompt:        "please summarize the repository changes and include only important implementation details",
+		eventSequence: 3,
+		timestamp:     now.Add(20 * time.Minute),
+	})
 
 	var candidates []telemetryRepo.ClaudeUserPromptCandidate
 	require.Eventually(t, func() bool {
@@ -59,6 +69,26 @@ func TestListClaudeUserPromptCandidatesForCorrelationRanksFuzzyMatch(t *testing.
 
 	require.False(t, candidates[0].IsExact)
 	require.Greater(t, candidates[0].Similarity, candidates[1].Similarity)
+}
+
+func TestListClaudeUserPromptCandidatesForCorrelationBindsLargePrompt(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	candidates, err := ti.chClient.ListClaudeUserPromptCandidatesForCorrelation(ctx, telemetryRepo.ListClaudeUserPromptCandidatesForCorrelationParams{
+		GramProjectID:          uuid.NewString(),
+		GramChatID:             uuid.NewString(),
+		SessionID:              uuid.NewString(),
+		MessagePrompt:          strings.Repeat("Вот тебе пример с прода для serviceMainCategories ", 10_000),
+		MessageTimeUnixNano:    time.Now().UTC().UnixNano(),
+		AfterEventSequence:     0,
+		AfterEventTimeUnixNano: 0,
+		MinFuzzyLength:         40,
+		MaxTimeDeltaNanos:      (10 * time.Minute).Nanoseconds(),
+	})
+	require.NoError(t, err)
+	require.Empty(t, candidates)
 }
 
 type claudeUserPromptEventFixture struct {
