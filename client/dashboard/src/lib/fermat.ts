@@ -17,7 +17,10 @@ type FermatCommand =
       config: {
         id: string;
         sourceType: string;
-        metadata?: { properties?: Record<string, unknown> };
+        metadata?: {
+          orgId: string;
+          properties?: Record<string, unknown>;
+        };
       };
     }
   | {
@@ -71,9 +74,9 @@ export function initializeFermat(): void {
       id: FERMAT_SOURCE_ID,
       sourceType: "external-b2b",
       metadata: {
+        orgId: FERMAT_ORG_ID,
         properties: {
           app_name: "Speakeasy",
-          orgId: FERMAT_ORG_ID,
         },
       },
     },
