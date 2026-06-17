@@ -1,7 +1,10 @@
 import { useMemo, useState } from "react";
+import { Navigate } from "react-router";
 import { FacetSelect } from "@/components/auditlogs/feed";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { useTelemetry } from "@/contexts/Telemetry";
+import { useOrgRoutes } from "@/routes";
 import { SessionTableRow } from "@/components/sessions/SessionTableRow";
 import { Button } from "@/components/ui/button";
 import { DotTable } from "@/components/ui/dot-table";
@@ -29,6 +32,16 @@ const STATUS_FILTER_OPTIONS = STATUS_OPTIONS.filter((o) => o !== "all").map(
 );
 
 export default function UserSessions(): JSX.Element {
+  const telemetry = useTelemetry();
+  const orgRoutes = useOrgRoutes();
+
+  // Gated behind the `user-sessions-dashboard` PostHog flag (internal rollout).
+  // Redirect direct-URL access when the flag has resolved to disabled; while it
+  // is still loading (undefined) we render and let RBAC guard the data.
+  if (telemetry.isFeatureEnabled("user-sessions-dashboard") === false) {
+    return <Navigate to={orgRoutes.home.href()} replace />;
+  }
+
   return (
     <Page>
       <Page.Header>

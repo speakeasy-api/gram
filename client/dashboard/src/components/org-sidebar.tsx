@@ -71,6 +71,8 @@ export function OrgSidebar({
   const telemetry = useTelemetry();
   const isDeviceAgentEnabled =
     telemetry.isFeatureEnabled("gram-device-agent") ?? false;
+  const isUserSessionsEnabled =
+    telemetry.isFeatureEnabled("user-sessions-dashboard") ?? false;
 
   const settingsActive = [
     orgRoutes.billing,
@@ -219,12 +221,14 @@ export function OrgSidebar({
               <CollapsibleNavGroup
                 label="Identity"
                 Icon={(p) => <Icon {...p} name="fingerprint" />}
-                defaultHref={orgRoutes.userSessions.href()}
+                defaultHref={orgRoutes.identity.href()}
               >
-                <ScopeGatedNavItem
-                  item={orgRoutes.userSessions}
-                  scope={["org:read", "org:admin"]}
-                />
+                {isUserSessionsEnabled && (
+                  <ScopeGatedNavItem
+                    item={orgRoutes.userSessions}
+                    scope={["org:read", "org:admin"]}
+                  />
+                )}
                 <ScopeGatedNavItem
                   item={orgRoutes.identity}
                   scope={["org:read", "org:admin"]}
