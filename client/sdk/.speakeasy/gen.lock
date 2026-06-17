@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 8cf4fc4442decbc4273d3e6af97876ff
+  docChecksum: f9042dc88b5954f966f4e0a7e9aa11a9
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -4449,9 +4449,7 @@ trackedFiles:
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
   src/models/components/index.ts:
     id: 0aa842dce54d
-
-    last_write_checksum: sha1:51f87480230f8e31edb6fa934559262938f6eb29
-
+    last_write_checksum: sha1:9d9abe5a5855281513f12a28ddc1b6b33a779c14
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     last_write_checksum: sha1:549d388111333748195b4791e63fd64f4a6e7140

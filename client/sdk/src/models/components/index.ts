@@ -13,13 +13,7 @@ export * from "./addpackageform.js";
 export * from "./addpluginserverform.js";
 export * from "./agentmarketplace.js";
 export * from "./agentplugin.js";
-export {
-  AgentUsage$inboundSchema,
-  Type as AgentUsageType,
-  Type$inboundSchema as AgentUsageType$inboundSchema,
-  agentUsageFromJSON,
-} from "./agentusage.js";
-export type { AgentUsage } from "./agentusage.js";
+export * from "./agentusage.js";
 export * from "./aiintegrationconfig.js";
 export * from "./allowedorigin.js";
 export * from "./approveshadowmcpapprovalrequestform.js";
