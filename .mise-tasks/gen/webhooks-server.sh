@@ -7,9 +7,7 @@
 
 set -e
 
-# `go run` builds a throwaway binary and stamps VCS info, which has crashed
-# CI with `signal: bus error` while shelling out to git. Codegen binaries
-# are never shipped, so the stamp buys nothing.
+# Codegen binaries are throwaway; skip VCS stamping.
 export GOFLAGS="-buildvcs=false ${GOFLAGS:-}"
 
 args=()
