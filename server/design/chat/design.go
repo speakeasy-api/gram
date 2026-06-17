@@ -259,6 +259,7 @@ var Chat = Type("Chat", func() {
 	Attribute("messages", ArrayOf(ChatMessage), "The list of messages in the chat for the returned generation")
 	Attribute("generation", Int, "The generation that this response's messages belong to. A generation is an immutable snapshot of the transcript; a new one is opened on compaction or message edits, while normal turns append to the current one.")
 	Attribute("max_generation", Int, "The highest generation number present for this chat. To load the full history, walk from `max_generation` down to 0, requesting each generation in turn.")
+	Attribute("agent_usage", AgentUsage, "Agent-specific usage enrichment for the chat, when available.")
 
 	Required("messages", "generation", "max_generation")
 })
@@ -273,6 +274,7 @@ var ChatMessage = Type("ChatMessage", func() {
 	Attribute("tool_call_id", String, "The tool call ID of the message")
 	Attribute("tool_calls", String, "The tool calls in the message as a JSON blob")
 	Attribute("finish_reason", String, "The finish reason of the message")
+	Attribute("prompt_id", String, "The agent prompt/turn ID associated with this message, when available.")
 	Attribute("user_id", String, "The ID of the user who created the message")
 	Attribute("external_user_id", String, "The ID of the external user who created the message")
 	Attribute("created_at", String, func() {
@@ -282,4 +284,48 @@ var ChatMessage = Type("ChatMessage", func() {
 	Attribute("generation", Int, "Conversation generation — bumps on compaction or edit divergence")
 
 	Required("id", "role", "model", "created_at", "generation")
+})
+
+var AgentUsage = Type("AgentUsage", func() {
+	Attribute("type", String, "The agent usage payload discriminator.", func() {
+		Enum("claude")
+	})
+	Attribute("claude", ClaudeAgentUsage, "Claude Code usage details.")
+
+	Required("type")
+})
+
+var ClaudeAgentUsage = Type("ClaudeAgentUsage", func() {
+	Attribute("turns", ArrayOf(ClaudeTurnUsage), "Per-prompt Claude usage turns ordered by start time.")
+	Attribute("tools", ArrayOf(ClaudeToolUsage), "Per-tool Claude usage keyed by tool_use_id.")
+
+	Required("turns", "tools")
+})
+
+var ClaudeTurnUsage = Type("ClaudeTurnUsage", func() {
+	Attribute("prompt_id", String, "Claude prompt.id that correlates events for one user turn.")
+	Attribute("start_time_unix_nano", String, "Earliest OTEL log timestamp in this turn, as Unix nanoseconds.")
+	Attribute("end_time_unix_nano", String, "Latest OTEL log timestamp in this turn, as Unix nanoseconds.")
+	Attribute("request_count", Int64, "Number of Claude API request events in this turn.")
+	Attribute("input_tokens", Int64, "Input tokens used by this turn.")
+	Attribute("output_tokens", Int64, "Output tokens used by this turn.")
+	Attribute("cache_read_tokens", Int64, "Cache read tokens used by this turn.")
+	Attribute("cache_creation_tokens", Int64, "Cache creation tokens used by this turn.")
+	Attribute("total_tokens", Int64, "Total tokens used by this turn.")
+	Attribute("cost_usd", Float64, "Total USD cost for this turn.")
+	Attribute("cost_micros", Int64, "Total cost for this turn in micros of a USD.")
+	Attribute("models", ArrayOf(String), "Distinct model names used by this turn.")
+	Attribute("query_sources", ArrayOf(String), "Distinct Claude query sources used by this turn.")
+
+	Required("prompt_id", "start_time_unix_nano", "end_time_unix_nano", "request_count", "input_tokens", "output_tokens", "cache_read_tokens", "cache_creation_tokens", "total_tokens", "cost_usd", "cost_micros", "models", "query_sources")
+})
+
+var ClaudeToolUsage = Type("ClaudeToolUsage", func() {
+	Attribute("tool_use_id", String, "Claude tool_use_id that correlates the tool call and result.")
+	Attribute("prompt_id", String, "Claude prompt.id for the turn that used this tool.")
+	Attribute("tool_name", String, "Tool name reported by Claude Code.")
+	Attribute("input_size_bytes", Int64, "Serialized tool input size in bytes.")
+	Attribute("result_size_bytes", Int64, "Serialized tool result size in bytes.")
+
+	Required("tool_use_id", "prompt_id", "tool_name", "input_size_bytes", "result_size_bytes")
 })

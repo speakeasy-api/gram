@@ -2752,6 +2752,48 @@ func (s *Service) GetChatMetricsByIDs(ctx context.Context, projectID string, cha
 	return result, nil
 }
 
+// GetClaudeTurnUsageByChatIDs retrieves per-turn Claude Code usage for specific chat IDs.
+// This is used by the chat service to enrich chat detail responses from ClickHouse.
+func (s *Service) GetClaudeTurnUsageByChatIDs(ctx context.Context, projectID string, chatIDs []string) (map[string][]repo.ClaudeTurnUsageRow, error) {
+	if s.chRepo == nil {
+		usageByChatID := make(map[string][]repo.ClaudeTurnUsageRow, len(chatIDs))
+		for _, chatID := range chatIDs {
+			usageByChatID[chatID] = []repo.ClaudeTurnUsageRow{}
+		}
+		return usageByChatID, nil
+	}
+
+	result, err := s.chRepo.GetClaudeTurnUsageByChatIDs(ctx, repo.GetClaudeTurnUsageByChatIDsParams{
+		GramProjectID: projectID,
+		ChatIDs:       chatIDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get Claude turn usage by chat ids: %w", err)
+	}
+	return result, nil
+}
+
+// GetClaudeToolUsageByChatIDs retrieves per-tool Claude Code input/result byte sizes for specific chat IDs.
+// This is used by the chat service to enrich chat detail rows from ClickHouse.
+func (s *Service) GetClaudeToolUsageByChatIDs(ctx context.Context, projectID string, chatIDs []string) (map[string][]repo.ClaudeToolUsageRow, error) {
+	if s.chRepo == nil {
+		usageByChatID := make(map[string][]repo.ClaudeToolUsageRow, len(chatIDs))
+		for _, chatID := range chatIDs {
+			usageByChatID[chatID] = []repo.ClaudeToolUsageRow{}
+		}
+		return usageByChatID, nil
+	}
+
+	result, err := s.chRepo.GetClaudeToolUsageByChatIDs(ctx, repo.GetClaudeTurnUsageByChatIDsParams{
+		GramProjectID: projectID,
+		ChatIDs:       chatIDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get Claude tool usage by chat ids: %w", err)
+	}
+	return result, nil
+}
+
 // toTopUsersFromPG converts PostgreSQL top users to API type.
 func toTopUsersFromPG(users []chatRepo.GetTopUsersByMessagesRow) []*telem_gen.TopUser {
 	if users == nil {

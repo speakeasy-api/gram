@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 5ff50fdf9d57766ef599957360eb3e35
+  docChecksum: f9042dc88b5954f966f4e0a7e9aa11a9
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -74,6 +74,8 @@ trackedFiles:
     last_write_checksum: sha1:4ab7d959193ab0afa325c5d83b24753a12b0dbc7
   docs/models/components/agentplugin.md:
     last_write_checksum: sha1:47a23e63a23265078a632129a0fec6982cfa3aec
+  docs/models/components/agentusage.md:
+    last_write_checksum: sha1:f3a8ddf9d32f7ff4e4bd258a5971f82e2ee73567
   docs/models/components/aiintegrationconfig.md:
     last_write_checksum: sha1:7ea9ad8d1fd9e1273b997053e9b1132ad040d134
   docs/models/components/allowedorigin.md:
@@ -127,19 +129,25 @@ trackedFiles:
   docs/models/components/challengeresolutionresolutiontype.md:
     last_write_checksum: sha1:16b41a0d2e48e14d61e82ae01899bb393db826c3
   docs/models/components/chat.md:
-    last_write_checksum: sha1:da586b9c73fb89349af1488504d4f1761d100c79
+    last_write_checksum: sha1:73c23ba715f70c68bcf856eb2620fd12b66920a6
   docs/models/components/chatmessage.md:
-    last_write_checksum: sha1:0d8a81d4c4f0d1f45ae7c5ca78a66be74bf7d74d
+    last_write_checksum: sha1:8a9af2aa03b5449b37a13d17b2de91d694f5e6ad
   docs/models/components/chatoverview.md:
     last_write_checksum: sha1:4b46717d1ff26e7148134c618c4dd040cfda1c01
   docs/models/components/chatsummary.md:
     last_write_checksum: sha1:19859afeae623790ebc81cfd539c4622cda98255
   docs/models/components/chatsummarystatus.md:
     last_write_checksum: sha1:543bad7e7c81392fa16e4f5616d9b8f95dfb3f99
+  docs/models/components/claudeagentusage.md:
+    last_write_checksum: sha1:5af88c62df60a4bbdaeb82198e9ed5e5cdbd4703
   docs/models/components/claudehookpayload.md:
     last_write_checksum: sha1:5f532dab5f0854232eda583ca2f5382e4970d58a
   docs/models/components/claudehookresult.md:
     last_write_checksum: sha1:48bbaddb1a28d048fde786eb05649b89fed1f3fd
+  docs/models/components/claudetoolusage.md:
+    last_write_checksum: sha1:20e531070bad16069a3d36e38dc3ad945cbe2a73
+  docs/models/components/claudeturnusage.md:
+    last_write_checksum: sha1:661e3a0df6c3655a145d6b37ef945a186c01bf02
   docs/models/components/cloneclientfromoauthproxyproviderform.md:
     last_write_checksum: sha1:34824b4c235eea35758b0449308f932517bc7b51
   docs/models/components/cloneclientfromoauthproxyproviderformtokenendpointauthmethod.md:
@@ -821,7 +829,9 @@ trackedFiles:
   docs/models/components/resource.md:
     last_write_checksum: sha1:62b0fa197ad020da45d804e389ba7ea3a4eef4e5
   docs/models/components/resourceentry.md:
-    last_write_checksum: sha1:1fd4caa06e03fef506b201ec27e04238a238450d
+    last_write_checksum: sha1:0fb9f73eb50f93e5ed462297362726eca416509d
+  docs/models/components/resourceentrytype.md:
+    last_write_checksum: sha1:dd10c91ab8607fba96da4ee25b4bef9d4dc08e14
   docs/models/components/resourcekind.md:
     last_write_checksum: sha1:27f30da46031f8d3fcfd7c8c1928f5a10fa4c02b
   docs/models/components/resourcetype.md:
@@ -1159,7 +1169,7 @@ trackedFiles:
   docs/models/components/tumperiodday.md:
     last_write_checksum: sha1:768bd164dd4d02ad1f603314ff24d133cddb43fe
   docs/models/components/type.md:
-    last_write_checksum: sha1:f3606d62bd77e8ac3c11011316949e80d0803890
+    last_write_checksum: sha1:1ba8730c79a54c67c67bc17be4cc06f793b059c5
   docs/models/components/typestoinclude.md:
     last_write_checksum: sha1:d719e00f4ac132dca985b4af44c638de3e97df39
   docs/models/components/updateassistantform.md:
@@ -4152,6 +4162,8 @@ trackedFiles:
     last_write_checksum: sha1:7ece1220e48985adec826c5e3dd0b0dbaff12a0c
   src/models/components/agentplugin.ts:
     last_write_checksum: sha1:15434de35272d44a41b4379c86047304528a27c0
+  src/models/components/agentusage.ts:
+    last_write_checksum: sha1:6e9f206e898d71b9e2d2834c7a8e24979c073bec
   src/models/components/aiintegrationconfig.ts:
     last_write_checksum: sha1:d4969b5c4807110e308838b1e68805ca37ac8069
   src/models/components/allowedorigin.ts:
@@ -4185,17 +4197,23 @@ trackedFiles:
   src/models/components/challengeresolution.ts:
     last_write_checksum: sha1:3eee5fef5022dacd6465f10a32bc64d2c8a5d42d
   src/models/components/chat.ts:
-    last_write_checksum: sha1:cc21f026705aacb8ee4d4e7a172a4dc06c53fa7c
+    last_write_checksum: sha1:ea4abaf8931e2e5ac17dee2ab59811430c721e16
   src/models/components/chatmessage.ts:
-    last_write_checksum: sha1:86d1b0b52d4d911ad41ac3293868429b622acf15
+    last_write_checksum: sha1:4c5d72f5766297045d6b421afbcdafa6fa27b493
   src/models/components/chatoverview.ts:
     last_write_checksum: sha1:3b6ac49ef8daabc38bf720571294d2f18592aae4
   src/models/components/chatsummary.ts:
     last_write_checksum: sha1:aff9564e3cb1d2ecaa44e06c99bc75b4fc5d7115
+  src/models/components/claudeagentusage.ts:
+    last_write_checksum: sha1:a3e1cb37dc3d05e4e493b28765eb8cc9535a03b3
   src/models/components/claudehookpayload.ts:
     last_write_checksum: sha1:5a6f6c0b85a83641adb83faefa49eb6130c633d1
   src/models/components/claudehookresult.ts:
     last_write_checksum: sha1:efd4bc197c346a55142b1b3f65194d6c497e554c
+  src/models/components/claudetoolusage.ts:
+    last_write_checksum: sha1:66e1a6db10eecbc4cb5b9ac67491f7e527c780d3
+  src/models/components/claudeturnusage.ts:
+    last_write_checksum: sha1:0709fcfcc09ab8269e6c73f2081cdd0efbc21064
   src/models/components/cloneclientfromoauthproxyproviderform.ts:
     last_write_checksum: sha1:6159184e17bb7bbae0bec65e5c3eda0e7cd6b7fd
   src/models/components/cloneenvironmentrequestbody.ts:
@@ -4431,7 +4449,7 @@ trackedFiles:
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:84c3762ea2822453c90dfa5840e2293e9aec29fa
+    last_write_checksum: sha1:9d9abe5a5855281513f12a28ddc1b6b33a779c14
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     last_write_checksum: sha1:549d388111333748195b4791e63fd64f4a6e7140
@@ -4773,7 +4791,7 @@ trackedFiles:
   src/models/components/resource.ts:
     last_write_checksum: sha1:503b7995da7f318dfb78d1c6f26c2f7166441f59
   src/models/components/resourceentry.ts:
-    last_write_checksum: sha1:58b1fdbb7e112ccbbec65d1bfc7124c6e0749e05
+    last_write_checksum: sha1:76c0d54ba25901af51aa6bf686f9085d7b8b1eb3
   src/models/components/responsefilter.ts:
     last_write_checksum: sha1:bdb4ce2744e048df8f1fa3044b1a88e43dd2dc8a
   src/models/components/revokeallclientsessionsrequestbody.ts:
