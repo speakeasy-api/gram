@@ -207,6 +207,19 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
     routes.agentSessions,
     to,
   ]);
+  const toolLogsHref = useMemo(() => {
+    const params = new URLSearchParams();
+    if (employeeEmailFilter) {
+      params.set("user", employeeEmailFilter);
+    }
+    if (customRange) {
+      params.set("from", from.toISOString());
+      params.set("to", to.toISOString());
+    } else {
+      params.set("range", dateRange);
+    }
+    return `${routes.logs.href()}?${params.toString()}`;
+  }, [customRange, dateRange, employeeEmailFilter, from, routes.logs, to]);
   const agentSessionsQuery = useListChats(
     {
       search: employeeEmailFilter ?? undefined,
@@ -450,6 +463,25 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                   value={summary?.totalToolCalls ?? 0}
                   icon="wrench"
                   subtext={`${(summary?.toolCallSuccess ?? 0).toLocaleString()} succeeded / ${(summary?.toolCallFailure ?? 0).toLocaleString()} failed`}
+                  action={
+                    employeeEmailFilter ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Link
+                            to={toolLogsHref}
+                            aria-label="View Tool Logs"
+                            className="text-primary/70 hover:text-primary flex items-center gap-1 text-xs no-underline"
+                          >
+                            View
+                            <Icon name="arrow-right" />
+                          </Link>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          View Tool Logs for {member?.name ?? routeUser}
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : null
+                  }
                 />
                 <MetricCard
                   title="Agent Sessions"
