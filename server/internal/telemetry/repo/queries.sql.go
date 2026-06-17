@@ -1110,6 +1110,181 @@ func (q *Queries) GetChatMetricsByIDs(ctx context.Context, arg GetChatMetricsByI
 	return metricsMap, nil
 }
 
+// GetClaudeTurnUsageByChatIDsParams contains the parameters for getting Claude
+// Code per-turn usage for specific chat IDs.
+type GetClaudeTurnUsageByChatIDsParams struct {
+	GramProjectID string
+	ChatIDs       []string
+}
+
+// ClaudeTurnUsageRow represents aggregated Claude Code usage for one prompt.id turn.
+type ClaudeTurnUsageRow struct {
+	GramChatID          string   `ch:"gram_chat_id"`
+	PromptID            string   `ch:"prompt_id"`
+	StartTimeUnixNano   int64    `ch:"start_time_unix_nano"`
+	EndTimeUnixNano     int64    `ch:"end_time_unix_nano"`
+	RequestCount        uint64   `ch:"request_count"`
+	InputTokens         int64    `ch:"input_tokens"`
+	OutputTokens        int64    `ch:"output_tokens"`
+	CacheReadTokens     int64    `ch:"cache_read_tokens"`
+	CacheCreationTokens int64    `ch:"cache_creation_tokens"`
+	TotalTokens         int64    `ch:"total_tokens"`
+	CostUSD             float64  `ch:"cost_usd"`
+	CostMicros          int64    `ch:"cost_micros"`
+	Models              []string `ch:"models"`
+	QuerySources        []string `ch:"query_sources"`
+}
+
+// ClaudeToolUsageRow represents serialized input/result sizes for one Claude Code tool use.
+type ClaudeToolUsageRow struct {
+	GramChatID      string `ch:"gram_chat_id"`
+	ToolUseID       string `ch:"tool_use_id"`
+	PromptID        string `ch:"prompt_id"`
+	ToolName        string `ch:"tool_name"`
+	InputSizeBytes  int64  `ch:"input_size_bytes"`
+	ResultSizeBytes int64  `ch:"result_size_bytes"`
+}
+
+// GetClaudeTurnUsageByChatIDs retrieves ordered Claude Code usage turns grouped
+// by gram_chat_id and attributes.prompt.id. It initializes each requested chat
+// ID to an empty slice so callers can best-effort enrich chat responses without
+// special-casing missing ClickHouse rows.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetClaudeTurnUsageByChatIDs(ctx context.Context, arg GetClaudeTurnUsageByChatIDsParams) (map[string][]ClaudeTurnUsageRow, error) {
+	usageByChatID := make(map[string][]ClaudeTurnUsageRow, len(arg.ChatIDs))
+	for _, chatID := range arg.ChatIDs {
+		usageByChatID[chatID] = []ClaudeTurnUsageRow{}
+	}
+	if len(arg.ChatIDs) == 0 {
+		return usageByChatID, nil
+	}
+
+	promptIDExpr := "toString(attributes.prompt.id)"
+	isAPIRequestExpr := "(toString(attributes.event.name) = 'api_request' OR body = 'claude_code.api_request')"
+	isClaudeCodeExpr := "(service_name = 'claude-code' OR toString(resource_attributes.service.name) = 'claude-code' OR startsWith(body, 'claude_code.'))"
+	inputTokensExpr := "sumIf(toInt64OrZero(toString(attributes.input_tokens)), " + isAPIRequestExpr + ")"
+	outputTokensExpr := "sumIf(toInt64OrZero(toString(attributes.output_tokens)), " + isAPIRequestExpr + ")"
+	cacheReadTokensExpr := "sumIf(toInt64OrZero(toString(attributes.cache_read_tokens)), " + isAPIRequestExpr + ")"
+	cacheCreationTokensExpr := "sumIf(toInt64OrZero(toString(attributes.cache_creation_tokens)), " + isAPIRequestExpr + ")"
+
+	sb := sq.Select(
+		"gram_chat_id",
+		promptIDExpr+" AS prompt_id",
+		"min(time_unix_nano) AS start_time_unix_nano",
+		"max(time_unix_nano) AS end_time_unix_nano",
+		"countIf("+isAPIRequestExpr+") AS request_count",
+		inputTokensExpr+" AS input_tokens",
+		outputTokensExpr+" AS output_tokens",
+		cacheReadTokensExpr+" AS cache_read_tokens",
+		cacheCreationTokensExpr+" AS cache_creation_tokens",
+		"("+inputTokensExpr+" + "+outputTokensExpr+" + "+cacheReadTokensExpr+" + "+cacheCreationTokensExpr+") AS total_tokens",
+		"sumIf(toFloat64OrZero(toString(attributes.cost_usd)), "+isAPIRequestExpr+") AS cost_usd",
+		"sumIf(toInt64OrZero(toString(attributes.cost_usd_micros)), "+isAPIRequestExpr+") AS cost_micros",
+		"arraySort(groupUniqArrayIf(toString(attributes.model), "+isAPIRequestExpr+" AND toString(attributes.model) != '')) AS models",
+		"arraySort(groupUniqArrayIf(toString(attributes.query_source), "+isAPIRequestExpr+" AND toString(attributes.query_source) != '')) AS query_sources",
+	).
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where(squirrel.Eq{"gram_chat_id": arg.ChatIDs}).
+		Where("gram_chat_id IS NOT NULL").
+		Where("gram_chat_id != ''").
+		Where(promptIDExpr+" != ''").
+		Where(isClaudeCodeExpr).
+		GroupBy("gram_chat_id", promptIDExpr).
+		OrderBy("gram_chat_id ASC", "start_time_unix_nano ASC", "prompt_id ASC")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building get Claude turn usage by chat IDs query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var usage ClaudeTurnUsageRow
+		if err = rows.ScanStruct(&usage); err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+		usageByChatID[usage.GramChatID] = append(usageByChatID[usage.GramChatID], usage)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return usageByChatID, nil
+}
+
+// GetClaudeToolUsageByChatIDs retrieves Claude Code tool input/result byte sizes
+// grouped by chat ID and tool_use_id. Claude Code emits these fields on
+// tool_result events after the tool completes.
+//
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) GetClaudeToolUsageByChatIDs(ctx context.Context, arg GetClaudeTurnUsageByChatIDsParams) (map[string][]ClaudeToolUsageRow, error) {
+	usageByChatID := make(map[string][]ClaudeToolUsageRow, len(arg.ChatIDs))
+	for _, chatID := range arg.ChatIDs {
+		usageByChatID[chatID] = []ClaudeToolUsageRow{}
+	}
+	if len(arg.ChatIDs) == 0 {
+		return usageByChatID, nil
+	}
+
+	toolUseIDExpr := "toString(attributes.tool_use_id)"
+	promptIDExpr := "toString(attributes.prompt.id)"
+	isToolResultExpr := "(toString(attributes.event.name) = 'tool_result' OR body = 'claude_code.tool_result')"
+	isClaudeCodeExpr := "(service_name = 'claude-code' OR toString(resource_attributes.service.name) = 'claude-code' OR startsWith(body, 'claude_code.'))"
+
+	sb := sq.Select(
+		"gram_chat_id",
+		toolUseIDExpr+" AS tool_use_id",
+		promptIDExpr+" AS prompt_id",
+		"anyIf(toString(attributes.tool_name), toString(attributes.tool_name) != '') AS tool_name",
+		"max(toInt64OrZero(toString(attributes.tool_input_size_bytes))) AS input_size_bytes",
+		"max(toInt64OrZero(toString(attributes.tool_result_size_bytes))) AS result_size_bytes",
+	).
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where(squirrel.Eq{"gram_chat_id": arg.ChatIDs}).
+		Where("gram_chat_id IS NOT NULL").
+		Where("gram_chat_id != ''").
+		Where(toolUseIDExpr+" != ''").
+		Where(promptIDExpr+" != ''").
+		Where(isToolResultExpr).
+		Where(isClaudeCodeExpr).
+		GroupBy("gram_chat_id", toolUseIDExpr, promptIDExpr).
+		OrderBy("gram_chat_id ASC", "min(time_unix_nano) ASC", "tool_use_id ASC")
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building get Claude tool usage by chat IDs query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var usage ClaudeToolUsageRow
+		if err = rows.ScanStruct(&usage); err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+		usageByChatID[usage.GramChatID] = append(usageByChatID[usage.GramChatID], usage)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return usageByChatID, nil
+}
+
 // toolCallExpressions returns the SQL fragments used to count tool calls for a
 // given event source. Hook events (Claude Code, Cursor, Codex) carry a
 // tool_name and a hook event name but no gram_urn; we only count the
@@ -4077,6 +4252,111 @@ func (q *Queries) ListRecentHookEventsForOnboarding(ctx context.Context, arg Lis
 		events = append(events, ev)
 	}
 
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return events, nil
+}
+
+type ListClaudeUserPromptCandidatesForCorrelationParams struct {
+	GramProjectID          string
+	GramChatID             string
+	SessionID              string
+	MessagePrompt          string
+	MessageTimeUnixNano    int64
+	AfterEventSequence     int64
+	AfterEventTimeUnixNano int64
+	MinFuzzyLength         int
+	MaxTimeDeltaNanos      int64
+}
+
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) ListClaudeUserPromptCandidatesForCorrelation(ctx context.Context, arg ListClaudeUserPromptCandidatesForCorrelationParams) ([]ClaudeUserPromptCandidate, error) {
+	if arg.MessagePrompt == "" {
+		return nil, nil
+	}
+
+	rawEvents := sq.Select(
+		"toString(attributes.prompt.id) AS prompt_id",
+		"replaceRegexpAll(trimBoth(toString(attributes.prompt)), '\\\\s+', ' ') AS prompt",
+		"toInt64OrZero(toString(attributes.event.sequence)) AS event_sequence",
+		"time_unix_nano",
+	).
+		From("telemetry_logs").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		Where("gram_chat_id = ?", arg.GramChatID).
+		Where("toString(attributes.session.id) = ?", arg.SessionID).
+		Where("toString(attributes.event.name) = 'user_prompt'").
+		Where("toString(attributes.prompt.id) != ''").
+		Where("toString(attributes.prompt) != ''").
+		Where(squirrel.Or{
+			squirrel.Expr("event_sequence > ?", arg.AfterEventSequence),
+			squirrel.Expr("(event_sequence = ? AND time_unix_nano > ?)", arg.AfterEventSequence, arg.AfterEventTimeUnixNano),
+		})
+
+	scoredCandidates := sq.Select(
+		"prompt_id",
+		"prompt",
+		"event_sequence",
+		"time_unix_nano",
+		"prompt = message_prompt AS is_exact",
+		`if(
+			prompt = message_prompt,
+			1.0,
+			1.0 - (
+				toFloat64(editDistanceUTF8(prompt, message_prompt))
+				/ toFloat64(greatest(lengthUTF8(prompt), message_len, 1))
+			)
+		) AS similarity`,
+		"abs(time_unix_nano - message_time_unix_nano) AS time_delta",
+	).
+		FromSelect(rawEvents, "raw_events")
+
+	sb := sq.Select(
+		"prompt_id",
+		"prompt",
+		"event_sequence",
+		"time_unix_nano",
+		"similarity",
+		"is_exact",
+	).
+		Prefix(
+			"WITH ? AS message_prompt, lengthUTF8(message_prompt) AS message_len, toInt64(?) AS message_time_unix_nano",
+			arg.MessagePrompt,
+			arg.MessageTimeUnixNano,
+		).
+		FromSelect(scoredCandidates, "scored_candidates").
+		Where(squirrel.Or{
+			squirrel.Expr("is_exact"),
+			squirrel.And{
+				squirrel.Expr("message_len >= ?", arg.MinFuzzyLength),
+				squirrel.Expr("lengthUTF8(prompt) >= ?", arg.MinFuzzyLength),
+				squirrel.Expr("time_delta <= ?", arg.MaxTimeDeltaNanos),
+			},
+		}).
+		OrderBy("is_exact DESC", "similarity DESC", "time_delta ASC", "event_sequence ASC", "time_unix_nano ASC").
+		Limit(2)
+
+	query, args, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building list Claude user prompt candidates query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []ClaudeUserPromptCandidate
+	for rows.Next() {
+		var event ClaudeUserPromptCandidate
+		if err = rows.ScanStruct(&event); err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+		events = append(events, event)
+	}
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}

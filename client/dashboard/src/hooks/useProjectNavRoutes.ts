@@ -42,6 +42,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     const readWrite: Scope[] = ["project:read", "project:write"];
     return [
       { route: routes.home, scope: read },
+      { route: routes.chat, scope: read },
       { route: routes.sources, scope: readWrite },
       { route: routes.catalog, scope: ["project:read", "mcp:write"] },
       {

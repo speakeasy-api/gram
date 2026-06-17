@@ -76,6 +76,9 @@ export function useObservabilityMcpConfig({
       projectSlug,
       tools: {
         toolsToInclude,
+        // Collapse multi-tool groups to an "Executed N tools" summary by
+        // default; the user expands a group to see the individual calls.
+        expandToolGroupsByDefault: false,
       },
       api: {
         url: serverURL,

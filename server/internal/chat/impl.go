@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -402,6 +403,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 			ToolCalls:      &toolCalls,
 			ToolCallID:     &msg.ToolCallID.String,
 			FinishReason:   &msg.FinishReason.String,
+			PromptID:       conv.FromPGText[string](msg.MessageID),
 			CreatedAt:      msg.CreatedAt.Time.Format(time.RFC3339),
 			Generation:     int(msg.Generation),
 		}
@@ -456,11 +458,15 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		TotalOutputTokens:    nil,
 		TotalTokens:          nil,
 		TotalCost:            nil,
+		AgentUsage:           nil,
 	}
 
 	if isLatestRequest {
 		if err := s.enrichChatWithMetrics(ctx, authCtx.ProjectID.String(), result); err != nil {
 			s.logger.WarnContext(ctx, "failed to enrich chat with metrics", attr.SlogError(err))
+		}
+		if err := s.enrichChatWithClaudeTurnUsage(ctx, authCtx.ProjectID.String(), result); err != nil {
+			s.logger.WarnContext(ctx, "failed to enrich chat with Claude turn usage", attr.SlogError(err))
 		}
 	}
 
@@ -1416,4 +1422,76 @@ func (s *Service) enrichChatWithMetrics(ctx context.Context, projectID string, c
 	}
 
 	return nil
+}
+
+// enrichChatWithClaudeTurnUsage fetches per-turn Claude Code usage from ClickHouse
+// and attaches it to chat.load. This is best-effort: missing ClickHouse data
+// simply leaves the optional agent usage payload empty.
+func (s *Service) enrichChatWithClaudeTurnUsage(ctx context.Context, projectID string, chat *gen.Chat) error {
+	if s.telemetryService == nil {
+		return nil
+	}
+
+	usageMap, err := s.telemetryService.GetClaudeTurnUsageByChatIDs(ctx, projectID, []string{chat.ID})
+	if err != nil {
+		return fmt.Errorf("get Claude turn usage from ClickHouse: %w", err)
+	}
+	toolUsageMap, err := s.telemetryService.GetClaudeToolUsageByChatIDs(ctx, projectID, []string{chat.ID})
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to enrich chat with Claude tool usage", attr.SlogError(err))
+		toolUsageMap = nil
+	}
+
+	turns := usageMap[chat.ID]
+	toolUsageRows := toolUsageMap[chat.ID]
+	if len(turns) == 0 && len(toolUsageRows) == 0 {
+		return nil
+	}
+
+	apiTurns := make([]*gen.ClaudeTurnUsage, 0, len(turns))
+	for _, turn := range turns {
+		apiTurns = append(apiTurns, &gen.ClaudeTurnUsage{
+			PromptID:            turn.PromptID,
+			StartTimeUnixNano:   strconv.FormatInt(turn.StartTimeUnixNano, 10),
+			EndTimeUnixNano:     strconv.FormatInt(turn.EndTimeUnixNano, 10),
+			RequestCount:        clampUint64ToInt64(turn.RequestCount),
+			InputTokens:         turn.InputTokens,
+			OutputTokens:        turn.OutputTokens,
+			CacheReadTokens:     turn.CacheReadTokens,
+			CacheCreationTokens: turn.CacheCreationTokens,
+			TotalTokens:         turn.TotalTokens,
+			CostUsd:             turn.CostUSD,
+			CostMicros:          turn.CostMicros,
+			Models:              turn.Models,
+			QuerySources:        turn.QuerySources,
+		})
+	}
+	apiTools := make([]*gen.ClaudeToolUsage, 0, len(toolUsageRows))
+	for _, tool := range toolUsageRows {
+		apiTools = append(apiTools, &gen.ClaudeToolUsage{
+			ToolUseID:       tool.ToolUseID,
+			PromptID:        tool.PromptID,
+			ToolName:        tool.ToolName,
+			InputSizeBytes:  tool.InputSizeBytes,
+			ResultSizeBytes: tool.ResultSizeBytes,
+		})
+	}
+
+	chat.AgentUsage = &gen.AgentUsage{
+		Type: "claude",
+		Claude: &gen.ClaudeAgentUsage{
+			Turns: apiTurns,
+			Tools: apiTools,
+		},
+	}
+
+	return nil
+}
+
+func clampUint64ToInt64(value uint64) int64 {
+	const maxInt64 = ^uint64(0) >> 1
+	if value > maxInt64 {
+		return int64(maxInt64)
+	}
+	return int64(value)
 }

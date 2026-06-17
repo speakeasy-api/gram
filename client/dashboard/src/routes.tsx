@@ -13,6 +13,7 @@ import CatalogDetail, {
   CatalogDetailRoot,
 } from "./pages/catalog/CatalogDetail";
 import ChatSessions from "./pages/chatLogs/ChatLogs";
+import { ChatConversation, ChatHome, ChatRoot } from "./pages/chat/Chat";
 import CLIs from "./pages/CLIs";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
@@ -185,6 +186,21 @@ const ROUTE_STRUCTURE = {
     url: "",
     icon: "house",
     component: Home,
+  },
+  chat: {
+    title: "Project Assistant",
+    url: "chat",
+    icon: "message-circle",
+    // Layout route: renders the index (ChatHome) or a conversation subpage.
+    component: ChatRoot,
+    indexComponent: ChatHome,
+    subPages: {
+      conversation: {
+        title: "Chat",
+        url: ":chatId",
+        component: ChatConversation,
+      },
+    },
   },
   playground: {
     title: "Playground",

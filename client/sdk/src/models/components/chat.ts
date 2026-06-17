@@ -7,9 +7,11 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import { AgentUsage, AgentUsage$inboundSchema } from "./agentusage.js";
 import { ChatMessage, ChatMessage$inboundSchema } from "./chatmessage.js";
 
 export type Chat = {
+  agentUsage?: AgentUsage | undefined;
   /**
    * When the chat was created.
    */
@@ -83,6 +85,7 @@ export type Chat = {
 /** @internal */
 export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
   z.object({
+    agent_usage: z.optional(AgentUsage$inboundSchema),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -112,6 +115,7 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
   }),
   z.transform((v) => {
     return remap$(v, {
+      "agent_usage": "agentUsage",
       "created_at": "createdAt",
       "external_user_id": "externalUserId",
       "last_message_timestamp": "lastMessageTimestamp",
