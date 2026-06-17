@@ -136,11 +136,11 @@ function UserSessionsInner(): JSX.Element {
               options={facets?.servers ?? []}
             />
             <FacetSelect
-              label="Client"
+              label="OAuth Clients"
               value={clientId}
               onValueChange={setClientId}
-              placeholder="All clients"
-              allLabel="All clients"
+              placeholder="All OAuth clients"
+              allLabel="All OAuth clients"
               options={facets?.clients ?? []}
             />
             <FacetSelect
@@ -165,7 +165,7 @@ function UserSessionsInner(): JSX.Element {
             <DotTable
               headers={[
                 { label: "Subject" },
-                { label: "Client" },
+                { label: "OAuth Client" },
                 { label: "MCP server" },
                 { label: "Status" },
                 { label: "Expires" },
