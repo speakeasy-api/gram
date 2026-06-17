@@ -90,7 +90,7 @@ export type UpdateRiskPolicyRequestBody = {
    */
   prompt?: string | undefined;
   /**
-   * Prompt-injection detection rule ids to enable in addition to the heuristic baseline (e.g. 'deberta-v3-classifier').
+   * Prompt-injection detection rule ids to enable in addition to the heuristic baseline.
    */
   promptInjectionRules?: Array<string> | undefined;
   /**

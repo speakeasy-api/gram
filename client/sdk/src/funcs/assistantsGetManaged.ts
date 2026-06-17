@@ -28,19 +28,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * getRiskCapabilities risk
+ * getManagedAssistant assistants
  *
  * @remarks
- * Get server-side risk analysis capabilities for the current project.
+ * Get the project's built-in Project Assistant if it exists. Returns 404 when no managed assistant has been provisioned yet — call ensureManagedAssistant to create one.
  */
-export function riskCapabilitiesGet(
+export function assistantsGetManaged(
   client: GramCore,
-  request?: operations.GetRiskCapabilitiesRequest | undefined,
-  security?: operations.GetRiskCapabilitiesSecurity | undefined,
+  request?: operations.GetManagedAssistantRequest | undefined,
+  security?: operations.GetManagedAssistantSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.RiskCapabilitiesResult,
+    components.Assistant,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -62,13 +62,13 @@ export function riskCapabilitiesGet(
 
 async function $do(
   client: GramCore,
-  request?: operations.GetRiskCapabilitiesRequest | undefined,
-  security?: operations.GetRiskCapabilitiesSecurity | undefined,
+  request?: operations.GetManagedAssistantRequest | undefined,
+  security?: operations.GetManagedAssistantSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.RiskCapabilitiesResult,
+      components.Assistant,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -86,7 +86,7 @@ async function $do(
     request,
     (value) =>
       z.parse(
-        z.optional(operations.GetRiskCapabilitiesRequest$outboundSchema),
+        z.optional(operations.GetManagedAssistantRequest$outboundSchema),
         value,
       ),
     "Input validation failed",
@@ -97,14 +97,10 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/risk.capabilities.get")();
+  const path = pathToFunc("/rpc/assistants.getManagedAssistant")();
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
-      explode: false,
-      charEncoding: "none",
-    }),
     "Gram-Project": encodeSimple("Gram-Project", payload?.["Gram-Project"], {
       explode: false,
       charEncoding: "none",
@@ -118,26 +114,14 @@ async function $do(
   const requestSecurity = resolveSecurity(
     [
       {
-        fieldName: "Gram-Key",
-        type: "apiKey:header",
-        value: security?.option1?.apikeyHeaderGramKey,
-      },
-      {
         fieldName: "Gram-Project",
         type: "apiKey:header",
-        value: security?.option1?.projectSlugHeaderGramProject,
-      },
-    ],
-    [
-      {
-        fieldName: "Gram-Project",
-        type: "apiKey:header",
-        value: security?.option2?.projectSlugHeaderGramProject,
+        value: security?.projectSlugHeaderGramProject,
       },
       {
         fieldName: "Gram-Session",
         type: "apiKey:header",
-        value: security?.option2?.sessionHeaderGramSession,
+        value: security?.sessionHeaderGramSession,
       },
     ],
   );
@@ -145,7 +129,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getRiskCapabilities",
+    operationID: "getManagedAssistant",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -200,7 +184,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.RiskCapabilitiesResult,
+    components.Assistant,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -211,7 +195,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.RiskCapabilitiesResult$inboundSchema),
+    M.json(200, components.Assistant$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

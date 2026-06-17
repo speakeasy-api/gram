@@ -29,19 +29,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  buildRiskCapabilitiesQuery,
-  prefetchRiskCapabilities,
-  queryKeyRiskCapabilities,
-  RiskCapabilitiesQueryData,
-} from "./riskCapabilities.core.js";
+  AssistantsGetManagedQueryData,
+  buildAssistantsGetManagedQuery,
+  prefetchAssistantsGetManaged,
+  queryKeyAssistantsGetManaged,
+} from "./assistantsGetManaged.core.js";
 export {
-  buildRiskCapabilitiesQuery,
-  prefetchRiskCapabilities,
-  queryKeyRiskCapabilities,
-  type RiskCapabilitiesQueryData,
+  type AssistantsGetManagedQueryData,
+  buildAssistantsGetManagedQuery,
+  prefetchAssistantsGetManaged,
+  queryKeyAssistantsGetManaged,
 };
 
-export type RiskCapabilitiesQueryError =
+export type AssistantsGetManagedQueryError =
   | errors.ServiceError
   | GramError
   | ResponseValidationError
@@ -53,22 +53,25 @@ export type RiskCapabilitiesQueryError =
   | SDKValidationError;
 
 /**
- * getRiskCapabilities risk
+ * getManagedAssistant assistants
  *
  * @remarks
- * Get server-side risk analysis capabilities for the current project.
+ * Get the project's built-in Project Assistant if it exists. Returns 404 when no managed assistant has been provisioned yet — call ensureManagedAssistant to create one.
  */
-export function useRiskCapabilities(
-  request?: operations.GetRiskCapabilitiesRequest | undefined,
-  security?: operations.GetRiskCapabilitiesSecurity | undefined,
+export function useAssistantsGetManaged(
+  request?: operations.GetManagedAssistantRequest | undefined,
+  security?: operations.GetManagedAssistantSecurity | undefined,
   options?: QueryHookOptions<
-    RiskCapabilitiesQueryData,
-    RiskCapabilitiesQueryError
+    AssistantsGetManagedQueryData,
+    AssistantsGetManagedQueryError
   >,
-): UseQueryResult<RiskCapabilitiesQueryData, RiskCapabilitiesQueryError> {
+): UseQueryResult<
+  AssistantsGetManagedQueryData,
+  AssistantsGetManagedQueryError
+> {
   const client = useGramContext();
   return useQuery({
-    ...buildRiskCapabilitiesQuery(
+    ...buildAssistantsGetManagedQuery(
       client,
       request,
       security,
@@ -79,25 +82,25 @@ export function useRiskCapabilities(
 }
 
 /**
- * getRiskCapabilities risk
+ * getManagedAssistant assistants
  *
  * @remarks
- * Get server-side risk analysis capabilities for the current project.
+ * Get the project's built-in Project Assistant if it exists. Returns 404 when no managed assistant has been provisioned yet — call ensureManagedAssistant to create one.
  */
-export function useRiskCapabilitiesSuspense(
-  request?: operations.GetRiskCapabilitiesRequest | undefined,
-  security?: operations.GetRiskCapabilitiesSecurity | undefined,
+export function useAssistantsGetManagedSuspense(
+  request?: operations.GetManagedAssistantRequest | undefined,
+  security?: operations.GetManagedAssistantSecurity | undefined,
   options?: SuspenseQueryHookOptions<
-    RiskCapabilitiesQueryData,
-    RiskCapabilitiesQueryError
+    AssistantsGetManagedQueryData,
+    AssistantsGetManagedQueryError
   >,
 ): UseSuspenseQueryResult<
-  RiskCapabilitiesQueryData,
-  RiskCapabilitiesQueryError
+  AssistantsGetManagedQueryData,
+  AssistantsGetManagedQueryError
 > {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildRiskCapabilitiesQuery(
+    ...buildAssistantsGetManagedQuery(
       client,
       request,
       security,
@@ -107,27 +110,25 @@ export function useRiskCapabilitiesSuspense(
   });
 }
 
-export function setRiskCapabilitiesData(
+export function setAssistantsGetManagedData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     },
   ],
-  data: RiskCapabilitiesQueryData,
-): RiskCapabilitiesQueryData | undefined {
-  const key = queryKeyRiskCapabilities(...queryKeyBase);
+  data: AssistantsGetManagedQueryData,
+): AssistantsGetManagedQueryData | undefined {
+  const key = queryKeyAssistantsGetManaged(...queryKeyBase);
 
-  return client.setQueryData<RiskCapabilitiesQueryData>(key, data);
+  return client.setQueryData<AssistantsGetManagedQueryData>(key, data);
 }
 
-export function invalidateRiskCapabilities(
+export function invalidateAssistantsGetManaged(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     }]
@@ -136,16 +137,16 @@ export function invalidateRiskCapabilities(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "capabilities", "get", ...queryKeyBase],
+    queryKey: ["@gram/client", "assistants", "getManaged", ...queryKeyBase],
   });
 }
 
-export function invalidateAllRiskCapabilities(
+export function invalidateAllAssistantsGetManaged(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "capabilities", "get"],
+    queryKey: ["@gram/client", "assistants", "getManaged"],
   });
 }

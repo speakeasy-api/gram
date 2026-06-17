@@ -8,23 +8,23 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { riskCapabilitiesGet } from "../funcs/riskCapabilitiesGet.js";
+import { assistantsGetManaged } from "../funcs/assistantsGetManaged.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
-export type RiskCapabilitiesQueryData = components.RiskCapabilitiesResult;
+export type AssistantsGetManagedQueryData = components.Assistant;
 
-export function prefetchRiskCapabilities(
+export function prefetchAssistantsGetManaged(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: operations.GetRiskCapabilitiesRequest | undefined,
-  security?: operations.GetRiskCapabilitiesSecurity | undefined,
+  request?: operations.GetManagedAssistantRequest | undefined,
+  security?: operations.GetManagedAssistantSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildRiskCapabilitiesQuery(
+    ...buildAssistantsGetManagedQuery(
       client$,
       request,
       security,
@@ -33,26 +33,25 @@ export function prefetchRiskCapabilities(
   });
 }
 
-export function buildRiskCapabilitiesQuery(
+export function buildAssistantsGetManagedQuery(
   client$: GramCore,
-  request?: operations.GetRiskCapabilitiesRequest | undefined,
-  security?: operations.GetRiskCapabilitiesSecurity | undefined,
+  request?: operations.GetManagedAssistantRequest | undefined,
+  security?: operations.GetManagedAssistantSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
   queryFn: (
     context: QueryFunctionContext,
-  ) => Promise<RiskCapabilitiesQueryData>;
+  ) => Promise<AssistantsGetManagedQueryData>;
 } {
   return {
-    queryKey: queryKeyRiskCapabilities({
-      gramKey: request?.gramKey,
+    queryKey: queryKeyAssistantsGetManaged({
       gramSession: request?.gramSession,
       gramProject: request?.gramProject,
     }),
-    queryFn: async function riskCapabilitiesQueryFn(
+    queryFn: async function assistantsGetManagedQueryFn(
       ctx,
-    ): Promise<RiskCapabilitiesQueryData> {
+    ): Promise<AssistantsGetManagedQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -64,7 +63,7 @@ export function buildRiskCapabilitiesQuery(
         signal: sig,
       };
 
-      return unwrapAsync(riskCapabilitiesGet(
+      return unwrapAsync(assistantsGetManaged(
         client$,
         request,
         security,
@@ -74,12 +73,11 @@ export function buildRiskCapabilitiesQuery(
   };
 }
 
-export function queryKeyRiskCapabilities(
+export function queryKeyAssistantsGetManaged(
   parameters: {
-    gramKey?: string | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
   },
 ): QueryKey {
-  return ["@gram/client", "capabilities", "get", parameters];
+  return ["@gram/client", "assistants", "getManaged", parameters];
 }
