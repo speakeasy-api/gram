@@ -57,22 +57,6 @@ WHERE project_id = sqlc.arg(project_id)
 ORDER BY created_at DESC
 LIMIT 1;
 
--- name: BackfillLatestClaudeUserMessagePromptID :execrows
-WITH latest_user_message AS (
-  SELECT chat_messages.id
-  FROM chat_messages
-  WHERE chat_messages.chat_id = sqlc.arg(chat_id)
-    AND (chat_messages.project_id IS NULL OR chat_messages.project_id = sqlc.arg(project_id)::uuid)
-    AND chat_messages.role = 'user'
-  ORDER BY chat_messages.seq DESC
-  LIMIT 1
-)
-UPDATE chat_messages
-SET message_id = sqlc.arg(message_id)
-WHERE chat_messages.id = (SELECT latest_user_message.id FROM latest_user_message)
-  AND sqlc.arg(message_id)::text <> ''
-  AND (chat_messages.message_id IS NULL OR chat_messages.message_id = '' OR chat_messages.message_id != sqlc.arg(message_id)::text);
-
 -- name: InsertShadowMCPBlockResult :exec
 INSERT INTO risk_results (
     id
