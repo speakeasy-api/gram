@@ -5,11 +5,14 @@ type PendingResolver = (result: unknown) => void;
 
 export type AssistantEnv = { id: string; slug: string };
 
+export type AssistantStatus = "loading" | "ready" | "missing";
+
 export type DraftContextValue = {
   assistantId: string | null;
   setAssistantId: (id: string) => void;
   setAssistant: (assistant: Assistant) => void;
   assistant: Assistant | undefined;
+  assistantStatus: AssistantStatus;
   refetchAssistant: () => Promise<unknown>;
   invalidateAll: () => void;
   registerPending: (toolCallId: string, resolver: PendingResolver) => void;
