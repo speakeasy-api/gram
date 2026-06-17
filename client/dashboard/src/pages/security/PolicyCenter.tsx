@@ -94,19 +94,17 @@ import {
 import { cn } from "@/lib/utils";
 import { ruleIdToPresidioEntity } from "./rule-ids";
 import {
-  buildMatchConfig,
   ruleConditions,
   ruleRequiredMessageTypes,
   useDetectionRulesStore,
+  validateConditions,
+  type MatchCombine,
 } from "./detection-rules-data";
-import { matchQueryFromConditions, parseMatchQuery } from "./match-query";
-import {
-  MatchQueryMonaco as MatchQueryInput,
-  MatchQueryExamples,
-} from "./match-query-monaco";
+import { ConditionBuilder } from "./condition-builder";
 import type {
   RiskPolicyApplication,
   RiskMatchConfig,
+  RiskMatchCondition,
 } from "@gram/client/models/components";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -801,40 +799,43 @@ function promptPolicyName(prompt: string): string {
   return prompt.trim().replace(/\s+/g, " ").slice(0, 60) || "Prompt Policy";
 }
 
-/** A stored predicate as a query-bar string. */
-function queryFromPredicate(cfg: RiskMatchConfig): string {
-  if (cfg.conditions.length === 0) return "";
-  return matchQueryFromConditions(
-    cfg.conditions,
-    cfg.combine === "or" ? "or" : "and",
-  );
+/** A single scope/exemption condition group, edited via ConditionBuilder. */
+type ScopePredicate = {
+  conditions: RiskMatchCondition[];
+  combine: MatchCombine;
+};
+
+const EMPTY_PREDICATE: ScopePredicate = { conditions: [], combine: "and" };
+
+/** A predicate as a one-element application_config list, or empty when it has
+ *  no valid conditions. */
+function predicateToList(p: ScopePredicate): RiskMatchConfig[] {
+  return validateConditions(p.conditions) === null
+    ? [{ combine: p.combine, conditions: p.conditions }]
+    : [];
 }
 
-/** A query-bar string parsed into a predicate, or undefined when empty/invalid. */
-function predicateFromQuery(query: string): RiskMatchConfig | undefined {
-  if (!query.trim()) return undefined;
-  const parsed = parseMatchQuery(query);
-  if (parsed.error || parsed.conditions.length === 0) return undefined;
-  return buildMatchConfig(parsed.conditions, parsed.combine);
+/** Load a stored application_config list — we edit only the first group. */
+function predicateFromList(
+  cfgs: RiskMatchConfig[] | undefined,
+): ScopePredicate {
+  const first = cfgs?.[0];
+  if (!first) return EMPTY_PREDICATE;
+  return {
+    conditions: first.conditions,
+    combine: first.combine === "or" ? "or" : "and",
+  };
 }
 
-/** Stored predicate list → query-bar strings (one row per predicate). */
-function queriesFromPredicates(cfgs: RiskMatchConfig[] | undefined): string[] {
-  return (cfgs ?? []).map(queryFromPredicate).filter((q) => q.trim() !== "");
-}
-
-/** Build application_config from the include/exempt query rows; undefined when
- *  none are set (policy relies on the coarse message_types + exempt_rule_ids). */
+/** Build application_config from the include/exempt groups; undefined when
+ *  neither is set (policy relies on the coarse message_types +
+ *  exempt_rule_ids). */
 function buildApplicationConfig(
-  includeQueries: string[],
-  exemptQueries: string[],
+  include: ScopePredicate,
+  exempt: ScopePredicate,
 ): RiskPolicyApplication | undefined {
-  const includes = includeQueries
-    .map(predicateFromQuery)
-    .filter((c): c is RiskMatchConfig => !!c);
-  const exempts = exemptQueries
-    .map(predicateFromQuery)
-    .filter((c): c is RiskMatchConfig => !!c);
+  const includes = predicateToList(include);
+  const exempts = predicateToList(exempt);
   if (includes.length === 0 && exempts.length === 0) return undefined;
   return { includes, exempts };
 }
@@ -891,11 +892,13 @@ function PolicyCenterContent() {
   const [exemptRuleIds, setExemptRuleIds] = useState<Set<string>>(
     new Set<string>(),
   );
-  // Fine-grained application predicates (application_config): lists of query-bar
-  // strings, OR'd within each list. Empty => rely on the coarse message_types +
+  // Fine-grained application predicate (application_config): one condition group
+  // for scope, one for exemptions. Empty => rely on the coarse message_types +
   // exempt_rule_ids knobs.
-  const [includeQueries, setIncludeQueries] = useState<string[]>([]);
-  const [exemptQueries, setExemptQueries] = useState<string[]>([]);
+  const [includePredicate, setIncludePredicate] =
+    useState<ScopePredicate>(EMPTY_PREDICATE);
+  const [exemptPredicate, setExemptPredicate] =
+    useState<ScopePredicate>(EMPTY_PREDICATE);
   // Scope is defined EITHER by the coarse message-type cards OR by a custom
   // include predicate — a mutex. message_types is kept either way but only sent
   // (and only required) in "messageTypes" mode.
@@ -996,8 +999,8 @@ function PolicyCenterContent() {
     setDisabledRules(new Set());
     setSelectedCustomRuleIds(new Set<string>());
     setExemptRuleIds(new Set<string>());
-    setIncludeQueries([]);
-    setExemptQueries([]);
+    setIncludePredicate(EMPTY_PREDICATE);
+    setExemptPredicate(EMPTY_PREDICATE);
     setScopeMode("messageTypes");
     setSelectedMessageTypes(new Set(ALL_POLICY_MESSAGE_TYPES));
     setFormAction("flag");
@@ -1027,11 +1030,9 @@ function PolicyCenterContent() {
     setFormName(policy.name);
     setFormEnabled(policy.enabled);
     // application_config applies to both kinds; load it before the kind branch.
-    const loadedIncludes = queriesFromPredicates(
-      policy.applicationConfig?.includes,
-    );
-    setIncludeQueries(loadedIncludes);
-    setExemptQueries(queriesFromPredicates(policy.applicationConfig?.exempts));
+    const loadedIncludes = policy.applicationConfig?.includes ?? [];
+    setIncludePredicate(predicateFromList(loadedIncludes));
+    setExemptPredicate(predicateFromList(policy.applicationConfig?.exempts));
     setScopeMode(loadedIncludes.length > 0 ? "predicate" : "messageTypes");
     if (isPrompt) {
       setFormPromptInstruction(policy.prompt ?? "");
@@ -1088,8 +1089,8 @@ function PolicyCenterContent() {
     // a value (empty object clears) so the omit-to-preserve impl can replace it;
     // on create we omit when empty.
     const applicationConfig = buildApplicationConfig(
-      scopeMode === "predicate" ? includeQueries : [],
-      exemptQueries,
+      scopeMode === "predicate" ? includePredicate : EMPTY_PREDICATE,
+      exemptPredicate,
     );
     const applicationUpdate = { applicationConfig: applicationConfig ?? {} };
     const applicationCreate = applicationConfig ? { applicationConfig } : {};
@@ -1503,10 +1504,9 @@ function PolicyCenterContent() {
   const showWizardContinue = isWizard && !isLastWizardStep;
   const mutationPending = createMutation.isPending || updateMutation.isPending;
   // Scope is satisfied by either a message-type selection or — in predicate mode
-  // — at least one valid include predicate (the two are a mutex).
-  const hasValidInclude = includeQueries.some(
-    (q) => predicateFromQuery(q) !== undefined,
-  );
+  // — a valid include group (the two are a mutex).
+  const hasValidInclude =
+    validateConditions(includePredicate.conditions) === null;
   const scopeMissing =
     scopeMode === "messageTypes"
       ? selectedMessageTypes.size === 0
@@ -1517,11 +1517,13 @@ function PolicyCenterContent() {
         ? !formPromptInstruction.trim()
         : selectedCategories.size === 0 && selectedCustomRuleIds.size === 0)) ||
     (wizardStep === 1 && scopeMissing);
-  // Block save while an application predicate that will be sent is unparseable.
-  const applicationInvalid = [
-    ...(scopeMode === "predicate" ? includeQueries : []),
-    ...exemptQueries,
-  ].some((q) => q.trim() !== "" && parseMatchQuery(q).error !== null);
+  // Block save while a group that will be sent has conditions but is invalid
+  // (e.g. a malformed regex). A fully-empty group is ignored.
+  const groupInvalid = (p: ScopePredicate) =>
+    p.conditions.length > 0 && validateConditions(p.conditions) !== null;
+  const applicationInvalid =
+    (scopeMode === "predicate" && groupInvalid(includePredicate)) ||
+    groupInvalid(exemptPredicate);
   const saveDisabled =
     (formPolicyKind === "prompt" && !formPromptInstruction.trim()) ||
     // A standard policy needs at least one detector or custom rule (the step-0
@@ -1685,10 +1687,10 @@ function PolicyCenterContent() {
                     setSelectedCustomRuleIds={setSelectedCustomRuleIds}
                     exemptRuleIds={exemptRuleIds}
                     setExemptRuleIds={setExemptRuleIds}
-                    includeQueries={includeQueries}
-                    setIncludeQueries={setIncludeQueries}
-                    exemptQueries={exemptQueries}
-                    setExemptQueries={setExemptQueries}
+                    includePredicate={includePredicate}
+                    setIncludePredicate={setIncludePredicate}
+                    exemptPredicate={exemptPredicate}
+                    setExemptPredicate={setExemptPredicate}
                     scopeMode={scopeMode}
                     setScopeMode={setScopeMode}
                     selectedMessageTypes={selectedMessageTypes}
@@ -2358,71 +2360,6 @@ function PromptPolicyHowItWorks({ isEditing }: { isEditing: boolean }) {
 /*  PolicySheetBody                                                           */
 /* -------------------------------------------------------------------------- */
 
-/** A list of match-query predicate rows (OR'd) with add/remove — used for both
- *  the include (scope) and exempt lists in the Scope step's Advanced section. */
-function PredicateList({
-  label,
-  helpText,
-  emptyAddLabel,
-  queries,
-  setQueries,
-}: {
-  label?: string;
-  helpText?: string;
-  emptyAddLabel: string;
-  queries: string[];
-  setQueries: (v: string[]) => void;
-}) {
-  const update = (i: number, v: string) => {
-    const next = [...queries];
-    next[i] = v;
-    setQueries(next);
-  };
-  return (
-    <div className="space-y-2">
-      {label && <Label className="text-sm font-medium">{label}</Label>}
-      {helpText && <p className="text-muted-foreground text-xs">{helpText}</p>}
-      {queries.map((q, i) => (
-        // Index key: rows are positional and Monaco is controlled by `value`.
-        // eslint-disable-next-line react/no-array-index-key
-        <div key={i} className="space-y-1">
-          {i > 0 && (
-            <div className="text-muted-foreground text-[10px] font-semibold tracking-wide">
-              OR
-            </div>
-          )}
-          <div className="flex items-start gap-2">
-            <div className="min-w-0 flex-1">
-              <MatchQueryInput
-                value={q}
-                onChange={(v) => update(i, v)}
-                error={q.trim() ? parseMatchQuery(q).error : null}
-                showExamples={false}
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => setQueries(queries.filter((_, j) => j !== i))}
-              aria-label="Remove"
-              className="text-muted-foreground hover:text-foreground mt-2.5 shrink-0"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      ))}
-      <Button variant="secondary" onClick={() => setQueries([...queries, ""])}>
-        <Button.LeftIcon>
-          <Plus className="h-4 w-4" />
-        </Button.LeftIcon>
-        <Button.Text>
-          {queries.length === 0 ? emptyAddLabel : "Add another (OR)"}
-        </Button.Text>
-      </Button>
-    </div>
-  );
-}
-
 function PolicySheetBody({
   wizardStep,
   setWizardStep,
@@ -2439,10 +2376,10 @@ function PolicySheetBody({
   setSelectedCustomRuleIds,
   exemptRuleIds,
   setExemptRuleIds,
-  includeQueries,
-  setIncludeQueries,
-  exemptQueries,
-  setExemptQueries,
+  includePredicate,
+  setIncludePredicate,
+  exemptPredicate,
+  setExemptPredicate,
   scopeMode,
   setScopeMode,
   selectedMessageTypes,
@@ -2469,10 +2406,10 @@ function PolicySheetBody({
   setSelectedCustomRuleIds: (v: Set<string>) => void;
   exemptRuleIds: Set<string>;
   setExemptRuleIds: (v: Set<string>) => void;
-  includeQueries: string[];
-  setIncludeQueries: (v: string[]) => void;
-  exemptQueries: string[];
-  setExemptQueries: (v: string[]) => void;
+  includePredicate: ScopePredicate;
+  setIncludePredicate: (v: ScopePredicate) => void;
+  exemptPredicate: ScopePredicate;
+  setExemptPredicate: (v: ScopePredicate) => void;
   scopeMode: "messageTypes" | "predicate";
   setScopeMode: (v: "messageTypes" | "predicate") => void;
   selectedMessageTypes: Set<PolicyMessageType>;
@@ -2645,7 +2582,7 @@ function PolicySheetBody({
           <div className="space-y-6">
             <WizardStepHeading
               title="Where should it evaluate?"
-              description="Leave all four on to apply everywhere. Narrow the scope to reduce noise or cost."
+              description="Apply everywhere, or narrow the scope to reduce noise and cost."
             />
             {/* Scope is a mutex: message-type cards (coarse) XOR a custom
                 include predicate (fine). The segmented control conveys that. */}
@@ -2654,7 +2591,7 @@ function PolicySheetBody({
                 {(
                   [
                     { key: "messageTypes", label: "Message types" },
-                    { key: "predicate", label: "Custom predicate" },
+                    { key: "predicate", label: "Specific conditions" },
                   ] as const
                 ).map((opt) => (
                   <button
@@ -2674,8 +2611,8 @@ function PolicySheetBody({
               </div>
               <p className="text-muted-foreground text-xs">
                 {scopeMode === "messageTypes"
-                  ? "Apply to whole session parts. Switch to a custom predicate to match on tool or content attributes instead."
-                  : "Apply only to messages matching your predicate(s) — this replaces the message-type selection."}
+                  ? "Apply to whole session parts. Switch to specific conditions to match on tool or content attributes instead."
+                  : "Apply only to messages matching the conditions below — this replaces the message-type selection."}
               </p>
             </div>
 
@@ -2740,13 +2677,22 @@ function PolicySheetBody({
                 )}
               </>
             ) : (
-              <PredicateList
-                label="Evaluate messages matching"
-                helpText="The policy evaluates a message only when it matches one of these. Add more to widen scope — they're OR'd."
-                emptyAddLabel="Add scope predicate"
-                queries={includeQueries}
-                setQueries={setIncludeQueries}
-              />
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  Evaluate messages matching
+                </Label>
+                <p className="text-muted-foreground text-xs">
+                  The policy evaluates a message only when it matches these
+                  conditions.
+                </p>
+                <ConditionBuilder
+                  conditions={includePredicate.conditions}
+                  combine={includePredicate.combine}
+                  onChange={(conditions, combine) =>
+                    setIncludePredicate({ conditions, combine })
+                  }
+                />
+              </div>
             )}
 
             {/* Exemptions — always available and additive (not part of the
@@ -2756,8 +2702,8 @@ function PolicySheetBody({
                 <Label className="text-sm font-medium">Exemptions</Label>
                 <p className="text-muted-foreground text-xs">
                   Skip the whole policy for a message that matches a saved rule
-                  or a match query below — an allowlist, regardless of the scope
-                  above.
+                  or the conditions below — an allowlist, regardless of the
+                  scope above.
                 </p>
               </div>
               {customRules.length > 0 && (
@@ -2778,16 +2724,14 @@ function PolicySheetBody({
                   onToggle={() => setExemptionsExpanded((v) => !v)}
                 />
               )}
-              <PredicateList
-                emptyAddLabel="Add exemption query"
-                queries={exemptQueries}
-                setQueries={setExemptQueries}
+              <ConditionBuilder
+                conditions={exemptPredicate.conditions}
+                combine={exemptPredicate.combine}
+                onChange={(conditions, combine) =>
+                  setExemptPredicate({ conditions, combine })
+                }
               />
             </div>
-
-            {(scopeMode === "predicate" || exemptQueries.length > 0) && (
-              <MatchQueryExamples />
-            )}
           </div>
         )}
 

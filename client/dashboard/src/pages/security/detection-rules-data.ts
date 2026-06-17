@@ -360,7 +360,7 @@ export const TARGET_LABELS: Record<MatchTarget, string> = {
   assistant_text: "Assistant text",
   tool_result: "Tool result",
   tool_name: "Tool name",
-  tool_server: "Tool server (MCP)",
+  tool_server: "Tool server",
   tool_function: "Tool function",
   tool_args: "Tool argument",
 };

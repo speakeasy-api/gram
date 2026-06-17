@@ -44,19 +44,24 @@ import {
   BUILTIN_RULES_BY_CATEGORY,
   SEVERITY_LEVELS,
   buildMatchConfig,
+  defaultCondition,
   ruleCombine,
   ruleConditions,
   ruleSummary,
   useDetectionRulesStore,
+  validateConditions,
   validateCustomRuleId,
   type BuiltinRule,
   type CustomDetectionRule,
   type CustomRuleDraft,
+  type MatchCombine,
   type SeverityLevel,
 } from "./detection-rules-data";
-import { matchQueryFromConditions, parseMatchQuery } from "./match-query";
-import { MatchQueryMonaco as MatchQueryInput } from "./match-query-monaco";
-import type { RiskMatchConfig } from "@gram/client/models/components";
+import { ConditionBuilder } from "./condition-builder";
+import type {
+  RiskMatchConfig,
+  RiskMatchCondition,
+} from "@gram/client/models/components";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
 
 /** Presidio-backed categories: kept in the same order the policy form uses
@@ -478,9 +483,10 @@ function CustomRuleDetail({
 }) {
   const [title, setTitle] = useState(rule.title);
   const [description, setDescription] = useState(rule.description);
-  const [query, setQuery] = useState(() =>
-    matchQueryFromConditions(ruleConditions(rule), ruleCombine(rule)),
+  const [conditions, setConditions] = useState<RiskMatchCondition[]>(() =>
+    ruleConditions(rule),
   );
+  const [combine, setCombine] = useState<MatchCombine>(() => ruleCombine(rule));
   const [saveState, setSaveState] = useState<
     "idle" | "saving" | "saved" | "error"
   >("idle");
@@ -488,14 +494,17 @@ function CustomRuleDetail({
   const savedRef = useRef({
     title: rule.title,
     description: rule.description,
-    query: matchQueryFromConditions(ruleConditions(rule), ruleCombine(rule)),
+    matcher: JSON.stringify({
+      conditions: ruleConditions(rule),
+      combine: ruleCombine(rule),
+    }),
   });
 
-  const parsed = useMemo(() => parseMatchQuery(query), [query]);
+  const conditionsError = validateConditions(conditions);
   const dirty =
     title !== savedRef.current.title ||
     description !== savedRef.current.description ||
-    query !== savedRef.current.query;
+    JSON.stringify({ conditions, combine }) !== savedRef.current.matcher;
 
   useEffect(() => {
     if (dirty && saveState === "error") {
@@ -513,8 +522,8 @@ function CustomRuleDetail({
   );
 
   const handleSave = async () => {
-    if (parsed.error) {
-      toast.error(parsed.error);
+    if (conditionsError) {
+      toast.error(conditionsError);
       return;
     }
     setSaveState("saving");
@@ -522,10 +531,14 @@ function CustomRuleDetail({
       await onUpdate({
         title,
         description,
-        conditions: parsed.conditions,
-        combine: parsed.combine,
+        conditions,
+        combine,
       });
-      savedRef.current = { title, description, query };
+      savedRef.current = {
+        title,
+        description,
+        matcher: JSON.stringify({ conditions, combine }),
+      };
       setSaveState("saved");
       if (savedTimerRef.current !== undefined) {
         window.clearTimeout(savedTimerRef.current);
@@ -571,19 +584,20 @@ function CustomRuleDetail({
 
         <div className="space-y-2">
           <Label className="text-sm font-medium">Match conditions</Label>
-          <MatchQueryInput
-            value={query}
-            onChange={setQuery}
-            error={query.trim() ? parsed.error : null}
+          <ConditionBuilder
+            conditions={conditions}
+            combine={combine}
+            onChange={(c, cb) => {
+              setConditions(c);
+              setCombine(cb);
+            }}
           />
         </div>
 
         <RulePlayground
           ruleId={rule.id}
           matchConfig={
-            parsed.error
-              ? null
-              : buildMatchConfig(parsed.conditions, parsed.combine)
+            conditionsError ? null : buildMatchConfig(conditions, combine)
           }
         />
       </div>
@@ -604,7 +618,7 @@ function CustomRuleDetail({
           <Button
             disabled={
               !dirty ||
-              !!parsed.error ||
+              !!conditionsError ||
               !title.trim() ||
               saveState === "saving"
             }
@@ -1203,7 +1217,10 @@ function CreateCustomRuleSheet({
   const [idSuffix, setIdSuffix] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [query, setQuery] = useState("");
+  const [conditions, setConditions] = useState<RiskMatchCondition[]>(() => [
+    defaultCondition(),
+  ]);
+  const [combine, setCombine] = useState<MatchCombine>("and");
   const [severity, setSeverity] = useState<SeverityLevel>("medium");
 
   const reset = () => {
@@ -1212,7 +1229,8 @@ function CreateCustomRuleSheet({
     setIdSuffix("");
     setTitle("");
     setDescription("");
-    setQuery("");
+    setConditions([defaultCondition()]);
+    setCombine("and");
     setSeverity("medium");
   };
 
@@ -1226,19 +1244,11 @@ function CreateCustomRuleSheet({
       // arguments, keywords, …); fall back to a content/regex clause for
       // older/heuristic suggestions that only return a regex.
       if (next.matchConfig && next.matchConfig.conditions.length > 0) {
-        setQuery(
-          matchQueryFromConditions(
-            next.matchConfig.conditions,
-            next.matchConfig.combine ?? "and",
-          ),
-        );
+        setConditions(next.matchConfig.conditions);
+        setCombine(next.matchConfig.combine === "or" ? "or" : "and");
       } else {
-        setQuery(
-          matchQueryFromConditions(
-            [{ target: "content", op: "regex", value: next.regex }],
-            "and",
-          ),
-        );
+        setConditions([{ target: "content", op: "regex", value: next.regex }]);
+        setCombine("and");
       }
       setSeverity(
         (SEVERITY_LEVELS as readonly string[]).includes(next.severity)
@@ -1274,7 +1284,8 @@ function CreateCustomRuleSheet({
     setIdSuffix("");
     setTitle("");
     setDescription("");
-    setQuery("");
+    setConditions([defaultCondition()]);
+    setCombine("and");
     setSeverity("medium");
     setStep("review");
   };
@@ -1289,10 +1300,10 @@ function CreateCustomRuleSheet({
         : null,
     [idSuffix, existingCustomIds],
   );
-  const parsed = useMemo(() => parseMatchQuery(query), [query]);
+  const conditionsError = validateConditions(conditions);
 
   const canSubmit =
-    idSuffix.trim() && title.trim() && !idError && !parsed.error;
+    idSuffix.trim() && title.trim() && !idError && !conditionsError;
 
   const handleSubmit = () => {
     const finalRuleId = customRuleIDFromSuffix(idSuffix);
@@ -1301,16 +1312,16 @@ function CreateCustomRuleSheet({
       toast.error(finalIdError);
       return;
     }
-    if (parsed.error) {
-      toast.error(parsed.error);
+    if (conditionsError) {
+      toast.error(conditionsError);
       return;
     }
     onCreate({
       id: finalRuleId,
       title: title.trim(),
       description: description.trim(),
-      conditions: parsed.conditions,
-      combine: parsed.combine,
+      conditions,
+      combine,
       severity,
     });
     reset();
@@ -1324,7 +1335,7 @@ function CreateCustomRuleSheet({
         if (!next) reset();
       }}
     >
-      <SheetContent className="flex flex-col overflow-y-auto sm:max-w-lg">
+      <SheetContent className="flex flex-col overflow-y-auto sm:max-w-xl">
         <SheetHeader className="px-6 pt-6">
           <SheetTitle>New Custom Detection Rule</SheetTitle>
           <SheetDescription>
@@ -1419,10 +1430,13 @@ function CreateCustomRuleSheet({
 
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Match conditions</Label>
-                <MatchQueryInput
-                  value={query}
-                  onChange={setQuery}
-                  error={query.trim() ? parsed.error : null}
+                <ConditionBuilder
+                  conditions={conditions}
+                  combine={combine}
+                  onChange={(c, cb) => {
+                    setConditions(c);
+                    setCombine(cb);
+                  }}
                 />
               </div>
             </div>
