@@ -21,6 +21,7 @@ import {
 import {
   AssistantDraftCtx,
   AssistantEnv,
+  AssistantStatus,
   DraftContextValue,
   PendingResolver,
 } from "./useAssistantDraft";
@@ -43,16 +44,27 @@ export function AssistantDraftProvider({
   );
   const pendingRef = useRef(new Map<string, PendingResolver>());
 
-  const { data: assistant, refetch } = useAssistantsGet(
-    { id: assistantId ?? "" },
-    undefined,
-    {
-      enabled: !!assistantId,
-      retry: false,
-      throwOnError: false,
-      refetchOnWindowFocus: false,
-    },
-  );
+  const {
+    data: assistant,
+    refetch,
+    isFetching: isFetchingAssistant,
+    isError: assistantFetchErrored,
+  } = useAssistantsGet({ id: assistantId ?? "" }, undefined, {
+    enabled: !!assistantId,
+    retry: false,
+    throwOnError: false,
+    refetchOnWindowFocus: false,
+  });
+
+  const assistantStatus: AssistantStatus = !assistantId
+    ? "missing"
+    : assistant
+      ? "ready"
+      : assistantFetchErrored
+        ? "missing"
+        : isFetchingAssistant
+          ? "loading"
+          : "missing";
 
   const setAssistantId = useCallback(
     (id: string) => {
@@ -122,6 +134,7 @@ export function AssistantDraftProvider({
       setAssistantId,
       setAssistant,
       assistant,
+      assistantStatus,
       refetchAssistant: refetch,
       invalidateAll,
       registerPending,
@@ -134,6 +147,7 @@ export function AssistantDraftProvider({
       setAssistantId,
       setAssistant,
       assistant,
+      assistantStatus,
       refetch,
       invalidateAll,
       registerPending,

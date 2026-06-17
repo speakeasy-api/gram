@@ -17,11 +17,16 @@ import { ErrorAlert } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { SessionRow } from "@/components/sessions/SessionRow";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { cn } from "@/lib/utils";
+import { useRoutes } from "@/routes";
 import { telemetryGetEmployeeDataFlowGraph } from "@gram/client/funcs/telemetryGetEmployeeDataFlowGraph";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import { telemetryGetUserMetricsSummary } from "@gram/client/funcs/telemetryGetUserMetricsSummary";
@@ -36,9 +41,11 @@ import type {
 } from "@gram/client/models/components";
 import {
   useGramContext,
+  useListChats,
   useMembers,
   useUserSessions,
 } from "@gram/client/react-query";
+import { useRiskOverview } from "@gram/client/react-query/index.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import {
   TimeRangePicker,
@@ -55,7 +62,7 @@ import {
   LinearScale,
   LineElement,
   PointElement,
-  Tooltip,
+  Tooltip as ChartTooltip,
   type ChartOptions,
 } from "chart.js";
 import { slugify } from "@/lib/constants";
@@ -86,7 +93,7 @@ ChartJS.register(
   PointElement,
   LineElement,
   Filler,
-  Tooltip,
+  ChartTooltip,
   Legend,
 );
 
@@ -140,6 +147,7 @@ const DATA_FLOW_EDGE_TYPES = { dataFlow: DataFlowEdgeLine };
 export function InsightsEmployeeDetailContent(): JSX.Element {
   const { userSlug } = useParams<{ userSlug: string }>();
   const client = useGramContext();
+  const routes = useRoutes();
   const { isExpanded: isInsightsOpen } = useInsightsState();
   const mcpConfig = useObservabilityMcpConfig({
     toolsToInclude: ["gram_search_users", "gram_list_organization_users"],
@@ -179,6 +187,80 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
     if (customRange) return customRangeLabel ?? "the selected range";
     return formatDateRangeLabel(dateRange, null);
   }, [customRange, customRangeLabel, dateRange]);
+  const employeeEmailFilter =
+    member?.email ?? (routeUser.includes("@") ? routeUser : null);
+  const agentSessionsHref = useMemo(() => {
+    const params = new URLSearchParams();
+    if (customRange) {
+      params.set("from", from.toISOString());
+      params.set("to", to.toISOString());
+    } else {
+      params.set("range", dateRange);
+    }
+    if (employeeEmailFilter) {
+      params.set("search", employeeEmailFilter);
+    }
+    return `${routes.agentSessions.href()}?${params.toString()}`;
+  }, [
+    customRange,
+    dateRange,
+    employeeEmailFilter,
+    from,
+    routes.agentSessions,
+    to,
+  ]);
+  const toolLogsHref = useMemo(() => {
+    const params = new URLSearchParams();
+    if (employeeEmailFilter) {
+      params.set("user", employeeEmailFilter);
+    }
+    if (customRange) {
+      params.set("from", from.toISOString());
+      params.set("to", to.toISOString());
+    } else {
+      params.set("range", dateRange);
+    }
+    return `${routes.logs.href()}?${params.toString()}`;
+  }, [customRange, dateRange, employeeEmailFilter, from, routes.logs, to]);
+  const agentSessionsQuery = useListChats(
+    {
+      search: employeeEmailFilter ?? undefined,
+      from,
+      to,
+      limit: 1,
+    },
+    undefined,
+    {
+      enabled: employeeEmailFilter != null,
+      throwOnError: false,
+    },
+  );
+  const riskEventsHref = useMemo(() => {
+    const params = new URLSearchParams();
+    if (employeeEmailFilter) {
+      params.set("user_id", employeeEmailFilter);
+    }
+    const query = params.toString();
+    return query
+      ? `${routes.riskEvents.href()}?${query}`
+      : routes.riskEvents.href();
+  }, [employeeEmailFilter, routes.riskEvents]);
+  const riskOverviewQuery = useRiskOverview({ from, to }, undefined, {
+    enabled: employeeEmailFilter != null,
+    throwOnError: false,
+  });
+  const riskEventsCount = useMemo(() => {
+    if (!employeeEmailFilter) return 0;
+    const normalizedEmail = employeeEmailFilter.toLowerCase();
+    return (
+      riskOverviewQuery.data?.topUsers.find((user) => {
+        return (
+          user.email.toLowerCase() === normalizedEmail ||
+          user.externalUserId.toLowerCase() === normalizedEmail
+        );
+      })?.findings ?? 0
+    );
+  }, [employeeEmailFilter, riskOverviewQuery.data?.topUsers]);
 
   const handlePresetChange = (preset: DateRangePreset) => {
     setDateRange(preset);
@@ -359,12 +441,9 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                   "grid gap-4 transition-all duration-300",
                   isInsightsOpen
                     ? "grid-cols-1 md:grid-cols-2"
-                    : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4",
+                    : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5",
                 )}
               >
-                <FirstActivityCard
-                  firstSeenUnixNano={summary?.firstSeenUnixNano}
-                />
                 <MetricCard
                   title="Total Tokens"
                   value={totalTokens}
@@ -386,6 +465,31 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                   value={summary?.totalToolCalls ?? 0}
                   icon="wrench"
                   subtext={`${(summary?.toolCallSuccess ?? 0).toLocaleString()} succeeded / ${(summary?.toolCallFailure ?? 0).toLocaleString()} failed`}
+                  link={toolLogsHref}
+                />
+                <MetricCard
+                  title="Agent Sessions"
+                  value={agentSessionsQuery.data?.total ?? 0}
+                  displayValue={
+                    agentSessionsQuery.isLoading || agentSessionsQuery.isError
+                      ? "-"
+                      : undefined
+                  }
+                  icon="message-square"
+                  subtext={`Over ${rangeLabel}`}
+                  link={agentSessionsHref}
+                />
+                <MetricCard
+                  title="Risk Events"
+                  value={riskEventsCount}
+                  displayValue={
+                    riskOverviewQuery.isLoading || riskOverviewQuery.isError
+                      ? "-"
+                      : undefined
+                  }
+                  icon="flag"
+                  subtext={`Over ${rangeLabel}`}
+                  link={riskEventsHref}
                 />
               </section>
 
@@ -522,50 +626,6 @@ function EmployeeSessions({ userId }: { userId: string }): JSX.Element {
   );
 }
 
-function FirstActivityCard({
-  firstSeenUnixNano,
-}: {
-  firstSeenUnixNano?: string | null;
-}) {
-  const hasActivity =
-    firstSeenUnixNano != null &&
-    firstSeenUnixNano !== "" &&
-    firstSeenUnixNano !== "0";
-  const date = hasActivity ? unixNanoToDate(firstSeenUnixNano) : null;
-  const primary = date
-    ? date.toLocaleDateString([], {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      })
-    : "No activity";
-  const subtext = date ? `${daysSince(date).toLocaleString()} days ago` : null;
-
-  return (
-    <div className="bg-card border-border rounded-lg border p-5">
-      <div className="mb-3 flex items-center justify-between">
-        <span className="text-sm font-semibold">First Activity</span>
-        <div className="bg-muted/50 rounded-lg p-2">
-          <Icon name="calendar" className="text-muted-foreground size-4" />
-        </div>
-      </div>
-      <span className="block text-3xl font-semibold tracking-tight">
-        {primary}
-      </span>
-      {subtext && (
-        <span className="text-muted-foreground mt-1 block text-xs">
-          {subtext}
-        </span>
-      )}
-    </div>
-  );
-}
-
-function daysSince(date: Date) {
-  const ms = Date.now() - date.getTime();
-  return Math.max(0, Math.floor(ms / 86_400_000));
-}
-
 function DetailLoadingState({ isInsightsOpen }: { isInsightsOpen: boolean }) {
   return (
     <>
@@ -574,10 +634,10 @@ function DetailLoadingState({ isInsightsOpen }: { isInsightsOpen: boolean }) {
           "grid gap-4 transition-all duration-300",
           isInsightsOpen
             ? "grid-cols-1 md:grid-cols-2"
-            : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4",
+            : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5",
         )}
       >
-        {Array.from({ length: 4 }).map((_, index) => (
+        {Array.from({ length: 5 }).map((_, index) => (
           <div key={index} className="bg-card rounded-lg border p-5">
             <Skeleton className="mb-4 h-4 w-28" />
             <Skeleton className="h-9 w-20" />
@@ -740,7 +800,7 @@ function EmployeeDataFlowGraphCard({
                 pannable
                 zoomable
                 ariaLabel="Data flow minimap"
-                className="!bg-card !border-border rounded-md border"
+                className="bg-card! border-border! rounded-md border"
                 maskColor="hsl(0 0% 50% / 0.12)"
                 nodeColor={getDataFlowMiniMapColor}
                 nodeStrokeWidth={2}
@@ -808,7 +868,7 @@ function DataFlowNodeCard({ data }: NodeProps<DataFlowGraphNode>) {
       <Handle
         type="target"
         position={Position.Left}
-        className="!border-background !bg-muted-foreground"
+        className="border-background! bg-muted-foreground!"
       />
       <div className="mb-2 flex items-center gap-2">
         <DataFlowNodeVisual
@@ -846,7 +906,7 @@ function DataFlowNodeCard({ data }: NodeProps<DataFlowGraphNode>) {
       <Handle
         type="source"
         position={Position.Right}
-        className="!border-background !bg-muted-foreground"
+        className="border-background! bg-muted-foreground!"
       />
     </div>
   );
@@ -856,14 +916,17 @@ function DataFlowMetricBadge({ metric }: { metric: DataFlowNodeMetric }) {
   const tooltip = `${metric.value.toLocaleString()} calls received (${metric.successValue.toLocaleString()} ok / ${metric.failureValue.toLocaleString()} blocked)`;
 
   return (
-    <SimpleTooltip tooltip={tooltip}>
-      <Badge variant="neutral" background>
-        <Badge.LeftIcon>
-          <ArrowRight className="h-3.5 w-3.5" />
-        </Badge.LeftIcon>
-        <Badge.Text>{metric.value.toLocaleString()}</Badge.Text>
-      </Badge>
-    </SimpleTooltip>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge variant="neutral" background>
+          <Badge.LeftIcon>
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Badge.LeftIcon>
+          <Badge.Text>{metric.value.toLocaleString()}</Badge.Text>
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -950,16 +1013,19 @@ function ServerClassBadge({
       : meta.tooltip;
 
   return (
-    <SimpleTooltip tooltip={tooltip}>
-      <Badge variant={meta.variant} background aria-label={meta.tooltip}>
-        <Badge.LeftIcon>
-          <ClassIcon className="h-3.5 w-3.5" />
-        </Badge.LeftIcon>
-        {count !== undefined && (
-          <Badge.Text>{count.toLocaleString()}</Badge.Text>
-        )}
-      </Badge>
-    </SimpleTooltip>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge variant={meta.variant} background aria-label={meta.tooltip}>
+          <Badge.LeftIcon>
+            <ClassIcon className="h-3.5 w-3.5" />
+          </Badge.LeftIcon>
+          {count !== undefined && (
+            <Badge.Text>{count.toLocaleString()}</Badge.Text>
+          )}
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
   );
 }
 
