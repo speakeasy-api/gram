@@ -38,7 +38,11 @@ import type {
   TimeSeriesBucket,
   UserSummary,
 } from "@gram/client/models/components";
-import { useGramContext, useMembers } from "@gram/client/react-query";
+import {
+  useGramContext,
+  useListChats,
+  useMembers,
+} from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import {
   TimeRangePicker,
@@ -202,6 +206,19 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
     routes.agentSessions,
     to,
   ]);
+  const agentSessionsQuery = useListChats(
+    {
+      search: employeeEmailFilter ?? undefined,
+      from,
+      to,
+      limit: 1,
+    },
+    undefined,
+    {
+      enabled: employeeEmailFilter != null,
+      throwOnError: false,
+    },
+  );
 
   const handlePresetChange = (preset: DateRangePreset) => {
     setDateRange(preset);
@@ -412,7 +429,12 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                 />
                 <MetricCard
                   title="Agent Sessions"
-                  value={summary?.totalChats ?? 0}
+                  value={agentSessionsQuery.data?.total ?? 0}
+                  displayValue={
+                    agentSessionsQuery.isLoading || agentSessionsQuery.isError
+                      ? "-"
+                      : undefined
+                  }
                   icon="message-square"
                   subtext={`Over ${rangeLabel}`}
                   action={
