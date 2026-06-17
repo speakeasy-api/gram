@@ -4,7 +4,7 @@ import {
   useEnsureManagedAssistantMutation,
   useGramContext,
 } from "@gram/client/react-query";
-import { useProject } from "@/contexts/Auth";
+import { useOrganization } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { createServerAssistantTransport } from "@/lib/ServerAssistantTransport";
 import type { ElementsTransportFactory } from "@gram-ai/elements";
@@ -49,10 +49,20 @@ export function useServerAssistantTransport(
   enabled: boolean,
 ): UseServerAssistantTransportResult {
   const client = useGramContext();
-  const project = useProject();
+  const organization = useOrganization();
   const { hasScope, isLoading: rbacLoading } = useRBAC();
 
-  const canCreate = hasScope("project:write", project.id);
+  // The hook can be called with a projectSlug that differs from the URL-active
+  // project (e.g. the org audit logs route picks an arbitrary project from
+  // organization.projects). Scope the RBAC check to THAT project's id, not
+  // useProject(), so a user with project:write on the target — but not on the
+  // active one — still gets the writer path.
+  const targetProjectId = useMemo(
+    () => organization.projects.find((p) => p.slug === projectSlug)?.id ?? "",
+    [organization.projects, projectSlug],
+  );
+  const canCreate =
+    !!targetProjectId && hasScope("project:write", targetProjectId);
 
   // The fetcher reads the project from the X-Gram-Project header, but react-
   // query only differentiates by query key — pass projectSlug into the request
@@ -103,8 +113,11 @@ export function useServerAssistantTransport(
     if (provisionedForSlugRef.current === projectSlug) return;
     provisionedForSlugRef.current = projectSlug;
     const slugAtRequest = projectSlug;
+    // gramProject is explicit so the ensure targets the slug the hook was
+    // called with, not whatever the SDK client's default header resolves to
+    // — the active project may not be the same one (org-scoped routes).
     ensureMutate(
-      {},
+      { request: { gramProject: projectSlug } },
       {
         onSuccess: (assistant) => {
           if (slugAtRequest !== provisionedForSlugRef.current) return;
