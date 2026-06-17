@@ -5,6 +5,12 @@
 
 set -e
 
+# `go tool goa` builds the goa binary on demand and `goa gen` then `go run`s
+# its throwaway main; every one of those builds stamps VCS info, which has
+# crashed CI with `signal: bus error` while shelling out to git. Codegen
+# binaries are throwaway and never shipped, so the VCS stamp buys nothing.
+export GOFLAGS="-buildvcs=false ${GOFLAGS:-}"
+
 # `goa gen` writes a throwaway `goa<random>/main.go` generator into its working
 # directory. goa removes it on both success and failure, but on a hard interrupt
 # (Ctrl-C) or --debug it can linger. That main imports goa's codegen deps
