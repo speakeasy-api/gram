@@ -108,6 +108,7 @@ function OnboardingShell() {
 }
 
 function OnboardingEntryGate({ children }: { children: ReactNode }) {
+  const project = useProject();
   const draft = useAssistantDraft();
   const { hasAllScopes, isLoading: rbacLoading } = useRBAC();
 
@@ -121,7 +122,7 @@ function OnboardingEntryGate({ children }: { children: ReactNode }) {
     );
   }
 
-  const canCreate = hasAllScopes(["project:write", "mcp:write"]);
+  const canCreate = hasAllScopes(["project:read", "project:write"], project.id);
   if (!canCreate) return <AssistantUnavailableNotice />;
 
   return <>{children}</>;
