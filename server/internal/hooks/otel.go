@@ -296,7 +296,10 @@ func extractResourceAttribute(resource *gen.OTELResource, key string) string {
 		return ""
 	}
 	for _, attr := range resource.Attributes {
-		if attr.Key == key && attr.Value != nil && attr.Value.StringValue != nil {
+		if attr == nil || attr.Value == nil || attr.Value.StringValue == nil {
+			continue
+		}
+		if attr.Key == key {
 			return *attr.Value.StringValue
 		}
 	}
@@ -311,12 +314,12 @@ func extractLogData(logRecord *gen.OTELLogRecord) OTELLogData {
 		ClaudeOrgID: "",
 	}
 
-	if logRecord.Attributes == nil {
+	if logRecord == nil || logRecord.Attributes == nil {
 		return data
 	}
 
 	for _, attr := range logRecord.Attributes {
-		if attr.Value == nil {
+		if attr == nil || attr.Value == nil {
 			continue
 		}
 
@@ -345,7 +348,10 @@ func extractAttributeString(attributes []*gen.OTELAttribute, key string) string 
 	}
 
 	for _, attr := range attributes {
-		if attr.Key == key && attr.Value != nil && attr.Value.StringValue != nil {
+		if attr == nil || attr.Value == nil || attr.Value.StringValue == nil {
+			continue
+		}
+		if attr.Key == key {
 			return *attr.Value.StringValue
 		}
 	}
