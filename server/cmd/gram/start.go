@@ -114,6 +114,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/xmcp"
 )
 
+// shutdownDrainTimeout is how long srv.Shutdown waits for in-flight requests
+// to complete on SIGTERM before the process exits. It must cover the slowest
+// outbound work any endpoint can do, including the MCP runtime path
+// (POST /mcp/{mcpSlug}).
+//
+// Note: the effective drain is also bounded by infrastructure settings such as
+// terminationGracePeriodSeconds in Kubernetes, which must be set above this
+// value for the full window to be honored.
+const shutdownDrainTimeout = 60 * time.Second
+
 func newStartCommand() *cli.Command {
 	var shutdownFuncs []func(context.Context) error
 
@@ -1183,7 +1193,7 @@ func newStartCommand() *cli.Command {
 
 				logger.InfoContext(ctx, "shutting down server")
 
-				graceCtx, graceCancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+				graceCtx, graceCancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownDrainTimeout)
 				defer graceCancel()
 
 				if err := srv.Shutdown(graceCtx); err != nil {
