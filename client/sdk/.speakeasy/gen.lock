@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: c1a282f873d537eb44ee4b8e1bafa6ec
+  docChecksum: 5ff50fdf9d57766ef599957360eb3e35
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -693,7 +693,7 @@ trackedFiles:
   docs/models/components/otellogbody.md:
     last_write_checksum: sha1:eedd08e6ed59982d620c3cd20a0717f662727c1e
   docs/models/components/otellogrecord.md:
-    last_write_checksum: sha1:c69f8f1e1adeeb818f630d6d9797adafc524d800
+    last_write_checksum: sha1:c331b039223ead9c02b8250919469858aad3f9a5
   docs/models/components/otellogspayload.md:
     last_write_checksum: sha1:b11f01a37b76cbf22952e5ad2226ea0a6ec9f4fa
   docs/models/components/otelmetric.md:
@@ -4670,7 +4670,7 @@ trackedFiles:
   src/models/components/otellogbody.ts:
     last_write_checksum: sha1:cb8d00884573f1ce6609987aeac27d8434edabb0
   src/models/components/otellogrecord.ts:
-    last_write_checksum: sha1:94653a8154df1dbcf3371c04645c2fc549045f1c
+    last_write_checksum: sha1:0d0f600f2429f9472db299e1380421490ba9c91a
   src/models/components/otellogspayload.ts:
     last_write_checksum: sha1:9025684da8d3e409cc9bc9524a7a58bdd51c6312
   src/models/components/otelmetric.ts:

@@ -40502,9 +40502,15 @@ components:
                 observedTimeUnixNano:
                     type: string
                     description: Observed timestamp in nanoseconds
+                spanId:
+                    type: string
+                    description: Span ID
                 timeUnixNano:
                     type: string
                     description: Timestamp in nanoseconds since Unix epoch
+                traceId:
+                    type: string
+                    description: Trace ID
             description: Individual OTEL log record
         OTELLogsPayload:
             type: object
