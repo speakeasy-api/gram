@@ -131,6 +131,14 @@ type RevokeSessionRequestBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 }
 
+// RefreshSessionRequestBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// request body.
+type RefreshSessionRequestBody struct {
+	// The remote_session id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+}
+
 // RevokeAllClientSessionsRequestBody is the type of the
 // "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
 // endpoint HTTP request body.
@@ -402,6 +410,39 @@ type UpdateClientResponseBody struct {
 	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
 	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// RefreshSessionResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body.
+type RefreshSessionResponseBody struct {
+	// The remote_session id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The session's subject URN (user:<id> | apikey:<uuid> |
+	// anonymous:<mcp-session-id>).
+	SubjectUrn string `form:"subject_urn" json:"subject_urn" xml:"subject_urn"`
+	// Resolved display name when the subject is a Gram user. Absent for
+	// apikey/anonymous subjects or unresolved users.
+	SubjectDisplayName *string `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
+	// Resolved email when the subject is a Gram user. Absent for apikey/anonymous
+	// subjects or unresolved users.
+	SubjectEmail *string `form:"subject_email,omitempty" json:"subject_email,omitempty" xml:"subject_email,omitempty"`
+	// The user_session_issuer this session is bound to.
+	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
+	// The remote_session_client this session was minted against.
+	RemoteSessionClientID string `form:"remote_session_client_id" json:"remote_session_client_id" xml:"remote_session_client_id"`
+	// Upstream access-token expiry. Independent of refresh_expires_at.
+	AccessExpiresAt string `form:"access_expires_at" json:"access_expires_at" xml:"access_expires_at"`
+	// Upstream refresh-token expiry. Null when the session has no refresh token.
+	RefreshExpiresAt *string `form:"refresh_expires_at,omitempty" json:"refresh_expires_at,omitempty" xml:"refresh_expires_at,omitempty"`
+	// Whether the session holds an upstream refresh token. Gates the 'Refresh now'
+	// action; refresh_expires_at is insufficient because an upstream may issue a
+	// non-expiring refresh token. The token itself is never returned.
+	HasRefreshToken bool `form:"has_refresh_token" json:"has_refresh_token" xml:"has_refresh_token"`
+	// Scopes held by this session.
+	Scopes    []string `form:"scopes" json:"scopes" xml:"scopes"`
+	CreatedAt string   `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string   `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // RevokeAllClientSessionsResponseBody is the type of the
@@ -3452,6 +3493,196 @@ type RevokeSessionGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// RefreshSessionUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "unauthorized" error.
+type RefreshSessionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshSessionForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "forbidden" error.
+type RefreshSessionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshSessionBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "bad_request" error.
+type RefreshSessionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshSessionNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "not_found" error.
+type RefreshSessionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshSessionConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "conflict" error.
+type RefreshSessionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshSessionUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "unsupported_media" error.
+type RefreshSessionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshSessionInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "invalid" error.
+type RefreshSessionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshSessionInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "invariant_violation" error.
+type RefreshSessionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshSessionUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "unexpected" error.
+type RefreshSessionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshSessionGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "gateway_error" error.
+type RefreshSessionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // RevokeAllClientSessionsUnauthorizedResponseBody is the type of the
 // "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
 // endpoint HTTP response body for the "unauthorized" error.
@@ -3771,6 +4002,10 @@ type RemoteSessionResponseBody struct {
 	AccessExpiresAt string `form:"access_expires_at" json:"access_expires_at" xml:"access_expires_at"`
 	// Upstream refresh-token expiry. Null when the session has no refresh token.
 	RefreshExpiresAt *string `form:"refresh_expires_at,omitempty" json:"refresh_expires_at,omitempty" xml:"refresh_expires_at,omitempty"`
+	// Whether the session holds an upstream refresh token. Gates the 'Refresh now'
+	// action; refresh_expires_at is insufficient because an upstream may issue a
+	// non-expiring refresh token. The token itself is never returned.
+	HasRefreshToken bool `form:"has_refresh_token" json:"has_refresh_token" xml:"has_refresh_token"`
 	// Scopes held by this session.
 	Scopes    []string `form:"scopes" json:"scopes" xml:"scopes"`
 	CreatedAt string   `form:"created_at" json:"created_at" xml:"created_at"`
@@ -4134,6 +4369,34 @@ func NewUpdateClientResponseBody(res *types.RemoteSessionClient) *UpdateClientRe
 		for i, val := range res.Scope {
 			body.Scope[i] = val
 		}
+	}
+	return body
+}
+
+// NewRefreshSessionResponseBody builds the HTTP response body from the result
+// of the "refreshSession" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewRefreshSessionResponseBody(res *types.RemoteSession) *RefreshSessionResponseBody {
+	body := &RefreshSessionResponseBody{
+		ID:                    res.ID,
+		SubjectUrn:            res.SubjectUrn,
+		SubjectDisplayName:    res.SubjectDisplayName,
+		SubjectEmail:          res.SubjectEmail,
+		UserSessionIssuerID:   res.UserSessionIssuerID,
+		RemoteSessionClientID: res.RemoteSessionClientID,
+		AccessExpiresAt:       res.AccessExpiresAt,
+		RefreshExpiresAt:      res.RefreshExpiresAt,
+		HasRefreshToken:       res.HasRefreshToken,
+		CreatedAt:             res.CreatedAt,
+		UpdatedAt:             res.UpdatedAt,
+	}
+	if res.Scopes != nil {
+		body.Scopes = make([]string, len(res.Scopes))
+		for i, val := range res.Scopes {
+			body.Scopes[i] = val
+		}
+	} else {
+		body.Scopes = []string{}
 	}
 	return body
 }
@@ -6548,6 +6811,156 @@ func NewRevokeSessionGatewayErrorResponseBody(res *goa.ServiceError) *RevokeSess
 	return body
 }
 
+// NewRefreshSessionUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "refreshSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRefreshSessionUnauthorizedResponseBody(res *goa.ServiceError) *RefreshSessionUnauthorizedResponseBody {
+	body := &RefreshSessionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshSessionForbiddenResponseBody builds the HTTP response body from
+// the result of the "refreshSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRefreshSessionForbiddenResponseBody(res *goa.ServiceError) *RefreshSessionForbiddenResponseBody {
+	body := &RefreshSessionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshSessionBadRequestResponseBody builds the HTTP response body from
+// the result of the "refreshSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRefreshSessionBadRequestResponseBody(res *goa.ServiceError) *RefreshSessionBadRequestResponseBody {
+	body := &RefreshSessionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshSessionNotFoundResponseBody builds the HTTP response body from the
+// result of the "refreshSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRefreshSessionNotFoundResponseBody(res *goa.ServiceError) *RefreshSessionNotFoundResponseBody {
+	body := &RefreshSessionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshSessionConflictResponseBody builds the HTTP response body from the
+// result of the "refreshSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRefreshSessionConflictResponseBody(res *goa.ServiceError) *RefreshSessionConflictResponseBody {
+	body := &RefreshSessionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshSessionUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "refreshSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRefreshSessionUnsupportedMediaResponseBody(res *goa.ServiceError) *RefreshSessionUnsupportedMediaResponseBody {
+	body := &RefreshSessionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshSessionInvalidResponseBody builds the HTTP response body from the
+// result of the "refreshSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRefreshSessionInvalidResponseBody(res *goa.ServiceError) *RefreshSessionInvalidResponseBody {
+	body := &RefreshSessionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshSessionInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "refreshSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRefreshSessionInvariantViolationResponseBody(res *goa.ServiceError) *RefreshSessionInvariantViolationResponseBody {
+	body := &RefreshSessionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshSessionUnexpectedResponseBody builds the HTTP response body from
+// the result of the "refreshSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRefreshSessionUnexpectedResponseBody(res *goa.ServiceError) *RefreshSessionUnexpectedResponseBody {
+	body := &RefreshSessionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshSessionGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "refreshSession" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewRefreshSessionGatewayErrorResponseBody(res *goa.ServiceError) *RefreshSessionGatewayErrorResponseBody {
+	body := &RefreshSessionGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewRevokeAllClientSessionsUnauthorizedResponseBody builds the HTTP response
 // body from the result of the "revokeAllClientSessions" endpoint of the
 // "organizationRemoteSessionIssuers" service.
@@ -6966,6 +7379,18 @@ func NewRevokeSessionPayload(body *RevokeSessionRequestBody, sessionToken *strin
 	return v
 }
 
+// NewRefreshSessionPayload builds a organizationRemoteSessionIssuers service
+// refreshSession endpoint payload.
+func NewRefreshSessionPayload(body *RefreshSessionRequestBody, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.RefreshSessionPayload {
+	v := &organizationremotesessionissuers.RefreshSessionPayload{
+		ID: *body.ID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
 // NewRevokeAllClientSessionsPayload builds a organizationRemoteSessionIssuers
 // service revokeAllClientSessions endpoint payload.
 func NewRevokeAllClientSessionsPayload(body *RevokeAllClientSessionsRequestBody, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.RevokeAllClientSessionsPayload {
@@ -7081,6 +7506,18 @@ func ValidateRemoveClientFromMcpServerRequestBody(body *RemoveClientFromMcpServe
 // ValidateRevokeSessionRequestBody runs the validations defined on
 // RevokeSessionRequestBody
 func ValidateRevokeSessionRequestBody(body *RevokeSessionRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateRefreshSessionRequestBody runs the validations defined on
+// RefreshSessionRequestBody
+func ValidateRefreshSessionRequestBody(body *RefreshSessionRequestBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}

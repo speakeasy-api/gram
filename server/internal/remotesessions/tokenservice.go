@@ -36,6 +36,8 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -199,33 +201,59 @@ func (m *ChallengeManager) validateAndRefresh(
 	return m.refreshAccessToken(ctx, sess)
 }
 
-// refreshAccessToken POSTs grant_type=refresh_token to the upstream
-// token endpoint and persists the new token pair on success, then
-// returns the new access token. Mirrors exchangeCode's request shape
-// but with the refresh grant.
+// refreshAccessToken is the lazy-path wrapper: it runs the shared refresh and
+// returns just the new access token, discarding the persisted row.
 func (m *ChallengeManager) refreshAccessToken(
 	ctx context.Context,
 	sess remotesessions_repo.RemoteSession,
 ) (string, error) {
-	q := remotesessions_repo.New(m.db)
+	_, accessToken, err := refreshSessionTokens(ctx, remotesessions_repo.New(m.db), m.enc, m.policy, sess)
+	if err != nil {
+		return "", err
+	}
+	return accessToken, nil
+}
+
+// refreshSessionTokens POSTs grant_type=refresh_token to the upstream token
+// endpoint and persists the new token pair on success, returning the upserted
+// remote_session row and the new plaintext access token.
+//
+// It is shared by the lazy MCP resolution path (ChallengeManager) and the
+// explicit org-admin refresh handler. The upstream token POST is an external
+// call, so q must be a pool-bound querier, never a transaction-bound one — the
+// POST must not run inside an open database transaction.
+//
+// Operator-actionable failures (unreadable stored token, missing token
+// endpoint, an upstream rejection, no access token returned) come back as a
+// *TokenRefreshError carrying a public-safe Reason, so callers can distinguish
+// them from internal infrastructure errors and surface the Reason.
+func refreshSessionTokens(
+	ctx context.Context,
+	q *remotesessions_repo.Queries,
+	enc *encryption.Client,
+	policy *guardian.Policy,
+	sess remotesessions_repo.RemoteSession,
+) (remotesessions_repo.RemoteSession, string, error) {
+	var zero remotesessions_repo.RemoteSession
+
 	client, err := q.GetRemoteSessionClientWithIssuerByID(ctx, sess.RemoteSessionClientID)
 	if err != nil {
-		return "", fmt.Errorf("load remote_session_client for refresh: %w", err)
+		return zero, "", fmt.Errorf("load remote_session_client for refresh: %w", err)
 	}
 	if !client.TokenEndpoint.Valid || client.TokenEndpoint.String == "" {
-		return "", errors.New("remote_session_issuer has no token endpoint configured")
+		return zero, "", newTokenRefreshError("the identity provider has no token endpoint configured", nil)
 	}
 
-	refreshToken, err := m.enc.Decrypt(sess.RefreshTokenEncrypted.String)
+	refreshToken, err := enc.Decrypt(sess.RefreshTokenEncrypted.String)
 	if err != nil {
-		return "", fmt.Errorf("decrypt refresh token: %w", err)
+		return zero, "", newTokenRefreshError("the session's stored refresh token could not be read; revoke and re-link the session", err)
 	}
 
 	var clientSecret string
 	if client.ClientSecretEncrypted.Valid {
-		clientSecret, err = m.enc.Decrypt(client.ClientSecretEncrypted.String)
+		clientSecret, err = enc.Decrypt(client.ClientSecretEncrypted.String)
 		if err != nil {
-			return "", fmt.Errorf("decrypt client secret: %w", err)
+			return zero, "", newTokenRefreshError("the client secret could not be read; check the issuer's configuration", err)
 		}
 	}
 
@@ -241,39 +269,39 @@ func (m *ChallengeManager) refreshAccessToken(
 
 	req, err := newTokenEndpointRequest(ctx, client.TokenEndpoint.String, form, authMethod, client.ExternalClientID, clientSecret)
 	if err != nil {
-		return "", fmt.Errorf("new refresh request: %w", err)
+		return zero, "", fmt.Errorf("new refresh request: %w", err)
 	}
 
-	resp, err := m.policy.PooledClient().Do(req)
+	resp, err := policy.PooledClient().Do(req)
 	if err != nil {
-		return "", fmt.Errorf("post refresh: %w", err)
+		return zero, "", fmt.Errorf("post refresh: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	if err != nil {
-		return "", fmt.Errorf("read refresh response: %w", err)
+		return zero, "", fmt.Errorf("read refresh response: %w", err)
 	}
 	if resp.StatusCode/100 != 2 {
-		return "", fmt.Errorf("refresh endpoint %s: %s", resp.Status, string(body))
+		return zero, "", newTokenRefreshErrorFromHTTP(resp.Status, body)
 	}
 	var tok tokenResponse
 	if err := json.Unmarshal(body, &tok); err != nil {
-		return "", fmt.Errorf("decode refresh response: %w", err)
+		return zero, "", fmt.Errorf("decode refresh response: %w", err)
 	}
 	if tok.AccessToken == "" {
-		return "", errors.New("refresh endpoint returned no access_token")
+		return zero, "", newTokenRefreshError("the identity provider returned no access token", nil)
 	}
 
-	accessEnc, err := m.enc.Encrypt([]byte(tok.AccessToken))
+	accessEnc, err := enc.Encrypt([]byte(tok.AccessToken))
 	if err != nil {
-		return "", fmt.Errorf("encrypt new access token: %w", err)
+		return zero, "", fmt.Errorf("encrypt new access token: %w", err)
 	}
 	newRefreshEnc := sess.RefreshTokenEncrypted
 	if tok.RefreshToken != "" {
-		v, eerr := m.enc.Encrypt([]byte(tok.RefreshToken))
+		v, eerr := enc.Encrypt([]byte(tok.RefreshToken))
 		if eerr != nil {
-			return "", fmt.Errorf("encrypt new refresh token: %w", eerr)
+			return zero, "", fmt.Errorf("encrypt new refresh token: %w", eerr)
 		}
 		newRefreshEnc = conv.PtrToPGText(&v)
 	}
@@ -288,7 +316,7 @@ func (m *ChallengeManager) refreshAccessToken(
 		refreshExpires = conv.ToPGTimestamptz(v)
 	}
 
-	if _, err := q.UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	updated, err := q.UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
 		SubjectUrn:            sess.SubjectUrn,
 		UserSessionIssuerID:   sess.UserSessionIssuerID,
 		RemoteSessionClientID: sess.RemoteSessionClientID,
@@ -297,9 +325,10 @@ func (m *ChallengeManager) refreshAccessToken(
 		RefreshTokenEncrypted: newRefreshEnc,
 		RefreshExpiresAt:      refreshExpires,
 		Scopes:                sess.Scopes,
-	}); err != nil {
-		return "", fmt.Errorf("persist refreshed session: %w", err)
+	})
+	if err != nil {
+		return zero, "", fmt.Errorf("persist refreshed session: %w", err)
 	}
 
-	return tok.AccessToken, nil
+	return updated, tok.AccessToken, nil
 }
