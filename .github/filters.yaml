@@ -27,9 +27,6 @@ cli:
 tsframework:
   - "ts-framework/**"
 
-pi_classifier:
-  - "services/pi-classifier/**"
-
 sdk:
   - "client/sdk/**"
   - "package.json"
@@ -89,11 +86,3 @@ webhooks-catalog:
 
 otel-collector:
   - "otel-collector/**"
-
-# Subset of `server` that gates the prompt-injection risk report job.
-risk_accuracy:
-  - ".github/scripts/risk-metrics-comment.*"
-  - ".github/workflows/pr.yaml"
-  - ".mise-tasks/risk/**"
-  - "server/internal/background/activities/risk_analysis/**"
-  - "server/cmd/risk-pi-report/**"

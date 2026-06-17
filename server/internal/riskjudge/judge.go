@@ -339,30 +339,30 @@ func VerdictSchema() map[string]any {
 // quoted string in a known field — and lets the system prompt say "evaluate only
 // the fields of this object".
 type judgePromptPayload struct {
-	Policy  string              `json:"policy"`
-	Message judgeMessagePayload `json:"message"`
+	Policy  string         `json:"policy"`
+	Message MessagePayload `json:"message"`
 }
 
-type judgeMessagePayload struct {
-	ProducedBy         string                 `json:"produced_by"`
-	Tool               *judgeToolPayload      `json:"tool,omitempty"`
-	BodyKind           string                 `json:"body_kind"`
-	Body               string                 `json:"body,omitempty"`
-	BodyTruncated      bool                   `json:"body_truncated,omitempty"`
-	ToolCalls          []judgeToolCallPayload `json:"tool_calls,omitempty"`
-	ToolCallsTruncated bool                   `json:"tool_calls_truncated,omitempty"`
+type MessagePayload struct {
+	ProducedBy         string            `json:"produced_by"`
+	Tool               *ToolPayload      `json:"tool,omitempty"`
+	BodyKind           string            `json:"body_kind"`
+	Body               string            `json:"body,omitempty"`
+	BodyTruncated      bool              `json:"body_truncated,omitempty"`
+	ToolCalls          []ToolCallPayload `json:"tool_calls,omitempty"`
+	ToolCallsTruncated bool              `json:"tool_calls_truncated,omitempty"`
 }
 
-type judgeToolPayload struct {
+type ToolPayload struct {
 	MCPServer   string `json:"mcp_server,omitempty"`
 	MCPFunction string `json:"mcp_function,omitempty"`
 	Name        string `json:"name,omitempty"`
 }
 
-type judgeToolCallPayload struct {
-	Tool               *judgeToolPayload `json:"tool,omitempty"`
-	Arguments          string            `json:"arguments"`
-	ArgumentsTruncated bool              `json:"arguments_truncated,omitempty"`
+type ToolCallPayload struct {
+	Tool               *ToolPayload `json:"tool,omitempty"`
+	Arguments          string       `json:"arguments"`
+	ArgumentsTruncated bool         `json:"arguments_truncated,omitempty"`
 }
 
 // BuildJudgePrompt renders the policy plus the message under evaluation as the
@@ -372,7 +372,7 @@ type judgeToolCallPayload struct {
 func BuildJudgePrompt(in ra.JudgeInput) string {
 	payload := judgePromptPayload{
 		Policy:  in.Prompt,
-		Message: renderJudgeMessage(in.Message),
+		Message: RenderMessage(in.Message),
 	}
 	b, err := json.Marshal(payload)
 	if err != nil {
@@ -385,10 +385,10 @@ func BuildJudgePrompt(in ra.JudgeInput) string {
 	return string(b)
 }
 
-// renderJudgeMessage maps a JudgeMessage onto the JSON payload the judge reads.
+// RenderMessage maps a JudgeMessage onto the JSON payload the judge reads.
 // A multi-call tool request renders each call with its own attribution under
 // tool_calls; every other shape carries a single type-appropriate body.
-func renderJudgeMessage(m ra.JudgeMessage) judgeMessagePayload {
+func RenderMessage(m ra.JudgeMessage) MessagePayload {
 	if len(m.ToolCalls) > 0 {
 		calls := m.ToolCalls
 		truncatedCalls := false
@@ -396,16 +396,16 @@ func renderJudgeMessage(m ra.JudgeMessage) judgeMessagePayload {
 			calls = calls[:maxRenderedToolCalls]
 			truncatedCalls = true
 		}
-		rendered := make([]judgeToolCallPayload, 0, len(calls))
+		rendered := make([]ToolCallPayload, 0, len(calls))
 		for _, c := range calls {
 			args, argsTruncated := truncateBody(c.Arguments, maxBodyLen)
-			rendered = append(rendered, judgeToolCallPayload{
+			rendered = append(rendered, ToolCallPayload{
 				Tool:               toolPayload(c.ToolName, c.MCPServer, c.MCPFunction),
 				Arguments:          args,
 				ArgumentsTruncated: argsTruncated,
 			})
 		}
-		return judgeMessagePayload{
+		return MessagePayload{
 			ProducedBy:         "ai_assistant_tool_call",
 			Tool:               nil,
 			BodyKind:           "tool_calls",
@@ -418,7 +418,7 @@ func renderJudgeMessage(m ra.JudgeMessage) judgeMessagePayload {
 
 	producedBy, bodyKind := messageDescriptors(m.Type)
 	body, truncated := truncateBody(m.Body, maxBodyLen)
-	return judgeMessagePayload{
+	return MessagePayload{
 		ProducedBy:         producedBy,
 		Tool:               toolPayload(m.ToolName, m.MCPServer, m.MCPFunction),
 		BodyKind:           bodyKind,
@@ -450,12 +450,12 @@ func messageDescriptors(messageType message.Type) (producedBy, bodyKind string) 
 // toolPayload describes the tool a call/result targets: destructured MCP server
 // + function when known, otherwise the raw tool name. Returns nil when there is
 // no tool attribution.
-func toolPayload(name, mcpServer, mcpFunction string) *judgeToolPayload {
+func toolPayload(name, mcpServer, mcpFunction string) *ToolPayload {
 	if mcpServer != "" || mcpFunction != "" {
-		return &judgeToolPayload{MCPServer: mcpServer, MCPFunction: mcpFunction, Name: ""}
+		return &ToolPayload{MCPServer: mcpServer, MCPFunction: mcpFunction, Name: ""}
 	}
 	if name != "" {
-		return &judgeToolPayload{MCPServer: "", MCPFunction: "", Name: name}
+		return &ToolPayload{MCPServer: "", MCPFunction: "", Name: name}
 	}
 	return nil
 }
@@ -469,9 +469,13 @@ func truncateBody(s string, maxLen int) (string, bool) {
 		return s, false
 	}
 	runes := []rune(s)
-	dropped := len(runes) - maxLen
-	head := maxLen * 3 / 5
-	tail := maxLen - head
+	// Reserve room for the truncation marker so the returned text — marker
+	// included — stays within maxLen runes, rather than maxLen + marker. (cubic)
+	const markerBudget = 40
+	budget := max(maxLen-markerBudget, 0)
+	dropped := len(runes) - budget
+	head := budget * 3 / 5
+	tail := budget - head
 	var b strings.Builder
 	b.WriteString(string(runes[:head]))
 	fmt.Fprintf(&b, "\n…[%d characters truncated]…\n", dropped)
