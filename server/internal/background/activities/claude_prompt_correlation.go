@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	activitiesrepo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -24,12 +25,14 @@ const (
 )
 
 type CorrelateClaudePrompts struct {
+	logger *slog.Logger
 	db     *pgxpool.Pool
 	chConn clickhouse.Conn
 }
 
-func NewCorrelateClaudePrompts(_ *slog.Logger, db *pgxpool.Pool, chConn clickhouse.Conn) *CorrelateClaudePrompts {
+func NewCorrelateClaudePrompts(logger *slog.Logger, db *pgxpool.Pool, chConn clickhouse.Conn) *CorrelateClaudePrompts {
 	return &CorrelateClaudePrompts{
+		logger: logger.With(attr.SlogComponent("correlate_claude_prompts")),
 		db:     db,
 		chConn: chConn,
 	}
