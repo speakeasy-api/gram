@@ -52,6 +52,7 @@ import { slugify } from "@/lib/constants";
 import {
   Badge,
   type Column,
+  Icon,
   type SortDescriptor,
   Table,
   sortTableData,
@@ -678,13 +679,13 @@ function EmployeeTable({
       },
       {
         key: "action",
-        header: <span className="block text-right">Action</span>,
+        header: "",
         width: "auto",
         render: (item) => (
           <div className="text-right">
             <button
               type="button"
-              className="text-primary hover:text-primary/80 text-sm font-medium underline underline-offset-4"
+              className="flex items-center gap-1"
               aria-label={`View ${item.name}`}
               onClick={(event) => {
                 event.stopPropagation();
@@ -692,6 +693,7 @@ function EmployeeTable({
               }}
             >
               View
+              <Icon name="arrow-right" />
             </button>
           </div>
         ),
