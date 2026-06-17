@@ -111,6 +111,7 @@ export * from "./getemployeedataflowgraph.js";
 export * from "./gethookssummary.js";
 export * from "./getinstance.js";
 export * from "./getlatestdeployment.js";
+export * from "./getmanagedassistant.js";
 export * from "./getmarketplacesettings.js";
 export * from "./getmcpendpoint.js";
 export * from "./getmcpmetadata.js";

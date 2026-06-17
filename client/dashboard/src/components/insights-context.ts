@@ -32,6 +32,10 @@ export interface InsightsContextValue {
    *  (e.g. the full-page chat) gate on this before rendering chat UI that
    *  needs the runtime. */
   assistantReady: boolean;
+  /** True when the project has no managed assistant yet and the caller lacks
+   *  `project:write`. Surfaces should render an "ask an admin" notice instead
+   *  of waiting on `assistantReady`. */
+  assistantNeedsAdmin: boolean;
   /** Switch the shared runtime to a fresh empty conversation. */
   newConversation: () => void;
   /** Hide the floating dock while a caller is mounted (ref-counted). Returns
@@ -48,6 +52,7 @@ export const InsightsContext = createContext<InsightsContextValue>({
   setOverride: () => {},
   sendPrompt: () => {},
   assistantReady: false,
+  assistantNeedsAdmin: false,
   newConversation: () => {},
   registerDockHide: () => () => {},
 });

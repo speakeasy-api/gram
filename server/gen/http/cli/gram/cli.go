@@ -81,7 +81,7 @@ func UsageCommands() []string {
 		"ai-integrations (get-config|upsert-config|delete-config)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
-		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant|send-message|ensure-managed-assistant)",
+		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant|send-message|get-managed-assistant|ensure-managed-assistant)",
 		"auditlogs (list|list-facets)",
 		"auth (callback|login|switch-scopes|logout|register|info)",
 		"chat (list-chats|load-chat|generate-title|credit-usage|delete-chat|submit-feedback)",
@@ -472,6 +472,10 @@ func ParseEndpoint(
 		assistantsSendMessageBodyFlag             = assistantsSendMessageFlags.String("body", "REQUIRED", "")
 		assistantsSendMessageSessionTokenFlag     = assistantsSendMessageFlags.String("session-token", "", "")
 		assistantsSendMessageProjectSlugInputFlag = assistantsSendMessageFlags.String("project-slug-input", "", "")
+
+		assistantsGetManagedAssistantFlags                = flag.NewFlagSet("get-managed-assistant", flag.ExitOnError)
+		assistantsGetManagedAssistantSessionTokenFlag     = assistantsGetManagedAssistantFlags.String("session-token", "", "")
+		assistantsGetManagedAssistantProjectSlugInputFlag = assistantsGetManagedAssistantFlags.String("project-slug-input", "", "")
 
 		assistantsEnsureManagedAssistantFlags                = flag.NewFlagSet("ensure-managed-assistant", flag.ExitOnError)
 		assistantsEnsureManagedAssistantSessionTokenFlag     = assistantsEnsureManagedAssistantFlags.String("session-token", "", "")
@@ -2165,6 +2169,7 @@ func ParseEndpoint(
 	assistantsUpdateAssistantFlags.Usage = assistantsUpdateAssistantUsage
 	assistantsDeleteAssistantFlags.Usage = assistantsDeleteAssistantUsage
 	assistantsSendMessageFlags.Usage = assistantsSendMessageUsage
+	assistantsGetManagedAssistantFlags.Usage = assistantsGetManagedAssistantUsage
 	assistantsEnsureManagedAssistantFlags.Usage = assistantsEnsureManagedAssistantUsage
 
 	auditlogsFlags.Usage = auditlogsUsage
@@ -2866,6 +2871,9 @@ func ParseEndpoint(
 
 			case "send-message":
 				epf = assistantsSendMessageFlags
+
+			case "get-managed-assistant":
+				epf = assistantsGetManagedAssistantFlags
 
 			case "ensure-managed-assistant":
 				epf = assistantsEnsureManagedAssistantFlags
@@ -4105,6 +4113,9 @@ func ParseEndpoint(
 			case "send-message":
 				endpoint = c.SendMessage()
 				data, err = assistantsc.BuildSendMessagePayload(*assistantsSendMessageBodyFlag, *assistantsSendMessageSessionTokenFlag, *assistantsSendMessageProjectSlugInputFlag)
+			case "get-managed-assistant":
+				endpoint = c.GetManagedAssistant()
+				data, err = assistantsc.BuildGetManagedAssistantPayload(*assistantsGetManagedAssistantSessionTokenFlag, *assistantsGetManagedAssistantProjectSlugInputFlag)
 			case "ensure-managed-assistant":
 				endpoint = c.EnsureManagedAssistant()
 				data, err = assistantsc.BuildEnsureManagedAssistantPayload(*assistantsEnsureManagedAssistantSessionTokenFlag, *assistantsEnsureManagedAssistantProjectSlugInputFlag)
@@ -6437,6 +6448,7 @@ func assistantsUsage() {
 	fmt.Fprintln(os.Stderr, `    update-assistant: Update an assistant.`)
 	fmt.Fprintln(os.Stderr, `    delete-assistant: Delete an assistant.`)
 	fmt.Fprintln(os.Stderr, `    send-message: Send a message from the dashboard to an assistant as the calling user. Continue an existing conversation by passing its chat_id (from listChats), or omit chat_id to start a new conversation — the server mints and returns a fresh chat id. The reply is delivered asynchronously; poll the chat service (loadChat) to read it.`)
+	fmt.Fprintln(os.Stderr, `    get-managed-assistant: Get the project's built-in Project Assistant if it exists. Returns 404 when no managed assistant has been provisioned yet — call ensureManagedAssistant to create one.`)
 	fmt.Fprintln(os.Stderr, `    ensure-managed-assistant: Get the project's built-in Project Assistant, provisioning it on first access. Idempotent — safe to call on every sidebar open.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -6570,6 +6582,26 @@ func assistantsSendMessageUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants send-message --body '{\n      \"assistant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"chat_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"idempotency_key\": \"aaa\",\n      \"message\": \"aa\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func assistantsGetManagedAssistantUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] assistants get-managed-assistant", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the project's built-in Project Assistant if it exists. Returns 404 when no managed assistant has been provisioned yet — call ensureManagedAssistant to create one.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "assistants get-managed-assistant --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func assistantsEnsureManagedAssistantUsage() {

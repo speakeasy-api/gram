@@ -195,6 +195,7 @@ run();
 * [delete](docs/sdks/assistants/README.md#delete) - deleteAssistant assistants
 * [ensureManaged](docs/sdks/assistants/README.md#ensuremanaged) - ensureManagedAssistant assistants
 * [get](docs/sdks/assistants/README.md#get) - getAssistant assistants
+* [getManaged](docs/sdks/assistants/README.md#getmanaged) - getManagedAssistant assistants
 * [list](docs/sdks/assistants/README.md#list) - listAssistants assistants
 * [sendMessage](docs/sdks/assistants/README.md#sendmessage) - sendMessage assistants
 * [update](docs/sdks/assistants/README.md#update) - updateAssistant assistants
@@ -686,6 +687,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`assistantsDelete`](docs/sdks/assistants/README.md#delete) - deleteAssistant assistants
 - [`assistantsEnsureManaged`](docs/sdks/assistants/README.md#ensuremanaged) - ensureManagedAssistant assistants
 - [`assistantsGet`](docs/sdks/assistants/README.md#get) - getAssistant assistants
+- [`assistantsGetManaged`](docs/sdks/assistants/README.md#getmanaged) - getManagedAssistant assistants
 - [`assistantsList`](docs/sdks/assistants/README.md#list) - listAssistants assistants
 - [`assistantsSendMessage`](docs/sdks/assistants/README.md#sendmessage) - sendMessage assistants
 - [`assistantsUpdate`](docs/sdks/assistants/README.md#update) - updateAssistant assistants
@@ -999,6 +1001,7 @@ To learn about this feature and how to get started, check
 - [`useAssistantsCreateMutation`](docs/sdks/assistants/README.md#create) - createAssistant assistants
 - [`useAssistantsDeleteMutation`](docs/sdks/assistants/README.md#delete) - deleteAssistant assistants
 - [`useAssistantsGet`](docs/sdks/assistants/README.md#get) - getAssistant assistants
+- [`useAssistantsGetManaged`](docs/sdks/assistants/README.md#getmanaged) - getManagedAssistant assistants
 - [`useAssistantsList`](docs/sdks/assistants/README.md#list) - listAssistants assistants
 - [`useAssistantsUpdateMutation`](docs/sdks/assistants/README.md#update) - updateAssistant assistants
 - [`useAuditLogFacets`](docs/sdks/auditlogs/README.md#listfacets) - listFacets auditlogs
