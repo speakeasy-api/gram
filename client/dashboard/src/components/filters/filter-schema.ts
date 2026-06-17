@@ -87,14 +87,14 @@ interface BaseDimension<K extends FilterKind> {
   allLabel?: string;
 }
 
-export type MultiselectDimension = BaseDimension<"multiselect">;
-export type SelectDimension = BaseDimension<"select">;
-export interface TextDimension extends BaseDimension<"text"> {
+type MultiselectDimension = BaseDimension<"multiselect">;
+type SelectDimension = BaseDimension<"select">;
+interface TextDimension extends BaseDimension<"text"> {
   /** Operator applied server-side; defaults to `contains`. */
   operator?: Operator;
 }
-export type BooleanDimension = BaseDimension<"boolean">;
-export interface DateRangeDimension extends BaseDimension<"daterange"> {
+type BooleanDimension = BaseDimension<"boolean">;
+interface DateRangeDimension extends BaseDimension<"daterange"> {
   presets?: DateRangePreset[];
   defaultPreset?: DateRangePreset;
 }
@@ -207,7 +207,7 @@ function dateRangeLabel(value: DateRangeValue): string {
 // Naive English pluralizer for the "All …" empty-state label (e.g. "All servers",
 // "All policies"). Covers the dimension labels we use (server/user/policy/role).
 // Shared by the chip label and the sheet's select control.
-export function pluralize(word: string): string {
+function pluralize(word: string): string {
   if (/[^aeiou]y$/.test(word)) return `${word.slice(0, -1)}ies`;
   if (/(s|x|z|ch|sh)$/.test(word)) return `${word}es`;
   return `${word}s`;

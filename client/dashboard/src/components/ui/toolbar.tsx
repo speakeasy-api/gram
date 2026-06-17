@@ -106,7 +106,7 @@ function ToolbarRoot({
 }
 
 /** Search box (debounced, white, shared height). */
-export interface ToolbarSearchProps {
+interface ToolbarSearchProps {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
@@ -170,7 +170,7 @@ function ToolbarSearch({
 }
 
 /** Filter chips + "More filters" sheet trigger + "Clear all". */
-export interface ToolbarFiltersProps {
+interface ToolbarFiltersProps {
   schema: readonly FilterDimension[];
   values: Record<string, FilterValue>;
   optionsById: OptionsById;
@@ -286,7 +286,7 @@ function ToolbarFilters({
 }
 
 /** Sort dropdown, with an optional asc/desc direction toggle. */
-export interface ToolbarSortByProps {
+interface ToolbarSortByProps {
   value: string;
   onChange: (value: string) => void;
   options: { value: string; label: string }[];
@@ -353,7 +353,7 @@ function ToolbarSortBy({
 }
 
 /** Grid/table view toggle (right-aligned). */
-export interface ToolbarViewAsProps {
+interface ToolbarViewAsProps {
   value: ViewMode;
   onChange: (value: ViewMode) => void;
 }
