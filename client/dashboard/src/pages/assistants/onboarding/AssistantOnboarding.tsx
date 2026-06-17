@@ -1,6 +1,8 @@
 import { Page } from "@/components/page-layout";
 import { useHideInsightsDock } from "@/components/insights-context";
+import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
 import { internalMcpUrl } from "@/hooks/useToolsetUrl";
 import { getServerURL } from "@/lib/utils";
 import {
@@ -11,9 +13,13 @@ import {
 } from "@gram-ai/elements";
 import { useListToolsets } from "@gram/client/react-query";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
-import { ResizablePanel, useMoonshineConfig } from "@speakeasy-api/moonshine";
+import {
+  Icon,
+  ResizablePanel,
+  useMoonshineConfig,
+} from "@speakeasy-api/moonshine";
 import { Loader2 } from "lucide-react";
-import { useCallback, useMemo, useRef } from "react";
+import { ReactNode, useCallback, useMemo, useRef } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { AssistantDraftProvider } from "./AssistantDraftContext";
@@ -83,19 +89,59 @@ function OnboardingShell() {
         <Page.Header.Breadcrumbs fullWidth substitutions={substitutions} />
       </Page.Header>
       <Page.Body fullWidth fullHeight className="p-0">
-        <ResizablePanel
-          direction="horizontal"
-          className="[&>[role='separator']]:bg-neutral-softest [&>[role='separator']]:hover:bg-primary h-full [&>[role='separator']]:relative [&>[role='separator']]:w-px [&>[role='separator']]:border-0 [&>[role='separator']]:before:absolute [&>[role='separator']]:before:inset-y-0 [&>[role='separator']]:before:-right-1 [&>[role='separator']]:before:-left-1 [&>[role='separator']]:before:cursor-col-resize"
-        >
-          <ResizablePanel.Pane minSize={35}>
-            <ChatPane mode={mode} />
-          </ResizablePanel.Pane>
-          <ResizablePanel.Pane minSize={24} defaultSize={36}>
-            <AssistantDraftPanel />
-          </ResizablePanel.Pane>
-        </ResizablePanel>
+        <OnboardingEntryGate>
+          <ResizablePanel
+            direction="horizontal"
+            className="[&>[role='separator']]:bg-neutral-softest [&>[role='separator']]:hover:bg-primary h-full [&>[role='separator']]:relative [&>[role='separator']]:w-px [&>[role='separator']]:border-0 [&>[role='separator']]:before:absolute [&>[role='separator']]:before:inset-y-0 [&>[role='separator']]:before:-right-1 [&>[role='separator']]:before:-left-1 [&>[role='separator']]:before:cursor-col-resize"
+          >
+            <ResizablePanel.Pane minSize={35}>
+              <ChatPane mode={mode} />
+            </ResizablePanel.Pane>
+            <ResizablePanel.Pane minSize={24} defaultSize={36}>
+              <AssistantDraftPanel />
+            </ResizablePanel.Pane>
+          </ResizablePanel>
+        </OnboardingEntryGate>
       </Page.Body>
     </Page>
+  );
+}
+
+function OnboardingEntryGate({ children }: { children: ReactNode }) {
+  const project = useProject();
+  const draft = useAssistantDraft();
+  const { hasAllScopes, isLoading: rbacLoading } = useRBAC();
+
+  if (draft.assistantStatus === "ready") return <>{children}</>;
+
+  if (draft.assistantStatus === "loading" || rbacLoading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+      </div>
+    );
+  }
+
+  const canCreate = hasAllScopes(["project:read", "project:write"], project.id);
+  if (!canCreate) return <AssistantUnavailableNotice />;
+
+  return <>{children}</>;
+}
+
+function AssistantUnavailableNotice() {
+  return (
+    <div className="flex h-full min-h-[400px] w-full items-center justify-center">
+      <div className="flex max-w-sm flex-col items-center gap-3 text-center">
+        <div className="bg-muted flex h-12 w-12 items-center justify-center rounded-full">
+          <Icon name="bot" className="text-muted-foreground h-5 w-5" />
+        </div>
+        <Type variant="subheading">No assistant yet</Type>
+        <Type small muted>
+          Ask an admin to set up an assistant for this project before you can
+          chat with it.
+        </Type>
+      </div>
+    </div>
   );
 }
 
