@@ -247,93 +247,100 @@ async function pollForReplies(args: {
   // step writes below.
   let stepOpen = false;
 
-  for (;;) {
-    if (abortSignal?.aborted) {
-      throw new DOMException("Aborted", "AbortError");
-    }
-
-    const res = await chatLoad(
-      client,
-      { id: chatId, generation: pinnedGeneration },
-      undefined,
-      { fetchOptions: { signal: abortSignal } },
-    );
-    if (res.ok) {
-      consecutiveFailures = 0;
-      if (pinnedGeneration === undefined) {
-        pinnedGeneration = res.value.generation;
+  // The `finally` closes whatever step is still open however the loop exits —
+  // terminal return, timeout, poll failure, or abort — so the stream never ends
+  // mid-step.
+  try {
+    for (;;) {
+      if (abortSignal?.aborted) {
+        throw new DOMException("Aborted", "AbortError");
       }
-      // Only the *new* (post-baseline) assistant rows belong to this turn —
-      // prior-turn terminal rows would otherwise satisfy the terminal check on
-      // the first iteration and short-circuit the loop with empty replies.
-      let lastNewAssistant: {
-        finishReason?: string;
-        toolCalls?: string;
-      } | null = null;
-      for (const m of res.value.messages) {
-        if (m.role === "tool") {
-          if (m.toolCallId && pendingToolCalls.delete(m.toolCallId)) {
-            writer.write({
-              type: "tool-output-available",
-              toolCallId: m.toolCallId,
-              output: toolOutputValue(m.content),
+
+      const res = await chatLoad(
+        client,
+        { id: chatId, generation: pinnedGeneration },
+        undefined,
+        { fetchOptions: { signal: abortSignal } },
+      );
+      if (res.ok) {
+        consecutiveFailures = 0;
+        if (pinnedGeneration === undefined) {
+          pinnedGeneration = res.value.generation;
+        }
+        // Only the *new* (post-baseline) assistant rows belong to this turn —
+        // prior-turn terminal rows would otherwise satisfy the terminal check on
+        // the first iteration and short-circuit the loop with empty replies.
+        let lastNewAssistant: {
+          finishReason?: string;
+          toolCalls?: string;
+        } | null = null;
+        for (const m of res.value.messages) {
+          if (m.role === "tool") {
+            if (m.toolCallId && pendingToolCalls.delete(m.toolCallId)) {
+              writer.write({
+                type: "tool-output-available",
+                toolCallId: m.toolCallId,
+                output: toolOutputValue(m.content),
+              });
+            }
+            continue;
+          }
+          if (m.role !== "assistant") continue;
+          if (seen.has(m.id)) continue;
+          seen.add(m.id);
+          lastNewAssistant = m;
+          // Open a fresh step for each completion (closing the prior one).
+          // Without these boundaries the whole turn collapses into one step, and
+          // assistant-ui's resume check
+          // (`lastAssistantMessageIsCompleteWithToolCalls`, which inspects only
+          // the last step's tool parts) sees the turn's resolved tool calls and
+          // auto-resends a turn the server already finished. Per-step framing
+          // keeps the final text-only row in a step of its own, so that check
+          // finds no pending tool calls and stays put.
+          if (stepOpen) {
+            writer.write({ type: "finish-step" });
+          }
+          writer.write({ type: "start-step" });
+          stepOpen = true;
+          const text = contentText(m.content);
+          if (text) {
+            await writeStreamedText({
+              writer,
+              id: m.id,
+              text,
+              abortSignal,
             });
           }
-          continue;
+          for (const call of parseToolCalls(m.toolCalls)) {
+            writer.write({
+              type: "tool-input-available",
+              toolCallId: call.id,
+              toolName: call.name,
+              input: call.input,
+            });
+            pendingToolCalls.add(call.id);
+          }
         }
-        if (m.role !== "assistant") continue;
-        if (seen.has(m.id)) continue;
-        seen.add(m.id);
-        lastNewAssistant = m;
-        // Open a fresh step for each completion (closing the prior one). Without
-        // these boundaries the whole turn collapses into a single step, and
-        // assistant-ui's `lastAssistantMessageIsCompleteWithToolCalls` resume
-        // check — which inspects only the last step's tool parts — sees the
-        // turn's resolved tool calls and auto-resends a turn the server already
-        // finished. Per-step framing keeps the final text-only row in a step of
-        // its own, so that check finds no pending tool calls and stays put.
-        if (stepOpen) {
-          writer.write({ type: "finish-step" });
+        if (lastNewAssistant && isTurnTerminal(lastNewAssistant)) {
+          return;
         }
-        writer.write({ type: "start-step" });
-        stepOpen = true;
-        const text = contentText(m.content);
-        if (text) {
-          await writeStreamedText({
-            writer,
-            id: m.id,
-            text,
-            abortSignal,
-          });
-        }
-        for (const call of parseToolCalls(m.toolCalls)) {
-          writer.write({
-            type: "tool-input-available",
-            toolCallId: call.id,
-            toolName: call.name,
-            input: call.input,
-          });
-          pendingToolCalls.add(call.id);
+      } else {
+        consecutiveFailures++;
+        if (consecutiveFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
+          throw res.error;
         }
       }
-      if (lastNewAssistant && isTurnTerminal(lastNewAssistant)) {
-        if (stepOpen) {
-          writer.write({ type: "finish-step" });
-        }
-        return;
-      }
-    } else {
-      consecutiveFailures++;
-      if (consecutiveFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
-        throw res.error;
-      }
-    }
 
-    if (Date.now() >= deadline) {
-      throw new Error("Timed out waiting for the assistant's reply.");
+      if (Date.now() >= deadline) {
+        throw new Error("Timed out waiting for the assistant's reply.");
+      }
+      await sleep(nextPollDelay(attempt, pollIntervalMs), abortSignal);
+      attempt++;
     }
-    await sleep(nextPollDelay(attempt, pollIntervalMs), abortSignal);
-    attempt++;
+  } finally {
+    if (stepOpen) {
+      writer.write({ type: "finish-step" });
+    }
   }
 }
 
