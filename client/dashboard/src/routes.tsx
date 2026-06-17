@@ -16,7 +16,7 @@ import ChatSessions from "./pages/chatLogs/ChatLogs";
 import CLIs from "./pages/CLIs";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
-import UserSessions from "./pages/connect/UserSessions";
+import UserSessions from "./pages/org/UserSessions";
 import DeviceAgent from "./pages/device-agent/DeviceAgent";
 import Elements from "./pages/elements/Elements";
 import EnvironmentPage from "./pages/environments/Environment";
@@ -522,12 +522,6 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
-  userSessions: {
-    title: "User Sessions",
-    url: "user-sessions",
-    icon: "users",
-    component: UserSessions,
-  },
   settings: {
     title: "Project settings",
     url: "settings",
@@ -768,8 +762,14 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "history",
     component: OrgAuditLogs,
   },
+  userSessions: {
+    title: "User Sessions",
+    url: "user-sessions",
+    icon: "users",
+    component: UserSessions,
+  },
   identity: {
-    title: "Identity",
+    title: "IDP and SSO",
     url: "identity",
     icon: "fingerprint",
     component: OrgIdentity,

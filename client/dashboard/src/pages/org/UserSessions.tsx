@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { FacetSelect } from "@/components/auditlogs/feed";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
@@ -6,6 +6,7 @@ import { SessionTableRow } from "@/components/sessions/SessionTableRow";
 import { Button } from "@/components/ui/button";
 import { DotTable } from "@/components/ui/dot-table";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useOrganization, useProject } from "@/contexts/Auth";
 import {
   useUserSessionFacets,
   useUserSessionsInfinite,
@@ -26,7 +27,7 @@ export default function UserSessions(): JSX.Element {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <RequireScope scope="project:read" level="page">
+        <RequireScope scope="org:read" level="page">
           <UserSessionsInner />
         </RequireScope>
       </Page.Body>
@@ -35,12 +36,22 @@ export default function UserSessions(): JSX.Element {
 }
 
 function UserSessionsInner(): JSX.Element {
+  const project = useProject();
+  const organization = useOrganization();
+
+  const projects = useMemo(
+    () =>
+      [...organization.projects].sort((a, b) => a.slug.localeCompare(b.slug)),
+    [organization.projects],
+  );
+
+  const [projectSlug, setProjectSlug] = useState<string>(project.slug);
   const [status, setStatus] = useState<StatusFilter>("all");
   const [clientId, setClientId] = useState("all");
   const [subjectUrn, setSubjectUrn] = useState("all");
   const [issuerId, setIssuerId] = useState("all");
 
-  const { data: facets } = useUserSessionFacets({});
+  const { data: facets } = useUserSessionFacets({ gramProject: projectSlug });
 
   const {
     data,
@@ -50,6 +61,7 @@ function UserSessionsInner(): JSX.Element {
     isFetchingNextPage,
     refetch,
   } = useUserSessionsInfinite({
+    gramProject: projectSlug,
     status:
       status === "all"
         ? undefined
@@ -70,6 +82,19 @@ function UserSessionsInner(): JSX.Element {
       <Page.Section.Body>
         <div className="space-y-4">
           <div className="flex flex-wrap gap-2">
+            <FacetSelect
+              label="Project"
+              value={projectSlug}
+              onValueChange={(v) => {
+                if (v !== "all") setProjectSlug(v);
+              }}
+              placeholder="Select project"
+              allLabel={projectSlug}
+              options={projects.map((p) => ({
+                value: p.slug,
+                displayName: p.slug,
+              }))}
+            />
             <FacetSelect
               label="Status"
               value={status}
