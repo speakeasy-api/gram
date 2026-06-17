@@ -43,6 +43,7 @@ import {
   useListChats,
   useMembers,
 } from "@gram/client/react-query";
+import { useRiskOverview } from "@gram/client/react-query/index.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import {
   TimeRangePicker,
@@ -219,6 +220,32 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
       throwOnError: false,
     },
   );
+  const riskEventsHref = useMemo(() => {
+    const params = new URLSearchParams();
+    if (employeeEmailFilter) {
+      params.set("user_id", employeeEmailFilter);
+    }
+    const query = params.toString();
+    return query
+      ? `${routes.riskEvents.href()}?${query}`
+      : routes.riskEvents.href();
+  }, [employeeEmailFilter, routes.riskEvents]);
+  const riskOverviewQuery = useRiskOverview({ from, to }, undefined, {
+    enabled: employeeEmailFilter != null,
+    throwOnError: false,
+  });
+  const riskEventsCount = useMemo(() => {
+    if (!employeeEmailFilter) return 0;
+    const normalizedEmail = employeeEmailFilter.toLowerCase();
+    return (
+      riskOverviewQuery.data?.topUsers.find((user) => {
+        return (
+          user.email.toLowerCase() === normalizedEmail ||
+          user.externalUserId.toLowerCase() === normalizedEmail
+        );
+      })?.findings ?? 0
+    );
+  }, [employeeEmailFilter, riskOverviewQuery.data?.topUsers]);
 
   const handlePresetChange = (preset: DateRangePreset) => {
     setDateRange(preset);
@@ -402,9 +429,6 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                     : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5",
                 )}
               >
-                <FirstActivityCard
-                  firstSeenUnixNano={summary?.firstSeenUnixNano}
-                />
                 <MetricCard
                   title="Total Tokens"
                   value={totalTokens}
@@ -453,6 +477,36 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                         View Agent Sessions for {member?.name ?? routeUser}
                       </TooltipContent>
                     </Tooltip>
+                  }
+                />
+                <MetricCard
+                  title="Risk Events"
+                  value={riskEventsCount}
+                  displayValue={
+                    riskOverviewQuery.isLoading || riskOverviewQuery.isError
+                      ? "-"
+                      : undefined
+                  }
+                  icon="flag"
+                  subtext={`Over ${rangeLabel}`}
+                  action={
+                    employeeEmailFilter ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Link
+                            to={riskEventsHref}
+                            aria-label="View Risk Events"
+                            className="text-primary/70 hover:text-primary flex items-center gap-1 text-xs no-underline"
+                          >
+                            View
+                            <Icon name="arrow-right" />
+                          </Link>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          View Risk Events for {member?.name ?? routeUser}
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : null
                   }
                 />
               </section>
@@ -550,50 +604,6 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
       </div>
     </>
   );
-}
-
-function FirstActivityCard({
-  firstSeenUnixNano,
-}: {
-  firstSeenUnixNano?: string | null;
-}) {
-  const hasActivity =
-    firstSeenUnixNano != null &&
-    firstSeenUnixNano !== "" &&
-    firstSeenUnixNano !== "0";
-  const date = hasActivity ? unixNanoToDate(firstSeenUnixNano) : null;
-  const primary = date
-    ? date.toLocaleDateString([], {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      })
-    : "No activity";
-  const subtext = date ? `${daysSince(date).toLocaleString()} days ago` : null;
-
-  return (
-    <div className="bg-card border-border rounded-lg border p-5">
-      <div className="mb-3 flex items-center justify-between">
-        <span className="text-sm font-semibold">First Activity</span>
-        <div className="bg-muted/50 rounded-lg p-2">
-          <Icon name="calendar" className="text-muted-foreground size-4" />
-        </div>
-      </div>
-      <span className="block text-3xl font-semibold tracking-tight">
-        {primary}
-      </span>
-      {subtext && (
-        <span className="text-muted-foreground mt-1 block text-xs">
-          {subtext}
-        </span>
-      )}
-    </div>
-  );
-}
-
-function daysSince(date: Date) {
-  const ms = Date.now() - date.getTime();
-  return Math.max(0, Math.floor(ms / 86_400_000));
 }
 
 function DetailLoadingState({ isInsightsOpen }: { isInsightsOpen: boolean }) {
