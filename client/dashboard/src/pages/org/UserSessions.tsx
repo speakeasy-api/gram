@@ -5,7 +5,15 @@ import { RequireScope } from "@/components/require-scope";
 import { SessionTableRow } from "@/components/sessions/SessionTableRow";
 import { Button } from "@/components/ui/button";
 import { DotTable } from "@/components/ui/dot-table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Type } from "@/components/ui/type";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import {
   useUserSessionFacets,
@@ -82,19 +90,26 @@ function UserSessionsInner(): JSX.Element {
       <Page.Section.Body>
         <div className="space-y-4">
           <div className="flex flex-wrap gap-2">
-            <FacetSelect
-              label="Project"
-              value={projectSlug}
-              onValueChange={(v) => {
-                if (v !== "all") setProjectSlug(v);
-              }}
-              placeholder="Select project"
-              allLabel={projectSlug}
-              options={projects.map((p) => ({
-                value: p.slug,
-                displayName: p.slug,
-              }))}
-            />
+            <div className="flex flex-col gap-1.5">
+              <Type small muted>
+                Project
+              </Type>
+              <Select value={projectSlug} onValueChange={setProjectSlug}>
+                <SelectTrigger
+                  size="sm"
+                  className="bg-background min-w-[220px]"
+                >
+                  <SelectValue placeholder="Select project" />
+                </SelectTrigger>
+                <SelectContent>
+                  {projects.map((p) => (
+                    <SelectItem key={p.slug} value={p.slug}>
+                      {p.slug}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <FacetSelect
               label="Status"
               value={status}
