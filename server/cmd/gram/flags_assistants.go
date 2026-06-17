@@ -121,12 +121,20 @@ func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistan
 		gkeNamespace = "gram-" + c.String("environment")
 	}
 
+	// tokens.Parse returns a non-nil value even for an empty string, so guard on
+	// the raw flag: a GKE-only deployment leaves the Fly token unset and must not
+	// have the Fly backend (and its validation) forced on.
+	var flyTokens *tokens.Tokens
+	if raw := c.String("assistant-runtime-flyio-api-token"); raw != "" {
+		flyTokens = tokens.Parse(raw)
+	}
+
 	return assistants.RuntimeBackendConfig{
 		Provider: provider,
 		Fly: assistants.FlyRuntimeConfig{
 			ServiceName:        "gram",
 			ServiceVersion:     GitSHA,
-			FlyTokens:          tokens.Parse(c.String("assistant-runtime-flyio-api-token")),
+			FlyTokens:          flyTokens,
 			FlyAPIURL:          "",
 			FlyMachinesBaseURL: "",
 			DefaultFlyOrg:      c.String("assistant-runtime-flyio-org"),
@@ -172,10 +180,12 @@ func newAssistantRuntime(
 		return nil, err
 	}
 
-	// The GKE backend reaches Agent Sandbox through the in-cluster kubernetes
-	// API. InitializeK8sClient is a singleton and returns nil clients in local
-	// env, where GKE is unsupported — GKERuntimeConfig.Validate rejects that.
-	if cfg.Provider == assistants.RuntimeProviderGKE {
+	// Build the GKE backend whenever it is configured (a warm pool is set), not
+	// only when it is the target: a fly-target process must still reach Agent
+	// Sandbox to reap gke-backed runtime rows (and vice versa). InitializeK8sClient
+	// is a singleton that returns nil clients in local env, where GKE is
+	// unsupported — leaving Dynamic nil so the backend is skipped.
+	if cfg.GKE.WarmPool != "" {
 		k8sClients, err := k8s.InitializeK8sClient(ctx, logger, c.String("environment"), false)
 		if err != nil {
 			return nil, fmt.Errorf("initialize kubernetes client for gke assistant runtime: %w", err)
