@@ -54,6 +54,8 @@ func buildView(row repo.ListUserSessionsByProjectIDRow) *types.UserSession {
 		}
 	case urn.SessionSubjectKindAPIKey:
 		subjectName = conv.FromPGText[string](row.ApiKeyName)
+	case urn.SessionSubjectKindAnonymous:
+		// anonymous subjects have no resolved display name
 	}
 
 	var revokedAt *string
@@ -89,11 +91,11 @@ func projectID(ctx context.Context) (uuid.UUID, error) {
 
 func parseNullUUID(s string, field string) (uuid.NullUUID, error) {
 	if s == "" {
-		return uuid.NullUUID{}, nil
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
 	}
 	id, err := uuid.Parse(s)
 	if err != nil {
-		return uuid.NullUUID{}, oops.E(oops.CodeBadRequest, err, "invalid %s", field)
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, oops.E(oops.CodeBadRequest, err, "invalid %s", field)
 	}
 	return uuid.NullUUID{UUID: id, Valid: true}, nil
 }
@@ -137,7 +139,7 @@ func (t *ListTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload i
 		if in.Limit > maxLimit {
 			in.Limit = maxLimit
 		}
-		limit = int32(in.Limit)
+		limit = int32(in.Limit) //nolint:gosec // in.Limit is clamped to [1,maxLimit] above
 	}
 
 	issuer, err := parseNullUUID(in.UserSessionIssuerID, "user_session_issuer_id")
@@ -159,7 +161,7 @@ func (t *ListTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload i
 		SubjectUrn:          conv.ToPGTextEmpty(in.SubjectURN),
 		UserSessionIssuerID: issuer,
 		ClientID:            client,
-		ID:                  uuid.NullUUID{},
+		ID:                  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Cursor:              cursor,
 		LimitValue:          limit,
 	})
@@ -225,10 +227,10 @@ func (t *GetTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io
 		ProjectID:           pid,
 		Status:              conv.ToPGTextEmpty("all"),
 		SubjectUrn:          conv.ToPGTextEmpty(""),
-		UserSessionIssuerID: uuid.NullUUID{},
-		ClientID:            uuid.NullUUID{},
+		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ClientID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ID:                  id,
-		Cursor:              uuid.NullUUID{},
+		Cursor:              uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		LimitValue:          1,
 	})
 	if err != nil {

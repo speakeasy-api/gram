@@ -55,7 +55,7 @@ func (s *Service) ListUserSessions(ctx context.Context, payload *gen.ListUserSes
 		SubjectUrn:          conv.PtrToPGTextEmpty(payload.SubjectUrn),
 		UserSessionIssuerID: issuerFilter,
 		ClientID:            clientFilter,
-		ID:                  uuid.NullUUID{},
+		ID:                  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Cursor:              cursor,
 		LimitValue:          limit,
 	})

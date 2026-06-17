@@ -274,7 +274,7 @@ func TestListUserSessions_FilterByClientID_NoMatch(t *testing.T) {
 		ClientID:            &cid,
 	})
 	require.NoError(t, err)
-	require.Len(t, got.Items, 0)
+	require.Empty(t, got.Items)
 }
 
 func TestListUserSessions_StatusRevokedFilter(t *testing.T) {
