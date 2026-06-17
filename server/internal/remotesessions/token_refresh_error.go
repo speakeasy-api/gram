@@ -16,6 +16,10 @@ type TokenRefreshError struct {
 	cause  error
 }
 
+// Error returns the full detail (the public-safe Reason plus the private cause)
+// for logs and error chains. It is deliberately NOT the public boundary: code
+// surfacing a refresh failure to a client must use the Reason field, never
+// Error(), so the cause text never reaches the client.
 func (e *TokenRefreshError) Error() string {
 	if e.cause == nil {
 		return e.Reason
