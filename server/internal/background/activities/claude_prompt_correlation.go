@@ -24,24 +24,14 @@ const (
 )
 
 type CorrelateClaudePrompts struct {
-	repo   *activitiesrepo.Queries
-	chRepo *telemetryrepo.Queries
+	db     *pgxpool.Pool
+	chConn clickhouse.Conn
 }
 
 func NewCorrelateClaudePrompts(_ *slog.Logger, db *pgxpool.Pool, chConn clickhouse.Conn) *CorrelateClaudePrompts {
-	var repo *activitiesrepo.Queries
-	if db != nil {
-		repo = activitiesrepo.New(db)
-	}
-
-	var chRepo *telemetryrepo.Queries
-	if chConn != nil {
-		chRepo = telemetryrepo.New(chConn)
-	}
-
 	return &CorrelateClaudePrompts{
-		repo:   repo,
-		chRepo: chRepo,
+		db:     db,
+		chConn: chConn,
 	}
 }
 
@@ -58,13 +48,6 @@ type claudeUnlinkedUserMessage struct {
 }
 
 func (c *CorrelateClaudePrompts) Do(ctx context.Context, args CorrelateClaudePromptsArgs) error {
-	if args.SessionID == "" || args.ProjectID == uuid.Nil || args.ChatID == uuid.Nil {
-		return nil
-	}
-	if c.repo == nil || c.chRepo == nil {
-		return nil
-	}
-
 	messages, err := c.listUnlinkedUserMessages(ctx, args.ProjectID, args.ChatID)
 	if err != nil {
 		return fmt.Errorf("list unlinked Claude user messages: %w", err)
@@ -94,7 +77,7 @@ func (c *CorrelateClaudePrompts) Do(ctx context.Context, args CorrelateClaudePro
 }
 
 func (c *CorrelateClaudePrompts) listUnlinkedUserMessages(ctx context.Context, projectID uuid.UUID, chatID uuid.UUID) ([]claudeUnlinkedUserMessage, error) {
-	rows, err := c.repo.ListUnlinkedClaudeUserMessagesForCorrelation(ctx, activitiesrepo.ListUnlinkedClaudeUserMessagesForCorrelationParams{
+	rows, err := activitiesrepo.New(c.db).ListUnlinkedClaudeUserMessagesForCorrelation(ctx, activitiesrepo.ListUnlinkedClaudeUserMessagesForCorrelationParams{
 		ChatID:    chatID,
 		ProjectID: conv.ToNullUUID(projectID),
 	})
@@ -133,7 +116,7 @@ func (c *CorrelateClaudePrompts) findClaudeUserPromptMatch(
 		return noMatch, false, nil
 	}
 
-	candidates, err := c.chRepo.ListClaudeUserPromptCandidatesForCorrelation(ctx, telemetryrepo.ListClaudeUserPromptCandidatesForCorrelationParams{
+	candidates, err := telemetryrepo.New(c.chConn).ListClaudeUserPromptCandidatesForCorrelation(ctx, telemetryrepo.ListClaudeUserPromptCandidatesForCorrelationParams{
 		GramProjectID:          projectID.String(),
 		GramChatID:             chatID.String(),
 		SessionID:              sessionID,
@@ -160,7 +143,7 @@ func (c *CorrelateClaudePrompts) backfillMessagePromptID(ctx context.Context, pr
 	if strings.TrimSpace(promptID) == "" {
 		return nil
 	}
-	err := c.repo.BackfillClaudeUserMessagePromptID(ctx, activitiesrepo.BackfillClaudeUserMessagePromptIDParams{
+	err := activitiesrepo.New(c.db).BackfillClaudeUserMessagePromptID(ctx, activitiesrepo.BackfillClaudeUserMessagePromptIDParams{
 		PromptID:  conv.ToPGText(promptID),
 		MessageID: messageID,
 		ChatID:    chatID,
