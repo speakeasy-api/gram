@@ -119,6 +119,11 @@ export function useServerAssistantTransport(
         },
         onError: () => {
           if (slugAtRequest !== provisionedForSlugRef.current) return;
+          // Clear the latch so the next dep change (project switch, or a
+          // future caller wiring `enabled` to the sidebar toggle again) can
+          // re-fire ensure. Without this, a transient 500 or a 409 from the
+          // managed-name conflict would stick until full page reload.
+          provisionedForSlugRef.current = null;
           setProvisionError(
             "Couldn't connect to the Project Assistant. Try reopening the sidebar.",
           );

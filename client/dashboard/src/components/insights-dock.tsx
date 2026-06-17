@@ -1007,6 +1007,7 @@ export function InsightsProvider({
       // `assistantReady`: chat pages render runtime hooks (useAssistantRuntime)
       // only once the provider actually exists.
       assistantReady: runtimeMounted,
+      assistantNeedsAdmin,
       newConversation: handleStartFresh,
       registerDockHide,
     }),
@@ -1016,6 +1017,7 @@ export function InsightsProvider({
       handleSetOverride,
       handleSendPrompt,
       runtimeMounted,
+      assistantNeedsAdmin,
       handleStartFresh,
       registerDockHide,
     ],
