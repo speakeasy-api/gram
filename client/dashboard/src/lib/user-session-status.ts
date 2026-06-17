@@ -1,4 +1,5 @@
 import type { ComponentProps } from "react";
+import { format, formatDistanceToNow } from "date-fns";
 
 import type { Badge } from "@/components/ui/badge";
 import type { UserSession } from "@gram/client/models/components";
@@ -33,6 +34,19 @@ export const STATUS_PRESENTATION: Record<
     dotClass: "bg-destructive",
   },
 };
+
+// Human-readable timing label that matches the session's status, so an expired
+// session never reads "expires ... ago". Shared by the list and table rows.
+export function sessionTimeLabel(session: UserSession): string {
+  const status = sessionStatus(session);
+  if (status === "revoked" && session.revokedAt) {
+    return `revoked ${format(new Date(session.revokedAt), "PP")}`;
+  }
+  const relative = formatDistanceToNow(new Date(session.expiresAt), {
+    addSuffix: true,
+  });
+  return status === "expired" ? `expired ${relative}` : `expires ${relative}`;
+}
 
 export function subjectLabel(session: UserSession): string {
   if (session.subjectDisplayName) return session.subjectDisplayName;

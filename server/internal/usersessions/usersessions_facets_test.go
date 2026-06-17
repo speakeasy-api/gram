@@ -49,4 +49,5 @@ func TestListFacets_ServersAndUsers(t *testing.T) {
 	require.Equal(t, "user:alice", got.Users[0].Value)
 	require.Equal(t, int64(2), got.Users[0].Count)
 	require.Equal(t, "user:bob", got.Users[1].Value)
+	require.Equal(t, int64(1), got.Users[1].Count)
 }

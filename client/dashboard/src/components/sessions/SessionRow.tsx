@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { format, formatDistanceToNow } from "date-fns";
 import type { UserSession } from "@gram/client/models/components";
 
 import {
@@ -12,6 +11,7 @@ import { MoreActions } from "@/components/ui/more-actions";
 import { cn } from "@/lib/utils";
 import {
   sessionStatus,
+  sessionTimeLabel,
   subjectLabel,
   STATUS_PRESENTATION,
 } from "@/lib/user-session-status";
@@ -46,9 +46,7 @@ export function SessionRow({
       </div>
       <SessionStatusBadge session={session} />
       <span className="text-muted-foreground shrink-0 text-xs">
-        {status === "revoked" && session.revokedAt
-          ? `revoked ${format(new Date(session.revokedAt), "PP")}`
-          : `expires ${formatDistanceToNow(new Date(session.expiresAt), { addSuffix: true })}`}
+        {sessionTimeLabel(session)}
       </span>
       {canRevoke && (
         <MoreActions

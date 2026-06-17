@@ -14,6 +14,7 @@ function McpServerSessionsPanelInner({
   const {
     data,
     isPending,
+    isError,
     hasNextPage,
     fetchNextPage,
     isFetchingNextPage,
@@ -31,6 +32,15 @@ function McpServerSessionsPanelInner({
           {Array.from({ length: 3 }).map((_, i) => (
             <Skeleton key={i} className="h-12 w-full" />
           ))}
+        </div>
+      ) : isError ? (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-destructive text-sm">
+            Couldn&apos;t load sessions.
+          </p>
+          <Button variant="ghost" size="sm" onClick={() => void refetch()}>
+            Retry
+          </Button>
         </div>
       ) : sessions.length === 0 ? (
         <p className="text-muted-foreground text-sm">No active sessions</p>

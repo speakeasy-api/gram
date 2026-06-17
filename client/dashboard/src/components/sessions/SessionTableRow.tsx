@@ -1,21 +1,16 @@
 import { useState } from "react";
-import { format, formatDistanceToNow } from "date-fns";
 import type { UserSession } from "@gram/client/models/components";
 
 import { DotRow } from "@/components/ui/dot-row";
 import { MoreActions } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
-import { sessionStatus, subjectLabel } from "@/lib/user-session-status";
+import {
+  sessionStatus,
+  sessionTimeLabel,
+  subjectLabel,
+} from "@/lib/user-session-status";
 import { SessionStatusBadge } from "./SessionStatusBadge";
 import { RevokeSessionDialog } from "./RevokeSessionDialog";
-
-function expiryLabel(session: UserSession): string {
-  const status = sessionStatus(session);
-  if (status === "revoked" && session.revokedAt) {
-    return `revoked ${format(new Date(session.revokedAt), "PP")}`;
-  }
-  return `expires ${formatDistanceToNow(new Date(session.expiresAt), { addSuffix: true })}`;
-}
 
 export function SessionTableRow({
   session,
@@ -65,7 +60,7 @@ export function SessionTableRow({
         {/* Expires / Revoked */}
         <td className="px-3 py-3">
           <Type small muted>
-            {expiryLabel(session)}
+            {sessionTimeLabel(session)}
           </Type>
         </td>
 

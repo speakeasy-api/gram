@@ -591,7 +591,7 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
 }
 
 function EmployeeSessions({ userId }: { userId: string }): JSX.Element {
-  const { data, isPending, refetch } = useUserSessions({
+  const { data, isPending, isError, refetch } = useUserSessions({
     subjectUrn: `user:${userId}`,
     status: "active",
   });
@@ -607,6 +607,14 @@ function EmployeeSessions({ userId }: { userId: string }): JSX.Element {
       </div>
       {isPending ? (
         <Skeleton className="h-12 w-full" />
+      ) : isError ? (
+        <button
+          type="button"
+          onClick={() => void refetch()}
+          className="text-destructive text-sm underline-offset-2 hover:underline"
+        >
+          Couldn&apos;t load sessions — retry
+        </button>
       ) : sessions.length === 0 ? (
         <span className="text-muted-foreground text-sm">
           No active sessions
