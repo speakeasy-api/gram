@@ -5,6 +5,9 @@
 
 set -euo pipefail
 
+# Codegen binaries are throwaway; skip VCS stamping.
+export GOFLAGS="-buildvcs=false ${GOFLAGS:-}"
+
 # Prune stale codegen for both languages before regenerating: buf has no clean
 # option, so a deleted or renamed proto would otherwise leave orphaned modules
 # behind (committed, shipped in the Python wheel, and invisible to CI's

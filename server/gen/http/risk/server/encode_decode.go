@@ -7557,6 +7557,7 @@ func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPo
 		PolicyType:      v.PolicyType,
 		Enabled:         v.Enabled,
 		Action:          v.Action,
+		AudienceType:    v.AudienceType,
 		AutoName:        v.AutoName,
 		UserMessage:     v.UserMessage,
 		Prompt:          v.Prompt,
@@ -7612,6 +7613,14 @@ func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPo
 	}
 	if v.ApplicationConfig != nil {
 		res.ApplicationConfig = marshalTypesRiskPolicyApplicationToRiskPolicyApplicationResponseBody(v.ApplicationConfig)
+	}
+	if v.AudiencePrincipalUrns != nil {
+		res.AudiencePrincipalUrns = make([]string, len(v.AudiencePrincipalUrns))
+		for i, val := range v.AudiencePrincipalUrns {
+			res.AudiencePrincipalUrns[i] = val
+		}
+	} else {
+		res.AudiencePrincipalUrns = []string{}
 	}
 	if v.ModelConfig != nil {
 		res.ModelConfig = marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigResponseBody(v.ModelConfig)

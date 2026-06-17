@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
+
+	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -18,16 +21,22 @@ var ErrPrincipalNotFound = errors.New("principal not found")
 // principal.
 var ErrPrincipalInvalid = errors.New("principal invalid")
 
-// ResolveUserPrincipals resolves user:<id> plus assigned role principals
-// only when the Gram user is an active member of the organization. Missing or
-// cross-org users return ErrPrincipalNotFound. Empty or reserved user IDs are
-// invalid.
+// ResolveUserPrincipals resolves the principals that should be considered for
+// an organization-scoped request. Every request with a known organization gets
+// user:all. When userID identifies an active organization member, the result
+// also includes user:<id> plus assigned role principals. Missing, empty, or
+// cross-org users still receive only user:all.
 func ResolveUserPrincipals(ctx context.Context, db repo.DBTX, organizationID string, userID string) ([]urn.Principal, error) {
 	if organizationID == "" {
 		return nil, fmt.Errorf("organization id is required")
 	}
-	if userID == "" || userID == urn.AllUsersPrincipalID {
+	if userID == urn.AllUsersPrincipalID {
 		return nil, fmt.Errorf("%w: user id %q", ErrPrincipalInvalid, userID)
+	}
+
+	principals := []urn.Principal{AllUsersPrincipal()}
+	if userID == "" {
+		return principals, nil
 	}
 
 	isMember, err := orgrepo.New(db).HasActiveOrganizationUser(ctx, orgrepo.HasActiveOrganizationUserParams{
@@ -38,16 +47,13 @@ func ResolveUserPrincipals(ctx context.Context, db repo.DBTX, organizationID str
 		return nil, fmt.Errorf("resolve organization user principal: %w", err)
 	}
 	if !isMember {
-		return nil, ErrPrincipalNotFound
+		return principals, nil
 	}
 
-	principals := []urn.Principal{
-		urn.NewPrincipal(urn.PrincipalTypeUser, userID),
-		AllUsersPrincipal(),
-	}
-	seen := map[string]struct{}{}
-	for _, principal := range principals {
-		seen[principal.String()] = struct{}{}
+	principals = append(principals, urn.NewPrincipal(urn.PrincipalTypeUser, userID))
+	seen := map[string]struct{}{
+		AllUsersPrincipal().String():                             {},
+		urn.NewPrincipal(urn.PrincipalTypeUser, userID).String(): {},
 	}
 
 	q := repo.New(db)
@@ -75,6 +81,62 @@ func ResolveUserPrincipals(ctx context.Context, db repo.DBTX, organizationID str
 	}
 
 	return principals, nil
+}
+
+// ValidatePrincipal verifies that principal is a valid grant target in the
+// organization. Unlike ResolveUserPrincipals, this is strict: concrete users
+// must be active organization members and role principals must identify an
+// active role in the organization.
+func ValidatePrincipal(ctx context.Context, db repo.DBTX, organizationID string, principal urn.Principal) error {
+	if organizationID == "" {
+		return fmt.Errorf("organization id is required")
+	}
+
+	switch principal.Type {
+	case urn.PrincipalTypeUser:
+		if principal.String() == AllUsersPrincipal().String() {
+			return nil
+		}
+		if principal.ID == "" {
+			return fmt.Errorf("%w: user id %q", ErrPrincipalInvalid, principal.ID)
+		}
+		isMember, err := orgrepo.New(db).HasActiveOrganizationUser(ctx, orgrepo.HasActiveOrganizationUserParams{
+			UserID:         principal.ID,
+			OrganizationID: organizationID,
+		})
+		if err != nil {
+			return fmt.Errorf("validate user principal %q: %w", principal.String(), err)
+		}
+		if !isMember {
+			return fmt.Errorf("validate user principal %q: %w", principal.String(), ErrPrincipalNotFound)
+		}
+	case urn.PrincipalTypeRole:
+		roleKind, rawRoleID, ok := strings.Cut(principal.ID, ":")
+		if !ok {
+			return fmt.Errorf("invalid role principal %q", principal.String())
+		}
+		if roleKind != "organization" && roleKind != "global" {
+			return fmt.Errorf("invalid role principal %q", principal.String())
+		}
+		roleID, err := uuid.Parse(rawRoleID)
+		if err != nil {
+			return fmt.Errorf("invalid role principal %q: %w", principal.String(), err)
+		}
+		row, err := repo.New(db).GetOrganizationRoleByID(ctx, repo.GetOrganizationRoleByIDParams{
+			OrganizationID: organizationID,
+			ID:             roleID,
+		})
+		if err != nil {
+			return fmt.Errorf("validate role principal %q: %w", principal.String(), err)
+		}
+		if row.RoleUrn != principal.String() {
+			return fmt.Errorf("role principal %q does not match active role %q", principal.String(), row.RoleUrn)
+		}
+	default:
+		return fmt.Errorf("unsupported principal type %q", principal.Type)
+	}
+
+	return nil
 }
 
 func DeleteRoleGrants(ctx context.Context, q *repo.Queries, orgID, roleSlug, rolePrincipalURN string) error {

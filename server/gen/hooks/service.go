@@ -165,6 +165,8 @@ type CodexPayload struct {
 	PermissionType *string
 	// The user's prompt text (UserPromptSubmit only)
 	Prompt *string
+	// The final assistant message text for the turn (Stop only)
+	LastAssistantMessage *string
 }
 
 // CursorHookResult is the result type of the hooks service cursor method.
@@ -305,6 +307,10 @@ type OTELLogRecord struct {
 	TimeUnixNano *string
 	// Observed timestamp in nanoseconds
 	ObservedTimeUnixNano *string
+	// Trace ID
+	TraceID *string
+	// Span ID
+	SpanID *string
 	// Log body content
 	Body *OTELLogBody
 	// Log attributes

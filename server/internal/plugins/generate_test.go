@@ -780,6 +780,113 @@ printf '{}\n200'
 	require.Equal(t, "cursor@example.com", posted["user_email"])
 }
 
+func TestGeneratedClaudeHookScriptAddsLastUserPromptIDFromStopTranscript(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	files, err := GenerateObservabilityPluginPackage(cfg, "claude")
+	require.NoError(t, err)
+
+	posted := runGeneratedClaudeHook(t, files["hooks/hook.sh"], files["hooks/prompt-id.sh"], []string{
+		`{"sessionId":"session-1","type":"user","promptId":"prompt-old","message":{"role":"user","content":"old prompt"}}`,
+		`{"sessionId":"other-session","type":"user","promptId":"prompt-other","message":{"role":"user","content":"ignore me"}}`,
+		`{"sessionId":"session-1","type":"user","promptId":"prompt-new","message":{"role":"user","content":"current prompt"}}`,
+	}, `{"hook_event_name":"Stop","session_id":"session-1","last_assistant_message":"ok"}`)
+
+	require.Equal(t, "prompt-new", posted["LastUserPromptID"])
+	additionalData, ok := posted["additional_data"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "prompt-new", additionalData["LastUserPromptID"])
+}
+
+func TestGeneratedClaudeHookScriptDoesNotEnrichUserPromptSubmit(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	files, err := GeneratePluginPackages(nil, cfg)
+	require.NoError(t, err)
+
+	posted := runGeneratedClaudeHook(t, files[ClaudeObservabilitySlug(cfg)+"/hooks/hook.sh"], files[ClaudeObservabilitySlug(cfg)+"/hooks/prompt-id.sh"], []string{
+		`{"sessionId":"session-1","type":"user","promptId":"prompt-new","message":{"role":"user","content":"hook prompt"}}`,
+	}, `{"hook_event_name":"UserPromptSubmit","session_id":"session-1","prompt":"hook prompt"}`)
+
+	require.NotContains(t, posted, "promptId")
+	require.NotContains(t, posted, "LastUserPromptID")
+	require.NotContains(t, posted, "additional_data")
+}
+
+func TestGeneratedClaudeHookScriptOmitsLastUserPromptIDWhenTranscriptUnreadable(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	files, err := GenerateObservabilityPluginPackage(cfg, "claude")
+	require.NoError(t, err)
+
+	posted := runGeneratedClaudeHookWithPayload(t, files["hooks/hook.sh"], files["hooks/prompt-id.sh"], `{"hook_event_name":"Stop","session_id":"session-1","last_assistant_message":"ok","transcript_path":"/path/that/does/not/exist"}`)
+	require.NotContains(t, posted, "promptId")
+	require.NotContains(t, posted, "LastUserPromptID")
+	require.NotContains(t, posted, "additional_data")
+}
+
+func runGeneratedClaudeHook(t *testing.T, script []byte, promptIDScript []byte, transcriptLines []string, payload string) map[string]any {
+	t.Helper()
+
+	dir := t.TempDir()
+	transcriptPath := filepath.Join(dir, "transcript.jsonl")
+	require.NoError(t, os.WriteFile(transcriptPath, []byte(strings.Join(transcriptLines, "\n")+"\n"), 0o644))
+
+	var data map[string]any
+	require.NoError(t, json.Unmarshal([]byte(payload), &data))
+	data["transcript_path"] = transcriptPath
+	payloadBytes, err := json.Marshal(data)
+	require.NoError(t, err)
+
+	return runGeneratedClaudeHookWithPayload(t, script, promptIDScript, string(payloadBytes))
+}
+
+func runGeneratedClaudeHookWithPayload(t *testing.T, script []byte, promptIDScript []byte, payload string) map[string]any {
+	t.Helper()
+	require.NotEmpty(t, promptIDScript, "generated Claude prompt-id.sh missing")
+
+	dir := t.TempDir()
+	hookPath := filepath.Join(dir, "hook.sh")
+	capturePath := filepath.Join(dir, "payload.json")
+	require.NoError(t, os.WriteFile(hookPath, script, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "prompt-id.sh"), promptIDScript, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "curl"), []byte(`#!/usr/bin/env bash
+cat > "$GRAM_CAPTURE_PAYLOAD"
+printf '{}\n200'
+`), 0o755))
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(payload)
+	cmd.Env = append(os.Environ(),
+		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"GRAM_CAPTURE_PAYLOAD="+capturePath,
+	)
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+
+	var posted map[string]any
+	require.NoError(t, json.Unmarshal(requireFileBytes(t, capturePath), &posted))
+	return posted
+}
+
 func TestDeviceAgentIdentityScriptHandlesWhitespaceEmptyObject(t *testing.T) {
 	t.Parallel()
 
@@ -850,6 +957,7 @@ func TestGenerateClaudeObservabilityPluginHooksJSONIncludesAllRegisteredEvents(t
 	hooksJSON := files[ClaudeObservabilitySlug(cfg)+"/hooks/hooks.json"]
 	require.NotNil(t, hooksJSON, "claude observability hooks/hooks.json missing")
 	require.NotNil(t, files[ClaudeObservabilitySlug(cfg)+"/hooks/identity.sh"], "claude observability hooks/identity.sh missing")
+	require.NotNil(t, files[ClaudeObservabilitySlug(cfg)+"/hooks/prompt-id.sh"], "claude observability hooks/prompt-id.sh missing")
 
 	var parsed claudeHooksConfig
 	require.NoError(t, json.Unmarshal(hooksJSON, &parsed))
@@ -1017,6 +1125,43 @@ func TestGenerateCodexObservabilityPluginScriptPostsToCodexEndpoint(t *testing.T
 	require.Contains(t, asyncScript, ") >/dev/null 2>&1 &", "hook_async.sh must run the sender in the background")
 }
 
+// runCodexInstallScript executes the generated install script under an
+// isolated HOME containing a stub codex at ~/.local/bin (off PATH), so binary
+// probing never reaches a real install on the host. The stub appends its
+// arguments to the returned call log.
+func runCodexInstallScript(t *testing.T, script []byte, existingConfig string) (home string, callLog string) {
+	t.Helper()
+
+	bashPath, err := exec.LookPath("bash")
+	require.NoError(t, err, "bash is required to run the generated install script")
+	pythonPath, err := exec.LookPath("python3")
+	require.NoError(t, err, "python3 is required by the generated install script")
+
+	home = t.TempDir()
+	callLog = filepath.Join(home, "codex-calls.log")
+	stub := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"" + callLog + "\"\n"
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".local", "bin"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".local", "bin", "codex"), []byte(stub), 0o755))
+
+	if existingConfig != "" {
+		require.NoError(t, os.MkdirAll(filepath.Join(home, ".codex"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(home, ".codex", "config.toml"), []byte(existingConfig), 0o644))
+	}
+
+	scriptPath := filepath.Join(t.TempDir(), "install.sh")
+	require.NoError(t, os.WriteFile(scriptPath, script, 0o755))
+
+	cmd := exec.Command(bashPath, scriptPath)
+	cmd.Env = []string{
+		"HOME=" + home,
+		"PATH=" + filepath.Dir(pythonPath) + ":/usr/bin:/bin",
+	}
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "install script failed: %s", out)
+
+	return home, callLog
+}
+
 // An upgraded install already carries [hooks.state] entries whose trusted_hash
 // was computed against the previous hook command. When the command changes
 // (e.g. SessionStart moving from hook.sh to hook_async.sh) the installer must
@@ -1024,11 +1169,6 @@ func TestGenerateCodexObservabilityPluginScriptPostsToCodexEndpoint(t *testing.T
 // and silently stops running telemetry until the user re-approves them.
 func TestGenerateCodexInstallScriptRefreshesStaleTrustedHashes(t *testing.T) {
 	t.Parallel()
-
-	bashPath, err := exec.LookPath("bash")
-	require.NoError(t, err, "bash is required to run the generated install script")
-	pythonPath, err := exec.LookPath("python3")
-	require.NoError(t, err, "python3 is required by the generated install script")
 
 	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
 	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
@@ -1045,34 +1185,78 @@ func TestGenerateCodexInstallScriptRefreshesStaleTrustedHashes(t *testing.T) {
 	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
 	require.NoError(t, err)
 
-	home := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(home, ".codex"), 0o755))
-	existing := "features.hooks = true\n\n" +
-		"[hooks.state.\"" + target.StateKey + "\"]\n" +
+	existing := "[hooks.state.\"" + target.StateKey + "\"]\n" +
 		"enabled = true\n" +
 		"trusted_hash = \"" + staleHash + "\"\n"
-	configPath := filepath.Join(home, ".codex", "config.toml")
-	require.NoError(t, os.WriteFile(configPath, []byte(existing), 0o644))
+	home, _ := runCodexInstallScript(t, script, existing)
 
-	scriptPath := filepath.Join(t.TempDir(), "install.sh")
-	require.NoError(t, os.WriteFile(scriptPath, script, 0o755))
-
-	cmd := exec.Command(bashPath, scriptPath)
-	// Exclude any installed `codex` binary so only the config.toml patch runs.
-	cmd.Env = []string{
-		"HOME=" + home,
-		"PATH=" + filepath.Dir(pythonPath) + ":/usr/bin:/bin",
-	}
-	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, "install script failed: %s", out)
-
-	patched, err := os.ReadFile(configPath)
-	require.NoError(t, err)
+	patched := requireFileBytes(t, filepath.Join(home, ".codex", "config.toml"))
 	patchedStr := string(patched)
 
 	require.NotContains(t, patchedStr, staleHash, "stale trusted_hash must be replaced")
 	require.Contains(t, patchedStr, target.TrustedHash, "trusted_hash must be refreshed to the current command's hash")
 	require.Equal(t, 1, strings.Count(patchedStr, "[hooks.state.\""+target.StateKey+"\"]"), "refresh must not duplicate the entry")
+}
+
+// Desktop-only and MDM-deployed machines run without codex on PATH. The
+// install script must probe well-known install locations and use the binary
+// it finds there instead of skipping marketplace registration.
+func TestGenerateCodexInstallScriptProbesForCodexBinary(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	_, callLog := runCodexInstallScript(t, script, "")
+
+	calls := string(requireFileBytes(t, callLog))
+	require.Contains(t, calls, "plugin marketplace add https://example.com/gram-marketplace")
+	require.Contains(t, calls, "plugin marketplace upgrade "+conv.ToSlug(cfg.OrgName)+"-speakeasy")
+}
+
+// Root-level dotted keys (features.hooks = true) implicitly define the
+// [features] table and make Codex reject the whole config with a duplicate-key
+// error when an explicit [features] table is also present — which is the
+// default, since js_repl lives there. The flags must be written inside the
+// table, and dotted keys left behind by earlier script versions removed.
+func TestGenerateCodexInstallScriptWritesFeatureFlagsInFeaturesTable(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	existing := "features.hooks = true\n" +
+		"features.plugin_hooks = true\n\n" +
+		"[features]\n" +
+		"js_repl = true\n"
+	home, _ := runCodexInstallScript(t, script, existing)
+
+	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+
+	require.NotRegexp(t, `(?m)^features\.`, patched, "root-level dotted feature keys must be removed")
+	require.Equal(t, 1, strings.Count(patched, "[features]"), "the existing [features] table must be reused")
+	require.Equal(t, 1, strings.Count(patched, "\nhooks = true"), "hooks flag must live in the [features] table")
+	require.Equal(t, 1, strings.Count(patched, "\nplugin_hooks = true"), "plugin_hooks flag must live in the [features] table")
+	require.Contains(t, patched, "js_repl = true", "pre-existing table entries must be preserved")
+}
+
+func TestGenerateCodexInstallScriptCreatesFeaturesTable(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	home, _ := runCodexInstallScript(t, script, "")
+
+	patched := string(requireFileBytes(t, filepath.Join(home, ".codex", "config.toml")))
+
+	require.NotRegexp(t, `(?m)^features\.`, patched, "feature flags must not be written as root-level dotted keys")
+	require.Equal(t, 1, strings.Count(patched, "[features]"))
+	require.Equal(t, 1, strings.Count(patched, "\nhooks = true"))
+	require.Equal(t, 1, strings.Count(patched, "\nplugin_hooks = true"))
 }
 
 func TestGenerateReadmeIncludesCodexInstallation(t *testing.T) {

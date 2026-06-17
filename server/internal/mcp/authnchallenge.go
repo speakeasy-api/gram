@@ -297,7 +297,7 @@ func (s *Service) ApplyIssuerGate(
 ) (context.Context, string, error) {
 	protectedResourceURL, err := endpoint.ProtectedResourceURL(baseURL)
 	if err != nil {
-		return ctx, "", oops.E(oops.CodeUnexpected, err, "build protected-resource URL").Log(ctx, s.logger)
+		return ctx, "", oops.E(oops.CodeUnexpected, err, "build protected-resource URL").LogError(ctx, s.logger)
 	}
 
 	newCtx, subject, ok := s.validateUserSessionToken(ctx, authToken, endpoint)
@@ -329,7 +329,7 @@ func (s *Service) ApplyIssuerGate(
 		case errors.Is(rerr, remotesessions.ErrNoValidToken):
 			return ctx, "", WriteAuthenticateChallenge(w, protectedResourceURL, "")
 		case rerr != nil:
-			return ctx, "", oops.E(oops.CodeUnexpected, rerr, "resolve remote session").Log(newCtx, s.logger)
+			return ctx, "", oops.E(oops.CodeUnexpected, rerr, "resolve remote session").LogError(newCtx, s.logger)
 		}
 		upstreamToken = upstream
 	}
@@ -355,7 +355,7 @@ func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *Resolv
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeNotFound, err, "user_session_issuer not found")
 		}
-		return oops.E(oops.CodeUnexpected, err, "load user_session_issuer").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "load user_session_issuer").LogError(ctx, s.logger)
 	}
 	return nil
 }

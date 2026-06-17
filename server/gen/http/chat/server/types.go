@@ -52,6 +52,8 @@ type LoadChatResponseBody struct {
 	// history, walk from `max_generation` down to 0, requesting each generation in
 	// turn.
 	MaxGeneration int `form:"max_generation" json:"max_generation" xml:"max_generation"`
+	// Agent-specific usage enrichment for the chat, when available.
+	AgentUsage *AgentUsageResponseBody `form:"agent_usage,omitempty" json:"agent_usage,omitempty" xml:"agent_usage,omitempty"`
 	// The ID of the chat
 	ID string `form:"id" json:"id" xml:"id"`
 	// The title of the chat
@@ -1246,6 +1248,8 @@ type ChatMessageResponseBody struct {
 	ToolCalls *string `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
 	// The finish reason of the message
 	FinishReason *string `form:"finish_reason,omitempty" json:"finish_reason,omitempty" xml:"finish_reason,omitempty"`
+	// The agent prompt/turn ID associated with this message, when available.
+	PromptID *string `form:"prompt_id,omitempty" json:"prompt_id,omitempty" xml:"prompt_id,omitempty"`
 	// The ID of the user who created the message
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// The ID of the external user who created the message
@@ -1254,6 +1258,66 @@ type ChatMessageResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// Conversation generation — bumps on compaction or edit divergence
 	Generation int `form:"generation" json:"generation" xml:"generation"`
+}
+
+// AgentUsageResponseBody is used to define fields on response body types.
+type AgentUsageResponseBody struct {
+	// The agent usage payload discriminator.
+	Type string `form:"type" json:"type" xml:"type"`
+	// Claude Code usage details.
+	Claude *ClaudeAgentUsageResponseBody `form:"claude,omitempty" json:"claude,omitempty" xml:"claude,omitempty"`
+}
+
+// ClaudeAgentUsageResponseBody is used to define fields on response body types.
+type ClaudeAgentUsageResponseBody struct {
+	// Per-prompt Claude usage turns ordered by start time.
+	Turns []*ClaudeTurnUsageResponseBody `form:"turns" json:"turns" xml:"turns"`
+	// Per-tool Claude usage keyed by tool_use_id.
+	Tools []*ClaudeToolUsageResponseBody `form:"tools" json:"tools" xml:"tools"`
+}
+
+// ClaudeTurnUsageResponseBody is used to define fields on response body types.
+type ClaudeTurnUsageResponseBody struct {
+	// Claude prompt.id that correlates events for one user turn.
+	PromptID string `form:"prompt_id" json:"prompt_id" xml:"prompt_id"`
+	// Earliest OTEL log timestamp in this turn, as Unix nanoseconds.
+	StartTimeUnixNano string `form:"start_time_unix_nano" json:"start_time_unix_nano" xml:"start_time_unix_nano"`
+	// Latest OTEL log timestamp in this turn, as Unix nanoseconds.
+	EndTimeUnixNano string `form:"end_time_unix_nano" json:"end_time_unix_nano" xml:"end_time_unix_nano"`
+	// Number of Claude API request events in this turn.
+	RequestCount int64 `form:"request_count" json:"request_count" xml:"request_count"`
+	// Input tokens used by this turn.
+	InputTokens int64 `form:"input_tokens" json:"input_tokens" xml:"input_tokens"`
+	// Output tokens used by this turn.
+	OutputTokens int64 `form:"output_tokens" json:"output_tokens" xml:"output_tokens"`
+	// Cache read tokens used by this turn.
+	CacheReadTokens int64 `form:"cache_read_tokens" json:"cache_read_tokens" xml:"cache_read_tokens"`
+	// Cache creation tokens used by this turn.
+	CacheCreationTokens int64 `form:"cache_creation_tokens" json:"cache_creation_tokens" xml:"cache_creation_tokens"`
+	// Total tokens used by this turn.
+	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
+	// Total USD cost for this turn.
+	CostUsd float64 `form:"cost_usd" json:"cost_usd" xml:"cost_usd"`
+	// Total cost for this turn in micros of a USD.
+	CostMicros int64 `form:"cost_micros" json:"cost_micros" xml:"cost_micros"`
+	// Distinct model names used by this turn.
+	Models []string `form:"models" json:"models" xml:"models"`
+	// Distinct Claude query sources used by this turn.
+	QuerySources []string `form:"query_sources" json:"query_sources" xml:"query_sources"`
+}
+
+// ClaudeToolUsageResponseBody is used to define fields on response body types.
+type ClaudeToolUsageResponseBody struct {
+	// Claude tool_use_id that correlates the tool call and result.
+	ToolUseID string `form:"tool_use_id" json:"tool_use_id" xml:"tool_use_id"`
+	// Claude prompt.id for the turn that used this tool.
+	PromptID string `form:"prompt_id" json:"prompt_id" xml:"prompt_id"`
+	// Tool name reported by Claude Code.
+	ToolName string `form:"tool_name" json:"tool_name" xml:"tool_name"`
+	// Serialized tool input size in bytes.
+	InputSizeBytes int64 `form:"input_size_bytes" json:"input_size_bytes" xml:"input_size_bytes"`
+	// Serialized tool result size in bytes.
+	ResultSizeBytes int64 `form:"result_size_bytes" json:"result_size_bytes" xml:"result_size_bytes"`
 }
 
 // NewListChatsResponseBody builds the HTTP response body from the result of
@@ -1309,6 +1373,9 @@ func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 		}
 	} else {
 		body.Messages = []*ChatMessageResponseBody{}
+	}
+	if res.AgentUsage != nil {
+		body.AgentUsage = marshalChatAgentUsageToAgentUsageResponseBody(res.AgentUsage)
 	}
 	return body
 }

@@ -1313,6 +1313,8 @@ func marshalHooksOTELLogRecordToOTELLogRecordRequestBody(v *hooks.OTELLogRecord)
 	res := &OTELLogRecordRequestBody{
 		TimeUnixNano:           v.TimeUnixNano,
 		ObservedTimeUnixNano:   v.ObservedTimeUnixNano,
+		TraceID:                v.TraceID,
+		SpanID:                 v.SpanID,
 		DroppedAttributesCount: v.DroppedAttributesCount,
 	}
 	if v.Body != nil {
@@ -1492,6 +1494,8 @@ func marshalOTELLogRecordRequestBodyToHooksOTELLogRecord(v *OTELLogRecordRequest
 	res := &hooks.OTELLogRecord{
 		TimeUnixNano:           v.TimeUnixNano,
 		ObservedTimeUnixNano:   v.ObservedTimeUnixNano,
+		TraceID:                v.TraceID,
+		SpanID:                 v.SpanID,
 		DroppedAttributesCount: v.DroppedAttributesCount,
 	}
 	if v.Body != nil {

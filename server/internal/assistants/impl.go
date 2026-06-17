@@ -92,14 +92,14 @@ func (s *Service) ListAssistants(ctx context.Context, _ *gen.ListAssistantsPaylo
 
 	items, err := s.core.ListAssistants(ctx, *authCtx.ProjectID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list assistants").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "list assistants").LogError(ctx, s.logger)
 	}
 
 	result := &gen.ListAssistantsResult{Assistants: make([]*types.Assistant, 0, len(items))}
 	for _, item := range items {
 		view, err := toHTTPAssistant(item)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "build assistant view").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "build assistant view").LogError(ctx, s.logger)
 		}
 		result.Assistants = append(result.Assistants, view)
 	}
@@ -116,7 +116,7 @@ func (s *Service) GetAssistant(ctx context.Context, payload *gen.GetAssistantPay
 	}
 	assistantID, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogError(ctx, s.logger)
 	}
 
 	record, err := s.core.GetAssistant(ctx, *authCtx.ProjectID, assistantID)
@@ -125,7 +125,7 @@ func (s *Service) GetAssistant(ctx context.Context, payload *gen.GetAssistantPay
 	}
 	view, err := toHTTPAssistant(record)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build assistant view").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "build assistant view").LogError(ctx, s.logger)
 	}
 	return view, nil
 }
@@ -139,7 +139,7 @@ func (s *Service) CreateAssistant(ctx context.Context, payload *gen.CreateAssist
 		return nil, err
 	}
 	if authCtx.UserID == "" {
-		return nil, oops.E(oops.CodeUnauthorized, nil, "create assistant requires a user identity").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnauthorized, nil, "create assistant requires a user identity").LogError(ctx, s.logger)
 	}
 	record, err := s.core.CreateAssistant(
 		ctx,
@@ -160,7 +160,7 @@ func (s *Service) CreateAssistant(ctx context.Context, payload *gen.CreateAssist
 	s.startRuntimeWarmup(ctx, record)
 	view, err := toHTTPAssistant(record)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build assistant view").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "build assistant view").LogError(ctx, s.logger)
 	}
 	return view, nil
 }
@@ -175,7 +175,7 @@ func (s *Service) UpdateAssistant(ctx context.Context, payload *gen.UpdateAssist
 	}
 	assistantID, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogError(ctx, s.logger)
 	}
 
 	record, err := s.core.UpdateAssistant(
@@ -195,7 +195,7 @@ func (s *Service) UpdateAssistant(ctx context.Context, payload *gen.UpdateAssist
 	}
 	view, err := toHTTPAssistant(record)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build assistant view").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "build assistant view").LogError(ctx, s.logger)
 	}
 	return view, nil
 }
@@ -210,7 +210,7 @@ func (s *Service) DeleteAssistant(ctx context.Context, payload *gen.DeleteAssist
 	}
 	assistantID, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid assistant id").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogError(ctx, s.logger)
 	}
 	if err := s.core.DeleteAssistant(ctx, *authCtx.ProjectID, assistantID); err != nil {
 		return mapAssistantStoreError(ctx, s.logger, err, "delete assistant")
@@ -223,17 +223,19 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	// Sending a message is gated on project:read: it does not mutate project
+	// configuration, and viewers must be able to talk to a project's assistants.
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	// Messages are sent as the calling user, so a user identity is required.
 	if authCtx.UserID == "" {
-		return nil, oops.E(oops.CodeUnauthorized, nil, "sending a message requires a user identity").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnauthorized, nil, "sending a message requires a user identity").LogError(ctx, s.logger)
 	}
 
 	assistantID, err := uuid.Parse(payload.AssistantID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogError(ctx, s.logger)
 	}
 
 	// chat_id names the conversation to continue; omit it to start a new one (the
@@ -242,7 +244,7 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 	if payload.ChatID != nil && *payload.ChatID != "" {
 		chatID, err = uuid.Parse(*payload.ChatID)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid chat id").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid chat id").LogError(ctx, s.logger)
 		}
 	}
 
@@ -253,9 +255,9 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 	if chatID != uuid.Nil {
 		if err := s.core.CheckDashboardChatOwnership(ctx, *authCtx.ProjectID, chatID, authCtx.UserID); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, oops.E(oops.CodeNotFound, err, "chat not found").Log(ctx, s.logger)
+				return nil, oops.E(oops.CodeNotFound, err, "chat not found").LogError(ctx, s.logger)
 			}
-			return nil, oops.E(oops.CodeUnexpected, err, "resolve chat access").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "resolve chat access").LogError(ctx, s.logger)
 		}
 	}
 
@@ -267,7 +269,7 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 	result, err := s.core.SendDashboardMessage(ctx, *authCtx.ProjectID, assistantID, authCtx.UserID, chatID, payload.Message, idempotencyKey)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "assistant not found").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeNotFound, err, "assistant not found").LogError(ctx, s.logger)
 		}
 		return nil, mapAssistantStoreError(ctx, s.logger, err, "send assistant message")
 	}
@@ -283,6 +285,29 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 	}, nil
 }
 
+func (s *Service) GetManagedAssistant(ctx context.Context, _ *gen.GetManagedAssistantPayload) (*types.Assistant, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	record, err := s.core.GetManagedAssistant(ctx, *authCtx.ProjectID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "project assistant not provisioned")
+		}
+		return nil, mapAssistantStoreError(ctx, s.logger, err, "get project assistant")
+	}
+	view, err := toHTTPAssistant(record)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "build assistant view").LogError(ctx, s.logger)
+	}
+	return view, nil
+}
+
 func (s *Service) EnsureManagedAssistant(ctx context.Context, _ *gen.EnsureManagedAssistantPayload) (*types.Assistant, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -293,20 +318,20 @@ func (s *Service) EnsureManagedAssistant(ctx context.Context, _ *gen.EnsureManag
 	}
 	// Provisioning records the creating user, so a user identity is required.
 	if authCtx.UserID == "" {
-		return nil, oops.E(oops.CodeUnauthorized, nil, "the project assistant requires a user identity").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnauthorized, nil, "the project assistant requires a user identity").LogError(ctx, s.logger)
 	}
 
 	record, err := s.core.EnableManagedAssistant(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID)
 	if err != nil {
 		if errors.Is(err, ErrManagedAssistantNameTaken) {
-			return nil, oops.E(oops.CodeConflict, err, "an assistant with the project assistant's name already exists — rename it to enable the built-in assistant").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeConflict, err, "an assistant with the project assistant's name already exists — rename it to enable the built-in assistant").LogError(ctx, s.logger)
 		}
 		return nil, mapAssistantStoreError(ctx, s.logger, err, "ensure project assistant")
 	}
 	s.startRuntimeWarmup(ctx, record)
 	view, err := toHTTPAssistant(record)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build assistant view").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "build assistant view").LogError(ctx, s.logger)
 	}
 	return view, nil
 }
@@ -365,10 +390,10 @@ func (s *Service) startRuntimeWarmup(ctx context.Context, record assistantRecord
 func mapAssistantStoreError(ctx context.Context, logger *slog.Logger, err error, message string) error {
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return oops.E(oops.CodeNotFound, err, "%s", message).Log(ctx, logger)
+		return oops.E(oops.CodeNotFound, err, "%s", message).LogError(ctx, logger)
 	case errors.Is(err, errAssistantValidation):
-		return oops.E(oops.CodeBadRequest, err, "%s", message).Log(ctx, logger)
+		return oops.E(oops.CodeBadRequest, err, "%s", message).LogError(ctx, logger)
 	default:
-		return oops.E(oops.CodeUnexpected, err, "%s", message).Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "%s", message).LogError(ctx, logger)
 	}
 }

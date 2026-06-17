@@ -42,12 +42,12 @@ func (s *Service) ListAssistantMemories(ctx context.Context, payload *gen.ListAs
 
 	assistantID, err := uuid.Parse(payload.AssistantID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogError(ctx, s.logger)
 	}
 
 	cursorCreatedAt, cursorID, err := decodeListCursor(payload.Cursor)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
 	}
 
 	limit := conv.SafeInt32(payload.Limit)
@@ -92,7 +92,7 @@ func (s *Service) GetAssistantMemory(ctx context.Context, payload *gen.GetAssist
 
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid memory id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid memory id").LogError(ctx, s.logger)
 	}
 
 	mem, err := s.memory.Get(ctx, *authCtx.ProjectID, id)
@@ -111,7 +111,7 @@ func (s *Service) DeleteAssistantMemory(ctx context.Context, payload *gen.Delete
 
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid memory id").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid memory id").LogError(ctx, s.logger)
 	}
 
 	if err := s.memory.DeleteByID(ctx, *authCtx.ProjectID, id); err != nil {

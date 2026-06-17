@@ -76,6 +76,36 @@ func TestCodexSessionMetadata_CachesSessionStartEmail(t *testing.T) {
 	metadata := ti.service.codexSessionMetadata(ctx, &gen.CodexPayload{
 		HookEventName: "PreToolUse",
 		SessionID:     &sessionID,
-	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID)
 	require.Equal(t, email, metadata.UserEmail)
+	require.Equal(t, authCtx.UserID, metadata.UserID)
+}
+
+func TestCodexSessionMetadata_PrefersAuthenticatedUserIDOverCachedMetadata(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "codex-session-with-stale-cache"
+	email := "cached@example.com"
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "Codex",
+		UserEmail:   email,
+		UserID:      "cached-user-id",
+		ClaudeOrgID: "",
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}, 0))
+
+	metadata := ti.service.codexSessionMetadata(ctx, &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID)
+
+	require.Equal(t, email, metadata.UserEmail)
+	require.Equal(t, authCtx.UserID, metadata.UserID)
 }

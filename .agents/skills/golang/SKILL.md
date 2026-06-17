@@ -420,7 +420,7 @@ func (s *Service) ListDeployments(ctx context.Context, form *gen.ListDeployments
 	if form.Cursor != nil {
 		c, err := uuid.Parse(*form.Cursor)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
 		}
 
 		cursor = uuid.NullUUID{UUID: c, Valid: true}
@@ -529,7 +529,7 @@ Use `NoLogDefer` when a cleanup operation's error can be **silently discarded** 
 ```go
 dbtx, err := s.repo.DB().Begin(ctx)
 if err != nil {
-    return nil, oops.E(oops.CodeUnexpected, err, "error accessing resource").Log(ctx, logger)
+    return nil, oops.E(oops.CodeUnexpected, err, "error accessing resource").LogError(ctx, logger)
 }
 defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 ```

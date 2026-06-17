@@ -5,6 +5,9 @@
 
 set -e
 
+# Codegen binaries are throwaway; skip VCS stamping.
+export GOFLAGS="-buildvcs=false ${GOFLAGS:-}"
+
 # `goa gen` writes a throwaway `goa<random>/main.go` generator into its working
 # directory. goa removes it on both success and failure, but on a hard interrupt
 # (Ctrl-C) or --debug it can linger. That main imports goa's codegen deps

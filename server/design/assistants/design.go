@@ -166,6 +166,27 @@ var _ = Service("assistants", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SendAssistantMessage"}`)
 	})
 
+	Method("getManagedAssistant", func() {
+		Description("Get the project's built-in Project Assistant if it exists. Returns 404 when no managed assistant has been provisioned yet — call ensureManagedAssistant to create one.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(shared.Assistant)
+
+		HTTP(func() {
+			GET("/rpc/assistants.getManagedAssistant")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getManagedAssistant")
+		Meta("openapi:extension:x-speakeasy-name-override", "getManaged")
+	})
+
 	Method("ensureManagedAssistant", func() {
 		Description("Get the project's built-in Project Assistant, provisioning it on first access. Idempotent — safe to call on every sidebar open.")
 

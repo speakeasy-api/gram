@@ -142,6 +142,7 @@ export const AGENT_PLATFORMS: AgentPlatform[] = [
     description: "OpenAI CLI agent",
     icon: "codex",
     connected: false,
+    available: false,
     setupSteps: [
       {
         title: "Register the Speakeasy plugin marketplace",

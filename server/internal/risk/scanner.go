@@ -18,6 +18,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -28,15 +29,16 @@ import (
 
 // RiskScanner checks text against blocking risk policies.
 type RiskScanner interface {
-	// ScanForEnforcement scans text against all enabled blocking policies
-	// for the given project. Returns nil if no blocking policy matches.
+	// ScanForEnforcement scans text against enabled blocking policies that
+	// apply to the given user. Everyone-audience policies always apply;
+	// targeted policies require a matching risk_policy:evaluate grant.
 	// toolName is the tool-call name for tool_request/tool_response messages
-	// ("" otherwise); it is surfaced (destructured) to prompt-based policies.
-	ScanForEnforcement(ctx context.Context, projectID uuid.UUID, text string, messageType message.Type, toolName string) (*ScanResult, error)
+	// ("" otherwise); it is surfaced to prompt-based policies.
+	ScanForEnforcement(ctx context.Context, organizationID string, projectID uuid.UUID, userID string, text string, messageType message.Type, toolName string) (*ScanResult, error)
 	// LookupShadowMCPBlockingPolicy returns the first enabled shadow-MCP
-	// policy for the project whose action is "block". Returns nil when no
-	// such policy exists. Used by hooks to gate the realtime deny path.
-	LookupShadowMCPBlockingPolicy(ctx context.Context, projectID uuid.UUID) (*ShadowMCPPolicy, error)
+	// policy that applies to the given user. Returns nil when no such policy
+	// exists. Used by hooks to gate the realtime deny path.
+	LookupShadowMCPBlockingPolicy(ctx context.Context, organizationID string, projectID uuid.UUID, userID string) (*ShadowMCPPolicy, error)
 	// HasEnabledShadowMCPPolicy reports whether the project has at least one
 	// enabled shadow-MCP policy (any action). Used by the MCP server to
 	// decide whether to inject the x-gram-toolset-id constant into tool
@@ -111,6 +113,7 @@ var _ RiskScanner = (*Scanner)(nil)
 // per-scan mutex+init overhead on the hot path.
 type Scanner struct {
 	logger     *slog.Logger
+	db         *pgxpool.Pool
 	repo       *repo.Queries
 	gitleaksMu sync.Mutex                 // DetectString is not concurrent-safe
 	detector   *detect.Detector           // pre-created, reused across scans
@@ -140,6 +143,7 @@ func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner,
 
 	return &Scanner{
 		logger:     logger.With(attr.SlogComponent("risk-scanner")),
+		db:         db,
 		repo:       repo.New(db),
 		gitleaksMu: sync.Mutex{},
 		detector:   det,
@@ -151,7 +155,7 @@ func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner,
 	}, nil
 }
 
-func (s *Scanner) ScanForEnforcement(ctx context.Context, projectID uuid.UUID, text string, messageType message.Type, toolName string) (*ScanResult, error) {
+func (s *Scanner) ScanForEnforcement(ctx context.Context, organizationID string, projectID uuid.UUID, userID string, text string, messageType message.Type, toolName string) (*ScanResult, error) {
 	// An empty body is only a no-op when there is also no tool attribution: a
 	// no-arg/no-output tool call still names a tool (+ MCP server/function) that
 	// a tool-scoped prompt policy can match, so let those events through.
@@ -170,6 +174,12 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, projectID uuid.UUID, t
 		// No enforcing policies, fast path. Record as "skipped" to track volume.
 		s.recordScan(ctx, projectID.String(), "skipped", time.Since(start))
 		return nil, nil
+	}
+
+	grants, err := s.riskPolicyGrants(ctx, organizationID, userID)
+	if err != nil {
+		s.recordScan(ctx, projectID.String(), o11y.OutcomeFailure, time.Since(start))
+		return nil, err
 	}
 
 	// Resolve the prompt-policy flag once per scan (on the parent ctx, before
@@ -206,6 +216,15 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, projectID uuid.UUID, t
 	)
 	g, gctx := errgroup.WithContext(ctx)
 	for _, p := range policies {
+		policyApplication, err := authz.RiskPolicyApplies(p.ID.String(), authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate(grants)
+		if err != nil {
+			s.recordScan(ctx, projectID.String(), o11y.OutcomeFailure, time.Since(start))
+			return nil, fmt.Errorf("evaluate risk policy application: %w", err)
+		}
+		if !policyApplication.Satisfied {
+			continue
+		}
+		// A defined include predicate supersedes message_types (see inMessageScope).
 		if !inMessageScope(p) {
 			continue
 		}
@@ -244,12 +263,24 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, projectID uuid.UUID, t
 // LookupShadowMCPBlockingPolicy returns the first enabled shadow-MCP policy
 // for the project whose action is "block". Flag-action policies surface as
 // findings via the batch scanner instead of denying at the hook layer.
-func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, projectID uuid.UUID) (*ShadowMCPPolicy, error) {
+func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, organizationID string, projectID uuid.UUID, userID string) (*ShadowMCPPolicy, error) {
+	grants, err := s.riskPolicyGrants(ctx, organizationID, userID)
+	if err != nil {
+		return nil, err
+	}
+
 	policies, err := s.repo.ListEnabledShadowMCPPoliciesByProject(ctx, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("list shadow_mcp policies: %w", err)
 	}
 	for _, p := range policies {
+		policyApplication, err := authz.RiskPolicyApplies(p.ID.String(), authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate(grants)
+		if err != nil {
+			return nil, fmt.Errorf("evaluate risk policy application: %w", err)
+		}
+		if !policyApplication.Satisfied {
+			continue
+		}
 		if p.Action == "block" {
 			return &ShadowMCPPolicy{
 				ID:          p.ID.String(),
@@ -260,6 +291,18 @@ func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, projectID u
 		}
 	}
 	return nil, nil
+}
+
+func (s *Scanner) riskPolicyGrants(ctx context.Context, organizationID string, userID string) ([]authz.Grant, error) {
+	principals, err := authz.ResolveUserPrincipals(ctx, s.db, organizationID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve risk policy audience principals: %w", err)
+	}
+	grants, err := authz.LoadGrants(ctx, s.db, organizationID, principals)
+	if err != nil {
+		return nil, fmt.Errorf("load risk policy audience grants: %w", err)
+	}
+	return grants, nil
 }
 
 // HasEnabledShadowMCPPolicy reports whether the project has at least one

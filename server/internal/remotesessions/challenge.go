@@ -367,19 +367,18 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 
 	q := r.URL.Query()
 	if errCode := q.Get("error"); errCode != "" {
-		logger.WarnContext(ctx, "remote authn challenge returned error",
+		return oops.E(oops.CodeUnauthorized, nil, "remote authn challenge denied: %s", errCode).LogWarn(ctx, logger,
 			attr.SlogOAuthError(errCode),
 			attr.SlogOAuthErrorDescription(q.Get("error_description")),
 		)
-		return oops.E(oops.CodeUnauthorized, nil, "remote authn challenge denied: %s", errCode)
 	}
 	stateID := q.Get("state")
 	if stateID == "" {
-		return oops.E(oops.CodeBadRequest, nil, "state is required").Log(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, logger)
 	}
 	code := q.Get("code")
 	if code == "" {
-		return oops.E(oops.CodeBadRequest, nil, "code is required").Log(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, "code is required").LogError(ctx, logger)
 	}
 
 	// Single-use state: GETDEL so a duplicate callback can't double-exchange
@@ -387,20 +386,20 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	// depth keeps the failure mode obvious.
 	state, err := m.cache.GetAndDelete(ctx, "remoteLogin:"+stateID)
 	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "remote login state not found or expired").Log(ctx, logger)
+		return oops.E(oops.CodeUnauthorized, err, "remote login state not found or expired").LogError(ctx, logger)
 	}
 	mcpSlug := state.McpSlug
 	if mcpSlug == "" {
 		mcpSlug = routeMcpSlug
 	}
 	if mcpSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "mcp slug is missing from remote login state").Log(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, "mcp slug is missing from remote login state").LogError(ctx, logger)
 	}
 	if routeMcpSlug != "" && routeMcpSlug != mcpSlug {
-		return oops.E(oops.CodeUnauthorized, nil, "remote login state does not match this MCP server").Log(ctx, logger)
+		return oops.E(oops.CodeUnauthorized, nil, "remote login state does not match this MCP server").LogError(ctx, logger)
 	}
 	if state.McpSlug != "" && state.McpSlug != mcpSlug {
-		return oops.E(oops.CodeUnauthorized, nil, "remote login state does not match this MCP server").Log(ctx, logger)
+		return oops.E(oops.CodeUnauthorized, nil, "remote login state does not match this MCP server").LogError(ctx, logger)
 	}
 
 	logger = logger.With(
@@ -413,7 +412,7 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	// upstream authorization code on a request that can't produce a
 	// remote_sessions row anyway.
 	if state.Subject == nil || state.Subject.IsZero() {
-		return oops.E(oops.CodeUnauthorized, nil, "remote login requires a stamped subject on the parent challenge").Log(ctx, logger)
+		return oops.E(oops.CodeUnauthorized, nil, "remote login requires a stamped subject on the parent challenge").LogError(ctx, logger)
 	}
 
 	queries := remotesessions_repo.New(m.db)
@@ -422,14 +421,14 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		ProjectID: conv.ToNullUUID(state.ProjectID),
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "load remote session client").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "load remote session client").LogError(ctx, logger)
 	}
 
 	var clientSecret string
 	if clientRow.ClientSecretEncrypted.Valid {
 		decoded, derr := m.enc.Decrypt(clientRow.ClientSecretEncrypted.String)
 		if derr != nil {
-			return oops.E(oops.CodeUnexpected, derr, "decrypt client secret").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, derr, "decrypt client secret").LogError(ctx, logger)
 		}
 		clientSecret = decoded
 	}
@@ -438,18 +437,18 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	audience := conv.FromPGTextOrEmpty[string](clientRow.Audience)
 	tok, err := m.exchangeCode(ctx, state, clientRow.ClientID, clientSecret, authMethod, audience, code)
 	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "upstream token exchange failed").Log(ctx, logger)
+		return oops.E(oops.CodeUnauthorized, err, "upstream token exchange failed").LogError(ctx, logger)
 	}
 
 	accessEnc, err := m.enc.Encrypt([]byte(tok.AccessToken))
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "encrypt access token").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "encrypt access token").LogError(ctx, logger)
 	}
 	var refreshEnc *string
 	if tok.RefreshToken != "" {
 		v, eerr := m.enc.Encrypt([]byte(tok.RefreshToken))
 		if eerr != nil {
-			return oops.E(oops.CodeUnexpected, eerr, "encrypt refresh token").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, eerr, "encrypt refresh token").LogError(ctx, logger)
 		}
 		refreshEnc = &v
 	}
@@ -482,7 +481,7 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		RefreshExpiresAt:      conv.PtrToPGTimestamptz(refreshExpires),
 		Scopes:                scopes,
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "store remote session").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "store remote session").LogError(ctx, logger)
 	}
 
 	routeBase := state.RouteBase

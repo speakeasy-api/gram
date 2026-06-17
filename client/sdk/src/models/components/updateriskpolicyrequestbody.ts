@@ -30,12 +30,34 @@ export type UpdateRiskPolicyRequestBodyAction = ClosedEnum<
   typeof UpdateRiskPolicyRequestBodyAction
 >;
 
+/**
+ * Policy audience type: everyone or targeted. Omit to preserve the current audience type.
+ */
+export const UpdateRiskPolicyRequestBodyAudienceType = {
+  Everyone: "everyone",
+  Targeted: "targeted",
+} as const;
+/**
+ * Policy audience type: everyone or targeted. Omit to preserve the current audience type.
+ */
+export type UpdateRiskPolicyRequestBodyAudienceType = ClosedEnum<
+  typeof UpdateRiskPolicyRequestBodyAudienceType
+>;
+
 export type UpdateRiskPolicyRequestBody = {
   /**
    * Policy action: flag or block.
    */
   action?: UpdateRiskPolicyRequestBodyAction | undefined;
   applicationConfig?: RiskPolicyApplication | undefined;
+  /**
+   * Principal URNs this policy applies to. Omit to preserve the current target principals.
+   */
+  audiencePrincipalUrns?: Array<string> | undefined;
+  /**
+   * Policy audience type: everyone or targeted. Omit to preserve the current audience type.
+   */
+  audienceType?: UpdateRiskPolicyRequestBodyAudienceType | undefined;
   /**
    * Whether the policy name should be auto-generated.
    */
@@ -97,9 +119,17 @@ export const UpdateRiskPolicyRequestBodyAction$outboundSchema: z.ZodMiniEnum<
 > = z.enum(UpdateRiskPolicyRequestBodyAction);
 
 /** @internal */
+export const UpdateRiskPolicyRequestBodyAudienceType$outboundSchema:
+  z.ZodMiniEnum<typeof UpdateRiskPolicyRequestBodyAudienceType> = z.enum(
+    UpdateRiskPolicyRequestBodyAudienceType,
+  );
+
+/** @internal */
 export type UpdateRiskPolicyRequestBody$Outbound = {
   action?: string | undefined;
   application_config?: RiskPolicyApplication$Outbound | undefined;
+  audience_principal_urns?: Array<string> | undefined;
+  audience_type?: string | undefined;
   auto_name?: boolean | undefined;
   custom_rule_ids?: Array<string> | undefined;
   disabled_rules?: Array<string> | undefined;
@@ -124,6 +154,10 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
   z.object({
     action: z.optional(UpdateRiskPolicyRequestBodyAction$outboundSchema),
     applicationConfig: z.optional(RiskPolicyApplication$outboundSchema),
+    audiencePrincipalUrns: z.optional(z.array(z.string())),
+    audienceType: z.optional(
+      UpdateRiskPolicyRequestBodyAudienceType$outboundSchema,
+    ),
     autoName: z.optional(z.boolean()),
     customRuleIds: z.optional(z.array(z.string())),
     disabledRules: z.optional(z.array(z.string())),
@@ -142,6 +176,8 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       applicationConfig: "application_config",
+      audiencePrincipalUrns: "audience_principal_urns",
+      audienceType: "audience_type",
       autoName: "auto_name",
       customRuleIds: "custom_rule_ids",
       disabledRules: "disabled_rules",

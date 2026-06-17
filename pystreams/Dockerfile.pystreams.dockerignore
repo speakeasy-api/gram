@@ -1,0 +1,39 @@
+# Build-scoped ignore file for pystreams/Dockerfile.pystreams. BuildKit prefers
+# "<dockerfile>.dockerignore" over a root .dockerignore, so this keeps the
+# pystreams image's context minimal without affecting any other build.
+#
+# Patterns are evaluated against the build context root (the repo root).
+
+# Start by excluding everything, then allow only what the uv workspace build
+# needs: the root lock + workspace manifest, and the two member directories.
+*
+
+!pyproject.toml
+!uv.lock
+!infra
+!pystreams
+
+# Trim the infra member down to just its Python wheel inputs (the hatchling
+# wheel only packages gram_infra + gen_py). The rest of infra/ is the Go service
+# and is never imported by pystreams.
+infra/cmd
+infra/gen
+infra/internal
+infra/pkg
+infra/proto
+infra/main.go
+
+# Local virtualenvs are platform-specific and must be rebuilt in the image.
+**/.venv
+
+# Caches and build artifacts.
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+
+# Local-only / editor / VCS noise that may live inside the allowed members.
+**/.claude
+**/.git
+**/.gitignore

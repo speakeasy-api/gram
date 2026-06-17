@@ -116,6 +116,7 @@ func newEnabledShadowMCPFixture(t *testing.T, ctx context.Context, ti *testInsta
 		PresidioEntities: nil,
 		Enabled:          true,
 		Action:           "block",
+		AudienceType:     "everyone",
 		AutoName:         false,
 		UserMessage:      pgtype.Text{},
 	})

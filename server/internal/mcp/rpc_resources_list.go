@@ -58,7 +58,7 @@ func handleResourcesList(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 
 	bs, err := json.Marshal(result)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize resources/list response").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize resources/list response").LogError(ctx, logger)
 	}
 
 	return bs, nil

@@ -72,7 +72,7 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 
 	dbtx, err := d.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error starting transaction").Log(ctx, d.logger)
+		return oops.E(oops.CodeUnexpected, err, "error starting transaction").LogError(ctx, d.logger)
 	}
 	defer o11y.NoLogDefer(func() error {
 		return dbtx.Rollback(ctx)
@@ -86,7 +86,7 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 		DeploymentID: args.DeploymentID,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error fetching deployment functions").Log(ctx, d.logger)
+		return oops.E(oops.CodeUnexpected, err, "error fetching deployment functions").LogError(ctx, d.logger)
 	}
 
 	ids := make([]uuid.UUID, 0, len(depfuncs))
@@ -102,7 +102,7 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 		FunctionIds:  ids,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error fetching function credentials").Log(ctx, d.logger)
+		return oops.E(oops.CodeUnexpected, err, "error fetching function credentials").LogError(ctx, d.logger)
 	}
 
 	creds := make(map[uuid.UUID]repo.GetFunctionCredentialsBatchRow, len(credrows))
@@ -115,7 +115,7 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 		Ids:       assetids,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error reading function asset URLs").Log(ctx, d.logger)
+		return oops.E(oops.CodeUnexpected, err, "error reading function asset URLs").LogError(ctx, d.logger)
 	}
 
 	assetURLs := make(map[uuid.UUID]assetsrepo.GetAssetsByIDRow, len(urlrows))
@@ -133,7 +133,7 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 		}
 	}
 	if stop {
-		return oops.E(oops.CodeInvalid, nil, "one or more functions failed preflight checks").Log(ctx, d.logger)
+		return oops.E(oops.CodeInvalid, nil, "one or more functions failed preflight checks").LogError(ctx, d.logger)
 	}
 
 	workers := pool.New().WithErrors().WithMaxGoroutines(runtime.GOMAXPROCS(0))
@@ -165,7 +165,7 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 			case errors.As(err, &serr):
 				return serr
 			case err != nil:
-				return oops.E(oops.CodeUnexpected, err, "error deploying function runner").Log(ctx, d.logger)
+				return oops.E(oops.CodeUnexpected, err, "error deploying function runner").LogError(ctx, d.logger)
 			}
 			return nil
 		})
@@ -175,7 +175,7 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error committing transaction").Log(ctx, d.logger)
+		return oops.E(oops.CodeUnexpected, err, "error committing transaction").LogError(ctx, d.logger)
 	}
 
 	return nil
@@ -208,52 +208,52 @@ func (d *DeployFunctionRunners) preflightFunction(
 	var empty deployFunctionRunnerTask
 
 	if !functions.IsSupportedRuntime(fnc.Runtime) {
-		return empty, oops.E(oops.CodeInvariantViolation, nil, "function has unsupported runtime %q", fnc.Runtime).Log(ctx, logger)
+		return empty, oops.E(oops.CodeInvariantViolation, nil, "function has unsupported runtime %q", fnc.Runtime).LogError(ctx, logger)
 	}
 
 	fa, ok := fncAssets[fnc.AssetID]
 	if !ok {
-		return empty, oops.E(oops.CodeInvariantViolation, nil, "function is missing asset URL").Log(ctx, logger)
+		return empty, oops.E(oops.CodeInvariantViolation, nil, "function is missing asset URL").LogError(ctx, logger)
 	}
 	if fa.Url == "" {
-		return empty, oops.E(oops.CodeInvariantViolation, nil, "function has empty asset URL").Log(ctx, logger)
+		return empty, oops.E(oops.CodeInvariantViolation, nil, "function has empty asset URL").LogError(ctx, logger)
 	}
 	if fa.Sha256 == "" {
-		return empty, oops.E(oops.CodeInvariantViolation, nil, "function has empty asset integrity hash").Log(ctx, logger)
+		return empty, oops.E(oops.CodeInvariantViolation, nil, "function has empty asset integrity hash").LogError(ctx, logger)
 	}
 
 	mem := int(fnc.MemoryMib.Int32)
 	if mem < 0 || mem > constants.MaxFunctionMemoryMiB {
-		return empty, oops.E(oops.CodeInvariantViolation, nil, "function has invalid memory configuration").Log(ctx, logger)
+		return empty, oops.E(oops.CodeInvariantViolation, nil, "function has invalid memory configuration").LogError(ctx, logger)
 	}
 
 	scale := int(fnc.Scale.Int32)
 	if scale < 0 || scale > constants.MaxFunctionScale {
-		return empty, oops.E(oops.CodeInvariantViolation, nil, "function has invalid scale configuration").Log(ctx, logger)
+		return empty, oops.E(oops.CodeInvariantViolation, nil, "function has invalid scale configuration").LogError(ctx, logger)
 	}
 
 	assetURL, err := url.Parse(fa.Url)
 	if err != nil {
-		return empty, oops.E(oops.CodeInvariantViolation, err, "function has malformed asset URL").Log(ctx, logger)
+		return empty, oops.E(oops.CodeInvariantViolation, err, "function has malformed asset URL").LogError(ctx, logger)
 	}
 
 	c, ok := credentials[fnc.ID]
 	if !ok {
-		return empty, oops.E(oops.CodeInvariantViolation, nil, "function is missing credentials").Log(ctx, logger)
+		return empty, oops.E(oops.CodeInvariantViolation, nil, "function is missing credentials").LogError(ctx, logger)
 	}
 
 	enckey := c.EncryptionKey.Reveal()
 	if len(enckey) == 0 || c.BearerFormat.String == "" {
-		return empty, oops.E(oops.CodeInvariantViolation, nil, "malformed credentials generated for function").Log(ctx, logger)
+		return empty, oops.E(oops.CodeInvariantViolation, nil, "malformed credentials generated for function").LogError(ctx, logger)
 	}
 
 	sec, err := d.enc.Decrypt(string(enckey))
 	if err != nil {
-		return empty, oops.E(oops.CodeInvariantViolation, err, "failed to unseal function credentials").Log(ctx, logger)
+		return empty, oops.E(oops.CodeInvariantViolation, err, "failed to unseal function credentials").LogError(ctx, logger)
 	}
 
 	if len(sec) == 0 {
-		return empty, oops.E(oops.CodeInvariantViolation, nil, "function has empty credentials").Log(ctx, logger)
+		return empty, oops.E(oops.CodeInvariantViolation, nil, "function has empty credentials").LogError(ctx, logger)
 	}
 
 	return deployFunctionRunnerTask{

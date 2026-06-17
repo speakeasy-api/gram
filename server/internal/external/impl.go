@@ -75,8 +75,15 @@ func AttachWebhookHandler(mux goahttp.Muxer, h *WebhookHandler) {
 
 // webhookEventData is the relevant subset of the `data` field on a WorkOS
 // webhook payload. ID and OrganizationID are populated differently per event
-// type; see workOSOrganizationIDFromWebhook for the mapping.
+// type; see parseOrganizationID for the mapping.
 type webhookEventData struct {
+	ID             string                 `json:"id"`
+	OrganizationID string                 `json:"organization_id"`
+	User           webhookDirectoryEntity `json:"user"`
+	Group          webhookDirectoryEntity `json:"group"`
+}
+
+type webhookDirectoryEntity struct {
 	ID             string `json:"id"`
 	OrganizationID string `json:"organization_id"`
 }
@@ -99,7 +106,7 @@ func (h *WebhookHandler) ReceiveWorkOSWebhook(ctx context.Context, payload *gen.
 
 	bodyBytes, err := io.ReadAll(body)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, h.logger)
+		return oops.E(oops.CodeBadRequest, err, "failed to read request body").LogError(ctx, h.logger)
 	}
 
 	if _, err := h.webhooksClient.ValidatePayload(*payload.WorkosSignature, string(bodyBytes)); err != nil {
@@ -108,7 +115,7 @@ func (h *WebhookHandler) ReceiveWorkOSWebhook(ctx context.Context, payload *gen.
 
 	var event webhookEvent
 	if err := json.Unmarshal(bodyBytes, &event); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid webhook payload").Log(ctx, h.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid webhook payload").LogError(ctx, h.logger)
 	}
 
 	logger := h.logger.With(attr.SlogWorkOSEventType(event.Event))
@@ -134,13 +141,21 @@ func (h *WebhookHandler) dispatch(ctx context.Context, logger *slog.Logger, even
 		string(workos.EventKindConnectionDeactivated),
 		string(workos.EventKindConnectionDeleted),
 		string(workos.EventKindDirectorySyncActivated),
-		string(workos.EventKindDirectorySyncDeleted):
+		string(workos.EventKindDirectorySyncDeleted),
+		string(workos.EventKindDirectorySyncUserCreated),
+		string(workos.EventKindDirectorySyncUserUpdated),
+		string(workos.EventKindDirectorySyncUserDeleted),
+		string(workos.EventKindDirectorySyncGroupCreated),
+		string(workos.EventKindDirectorySyncGroupUpdated),
+		string(workos.EventKindDirectorySyncGroupDeleted),
+		string(workos.EventKindDirectorySyncGroupUserAdded),
+		string(workos.EventKindDirectorySyncGroupUserRemoved):
 
 		orgID := parseOrganizationID(event)
 		if _, err := background.ExecuteProcessWorkOSOrganizationEventsWorkflowDebounced(ctx, h.temporalEnv, background.ProcessWorkOSEventsParams{
 			WorkOSOrganizationID: orgID,
 		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to enqueue WorkOS organization sync").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to enqueue WorkOS organization sync").LogError(ctx, logger)
 		}
 		return nil
 
@@ -148,7 +163,7 @@ func (h *WebhookHandler) dispatch(ctx context.Context, logger *slog.Logger, even
 		string(workos.EventKindRoleUpdated),
 		string(workos.EventKindRoleDeleted):
 		if _, err := background.ExecuteProcessWorkOSGlobalRoleEventsWorkflowDebounced(ctx, h.temporalEnv); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to enqueue WorkOS global role sync").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to enqueue WorkOS global role sync").LogError(ctx, logger)
 		}
 		return nil
 
@@ -158,13 +173,12 @@ func (h *WebhookHandler) dispatch(ctx context.Context, logger *slog.Logger, even
 		if _, err := background.ExecuteProcessWorkOSUserEventsWorkflowDebounced(ctx, h.temporalEnv, background.ProcessWorkOSUserEventsWorkflowParams{
 			WorkOSUserID: event.Data.ID,
 		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to enqueue WorkOS user sync").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to enqueue WorkOS user sync").LogError(ctx, logger)
 		}
 		return nil
 
 	default:
-		// Remaining dsync.* sub-events and any new event types are accepted
-		// so WorkOS stops retrying, but they are not processed yet.
+		// Unknown event types are accepted so WorkOS stops retrying them.
 		return nil
 	}
 }
@@ -179,5 +193,11 @@ func parseOrganizationID(event webhookEvent) string {
 	if strings.HasPrefix(event.Event, "organization.") {
 		return event.Data.ID
 	}
-	return event.Data.OrganizationID
+	if event.Data.OrganizationID != "" {
+		return event.Data.OrganizationID
+	}
+	if event.Data.Group.OrganizationID != "" {
+		return event.Data.Group.OrganizationID
+	}
+	return event.Data.User.OrganizationID
 }

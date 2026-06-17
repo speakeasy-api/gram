@@ -127,6 +127,11 @@ function LogDetailContent({
     ? getNestedValue(attrs, HOOK_BLOCK_REASON_KEY)
     : undefined;
   const toolError = attrs ? getNestedValue(attrs, HOOK_ERROR_KEY) : undefined;
+  const toolCallID = attrs ? getNestedValue(attrs, "gen_ai.tool.call.id") : "";
+  const toolName = attrs ? getNestedValue(attrs, "gram.tool.name") : "";
+  const showToolIOHiddenMessage = Boolean(
+    (toolCallID || toolName) && !toolInput,
+  );
   const highlights = attrs
     ? HIGHLIGHT_ATTR_KEYS.map(({ path, label }) => ({
         path,
@@ -281,6 +286,11 @@ function LogDetailContent({
           {/* Tool Input */}
           {toolInput && (
             <CollapsibleBodySection title="Tool Input" content={toolInput} />
+          )}
+          {showToolIOHiddenMessage && (
+            <div className="text-muted-foreground bg-muted/30 border-border rounded-lg border px-3 py-2 text-sm">
+              Tool arguments are not shown when tool_io_logs are disabled.
+            </div>
           )}
 
           {/* Tool Output */}

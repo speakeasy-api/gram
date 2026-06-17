@@ -48,6 +48,11 @@ type RiskPolicy struct {
 	Enabled bool
 	// Policy action: flag (log only) or block (deny in real-time).
 	Action string
+	// Policy audience type: everyone or targeted.
+	AudienceType string
+	// Principal URNs the policy applies to. Contains user:all when audience_type
+	// is everyone.
+	AudiencePrincipalUrns []string
 	// Whether the policy name is auto-generated. When true, the name is
 	// regenerated on each update.
 	AutoName bool

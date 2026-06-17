@@ -37,6 +37,10 @@ export type CodexHookPayload = {
    */
   hookEventName: CodexHookPayloadHookEventName;
   /**
+   * The final assistant message text for the turn (Stop only)
+   */
+  lastAssistantMessage?: string | undefined;
+  /**
    * The model identifier
    */
   model?: string | undefined;
@@ -83,6 +87,7 @@ export const CodexHookPayloadHookEventName$outboundSchema: z.ZodMiniEnum<
 export type CodexHookPayload$Outbound = {
   cwd?: string | undefined;
   hook_event_name: string;
+  last_assistant_message?: string | undefined;
   model?: string | undefined;
   permission_type?: string | undefined;
   prompt?: string | undefined;
@@ -102,6 +107,7 @@ export const CodexHookPayload$outboundSchema: z.ZodMiniType<
   z.object({
     cwd: z.optional(z.string()),
     hookEventName: CodexHookPayloadHookEventName$outboundSchema,
+    lastAssistantMessage: z.optional(z.string()),
     model: z.optional(z.string()),
     permissionType: z.optional(z.string()),
     prompt: z.optional(z.string()),
@@ -115,6 +121,7 @@ export const CodexHookPayload$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       hookEventName: "hook_event_name",
+      lastAssistantMessage: "last_assistant_message",
       permissionType: "permission_type",
       sessionId: "session_id",
       toolInput: "tool_input",

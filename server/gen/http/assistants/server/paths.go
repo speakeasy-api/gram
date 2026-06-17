@@ -37,6 +37,11 @@ func SendMessageAssistantsPath() string {
 	return "/rpc/assistants.sendMessage"
 }
 
+// GetManagedAssistantAssistantsPath returns the URL path to the assistants service getManagedAssistant HTTP endpoint.
+func GetManagedAssistantAssistantsPath() string {
+	return "/rpc/assistants.getManagedAssistant"
+}
+
 // EnsureManagedAssistantAssistantsPath returns the URL path to the assistants service ensureManagedAssistant HTTP endpoint.
 func EnsureManagedAssistantAssistantsPath() string {
 	return "/rpc/assistants.ensureManagedAssistant"

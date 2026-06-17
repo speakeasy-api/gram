@@ -15,6 +15,7 @@ import anyio
 import anyio.from_thread
 
 from google.protobuf.message import Message
+from opentelemetry import propagate
 
 from .broker import PublisherBroker, PublisherHandle
 
@@ -24,6 +25,21 @@ M = TypeVar("M", bound=Message)
 
 # Attribute value mirrored from publisher.go; identifies the body encoding.
 CONTENT_TYPE = "application/x-protobuf"
+
+
+def _message_attributes(schema: str) -> dict[str, str]:
+    """Build the attribute set carried with an outgoing message.
+
+    Mirrors ``messageAttributes`` in ``publisher.go``: the ``content-type`` and
+    ``schema`` markers the subscriber uses to decode the payload, plus any trace
+    context injected from the active span so the subscriber can continue the
+    producer's trace. Injection uses the globally configured propagator (W3C
+    tracecontext + baggage by default, the same one the receiver extracts with);
+    with no active span it is a no-op and no propagation attributes are added.
+    """
+    attributes = {"content-type": CONTENT_TYPE, "schema": schema}
+    propagate.inject(attributes)
+    return attributes
 
 
 class Publisher(Generic[M]):
@@ -57,7 +73,7 @@ class Publisher(Generic[M]):
         future = self._handle.client.publish(
             self._handle.topic_path,
             data,
-            **{"content-type": CONTENT_TYPE, "schema": self._schema},
+            **_message_attributes(self._schema),
         )
         # Let the broker's teardown wait for this commit before it closes the
         # publisher's transport.

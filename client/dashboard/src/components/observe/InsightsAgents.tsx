@@ -13,7 +13,9 @@ import { ErrorAlert } from "@/components/ui/alert";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
+import { slugify } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { useRoutes } from "@/routes";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import { telemetryGetProjectMetricsSummary } from "@gram/client/funcs/telemetryGetProjectMetricsSummary";
 import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
@@ -46,12 +48,14 @@ import {
 import {
   Button,
   type Column,
+  Icon,
   type SortDescriptor,
   Table,
   sortTableData,
 } from "@speakeasy-api/moonshine";
 import { useMemo, useState } from "react";
 import { Bar, Chart } from "react-chartjs-2";
+import { Link } from "react-router";
 import { toast } from "sonner";
 
 ChartJS.register(
@@ -952,6 +956,16 @@ type EmployeeRow = UserSummary & {
   tokenShare: number;
 };
 
+function employeeDetailSegment(user: EmployeeRow): string {
+  if (user.email) {
+    return slugify(user.displayName);
+  }
+  if (user.userId.includes("@")) {
+    return encodeURIComponent(user.userId);
+  }
+  return slugify(user.userId);
+}
+
 function EmployeeCostTable({
   users,
   roleUsage,
@@ -970,6 +984,7 @@ function EmployeeCostTable({
   roleUsageLoading: boolean;
 }) {
   const PAGE_SIZE = 10;
+  const routes = useRoutes();
   const [page, setPage] = useState(0);
   const isCost = valueMode === "cost";
   const isRoleView = groupByDimension === "role";
@@ -1242,8 +1257,24 @@ function EmployeeCostTable({
           </div>
         ),
       },
+      {
+        key: "userId",
+        id: "employeeDetail",
+        header: "",
+        width: "0.6fr",
+        render: (user) => (
+          <Link
+            to={routes.employees.detail.href(employeeDetailSegment(user))}
+            className="flex items-center gap-1"
+            aria-label={`View ${user.displayName}`}
+          >
+            View
+            <Icon name="arrow-right" />
+          </Link>
+        ),
+      },
     ],
-    [clientFilter, isCost],
+    [clientFilter, isCost, routes.employees.detail],
   );
 
   const sortedUsers = useMemo(

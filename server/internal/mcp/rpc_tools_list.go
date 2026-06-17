@@ -100,7 +100,7 @@ func handleToolsList(
 	case ToolModeDynamic:
 		tools, err = buildDynamicSessionTools(ctx, logger, toolset, vectorToolStore, temporalEnv)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to build dynamic session tools").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to build dynamic session tools").LogError(ctx, logger)
 		}
 	case ToolModeStatic:
 		fallthrough
@@ -127,7 +127,7 @@ func handleToolsList(
 				if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
 					continue
 				}
-				return nil, oops.E(oops.CodeUnexpected, err, "check tool-level authz for tools/list").Log(ctx, logger)
+				return nil, oops.E(oops.CodeUnexpected, err, "check tool-level authz for tools/list").LogError(ctx, logger)
 			}
 			allowed = append(allowed, t)
 		}
@@ -157,7 +157,7 @@ func handleToolsList(
 
 	bs, err := json.Marshal(result)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/list response").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/list response").LogError(ctx, logger)
 	}
 
 	return bs, nil
@@ -177,7 +177,7 @@ func buildToolListEntries(
 
 	toolsetID, err := uuid.Parse(toolset.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse toolset ID").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse toolset ID").LogError(ctx, logger)
 	}
 
 	userConfig := toolconfig.CIEnvFrom(payload.mcpEnvVariables)
@@ -212,7 +212,7 @@ func buildToolListEntries(
 
 		proxyTools, err := executor.DoList(ctx, payload.projectID, userConfig, oauthToken, loadSystemEnv, resolve)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to list proxy tools").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to list proxy tools").LogError(ctx, logger)
 		}
 
 		for _, extTool := range proxyTools {

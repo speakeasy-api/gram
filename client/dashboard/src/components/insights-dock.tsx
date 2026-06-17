@@ -1,10 +1,7 @@
 import { useNoToolsetsConfigured } from "@/hooks/useObservabilityMcpConfig";
 import { useServerAssistantTransport } from "@/hooks/useServerAssistantTransport";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { useListChats } from "@gram/client/react-query";
+import { SortBy, SortOrder } from "@gram/client/models/operations/listchats";
 import { cn, isMacPlatform } from "@/lib/utils";
 import speakeasyIcon from "@/assets/speakeasy-icon.svg";
 import { useAssistantRuntime } from "@assistant-ui/react";
@@ -12,7 +9,12 @@ import type {
   ElementsConfig,
   ElementsTransportFactory,
 } from "@gram-ai/elements";
-import { Chat, ChatHistory, GramElementsProvider } from "@gram-ai/elements";
+import {
+  Chat,
+  ChatHistory,
+  GramElementsProvider,
+  useThreadId,
+} from "@gram-ai/elements";
 import { stripMessageContextFraming } from "@/lib/projectAssistantTranscript";
 import {
   INSIGHTS_DOCK_CONTENT_VT_CLASS,
@@ -20,6 +22,7 @@ import {
   useInsightsDockCta,
 } from "@/hooks/useInsightsDockCta";
 import { useLocation } from "react-router";
+import { useRoutes } from "@/routes";
 import { motion } from "motion/react";
 import {
   getRouteSuggestions,
@@ -29,12 +32,11 @@ import {
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 import type { UIMessage } from "ai";
 import {
+  ArrowLeft,
   ArrowUp,
-  ChevronDown,
   HistoryIcon,
   Loader2,
   Maximize2,
-  Minimize2,
   SquarePen,
   Terminal,
   X,
@@ -49,6 +51,7 @@ import {
 } from "react";
 import type { InsightsConfigOptions } from "./insights-context";
 import { InsightsContext, useInsightsState } from "./insights-context";
+import { InsightsShortcutKeys } from "./insights-dock-shortcut-hint";
 import { useAskAiListener } from "./command-palette/askAiBridge";
 
 // Types-only re-export (erased at compile time, won't break Fast Refresh)
@@ -88,6 +91,10 @@ const DOCK_SUGGESTION_LIMIT = 3;
  *  click itself blurs the input, but the user's intent was to change pages,
  *  not to put the composer away. */
 const DOCK_COLLAPSE_GRACE_MS = 350;
+
+// How recent a conversation must be (by last message) for the docked pill to
+// offer "Continue chat" — reopen it — instead of "Ask anything".
+const CONTINUE_WINDOW_MS = 60 * 1000;
 
 /** How recently a grace-timer collapse must have fired for a navigation to
  *  undo it. Covers slow clicks and route transitions that outlast the grace
@@ -145,6 +152,38 @@ const DOCK_PANEL_COMPOSER_CSS = `
   }
 `;
 
+// Elements' MarkdownText ships display-sized typography (h1 `text-4xl`, h2
+// `text-3xl`, 1rem body) tuned for a marketing-style standalone chat. That
+// reads oversized in the dashboard's chat surfaces, so dial the body and
+// headings down to app scale. Injected after Elements' built-in stylesheet,
+// so these equal-specificity `aui-md-*` rules win.
+const CHAT_MARKDOWN_CSS = `
+  .aui-md { font-size: 0.9375rem; line-height: 1.6; }
+  .aui-md-h1 { font-size: 1.5rem; margin-bottom: 1rem; }
+  .aui-md-h2 { font-size: 1.3125rem; margin-top: 1.5rem; margin-bottom: 0.75rem; }
+  .aui-md-h3 { font-size: 1.125rem; margin-top: 1.25rem; margin-bottom: 0.5rem; }
+  .aui-md-h4 { font-size: 1rem; }
+  .aui-md-p { margin-top: 0.75rem; margin-bottom: 0.75rem; line-height: 1.6; }
+  .aui-md-ul, .aui-md-ol { margin-top: 0.75rem; margin-bottom: 0.75rem; }
+`;
+
+// The docked composer above is intentionally compact. On the full-page chat
+// (ChatSurface wraps it in `.gram-chat-fullpage`) the composer should breathe,
+// so give it a roomier min-height + padding. Scoped via :host-context so the
+// docked panel keeps its tight pill.
+const CHAT_FULLPAGE_COMPOSER_CSS = `
+  :host-context(.gram-chat-fullpage) .aui-composer-root { min-height: 3.25rem; }
+  :host-context(.gram-chat-fullpage) .aui-composer-input {
+    min-height: 3.25rem;
+    padding-top: 0.875rem;
+    padding-bottom: 0.875rem;
+    font-size: 0.9375rem;
+  }
+  :host-context(.gram-chat-fullpage) .aui-composer-wrapper {
+    padding-bottom: 1.25rem;
+  }
+`;
+
 function DockSubmitButton() {
   return (
     <button
@@ -167,24 +206,25 @@ interface InsightsDockProps {
    *  panel is closed; the dock responds by focusing (and therefore
    *  expanding) the input. Starts at 0 — the initial value is ignored. */
   focusKey: number;
+  /** Submit a fresh conversation (the resting "Ask anything" state). */
   onSubmitPrompt: (text: string) => void;
+  /** Reopen the most recent conversation (the "Continue chat" button). */
+  onContinue: () => void;
+  /** When true the resting pill is a "Continue chat" button that reopens the
+   *  recent conversation (a chat was active in the last few minutes). */
+  continueMode: boolean;
   /** Genies the dock down into the sidebar-footer resume button. */
   onDismiss: () => void;
+  /** Opens the chat panel straight into the full-window history view. */
+  onOpenHistory: () => void;
   /** Chat panel content, rendered inside the card when `open`. */
   panel: React.ReactNode;
-  /** Stretch the open chat panel to fill the content area. */
-  maximized: boolean;
 }
 
 /** Width/shape/elevation of the dock card across its states: chat panel
  *  full-screen, chat panel open, composer focused (or holding draft text),
  *  and collapsed pill. Activity is signalled by deepening shadow. */
-function dockCardShapeClass(
-  open: boolean,
-  composerExpanded: boolean,
-  maximized: boolean,
-): string {
-  if (open && maximized) return "h-full max-w-none rounded-2xl shadow-2xl";
+function dockCardShapeClass(open: boolean, composerExpanded: boolean): string {
   if (open) return "max-w-3xl rounded-2xl shadow-2xl";
   if (composerExpanded) return "max-w-2xl rounded-2xl shadow-xl";
   return "max-w-md rounded-full shadow-md hover:shadow-lg";
@@ -210,9 +250,11 @@ function InsightsDock({
   open,
   focusKey,
   onSubmitPrompt,
+  onContinue,
+  continueMode,
   onDismiss,
+  onOpenHistory,
   panel,
-  maximized,
 }: InsightsDockProps): ReactElement {
   const [value, setValue] = useState("");
   // Expansion is sticky state, not a focus mirror: it must survive the input
@@ -305,13 +347,40 @@ function InsightsDock({
     onSubmitPrompt(trimmed);
   };
 
+  // Within the continue window the resting pill is a "Continue chat" button
+  // that reopens the recent conversation instead of an "Ask anything" input.
+  const composerField = continueMode ? (
+    <button
+      type="button"
+      onClick={onContinue}
+      tabIndex={open ? -1 : 0}
+      className="text-muted-foreground hover:text-foreground min-w-0 flex-1 cursor-pointer text-left text-sm transition-colors"
+    >
+      Continue chat
+    </button>
+  ) : (
+    <input
+      ref={inputRef}
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          collapseNow();
+          inputRef.current?.blur();
+        }
+      }}
+      tabIndex={open ? -1 : 0}
+      placeholder="Ask anything"
+      aria-label="Ask the Project Assistant"
+      aria-keyshortcuts={shortcutAria}
+      className="placeholder:text-muted-foreground min-w-0 flex-1 bg-transparent text-sm outline-none"
+    />
+  );
+
   return (
     <div
       className={cn(
         "pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center px-4 pt-14 pb-8",
-        // Full-screen: anchor the wrapper to the whole content area so the
-        // card (h-full) fills it, keeping the floating-card margins.
-        open && maximized && "top-0 pt-8",
       )}
     >
       {/* Frosted veil under the dock: blurs the page content directly behind
@@ -326,7 +395,7 @@ function InsightsDock({
         className={cn(
           "border-border bg-card text-card-foreground pointer-events-auto w-full border",
           "transition-all duration-300 ease-out",
-          dockCardShapeClass(open, composerExpanded, maximized),
+          dockCardShapeClass(open, composerExpanded),
           // Pairs with the sidebar resume button for the dismiss/resume genie
           // (see useInsightsDockCta). The inner wrapper carries the content
           // name so text fades at the endpoints instead of warping mid-flight.
@@ -352,14 +421,7 @@ function InsightsDock({
           }
         }}
       >
-        <div
-          className={cn(
-            INSIGHTS_DOCK_CONTENT_VT_CLASS,
-            // Full-screen: the card is h-full, so switch the content wrapper
-            // to a column flex and let the panel row absorb the height.
-            open && maximized && "flex h-full flex-col",
-          )}
-        >
+        <div className={INSIGHTS_DOCK_CONTENT_VT_CLASS}>
           {/* Chat panel — grows up out of the dock when open. The 0fr->1fr grid
             row transition animates from zero height to the panel's fixed
             height without hardcoding it on the card; since the card is
@@ -370,28 +432,15 @@ function InsightsDock({
             className={cn(
               "grid grid-rows-[0fr] transition-[grid-template-rows] duration-300 ease-out",
               open && "grid-rows-[1fr]",
-              open && maximized && "min-h-0 flex-1",
             )}
           >
-            <div
-              className={cn("overflow-hidden", open && maximized && "h-full")}
-            >
+            <div className="overflow-hidden">
               {/* Same grey-tray-around-white-surface treatment as the
                   expanded composer, so opening the chat reads as the input
                   surface growing into the conversation rather than an
                   unrelated white panel appearing. */}
-              <div
-                className={cn(
-                  "bg-muted/40 rounded-2xl p-2",
-                  open && maximized && "h-full",
-                )}
-              >
-                <div
-                  className={cn(
-                    "border-border bg-card h-[min(640px,70vh)] overflow-hidden rounded-xl border",
-                    open && maximized && "h-full",
-                  )}
-                >
+              <div className="bg-muted/40 rounded-2xl p-2">
+                <div className="border-border bg-card h-[min(640px,70vh)] overflow-hidden rounded-xl border">
                   {panel}
                 </div>
               </div>
@@ -487,23 +536,25 @@ function InsightsDock({
                       : "border-transparent bg-transparent",
                   )}
                 >
-                  <input
-                    ref={inputRef}
-                    value={value}
-                    onChange={(e) => setValue(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Escape") {
-                        collapseNow();
-                        inputRef.current?.blur();
-                      }
-                    }}
-                    tabIndex={open ? -1 : 0}
-                    placeholder="Ask anything"
-                    aria-label="Ask the Project Assistant"
-                    aria-keyshortcuts={shortcutAria}
-                    className="placeholder:text-muted-foreground min-w-0 flex-1 bg-transparent text-sm outline-none"
-                  />
+                  {composerField}
                   {value.trim() && <DockSubmitButton />}
+                  {composerExpanded && (
+                    <button
+                      type="button"
+                      onClick={onOpenHistory}
+                      className={PANEL_ICON_BUTTON_CLASS}
+                      aria-label="Conversation history"
+                      title="History"
+                    >
+                      <HistoryIcon className="size-3.5" />
+                    </button>
+                  )}
+                  {/* Greyed shortcut hint on the resting pill; hidden once the
+                      composer is engaged (focused or typing) and in continue
+                      mode (a button, not a focusable input). */}
+                  {!composerExpanded && !continueMode && (
+                    <InsightsShortcutKeys className="opacity-60" />
+                  )}
                   <button
                     type="button"
                     onClick={onDismiss}
@@ -570,6 +621,19 @@ export function InsightsProvider({
 }: InsightsProviderProps): ReactElement {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [override, setOverride] = useState<InsightsConfigOptions | null>(null);
+  // Ref-counted dock hide for pages with their own chat entry (full-page chat,
+  // home widget). Kept separate from `override` so dashboard consumers that
+  // reset the override (ProjectDashboard) can't un-hide the dock.
+  const dockHideCountRef = useRef(0);
+  const [dockHiddenByPage, setDockHiddenByPage] = useState(false);
+  const registerDockHide = useCallback(() => {
+    dockHideCountRef.current += 1;
+    setDockHiddenByPage(dockHideCountRef.current > 0);
+    return () => {
+      dockHideCountRef.current = Math.max(0, dockHideCountRef.current - 1);
+      setDockHiddenByPage(dockHideCountRef.current > 0);
+    };
+  }, []);
   // Bumped whenever the keyboard shortcut fires (with the chat panel closed) so
   // the docked composer grabs focus and expands. Starts at 0; the dock
   // ignores the initial value.
@@ -578,21 +642,43 @@ export function InsightsProvider({
     text: string;
     nonce: number;
   } | null>(null);
-  // Used as React `key` on <GramElementsProvider>; bumped from
-  // handleSendPrompt so each "Explore with AI" click gets a fresh assistant
-  // runtime. Avoids an assistant-ui race where rapid switchToNewThread()
-  // calls in a long-lived runtime throw `tapLookupResources: Resource not
-  // found for lookup: __LOCALID_…` during render.
-  const [sessionKey, setSessionKey] = useState(0);
-  const [historyOpen, setHistoryOpen] = useState(false);
-  // Full-screen chat panel, toggled from the panel header. Reset on close so
-  // the next open always starts at the regular panel size.
-  const [panelMaximized, setPanelMaximized] = useState(false);
+  // React `key` on the shared GramElementsProvider — bumped to start a
+  // brand-new conversation ("New", "Explore with AI", a fresh docked send).
+  // switchToNewThread on the long-lived shared runtime trips an assistant-ui
+  // projection race (tapLookupResources: __LOCALID_… not found), so we remount
+  // the runtime onto a fresh thread instead. The runtime is shared across the
+  // dock and the full-page chat, but the key only bumps when the user starts a
+  // new conversation — never when navigating between the two — so an in-flight
+  // turn survives maximize.
+  const [runtimeKey, setRuntimeKey] = useState(0);
+  // History takes over the whole panel (replacing the chat) rather than
+  // dropping a popover, and is cancellable back to the chat. Reset on close
+  // and on a fresh conversation so reopening always lands on the chat.
+  const [historyView, setHistoryView] = useState(false);
+  // Whether the history view has a live conversation to return to. False when
+  // opened cold from the docked composer (no chat exists behind it yet), so
+  // the back affordance is hidden and only close is offered. True when opened
+  // from inside an active chat via the in-panel history button.
+  const [historyReturnable, setHistoryReturnable] = useState(false);
   useEffect(() => {
-    if (!isExpanded) setPanelMaximized(false);
+    if (!isExpanded) {
+      setHistoryView(false);
+      setHistoryReturnable(false);
+    }
   }, [isExpanded]);
   const { theme } = useMoonshineConfig();
   const { pathname } = useLocation();
+  const routes = useRoutes();
+  // The full-page chat lives at `/…/chat[/…]`. The shared assistant runtime is
+  // resolved when the dock is opened OR when on a chat route, so the page has a
+  // live runtime without the user touching the dock first.
+  const onChatRoute = /\/chat(\/|$)/.test(pathname);
+  // On a chat route the page owns the chat and the dock is hidden, so collapse
+  // the dock (a maximize leaves it expanded). The shared runtime stays mounted
+  // via onChatRoute, so this collapse never unmounts it.
+  useEffect(() => {
+    if (onChatRoute) setIsExpanded(false);
+  }, [onChatRoute]);
 
   // Resolve effective values: per-page override wins, then the colocated
   // route-level suggestions (lib/insights-suggestions.ts), then the
@@ -608,19 +694,53 @@ export function InsightsProvider({
   const suggestions =
     override?.suggestions ?? routeSuggestions ?? defaultSuggestions;
   const contextInfo = override?.contextInfo;
-  const hideTrigger = override?.hideTrigger ?? false;
+  const hideTrigger = (override?.hideTrigger ?? false) || dockHiddenByPage;
   const noToolsetsConfigured = useNoToolsetsConfigured(mcpConfig.projectSlug);
 
-  // Server-side Project Assistant. Resolved lazily once the chat panel is first
-  // opened. While connecting (or after a failure) the factory is undefined and
-  // we gate the chat (below) instead of falling back to client-side generation.
-  // assistantId scopes the conversation list to this assistant's chats.
+  // Server-side Project Assistant. Resolved lazily the first time the chat
+  // panel is opened or a chat route is visited; once resolved it stays, so the
+  // shared runtime (below) persists across navigation. While connecting (or
+  // after a failure) the factory is undefined and we gate the chat instead of
+  // falling back to client-side generation. assistantId scopes the
+  // conversation list to this assistant's chats.
   const {
     transport: serverTransport,
     assistantId: managedAssistantId,
     ready: assistantReady,
     error: assistantError,
-  } = useServerAssistantTransport(mcpConfig.projectSlug, isExpanded);
+    needsAdmin: assistantNeedsAdmin,
+  } = useServerAssistantTransport(mcpConfig.projectSlug, true);
+
+  // Derive "Continue chat" from the server: if the assistant's most recent
+  // conversation was active within CONTINUE_WINDOW_MS, the resting pill offers
+  // to reopen it. Reading the backend (rather than client state) means it
+  // survives reloads for free. limit:1 — we only need the newest.
+  const { data: recentChatsData } = useListChats(
+    {
+      assistantId: managedAssistantId || undefined,
+      sortBy: SortBy.LastMessageTimestamp,
+      sortOrder: SortOrder.Desc,
+      limit: 1,
+    },
+    undefined,
+    { enabled: Boolean(managedAssistantId), throwOnError: false },
+  );
+  const recentChat = recentChatsData?.chats?.[0];
+  const continueMode =
+    recentChat !== undefined &&
+    Date.now() - recentChat.lastMessageTimestamp.getTime() < CONTINUE_WINDOW_MS;
+
+  // Mount the shared runtime only where it's actually used: a chat route (the
+  // page owns the chat) or the open dock — and only where the dock is shown.
+  // Pages with their own chat runtime (Playground, Elements, assistant
+  // onboarding) hide the dock, so `!hideTrigger` keeps the shared provider out
+  // of their tree and the two RemoteThreadListRuntimes never nest. Maximize
+  // stays seamless because the expand handler navigates WITHOUT collapsing, so
+  // `onChatRoute` takes over before `isExpanded` flips (no unmount gap).
+  // Everything runtime-dependent — the dock panel's chat view, the provider
+  // mount, and (via context) the chat pages — gates on this single flag.
+  const runtimeMounted =
+    assistantReady && (onChatRoute || (isExpanded && !hideTrigger));
 
   // Read inside the transport wrapper via ref so override churn doesn't
   // re-create the transport identity on every parent re-render.
@@ -735,7 +855,10 @@ export function InsightsProvider({
       },
       theme: {
         colorScheme: theme === "dark" ? "dark" : "light",
-        customCss: DOCK_PANEL_COMPOSER_CSS,
+        customCss:
+          DOCK_PANEL_COMPOSER_CSS +
+          CHAT_MARKDOWN_CSS +
+          CHAT_FULLPAGE_COMPOSER_CSS,
       },
     }),
     [
@@ -759,14 +882,23 @@ export function InsightsProvider({
     [],
   );
 
-  // Only "Explore with AI" clicks call this — bump sessionKey here (not in
-  // setOverride) so a fresh runtime is mounted before the prompt lands.
-  // Nonce defeats reference-equality skipping when the same chart is clicked
-  // twice in a row.
+  // "Explore with AI" / docked composer / chat-home composer all route here.
+  // Bump the runtime key so a fresh conversation opens, then queue the prompt
+  // for the bridge to append once the new runtime mounts. Nonce defeats
+  // reference-equality skipping when the same chart is clicked twice in a row.
   const handleSendPrompt = useCallback((text: string) => {
-    setSessionKey((k) => k + 1);
+    setRuntimeKey((k) => k + 1);
     setPendingPrompt({ text, nonce: Date.now() });
+    // Sending always drops into the live conversation, never the history list.
+    setHistoryView(false);
   }, []);
+
+  // Docked-pill "Continue chat": reopen the recent conversation as its own
+  // full page. Navigating (rather than reopening the dock panel) loads the
+  // exact chat by id via the page's runtime, so it works across reloads too.
+  const handleReopenChat = useCallback(() => {
+    if (recentChat) routes.chat.conversation.goTo(recentChat.id);
+  }, [recentChat, routes]);
 
   const consumePendingPrompt = useCallback(() => setPendingPrompt(null), []);
 
@@ -804,12 +936,36 @@ export function InsightsProvider({
     dismissDock();
   }, [dismissDock]);
 
-  // Start a brand-new Project Assistant conversation: remount the chat provider
-  // (bumping sessionKey) so a fresh thread opens. With server-side id minting,
-  // the new thread gets its chat id from the server on the first send.
+  // Start a brand-new Project Assistant conversation. Bumping the runtime key
+  // remounts the shared runtime onto a fresh thread; the new thread gets its
+  // chat id from the server on the first send.
   const handleStartFresh = useCallback(() => {
-    setSessionKey((k) => k + 1);
+    setRuntimeKey((k) => k + 1);
+    setHistoryView(false);
   }, []);
+
+  // Opening history from the docked composer: open the panel (which lazily
+  // resolves the assistant transport the history list needs) straight into
+  // the full-window history view. No chat exists behind it yet, so the view
+  // is close-only — no back affordance.
+  const handleOpenHistory = useCallback(() => {
+    setIsExpanded(true);
+    setHistoryView(true);
+    setHistoryReturnable(false);
+  }, []);
+
+  // Expand: leave the floating dock for the full-page chat, opening the
+  // current conversation (or a fresh one when none exists yet). Navigate only —
+  // do NOT collapse here: keeping isExpanded set means `onChatRoute` takes over
+  // as the runtime-mount condition before isExpanded flips, so the shared
+  // runtime never unmounts mid-transition and the in-flight stream survives.
+  // The chat-route effect below collapses the dock once we've landed.
+  const handleExpandToPage = useCallback(
+    (threadId: string | null) => {
+      routes.chat.conversation.goTo(threadId ?? "new");
+    },
+    [routes],
+  );
 
   // Global keyboard shortcut: Cmd+/ (Mac) / Ctrl+/ (PC). With the chat panel
   // closed it focuses the docked composer; with it open it collapses the
@@ -847,8 +1003,24 @@ export function InsightsProvider({
       setIsExpanded,
       setOverride: handleSetOverride,
       sendPrompt: handleSendPrompt,
+      // Expose the gated "runtime is mounted" signal, not the raw eager
+      // `assistantReady`: chat pages render runtime hooks (useAssistantRuntime)
+      // only once the provider actually exists.
+      assistantReady: runtimeMounted,
+      assistantNeedsAdmin,
+      newConversation: handleStartFresh,
+      registerDockHide,
     }),
-    [hideTrigger, isExpanded, handleSetOverride, handleSendPrompt],
+    [
+      hideTrigger,
+      isExpanded,
+      handleSetOverride,
+      handleSendPrompt,
+      runtimeMounted,
+      assistantNeedsAdmin,
+      handleStartFresh,
+      registerDockHide,
+    ],
   );
 
   // Shared between the ready and connecting headers.
@@ -863,6 +1035,19 @@ export function InsightsProvider({
     </button>
   );
 
+  // Cancels the full-window history view back to the chat — reads "← Back".
+  const panelBackButton = (
+    <button
+      onClick={() => setHistoryView(false)}
+      className={cn(PANEL_ICON_BUTTON_CLASS, "flex items-center gap-1")}
+      aria-label="Back to conversation"
+      title="Back to conversation"
+    >
+      <ArrowLeft className="size-4" />
+      <span className="text-sm font-medium">Back</span>
+    </button>
+  );
+
   const panelNotices = (
     <>
       {/* Notice when the Project Assistant failed to connect */}
@@ -870,6 +1055,15 @@ export function InsightsProvider({
         <div className="border-destructive/40 bg-destructive/10 text-destructive mx-4 mt-1 flex items-start gap-2 rounded-md border px-3 py-2 text-xs">
           <Terminal className="mt-0.5 size-3.5 shrink-0" />
           <span>{assistantError}</span>
+        </div>
+      )}
+
+      {assistantNeedsAdmin && (
+        <div className="border-border bg-muted/50 text-muted-foreground mx-4 mt-1 flex items-start gap-2 rounded-md border px-3 py-2 text-xs">
+          <Terminal className="mt-0.5 size-3.5 shrink-0" />
+          <span>
+            Ask an admin to enable the Project Assistant for this project.
+          </span>
         </div>
       )}
 
@@ -888,83 +1082,92 @@ export function InsightsProvider({
 
   // Expanded chat panel rendered inside the dock card. Granola-style header:
   // icon-only controls with no title bar — history picker on the left; new
-  // conversation, full assistants page, and close on the right. The whole
-  // header lives inside the Elements provider (when ready) because
-  // <ChatHistory> needs the chat runtime; "New" remounts it via sessionKey,
-  // which is fine since the header holds no local state.
+  // conversation, full-page chat, and close on the right. The chat runtime is
+  // the shared GramElementsProvider mounted around the whole dock + outlet (see
+  // the return below), so this panel just renders against it.
   const panelContent = (
     <div className="flex h-full flex-col">
-      {assistantReady ? (
-        <GramElementsProvider key={sessionKey} config={elementsConfig}>
-          <PendingPromptBridge
-            pending={pendingPrompt}
-            onConsume={consumePendingPrompt}
-          />
-          <div className="flex h-full min-h-0 flex-col">
-            {/* Header */}
-            <div className="flex shrink-0 items-center justify-between px-2 pt-2">
-              <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
-                <PopoverTrigger asChild>
-                  <button
-                    className={cn(
-                      PANEL_ICON_BUTTON_CLASS,
-                      "flex items-center gap-0.5",
-                    )}
-                    aria-label="Conversation history"
-                    title="Conversation history"
-                  >
-                    <HistoryIcon className="size-4" />
-                    <ChevronDown className="size-3" />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent
-                  align="start"
-                  className="max-h-96 w-72 overflow-y-auto p-0"
-                >
-                  <ChatHistory className="max-h-96 overflow-y-auto" />
-                </PopoverContent>
-              </Popover>
-              <div className="flex items-center gap-0.5">
-                <button
-                  onClick={handleStartFresh}
-                  className={PANEL_ICON_BUTTON_CLASS}
-                  aria-label="Start a new conversation"
-                  title="Start a new conversation"
-                >
-                  <SquarePen className="size-4" />
-                </button>
-                <button
-                  onClick={() => setPanelMaximized((m) => !m)}
-                  className={PANEL_ICON_BUTTON_CLASS}
-                  aria-label={
-                    panelMaximized ? "Exit full screen" : "Full screen"
-                  }
-                  title={panelMaximized ? "Exit full screen" : "Full screen"}
-                >
-                  {panelMaximized ? (
-                    <Minimize2 className="size-4" />
-                  ) : (
-                    <Maximize2 className="size-4" />
-                  )}
-                </button>
+      {runtimeMounted ? (
+        <div className="flex h-full min-h-0 flex-col">
+          {/* History view: the conversation list takes over the whole panel
+                in place of the chat, cancellable via the back button. */}
+          {historyView && (
+            <>
+              <div
+                className={cn(
+                  "flex shrink-0 items-center px-2 pt-2",
+                  historyReturnable ? "justify-between" : "justify-end",
+                )}
+              >
+                {historyReturnable && panelBackButton}
                 {panelCloseButton}
               </div>
-            </div>
-            {panelNotices}
-            <div className="min-h-0 flex-1 overflow-hidden">
-              <Chat />
-            </div>
-          </div>
-        </GramElementsProvider>
+              {/* Picking a conversation (or "New Thread") switches the
+                    runtime's active thread; the list lives in a shadow root,
+                    so its click bubbles (composed) out to this wrapper and
+                    returns the user to the chat. */}
+              <div
+                className="min-h-0 flex-1 overflow-y-auto"
+                onClick={() => setHistoryView(false)}
+              >
+                <ChatHistory className="min-h-full" />
+              </div>
+            </>
+          )}
+          {/* Chat view */}
+          {!historyView && (
+            <>
+              <div className="flex shrink-0 items-center justify-between px-2 pt-2">
+                <button
+                  onClick={() => {
+                    setHistoryReturnable(true);
+                    setHistoryView(true);
+                  }}
+                  className={PANEL_ICON_BUTTON_CLASS}
+                  aria-label="Conversation history"
+                  title="History"
+                >
+                  <HistoryIcon className="size-4" />
+                </button>
+                <div className="flex items-center gap-0.5">
+                  <button
+                    onClick={handleStartFresh}
+                    className={PANEL_ICON_BUTTON_CLASS}
+                    aria-label="Start a new conversation"
+                    title="Start a new conversation"
+                  >
+                    <SquarePen className="size-4" />
+                  </button>
+                  <ExpandToPageButton onExpand={handleExpandToPage} />
+                  {panelCloseButton}
+                </div>
+              </div>
+              {panelNotices}
+              <div className="min-h-0 flex-1 overflow-hidden">
+                <Chat />
+              </div>
+            </>
+          )}
+        </div>
       ) : (
         <>
-          {/* Header (connecting state) — close only; history/new need the
-              chat runtime. */}
-          <div className="flex shrink-0 items-center justify-end px-2 pt-2">
+          {/* Header (connecting state) — close only; the conversation list
+              and new-chat need the chat runtime. The back affordance only
+              applies to history opened from a live chat (not a cold composer
+              open), so it tracks historyReturnable like the ready header. */}
+          <div
+            className={cn(
+              "flex shrink-0 items-center px-2 pt-2",
+              historyView && historyReturnable
+                ? "justify-between"
+                : "justify-end",
+            )}
+          >
+            {historyView && historyReturnable && panelBackButton}
             {panelCloseButton}
           </div>
           {panelNotices}
-          {!assistantError && (
+          {!assistantError && !assistantNeedsAdmin && (
             <div className="text-muted-foreground flex flex-1 items-center justify-center gap-2 text-sm">
               <Loader2 className="size-4 animate-spin" />
               <span>Connecting to the Project Assistant…</span>
@@ -975,40 +1178,90 @@ export function InsightsProvider({
     </div>
   );
 
-  return (
-    <InsightsContext.Provider value={contextValue}>
-      <InsightsRainbowStyles />
-      {/* Relative so the docked composer floats at the bottom-center of the
-          content area. */}
-      <div className="relative h-full w-full overflow-hidden">
-        {children}
+  // Page content (outlet) + the docked composer. Relative so the composer
+  // floats at the bottom-center of the content area.
+  const dockSurface = (
+    <div className="relative h-full w-full overflow-hidden">
+      {children}
 
-        {/* Backdrop overlay - closes the chat panel when clicked */}
-        {isExpanded && (
-          <div
-            className="fixed inset-0 z-20"
-            onClick={() => setIsExpanded(false)}
-            aria-hidden="true"
-          />
-        )}
+      {/* Backdrop overlay - closes the chat panel when clicked */}
+      {isExpanded && (
+        <div
+          className="fixed inset-0 z-20"
+          onClick={() => setIsExpanded(false)}
+          aria-hidden="true"
+        />
+      )}
 
-        {/* Permanently docked "Ask anything" composer — the entry point to
+      {/* Permanently docked "Ask anything" composer — the entry point to
             the Project Assistant. Expands in place into the chat panel.
             Hidden on pages that opt out via hideTrigger, and while dismissed
             to the sidebar resume button. */}
-        {!hideTrigger && !dockDismissed && (
-          <InsightsDock
-            suggestions={suggestions}
-            open={isExpanded}
-            focusKey={focusComposerKey}
-            onSubmitPrompt={handleDockSubmit}
-            onDismiss={handleDockDismiss}
-            panel={panelContent}
-            maximized={panelMaximized}
+      {!hideTrigger && !dockDismissed && (
+        <InsightsDock
+          suggestions={suggestions}
+          open={isExpanded}
+          focusKey={focusComposerKey}
+          onSubmitPrompt={handleDockSubmit}
+          onContinue={handleReopenChat}
+          continueMode={continueMode}
+          onDismiss={handleDockDismiss}
+          onOpenHistory={handleOpenHistory}
+          panel={panelContent}
+        />
+      )}
+    </div>
+  );
+
+  return (
+    <InsightsContext.Provider value={contextValue}>
+      <InsightsRainbowStyles />
+      {/* The dock and the full-page chat share ONE runtime so an in-flight
+          conversation survives moving between them. The assistant id resolves
+          eagerly (for the "Continue chat" lookup), but the runtime only mounts
+          where chat is actually shown — the open dock or a chat route — to
+          avoid running MCP discovery on every page. It remounts (via
+          runtimeKey) only when a new conversation is started; PendingPromptBridge
+          appends any queued prompt to the fresh thread. */}
+      {runtimeMounted ? (
+        <GramElementsProvider
+          key={`${mcpConfig.projectSlug}:${runtimeKey}`}
+          config={elementsConfig}
+        >
+          <PendingPromptBridge
+            pending={pendingPrompt}
+            onConsume={consumePendingPrompt}
           />
-        )}
-      </div>
+          {dockSurface}
+        </GramElementsProvider>
+      ) : (
+        dockSurface
+      )}
     </InsightsContext.Provider>
+  );
+}
+
+/**
+ * Expand affordance in the chat panel header. Reads the current conversation
+ * id from the runtime (so the full-page chat opens the same thread) and hands
+ * it to the provider, which navigates to `/chat/:chatId`. Lives inside
+ * GramElementsProvider so `useThreadId` resolves.
+ */
+function ExpandToPageButton({
+  onExpand,
+}: {
+  onExpand: (threadId: string | null) => void;
+}): ReactElement {
+  const { threadId } = useThreadId();
+  return (
+    <button
+      onClick={() => onExpand(threadId)}
+      className={PANEL_ICON_BUTTON_CLASS}
+      aria-label="Open in full page"
+      title="Open in full page"
+    >
+      <Maximize2 className="size-4" />
+    </button>
   );
 }
 
@@ -1023,11 +1276,11 @@ function isEmptyThreadError(err: unknown): boolean {
 }
 
 /**
- * Lives inside GramElementsProvider so it can access useThreadRuntime().
- * When a pending prompt is queued via InsightsContext.sendPrompt, this bridge
- * appends it to the current thread as a user message, triggering the
- * assistant to respond. It fires once per nonce so repeat clicks on the
- * same CTA still work.
+ * Lives inside the shared GramElementsProvider. When a prompt is queued
+ * (sendPrompt / docked send / chat-home composer), the runtime has just been
+ * remounted onto a fresh thread via its `key`, so this bridge simply appends
+ * the prompt to that thread — no switchToNewThread (which races on the
+ * long-lived shared runtime). Fires once per nonce.
  */
 function PendingPromptBridge({
   pending,
@@ -1035,7 +1288,7 @@ function PendingPromptBridge({
 }: {
   pending: { text: string; nonce: number } | null;
   onConsume: () => void;
-}) {
+}): null {
   const assistantRuntime = useAssistantRuntime();
   const firedNonceRef = useRef<number | null>(null);
 
@@ -1050,13 +1303,10 @@ function PendingPromptBridge({
     // EMPTY_THREAD_CORE) until the remote thread-list runtime binds the real
     // thread core. The placeholder reports isLoading/isDisabled false but
     // throws on append, so a throw here means nothing was sent — leave the
-    // prompt queued and retry on the next runtime event (the runtime emits
-    // when the real core binds). A successful append marks `done`
-    // immediately and never retries: the optimistic message lands in the
-    // store asynchronously, so any post-append "did it land?" check races
-    // and re-appending duplicates the send — each duplicate fires before
-    // the server-minted chat id is adopted, minting a fresh chat per
-    // attempt.
+    // prompt queued and retry on the next runtime event. A successful append
+    // marks `done` immediately and never retries: the optimistic message lands
+    // asynchronously, so a post-append "did it land?" check races and
+    // re-appending duplicates the send.
     let done = false;
     let unsubscribe: (() => void) | null = null;
 
@@ -1074,11 +1324,6 @@ function PendingPromptBridge({
       try {
         assistantRuntime.thread.append(text);
       } catch (err) {
-        // The cold-open placeholder (EMPTY_THREAD_CORE) throws its sentinel
-        // error until the real thread core binds — the expected "not ready"
-        // signal, so leave the prompt queued and retry on the next runtime
-        // event. Any other error is a genuine send failure: surface it and
-        // stop, rather than swallowing it and retrying forever.
         if (!isEmptyThreadError(err)) {
           console.error("Failed to send queued assistant prompt:", err);
           finish();

@@ -29,6 +29,18 @@ export const Action = {
 export type Action = ClosedEnum<typeof Action>;
 
 /**
+ * Policy audience type: everyone or targeted.
+ */
+export const AudienceType = {
+  Everyone: "everyone",
+  Targeted: "targeted",
+} as const;
+/**
+ * Policy audience type: everyone or targeted.
+ */
+export type AudienceType = ClosedEnum<typeof AudienceType>;
+
+/**
  * Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge). Defaults to standard.
  */
 export const PolicyType = {
@@ -46,6 +58,14 @@ export type CreateRiskPolicyRequestBody = {
    */
   action?: Action | undefined;
   applicationConfig?: RiskPolicyApplication | undefined;
+  /**
+   * Principal URNs this policy applies to. For audience_type=everyone, the server stores user:all.
+   */
+  audiencePrincipalUrns?: Array<string> | undefined;
+  /**
+   * Policy audience type: everyone or targeted.
+   */
+  audienceType?: AudienceType | undefined;
   /**
    * Whether the policy name should be auto-generated.
    */
@@ -107,6 +127,10 @@ export const Action$outboundSchema: z.ZodMiniEnum<typeof Action> = z.enum(
 );
 
 /** @internal */
+export const AudienceType$outboundSchema: z.ZodMiniEnum<typeof AudienceType> = z
+  .enum(AudienceType);
+
+/** @internal */
 export const PolicyType$outboundSchema: z.ZodMiniEnum<typeof PolicyType> = z
   .enum(PolicyType);
 
@@ -114,6 +138,8 @@ export const PolicyType$outboundSchema: z.ZodMiniEnum<typeof PolicyType> = z
 export type CreateRiskPolicyRequestBody$Outbound = {
   action: string;
   application_config?: RiskPolicyApplication$Outbound | undefined;
+  audience_principal_urns?: Array<string> | undefined;
+  audience_type: string;
   auto_name?: boolean | undefined;
   custom_rule_ids?: Array<string> | undefined;
   disabled_rules?: Array<string> | undefined;
@@ -138,6 +164,8 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
   z.object({
     action: z._default(Action$outboundSchema, "flag"),
     applicationConfig: z.optional(RiskPolicyApplication$outboundSchema),
+    audiencePrincipalUrns: z.optional(z.array(z.string())),
+    audienceType: z._default(AudienceType$outboundSchema, "everyone"),
     autoName: z.optional(z.boolean()),
     customRuleIds: z.optional(z.array(z.string())),
     disabledRules: z.optional(z.array(z.string())),
@@ -156,6 +184,8 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       applicationConfig: "application_config",
+      audiencePrincipalUrns: "audience_principal_urns",
+      audienceType: "audience_type",
       autoName: "auto_name",
       customRuleIds: "custom_rule_ids",
       disabledRules: "disabled_rules",

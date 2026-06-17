@@ -29,14 +29,14 @@ var ErrBatchRequest = errors.New("batch requests are not supported")
 func (p *Proxy) classifyForwardError(ctx context.Context, err error, timedOut bool) error {
 	switch {
 	case timedOut:
-		return oops.E(oops.CodeGatewayError, err, "remote mcp server timed out").Log(ctx, p.Logger)
+		return oops.E(oops.CodeGatewayError, err, "remote mcp server timed out").LogError(ctx, p.Logger)
 	case errors.Is(err, context.DeadlineExceeded):
 		// Backstop in case any transport-level deadline (e.g.
 		// TLSHandshakeTimeout) fires before our phase timer.
-		return oops.E(oops.CodeGatewayError, err, "remote mcp server timed out").Log(ctx, p.Logger)
+		return oops.E(oops.CodeGatewayError, err, "remote mcp server timed out").LogError(ctx, p.Logger)
 	case errors.Is(err, context.Canceled):
-		return oops.E(oops.CodeBadRequest, err, "client cancelled request").Log(ctx, p.Logger)
+		return oops.E(oops.CodeBadRequest, err, "client cancelled request").LogError(ctx, p.Logger)
 	default:
-		return oops.E(oops.CodeGatewayError, err, "remote mcp server unreachable").Log(ctx, p.Logger)
+		return oops.E(oops.CodeGatewayError, err, "remote mcp server unreachable").LogError(ctx, p.Logger)
 	}
 }

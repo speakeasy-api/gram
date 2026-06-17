@@ -1,0 +1,16 @@
+[project]
+name = "gram"
+version = "0.0.0"
+requires-python = ">=3.12"
+
+# The repo root is a virtual workspace root: it groups the members below but is
+# not itself an installable package (there is no `src/gram` module to build).
+# Without this, `uv sync` tries to build `gram` and fails.
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+gram-infra = { workspace = true }
+
+[tool.uv.workspace]
+members = ["infra", "pystreams"]

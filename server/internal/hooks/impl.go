@@ -195,7 +195,7 @@ func (s *Service) withAuthContext(ctx context.Context, logger *slog.Logger) *slo
 // back to permissive behaviour. Flag-action policies are intentionally ignored
 // here — they surface as findings via the batch scanner instead of denying at
 // the hook layer.
-func (s *Service) lookupShadowMCPBlockingPolicy(ctx context.Context, projectID string) *risk.ShadowMCPPolicy {
+func (s *Service) lookupShadowMCPBlockingPolicy(ctx context.Context, organizationID, projectID, userID string) *risk.ShadowMCPPolicy {
 	if s.riskScanner == nil || projectID == "" {
 		return nil
 	}
@@ -203,7 +203,7 @@ func (s *Service) lookupShadowMCPBlockingPolicy(ctx context.Context, projectID s
 	if err != nil {
 		return nil
 	}
-	policy, err := s.riskScanner.LookupShadowMCPBlockingPolicy(ctx, pid)
+	policy, err := s.riskScanner.LookupShadowMCPBlockingPolicy(ctx, organizationID, pid, userID)
 	if err != nil {
 		s.logger.WarnContext(ctx, "failed to look up shadow_mcp policy; defaulting to off",
 			attr.SlogError(err),

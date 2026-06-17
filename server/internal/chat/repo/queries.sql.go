@@ -81,6 +81,7 @@ WITH candidate_chats AS (
             AND rr.project_id = $3
             AND rr.found IS TRUE
             AND rr.excluded_at IS NULL
+            AND rr.false_positive_at IS NULL
         )
       )
       OR (
@@ -91,6 +92,7 @@ WITH candidate_chats AS (
             AND rr.project_id = $3
             AND rr.found IS TRUE
             AND rr.excluded_at IS NULL
+            AND rr.false_positive_at IS NULL
         )
       )
     )
@@ -182,6 +184,7 @@ WHERE c.project_id = $1
           AND rr.project_id = $1
           AND rr.found IS TRUE
           AND rr.excluded_at IS NULL
+          AND rr.false_positive_at IS NULL
       )
     )
     OR (
@@ -192,6 +195,7 @@ WHERE c.project_id = $1
           AND rr.project_id = $1
           AND rr.found IS TRUE
           AND rr.excluded_at IS NULL
+          AND rr.false_positive_at IS NULL
       )
     )
   )
@@ -1187,6 +1191,7 @@ WITH candidate_chats AS (
             AND rr.project_id = $1
             AND rr.found IS TRUE
             AND rr.excluded_at IS NULL
+            AND rr.false_positive_at IS NULL
         )
       )
       OR (
@@ -1197,6 +1202,7 @@ WITH candidate_chats AS (
             AND rr.project_id = $1
             AND rr.found IS TRUE
             AND rr.excluded_at IS NULL
+            AND rr.false_positive_at IS NULL
         )
       )
     )
@@ -1228,6 +1234,7 @@ filtered_chats AS (
         AND rr.project_id = $1
         AND rr.found IS TRUE
         AND rr.excluded_at IS NULL
+        AND rr.false_positive_at IS NULL
     ) AS risk_findings_count
   FROM candidate_chats cc
   JOIN chat_stats cs ON cs.id = cc.id

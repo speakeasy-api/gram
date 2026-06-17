@@ -250,7 +250,7 @@ func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm,
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error accessing image assets").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing image assets").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -266,7 +266,7 @@ func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm,
 		ContentLength: payload.ContentLength,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info").LogError(ctx, logger)
 	}
 
 	if err := s.audit.LogAssetCreate(ctx, dbtx, audit.LogAssetCreateEvent{
@@ -280,11 +280,11 @@ func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm,
 		AssetURN:  urn.NewAsset(urn.AssetKindImage, asset.ID),
 		AssetName: asset.Name,
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to save image asset creation audit log").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save image asset creation audit log").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to save image asset").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save image asset").LogError(ctx, logger)
 	}
 
 	return &gen.UploadImageResult{
@@ -350,7 +350,7 @@ func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFuncti
 	}
 
 	if err := validateFunctionsArchive(ctx, s.logger, result.file.Name()); err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid functions archive: %s", err.Error()).Log(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid functions archive: %s", err.Error()).LogError(ctx, logger)
 	}
 
 	filename := fmt.Sprintf("functions-%s%s", result.hash, ext)
@@ -367,7 +367,7 @@ func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFuncti
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error accessing function assets").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing function assets").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -383,7 +383,7 @@ func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFuncti
 		ContentLength: payload.ContentLength,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info").LogError(ctx, logger)
 	}
 
 	if err := s.audit.LogAssetCreate(ctx, dbtx, audit.LogAssetCreateEvent{
@@ -397,11 +397,11 @@ func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFuncti
 		AssetURN:  urn.NewAsset(urn.AssetKindFunction, asset.ID),
 		AssetName: asset.Name,
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to save function asset creation audit log").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save function asset creation audit log").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to save function asset").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save function asset").LogError(ctx, logger)
 	}
 
 	return &gen.UploadFunctionsResult{
@@ -480,7 +480,7 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error accessing OpenAPI assets").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing OpenAPI assets").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -496,7 +496,7 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 		ContentLength: payload.ContentLength,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info").LogError(ctx, logger)
 	}
 
 	if err := s.audit.LogAssetCreate(ctx, dbtx, audit.LogAssetCreateEvent{
@@ -510,11 +510,11 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 		AssetURN:  urn.NewAsset(urn.AssetKindOpenAPI, asset.ID),
 		AssetName: asset.Name,
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to save OpenAPI asset creation audit log").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save OpenAPI asset creation audit log").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to save OpenAPI asset").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save OpenAPI asset").LogError(ctx, logger)
 	}
 
 	return &gen.UploadOpenAPIv3Result{
@@ -741,7 +741,7 @@ func (s *Service) ServeOpenAPIv3(ctx context.Context, payload *gen.ServeOpenAPIv
 
 	projectID, err := uuid.Parse(payload.ProjectID)
 	if err != nil {
-		return nil, nil, oops.E(oops.CodeBadRequest, err, "invalid project id").Log(ctx, s.logger)
+		return nil, nil, oops.E(oops.CodeBadRequest, err, "invalid project id").LogError(ctx, s.logger)
 	}
 	if projectID == uuid.Nil {
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "project id cannot be empty")
@@ -765,17 +765,17 @@ func (s *Service) ServeOpenAPIv3(ctx context.Context, payload *gen.ServeOpenAPIv
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, nil, oops.C(oops.CodeNotFound)
 	case err != nil:
-		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get openapiv3 asset url: %w", err), "error loading asset").Log(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get openapiv3 asset url: %w", err), "error loading asset").LogError(ctx, logger)
 	}
 
 	assetURL, err := url.Parse(row.Url)
 	if err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("parse asset url: %w", err), "error loading asset").Log(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("parse asset url: %w", err), "error loading asset").LogError(ctx, logger)
 	}
 
 	exists, err := s.storage.Exists(ctx, assetURL)
 	if err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("check if asset exists: %w", err), "error loading asset").Log(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("check if asset exists: %w", err), "error loading asset").LogError(ctx, logger)
 	}
 
 	if !exists {
@@ -784,7 +784,7 @@ func (s *Service) ServeOpenAPIv3(ctx context.Context, payload *gen.ServeOpenAPIv
 
 	body, err := s.storage.Read(ctx, assetURL)
 	if err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("read asset: %w", err), "error fetching asset").Log(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("read asset: %w", err), "error fetching asset").LogError(ctx, logger)
 	}
 
 	return &gen.ServeOpenAPIv3Result{
@@ -940,7 +940,7 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error accessing OpenAPI assets").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing OpenAPI assets").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -956,7 +956,7 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 		ContentLength: actualContentLength,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info").LogError(ctx, logger)
 	}
 
 	if err := s.audit.LogAssetCreate(ctx, dbtx, audit.LogAssetCreateEvent{
@@ -970,11 +970,11 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 		AssetURN:  urn.NewAsset(urn.AssetKindOpenAPI, asset.ID),
 		AssetName: asset.Name,
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to save OpenAPI asset creation audit log").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save OpenAPI asset creation audit log").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to save OpenAPI asset").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save OpenAPI asset").LogError(ctx, logger)
 	}
 
 	return &gen.UploadOpenAPIv3Result{
@@ -1006,7 +1006,7 @@ func (s *Service) ServeFunction(ctx context.Context, payload *gen.ServeFunctionF
 
 	projectID, err := uuid.Parse(payload.ProjectID)
 	if err != nil {
-		return nil, nil, oops.E(oops.CodeBadRequest, err, "invalid project id").Log(ctx, s.logger)
+		return nil, nil, oops.E(oops.CodeBadRequest, err, "invalid project id").LogError(ctx, s.logger)
 	}
 	if projectID == uuid.Nil {
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "project id cannot be empty")
@@ -1030,17 +1030,17 @@ func (s *Service) ServeFunction(ctx context.Context, payload *gen.ServeFunctionF
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, nil, oops.C(oops.CodeNotFound)
 	case err != nil:
-		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get function asset url: %w", err), "error loading asset").Log(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get function asset url: %w", err), "error loading asset").LogError(ctx, logger)
 	}
 
 	assetURL, err := url.Parse(row.Url)
 	if err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("parse asset url: %w", err), "error loading asset").Log(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("parse asset url: %w", err), "error loading asset").LogError(ctx, logger)
 	}
 
 	exists, err := s.storage.Exists(ctx, assetURL)
 	if err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("check if asset exists: %w", err), "error loading asset").Log(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("check if asset exists: %w", err), "error loading asset").LogError(ctx, logger)
 	}
 
 	if !exists {
@@ -1049,7 +1049,7 @@ func (s *Service) ServeFunction(ctx context.Context, payload *gen.ServeFunctionF
 
 	body, err := s.storage.Read(ctx, assetURL)
 	if err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("read asset: %w", err), "error fetching asset").Log(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("read asset: %w", err), "error fetching asset").LogError(ctx, logger)
 	}
 
 	return &gen.ServeFunctionResult{
@@ -1202,7 +1202,7 @@ func (s *Service) ServeChatAttachment(ctx context.Context, payload *gen.ServeCha
 
 	projectID, err := uuid.Parse(payload.ProjectID)
 	if err != nil {
-		return nil, nil, oops.E(oops.CodeBadRequest, err, "invalid project id").Log(ctx, s.logger)
+		return nil, nil, oops.E(oops.CodeBadRequest, err, "invalid project id").LogError(ctx, s.logger)
 	}
 	if projectID == uuid.Nil {
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "project id cannot be empty")
@@ -1225,17 +1225,17 @@ func (s *Service) ServeChatAttachment(ctx context.Context, payload *gen.ServeCha
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, nil, oops.C(oops.CodeNotFound)
 	case err != nil:
-		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get chat attachment asset url: %w", err), "error loading asset").Log(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get chat attachment asset url: %w", err), "error loading asset").LogError(ctx, logger)
 	}
 
 	assetURL, err := url.Parse(row.Url)
 	if err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("parse asset url: %w", err), "error loading asset").Log(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("parse asset url: %w", err), "error loading asset").LogError(ctx, logger)
 	}
 
 	exists, err := s.storage.Exists(ctx, assetURL)
 	if err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("check if asset exists: %w", err), "error loading asset").Log(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("check if asset exists: %w", err), "error loading asset").LogError(ctx, logger)
 	}
 
 	if !exists {
@@ -1244,7 +1244,7 @@ func (s *Service) ServeChatAttachment(ctx context.Context, payload *gen.ServeCha
 
 	body, err := s.storage.Read(ctx, assetURL)
 	if err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("read asset: %w", err), "error fetching asset").Log(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("read asset: %w", err), "error fetching asset").LogError(ctx, logger)
 	}
 
 	return &gen.ServeChatAttachmentResult{
@@ -1275,7 +1275,7 @@ func (s *Service) CreateSignedChatAttachmentURL(ctx context.Context, payload *ge
 
 	projectID, err := uuid.Parse(payload.ProjectID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid project id").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid project id").LogError(ctx, s.logger)
 	}
 	if projectID == uuid.Nil {
 		return nil, oops.E(oops.CodeBadRequest, nil, "project id cannot be empty")
@@ -1299,7 +1299,7 @@ func (s *Service) CreateSignedChatAttachmentURL(ctx context.Context, payload *ge
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get chat attachment asset url: %w", err), "error loading asset").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get chat attachment asset url: %w", err), "error loading asset").LogError(ctx, logger)
 	}
 
 	// Determine TTL
@@ -1312,7 +1312,7 @@ func (s *Service) CreateSignedChatAttachmentURL(ctx context.Context, payload *ge
 	// Generate signed token
 	token, expiresAt, err := GenerateSignedAssetToken(s.jwtSecret, assetID, projectID, ttl)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("generate signed token: %w", err), "error creating signed url").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("generate signed token: %w", err), "error creating signed url").LogError(ctx, logger)
 	}
 
 	// Build URL
@@ -1364,17 +1364,17 @@ func (s *Service) ServeChatAttachmentSigned(ctx context.Context, payload *gen.Se
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, nil, oops.C(oops.CodeNotFound)
 	case err != nil:
-		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get chat attachment asset url: %w", err), "error loading asset").Log(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("get chat attachment asset url: %w", err), "error loading asset").LogError(ctx, logger)
 	}
 
 	assetURL, err := url.Parse(row.Url)
 	if err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("parse asset url: %w", err), "error loading asset").Log(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("parse asset url: %w", err), "error loading asset").LogError(ctx, logger)
 	}
 
 	exists, err := s.storage.Exists(ctx, assetURL)
 	if err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("check if asset exists: %w", err), "error loading asset").Log(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("check if asset exists: %w", err), "error loading asset").LogError(ctx, logger)
 	}
 
 	if !exists {
@@ -1383,7 +1383,7 @@ func (s *Service) ServeChatAttachmentSigned(ctx context.Context, payload *gen.Se
 
 	body, err := s.storage.Read(ctx, assetURL)
 	if err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("read asset: %w", err), "error fetching asset").Log(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("read asset: %w", err), "error fetching asset").LogError(ctx, logger)
 	}
 
 	return &gen.ServeChatAttachmentSignedResult{

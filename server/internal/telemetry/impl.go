@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -1200,7 +1201,7 @@ func (s *Service) CaptureEvent(ctx context.Context, payload *telem_gen.CaptureEv
 	// Capture event in PostHog
 	if err := s.posthog.CaptureEvent(ctx, payload.Event, distinctID, properties); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to capture event").
-			Log(ctx, s.logger,
+			LogError(ctx, s.logger,
 				attr.SlogEvent(payload.Event),
 			)
 	}
@@ -2289,6 +2290,77 @@ func (s *Service) GetToolUsageSummary(ctx context.Context, payload *telem_gen.Ge
 	return toToolUsageSummaryResult(summary), nil
 }
 
+func (s *Service) ListToolUsageTraces(ctx context.Context, payload *telem_gen.ListToolUsageTracesPayload) (res *telem_gen.ListToolUsageTracesResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	params, err := s.prepareTelemetrySearch(ctx, payload.Limit, payload.Sort, payload.Cursor, &payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	targetTypes := make([]string, 0, len(payload.TargetTypes))
+	for _, targetType := range payload.TargetTypes {
+		targetTypes = append(targetTypes, string(targetType))
+	}
+
+	userFilters := make([]repo.ToolUsageUserFilter, 0, len(payload.UserFilters))
+	for _, filter := range payload.UserFilters {
+		if filter == nil {
+			continue
+		}
+		userFilters = append(userFilters, repo.ToolUsageUserFilter{
+			Kind: string(filter.Kind),
+			Key:  filter.Key,
+		})
+	}
+
+	cursorTimeUnixNano := int64(0)
+	cursorID := ""
+	if params.cursor != "" {
+		cursorTimeUnixNano, cursorID, err = decodeToolUsageTraceCursor(params.cursor)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor")
+		}
+	}
+
+	hostedMCPMatchers, err := s.toolUsageHostedMCPMatchers(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing hosted MCP servers")
+	}
+
+	rows, err := s.chRepo.ListToolUsageTraces(ctx, repo.ListToolUsageTracesParams{
+		GramProjectID:      params.projectID,
+		TimeStart:          params.timeStart,
+		TimeEnd:            params.timeEnd,
+		HostedMCPMatchers:  hostedMCPMatchers,
+		TargetTypes:        targetTypes,
+		HostedToolsetSlugs: payload.HostedToolsetSlugs,
+		ShadowServerNames:  payload.ShadowServerNames,
+		UserFilters:        userFilters,
+		HookSources:        payload.HookSources,
+		Query:              conv.PtrValOr(payload.Query, ""),
+		Filters:            toRepoAttributeFilters(payload.Filters),
+		SortOrder:          params.sortOrder,
+		CursorTimeUnixNano: cursorTimeUnixNano,
+		CursorID:           cursorID,
+		Limit:              params.limit + 1,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage traces")
+	}
+
+	nextCursor := ""
+	if len(rows) > params.limit {
+		nextCursor = encodeToolUsageTraceCursor(rows[params.limit-1].StartTimeUnixNano, rows[params.limit-1].ID)
+		rows = rows[:params.limit]
+	}
+
+	return toToolUsageTracesResult(rows, nextCursor), nil
+}
+
 // GetToolUsageFilterOptions returns selectable filter options for target-aware MCP and tool usage metrics.
 func (s *Service) GetToolUsageFilterOptions(ctx context.Context, payload *telem_gen.GetToolUsageFilterOptionsPayload) (res *telem_gen.GetToolUsageFilterOptionsResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -2349,6 +2421,63 @@ func (s *Service) toolUsageHostedMCPMatchers(ctx context.Context, projectID uuid
 		})
 	}
 	return matchers, nil
+}
+
+func encodeToolUsageTraceCursor(startTimeUnixNano int64, id string) string {
+	payload := fmt.Sprintf("%d:%s", startTimeUnixNano, id)
+	return base64.RawURLEncoding.EncodeToString([]byte(payload))
+}
+
+func decodeToolUsageTraceCursor(cursor string) (int64, string, error) {
+	decoded, err := base64.RawURLEncoding.DecodeString(cursor)
+	if err != nil {
+		return 0, "", fmt.Errorf("decode tool usage trace cursor: %w", err)
+	}
+	parts := strings.SplitN(string(decoded), ":", 2)
+	if len(parts) != 2 || parts[1] == "" {
+		return 0, "", fmt.Errorf("invalid tool usage trace cursor")
+	}
+	startTimeUnixNano, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return 0, "", fmt.Errorf("parse tool usage trace cursor timestamp: %w", err)
+	}
+	return startTimeUnixNano, parts[1], nil
+}
+
+func toToolUsageTracesResult(rows []repo.ToolUsageTraceSummary, nextCursor string) *telem_gen.ListToolUsageTracesResult {
+	traces := make([]*telem_gen.ToolUsageTraceSummary, 0, len(rows))
+	for _, row := range rows {
+		trace := &telem_gen.ToolUsageTraceSummary{
+			ID:      row.ID,
+			TraceID: conv.PtrEmpty(row.TraceID),
+			LogGroup: &telem_gen.ToolUsageTraceLogGroup{
+				Kind:  telem_gen.ToolUsageTraceLogGroupKind(row.LogGroupKind),
+				Value: row.LogGroupValue,
+			},
+			StartTimeUnixNano: strconv.FormatInt(row.StartTimeUnixNano, 10),
+			LogCount:          row.LogCount,
+			GramUrn:           row.GramURN,
+			ToolName:          row.ToolName,
+			TargetType:        telem_gen.ToolUsageTargetType(row.TargetType),
+			TargetKind:        telem_gen.ToolUsageTargetKind(row.TargetKind),
+			TargetID:          row.TargetID,
+			TargetLabel:       row.TargetLabel,
+			UserKey:           row.UserKey,
+			UserLabel:         row.UserLabel,
+			UserKind:          telem_gen.ToolUsageUserKind(row.UserKind),
+			HookSource:        row.HookSource,
+			EventSource:       row.EventSource,
+			HTTPStatusCode:    row.HTTPStatusCode,
+			HookStatus:        row.HookStatus,
+			BlockReason:       row.BlockReason,
+		}
+		traces = append(traces, trace)
+	}
+
+	return &telem_gen.ListToolUsageTracesResult{
+		Traces:     traces,
+		NextCursor: conv.PtrEmpty(nextCursor),
+	}
 }
 
 func toToolUsageFilterOptionsResult(options *repo.ToolUsageFilterOptions, optionTypes []telem_gen.ToolUsageFilterOptionType) *telem_gen.GetToolUsageFilterOptionsResult {
@@ -2619,6 +2748,48 @@ func (s *Service) GetChatMetricsByIDs(ctx context.Context, projectID string, cha
 	})
 	if err != nil {
 		return nil, fmt.Errorf("get chat metrics by ids: %w", err)
+	}
+	return result, nil
+}
+
+// GetClaudeTurnUsageByChatIDs retrieves per-turn Claude Code usage for specific chat IDs.
+// This is used by the chat service to enrich chat detail responses from ClickHouse.
+func (s *Service) GetClaudeTurnUsageByChatIDs(ctx context.Context, projectID string, chatIDs []string) (map[string][]repo.ClaudeTurnUsageRow, error) {
+	if s.chRepo == nil {
+		usageByChatID := make(map[string][]repo.ClaudeTurnUsageRow, len(chatIDs))
+		for _, chatID := range chatIDs {
+			usageByChatID[chatID] = []repo.ClaudeTurnUsageRow{}
+		}
+		return usageByChatID, nil
+	}
+
+	result, err := s.chRepo.GetClaudeTurnUsageByChatIDs(ctx, repo.GetClaudeTurnUsageByChatIDsParams{
+		GramProjectID: projectID,
+		ChatIDs:       chatIDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get Claude turn usage by chat ids: %w", err)
+	}
+	return result, nil
+}
+
+// GetClaudeToolUsageByChatIDs retrieves per-tool Claude Code input/result byte sizes for specific chat IDs.
+// This is used by the chat service to enrich chat detail rows from ClickHouse.
+func (s *Service) GetClaudeToolUsageByChatIDs(ctx context.Context, projectID string, chatIDs []string) (map[string][]repo.ClaudeToolUsageRow, error) {
+	if s.chRepo == nil {
+		usageByChatID := make(map[string][]repo.ClaudeToolUsageRow, len(chatIDs))
+		for _, chatID := range chatIDs {
+			usageByChatID[chatID] = []repo.ClaudeToolUsageRow{}
+		}
+		return usageByChatID, nil
+	}
+
+	result, err := s.chRepo.GetClaudeToolUsageByChatIDs(ctx, repo.GetClaudeTurnUsageByChatIDsParams{
+		GramProjectID: projectID,
+		ChatIDs:       chatIDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get Claude tool usage by chat ids: %w", err)
 	}
 	return result, nil
 }

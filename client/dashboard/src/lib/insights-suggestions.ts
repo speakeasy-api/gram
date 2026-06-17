@@ -86,6 +86,164 @@ export interface InsightsSuggestion {
   icon?: InsightsSuggestionIcon;
 }
 
+/**
+ * Starter prompts for the full-page chat landing + home widget. Pitched at the
+ * questions an enterprise platform, security, or FinOps lead actually asks of
+ * their AI usage — reliability, governance, exposure, spend, and adoption.
+ */
+export const CHAT_LANDING_SUGGESTIONS: InsightsSuggestion[] = [
+  {
+    title: "Any secrets or PII in chats?",
+    label: "Sensitive-data scan",
+    icon: "shield",
+    prompt:
+      "Scan recent agent conversations for sensitive-data exposure — leaked secrets, PII, or prompt-injection attempts. Show me the findings, how serious each is, and which chats they came from.",
+  },
+  {
+    title: "Any unapproved servers?",
+    label: "Shadow MCP usage",
+    icon: "server",
+    prompt:
+      "Are agents calling any MCP servers or tools that aren't on our approved list? List the shadow servers, who's calling them, and how often.",
+  },
+  {
+    title: "Which tools are erroring?",
+    label: "Failure hotspots",
+    icon: "alert",
+    prompt:
+      "Which tools and MCP servers are failing the most right now? Group the errors by pattern and tell me which users or clients are hitting them hardest.",
+  },
+  {
+    title: "What's driving our spend?",
+    label: "Token & cost drivers",
+    icon: "coins",
+    prompt:
+      "Break down token spend over the last 30 days by tool, model, and client, and call out the biggest cost drivers and any sudden jumps.",
+  },
+  {
+    title: "Is adoption growing?",
+    label: "Week-over-week adoption",
+    icon: "trend",
+    prompt:
+      "How is adoption trending week over week — active end users, agent sessions, and tool calls — and which teams or clients are driving the growth?",
+  },
+  {
+    title: "Who are the heaviest users this week?",
+    label: "Top users by volume",
+    icon: "users",
+    prompt:
+      "Who are the heaviest end users this week by tool calls and agent sessions, and what is each of them mainly doing?",
+  },
+  {
+    title: "What's getting slower?",
+    label: "Latency regressions",
+    icon: "gauge",
+    prompt:
+      "Which tools have the worst p95 latency, and which ones have regressed the most this week compared to last? Flag anything that looks like it's degrading.",
+  },
+];
+
+/**
+ * The full command palette shown when the user types `/` in the "Ask anything"
+ * composer. A superset of the landing chips — the seven headline prompts plus a
+ * deeper bench — so the slash menu speaks the same vocabulary as the chips while
+ * surfacing the long tail of questions the assistant can answer.
+ */
+export const SLASH_COMMANDS: InsightsSuggestion[] = [
+  ...CHAT_LANDING_SUGGESTIONS,
+  {
+    title: "Most-called tools",
+    label: "Usage leaders",
+    icon: "wrench",
+    prompt:
+      "Which tools have been called most this week, and how does that compare with last week? Show the top movers in both directions.",
+  },
+  {
+    title: "Top MCP servers by traffic",
+    label: "Server leaderboard",
+    icon: "server",
+    prompt:
+      "Rank our MCP servers by traffic this week — calls, unique end users, and error rate for each — and tell me which are growing fastest.",
+  },
+  {
+    title: "Recent failed tool calls",
+    label: "Latest failures",
+    icon: "alert",
+    prompt:
+      "Show me the most recent failed tool calls with their error messages, grouped by tool and likely root cause.",
+  },
+  {
+    title: "Slowest tools by p95",
+    label: "Latency outliers",
+    icon: "gauge",
+    prompt:
+      "List the tools with the worst p95 latency over the last day, with call volume alongside each so I can see what's actually worth fixing.",
+  },
+  {
+    title: "Any prompt-injection attempts?",
+    label: "Injection & jailbreaks",
+    icon: "shield",
+    prompt:
+      "Look for prompt-injection or jailbreak attempts in recent agent conversations. Show the attempts, which tools they targeted, and whether any succeeded.",
+  },
+  {
+    title: "Open risk & policy findings",
+    label: "Governance summary",
+    icon: "shield",
+    prompt:
+      "Summarize open risk and policy findings across the project — what's flagged, how severe each is, and what I should deal with first.",
+  },
+  {
+    title: "Biggest cost drivers",
+    label: "Where spend concentrates",
+    icon: "coins",
+    prompt:
+      "What are the single biggest contributors to token cost this month, and what would cut spend the most without hurting usage?",
+  },
+  {
+    title: "Token usage by model",
+    label: "Cost per model",
+    icon: "coins",
+    prompt:
+      "Break down token usage and cost by model over the last 30 days, and flag any model that's unusually expensive per call.",
+  },
+  {
+    title: "Which agents are most active?",
+    label: "Top clients",
+    icon: "bot",
+    prompt:
+      "Which LLM clients and agents are driving the most activity this week, and how reliable is each one by error rate?",
+  },
+  {
+    title: "What are agents trying to do?",
+    label: "Intent clusters",
+    icon: "bot",
+    prompt:
+      "What are agents mostly trying to accomplish this week? Cluster their sessions by intent and show the most common workflows.",
+  },
+  {
+    title: "Where do agents get stuck?",
+    label: "Drop-off points",
+    icon: "alert",
+    prompt:
+      "Where are agent sessions failing or stalling — which tools or steps get abandoned, and what errors precede the drop-off?",
+  },
+  {
+    title: "Summarize this week",
+    label: "Weekly recap",
+    icon: "sparkles",
+    prompt:
+      "Give me a concise weekly recap of assistant usage: adoption, top tools, notable errors, spend, and anything that changed sharply versus last week.",
+  },
+  {
+    title: "What should I look into today?",
+    label: "Today's priorities",
+    icon: "search",
+    prompt:
+      "Scan the last 24 hours and tell me what deserves my attention today — new errors, latency spikes, security flags, or unusual spend — ranked by urgency.",
+  },
+];
+
 type SuggestionEntry =
   | InsightsSuggestion[]
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- per-entry signatures vary; call sites get exact types from the object literal

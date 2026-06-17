@@ -38,7 +38,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	q := r.URL.Query()
 	stateID := q.Get("state")
 	if stateID == "" {
-		return oops.E(oops.CodeBadRequest, nil, "state is required").Log(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, logger)
 	}
 
 	// Atomic GETDEL: the IDP-returned state URL is single-use. The fresh
@@ -51,7 +51,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		// No challenge in hand (expired / replayed / never existed): nothing to
 		// attribute to an issuer, and an expired state is closer to abandonment
 		// than a flow failure, so it is left to the started-without-terminal gap.
-		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").Log(ctx, logger)
+		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
 	}
 
 	// Challenge in hand: correlate every subsequent log line by flow_id, and
@@ -65,12 +65,12 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		// Corrupted in-flight state (a code/data integrity failure), terminal
 		// for the flow.
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageIDPCallback)
-		return oops.E(oops.CodeBadRequest, nil, "mcp slug is missing from authn challenge state").Log(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, "mcp slug is missing from authn challenge state").LogError(ctx, logger)
 	}
 	if routeMcpSlug != "" && routeMcpSlug != mcpSlug {
 		// State-confusion guard (state minted for a different route). Attacker-
 		// controllable, so deliberately NOT counted as a flow failure.
-		return oops.E(oops.CodeUnauthorized, nil, "authn challenge state does not match this MCP server").Log(ctx, logger)
+		return oops.E(oops.CodeUnauthorized, nil, "authn challenge state does not match this MCP server").LogError(ctx, logger)
 	}
 
 	endpoint, err := s.loadResolvedMcpEndpointByRef(ctx, challengeState.Endpoint)
@@ -113,14 +113,14 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	if code == "" {
 		// IDP returned neither code nor error — a broken IDP redirect.
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageIDPCallback)
-		return oops.E(oops.CodeBadRequest, nil, "code is required").Log(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, "code is required").LogError(ctx, logger)
 	}
 
 	// Exchange the authorization code for user identity via WorkOS.
 	idpUser, err := s.identityResolver.ExchangeCodeForTokens(ctx, code)
 	if err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageIDPCallback)
-		return oops.E(oops.CodeUnauthorized, err, "failed to exchange IDP code").Log(ctx, logger)
+		return oops.E(oops.CodeUnauthorized, err, "failed to exchange IDP code").LogError(ctx, logger)
 	}
 
 	// Run the standard post-IDP user bootstrap: UpsertUser + posthog
@@ -129,7 +129,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	gramUserID, err := s.identityResolver.UpsertUserFromIDP(ctx, idpUser)
 	if err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageIDPCallback)
-		return oops.E(oops.CodeUnexpected, err, "failed to bootstrap user").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to bootstrap user").LogError(ctx, logger)
 	}
 
 	// Validate the user belongs to the endpoint's organization before
@@ -139,7 +139,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	// audience), not a user decline.
 	if _, _, ok := s.identityResolver.HasAccessToOrganization(ctx, endpoint.OrganizationID, gramUserID); !ok {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageIDPCallback)
-		return oops.E(oops.CodeForbidden, nil, "user is not a member of this MCP server's organization").Log(ctx, logger)
+		return oops.E(oops.CodeForbidden, nil, "user is not a member of this MCP server's organization").LogError(ctx, logger)
 	}
 
 	// Mint a fresh state ID so the /connect URL we redirect to is NOT the
@@ -153,7 +153,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	challengeState.Subject = &subject
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageIDPCallback)
-		return oops.E(oops.CodeUnexpected, err, "failed to update authn challenge state").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to update authn challenge state").LogError(ctx, logger)
 	}
 
 	// challengeState.Endpoint.BaseURL was stamped at mint time. New
@@ -170,7 +170,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	consentURL, err := endpoint.ConsentURL(baseURL, challengeState.ID)
 	if err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageIDPCallback)
-		return oops.E(oops.CodeUnexpected, err, "build consent URL").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "build consent URL").LogError(ctx, logger)
 	}
 	http.Redirect(w, r, consentURL, http.StatusFound)
 	return nil

@@ -22,10 +22,10 @@ import (
 // on the per-session tools/list response cache tracked separately, and is
 // added when that cache lands.
 type ToolsCallAuthzInterceptor struct {
-	authz     *authz.Engine
-	serverID  string
-	projectID string
-	logger    *slog.Logger
+	authz       *authz.Engine
+	mcpServerID string
+	projectID   string
+	logger      *slog.Logger
 }
 
 var _ proxy.ToolsCallRequestInterceptor = (*ToolsCallAuthzInterceptor)(nil)
@@ -33,14 +33,18 @@ var _ proxy.ToolsCallRequestInterceptor = (*ToolsCallAuthzInterceptor)(nil)
 // NewToolsCallAuthzInterceptor constructs an interceptor scoped to a single
 // Remote MCP Server. Callers build a fresh instance per request so the
 // resource ID for the authz check is captured without re-parsing routing
-// state. projectID is the owning project for the mcp_endpoint and is
-// forwarded as a dimension so project-scoped grants can match.
-func NewToolsCallAuthzInterceptor(authzEngine *authz.Engine, serverID, projectID string, logger *slog.Logger) *ToolsCallAuthzInterceptor {
+// state. mcpServerID is the mcp_servers row id (NOT the remote_mcp_servers
+// id) so the per-tool `mcp:connect` check resolves grants against the same
+// resource id the handler's upfront server-level `mcp:connect` check uses,
+// keeping per-tool and server-level authorization consistent. projectID is
+// the owning project for the mcp_endpoint and is forwarded as a dimension so
+// project-scoped grants can match.
+func NewToolsCallAuthzInterceptor(authzEngine *authz.Engine, mcpServerID, projectID string, logger *slog.Logger) *ToolsCallAuthzInterceptor {
 	return &ToolsCallAuthzInterceptor{
-		authz:     authzEngine,
-		serverID:  serverID,
-		projectID: projectID,
-		logger:    logger,
+		authz:       authzEngine,
+		mcpServerID: mcpServerID,
+		projectID:   projectID,
+		logger:      logger,
 	}
 }
 
@@ -59,9 +63,10 @@ func (i *ToolsCallAuthzInterceptor) Name() string {
 //
 // [authz.MCPToolCallCheck] names its first parameter `toolsetID` for legacy
 // reasons, but the helper only stores it as the opaque `ResourceID` on the
-// returned [authz.Check]; passing a Remote MCP Server UUID is semantically
-// correct and matches how the same scope is enforced for the server-level
-// check at [Service.ServeMCP].
+// returned [authz.Check]; passing the mcp_servers UUID is semantically
+// correct. It is the same resource id the handler runs the upfront
+// server-level `mcp:connect` check against, so per-tool and server-level
+// enforcement agree on what they are authorizing.
 func (i *ToolsCallAuthzInterceptor) InterceptToolsCallRequest(ctx context.Context, call *proxy.ToolsCallRequest) error {
 	// Defensive: the proxy's typed dispatch (toolsCallRequestFromUserRequest)
 	// only constructs a ToolsCallRequest with non-nil Params, so this branch
@@ -71,7 +76,7 @@ func (i *ToolsCallAuthzInterceptor) InterceptToolsCallRequest(ctx context.Contex
 		return nil
 	}
 
-	return i.authz.Require(ctx, authz.MCPToolCallCheck(i.serverID, authz.MCPToolCallDimensions{
+	return i.authz.Require(ctx, authz.MCPToolCallCheck(i.mcpServerID, authz.MCPToolCallDimensions{
 		Tool:        call.Params.Name,
 		Disposition: "",
 		ProjectID:   i.projectID,

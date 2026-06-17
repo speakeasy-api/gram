@@ -58,13 +58,13 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 
 	authedCtx, _, err := s.assistantTokens.Authorize(ctx, token)
 	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "failed to authorize platform toolset request").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnauthorized, err, "failed to authorize platform toolset request").LogError(ctx, s.logger)
 	}
 	ctx = authedCtx
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return oops.E(oops.CodeUnauthorized, nil, "no project auth context").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnauthorized, nil, "no project auth context").LogError(ctx, s.logger)
 	}
 
 	if err := s.authorizePlatformToolset(ctx, slug, authCtx); err != nil {
@@ -76,19 +76,19 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 	case errors.Is(err, io.EOF) || len(bodyBytes) == 0:
 		return nil
 	case err != nil:
-		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "failed to read request body").LogError(ctx, s.logger)
 	}
 
 	if len(bodyBytes) > 0 && bodyBytes[0] == '[' {
-		return oops.E(oops.CodeBadRequest, nil, "batch requests are not supported").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "batch requests are not supported").LogError(ctx, s.logger)
 	}
 
 	var req rawRequest
 	if err := json.Unmarshal(bodyBytes, &req); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to decode request body").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "failed to decode request body").LogError(ctx, s.logger)
 	}
 	if req.JSONRPC != "2.0" {
-		return oops.E(oops.CodeBadRequest, errInvalidJSONRPCVersion, "unsupported JSON-RPC version").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, errInvalidJSONRPCVersion, "unsupported JSON-RPC version").LogError(ctx, s.logger)
 	}
 
 	body, err := s.handlePlatformToolsetRequest(ctx, authCtx, toolset, &req, r.Header.Get("Gram-Chat-ID"))
@@ -98,12 +98,12 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 	case err != nil:
 		bs, merr := json.Marshal(oops.NewMCPErrorFromCause(req.ID, err))
 		if merr != nil {
-			return oops.E(oops.CodeUnexpected, merr, "failed to serialize error response").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, merr, "failed to serialize error response").LogError(ctx, s.logger)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		if _, writeErr := w.Write(bs); writeErr != nil {
-			return oops.E(oops.CodeUnexpected, writeErr, "failed to write error response body").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, writeErr, "failed to write error response body").LogError(ctx, s.logger)
 		}
 		return nil
 	}
@@ -136,7 +136,7 @@ func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, aut
 	case errors.Is(err, pgx.ErrNoRows):
 		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
 	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "resolve managed assistant").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "resolve managed assistant").LogError(ctx, s.logger)
 	}
 
 	if managed.ID != principal.AssistantID {
@@ -193,7 +193,7 @@ func handlePlatformInitialize(ctx context.Context, logger *slog.Logger, req *raw
 	}
 	bs, err := json.Marshal(result)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize initialize response").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize initialize response").LogError(ctx, logger)
 	}
 	return bs, nil
 }
@@ -231,7 +231,7 @@ func (s *Service) listPlatformToolsetTools(
 		Result: toolsListResultTools{Tools: tools},
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/list response").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/list response").LogError(ctx, s.logger)
 	}
 	return bs, nil
 }
@@ -245,10 +245,10 @@ func (s *Service) callPlatformToolsetTool(
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse tool call request").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse tool call request").LogError(ctx, s.logger)
 	}
 	if params.Name == "" {
-		return nil, oops.E(oops.CodeInvalid, nil, "tool name is required").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeInvalid, nil, "tool name is required").LogError(ctx, s.logger)
 	}
 
 	var matched platformtools.ExternalTool
@@ -264,10 +264,10 @@ func (s *Service) callPlatformToolsetTool(
 		}
 	}
 	if !found {
-		return nil, oops.E(oops.CodeNotFound, errors.New("tool not found"), "tool not found").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, errors.New("tool not found"), "tool not found").LogError(ctx, s.logger)
 	}
 	if !s.platformToolFeatureAvailable(ctx, authCtx.ActiveOrganizationID, matched.RequiredFeature, nil) {
-		return nil, oops.E(oops.CodeNotFound, nil, "tool not found").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, nil, "tool not found").LogError(ctx, s.logger)
 	}
 
 	desc := matched.Executor.Descriptor()
@@ -405,24 +405,25 @@ func (s *Service) callPlatformToolsetTool(
 	}()
 
 	if err := s.toolProxy.Do(ctx, rw, bytes.NewReader(requestBodyBytes), toolCallEnv, plan, logAttrs); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute platform tool call").Log(ctx, logger, attr.SlogToolName(params.Name))
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute platform tool call").LogError(ctx, logger, attr.SlogToolName(params.Name))
 	}
 	outputBytes = int64(rw.body.Len())
 
-	chunk, err := formatResult(*rw, plan.Kind)
+	chunk, structured, err := formatResult(*rw, plan.Kind)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to format platform tool call result").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to format platform tool call result").LogError(ctx, logger)
 	}
 
 	bs, err := json.Marshal(result[toolCallResult]{
 		ID: req.ID,
 		Result: toolCallResult{
-			Content: []json.RawMessage{chunk},
-			IsError: rw.statusCode < 200 || rw.statusCode >= 300,
+			Content:           []json.RawMessage{chunk},
+			StructuredContent: structured,
+			IsError:           rw.statusCode < 200 || rw.statusCode >= 300,
 		},
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call result").Log(ctx, logger, attr.SlogToolName(params.Name))
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call result").LogError(ctx, logger, attr.SlogToolName(params.Name))
 	}
 	return bs, nil
 }

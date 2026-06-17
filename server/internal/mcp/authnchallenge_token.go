@@ -53,7 +53,7 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
 	}
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
 	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, "mcp")
@@ -95,7 +95,7 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "unknown_client_id")
 			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "unknown client_id")
 		}
-		return oops.E(oops.CodeUnexpected, err, "lookup user session client").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 	}
 	// Public clients (token_endpoint_auth_method=none) have a NULL hash:
 	// PKCE / refresh-token possession is the integrity proof, no secret check.
@@ -251,7 +251,7 @@ func (s *Service) handleTokenRefreshTokenGrant(
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_unknown_or_already_used")
 			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token is unknown or already used")
 		}
-		return oops.E(oops.CodeUnexpected, err, "revoke old refresh token").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "revoke old refresh token").LogError(ctx, logger)
 	}
 
 	// Client binding: refuse if the original session was minted for a
@@ -325,31 +325,31 @@ func (s *Service) mintSessionAndRespond(
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeNotFound, err, "user_session_issuer not found")
 		}
-		return oops.E(oops.CodeUnexpected, err, "lookup user session issuer").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "lookup user session issuer").LogError(ctx, logger)
 	}
 	if !issuer.SessionDuration.Valid {
-		return oops.E(oops.CodeUnexpected, nil, "issuer session_duration is not set").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, nil, "issuer session_duration is not set").LogError(ctx, logger)
 	}
 	if issuer.SessionDuration.Months != 0 || issuer.SessionDuration.Days != 0 {
-		return oops.E(oops.CodeUnexpected, nil, "issuer session_duration carries Months/Days; only Microseconds intervals are supported").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, nil, "issuer session_duration carries Months/Days; only Microseconds intervals are supported").LogError(ctx, logger)
 	}
 	refreshLifetime := time.Duration(issuer.SessionDuration.Microseconds) * time.Microsecond
 	if refreshLifetime <= 0 {
-		return oops.E(oops.CodeUnexpected, nil, "issuer session_duration is non-positive").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, nil, "issuer session_duration is non-positive").LogError(ctx, logger)
 	}
 
 	issuerURL, err := endpoint.RootURL(baseURL)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "build issuer URL").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, logger)
 	}
 	access, jti, err := s.userSessionSigner.Mint(subject, endpoint.AudienceURN, issuerURL, accessTokenLifetime)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "mint session jwt").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "mint session jwt").LogError(ctx, logger)
 	}
 
 	refreshTokenRaw, err := generateOpaqueToken()
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "generate refresh token").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "generate refresh token").LogError(ctx, logger)
 	}
 
 	now := time.Now()
@@ -362,7 +362,7 @@ func (s *Service) mintSessionAndRespond(
 		ExpiresAt:           pgtype.Timestamptz{Time: now.Add(accessTokenLifetime), InfinityModifier: 0, Valid: true},
 		RefreshExpiresAt:    pgtype.Timestamptz{Time: now.Add(refreshLifetime), InfinityModifier: 0, Valid: true},
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "persist user session").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "persist user session").LogError(ctx, logger)
 	}
 
 	body, err := json.Marshal(tokenResponse{
@@ -372,7 +372,7 @@ func (s *Service) mintSessionAndRespond(
 		RefreshToken: refreshTokenRaw,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "marshal token response").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "marshal token response").LogError(ctx, logger)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -380,7 +380,7 @@ func (s *Service) mintSessionAndRespond(
 	w.Header().Set("Pragma", "no-cache")
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write(body); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "write token response").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "write token response").LogError(ctx, logger)
 	}
 	return nil
 }
@@ -406,7 +406,7 @@ func writeTokenError(ctx context.Context, w http.ResponseWriter, logger *slog.Lo
 		"error_description": description,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "marshal token error").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "marshal token error").LogError(ctx, logger)
 	}
 
 	logger.InfoContext(ctx, "token request rejected",
@@ -419,7 +419,7 @@ func writeTokenError(ctx context.Context, w http.ResponseWriter, logger *slog.Lo
 	w.Header().Set("Pragma", "no-cache")
 	w.WriteHeader(status)
 	if _, werr := w.Write(body); werr != nil {
-		return oops.E(oops.CodeUnexpected, werr, "write token error body").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, werr, "write token error body").LogError(ctx, logger)
 	}
 	return nil
 }

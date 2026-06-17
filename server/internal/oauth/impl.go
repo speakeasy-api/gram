@@ -259,7 +259,7 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 	// Extract MCP slug from URL path
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
 	}
 
 	// Load toolset from MCP slug
@@ -268,7 +268,7 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 	case errors.Is(err, errToolsetNotFound), errors.Is(err, errOAuthUnavailable):
 		return oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "failed to load authorization details for mcp server").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to load authorization details for mcp server").LogError(ctx, s.logger)
 	}
 
 	// Parse authorization request
@@ -309,7 +309,7 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 		ID:        toolset.OauthProxyServerID.UUID,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "OAuth proxy server not found").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "OAuth proxy server not found").LogError(ctx, s.logger)
 	}
 
 	// Get OAuth proxy providers for this toolset
@@ -318,10 +318,10 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 		ProjectID:          toolset.ProjectID,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "OAuth providers not configured").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "OAuth providers not configured").LogError(ctx, s.logger)
 	}
 	if len(availableProviders) == 0 {
-		return oops.E(oops.CodeUnexpected, nil, "OAuth providers not configured").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, nil, "OAuth providers not configured").LogError(ctx, s.logger)
 	}
 
 	// TODO: Eventually support multiple providers
@@ -332,7 +332,7 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 	if provider.ProviderType == string(OAuthProxyProviderTypeCustom) {
 		var secrets map[string]string
 		if err := json.Unmarshal(provider.Secrets, &secrets); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "OAuth provider secrets invalid").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, err, "OAuth provider secrets invalid").LogError(ctx, s.logger)
 		}
 
 		clientID = secrets["client_id"]
@@ -341,7 +341,7 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 		if clientID == "" && secrets["environment_slug"] != "" {
 			envMap, err := s.environments.Load(ctx, toolset.ProjectID, toolconfig.Slug(secrets["environment_slug"]))
 			if err != nil {
-				return oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, s.logger)
+				return oops.E(oops.CodeUnexpected, err, "failed to load environment").LogError(ctx, s.logger)
 			}
 
 			for k, v := range envMap {
@@ -352,7 +352,7 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 		}
 
 		if clientID == "" {
-			return oops.E(oops.CodeUnexpected, nil, "OAuth provider client_id not configured").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, nil, "OAuth provider client_id not configured").LogError(ctx, s.logger)
 		}
 	}
 
@@ -372,7 +372,7 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 
 	oauthReqInfoJSON, err := json.Marshal(oauthReqInfo)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to encode OAuth request info").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "failed to encode OAuth request info").LogError(ctx, s.logger)
 	}
 
 	callbackURL := fmt.Sprintf("%s/oauth/callback", s.serverURL.String())
@@ -388,19 +388,19 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 			ScopesSupported: provider.ScopesSupported,
 		})
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to build gram OAuth URL").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to build gram OAuth URL").LogError(ctx, s.logger)
 		}
 	default:
 		// For custom providers, build the URL directly
 		authURL, err = url.Parse(provider.AuthorizationEndpoint.String)
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to parse OAuth authorization URL").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to parse OAuth authorization URL").LogError(ctx, s.logger)
 		}
 
 		// Generate PKCE for the upstream provider
 		upstreamCodeVerifier, err := generateCodeVerifier()
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to generate PKCE verifier").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to generate PKCE verifier").LogError(ctx, s.logger)
 		}
 		upstreamCodeChallenge := generateCodeChallenge(upstreamCodeVerifier)
 
@@ -411,12 +411,12 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 			Nonce:    pkceNonce,
 			Verifier: upstreamCodeVerifier,
 		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to store upstream PKCE verifier").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to store upstream PKCE verifier").LogError(ctx, s.logger)
 		}
 		oauthReqInfo["upstream_pkce_nonce"] = pkceNonce
 		oauthReqInfoJSON, err = json.Marshal(oauthReqInfo)
 		if err != nil {
-			return oops.E(oops.CodeBadRequest, err, "failed to encode OAuth request info").Log(ctx, s.logger)
+			return oops.E(oops.CodeBadRequest, err, "failed to encode OAuth request info").LogError(ctx, s.logger)
 		}
 
 		urlParams := url.Values{}
@@ -467,7 +467,7 @@ func (s *Service) handleToken(w http.ResponseWriter, r *http.Request) error {
 
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
 	}
 
 	toolset, fullMCPURL, err := s.loadToolsetFromCurrentURLContext(ctx, mcpSlug)
@@ -475,17 +475,17 @@ func (s *Service) handleToken(w http.ResponseWriter, r *http.Request) error {
 	case errors.Is(err, errToolsetNotFound), errors.Is(err, errOAuthUnavailable):
 		return oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "failed to load token exchange details for mcp server").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to load token exchange details for mcp server").LogError(ctx, s.logger)
 	}
 
 	if err := r.ParseForm(); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to parse form data").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "failed to parse form data").LogError(ctx, s.logger)
 	}
 
 	// Extract client credentials based on authentication method
 	clientID, clientSecret, err := s.extractClientCredentials(r)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid client authentication").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid client authentication").LogError(ctx, s.logger)
 	}
 
 	req := &TokenRequest{
@@ -506,11 +506,11 @@ func (s *Service) handleToken(w http.ResponseWriter, r *http.Request) error {
 	case "refresh_token":
 		token, err = s.tokenService.ExchangeRefreshToken(ctx, req, fullMCPURL, toolset.ID)
 	default:
-		return oops.E(oops.CodeBadRequest, nil, "unsupported grant type: %s", req.GrantType).Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "unsupported grant type: %s", req.GrantType).LogError(ctx, s.logger)
 	}
 
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "token exchange failed").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "token exchange failed").LogError(ctx, s.logger)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -527,7 +527,7 @@ func (s *Service) handleClientRegistration(w http.ResponseWriter, r *http.Reques
 
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
 	}
 
 	_, fullMcpURL, err := s.loadToolsetFromCurrentURLContext(ctx, mcpSlug)
@@ -535,12 +535,12 @@ func (s *Service) handleClientRegistration(w http.ResponseWriter, r *http.Reques
 	case errors.Is(err, errToolsetNotFound), errors.Is(err, errOAuthUnavailable):
 		return oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "failed to load client registration details for mcp server").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to load client registration details for mcp server").LogError(ctx, s.logger)
 	}
 
 	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "failed to read request body").LogError(ctx, s.logger)
 	}
 	// Create a new reader for JSON decoding
 	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
@@ -548,13 +548,13 @@ func (s *Service) handleClientRegistration(w http.ResponseWriter, r *http.Reques
 	// Parse JSON request
 	var req ClientInfo
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid JSON in request body").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid JSON in request body").LogError(ctx, s.logger)
 	}
 
 	// Register client
 	client, err := s.clientRegistration.RegisterClient(ctx, &req, fullMcpURL)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "client registration failed").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "client registration failed").LogError(ctx, s.logger)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -571,12 +571,12 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 
 	stateParam := r.URL.Query().Get("state")
 	if stateParam == "" {
-		return oops.E(oops.CodeBadRequest, nil, "state is required").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, s.logger)
 	}
 
 	var oauthReqInfo map[string]string
 	if err := json.Unmarshal([]byte(stateParam), &oauthReqInfo); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to decode OAuth request info from state").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "failed to decode OAuth request info from state").LogError(ctx, s.logger)
 	}
 
 	// Backwards-compat shim for remote_session_clients whose upstream
@@ -607,12 +607,12 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 	mcpSlug := oauthReqInfo["mcp_slug"]
 	projectIDStr := oauthReqInfo["project_id"]
 	if mcpSlug == "" || projectIDStr == "" {
-		return oops.E(oops.CodeBadRequest, nil, "mcp slug and project id is required in context").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "mcp slug and project id is required in context").LogError(ctx, s.logger)
 	}
 
 	projectID, err := uuid.Parse(projectIDStr)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid project id").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid project id").LogError(ctx, s.logger)
 	}
 
 	toolset, fullMCPURL, err := s.loadToolsetForProjectAndMCPSlug(ctx, projectID, mcpSlug)
@@ -620,12 +620,12 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 	case errors.Is(err, errToolsetNotFound), errors.Is(err, errCustomDomainNotFound):
 		return oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "failed to load authorization details for mcp server").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to load authorization details for mcp server").LogError(ctx, s.logger)
 	}
 
 	externalCode := r.URL.Query().Get("code")
 	if externalCode == "" {
-		return oops.E(oops.CodeBadRequest, nil, "code is required").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "code is required").LogError(ctx, s.logger)
 	}
 
 	// Get OAuth proxy providers for this toolset
@@ -634,10 +634,10 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 		ProjectID:          toolset.ProjectID,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "OAuth providers not configured").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "OAuth providers not configured").LogError(ctx, s.logger)
 	}
 	if len(availableProviders) == 0 {
-		return oops.E(oops.CodeUnexpected, nil, "OAuth providers not configured").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, nil, "OAuth providers not configured").LogError(ctx, s.logger)
 	}
 
 	// TODO: Eventually support multiple providers
@@ -662,7 +662,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 		pkceKey := UpstreamPKCEVerifier{Nonce: pkceNonce, Verifier: ""}.CacheKey()
 		stored, err := s.upstreamPKCEStorage.Get(ctx, pkceKey)
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to retrieve upstream PKCE verifier").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to retrieve upstream PKCE verifier").LogError(ctx, s.logger)
 		}
 		upstreamCodeVerifier = stored.Verifier
 		// Clean up after use
@@ -694,7 +694,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 		)
 		if buildErr != nil {
 			s.logger.ErrorContext(ctx, "failed to build error response URL", attr.SlogError(buildErr))
-			return oops.E(oops.CodeUnexpected, buildErr, "failed to build error response").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, buildErr, "failed to build error response").LogError(ctx, s.logger)
 		}
 
 		// Add defensive check for empty error description
@@ -712,7 +712,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			if err := s.failurePageTmpl.Execute(w, data); err != nil {
-				return oops.E(oops.CodeUnexpected, err, "failed to render oauth failure page").Log(ctx, s.logger)
+				return oops.E(oops.CodeUnexpected, err, "failed to render oauth failure page").LogError(ctx, s.logger)
 			}
 		} else {
 			http.Redirect(w, r, errorURL, http.StatusFound)
@@ -753,7 +753,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 	// Build authorization response and redirect back to client
 	responseURL, err := s.grantManager.BuildAuthorizationResponse(ctx, grant, authReq.RedirectURI)
 	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to build authorization response").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "failed to build authorization response").LogError(ctx, s.logger)
 	}
 
 	if provider.ProviderType == string(OAuthProxyProviderTypeGram) {
@@ -766,7 +766,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if err := s.successPageTmpl.Execute(w, data); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to render oauth success page").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to render oauth success page").LogError(ctx, s.logger)
 		}
 	} else {
 		http.Redirect(w, r, responseURL, http.StatusFound)
@@ -798,7 +798,7 @@ func (s *Service) serveSuccessScript(w http.ResponseWriter, r *http.Request) err
 
 	_, err := w.Write(s.oauthStatusPageScriptData)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to write script response").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to write script response").LogError(ctx, s.logger)
 	}
 
 	return nil
@@ -924,22 +924,22 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 		sessionToken = r.Header.Get(constants.SessionHeader)
 	}
 	if _, err := s.sessions.Authenticate(ctx, sessionToken); err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "authentication required").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnauthorized, err, "authentication required").LogError(ctx, s.logger)
 	}
 
 	if s.guardianPolicy == nil {
-		return oops.E(oops.CodeUnexpected, nil, "proxy register handler is not configured").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, nil, "proxy register handler is not configured").LogError(ctx, s.logger)
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, requestMaxBodyBytes)
 	var req ProxyRegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "invalid JSON in request body").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid JSON in request body").LogError(ctx, s.logger)
 	}
 
 	endpoint, err := url.Parse(req.RegistrationEndpoint)
 	if err != nil || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.Host == "" {
-		return oops.E(oops.CodeBadRequest, err, "invalid registration_endpoint").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, err, "invalid registration_endpoint").LogError(ctx, s.logger)
 	}
 
 	serverURL := s.serverURL.String()
@@ -961,7 +961,7 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 
 	body, err := json.Marshal(dcrReq)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to marshal DCR request").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to marshal DCR request").LogError(ctx, s.logger)
 	}
 
 	upstreamCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -969,14 +969,14 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 
 	httpReq, err := http.NewRequestWithContext(upstreamCtx, http.MethodPost, endpoint.String(), bytes.NewReader(body))
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to create DCR request").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to create DCR request").LogError(ctx, s.logger)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "application/json")
 
 	resp, err := s.guardianPolicy.Client().Do(httpReq)
 	if err != nil {
-		return oops.E(oops.CodeGatewayError, err, "failed to reach registration endpoint").Log(ctx, s.logger)
+		return oops.E(oops.CodeGatewayError, err, "failed to reach registration endpoint").LogError(ctx, s.logger)
 	}
 	defer o11y.LogDefer(ctx, s.logger, func() error {
 		if closeErr := resp.Body.Close(); closeErr != nil {
@@ -987,22 +987,22 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, requestMaxBodyBytes))
 	if err != nil {
-		return oops.E(oops.CodeGatewayError, err, "failed to read DCR response").Log(ctx, s.logger)
+		return oops.E(oops.CodeGatewayError, err, "failed to read DCR response").LogError(ctx, s.logger)
 	}
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		s.logger.ErrorContext(ctx, "DCR failed",
 			attr.SlogHTTPResponseStatusCode(resp.StatusCode),
 			attr.SlogHTTPResponseBody(string(respBody)))
-		return oops.E(oops.CodeGatewayError, nil, "registration endpoint returned %d", resp.StatusCode).Log(ctx, s.logger)
+		return oops.E(oops.CodeGatewayError, nil, "registration endpoint returned %d", resp.StatusCode).LogError(ctx, s.logger)
 	}
 
 	var dcrResp DCRResponse
 	if err := json.Unmarshal(respBody, &dcrResp); err != nil {
-		return oops.E(oops.CodeGatewayError, err, "invalid DCR response").Log(ctx, s.logger)
+		return oops.E(oops.CodeGatewayError, err, "invalid DCR response").LogError(ctx, s.logger)
 	}
 	if dcrResp.ClientID == "" {
-		return oops.E(oops.CodeGatewayError, nil, "DCR response missing client_id").Log(ctx, s.logger)
+		return oops.E(oops.CodeGatewayError, nil, "DCR response missing client_id").LogError(ctx, s.logger)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

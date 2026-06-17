@@ -21,11 +21,11 @@ import (
 // without standing up the real risk-policy stack.
 type stubBlockingShadowMCPScanner struct{}
 
-func (stubBlockingShadowMCPScanner) ScanForEnforcement(_ context.Context, _ uuid.UUID, _ string, _ string, _ string) (*risk.ScanResult, error) {
+func (stubBlockingShadowMCPScanner) ScanForEnforcement(_ context.Context, _ string, _ uuid.UUID, _ string, _ string, _ string, _ string) (*risk.ScanResult, error) {
 	return nil, nil
 }
 
-func (stubBlockingShadowMCPScanner) LookupShadowMCPBlockingPolicy(_ context.Context, _ uuid.UUID) (*risk.ShadowMCPPolicy, error) {
+func (stubBlockingShadowMCPScanner) LookupShadowMCPBlockingPolicy(_ context.Context, _ string, _ uuid.UUID, _ string) (*risk.ShadowMCPPolicy, error) {
 	return &risk.ShadowMCPPolicy{ID: "00000000-0000-0000-0000-000000000001", Name: "shadow-mcp-block"}, nil
 }
 
@@ -33,7 +33,7 @@ func (stubBlockingShadowMCPScanner) HasEnabledShadowMCPPolicy(_ context.Context,
 	return true, nil
 }
 
-func TestResolveClaudeScanProjectID_PrefersAuthContextOverCachedMetadata(t *testing.T) {
+func TestResolveClaudeScanContext_PrefersAuthContextOverCachedMetadata(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
@@ -48,9 +48,48 @@ func TestResolveClaudeScanProjectID_PrefersAuthContextOverCachedMetadata(t *test
 		ProjectID: cachedProjectID.String(),
 	}, 0))
 
-	got, ok := ti.service.resolveClaudeScanProjectID(ctx, sessionID)
+	got, ok := ti.service.resolveClaudeScanContext(ctx, &gen.ClaudePayload{
+		SessionID: &sessionID,
+	})
 	require.True(t, ok)
-	assert.Equal(t, *authCtx.ProjectID, got)
+	assert.Equal(t, authCtx.ActiveOrganizationID, got.organizationID)
+	assert.Equal(t, *authCtx.ProjectID, got.projectID)
+	assert.Equal(t, authCtx.UserID, got.userID)
+}
+
+func TestResolveClaudeScanContext_ResolvesAuthContextActorFromCachedEmail(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	userID := "user_cached_email_scan"
+	userEmail := "cached-email-scan@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, userEmail)
+
+	authCtx.UserID = ""
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	sessionID := uuid.NewString()
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "claude-code",
+		UserEmail:   userEmail,
+		UserID:      "",
+		ClaudeOrgID: "claude_org",
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   uuid.NewString(),
+	}, 0))
+
+	got, ok := ti.service.resolveClaudeScanContext(ctx, &gen.ClaudePayload{
+		SessionID: &sessionID,
+	})
+	require.True(t, ok)
+	assert.Equal(t, authCtx.ActiveOrganizationID, got.organizationID)
+	assert.Equal(t, *authCtx.ProjectID, got.projectID)
+	assert.Equal(t, userID, got.userID)
 }
 
 // When the request authenticated via Gram-Key + Gram-Project, handlePreToolUse
@@ -444,6 +483,38 @@ func TestClaude_RecordHook_UsesAuthContextUserIDOnCacheMissWithPayloadEmail(t *t
 
 	assert.Equal(t, authCtx.UserID, msgs[0].UserID.String)
 	assert.Equal(t, payloadEmail, msgs[0].ExternalUserID.String)
+}
+
+func TestMergeClaudeAuthContextMetadata_PrefersAuthUserIDOverCache(t *testing.T) {
+	t.Parallel()
+
+	metadata := mergeClaudeAuthContextMetadata(
+		SessionMetadata{
+			SessionID:   "session_test",
+			ServiceName: "",
+			UserEmail:   "",
+			UserID:      "user_from_auth",
+			ClaudeOrgID: "",
+			GramOrgID:   "org_from_auth",
+			ProjectID:   "project_from_auth",
+		},
+		SessionMetadata{
+			SessionID:   "session_test",
+			ServiceName: "claude-code",
+			UserEmail:   "local-hook-testing@example.com",
+			UserID:      "user_from_cache",
+			ClaudeOrgID: "claude_org",
+			GramOrgID:   "org_from_cache",
+			ProjectID:   "project_from_cache",
+		},
+	)
+
+	assert.Equal(t, "user_from_auth", metadata.UserID)
+	assert.Equal(t, "org_from_auth", metadata.GramOrgID)
+	assert.Equal(t, "project_from_auth", metadata.ProjectID)
+	assert.Equal(t, "claude-code", metadata.ServiceName)
+	assert.Equal(t, "local-hook-testing@example.com", metadata.UserEmail)
+	assert.Equal(t, "claude_org", metadata.ClaudeOrgID)
 }
 
 // When plugin auth headers are present but the API key is invalid/expired,

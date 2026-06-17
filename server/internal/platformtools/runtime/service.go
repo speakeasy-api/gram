@@ -185,17 +185,17 @@ func (s *Service) ExecuteTool(ctx context.Context, plan *gateway.ToolCallPlan, e
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.E(oops.CodeUnauthorized, nil, "platform tool requires project auth context").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnauthorized, nil, "platform tool requires project auth context").LogError(ctx, s.logger)
 	}
 	if authCtx.ProjectID.String() != plan.Descriptor.ProjectID {
-		return nil, oops.E(oops.CodeForbidden, nil, "platform tool auth context does not match project").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeForbidden, nil, "platform tool auth context does not match project").LogError(ctx, s.logger)
 	}
 
 	urnStr := plan.Descriptor.URN.String()
 
 	if feature, gated := s.featureGates[urnStr]; gated && s.featureChecker != nil {
 		if !s.featureChecker(ctx, authCtx.ActiveOrganizationID, feature) {
-			return nil, oops.E(oops.CodeNotFound, nil, "platform tool not found").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeNotFound, nil, "platform tool not found").LogError(ctx, s.logger)
 		}
 	}
 
@@ -216,7 +216,7 @@ func (s *Service) ExecuteTool(ctx context.Context, plan *gateway.ToolCallPlan, e
 
 	executor, ok := s.executors[urnStr]
 	if !ok {
-		return nil, oops.E(oops.CodeNotFound, nil, "platform tool not found").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeNotFound, nil, "platform tool not found").LogError(ctx, s.logger)
 	}
 
 	var out bytes.Buffer

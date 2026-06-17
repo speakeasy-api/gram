@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -18,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // fakePromptJudge is a stub ra.PromptJudge that returns a fixed verdict and
@@ -53,7 +55,7 @@ func insertPromptBasedBlockPolicyWithConfig(t *testing.T, ti *testInstance, ctx 
 	t.Helper()
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	require.NotNil(t, authCtx.ProjectID)
-	_, err := riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
+	policy, err := riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
 		ID:             uuid.New(),
 		ProjectID:      *authCtx.ProjectID,
 		OrganizationID: authCtx.ActiveOrganizationID,
@@ -63,11 +65,22 @@ func insertPromptBasedBlockPolicyWithConfig(t *testing.T, ti *testInstance, ctx 
 		MessageTypes:   messageTypes,
 		Enabled:        true,
 		Action:         "block",
+		AudienceType:   "everyone",
 		AutoName:       false,
 		Prompt:         pgtype.Text{String: prompt, Valid: true},
 		ModelConfig:    modelConfig,
 	})
 	require.NoError(t, err)
+	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
+		Resource: authz.Resource{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Scope:          authz.ScopeRiskPolicyEvaluate,
+			ResourceID:     policy.ID.String(),
+		},
+		Effect:     authz.PolicyEffectAllow,
+		Principals: []urn.Principal{authz.AllUsersPrincipal()},
+		Selector:   authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policy.ID.String()),
+	}))
 }
 
 func promptPoliciesFlag(ctx context.Context) *feature.InMemory {
@@ -91,7 +104,7 @@ func TestScanner_PromptBasedPolicyBlocksToolRequest(t *testing.T) {
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	res, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "rm -rf /data", message.ToolRequest, "")
+	res, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "rm -rf /data", message.ToolRequest, "")
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	require.Equal(t, "block", res.Action)
@@ -114,7 +127,7 @@ func TestScanner_PromptBasedPolicyAttributesMCPTool(t *testing.T) {
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	_, err = scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, `{"title":"pwn"}`, message.ToolRequest, "mcp__github__create_issue")
+	_, err = scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, `{"title":"pwn"}`, message.ToolRequest, "mcp__github__create_issue")
 	require.NoError(t, err)
 
 	msg := judge.lastInput().Message
@@ -139,7 +152,7 @@ func TestScanner_PromptBasedPolicyJudgesNonToolMessages(t *testing.T) {
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	res, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "just a user prompt", message.User, "")
+	res, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "just a user prompt", message.User, "")
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	require.Equal(t, int32(1), judge.calls.Load(), "judge must run for non-tool-call messages the policy applies to")
@@ -158,7 +171,7 @@ func TestScanner_PromptBasedPolicyRespectsMessageTypes(t *testing.T) {
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	res, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "just a user prompt", message.User, "")
+	res, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "just a user prompt", message.User, "")
 	require.NoError(t, err)
 	require.Nil(t, res)
 	require.Equal(t, int32(0), judge.calls.Load(), "judge must not run for a message type the policy excludes")
@@ -177,7 +190,7 @@ func TestScanner_PromptBasedPolicyNoMatch(t *testing.T) {
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	res, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "ls -la", message.ToolRequest, "")
+	res, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "ls -la", message.ToolRequest, "")
 	require.NoError(t, err)
 	require.Nil(t, res)
 	require.Equal(t, int32(1), judge.calls.Load())
@@ -194,7 +207,7 @@ func TestScanner_PromptBasedPolicyDisabledWhenFlagOff(t *testing.T) {
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	res, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "rm -rf /data", message.ToolRequest, "")
+	res, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "rm -rf /data", message.ToolRequest, "")
 	require.NoError(t, err)
 	require.Nil(t, res)
 	require.Equal(t, int32(0), judge.calls.Load(), "judge must not run while gram-prompt-policies is disabled")
@@ -213,7 +226,7 @@ func TestScanner_PromptBasedPolicyFailClosedWhenJudgeUnavailable(t *testing.T) {
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	res, err := scanner.ScanForEnforcement(ctx, *authCtx.ProjectID, "rm -rf /data", message.ToolRequest, "")
+	res, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "rm -rf /data", message.ToolRequest, "")
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	require.Equal(t, risk_analysis.SourceLLMJudge, res.Source)

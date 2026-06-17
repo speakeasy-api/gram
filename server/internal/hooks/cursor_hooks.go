@@ -53,6 +53,10 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 
 	orgID := authCtx.ActiveOrganizationID
 	projectID := authCtx.ProjectID.String()
+	actorUserID := authCtx.UserID
+	if actorUserID == "" {
+		actorUserID = s.resolveUserByEmail(ctx, conv.PtrValOr(payload.UserEmail, ""), orgID)
+	}
 	logger = logger.With(
 		attr.SlogOrganizationID(orgID),
 		attr.SlogProjectID(projectID),
@@ -79,7 +83,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		// beforeMCPExecution fires for MCP-routed (non-local) tool calls. Run
 		// the risk scanner first (block-only today), then fall through to the
 		// shadow-MCP guard so unapproved toolsets are still blocked.
-		if scanResult := s.scanCursorForEnforcement(ctx, payload, orgID, projectID); scanResult != nil {
+		if scanResult := s.scanCursorForEnforcement(ctx, payload, orgID, projectID, actorUserID); scanResult != nil {
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			blockReason = auditReason
@@ -87,14 +91,14 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 			result.UserMessage = &userReason
 			break
 		}
-		policy := s.lookupShadowMCPBlockingPolicy(ctx, projectID)
+		policy := s.lookupShadowMCPBlockingPolicy(ctx, orgID, projectID, actorUserID)
 		if policy == nil {
 			result.Permission = new("allow")
 			break
 		}
 		toolName := strings.TrimPrefix(conv.PtrValOr(payload.ToolName, ""), "MCP:")
 		evidence := cursorShadowMCPEvidence(payload)
-		if detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, authCtx.UserID, policy.ID, payload.ToolInput, toolName, evidence); denied {
+		if detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, actorUserID, policy.ID, payload.ToolInput, toolName, evidence); denied {
 			logger.InfoContext(ctx, "denying cursor tool call: failed gram toolset validation",
 				attr.SlogEvent("cursor_hook_denied"),
 				attr.SlogHookBlockReason(detail),
@@ -102,14 +106,10 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 				attr.SlogRiskPolicyName(policy.Name),
 			)
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
-			requesterUserID := authCtx.UserID
-			if requesterUserID == "" {
-				requesterUserID = s.resolveUserByEmail(ctx, conv.PtrValOr(payload.UserEmail, ""), orgID)
-			}
 			userReason := s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{
 				OrganizationID:  orgID,
 				ProjectID:       projectID,
-				RequesterUserID: requesterUserID,
+				RequesterUserID: actorUserID,
 				UserMessage:     policy.UserMessage,
 				AuditReason:     auditReason,
 				Evidence:        evidence,
@@ -136,7 +136,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 			result.Permission = new("allow")
 			break
 		}
-		if scanResult := s.scanCursorForEnforcement(ctx, payload, orgID, projectID); scanResult != nil {
+		if scanResult := s.scanCursorForEnforcement(ctx, payload, orgID, projectID, actorUserID); scanResult != nil {
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			blockReason = auditReason
@@ -146,7 +146,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 			result.Permission = new("allow")
 		}
 	case HookEventBeforeSubmitPrompt:
-		if scanResult := s.scanCursorForEnforcement(ctx, payload, orgID, projectID); scanResult != nil {
+		if scanResult := s.scanCursorForEnforcement(ctx, payload, orgID, projectID, actorUserID); scanResult != nil {
 			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			blockReason = auditReason
@@ -160,12 +160,12 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 	// Record the hook (will route to ClickHouse for tool calls, PG for all events).
 	// Runs after the deny decision so the ClickHouse entry can carry the
 	// block reason as an attribute.
-	s.recordCursorHook(ctx, payload, orgID, projectID, blockReason)
+	s.recordCursorHook(ctx, payload, orgID, projectID, actorUserID, blockReason)
 
 	return result, nil
 }
 
-func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string, blockReason string) {
+func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPayload, orgID string, projectID string, userID string, blockReason string) {
 	if payload.ConversationID == nil || *payload.ConversationID == "" {
 		s.logger.WarnContext(ctx, "Cursor event called without conversation ID")
 		return
@@ -177,7 +177,6 @@ func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPaylo
 	ctx = context.WithoutCancel(ctx)
 
 	userEmail := conv.PtrValOr(payload.UserEmail, "")
-	userID := s.resolveUserByEmail(ctx, userEmail, orgID)
 
 	metadata := &SessionMetadata{
 		SessionID:   *payload.ConversationID,

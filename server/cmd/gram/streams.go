@@ -12,6 +12,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/client"
 	"golang.org/x/sync/errgroup"
@@ -188,10 +189,20 @@ func newStreamsCommand() *cli.Command {
 				shutdownFuncs = append(shutdownFuncs, shutdown)
 			}
 
-			group := new(errgroup.Group)
+			// Use errgroup.WithContext (not a bare errgroup.Group) so the first
+			// receiver or publisher to return a non-nil error cancels gctx and unwinds the rest.
+			// A plain group's Wait blocks until *every* goroutine returns, and
+			// the heartbeat publisher loops until its context is cancelled — so
+			// a subscriber whose Receive returns (e.g. its subscription vanished
+			// after the emulator restarted) would be recorded as failed but the
+			// process would keep running on the eternal publisher, leaving the
+			// dead subscriber silently un-restarted. Cancelling on first exit
+			// lets Wait return, the process exit, and the supervisor restart us
+			// so subscriptions get reconciled afresh.
+			group, gctx := errgroup.WithContext(ctx)
 			rg := receiverGroup{
 				group:      group,
-				getContext: func() context.Context { return ctx },
+				getContext: func() context.Context { return gctx },
 				tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/cmd/gram/streams"),
 				logger:     logger,
 				broker:     psbroker,
@@ -208,7 +219,7 @@ func newStreamsCommand() *cli.Command {
 			// subscriber flow is working by driving a simple message through
 			// the system every N seconds and logging it in the subscriber.
 			group.Go(func() error {
-				if err := ping.StartPublisher(ctx, logger, psbroker); err != nil {
+				if err := ping.StartPublisher(gctx, logger, psbroker); err != nil {
 					return fmt.Errorf("publish pings: %w", err)
 				}
 				return nil
@@ -269,6 +280,15 @@ func receive[M proto.Message](
 
 	g.group.Go(func() error {
 		if err := sub.Receive(ctx, func(ctx context.Context, m M, meta gcp.MessageMetadata) (err error) {
+			// Continue the producer's trace: extract any trace context the
+			// publisher propagated through the message attributes so this span
+			// is a child of the publishing span instead of the root of a fresh
+			// trace. Extract uses the globally configured propagator (W3C
+			// tracecontext + baggage) and leaves ctx unchanged when no trace
+			// headers are present, so unpropagated messages still start a new
+			// trace.
+			ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.MapCarrier(meta.Attributes))
+
 			ctx, span := g.tracer.Start(ctx, "stream.handleMessage", trace.WithAttributes(
 				attr.TopicProtoName(msgName),
 				attr.SubscriptionProtoName(subName),

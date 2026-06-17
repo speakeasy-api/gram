@@ -1,7 +1,6 @@
 import { Icon, IconName, IconProps } from "@speakeasy-api/moonshine";
 import React, { useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
-import { RedirectToLogTools } from "./components/observe/ObserveRedirects";
 import { ReleaseStage } from "./components/release-stage-badge";
 import { useSlugs } from "./contexts/Sdk";
 import { cn } from "./lib/utils";
@@ -14,6 +13,7 @@ import CatalogDetail, {
   CatalogDetailRoot,
 } from "./pages/catalog/CatalogDetail";
 import ChatSessions from "./pages/chatLogs/ChatLogs";
+import { ChatConversation, ChatHome, ChatRoot } from "./pages/chat/Chat";
 import CLIs from "./pages/CLIs";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
@@ -27,7 +27,7 @@ import Home from "./pages/home/Home";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
-import { LogsRoot, LogsMCPPage, LogsToolsPage } from "./pages/logs/Logs";
+import { LogsRoot } from "./pages/logs/Logs";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
@@ -58,6 +58,12 @@ import OrgHome from "./pages/org/OrgHome";
 import OrgIdentity from "./pages/org/OrgIdentity";
 import OrgLogs from "./pages/org/OrgLogs";
 import OrgWebhooks from "./pages/org/OrgWebhooks";
+import {
+  RemoteIdentityProvidersPage,
+  RemoteIdentityProvidersRoot,
+} from "./pages/remote-identity-providers/RemoteIdentityProviders";
+import RemoteIdentityProviderDetail from "./pages/remote-identity-providers/RemoteIdentityProviderDetail";
+import RemoteSessionClientDetail from "./pages/remote-identity-providers/RemoteSessionClientDetail";
 import Playground from "./pages/playground/Playground";
 import NewPromptPage from "./pages/prompts/NewPrompt";
 import PromptPage from "./pages/prompts/Prompt";
@@ -179,6 +185,21 @@ const ROUTE_STRUCTURE = {
     url: "",
     icon: "house",
     component: Home,
+  },
+  chat: {
+    title: "Project Assistant",
+    url: "chat",
+    icon: "message-circle",
+    // Layout route: renders the index (ChatHome) or a conversation subpage.
+    component: ChatRoot,
+    indexComponent: ChatHome,
+    subPages: {
+      conversation: {
+        title: "Chat",
+        url: ":chatId",
+        component: ChatConversation,
+      },
+    },
   },
   playground: {
     title: "Playground",
@@ -413,23 +434,10 @@ const ROUTE_STRUCTURE = {
     component: InsightsAgentsPage,
   },
   logs: {
-    title: "Logs",
+    title: "Tool Logs",
     url: "logs",
     icon: "logs",
     component: LogsRoot,
-    indexComponent: RedirectToLogTools,
-    subPages: {
-      tools: {
-        title: "Tools",
-        url: "tools",
-        component: LogsToolsPage,
-      },
-      mcp: {
-        title: "MCP Servers",
-        url: "mcp",
-        component: LogsMCPPage,
-      },
-    },
   },
   agentSessions: {
     title: "Agent Sessions",
@@ -774,6 +782,36 @@ const ORG_ROUTE_STRUCTURE = {
     url: "identity",
     icon: "fingerprint",
     component: OrgIdentity,
+  },
+  remoteIdentityProviders: {
+    title: "Remote Identity Providers",
+    url: "remote-identity-providers",
+    icon: "key-round",
+    component: RemoteIdentityProvidersRoot,
+    indexComponent: RemoteIdentityProvidersPage,
+    subPages: {
+      issuerDetail: {
+        title: "Remote Identity Provider",
+        url: ":issuerId",
+        component: RemoteIdentityProviderDetail,
+        subPages: {
+          overview: { title: "Overview", url: "overview" },
+          clients: { title: "Clients", url: "clients" },
+          settings: { title: "Settings", url: "settings" },
+        },
+      },
+      clientDetail: {
+        title: "Remote Session Client",
+        url: ":issuerId/clients/:clientId",
+        component: RemoteSessionClientDetail,
+        subPages: {
+          overview: { title: "Overview", url: "overview" },
+          mcpServers: { title: "MCP Servers", url: "mcp-servers" },
+          sessions: { title: "Sessions", url: "sessions" },
+          settings: { title: "Settings", url: "settings" },
+        },
+      },
+    },
   },
   deviceAgent: {
     title: "Device Agent",

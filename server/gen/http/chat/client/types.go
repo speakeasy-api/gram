@@ -52,6 +52,8 @@ type LoadChatResponseBody struct {
 	// history, walk from `max_generation` down to 0, requesting each generation in
 	// turn.
 	MaxGeneration *int `form:"max_generation,omitempty" json:"max_generation,omitempty" xml:"max_generation,omitempty"`
+	// Agent-specific usage enrichment for the chat, when available.
+	AgentUsage *AgentUsageResponseBody `form:"agent_usage,omitempty" json:"agent_usage,omitempty" xml:"agent_usage,omitempty"`
 	// The ID of the chat
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The title of the chat
@@ -1246,6 +1248,8 @@ type ChatMessageResponseBody struct {
 	ToolCalls *string `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
 	// The finish reason of the message
 	FinishReason *string `form:"finish_reason,omitempty" json:"finish_reason,omitempty" xml:"finish_reason,omitempty"`
+	// The agent prompt/turn ID associated with this message, when available.
+	PromptID *string `form:"prompt_id,omitempty" json:"prompt_id,omitempty" xml:"prompt_id,omitempty"`
 	// The ID of the user who created the message
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// The ID of the external user who created the message
@@ -1254,6 +1258,66 @@ type ChatMessageResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// Conversation generation — bumps on compaction or edit divergence
 	Generation *int `form:"generation,omitempty" json:"generation,omitempty" xml:"generation,omitempty"`
+}
+
+// AgentUsageResponseBody is used to define fields on response body types.
+type AgentUsageResponseBody struct {
+	// The agent usage payload discriminator.
+	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
+	// Claude Code usage details.
+	Claude *ClaudeAgentUsageResponseBody `form:"claude,omitempty" json:"claude,omitempty" xml:"claude,omitempty"`
+}
+
+// ClaudeAgentUsageResponseBody is used to define fields on response body types.
+type ClaudeAgentUsageResponseBody struct {
+	// Per-prompt Claude usage turns ordered by start time.
+	Turns []*ClaudeTurnUsageResponseBody `form:"turns,omitempty" json:"turns,omitempty" xml:"turns,omitempty"`
+	// Per-tool Claude usage keyed by tool_use_id.
+	Tools []*ClaudeToolUsageResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+}
+
+// ClaudeTurnUsageResponseBody is used to define fields on response body types.
+type ClaudeTurnUsageResponseBody struct {
+	// Claude prompt.id that correlates events for one user turn.
+	PromptID *string `form:"prompt_id,omitempty" json:"prompt_id,omitempty" xml:"prompt_id,omitempty"`
+	// Earliest OTEL log timestamp in this turn, as Unix nanoseconds.
+	StartTimeUnixNano *string `form:"start_time_unix_nano,omitempty" json:"start_time_unix_nano,omitempty" xml:"start_time_unix_nano,omitempty"`
+	// Latest OTEL log timestamp in this turn, as Unix nanoseconds.
+	EndTimeUnixNano *string `form:"end_time_unix_nano,omitempty" json:"end_time_unix_nano,omitempty" xml:"end_time_unix_nano,omitempty"`
+	// Number of Claude API request events in this turn.
+	RequestCount *int64 `form:"request_count,omitempty" json:"request_count,omitempty" xml:"request_count,omitempty"`
+	// Input tokens used by this turn.
+	InputTokens *int64 `form:"input_tokens,omitempty" json:"input_tokens,omitempty" xml:"input_tokens,omitempty"`
+	// Output tokens used by this turn.
+	OutputTokens *int64 `form:"output_tokens,omitempty" json:"output_tokens,omitempty" xml:"output_tokens,omitempty"`
+	// Cache read tokens used by this turn.
+	CacheReadTokens *int64 `form:"cache_read_tokens,omitempty" json:"cache_read_tokens,omitempty" xml:"cache_read_tokens,omitempty"`
+	// Cache creation tokens used by this turn.
+	CacheCreationTokens *int64 `form:"cache_creation_tokens,omitempty" json:"cache_creation_tokens,omitempty" xml:"cache_creation_tokens,omitempty"`
+	// Total tokens used by this turn.
+	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
+	// Total USD cost for this turn.
+	CostUsd *float64 `form:"cost_usd,omitempty" json:"cost_usd,omitempty" xml:"cost_usd,omitempty"`
+	// Total cost for this turn in micros of a USD.
+	CostMicros *int64 `form:"cost_micros,omitempty" json:"cost_micros,omitempty" xml:"cost_micros,omitempty"`
+	// Distinct model names used by this turn.
+	Models []string `form:"models,omitempty" json:"models,omitempty" xml:"models,omitempty"`
+	// Distinct Claude query sources used by this turn.
+	QuerySources []string `form:"query_sources,omitempty" json:"query_sources,omitempty" xml:"query_sources,omitempty"`
+}
+
+// ClaudeToolUsageResponseBody is used to define fields on response body types.
+type ClaudeToolUsageResponseBody struct {
+	// Claude tool_use_id that correlates the tool call and result.
+	ToolUseID *string `form:"tool_use_id,omitempty" json:"tool_use_id,omitempty" xml:"tool_use_id,omitempty"`
+	// Claude prompt.id for the turn that used this tool.
+	PromptID *string `form:"prompt_id,omitempty" json:"prompt_id,omitempty" xml:"prompt_id,omitempty"`
+	// Tool name reported by Claude Code.
+	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	// Serialized tool input size in bytes.
+	InputSizeBytes *int64 `form:"input_size_bytes,omitempty" json:"input_size_bytes,omitempty" xml:"input_size_bytes,omitempty"`
+	// Serialized tool result size in bytes.
+	ResultSizeBytes *int64 `form:"result_size_bytes,omitempty" json:"result_size_bytes,omitempty" xml:"result_size_bytes,omitempty"`
 }
 
 // NewGenerateTitleRequestBody builds the HTTP request body from the payload of
@@ -1469,6 +1533,9 @@ func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 			continue
 		}
 		v.Messages[i] = unmarshalChatMessageResponseBodyToChatChatMessage(val)
+	}
+	if body.AgentUsage != nil {
+		v.AgentUsage = unmarshalAgentUsageResponseBodyToChatAgentUsage(body.AgentUsage)
 	}
 
 	return v
@@ -2304,6 +2371,11 @@ func ValidateLoadChatResponseBody(body *LoadChatResponseBody) (err error) {
 			if err2 := ValidateChatMessageResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.AgentUsage != nil {
+		if err2 := ValidateAgentUsageResponseBody(body.AgentUsage); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.CreatedAt != nil {
@@ -3841,6 +3913,117 @@ func ValidateChatMessageResponseBody(body *ChatMessageResponseBody) (err error) 
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateAgentUsageResponseBody runs the validations defined on
+// AgentUsageResponseBody
+func ValidateAgentUsageResponseBody(body *AgentUsageResponseBody) (err error) {
+	if body.Type == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("type", "body"))
+	}
+	if body.Type != nil {
+		if !(*body.Type == "claude") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"claude"}))
+		}
+	}
+	if body.Claude != nil {
+		if err2 := ValidateClaudeAgentUsageResponseBody(body.Claude); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateClaudeAgentUsageResponseBody runs the validations defined on
+// ClaudeAgentUsageResponseBody
+func ValidateClaudeAgentUsageResponseBody(body *ClaudeAgentUsageResponseBody) (err error) {
+	if body.Turns == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("turns", "body"))
+	}
+	if body.Tools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
+	}
+	for _, e := range body.Turns {
+		if e != nil {
+			if err2 := ValidateClaudeTurnUsageResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Tools {
+		if e != nil {
+			if err2 := ValidateClaudeToolUsageResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateClaudeTurnUsageResponseBody runs the validations defined on
+// ClaudeTurnUsageResponseBody
+func ValidateClaudeTurnUsageResponseBody(body *ClaudeTurnUsageResponseBody) (err error) {
+	if body.PromptID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_id", "body"))
+	}
+	if body.StartTimeUnixNano == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("start_time_unix_nano", "body"))
+	}
+	if body.EndTimeUnixNano == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("end_time_unix_nano", "body"))
+	}
+	if body.RequestCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("request_count", "body"))
+	}
+	if body.InputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("input_tokens", "body"))
+	}
+	if body.OutputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("output_tokens", "body"))
+	}
+	if body.CacheReadTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cache_read_tokens", "body"))
+	}
+	if body.CacheCreationTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cache_creation_tokens", "body"))
+	}
+	if body.TotalTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_tokens", "body"))
+	}
+	if body.CostUsd == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cost_usd", "body"))
+	}
+	if body.CostMicros == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cost_micros", "body"))
+	}
+	if body.Models == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("models", "body"))
+	}
+	if body.QuerySources == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("query_sources", "body"))
+	}
+	return
+}
+
+// ValidateClaudeToolUsageResponseBody runs the validations defined on
+// ClaudeToolUsageResponseBody
+func ValidateClaudeToolUsageResponseBody(body *ClaudeToolUsageResponseBody) (err error) {
+	if body.ToolUseID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_use_id", "body"))
+	}
+	if body.PromptID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_id", "body"))
+	}
+	if body.ToolName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_name", "body"))
+	}
+	if body.InputSizeBytes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("input_size_bytes", "body"))
+	}
+	if body.ResultSizeBytes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("result_size_bytes", "body"))
 	}
 	return
 }

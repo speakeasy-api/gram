@@ -6,6 +6,7 @@ import { assistantsCreate } from "../funcs/assistantsCreate.js";
 import { assistantsDelete } from "../funcs/assistantsDelete.js";
 import { assistantsEnsureManaged } from "../funcs/assistantsEnsureManaged.js";
 import { assistantsGet } from "../funcs/assistantsGet.js";
+import { assistantsGetManaged } from "../funcs/assistantsGetManaged.js";
 import { assistantsList } from "../funcs/assistantsList.js";
 import { assistantsSendMessage } from "../funcs/assistantsSendMessage.js";
 import { assistantsUpdate } from "../funcs/assistantsUpdate.js";
@@ -84,6 +85,25 @@ export class Assistants extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.Assistant> {
     return unwrapAsync(assistantsGet(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getManagedAssistant assistants
+   *
+   * @remarks
+   * Get the project's built-in Project Assistant if it exists. Returns 404 when no managed assistant has been provisioned yet — call ensureManagedAssistant to create one.
+   */
+  async getManaged(
+    request?: operations.GetManagedAssistantRequest | undefined,
+    security?: operations.GetManagedAssistantSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.Assistant> {
+    return unwrapAsync(assistantsGetManaged(
       this,
       request,
       security,

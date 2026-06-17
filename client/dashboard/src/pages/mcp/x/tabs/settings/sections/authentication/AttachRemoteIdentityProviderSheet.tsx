@@ -49,6 +49,7 @@ import {
   TokenEndpointAuthMethodField,
 } from "./IssuerFormFields";
 import {
+  deriveSlugFromUrl,
   narrowTokenEndpointAuthMethod,
   parseScopes,
   pickPreferredAuthMethod,
@@ -656,25 +657,4 @@ function SelectExistingFields({
       </Type>
     </Stack>
   );
-}
-
-// Derive a project-unique slug from the Issuer URL's hostname. Mirrors the
-// hyphen-style transform used by buildUserSessionResourceSlug's internal
-// slugify helper so the auto-filled value matches what an operator would
-// reasonably hand-write. Returns null for unparseable URLs — the caller
-// keeps the prior slug in that case so partial typing doesn't blow it away.
-function deriveSlugFromUrl(url: string): string | null {
-  const trimmed = url.trim();
-  if (!trimmed) return null;
-  try {
-    const host = new URL(trimmed).hostname;
-    if (!host) return null;
-    const slug = host
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
-    return slug || null;
-  } catch {
-    return null;
-  }
 }

@@ -157,7 +157,7 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to begin transaction").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -185,11 +185,11 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 		SnapshotBefore:   beforeSnap,
 		SnapshotAfter:    &afterSnap,
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log ai integration upsert").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "log ai integration upsert").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit ai integration upsert").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "commit ai integration upsert").LogError(ctx, logger)
 	}
 
 	if result.CreatedNewGeneration && cfg.Enabled {
@@ -230,7 +230,7 @@ func (s *Service) DeleteConfig(ctx context.Context, payload *gen.DeleteConfigPay
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to begin transaction").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
@@ -246,11 +246,11 @@ func (s *Service) DeleteConfig(ctx context.Context, payload *gen.DeleteConfigPay
 		ActorSlug:        nil,
 		ConfigURN:        urn.NewAIIntegrationConfig(row.ID),
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "log ai integration delete").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "log ai integration delete").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit ai integration delete").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "commit ai integration delete").LogError(ctx, logger)
 	}
 
 	return nil

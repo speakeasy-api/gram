@@ -49,6 +49,11 @@ type CreateRiskPolicyRequestBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag or block.
 	Action string `form:"action" json:"action" xml:"action"`
+	// Policy audience type: everyone or targeted.
+	AudienceType string `form:"audience_type" json:"audience_type" xml:"audience_type"`
+	// Principal URNs this policy applies to. For audience_type=everyone, the
+	// server stores user:all.
+	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
 	// Whether the policy name should be auto-generated.
 	AutoName *bool `form:"auto_name,omitempty" json:"auto_name,omitempty" xml:"auto_name,omitempty"`
 	// Optional message shown to end users when this policy blocks an action or
@@ -96,6 +101,12 @@ type UpdateRiskPolicyRequestBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag or block.
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
+	// Policy audience type: everyone or targeted. Omit to preserve the current
+	// audience type.
+	AudienceType *string `form:"audience_type,omitempty" json:"audience_type,omitempty" xml:"audience_type,omitempty"`
+	// Principal URNs this policy applies to. Omit to preserve the current target
+	// principals.
+	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
 	// Whether the policy name should be auto-generated.
 	AutoName *bool `form:"auto_name,omitempty" json:"auto_name,omitempty" xml:"auto_name,omitempty"`
 	// Optional message shown to end users when this policy blocks an action or
@@ -299,6 +310,11 @@ type CreateRiskPolicyResponseBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only) or block (deny in real-time).
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
+	// Policy audience type: everyone or targeted.
+	AudienceType *string `form:"audience_type,omitempty" json:"audience_type,omitempty" xml:"audience_type,omitempty"`
+	// Principal URNs the policy applies to. Contains user:all when audience_type
+	// is everyone.
+	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
 	// Whether the policy name is auto-generated. When true, the name is
 	// regenerated on each update.
 	AutoName *bool `form:"auto_name,omitempty" json:"auto_name,omitempty" xml:"auto_name,omitempty"`
@@ -379,6 +395,11 @@ type GetRiskPolicyResponseBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only) or block (deny in real-time).
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
+	// Policy audience type: everyone or targeted.
+	AudienceType *string `form:"audience_type,omitempty" json:"audience_type,omitempty" xml:"audience_type,omitempty"`
+	// Principal URNs the policy applies to. Contains user:all when audience_type
+	// is everyone.
+	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
 	// Whether the policy name is auto-generated. When true, the name is
 	// regenerated on each update.
 	AutoName *bool `form:"auto_name,omitempty" json:"auto_name,omitempty" xml:"auto_name,omitempty"`
@@ -445,6 +466,11 @@ type UpdateRiskPolicyResponseBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only) or block (deny in real-time).
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
+	// Policy audience type: everyone or targeted.
+	AudienceType *string `form:"audience_type,omitempty" json:"audience_type,omitempty" xml:"audience_type,omitempty"`
+	// Principal URNs the policy applies to. Contains user:all when audience_type
+	// is everyone.
+	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
 	// Whether the policy name is auto-generated. When true, the name is
 	// regenerated on each update.
 	AutoName *bool `form:"auto_name,omitempty" json:"auto_name,omitempty" xml:"auto_name,omitempty"`
@@ -6830,6 +6856,11 @@ type RiskPolicyResponseBody struct {
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only) or block (deny in real-time).
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
+	// Policy audience type: everyone or targeted.
+	AudienceType *string `form:"audience_type,omitempty" json:"audience_type,omitempty" xml:"audience_type,omitempty"`
+	// Principal URNs the policy applies to. Contains user:all when audience_type
+	// is everyone.
+	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
 	// Whether the policy name is auto-generated. When true, the name is
 	// regenerated on each update.
 	AutoName *bool `form:"auto_name,omitempty" json:"auto_name,omitempty" xml:"auto_name,omitempty"`
@@ -7125,13 +7156,14 @@ type TestDetectionRuleMatchResponseBody struct {
 // of the "createRiskPolicy" endpoint of the "risk" service.
 func NewCreateRiskPolicyRequestBody(p *risk.CreateRiskPolicyPayload) *CreateRiskPolicyRequestBody {
 	body := &CreateRiskPolicyRequestBody{
-		Name:        p.Name,
-		PolicyType:  p.PolicyType,
-		Enabled:     p.Enabled,
-		Action:      p.Action,
-		AutoName:    p.AutoName,
-		UserMessage: p.UserMessage,
-		Prompt:      p.Prompt,
+		Name:         p.Name,
+		PolicyType:   p.PolicyType,
+		Enabled:      p.Enabled,
+		Action:       p.Action,
+		AudienceType: p.AudienceType,
+		AutoName:     p.AutoName,
+		UserMessage:  p.UserMessage,
+		Prompt:       p.Prompt,
 	}
 	{
 		var zero string
@@ -7190,6 +7222,18 @@ func NewCreateRiskPolicyRequestBody(p *risk.CreateRiskPolicyPayload) *CreateRisk
 			body.Action = "flag"
 		}
 	}
+	{
+		var zero string
+		if body.AudienceType == zero {
+			body.AudienceType = "everyone"
+		}
+	}
+	if p.AudiencePrincipalUrns != nil {
+		body.AudiencePrincipalUrns = make([]string, len(p.AudiencePrincipalUrns))
+		for i, val := range p.AudiencePrincipalUrns {
+			body.AudiencePrincipalUrns[i] = val
+		}
+	}
 	if p.ModelConfig != nil {
 		body.ModelConfig = marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigRequestBody(p.ModelConfig)
 	}
@@ -7200,13 +7244,14 @@ func NewCreateRiskPolicyRequestBody(p *risk.CreateRiskPolicyPayload) *CreateRisk
 // of the "updateRiskPolicy" endpoint of the "risk" service.
 func NewUpdateRiskPolicyRequestBody(p *risk.UpdateRiskPolicyPayload) *UpdateRiskPolicyRequestBody {
 	body := &UpdateRiskPolicyRequestBody{
-		ID:          p.ID,
-		Name:        p.Name,
-		Enabled:     p.Enabled,
-		Action:      p.Action,
-		AutoName:    p.AutoName,
-		UserMessage: p.UserMessage,
-		Prompt:      p.Prompt,
+		ID:           p.ID,
+		Name:         p.Name,
+		Enabled:      p.Enabled,
+		Action:       p.Action,
+		AudienceType: p.AudienceType,
+		AutoName:     p.AutoName,
+		UserMessage:  p.UserMessage,
+		Prompt:       p.Prompt,
 	}
 	if p.Sources != nil {
 		body.Sources = make([]string, len(p.Sources))
@@ -7252,6 +7297,12 @@ func NewUpdateRiskPolicyRequestBody(p *risk.UpdateRiskPolicyPayload) *UpdateRisk
 	}
 	if p.ApplicationConfig != nil {
 		body.ApplicationConfig = marshalTypesRiskPolicyApplicationToRiskPolicyApplicationRequestBody(p.ApplicationConfig)
+	}
+	if p.AudiencePrincipalUrns != nil {
+		body.AudiencePrincipalUrns = make([]string, len(p.AudiencePrincipalUrns))
+		for i, val := range p.AudiencePrincipalUrns {
+			body.AudiencePrincipalUrns[i] = val
+		}
 	}
 	if p.ModelConfig != nil {
 		body.ModelConfig = marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigRequestBody(p.ModelConfig)
@@ -7470,6 +7521,7 @@ func NewCreateRiskPolicyRiskPolicyOK(body *CreateRiskPolicyResponseBody) *types.
 		PolicyType:      *body.PolicyType,
 		Enabled:         *body.Enabled,
 		Action:          *body.Action,
+		AudienceType:    *body.AudienceType,
 		AutoName:        *body.AutoName,
 		UserMessage:     body.UserMessage,
 		Prompt:          body.Prompt,
@@ -7521,6 +7573,10 @@ func NewCreateRiskPolicyRiskPolicyOK(body *CreateRiskPolicyResponseBody) *types.
 	}
 	if body.ApplicationConfig != nil {
 		v.ApplicationConfig = unmarshalRiskPolicyApplicationResponseBodyToTypesRiskPolicyApplication(body.ApplicationConfig)
+	}
+	v.AudiencePrincipalUrns = make([]string, len(body.AudiencePrincipalUrns))
+	for i, val := range body.AudiencePrincipalUrns {
+		v.AudiencePrincipalUrns[i] = val
 	}
 	if body.ModelConfig != nil {
 		v.ModelConfig = unmarshalRiskPolicyModelConfigResponseBodyToTypesRiskPolicyModelConfig(body.ModelConfig)
@@ -8015,6 +8071,7 @@ func NewGetRiskPolicyRiskPolicyOK(body *GetRiskPolicyResponseBody) *types.RiskPo
 		PolicyType:      *body.PolicyType,
 		Enabled:         *body.Enabled,
 		Action:          *body.Action,
+		AudienceType:    *body.AudienceType,
 		AutoName:        *body.AutoName,
 		UserMessage:     body.UserMessage,
 		Prompt:          body.Prompt,
@@ -8066,6 +8123,10 @@ func NewGetRiskPolicyRiskPolicyOK(body *GetRiskPolicyResponseBody) *types.RiskPo
 	}
 	if body.ApplicationConfig != nil {
 		v.ApplicationConfig = unmarshalRiskPolicyApplicationResponseBodyToTypesRiskPolicyApplication(body.ApplicationConfig)
+	}
+	v.AudiencePrincipalUrns = make([]string, len(body.AudiencePrincipalUrns))
+	for i, val := range body.AudiencePrincipalUrns {
+		v.AudiencePrincipalUrns[i] = val
 	}
 	if body.ModelConfig != nil {
 		v.ModelConfig = unmarshalRiskPolicyModelConfigResponseBodyToTypesRiskPolicyModelConfig(body.ModelConfig)
@@ -8234,6 +8295,7 @@ func NewUpdateRiskPolicyRiskPolicyOK(body *UpdateRiskPolicyResponseBody) *types.
 		PolicyType:      *body.PolicyType,
 		Enabled:         *body.Enabled,
 		Action:          *body.Action,
+		AudienceType:    *body.AudienceType,
 		AutoName:        *body.AutoName,
 		UserMessage:     body.UserMessage,
 		Prompt:          body.Prompt,
@@ -8285,6 +8347,10 @@ func NewUpdateRiskPolicyRiskPolicyOK(body *UpdateRiskPolicyResponseBody) *types.
 	}
 	if body.ApplicationConfig != nil {
 		v.ApplicationConfig = unmarshalRiskPolicyApplicationResponseBodyToTypesRiskPolicyApplication(body.ApplicationConfig)
+	}
+	v.AudiencePrincipalUrns = make([]string, len(body.AudiencePrincipalUrns))
+	for i, val := range body.AudiencePrincipalUrns {
+		v.AudiencePrincipalUrns[i] = val
 	}
 	if body.ModelConfig != nil {
 		v.ModelConfig = unmarshalRiskPolicyModelConfigResponseBodyToTypesRiskPolicyModelConfig(body.ModelConfig)
@@ -12868,6 +12934,12 @@ func ValidateCreateRiskPolicyResponseBody(body *CreateRiskPolicyResponseBody) (e
 	if body.Action == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("action", "body"))
 	}
+	if body.AudienceType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("audience_type", "body"))
+	}
+	if body.AudiencePrincipalUrns == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("audience_principal_urns", "body"))
+	}
 	if body.AutoName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("auto_name", "body"))
 	}
@@ -12905,6 +12977,11 @@ func ValidateCreateRiskPolicyResponseBody(body *CreateRiskPolicyResponseBody) (e
 	if body.Action != nil {
 		if !(*body.Action == "flag" || *body.Action == "block") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block"}))
+		}
+	}
+	if body.AudienceType != nil {
+		if !(*body.AudienceType == "everyone" || *body.AudienceType == "targeted") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.audience_type", *body.AudienceType, []any{"everyone", "targeted"}))
 		}
 	}
 	if body.CreatedAt != nil {
@@ -12965,6 +13042,12 @@ func ValidateGetRiskPolicyResponseBody(body *GetRiskPolicyResponseBody) (err err
 	if body.Action == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("action", "body"))
 	}
+	if body.AudienceType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("audience_type", "body"))
+	}
+	if body.AudiencePrincipalUrns == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("audience_principal_urns", "body"))
+	}
 	if body.AutoName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("auto_name", "body"))
 	}
@@ -13002,6 +13085,11 @@ func ValidateGetRiskPolicyResponseBody(body *GetRiskPolicyResponseBody) (err err
 	if body.Action != nil {
 		if !(*body.Action == "flag" || *body.Action == "block") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block"}))
+		}
+	}
+	if body.AudienceType != nil {
+		if !(*body.AudienceType == "everyone" || *body.AudienceType == "targeted") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.audience_type", *body.AudienceType, []any{"everyone", "targeted"}))
 		}
 	}
 	if body.CreatedAt != nil {
@@ -13037,6 +13125,12 @@ func ValidateUpdateRiskPolicyResponseBody(body *UpdateRiskPolicyResponseBody) (e
 	if body.Action == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("action", "body"))
 	}
+	if body.AudienceType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("audience_type", "body"))
+	}
+	if body.AudiencePrincipalUrns == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("audience_principal_urns", "body"))
+	}
 	if body.AutoName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("auto_name", "body"))
 	}
@@ -13074,6 +13168,11 @@ func ValidateUpdateRiskPolicyResponseBody(body *UpdateRiskPolicyResponseBody) (e
 	if body.Action != nil {
 		if !(*body.Action == "flag" || *body.Action == "block") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block"}))
+		}
+	}
+	if body.AudienceType != nil {
+		if !(*body.AudienceType == "everyone" || *body.AudienceType == "targeted") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.audience_type", *body.AudienceType, []any{"everyone", "targeted"}))
 		}
 	}
 	if body.CreatedAt != nil {
@@ -21506,6 +21605,12 @@ func ValidateRiskPolicyResponseBody(body *RiskPolicyResponseBody) (err error) {
 	if body.Action == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("action", "body"))
 	}
+	if body.AudienceType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("audience_type", "body"))
+	}
+	if body.AudiencePrincipalUrns == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("audience_principal_urns", "body"))
+	}
 	if body.AutoName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("auto_name", "body"))
 	}
@@ -21543,6 +21648,11 @@ func ValidateRiskPolicyResponseBody(body *RiskPolicyResponseBody) (err error) {
 	if body.Action != nil {
 		if !(*body.Action == "flag" || *body.Action == "block") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block"}))
+		}
+	}
+	if body.AudienceType != nil {
+		if !(*body.AudienceType == "everyone" || *body.AudienceType == "targeted") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.audience_type", *body.AudienceType, []any{"everyone", "targeted"}))
 		}
 	}
 	if body.CreatedAt != nil {

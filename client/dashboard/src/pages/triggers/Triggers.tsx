@@ -231,12 +231,12 @@ function TriggersTable({
       width: "auto",
       render: (trigger) => (
         <div onClick={(e) => e.stopPropagation()}>
-          <routes.logs.tools.Link
+          <routes.logs.Link
             queryParams={{ af: triggerLogsFilterParam(trigger.id) }}
             className="text-muted-foreground hover:text-foreground no-underline hover:no-underline"
           >
             <Icon name="file-text" className="h-4 w-4" />
-          </routes.logs.tools.Link>
+          </routes.logs.Link>
         </div>
       ),
     },

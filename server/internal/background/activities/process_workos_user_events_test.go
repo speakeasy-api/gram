@@ -39,6 +39,14 @@ func userEventDataWithExternalID(workosUserID, externalID, email, firstName, las
 	return []byte(`{"id":"` + workosUserID + `","external_id":"` + externalID + `","email":"` + email + `","first_name":"` + firstName + `","last_name":"` + lastName + `","profile_picture_url":"` + photoURL + `","created_at":"2026-05-11T10:00:00Z","updated_at":"2026-05-12T10:00:00Z"}`)
 }
 
+func directoryUserEventData(workosDirectoryUserID, email string) []byte {
+	return []byte(`{"id":"` + workosDirectoryUserID + `","email":"` + email + `","first_name":"Ada","last_name":"Lovelace","custom_attributes":{"department":"Engineering","team":"SDK"},"updated_at":"2026-05-12T10:00:00Z"}`)
+}
+
+func directoryUserEventDataWithOrganization(workosDirectoryUserID, workosOrgID, email string) []byte {
+	return []byte(`{"id":"` + workosDirectoryUserID + `","organization_id":"` + workosOrgID + `","email":"` + email + `","first_name":"Ada","last_name":"Lovelace","custom_attributes":{"department":"Engineering","team":"SDK"},"updated_at":"2026-05-12T10:00:00Z"}`)
+}
+
 func processWorkOSUserEventsParams(workosUserID string) activities.ProcessWorkOSUserEventsParams {
 	return activities.ProcessWorkOSUserEventsParams{WorkOSUserID: workosUserID, SinceEventID: nil}
 }
@@ -106,6 +114,40 @@ func TestProcessWorkOSUserEvents_CreatesUser(t *testing.T) {
 	require.False(t, row.WorkosDeletedAt.Valid)
 	require.False(t, row.DeletedAt.Valid)
 	require.Equal(t, []workos.UserExternalIDUpdate{{WorkOSUserID: workosUserID, ExternalID: gramID}}, workosClient.UserExternalIDUpdates())
+}
+
+func TestProcessWorkOSOrganizationEvents_StoresDirectoryUserAttributes(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newUserEventsTestConn(t, "workos_user_events_directory_user_attributes")
+	logger := testenv.NewLogger(t)
+
+	const (
+		workosDirectoryUserID = "directory_user_attributes"
+		gramOrgID             = "gram_directory_user_attributes_org"
+		workosOrgID           = "org_directory_user_attributes"
+		email                 = "ada.directory@example.com"
+	)
+	seedDirectoryAttributesWorkOSOrganization(t, ctx, conn, gramOrgID, workosOrgID)
+
+	workosClient := workos.NewStubClient()
+	workosClient.SetEventPages([][]events.Event{{
+		{ID: "event_directory_user_update", Event: "dsync.user.updated", CreatedAt: time.Now(), Data: directoryUserEventDataWithOrganization(workosDirectoryUserID, workosOrgID, email)},
+	}})
+
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient)
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_directory_user_update", res.LastEventID)
+
+	row, err := workosrepo.New(conn).GetDirectoryUserByWorkOSID(ctx, workosDirectoryUserID)
+	require.NoError(t, err)
+	require.Equal(t, gramOrgID, row.OrganizationID)
+	require.Equal(t, email, row.Email.String)
+	// Only the WorkOS custom_attributes payload is persisted, not the full
+	// raw event payload.
+	require.JSONEq(t, `{"department":"Engineering","team":"SDK"}`, string(row.Attributes))
 }
 
 func TestProcessWorkOSUserEvents_CreatesUserWithExistingExternalID(t *testing.T) {
