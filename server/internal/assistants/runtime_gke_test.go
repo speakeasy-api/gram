@@ -29,6 +29,7 @@ func newGKEFakeDynamic() *dynamicfake.FakeDynamicClient {
 	return dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
 		gkeSandboxClaimGVR: "SandboxClaimList",
 		gkeSandboxGVR:      "SandboxList",
+		gkePodGVR:          "PodList",
 	})
 }
 
@@ -46,13 +47,13 @@ func seedUnstructured(t *testing.T, dyn dynamic.Interface, gvr schema.GroupVersi
 func newTestGKEBackend(t *testing.T, dyn dynamic.Interface, doer runtimeHTTPDoer, port int) *GKERuntimeBackend {
 	t.Helper()
 	return NewGKERuntimeBackend(testenv.NewLogger(t), testenv.NewTracerProvider(t), doer, GKERuntimeConfig{
-		Dynamic:   dyn,
-		Namespace: "gram-test",
-		WarmPool:  "gram-asst-pool",
-		GuestPort: port,
-		OCIImage:  "registry.example.com/gram-assistant-runtime",
-		ImageTag:  "test",
-		ServerURL: &url.URL{Scheme: "https", Host: "gram.example.com"},
+		Dynamic:         dyn,
+		Namespace:       "gram-test",
+		SandboxTemplate: "gram-asst-pool",
+		GuestPort:       port,
+		OCIImage:        "registry.example.com/gram-assistant-runtime",
+		ImageTag:        "test",
+		ServerURL:       &url.URL{Scheme: "https", Host: "gram.example.com"},
 	})
 }
 
@@ -71,13 +72,13 @@ func testRunner(t *testing.T, handler http.HandlerFunc) (doer runtimeHTTPDoer, h
 	return srv.Client(), h, portNum
 }
 
-func gkeRecord(t *testing.T, backend *GKERuntimeBackend, assistantID uuid.UUID, fqdn string) assistantRuntimeRecord {
+func gkeRecord(t *testing.T, backend *GKERuntimeBackend, assistantID uuid.UUID, podIP string) assistantRuntimeRecord {
 	t.Helper()
 	meta := gkeRuntimeMetadata{
 		Namespace:   "gram-test",
 		ClaimName:   "gram-asst-" + assistantID.String(),
 		SandboxName: "sb-1",
-		ServiceFQDN: fqdn,
+		PodIP:       podIP,
 		Image:       backend.desiredImageRef(),
 	}
 	raw, err := json.Marshal(meta)
@@ -94,31 +95,25 @@ func gkeRecord(t *testing.T, backend *GKERuntimeBackend, assistantID uuid.UUID, 
 	}
 }
 
-func TestSandboxReadyEndpoint(t *testing.T) {
+func TestSandboxReady(t *testing.T) {
 	t.Parallel()
 
 	ready := &unstructured.Unstructured{Object: map[string]any{
 		"status": map[string]any{
-			"serviceFQDN": "sb-1.gram-test.svc.cluster.local",
 			"conditions": []any{
 				map[string]any{"type": "Suspended", "status": "False"},
 				map[string]any{"type": "Ready", "status": "True"},
 			},
 		},
 	}}
-	fqdn, ok := sandboxReadyEndpoint(ready)
-	require.True(t, ok)
-	require.Equal(t, "sb-1.gram-test.svc.cluster.local", fqdn)
+	require.True(t, sandboxReady(ready))
 
 	notReady := &unstructured.Unstructured{Object: map[string]any{
 		"status": map[string]any{
-			"serviceFQDN": "sb-1.gram-test.svc.cluster.local",
-			"conditions":  []any{map[string]any{"type": "Ready", "status": "False"}},
+			"conditions": []any{map[string]any{"type": "Ready", "status": "False"}},
 		},
 	}}
-	fqdn, ok = sandboxReadyEndpoint(notReady)
-	require.False(t, ok)
-	require.Equal(t, "sb-1.gram-test.svc.cluster.local", fqdn)
+	require.False(t, sandboxReady(notReady))
 }
 
 func TestGKERunTurnPostsToRunner(t *testing.T) {
@@ -176,22 +171,34 @@ func TestGKEEnsureWaitsForReadySandbox(t *testing.T) {
 	claim := &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": gkeSandboxClaimGVR.Group + "/" + gkeSandboxClaimGVR.Version,
 		"kind":       "SandboxClaim",
-		"metadata":   map[string]any{"name": claimName, "namespace": "gram-test"},
-		"status":     map[string]any{"sandbox": map[string]any{"name": "sb-1"}},
+		"metadata":   map[string]any{"name": claimName, "namespace": "gram-test", "uid": "claim-uid-1"},
+		"status":     map[string]any{"sandbox": map[string]any{"Name": "sb-1"}},
 	}}
 	sandbox := &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": gkeSandboxGVR.Group + "/" + gkeSandboxGVR.Version,
 		"kind":       "Sandbox",
 		"metadata":   map[string]any{"name": "sb-1", "namespace": "gram-test"},
 		"status": map[string]any{
-			"serviceFQDN": host,
-			"conditions":  []any{map[string]any{"type": "Ready", "status": "True"}},
+			"conditions": []any{map[string]any{"type": "Ready", "status": "True"}},
 		},
+	}}
+	// The controller injects the claim-uid label on the runner pod; the backend
+	// resolves the pod IP by it.
+	pod := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "v1",
+		"kind":       "Pod",
+		"metadata": map[string]any{
+			"name":      "sb-1-pod",
+			"namespace": "gram-test",
+			"labels":    map[string]any{gkeClaimUIDLabel: "claim-uid-1"},
+		},
+		"status": map[string]any{"phase": "Running", "podIP": host},
 	}}
 
 	dyn := newGKEFakeDynamic()
 	seedUnstructured(t, dyn, gkeSandboxClaimGVR, claim)
 	seedUnstructured(t, dyn, gkeSandboxGVR, sandbox)
+	seedUnstructured(t, dyn, gkePodGVR, pod)
 	backend := newTestGKEBackend(t, dyn, doer, port)
 	result, err := backend.Ensure(t.Context(), assistantRuntimeRecord{
 		ID:                  uuid.New(),
@@ -209,7 +216,7 @@ func TestGKEEnsureWaitsForReadySandbox(t *testing.T) {
 	require.NoError(t, json.Unmarshal(result.BackendMetadataJSON, &meta))
 	require.Equal(t, claimName, meta.ClaimName)
 	require.Equal(t, "sb-1", meta.SandboxName)
-	require.Equal(t, host, meta.ServiceFQDN)
+	require.Equal(t, host, meta.PodIP)
 }
 
 func TestGKEReapDeletesClaimIdempotently(t *testing.T) {

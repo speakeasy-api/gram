@@ -28,12 +28,12 @@ const runtimeBackendGKE = "gke"
 
 const (
 	// gkeRuntimeReadyTimeout bounds the wait for a freshly claimed sandbox to be
-	// assigned a pod and report Ready. Cold-started claims (we inject per-thread
-	// env, which forces a cold start off the warm pool's template) pull the
-	// image before they become ready, so this is generous.
+	// assigned a pod and report Ready. A claim with no pre-warmed pod available
+	// cold-starts (the pod pulls the image before it becomes ready), so this is
+	// generous.
 	gkeRuntimeReadyTimeout = 3 * time.Minute
 	// gkeRuntimeHealthTimeout bounds the runner /healthz wait once the sandbox
-	// reports Ready and a routable serviceFQDN.
+	// reports Ready and its runner pod has a routable IP.
 	gkeRuntimeHealthTimeout = 60 * time.Second
 	gkeRuntimePollInterval  = time.Second
 	// gkeRuntimeReapCallTimeout caps a single delete during reap so one wedged
@@ -48,24 +48,35 @@ const (
 	gkeMetadataProjectID   = "gram.speakeasy.com/project-id"
 	gkeMetadataRole        = "gram.speakeasy.com/role"
 	gkeMetadataRoleValue   = "assistant_runtime"
+
+	// gkeClaimUIDLabel is injected by the SandboxClaim controller onto the pod,
+	// carrying the owning claim's UID. We resolve the runner pod (for its IP) by
+	// this label.
+	gkeClaimUIDLabel = "agents.x-k8s.io/claim-uid"
 )
 
 var (
-	gkeSandboxClaimGVR = schema.GroupVersionResource{Group: "extensions.agents.x-k8s.io", Version: "v1beta1", Resource: "sandboxclaims"}
-	gkeSandboxGVR      = schema.GroupVersionResource{Group: "agents.x-k8s.io", Version: "v1beta1", Resource: "sandboxes"}
+	// GKE's managed Agent Sandbox addon serves v1alpha1 (upstream main is on
+	// v1beta1, but the GKE-shipped feature is v1alpha1).
+	gkeSandboxClaimGVR = schema.GroupVersionResource{Group: "extensions.agents.x-k8s.io", Version: "v1alpha1", Resource: "sandboxclaims"}
+	gkeSandboxGVR      = schema.GroupVersionResource{Group: "agents.x-k8s.io", Version: "v1alpha1", Resource: "sandboxes"}
+	gkePodGVR          = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}
 )
 
-// GKERuntimeConfig configures the GKE Agent Sandbox runtime backend. The
-// dynamic client and namespace are resolved from the in-cluster k8s client
-// (see server/internal/k8s) at construction; the backend is only usable inside
-// a cluster, never in --dev-single-process.
+// GKERuntimeConfig configures the GKE Agent Sandbox runtime backend. The dynamic
+// client targets the (separate) assistant cluster and is built from its endpoint
+// + CA with the process's Google credentials — see k8s.NewRemoteDynamicClient.
+// The gram server reaches the cluster by endpoint, not in-cluster config, so it
+// runs from the gram cluster (or locally) against a different cluster.
 type GKERuntimeConfig struct {
 	Dynamic dynamic.Interface
 
-	// Namespace is where SandboxClaims are created and the warm pool lives.
+	// Namespace is where SandboxClaims, the SandboxTemplate, and the warm pool live.
 	Namespace string
-	// WarmPool is the SandboxWarmPool name a claim checks out from.
-	WarmPool string
+	// SandboxTemplate is the SandboxTemplate name a claim references. A
+	// SandboxWarmPool referencing the same template pre-warms pods, and the
+	// controller adopts a warm pod for the claim automatically.
+	SandboxTemplate string
 	// GuestPort is the runner HTTP port inside the sandbox pod.
 	GuestPort int
 
@@ -74,20 +85,19 @@ type GKERuntimeConfig struct {
 	// ServerURL is the management API base the server embeds in the runner
 	// bootstrap response (completions + MCP URLs). The runner's own
 	// GRAM_SERVER_URL (for the bootstrap call) and OTLP config are baked into
-	// the SandboxTemplate, not the claim — putting them in the claim would
-	// force a cold start.
+	// the SandboxTemplate, so the claim carries no env and adopts a warm pod.
 	ServerURL *url.URL
 }
 
 func (c GKERuntimeConfig) Validate() error {
 	if c.Dynamic == nil {
-		return fmt.Errorf("gke assistant runtime requires an in-cluster kubernetes client (not available in local env)")
+		return fmt.Errorf("gke assistant runtime requires a kubernetes client for the assistant cluster (set --assistant-runtime-gke-cluster-endpoint)")
 	}
 	if c.Namespace == "" {
 		return fmt.Errorf("--assistant-runtime-gke-namespace is required")
 	}
-	if c.WarmPool == "" {
-		return fmt.Errorf("--assistant-runtime-gke-warm-pool is required")
+	if c.SandboxTemplate == "" {
+		return fmt.Errorf("--assistant-runtime-gke-sandbox-template is required")
 	}
 	if c.OCIImage == "" {
 		return fmt.Errorf("--assistant-runtime-oci-image is required")
@@ -99,13 +109,14 @@ func (c GKERuntimeConfig) Validate() error {
 }
 
 // gkeRuntimeMetadata is persisted opaquely in assistant_runtimes.backend_metadata_json
-// for gke-backed rows. ServiceFQDN is the sandbox's headless Service DNS name;
-// the runner is reached at http://<ServiceFQDN>:<guest port>.
+// for gke-backed rows. PodIP is the runner pod's IP, routable from the gram
+// cluster across the shared VPC; the runner is reached at http://<PodIP>:<guest
+// port> (in-cluster Service DNS is not resolvable across clusters).
 type gkeRuntimeMetadata struct {
 	Namespace   string `json:"namespace"`
 	ClaimName   string `json:"claim_name"`
 	SandboxName string `json:"sandbox_name"`
-	ServiceFQDN string `json:"service_fqdn"`
+	PodIP       string `json:"pod_ip"`
 	Image       string `json:"image,omitempty"`
 }
 
@@ -207,21 +218,21 @@ func (g *GKERuntimeBackend) buildClaim(name string, runtime assistantRuntimeReco
 			"namespace": g.config.Namespace,
 			"labels":    labels,
 		},
-		// No spec.env: per the SandboxClaim API that would force a cold start
-		// off the warm pool's template. The runner boots generic from a
-		// pristine pooled pod and learns its assistant from the first /turn
-		// (env-or-request); shared config (GRAM_SERVER_URL, OTLP) lives in the
-		// SandboxTemplate. additionalPodMetadata propagates identity labels to
-		// the pod for log/trace correlation without forcing a cold start.
+		// The claim references the SandboxTemplate; a SandboxWarmPool on the same
+		// template pre-warms pods and the controller adopts one for the claim.
+		// No spec.env — the runner boots generic from a pooled pod and learns its
+		// assistant from the first /turn (env-or-request); shared config
+		// (GRAM_SERVER_URL, OTLP) lives in the SandboxTemplate. shutdownPolicy
+		// Delete cascades a claim delete to the Sandbox and its pod.
 		"spec": map[string]any{
-			"warmPoolRef":           map[string]any{"name": g.config.WarmPool},
-			"additionalPodMetadata": map[string]any{"labels": labels},
+			"sandboxTemplateRef": map[string]any{"name": g.config.SandboxTemplate},
+			"lifecycle":          map[string]any{"shutdownPolicy": "Delete"},
 		},
 	}}
 }
 
 // waitForSandbox polls the claim until it names an assigned Sandbox, then polls
-// that Sandbox until it reports Ready with a routable serviceFQDN.
+// that Sandbox until it reports Ready and its runner pod has an IP.
 func (g *GKERuntimeBackend) waitForSandbox(ctx context.Context, claimName string) (gkeRuntimeMetadata, error) {
 	deadline := time.Now().Add(gkeRuntimeReadyTimeout)
 	sandboxes := g.config.Dynamic.Resource(gkeSandboxGVR).Namespace(g.config.Namespace)
@@ -230,19 +241,23 @@ func (g *GKERuntimeBackend) waitForSandbox(ctx context.Context, claimName string
 		if err != nil {
 			return gkeRuntimeMetadata{}, fmt.Errorf("get sandbox claim %s: %w", claimName, err)
 		}
-		sandboxName, _, _ := unstructured.NestedString(claim.Object, "status", "sandbox", "name")
+		sandboxName, _, _ := unstructured.NestedString(claim.Object, "status", "sandbox", "Name")
 		if sandboxName != "" {
 			sandbox, err := sandboxes.Get(ctx, sandboxName, metav1.GetOptions{})
 			if err != nil && !k8serrors.IsNotFound(err) {
 				return gkeRuntimeMetadata{}, fmt.Errorf("get sandbox %s: %w", sandboxName, err)
 			}
-			if err == nil {
-				if fqdn, ready := sandboxReadyEndpoint(sandbox); ready && fqdn != "" {
+			if err == nil && sandboxReady(sandbox) {
+				podIP, err := g.resolvePodIP(ctx, string(claim.GetUID()))
+				if err != nil {
+					return gkeRuntimeMetadata{}, err
+				}
+				if podIP != "" {
 					return gkeRuntimeMetadata{
 						Namespace:   g.config.Namespace,
 						ClaimName:   claimName,
 						SandboxName: sandboxName,
-						ServiceFQDN: fqdn,
+						PodIP:       podIP,
 						Image:       "",
 					}, nil
 				}
@@ -259,9 +274,8 @@ func (g *GKERuntimeBackend) waitForSandbox(ctx context.Context, claimName string
 	}
 }
 
-// sandboxReadyEndpoint reads the Sandbox's Ready condition and serviceFQDN.
-func sandboxReadyEndpoint(sandbox *unstructured.Unstructured) (string, bool) {
-	fqdn, _, _ := unstructured.NestedString(sandbox.Object, "status", "serviceFQDN")
+// sandboxReady reports whether the Sandbox's Ready condition is true.
+func sandboxReady(sandbox *unstructured.Unstructured) bool {
 	conditions, _, _ := unstructured.NestedSlice(sandbox.Object, "status", "conditions")
 	for _, raw := range conditions {
 		cond, ok := raw.(map[string]any)
@@ -271,14 +285,34 @@ func sandboxReadyEndpoint(sandbox *unstructured.Unstructured) (string, bool) {
 		condType, _, _ := unstructured.NestedString(cond, "type")
 		condStatus, _, _ := unstructured.NestedString(cond, "status")
 		if condType == gkeSandboxReadyConditionType {
-			return fqdn, condStatus == string(metav1.ConditionTrue)
+			return condStatus == string(metav1.ConditionTrue)
 		}
 	}
-	return fqdn, false
+	return false
+}
+
+// resolvePodIP finds the runner pod for a claim (by the controller-injected
+// claim-uid label) and returns its IP once the pod is Running. An empty string
+// means the pod is not scheduled/running yet, so the caller keeps polling.
+func (g *GKERuntimeBackend) resolvePodIP(ctx context.Context, claimUID string) (string, error) {
+	pods, err := g.config.Dynamic.Resource(gkePodGVR).Namespace(g.config.Namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: gkeClaimUIDLabel + "=" + claimUID,
+	})
+	if err != nil {
+		return "", fmt.Errorf("list runner pods for claim %s: %w", claimUID, err)
+	}
+	for i := range pods.Items {
+		phase, _, _ := unstructured.NestedString(pods.Items[i].Object, "status", "phase")
+		ip, _, _ := unstructured.NestedString(pods.Items[i].Object, "status", "podIP")
+		if phase == "Running" && ip != "" {
+			return ip, nil
+		}
+	}
+	return "", nil
 }
 
 func (g *GKERuntimeBackend) endpoint(metadata gkeRuntimeMetadata) string {
-	return fmt.Sprintf("http://%s:%d", metadata.ServiceFQDN, g.config.GuestPort)
+	return fmt.Sprintf("http://%s:%d", metadata.PodIP, g.config.GuestPort)
 }
 
 func (g *GKERuntimeBackend) waitForHealth(ctx context.Context, metadata gkeRuntimeMetadata) error {
@@ -306,8 +340,8 @@ func (g *GKERuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntim
 	if err != nil {
 		return err
 	}
-	if metadata.ServiceFQDN == "" {
-		return fmt.Errorf("%w: gke runtime service fqdn is not available", ErrRuntimeUnhealthy)
+	if metadata.PodIP == "" {
+		return fmt.Errorf("%w: gke runtime pod ip is not available", ErrRuntimeUnhealthy)
 	}
 
 	reqBody, err := json.Marshal(runtimeTurnRequest{
@@ -333,8 +367,8 @@ func (g *GKERuntimeBackend) Status(ctx context.Context, runtime assistantRuntime
 	if err != nil {
 		return RuntimeBackendStatus{}, err
 	}
-	if metadata.ServiceFQDN == "" {
-		return RuntimeBackendStatus{}, fmt.Errorf("%w: gke runtime service fqdn is not available", ErrRuntimeUnhealthy)
+	if metadata.PodIP == "" {
+		return RuntimeBackendStatus{}, fmt.Errorf("%w: gke runtime pod ip is not available", ErrRuntimeUnhealthy)
 	}
 	body, err := g.doRequest(ctx, metadata, http.MethodGet, "/state", nil, "", "", 0)
 	if err != nil {
@@ -348,10 +382,9 @@ func (g *GKERuntimeBackend) Status(ctx context.Context, runtime assistantRuntime
 }
 
 // Stop deletes the SandboxClaim. GKE has no cheap pause: a fresh admit recreates
-// the claim (and, but for the per-thread env we inject, would reclaim a
-// pre-warmed pod). The runner holds no per-assistant state across restarts —
-// history is replayed from the server on the next /turn — so deleting on Stop
-// loses nothing.
+// the claim and adopts a pre-warmed pod from the pool. The runner holds no
+// per-assistant state across restarts — history is replayed from the server on
+// the next /turn — so deleting on Stop loses nothing.
 func (g *GKERuntimeBackend) Stop(ctx context.Context, runtime assistantRuntimeRecord) error {
 	return g.deleteClaim(ctx, runtime)
 }

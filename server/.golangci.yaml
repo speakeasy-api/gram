@@ -281,6 +281,8 @@ linters:
         - '^k8s.io/apimachinery/pkg/apis/meta/v1\..+$'
         - '^k8s.io/api/networking/v1\..+$'
         - '^sigs.k8s.io/gateway-api/apis/v1\..+$'
+        - '^k8s.io/client-go/rest\.Config$'
+        - '^k8s.io/client-go/rest\.TLSClientConfig$'
         - '^github.com/posthog/posthog-go\..+$'
         - '^github\.com/speakeasy-api/openapi/.*'
         - '^github\.com/polarsource/polar-go/.*'

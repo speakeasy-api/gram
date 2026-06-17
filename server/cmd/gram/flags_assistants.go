@@ -2,6 +2,7 @@ package gram
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -37,9 +38,19 @@ var assistantRuntimeFlags = []cli.Flag{
 		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_NAMESPACE"},
 	},
 	&cli.StringFlag{
-		Name:    "assistant-runtime-gke-warm-pool",
-		Usage:   "SandboxWarmPool name that GKE assistant runtime claims check out from.",
-		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_WARM_POOL"},
+		Name:    "assistant-runtime-gke-sandbox-template",
+		Usage:   "SandboxTemplate name that GKE assistant runtime claims reference (a SandboxWarmPool on the same template pre-warms pods).",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_SANDBOX_TEMPLATE"},
+	},
+	&cli.StringFlag{
+		Name:    "assistant-runtime-gke-cluster-endpoint",
+		Usage:   "API endpoint (host or IP) of the assistant runtime cluster. Setting this enables the GKE backend.",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_CLUSTER_ENDPOINT"},
+	},
+	&cli.StringFlag{
+		Name:    "assistant-runtime-gke-cluster-ca",
+		Usage:   "Base64-encoded CA certificate of the assistant runtime cluster.",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_CLUSTER_CA"},
 	},
 	&cli.StringFlag{
 		Name:    "assistant-runtime-server-url",
@@ -148,19 +159,17 @@ func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistan
 			OTLPHeaders:        c.String("assistant-runtime-otlp-headers"),
 			Environment:        c.String("environment"),
 		},
-		// Dynamic is injected in newAssistantRuntime from the in-cluster
-		// kubernetes client — it is not available from the CLI context alone.
-		// Dynamic is injected in newAssistantRuntime from the in-cluster
-		// kubernetes client; the egress-controlled HTTP client is built from
-		// the guardian policy in assistants.NewRuntimeBackend.
+		// Dynamic is injected in newAssistantRuntime from a remote client for the
+		// assistant cluster (k8s.NewRemoteDynamicClient); the egress-controlled
+		// HTTP client is built from the guardian policy in NewRuntimeBackend.
 		GKE: assistants.GKERuntimeConfig{
-			Dynamic:   nil,
-			Namespace: gkeNamespace,
-			WarmPool:  c.String("assistant-runtime-gke-warm-pool"),
-			GuestPort: 0,
-			OCIImage:  c.String("assistant-runtime-oci-image"),
-			ImageTag:  AssistantRuntimeImageHash,
-			ServerURL: resolvedServerURL,
+			Dynamic:         nil,
+			Namespace:       gkeNamespace,
+			SandboxTemplate: c.String("assistant-runtime-gke-sandbox-template"),
+			GuestPort:       0,
+			OCIImage:        c.String("assistant-runtime-oci-image"),
+			ImageTag:        AssistantRuntimeImageHash,
+			ServerURL:       resolvedServerURL,
 		},
 	}, nil
 }
@@ -180,17 +189,21 @@ func newAssistantRuntime(
 		return nil, err
 	}
 
-	// Build the GKE backend whenever it is configured (a warm pool is set), not
-	// only when it is the target: a fly-target process must still reach Agent
-	// Sandbox to reap gke-backed runtime rows (and vice versa). InitializeK8sClient
-	// is a singleton that returns nil clients in local env, where GKE is
-	// unsupported — leaving Dynamic nil so the backend is skipped.
-	if cfg.GKE.WarmPool != "" {
-		k8sClients, err := k8s.InitializeK8sClient(ctx, logger, c.String("environment"), false)
+	// Build the GKE backend whenever an assistant cluster is configured (its
+	// endpoint is set), not only when it is the target: a fly-target process must
+	// still reach the assistant cluster to reap gke-backed runtime rows (and vice
+	// versa). The client authenticates with the process's Google credentials
+	// (workload identity in-cluster, ADC locally) against the separate cluster.
+	if endpoint := c.String("assistant-runtime-gke-cluster-endpoint"); endpoint != "" {
+		caCert, err := base64.StdEncoding.DecodeString(c.String("assistant-runtime-gke-cluster-ca"))
 		if err != nil {
-			return nil, fmt.Errorf("initialize kubernetes client for gke assistant runtime: %w", err)
+			return nil, fmt.Errorf("decode --assistant-runtime-gke-cluster-ca: %w", err)
 		}
-		cfg.GKE.Dynamic = k8sClients.DynamicClient
+		dynamicClient, err := k8s.NewRemoteDynamicClient(ctx, endpoint, caCert)
+		if err != nil {
+			return nil, fmt.Errorf("build assistant cluster client: %w", err)
+		}
+		cfg.GKE.Dynamic = dynamicClient
 	}
 
 	// Fly and GKE call back to the server at the same URL; validate it once.
