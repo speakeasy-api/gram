@@ -285,6 +285,29 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 	}, nil
 }
 
+func (s *Service) GetManagedAssistant(ctx context.Context, _ *gen.GetManagedAssistantPayload) (*types.Assistant, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	record, err := s.core.GetManagedAssistant(ctx, *authCtx.ProjectID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "project assistant not provisioned")
+		}
+		return nil, mapAssistantStoreError(ctx, s.logger, err, "get project assistant")
+	}
+	view, err := toHTTPAssistant(record)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "build assistant view").LogError(ctx, s.logger)
+	}
+	return view, nil
+}
+
 func (s *Service) EnsureManagedAssistant(ctx context.Context, _ *gen.EnsureManagedAssistantPayload) (*types.Assistant, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {

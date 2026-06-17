@@ -16,6 +16,7 @@ export * from "./assistantMemoriesDelete.js";
 export * from "./assistantsCreate.js";
 export * from "./assistantsDelete.js";
 export * from "./assistantsGet.js";
+export * from "./assistantsGetManaged.js";
 export * from "./assistantsList.js";
 export * from "./assistantsUpdate.js";
 export * from "./auditLogFacets.js";

@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: f9042dc88b5954f966f4e0a7e9aa11a9
+  docChecksum: cc19987185c99905c14f82619d3f86d9
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -1992,6 +1992,10 @@ trackedFiles:
     last_write_checksum: sha1:d360509c0300e049d2d0a950456d092904dfb221
   docs/models/operations/getlatestdeploymentsecurityoption2.md:
     last_write_checksum: sha1:9a349a20d3dcb9352cd21b943f208eba9dd11942
+  docs/models/operations/getmanagedassistantrequest.md:
+    last_write_checksum: sha1:b0ef085a2f567e2e7023f2cb10d433a477adb636
+  docs/models/operations/getmanagedassistantsecurity.md:
+    last_write_checksum: sha1:5b0c0d2ebfed1760445c5df41cc31bf2cd1ab8b3
   docs/models/operations/getmarketplacesettingsrequest.md:
     last_write_checksum: sha1:df0d400956c95c73f187a98de66c40e350a6ce1a
   docs/models/operations/getmarketplacesettingssecurity.md:
@@ -3337,7 +3341,7 @@ trackedFiles:
   docs/sdks/assistantmemories/README.md:
     last_write_checksum: sha1:5f2d9d10074617110479871148d92fd118f1cefa
   docs/sdks/assistants/README.md:
-    last_write_checksum: sha1:b43a3e22801c48026710bc8311d1a4aef0c2ca63
+    last_write_checksum: sha1:15bf304f6eca1efc98991ed257f197fe004641dd
   docs/sdks/auditlogs/README.md:
     last_write_checksum: sha1:7caf64a8e89202447bef36b378db3eec3e55821b
   docs/sdks/auth/README.md:
@@ -3548,6 +3552,8 @@ trackedFiles:
     last_write_checksum: sha1:1973f7cac2983a99eeb981c7759d762c24c75668
   src/funcs/assistantsGet.ts:
     last_write_checksum: sha1:6ca81dcfb983d0954b2181566e707a8dfca52c0c
+  src/funcs/assistantsGetManaged.ts:
+    last_write_checksum: sha1:012d59533bf14d7d97ffe9dfd5df9819fb4d2bff
   src/funcs/assistantsList.ts:
     last_write_checksum: sha1:0eef1ce8687ff64f5589fe7886de0357532ee2ac
   src/funcs/assistantsSendMessage.ts:
@@ -5364,6 +5370,8 @@ trackedFiles:
     last_write_checksum: sha1:fa4f6c75644d7dca1021abd8c688ea1e53acf263
   src/models/operations/getlatestdeployment.ts:
     last_write_checksum: sha1:14645332c9374d7e925b4d32b800b809001c5ea1
+  src/models/operations/getmanagedassistant.ts:
+    last_write_checksum: sha1:2d46c6e2240f91c72bf2280397f5ea9c0a32fd89
   src/models/operations/getmarketplacesettings.ts:
     last_write_checksum: sha1:0c6c08266f16158048bbe5fd80138b2bced488d7
   src/models/operations/getmcpendpoint.ts:
@@ -5460,7 +5468,7 @@ trackedFiles:
     last_write_checksum: sha1:68a17ba4375c98a861ba8ea4838401238e9caf7e
   src/models/operations/index.ts:
     id: 0d9ffaf774d2
-    last_write_checksum: sha1:8e424657f3bcd14fffeba45512c90c2cda8a467c
+    last_write_checksum: sha1:cfe61f81d30fc25f28049e163b9b6019238a790f
     pristine_git_object: dfbbde8a33b65de59f2ddc44b5a1200061eeacb0
   src/models/operations/integrationsnumberget.ts:
     last_write_checksum: sha1:082b8a2ed705b0b42b924e676b651e9431e8fddc
@@ -5826,6 +5834,10 @@ trackedFiles:
     last_write_checksum: sha1:57eecf07014f8d7aa371e1e31ae6e3a5243b7891
   src/react-query/assistantsGet.ts:
     last_write_checksum: sha1:fc424278812a8559a28d3d34010d67c8670c6e07
+  src/react-query/assistantsGetManaged.core.ts:
+    last_write_checksum: sha1:9783a7e77c82b8c67fc92d239e44eace7dd21c4c
+  src/react-query/assistantsGetManaged.ts:
+    last_write_checksum: sha1:7d7301055e9f70d1c8661277059d356cac6a09b6
   src/react-query/assistantsList.core.ts:
     last_write_checksum: sha1:3bc0643ad3129a3a8137eac6aed7ebb745b15f79
   src/react-query/assistantsList.ts:
@@ -6126,7 +6138,7 @@ trackedFiles:
     last_write_checksum: sha1:4aa2ad3f103ef14ea31e605c1d9430e7ec3de3f1
   src/react-query/index.ts:
     id: 9e975471aa65
-    last_write_checksum: sha1:f3f75b03bd3a5925f9686fadfd1891930f0dd5e1
+    last_write_checksum: sha1:44b592e2c2e7d5bd8ee33f7a0b70444bd1234203
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
   src/react-query/instance.core.ts:
     last_write_checksum: sha1:34d434d40565d270fde497f4cec6bb9befffb505
@@ -6737,7 +6749,7 @@ trackedFiles:
   src/sdk/assistantmemories.ts:
     last_write_checksum: sha1:40c6f4887e1a7715160ab9f35cb2aadb55c0c5f5
   src/sdk/assistants.ts:
-    last_write_checksum: sha1:7f663a43bccc705ba81f618a9ea8835f3a2ef0b5
+    last_write_checksum: sha1:bf9d0113a085bf75c7e4a7ddf7398644c8d553f8
   src/sdk/auditlogs.ts:
     last_write_checksum: sha1:7a7107003acbf2d60125e0777974a9d270328eeb
   src/sdk/auth.ts:
@@ -10353,5 +10365,14 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getManagedAssistant:
+    speakeasy-default-get-managed-assistant:
+      responses:
+        "200":
+          application/json: {"created_at": "2024-02-05T22:44:27.577Z", "id": "c661aa46-07c0-4c6a-97bb-bc47883500cd", "instructions": "<value>", "max_concurrency": 130261, "model": "2", "name": "<value>", "project_id": "790956c2-fca6-450d-aa54-beb049272cc1", "status": "paused", "toolsets": [{"toolset_slug": "<value>"}], "updated_at": "2026-09-04T15:38:02.228Z", "warm_ttl_seconds": 120403}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}

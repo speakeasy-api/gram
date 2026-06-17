@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  useAssistantsGetManaged,
   useEnsureManagedAssistantMutation,
   useGramContext,
 } from "@gram/client/react-query";
+import { useProject } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
 import { createServerAssistantTransport } from "@/lib/ServerAssistantTransport";
 import type { ElementsTransportFactory } from "@gram-ai/elements";
 
@@ -20,123 +23,114 @@ export interface UseServerAssistantTransportResult {
   ready: boolean;
   /** Connection error message, if resolving the managed assistant failed. */
   error: string | null;
+  /**
+   * True when the project has no managed assistant yet and the caller lacks
+   * `project:write`. UI should surface "ask an admin to enable this" rather
+   * than the connection-error notice — `sendMessage` itself only needs
+   * `project:read`, so once an admin provisions it the same viewer can chat.
+   */
+  needsAdmin: boolean;
 }
 
 /**
- * Resolves the project's server-side Project Assistant (provisioning it on first
- * access) and exposes a transport factory wired to it. The conversation id,
- * history, and conversation list are owned by Elements' RemoteThreadListAdapter
- * (backed by the chat service), so this hook only resolves the assistant and
- * builds the send transport.
+ * Resolves the project's server-side Project Assistant and exposes a transport
+ * factory wired to it. The conversation id, history, and conversation list are
+ * owned by Elements' RemoteThreadListAdapter (backed by the chat service), so
+ * this hook only resolves the assistant and builds the send transport.
  *
- * Resolution is lazy — only once `enabled` first becomes true (the sidebar is
- * opened) — so we never provision an assistant for users who never open it. The
- * provider is expected to mount inside the sidebar, so closing and reopening
- * after a failure retries.
+ * Read (`assistantsGetManaged`) is decoupled from write
+ * (`ensureManagedAssistant`): viewers with `project:read` reach an existing
+ * managed assistant without ever hitting the write-scoped provisioning path.
+ * When the assistant is missing, only writers fire ensure; viewers see
+ * `needsAdmin` so the caller can show an "ask an admin" notice.
  */
 export function useServerAssistantTransport(
   projectSlug: string,
   enabled: boolean,
 ): UseServerAssistantTransportResult {
   const client = useGramContext();
-  const ensureManaged = useEnsureManagedAssistantMutation();
-  const ensureManagedMutate = ensureManaged.mutate;
+  const project = useProject();
+  const { hasScope, isLoading: rbacLoading } = useRBAC();
 
-  const [assistantId, setAssistantId] = useState<string>("");
-  const [error, setError] = useState<string | null>(null);
+  const canCreate = hasScope("project:write", project.id);
 
-  // Latch invariant: `inflightSlugRef` holds the slug whose mutation is
-  // currently in flight, or null. It is set at mutate kickoff and cleared in
-  // onSettled, so a stale-slug callback never strands the latch.
-  const inflightSlugRef = useRef<string | null>(null);
-  const resolvedForSlugRef = useRef<string | null>(null);
-  const currentSlugRef = useRef(projectSlug);
-  currentSlugRef.current = projectSlug;
+  // The fetcher reads the project from the X-Gram-Project header, but react-
+  // query only differentiates by query key — pass projectSlug into the request
+  // so a project switch invalidates instead of replaying the old project's
+  // cached managed-assistant id.
+  const getQuery = useAssistantsGetManaged(
+    { gramProject: projectSlug },
+    undefined,
+    {
+      enabled: enabled && !!projectSlug,
+      retry: false,
+      throwOnError: false,
+      refetchOnWindowFocus: false,
+    },
+  );
 
-  // Project switch: drop any prior resolution so the new project resolves
-  // fresh. The InsightsProvider lives above the route outlet and persists
-  // across project navigation, so without this reset the transport would route
-  // a project-A assistant for project B → 404. We track the last slug we
-  // touched (resolved OR kicked off) so a mid-flight switch still resets.
-  const trackedSlugRef = useRef<string | null>(null);
+  const fetched = getQuery.data;
+  const fetchedId = fetched?.id ?? "";
+  const queryError = getQuery.error as
+    | { statusCode?: number }
+    | null
+    | undefined;
+  const is404 = !!queryError && queryError.statusCode === 404;
+  const isOtherError = !!queryError && !is404;
+
+  const ensure = useEnsureManagedAssistantMutation();
+  const ensureMutate = ensure.mutate;
+
+  const [provisionedId, setProvisionedId] = useState<string>("");
+  const [provisionError, setProvisionError] = useState<string | null>(null);
+
+  // Latch invariant: holds the slug whose ensure call has already fired this
+  // session, so re-renders after the read settles don't replay it. Reset when
+  // the project switches.
+  const provisionedForSlugRef = useRef<string | null>(null);
   useEffect(() => {
-    if (
-      trackedSlugRef.current !== null &&
-      trackedSlugRef.current !== projectSlug
-    ) {
-      trackedSlugRef.current = null;
-      resolvedForSlugRef.current = null;
-      setAssistantId("");
-      setError(null);
-    }
+    if (provisionedForSlugRef.current === null) return;
+    if (provisionedForSlugRef.current === projectSlug) return;
+    provisionedForSlugRef.current = null;
+    setProvisionedId("");
+    setProvisionError(null);
   }, [projectSlug]);
 
   useEffect(() => {
-    if (!enabled) {
-      return;
-    }
-    if (!projectSlug) {
-      return;
-    }
-    if (inflightSlugRef.current === projectSlug) {
-      return;
-    }
-    if (resolvedForSlugRef.current === projectSlug) {
-      return;
-    }
-    inflightSlugRef.current = projectSlug;
-    trackedSlugRef.current = projectSlug;
-    setError(null);
+    if (!enabled || !projectSlug) return;
+    if (!is404) return;
+    if (rbacLoading || !canCreate) return;
+    if (provisionedForSlugRef.current === projectSlug) return;
+    provisionedForSlugRef.current = projectSlug;
     const slugAtRequest = projectSlug;
-    ensureManagedMutate(
+    ensureMutate(
       {},
       {
         onSuccess: (assistant) => {
-          if (slugAtRequest !== currentSlugRef.current) {
-            return;
-          }
-          resolvedForSlugRef.current = slugAtRequest;
-          setAssistantId(assistant.id);
+          if (slugAtRequest !== provisionedForSlugRef.current) return;
+          setProvisionedId(assistant.id);
         },
         onError: () => {
-          if (slugAtRequest !== currentSlugRef.current) {
-            return;
-          }
-          setError(
+          if (slugAtRequest !== provisionedForSlugRef.current) return;
+          setProvisionError(
             "Couldn't connect to the Project Assistant. Try reopening the sidebar.",
           );
         },
-        onSettled: () => {
-          if (inflightSlugRef.current === slugAtRequest) {
-            inflightSlugRef.current = null;
-          }
-        },
       },
     );
+  }, [enabled, projectSlug, is404, canCreate, rbacLoading, ensureMutate]);
 
-    // React Query ties the mutate-level callbacks above to this component's
-    // observer: if the component unmounts before the request settles, they
-    // never fire (the request still completes). Dev StrictMode does exactly
-    // that — mount, fire, unmount, remount — which would orphan onSuccess
-    // while leaving the in-flight latch set, so the remount never re-fires and
-    // `enabled`-from-mount callers (the standalone /chat pages) hang with no
-    // assistant id forever. Release the latch on cleanup so the next run
-    // re-fires with a live observer whose callbacks actually run.
-    return () => {
-      if (inflightSlugRef.current === slugAtRequest) {
-        inflightSlugRef.current = null;
-      }
-    };
-  }, [enabled, projectSlug, ensureManagedMutate]);
-
+  const assistantId = fetchedId || provisionedId;
   const ready = assistantId !== "";
+  const needsAdmin = is404 && !rbacLoading && !canCreate;
+  const error = isOtherError
+    ? "Couldn't connect to the Project Assistant. Try reopening the sidebar."
+    : provisionError;
 
   const transport = useMemo<ElementsTransportFactory | undefined>(() => {
-    if (!ready) {
-      return undefined;
-    }
+    if (!ready) return undefined;
     return createServerAssistantTransport({ client, assistantId, projectSlug });
   }, [ready, client, assistantId, projectSlug]);
 
-  return { transport, assistantId, ready, error };
+  return { transport, assistantId, ready, error, needsAdmin };
 }
