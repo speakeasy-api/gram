@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { MetricCard } from "@/components/chart/MetricCard";
 import { Page } from "@/components/page-layout";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -307,11 +307,13 @@ export function ProjectDashboard(): JSX.Element {
     !isFeaturesPending && !isFeaturesError && !logsEnabled;
 
   const {
+    available: insightsDockAvailable,
     isExpanded: isInsightsExpanded,
     setIsExpanded: setInsightsExpanded,
     setOverride: setInsightsOverride,
     sendPrompt: sendInsightsPrompt,
   } = useInsightsState();
+  const navigate = useNavigate();
 
   const exploreWithAI = useCallback(
     (opts: InsightsConfigOptions) => {
@@ -321,11 +323,26 @@ export function ProjectDashboard(): JSX.Element {
       // on the first runtime.append call and (b) triggered a click-outside
       // crash via the unmount→cleanup chain.
       setInsightsOverride(opts);
-      setInsightsExpanded(true);
       const firstPrompt = opts.suggestions?.[0]?.prompt;
+      // When the dock is hidden (e.g. the home page provides its own chat
+      // widget), there's no panel to expand into — drop the user into the
+      // full-page chat with the prompt instead.
+      if (!insightsDockAvailable) {
+        if (firstPrompt) sendInsightsPrompt(firstPrompt);
+        void navigate(routes.chat.conversation.href("new"));
+        return;
+      }
+      setInsightsExpanded(true);
       if (firstPrompt) sendInsightsPrompt(firstPrompt);
     },
-    [setInsightsOverride, setInsightsExpanded, sendInsightsPrompt],
+    [
+      insightsDockAvailable,
+      setInsightsOverride,
+      setInsightsExpanded,
+      sendInsightsPrompt,
+      navigate,
+      routes,
+    ],
   );
 
   // Clear the per-chart override when the panel is closed so the next opening
