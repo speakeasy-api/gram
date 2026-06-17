@@ -223,7 +223,9 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	// Sending a message is gated on project:read: it does not mutate project
+	// configuration, and viewers must be able to talk to a project's assistants.
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	// Messages are sent as the calling user, so a user identity is required.
