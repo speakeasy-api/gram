@@ -21,6 +21,10 @@ func projectWriteGrant(projectID uuid.UUID) authz.Grant {
 	return authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, projectID.String())}
 }
 
+func projectReadGrant(projectID uuid.UUID) authz.Grant {
+	return authz.Grant{Scope: authz.ScopeProjectRead, Selector: authz.NewSelector(authz.ScopeProjectRead, projectID.String())}
+}
+
 // fakeDashboardIngestor stands in for the triggers App: it records the call and
 // reproduces IngestDirect's observable effect by enqueuing the dashboard turn
 // through the same EnqueueTriggerTask path the real dispatcher uses, so the
@@ -85,6 +89,26 @@ func TestSendMessageEnqueues(t *testing.T) {
 	// user's message.
 	require.NotEqual(t, uuid.Nil, ingestor.lastInstance)
 	require.Contains(t, string(ingestor.lastPayload), "what are my top errors?")
+}
+
+// project:read alone is sufficient to send a message: a viewer of a project
+// must be able to talk to its assistants even without project:write.
+func TestSendMessageAllowedWithProjectReadOnly(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID, _ := newRBACServiceWithConn(t, "assistants_send_message_read_only")
+	ctx = authztest.WithExactGrants(t, ctx, projectReadGrant(projectID))
+
+	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
+	require.NoError(t, err)
+	svc.core.SetDashboardIngestor(&fakeDashboardIngestor{core: svc.core, assistantID: managed.ID})
+
+	res, err := svc.SendMessage(ctx, &gen.SendMessagePayload{
+		AssistantID: managed.ID.String(),
+		Message:     "hello",
+	})
+	require.NoError(t, err)
+	require.True(t, res.Accepted)
 }
 
 // Each send without a chat id starts a fresh conversation with its own
