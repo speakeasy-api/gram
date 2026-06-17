@@ -1,10 +1,5 @@
 import { useMemo, useState } from "react";
-import {
-  defineFilters,
-  useFilterState,
-  type FilterValue,
-  type OptionsById,
-} from "@/components/filters";
+import { FacetSelect } from "@/components/auditlogs/feed";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { SessionTableRow } from "@/components/sessions/SessionTableRow";
@@ -26,18 +21,12 @@ import {
 } from "@gram/client/react-query";
 import type { ListUserSessionsQueryParamStatus } from "@gram/client/models/operations";
 
-const USER_SESSION_FILTERS = defineFilters([
-  { id: "status", label: "Status", kind: "select", pinned: true },
-  { id: "issuerId", label: "MCP server", kind: "select", pinned: true },
-  { id: "clientId", label: "OAuth Client", kind: "select", pinned: true },
-  { id: "subjectUrn", label: "User", kind: "select", pinned: true },
-]);
+const STATUS_OPTIONS = ["all", "active", "expired", "revoked"] as const;
+type StatusFilter = (typeof STATUS_OPTIONS)[number];
 
-const STATUS_TOOLBAR_OPTIONS = [
-  { value: "active", label: "Active" },
-  { value: "expired", label: "Expired" },
-  { value: "revoked", label: "Revoked" },
-];
+const STATUS_FILTER_OPTIONS = STATUS_OPTIONS.filter((o) => o !== "all").map(
+  (o) => ({ value: o, displayName: o[0]!.toUpperCase() + o.slice(1) }),
+);
 
 export default function UserSessions(): JSX.Element {
   return (
@@ -65,35 +54,21 @@ function UserSessionsInner(): JSX.Element {
   );
 
   const [projectSlug, setProjectSlug] = useState<string>(project.slug);
-  const filters = useFilterState(USER_SESSION_FILTERS);
+  const [status, setStatus] = useState<StatusFilter>("all");
+  const [clientId, setClientId] = useState("all");
+  const [subjectUrn, setSubjectUrn] = useState("all");
+  const [issuerId, setIssuerId] = useState("all");
 
-  // Reset facet filters when switching projects so a stale selection from one
-  // project isn't submitted to another.
+  // Reset project-specific facet filters when switching projects so a stale
+  // client/user/server selection from one project isn't submitted to another.
   const handleProjectChange = (slug: string) => {
     setProjectSlug(slug);
-    filters.clearAll();
+    setClientId("all");
+    setSubjectUrn("all");
+    setIssuerId("all");
   };
 
   const { data: facets } = useUserSessionFacets({ gramProject: projectSlug });
-
-  const optionsById: OptionsById = useMemo(
-    () => ({
-      status: STATUS_TOOLBAR_OPTIONS,
-      issuerId: (facets?.servers ?? []).map((s) => ({
-        value: s.value,
-        label: s.displayName,
-      })),
-      clientId: (facets?.clients ?? []).map((c) => ({
-        value: c.value,
-        label: c.displayName,
-      })),
-      subjectUrn: (facets?.users ?? []).map((u) => ({
-        value: u.value,
-        label: u.displayName,
-      })),
-    }),
-    [facets],
-  );
 
   const {
     data,
@@ -104,12 +79,13 @@ function UserSessionsInner(): JSX.Element {
     refetch,
   } = useUserSessionsInfinite({
     gramProject: projectSlug,
-    status: (filters.values.status ?? undefined) as
-      | ListUserSessionsQueryParamStatus
-      | undefined,
-    clientId: filters.values.clientId ?? undefined,
-    subjectUrn: filters.values.subjectUrn ?? undefined,
-    userSessionIssuerId: filters.values.issuerId ?? undefined,
+    status:
+      status === "all"
+        ? undefined
+        : (status as ListUserSessionsQueryParamStatus),
+    clientId: clientId === "all" ? undefined : clientId,
+    subjectUrn: subjectUrn === "all" ? undefined : subjectUrn,
+    userSessionIssuerId: issuerId === "all" ? undefined : issuerId,
   });
   const sessions = data?.pages.flatMap((p) => p.result.items) ?? [];
 
@@ -122,39 +98,60 @@ function UserSessionsInner(): JSX.Element {
       </Page.Section.Description>
       <Page.Section.Body>
         <div className="space-y-4">
-          <div className="flex flex-col gap-1.5">
-            <Type small muted>
-              Project
-            </Type>
-            <Select value={projectSlug} onValueChange={handleProjectChange}>
-              <SelectTrigger size="sm" className="bg-background w-[260px]">
-                <SelectValue placeholder="Select project" />
-              </SelectTrigger>
-              <SelectContent>
-                {projects.map((p) => (
-                  <SelectItem key={p.slug} value={p.slug}>
-                    {p.slug}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <Page.Toolbar>
-            <Page.Toolbar.Filters
-              schema={USER_SESSION_FILTERS}
-              values={filters.values}
-              optionsById={optionsById}
-              onChange={
-                filters.setValue as (id: string, value: FilterValue) => void
-              }
-              onClear={filters.clearValue as (id: string) => void}
-              onClearAll={filters.clearAll}
+          <div className="flex flex-wrap gap-2">
+            <div className="flex flex-col gap-1.5">
+              <Type small muted>
+                Project
+              </Type>
+              <Select value={projectSlug} onValueChange={handleProjectChange}>
+                <SelectTrigger
+                  size="sm"
+                  className="bg-background min-w-[220px]"
+                >
+                  <SelectValue placeholder="Select project" />
+                </SelectTrigger>
+                <SelectContent>
+                  {projects.map((p) => (
+                    <SelectItem key={p.slug} value={p.slug}>
+                      {p.slug}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <FacetSelect
+              label="Status"
+              value={status}
+              onValueChange={(v) => setStatus(v as StatusFilter)}
+              placeholder="All statuses"
+              allLabel="All statuses"
+              options={STATUS_FILTER_OPTIONS}
             />
-            <Page.Toolbar.Count>
-              {sessions.length} session{sessions.length === 1 ? "" : "s"}
-            </Page.Toolbar.Count>
-          </Page.Toolbar>
+            <FacetSelect
+              label="MCP server"
+              value={issuerId}
+              onValueChange={setIssuerId}
+              placeholder="All servers"
+              allLabel="All servers"
+              options={facets?.servers ?? []}
+            />
+            <FacetSelect
+              label="OAuth Clients"
+              value={clientId}
+              onValueChange={setClientId}
+              placeholder="All OAuth clients"
+              allLabel="All OAuth clients"
+              options={facets?.clients ?? []}
+            />
+            <FacetSelect
+              label="User"
+              value={subjectUrn}
+              onValueChange={setSubjectUrn}
+              placeholder="All users"
+              allLabel="All users"
+              options={facets?.users ?? []}
+            />
+          </div>
 
           {isPending ? (
             <div className="space-y-2">
