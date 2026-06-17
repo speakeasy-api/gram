@@ -600,7 +600,7 @@ function EmployeeSessions({ userId }: { userId: string }): JSX.Element {
   return (
     <section className="bg-card border-border rounded-lg border p-5">
       <div className="mb-3 flex items-center justify-between">
-        <span className="text-sm font-semibold">Active Sessions</span>
+        <span className="text-sm font-semibold">Active MCP sessions</span>
         <div className="bg-muted/50 rounded-lg p-2">
           <Icon name="key-round" className="text-muted-foreground size-4" />
         </div>
