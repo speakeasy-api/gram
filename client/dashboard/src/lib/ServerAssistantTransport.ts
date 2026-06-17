@@ -123,6 +123,8 @@ export function createServerAssistantTransport(
             ? AbortSignal.any([abortSignal, poll.signal])
             : poll.signal;
 
+          writer.write({ type: "start" });
+
           let chatId = ctx.getChatId();
           // Bind the local thread identity at send-start so a server-minted
           // chat id is reconciled with THIS thread even if a parallel send on
@@ -168,19 +170,6 @@ export function createServerAssistantTransport(
             chatId = sent.value.chatId;
             adopt(chatId);
           }
-
-          // The runtime dedupes by idempotency key. assistant-ui auto-resends a
-          // turn whose last assistant message is "complete with tool calls", and
-          // a user can double-submit — both replay the same key, so the runtime
-          // enqueues nothing and returns `accepted: false`. No reply will ever
-          // land, so polling would spin until the timeout and leave the composer
-          // stuck "loading". End the turn now without opening an assistant
-          // message (`start` is written below only once a turn is in flight).
-          if (!sent.value.accepted) {
-            return;
-          }
-
-          writer.write({ type: "start" });
 
           await pollForReplies({
             deps,
