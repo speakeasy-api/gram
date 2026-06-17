@@ -344,8 +344,6 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes]
     if: needs.changes.outputs.server == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]')
-    env:
-      ASSISTANT_RUNTIME_REGISTRY: ${{ vars.ASSISTANT_RUNTIME_REGISTRY || 'fly' }}
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@41cdeedae8edb2e684ba22896a5fd2a3cb85db6b # v1
@@ -385,21 +383,7 @@ jobs:
           fi
           echo "hash=$hash" >> "$GITHUB_OUTPUT"
 
-      - name: Validate assistant runtime registry
-        shell: bash
-        run: |
-          case "$ASSISTANT_RUNTIME_REGISTRY" in
-            fly|gcr)
-              echo "Publishing assistant runtime image to $ASSISTANT_RUNTIME_REGISTRY"
-              ;;
-            *)
-              echo "::error::ASSISTANT_RUNTIME_REGISTRY must be either 'fly' or 'gcr'."
-              exit 1
-              ;;
-          esac
-
       - name: "[DEV] Create fly app"
-        if: env.ASSISTANT_RUNTIME_REGISTRY == 'fly'
         id: assistantFlyCreateDev
         shell: bash
         env:
@@ -412,7 +396,6 @@ jobs:
             --force
 
       - name: "[PROD] Create fly app"
-        if: env.ASSISTANT_RUNTIME_REGISTRY == 'fly'
         id: assistantFlyCreateProd
         shell: bash
         env:
@@ -429,7 +412,6 @@ jobs:
 
       - id: assistantGcrAuth
         name: "Authenticate to Google Cloud"
-        if: env.ASSISTANT_RUNTIME_REGISTRY == 'gcr'
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
           token_format: "access_token"
@@ -437,7 +419,6 @@ jobs:
           service_account: "speakeasy-registry-ga-ci@linen-analyst-344721.iam.gserviceaccount.com"
 
       - name: Login to GCR
-        if: env.ASSISTANT_RUNTIME_REGISTRY == 'gcr'
         env:
           GCR_TOKEN: ${{ steps.assistantGcrAuth.outputs.access_token }}
         run: |
@@ -457,7 +438,6 @@ jobs:
           exit 1
 
       - name: Extract assistant runtime metadata for GCR
-        if: env.ASSISTANT_RUNTIME_REGISTRY == 'gcr'
         id: assistantMetaGcr
         uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
         with:
@@ -473,7 +453,6 @@ jobs:
             type=sha,format=long
 
       - name: Build and push assistant runtime image to GCR
-        if: env.ASSISTANT_RUNTIME_REGISTRY == 'gcr'
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: .
@@ -484,13 +463,11 @@ jobs:
           labels: ${{ steps.assistantMetaGcr.outputs.labels }}
 
       - name: "[DEV] Login to Fly registry"
-        if: env.ASSISTANT_RUNTIME_REGISTRY == 'fly'
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
         run: fly auth docker
 
       - name: "[DEV] Extract assistant runtime metadata"
-        if: env.ASSISTANT_RUNTIME_REGISTRY == 'fly'
         id: assistantMetaDev
         uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
         with:
@@ -506,7 +483,6 @@ jobs:
             type=sha,format=long
 
       - name: "[DEV] Build and push assistant runtime image"
-        if: env.ASSISTANT_RUNTIME_REGISTRY == 'fly'
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: .
@@ -517,13 +493,11 @@ jobs:
           labels: ${{ steps.assistantMetaDev.outputs.labels }}
 
       - name: "[PROD] Login to Fly registry"
-        if: env.ASSISTANT_RUNTIME_REGISTRY == 'fly'
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
         run: fly auth docker
 
       - name: "[PROD] Extract assistant runtime metadata"
-        if: env.ASSISTANT_RUNTIME_REGISTRY == 'fly'
         id: assistantMetaProd
         uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
         with:
@@ -539,7 +513,6 @@ jobs:
             type=sha,format=long
 
       - name: "[PROD] Build and push assistant runtime image"
-        if: env.ASSISTANT_RUNTIME_REGISTRY == 'fly'
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: .
