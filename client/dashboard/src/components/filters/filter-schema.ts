@@ -87,8 +87,8 @@ interface BaseDimension<K extends FilterKind> {
   allLabel?: string;
 }
 
-export interface MultiselectDimension extends BaseDimension<"multiselect"> {}
-export interface SelectDimension extends BaseDimension<"select"> {}
+export type MultiselectDimension = BaseDimension<"multiselect">;
+export type SelectDimension = BaseDimension<"select">;
 export interface TextDimension extends BaseDimension<"text"> {
   /** Operator applied server-side; defaults to `contains`. */
   operator?: Operator;
