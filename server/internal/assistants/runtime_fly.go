@@ -122,10 +122,6 @@ type flyRuntimeFlapsFactory interface {
 	New(ctx context.Context) (flyRuntimeFlapsClient, error)
 }
 
-type flyRuntimeHTTPDoer interface {
-	Do(req *http.Request) (*http.Response, error)
-}
-
 type defaultFlyRuntimeFlapsFactory struct {
 	serviceName    string
 	serviceVersion string
@@ -156,7 +152,7 @@ type FlyRuntimeBackend struct {
 	config       FlyRuntimeConfig
 	client       flyRuntimeAPIClient
 	flapsFactory flyRuntimeFlapsFactory
-	httpClient   flyRuntimeHTTPDoer
+	httpClient   runtimeHTTPDoer
 }
 
 func NewFlyRuntimeBackend(logger *slog.Logger, tracerProvider trace.TracerProvider, httpPolicy *guardian.Policy, config FlyRuntimeConfig) *FlyRuntimeBackend {
@@ -843,8 +839,10 @@ func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntim
 	}
 
 	reqBody, err := json.Marshal(runtimeTurnRequest{
-		Input:     prompt,
-		AuthToken: authToken,
+		Input:       prompt,
+		AuthToken:   authToken,
+		AssistantID: runtime.AssistantID.String(),
+		ProjectID:   runtime.ProjectID.String(),
 	})
 	if err != nil {
 		return fmt.Errorf("marshal assistant fly runtime turn request: %w", err)
@@ -1120,7 +1118,7 @@ func (f *FlyRuntimeBackend) runtimeState(ctx context.Context, target flyRuntimeT
 // clientForTarget is a hook point for per-target dialing. The runner is
 // reachable via the app's hostname today; a future dedicated-IP design can
 // swap this to pin a request to a specific IP without changing callers.
-func (f *FlyRuntimeBackend) clientForTarget(_ flyRuntimeTarget) flyRuntimeHTTPDoer {
+func (f *FlyRuntimeBackend) clientForTarget(_ flyRuntimeTarget) runtimeHTTPDoer {
 	return f.httpClient
 }
 

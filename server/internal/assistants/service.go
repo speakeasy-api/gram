@@ -1059,7 +1059,12 @@ func (s *ServiceCore) ReapInactiveAssistantRuntimes(ctx context.Context, params 
 
 	rows, err := assistantrepo.New(s.db).ListInactiveAssistantRuntimesForReap(ctx, assistantrepo.ListInactiveAssistantRuntimesForReapParams{
 		InactiveBefore: conv.ToPGTimestamptz(time.Now().UTC().Add(-params.InactivityThreshold)),
-		LimitCount:     params.BatchSize,
+		// Also collect runtimes parked on a backend we no longer target so a
+		// provider switch (e.g. flyio -> gke) drains the old backend lazily as
+		// assistants go idle, without an admission-path teardown.
+		TargetBackend: s.runtime.Backend(),
+		StoppedState:  runtimeStateStopped,
+		LimitCount:    params.BatchSize,
 	})
 	if err != nil {
 		return ReapAssistantRuntimesResult{}, fmt.Errorf("list inactive assistant runtimes for reap: %w", err)

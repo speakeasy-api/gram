@@ -13,6 +13,7 @@ import (
 
 const (
 	RuntimeProviderFlyIO = runtimeBackendFlyIO
+	RuntimeProviderGKE   = runtimeBackendGKE
 
 	defaultFlyRuntimeRegion = "us"
 	defaultFlyRuntimePrefix = "gram-asst"
@@ -21,6 +22,7 @@ const (
 type RuntimeBackendConfig struct {
 	Provider string
 	Fly      FlyRuntimeConfig
+	GKE      GKERuntimeConfig
 }
 
 type FlyRuntimeConfig struct {
@@ -71,11 +73,35 @@ func (c FlyRuntimeConfig) Validate() error {
 	return nil
 }
 
-func NewRuntimeBackend(logger *slog.Logger, tracerProvider trace.TracerProvider, httpPolicy *guardian.Policy, config RuntimeBackendConfig) RuntimeBackend {
-	switch config.Provider {
-	case RuntimeProviderFlyIO:
-		return NewFlyRuntimeBackend(logger, tracerProvider, httpPolicy, config.Fly)
-	default:
-		panic(fmt.Sprintf("assistants.NewRuntimeBackend: unsupported provider %q (CLI validation should have rejected this)", config.Provider))
+// NewRuntimeBackend assembles a runtimeRouter over every configured backend and
+// targets config.Provider for new admissions. A backend is constructed when its
+// config is present — Fly when an API token is set, GKE when an in-cluster
+// kubernetes client is injected — so the two can run side by side (e.g. target
+// GKE while still tearing down Fly-backed rows). The target backend must be
+// among those constructed.
+func NewRuntimeBackend(logger *slog.Logger, tracerProvider trace.TracerProvider, httpPolicy *guardian.Policy, config RuntimeBackendConfig) (RuntimeBackend, error) {
+	backends := map[string]RuntimeBackend{}
+
+	if config.Fly.FlyTokens != nil {
+		if err := config.Fly.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid fly assistant runtime config: %w", err)
+		}
+		backends[runtimeBackendFlyIO] = NewFlyRuntimeBackend(logger, tracerProvider, httpPolicy, config.Fly)
 	}
+
+	if config.GKE.Dynamic != nil {
+		if err := config.GKE.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid gke assistant runtime config: %w", err)
+		}
+		// Reach the in-pod runner through the guardian egress policy, matching
+		// the Fly backend. The policy must permit the in-cluster sandbox
+		// network for traffic to land.
+		backends[runtimeBackendGKE] = NewGKERuntimeBackend(logger, tracerProvider, httpPolicy.PooledClient(guardian.WithDefaultRetryConfig()), config.GKE)
+	}
+
+	router, err := newRuntimeRouter(config.Provider, backends)
+	if err != nil {
+		return nil, fmt.Errorf("assemble assistant runtime backends: %w", err)
+	}
+	return router, nil
 }

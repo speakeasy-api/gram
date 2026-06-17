@@ -2,19 +2,27 @@
 
 set -euo pipefail
 
-workdir_mount=/var/lib/gram-assistant/work
+workdir=/var/lib/gram-assistant/work
 sandbox_src=/usr/share/gram/sandbox
-mkdir -p "$workdir_mount"
-mount -t tmpfs -o size=256m,mode=0755 tmpfs "$workdir_mount"
-for dep in browser.ts package.json node_modules; do
-  src="$sandbox_src/$dep"
-  dst="$workdir_mount/$dep"
-  [ -e "$src" ] || continue
-  # The bind target must exist inside the tmpfs first.
-  if [ -d "$src" ]; then mkdir -p "$dst"; else : >"$dst"; fi
-  mount --bind "$src" "$dst"
-  mount -o remount,bind,ro "$dst"
-done
+mkdir -p "$workdir"
+
+# Size-capped tmpfs + read-only bind-mounted deps where mount(2) is permitted;
+# symlink the deps where it is not (the platform supplies the writable workdir).
+if mount -t tmpfs -o size=256m,mode=0755 tmpfs "$workdir" 2>/dev/null; then
+  for dep in browser.ts package.json node_modules; do
+    src="$sandbox_src/$dep"
+    dst="$workdir/$dep"
+    [ -e "$src" ] || continue
+    if [ -d "$src" ]; then mkdir -p "$dst"; else : >"$dst"; fi
+    mount --bind "$src" "$dst"
+    mount -o remount,bind,ro "$dst"
+  done
+else
+  for dep in browser.ts package.json node_modules; do
+    [ -e "$sandbox_src/$dep" ] || continue
+    ln -sfn "$sandbox_src/$dep" "$workdir/$dep"
+  done
+fi
 
 /usr/local/bin/lightpanda-supervise &
 

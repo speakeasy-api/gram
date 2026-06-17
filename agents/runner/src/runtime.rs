@@ -1,6 +1,6 @@
 use std::panic::AssertUnwindSafe;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use agentkit_adapter_completions::CompletionsAdapter;
@@ -58,7 +58,11 @@ pub type AppState = Arc<RuntimeHost>;
 
 /// Singleton host shared by every per-thread task on the VM.
 pub struct RuntimeHost {
-    pub assistant_id: String,
+    /// The assistant this VM serves, surfaced in /state. Set from the
+    /// GRAM_ASSISTANT_ID boot env when present (Fly, GKE cold-start), or
+    /// stamped by the first turn that carries one (GKE warm-pool sandbox).
+    /// Set-once: boot env wins.
+    pub assistant_id: OnceLock<String>,
     pub started_at: Instant,
     /// Per-idempotency-key admission slot. The bool tracks whether the
     /// keyed turn has actually been enqueued: holding the mutex covers
@@ -118,7 +122,7 @@ impl ConfiguredThread {
 }
 
 pub async fn build_host(
-    assistant_id: String,
+    assistant_id: Option<String>,
     server_url: String,
     initial_token: String,
     thread_idle_ttl: Duration,
@@ -138,8 +142,12 @@ pub async fn build_host(
 
     let gram_client =
         GramBootstrapClient::new(server_url, build_bootstrap_client(http_client.clone()));
+    let assistant_id_cell = OnceLock::new();
+    if let Some(id) = assistant_id {
+        let _ = assistant_id_cell.set(id);
+    }
     let host = Arc::new(RuntimeHost {
-        assistant_id,
+        assistant_id: assistant_id_cell,
         started_at: Instant::now(),
         seen: DashMap::new(),
         threads: DashMap::new(),
@@ -752,8 +760,10 @@ mod tests {
             "http://localhost".to_string(),
             build_bootstrap_client(http_client.clone()),
         );
+        let assistant_id = OnceLock::new();
+        let _ = assistant_id.set("asst".to_string());
         Arc::new(RuntimeHost {
-            assistant_id: "asst".to_string(),
+            assistant_id,
             started_at: Instant::now(),
             seen: DashMap::new(),
             threads: DashMap::new(),

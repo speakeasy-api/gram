@@ -13,22 +13,33 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/k8s"
 )
 
 var assistantRuntimeFlags = []cli.Flag{
 	&cli.StringFlag{
 		Name:    "assistant-runtime-provider",
-		Usage:   "Assistant runtime provider. Allowed values: flyio.",
+		Usage:   "Assistant runtime provider. Allowed values: flyio, gke.",
 		Value:   assistants.RuntimeProviderFlyIO,
 		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_PROVIDER"},
 		Action: func(_ *cli.Context, val string) error {
 			switch val {
-			case "", assistants.RuntimeProviderFlyIO:
+			case "", assistants.RuntimeProviderFlyIO, assistants.RuntimeProviderGKE:
 				return nil
 			default:
 				return fmt.Errorf("invalid assistant runtime provider: %s", val)
 			}
 		},
+	},
+	&cli.StringFlag{
+		Name:    "assistant-runtime-gke-namespace",
+		Usage:   "Kubernetes namespace for GKE Agent Sandbox assistant runtimes. Defaults to gram-{environment}.",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_NAMESPACE"},
+	},
+	&cli.StringFlag{
+		Name:    "assistant-runtime-gke-warm-pool",
+		Usage:   "SandboxWarmPool name that GKE assistant runtime claims check out from.",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_WARM_POOL"},
 	},
 	&cli.StringFlag{
 		Name:    "assistant-runtime-server-url",
@@ -97,11 +108,17 @@ func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistan
 	}
 
 	provider := c.String("assistant-runtime-provider")
-	if provider == "" {
+	switch provider {
+	case "", assistants.RuntimeProviderFlyIO:
 		provider = assistants.RuntimeProviderFlyIO
-	}
-	if provider != assistants.RuntimeProviderFlyIO {
+	case assistants.RuntimeProviderGKE:
+	default:
 		return assistants.RuntimeBackendConfig{}, fmt.Errorf("invalid assistant runtime provider: %s", provider)
+	}
+
+	gkeNamespace := c.String("assistant-runtime-gke-namespace")
+	if gkeNamespace == "" {
+		gkeNamespace = "gram-" + c.String("environment")
 	}
 
 	return assistants.RuntimeBackendConfig{
@@ -123,6 +140,20 @@ func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistan
 			OTLPHeaders:        c.String("assistant-runtime-otlp-headers"),
 			Environment:        c.String("environment"),
 		},
+		// Dynamic is injected in newAssistantRuntime from the in-cluster
+		// kubernetes client — it is not available from the CLI context alone.
+		// Dynamic is injected in newAssistantRuntime from the in-cluster
+		// kubernetes client; the egress-controlled HTTP client is built from
+		// the guardian policy in assistants.NewRuntimeBackend.
+		GKE: assistants.GKERuntimeConfig{
+			Dynamic:   nil,
+			Namespace: gkeNamespace,
+			WarmPool:  c.String("assistant-runtime-gke-warm-pool"),
+			GuestPort: 0,
+			OCIImage:  c.String("assistant-runtime-oci-image"),
+			ImageTag:  AssistantRuntimeImageHash,
+			ServerURL: resolvedServerURL,
+		},
 	}, nil
 }
 
@@ -140,11 +171,26 @@ func newAssistantRuntime(
 	if err != nil {
 		return nil, err
 	}
-	if err := cfg.Fly.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid fly assistant runtime config: %w", err)
+
+	// The GKE backend reaches Agent Sandbox through the in-cluster kubernetes
+	// API. InitializeK8sClient is a singleton and returns nil clients in local
+	// env, where GKE is unsupported — GKERuntimeConfig.Validate rejects that.
+	if cfg.Provider == assistants.RuntimeProviderGKE {
+		k8sClients, err := k8s.InitializeK8sClient(ctx, logger, c.String("environment"), false)
+		if err != nil {
+			return nil, fmt.Errorf("initialize kubernetes client for gke assistant runtime: %w", err)
+		}
+		cfg.GKE.Dynamic = k8sClients.DynamicClient
 	}
+
+	// Fly and GKE call back to the server at the same URL; validate it once.
 	if err := guardianPolicy.ValidateHost(ctx, cfg.Fly.ServerURL.Hostname()); err != nil {
-		return nil, fmt.Errorf("assistant fly runtime requires a public --assistant-runtime-server-url or --server-url; got %q: %w", cfg.Fly.ServerURL.String(), err)
+		return nil, fmt.Errorf("assistant runtime requires a public --assistant-runtime-server-url or --server-url; got %q: %w", cfg.Fly.ServerURL.String(), err)
 	}
-	return assistants.NewRuntimeBackend(logger, tracerProvider, guardianPolicy, cfg), nil
+
+	backend, err := assistants.NewRuntimeBackend(logger, tracerProvider, guardianPolicy, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("build assistant runtime backend: %w", err)
+	}
+	return backend, nil
 }

@@ -17,7 +17,7 @@ use crate::wire::{RunnerStateResponse, ThreadStateView, ThreadTurnRequest, Threa
 
 pub struct ServeConfig {
     pub addr: SocketAddr,
-    pub assistant_id: String,
+    pub assistant_id: Option<String>,
     pub server_url: String,
     pub initial_token: String,
 }
@@ -57,7 +57,7 @@ async fn healthz() -> &'static str {
 async fn state_handler(State(host): State<AppState>) -> Json<RunnerStateResponse> {
     let snapshot = snapshot_threads(&host);
     Json(RunnerStateResponse {
-        assistant_id: host.assistant_id.clone(),
+        assistant_id: host.assistant_id.get().cloned().unwrap_or_default(),
         uptime_seconds: host.started_at.elapsed().as_secs(),
         threads: snapshot
             .into_iter()
@@ -78,6 +78,12 @@ async fn thread_turn(
 ) -> Result<Json<ThreadTurnResponse>, (StatusCode, String)> {
     if thread_id.is_empty() {
         return Err((StatusCode::BAD_REQUEST, "missing thread_id".to_string()));
+    }
+
+    // A warm-pool sandbox boots without GRAM_ASSISTANT_ID; the first turn that
+    // carries one stamps it for /state. Set-once, so a boot env value wins.
+    if let Some(assistant_id) = &request.assistant_id {
+        let _ = host.assistant_id.set(assistant_id.clone());
     }
 
     // Idempotency key is namespaced by thread so two threads sharing an
