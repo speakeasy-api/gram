@@ -66,7 +66,7 @@ import {
 import { slugify } from "@/lib/constants";
 import { useMemo, useState } from "react";
 import { Line } from "react-chartjs-2";
-import { Link, useParams } from "react-router";
+import { useParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   Background,
@@ -463,25 +463,7 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                   value={summary?.totalToolCalls ?? 0}
                   icon="wrench"
                   subtext={`${(summary?.toolCallSuccess ?? 0).toLocaleString()} succeeded / ${(summary?.toolCallFailure ?? 0).toLocaleString()} failed`}
-                  action={
-                    employeeEmailFilter ? (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Link
-                            to={toolLogsHref}
-                            aria-label="View Tool Logs"
-                            className="text-primary/70 hover:text-primary flex items-center gap-1 text-xs no-underline"
-                          >
-                            View
-                            <Icon name="arrow-right" />
-                          </Link>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          View Tool Logs for {member?.name ?? routeUser}
-                        </TooltipContent>
-                      </Tooltip>
-                    ) : null
-                  }
+                  link={toolLogsHref}
                 />
                 <MetricCard
                   title="Agent Sessions"
@@ -493,23 +475,7 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                   }
                   icon="message-square"
                   subtext={`Over ${rangeLabel}`}
-                  action={
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Link
-                          to={agentSessionsHref}
-                          aria-label="View Agent Sessions"
-                          className="text-primary/70 hover:text-primary flex items-center gap-1 text-xs no-underline"
-                        >
-                          View
-                          <Icon name="arrow-right" />
-                        </Link>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        View Agent Sessions for {member?.name ?? routeUser}
-                      </TooltipContent>
-                    </Tooltip>
-                  }
+                  link={agentSessionsHref}
                 />
                 <MetricCard
                   title="Risk Events"
@@ -521,25 +487,7 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                   }
                   icon="flag"
                   subtext={`Over ${rangeLabel}`}
-                  action={
-                    employeeEmailFilter ? (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Link
-                            to={riskEventsHref}
-                            aria-label="View Risk Events"
-                            className="text-primary/70 hover:text-primary flex items-center gap-1 text-xs no-underline"
-                          >
-                            View
-                            <Icon name="arrow-right" />
-                          </Link>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          View Risk Events for {member?.name ?? routeUser}
-                        </TooltipContent>
-                      </Tooltip>
-                    ) : null
-                  }
+                  link={riskEventsHref}
                 />
               </section>
 

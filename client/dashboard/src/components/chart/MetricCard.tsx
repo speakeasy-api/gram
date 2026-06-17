@@ -2,6 +2,7 @@ import { Icon, type IconName } from "@speakeasy-api/moonshine";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { formatCompact } from "@/lib/format";
 import { getValueColor, ThresholdConfig } from "./chartUtils";
+import { Link } from "react-router";
 
 type AccentColor = "red" | "orange" | "yellow" | "green" | "blue" | "purple";
 
@@ -19,7 +20,8 @@ export type MetricCardProps = {
   accentColor?: AccentColor;
   subtext?: string;
   tooltip?: string;
-  action?: React.ReactNode;
+  link?: string;
+  linkText?: string;
 };
 
 export function MetricCard(props: MetricCardProps): JSX.Element {
@@ -35,7 +37,8 @@ export function MetricCard(props: MetricCardProps): JSX.Element {
     comparisonLabel,
     subtext,
     tooltip,
-    action,
+    link,
+    linkText = "View",
   } = props;
   const formatValue = (v: number) => {
     switch (format) {
@@ -131,7 +134,18 @@ export function MetricCard(props: MetricCardProps): JSX.Element {
           )}
         </div>
 
-        {action && <div className="shrink">{action}</div>}
+        {link && (
+          <div className="shrink">
+            <Link
+              to={link}
+              aria-label={`View ${title}`}
+              className="text-primary/70 hover:text-primary flex items-center gap-1 text-xs no-underline"
+            >
+              {linkText}
+              <Icon name="arrow-right" />
+            </Link>
+          </div>
+        )}
       </div>
     </div>
   );
