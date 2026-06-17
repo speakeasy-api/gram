@@ -201,7 +201,7 @@ func handleSearchToolsCall(
 	}
 
 	// construct full tool entries with similarity scores
-	var results []*toolListEntry
+	results := make([]*toolListEntry, 0, len(searchResults))
 	for _, searchResult := range searchResults {
 		tool, exists := toolsByName[searchResult.ToolName]
 		if !exists {
@@ -252,8 +252,9 @@ func handleSearchToolsCall(
 	response, err := json.Marshal(result[toolCallResult]{
 		ID: reqID,
 		Result: toolCallResult{
-			Content: []json.RawMessage{chunk},
-			IsError: false,
+			Content:           []json.RawMessage{chunk},
+			StructuredContent: json.RawMessage(payload),
+			IsError:           false,
 		},
 	})
 	if err != nil {
@@ -366,8 +367,9 @@ func handleDescribeToolsCall(
 	response, err := json.Marshal(result[toolCallResult]{
 		ID: reqID,
 		Result: toolCallResult{
-			Content: []json.RawMessage{chunk},
-			IsError: false,
+			Content:           []json.RawMessage{chunk},
+			StructuredContent: json.RawMessage(payload),
+			IsError:           false,
 		},
 	})
 	if err != nil {

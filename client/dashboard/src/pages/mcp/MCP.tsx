@@ -8,17 +8,18 @@ import { MCPTableRow, MCPTableRowSkeleton } from "@/components/mcp/MCPTableRow";
 import { Page } from "@/components/page-layout";
 import { DotTable } from "@/components/ui/dot-table";
 import { SearchBar } from "@/components/ui/search-bar";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { ViewToggle } from "@/components/ui/view-toggle";
 import { useViewMode } from "@/components/ui/use-view-mode";
-import { useSdkClient } from "@/contexts/Sdk";
+import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
 import {
   useMcpEndpoints,
   useMcpServers,
 } from "@gram/client/react-query/index.js";
-import { Button } from "@speakeasy-api/moonshine";
+import { Badge, Button, Icon } from "@speakeasy-api/moonshine";
 import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Outlet, useNavigate } from "react-router";
@@ -67,10 +68,27 @@ function MCPOverview() {
   // (toolset-backed) MCP servers also source from mcp_servers. Until then the
   // listing merges two parallel collections — toolsets (Hosted) and
   // mcp_servers (Remote-MCP-backed today) — in the same grid.
-  const { data: mcpServersResult, isLoading: isLoadingMcpServers } =
-    useMcpServers({}, undefined, { enabled: isRemoteMcpEnabled });
-  const { data: endpointsResult, isLoading: isLoadingEndpoints } =
-    useMcpEndpoints({}, undefined, { enabled: isRemoteMcpEnabled });
+  // These listing fetches are non-critical: degrade to the last good (or empty)
+  // data with an inline indicator instead of throwing to the page error
+  // boundary and replacing the whole screen. Key them by project so a tolerated
+  // failure can't leave another project's rows on screen after a switch.
+  const gramProject = useProjectSlugForRequests();
+  const {
+    data: mcpServersResult,
+    isLoading: isLoadingMcpServers,
+    isError: isMcpServersError,
+  } = useMcpServers({ gramProject }, undefined, {
+    enabled: isRemoteMcpEnabled,
+    throwOnError: false,
+  });
+  const {
+    data: endpointsResult,
+    isLoading: isLoadingEndpoints,
+    isError: isEndpointsError,
+  } = useMcpEndpoints({ gramProject }, undefined, {
+    enabled: isRemoteMcpEnabled,
+    throwOnError: false,
+  });
   // Filter the listing to Remote-MCP-backed rows for now — the AGE-1902
   // cutover will introduce toolset-backed rows that today still render
   // through the existing Hosted MCPCard path via useToolsets().
@@ -95,6 +113,9 @@ function MCPOverview() {
   const isLoading =
     toolsets.isLoading ||
     (isRemoteMcpEnabled && (isLoadingMcpServers || isLoadingEndpoints));
+
+  const hasRefreshError =
+    toolsets.isError || isMcpServersError || isEndpointsError;
 
   const [viewMode, setViewMode] = useViewMode();
   const [newMcpDialogOpen, setNewMcpDialogOpen] = useState(false);
@@ -157,6 +178,17 @@ function MCPOverview() {
     </RequireScope>
   );
 
+  const refreshErrorIndicator = (
+    <SimpleTooltip tooltip="We couldn't reach the server to refresh this list. Showing the most recently loaded data.">
+      <Badge variant="warning">
+        <Badge.LeftIcon>
+          <Icon name="triangle-alert" className="inline-block" />
+        </Badge.LeftIcon>
+        <Badge.Text>Couldn&apos;t refresh</Badge.Text>
+      </Badge>
+    </SimpleTooltip>
+  );
+
   const newMcpServerDialog = (
     <InputDialog
       open={newMcpDialogOpen}
@@ -200,7 +232,12 @@ function MCPOverview() {
     </Page.Section>
   );
 
-  if (!isLoading && toolsets.length === 0 && mcpServers.length === 0) {
+  if (
+    !isLoading &&
+    !hasRefreshError &&
+    toolsets.length === 0 &&
+    mcpServers.length === 0
+  ) {
     return (
       <>
         <MCPEmptyState cta={newMcpServerButton} />
@@ -214,6 +251,9 @@ function MCPOverview() {
     <>
       <Page.Section>
         <Page.Section.Title>Hosted MCP Servers</Page.Section.Title>
+        {hasRefreshError ? (
+          <Page.Section.CTA>{refreshErrorIndicator}</Page.Section.CTA>
+        ) : null}
         <Page.Section.CTA>
           <ViewToggle value={viewMode} onChange={setViewMode} />
         </Page.Section.CTA>

@@ -98,7 +98,7 @@ export function AppSidebar({
     ...(isDeploymentsPageEnabled ? [routes.deployments] : []),
   ].some((r) => r.active);
 
-  const buildActive = [
+  const distributeActive = [
     routes.mcp,
     routes.clis,
     routes.plugins,
@@ -123,14 +123,14 @@ export function AppSidebar({
   ].some((r) => r.active);
 
   let activeGroup: string | undefined;
-  if (connectActive) {
-    activeGroup = "Connect";
-  } else if (buildActive) {
-    activeGroup = "Build";
-  } else if (observeActive) {
+  if (observeActive) {
     activeGroup = "Observe";
   } else if (securityActive) {
     activeGroup = "Secure";
+  } else if (connectActive) {
+    activeGroup = "Connect";
+  } else if (distributeActive) {
+    activeGroup = "Distribute";
   }
 
   // Find the specific active route title for the sliding highlight. Shared with
@@ -173,7 +173,7 @@ export function AppSidebar({
             activeGroup={activeGroup}
             defaultOpenGroups={
               !activeGroup
-                ? ["Connect", "Build", "Observe", "Secure"]
+                ? ["Observe", "Secure", "Connect", "Distribute"]
                 : undefined
             }
             activeItem={activeItem}
@@ -185,61 +185,17 @@ export function AppSidebar({
                 scope={scopeFor(routes.home)}
               />
 
-              {/* Connect group */}
-              <CollapsibleNavGroup
-                label="Connect"
-                Icon={(p) => <Icon {...p} name="plug" />}
-                defaultHref={routes.sources.href()}
-              >
-                <ScopeGatedNavItem
-                  item={routes.sources}
-                  scope={scopeFor(routes.sources)}
-                />
-                <ScopeGatedNavItem
-                  item={routes.catalog}
-                  scope={scopeFor(routes.catalog)}
-                />
-                <ScopeGatedNavItem
-                  item={routes.playground}
-                  scope={scopeFor(routes.playground)}
-                />
-                {isDeploymentsPageEnabled && (
-                  <ScopeGatedNavItem
-                    item={routes.deployments}
-                    scope={scopeFor(routes.deployments)}
-                  />
-                )}
-              </CollapsibleNavGroup>
+              {/* Chat — top-level, no group; a full-page entry to the
+                  Project Assistant alongside the docked composer */}
+              <ScopeGatedTopLevelItem
+                item={routes.chat}
+                scope={scopeFor(routes.chat)}
+              />
 
-              {/* Build group */}
-              <CollapsibleNavGroup
-                label="Build"
-                Icon={(p) => <Icon {...p} name="hammer" />}
-                defaultHref={routes.mcp.href()}
-              >
-                <ScopeGatedNavItem
-                  item={routes.mcp}
-                  scope={scopeFor(routes.mcp)}
-                />
-                {isAssistantsEnabled && (
-                  <ScopeGatedNavItem
-                    item={routes.assistants}
-                    scope={scopeFor(routes.assistants)}
-                  />
-                )}
-                <ScopeGatedNavItem
-                  item={routes.clis}
-                  scope={scopeFor(routes.clis)}
-                />
-                <ScopeGatedNavItem
-                  item={routes.plugins}
-                  scope={scopeFor(routes.plugins)}
-                />
-                <ScopeGatedNavItem
-                  item={routes.environments}
-                  scope={scopeFor(routes.environments)}
-                />
-              </CollapsibleNavGroup>
+              {/* Divider: sets Home + Chat apart from the grouped nav below */}
+              <li aria-hidden="true" className="my-3 px-1">
+                <div className="border-border border-t" />
+              </li>
 
               {/* Observe group */}
               <CollapsibleNavGroup
@@ -269,7 +225,7 @@ export function AppSidebar({
                 />
               </CollapsibleNavGroup>
 
-              {/* Security group */}
+              {/* Secure group */}
               <CollapsibleNavGroup
                 label="Secure"
                 Icon={(p) => <Icon {...p} name="shield" />}
@@ -295,6 +251,62 @@ export function AppSidebar({
                 <ScopeGatedNavItem
                   item={routes.detectionRules}
                   scope={scopeFor(routes.detectionRules)}
+                />
+              </CollapsibleNavGroup>
+
+              {/* Connect group */}
+              <CollapsibleNavGroup
+                label="Connect"
+                Icon={(p) => <Icon {...p} name="plug" />}
+                defaultHref={routes.sources.href()}
+              >
+                <ScopeGatedNavItem
+                  item={routes.sources}
+                  scope={scopeFor(routes.sources)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.catalog}
+                  scope={scopeFor(routes.catalog)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.playground}
+                  scope={scopeFor(routes.playground)}
+                />
+                {isDeploymentsPageEnabled && (
+                  <ScopeGatedNavItem
+                    item={routes.deployments}
+                    scope={scopeFor(routes.deployments)}
+                  />
+                )}
+              </CollapsibleNavGroup>
+
+              {/* Distribute group */}
+              <CollapsibleNavGroup
+                label="Distribute"
+                Icon={(p) => <Icon {...p} name="hammer" />}
+                defaultHref={routes.mcp.href()}
+              >
+                <ScopeGatedNavItem
+                  item={routes.mcp}
+                  scope={scopeFor(routes.mcp)}
+                />
+                {isAssistantsEnabled && (
+                  <ScopeGatedNavItem
+                    item={routes.assistants}
+                    scope={scopeFor(routes.assistants)}
+                  />
+                )}
+                <ScopeGatedNavItem
+                  item={routes.clis}
+                  scope={scopeFor(routes.clis)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.plugins}
+                  scope={scopeFor(routes.plugins)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.environments}
+                  scope={scopeFor(routes.environments)}
                 />
               </CollapsibleNavGroup>
 

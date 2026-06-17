@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -142,6 +144,62 @@ func TestLogs_CodexPayloadContinuesThroughUsagePath(t *testing.T) {
 		})
 		return err == nil && len(logs) > 0
 	}, 300*time.Millisecond, 50*time.Millisecond)
+}
+
+func TestShouldTriggerClaudePromptCorrelation(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, shouldTriggerClaudePromptCorrelation(map[attr.Key]any{
+		attribute.Key("event.name"): "user_prompt",
+		attribute.Key("prompt.id"):  "prompt-1",
+		attribute.Key("session.id"): "session-1",
+	}))
+
+	require.False(t, shouldTriggerClaudePromptCorrelation(map[attr.Key]any{
+		attribute.Key("event.name"): "tool_call",
+		attribute.Key("prompt.id"):  "prompt-1",
+	}))
+
+	require.True(t, shouldTriggerClaudePromptCorrelation(map[attr.Key]any{
+		attribute.Key("event.name"): "user_prompt",
+	}))
+}
+
+func TestExtractSessionMetadataSkipsNilOTELAttributeElements(t *testing.T) {
+	t.Parallel()
+
+	payload := claudeLogsPayload(
+		[]*gen.OTELResourceAttribute{
+			nil,
+			resourceStrAttr("service.name", "claude-code"),
+		},
+		nil,
+		&gen.OTELLogRecord{
+			Attributes: []*gen.OTELAttribute{
+				nil,
+				{Key: "empty-value"},
+				strAttr("session.id", "claude-session-1"),
+				strAttr("user.email", "dev@example.com"),
+				strAttr("organization.id", "claude-org-1"),
+			},
+		},
+	)
+
+	var metadata claudeLogMetadata
+	require.NotPanics(t, func() {
+		metadata = extractSessionMetadata(payload)
+	})
+	require.Equal(t, "claude-code", metadata.ServiceName)
+	require.Equal(t, "claude-session-1", metadata.SessionID)
+	require.Equal(t, "dev@example.com", metadata.UserEmail)
+	require.Equal(t, "claude-org-1", metadata.ClaudeOrgID)
+
+	require.Empty(t, extractLogData(&gen.OTELLogRecord{Attributes: []*gen.OTELAttribute{nil}}).SessionID)
+	require.Empty(t, extractAttributeString([]*gen.OTELAttribute{nil}, "session.id"))
+	require.Equal(t, "claude-session-1", extractAttributeString([]*gen.OTELAttribute{
+		nil,
+		strAttr("session.id", "claude-session-1"),
+	}, "session.id"))
 }
 
 func enableHookTelemetryLogger(t *testing.T, ctx context.Context, ti *testInstance) *telemetryrepo.Queries {
