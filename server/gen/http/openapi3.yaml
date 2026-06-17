@@ -40070,13 +40070,6 @@ components:
         ListRoleGrant:
             type: object
             properties:
-                effect:
-                    type: string
-                    description: Whether this grant allows or denies the scope. Defaults to 'allow' when omitted.
-                    default: allow
-                    enum:
-                        - allow
-                        - deny
                 scope:
                     type: string
                     description: The scope slug this grant applies to.
@@ -44213,13 +44206,6 @@ components:
         RoleGrant:
             type: object
             properties:
-                effect:
-                    type: string
-                    description: Whether this grant allows or denies the scope. Defaults to 'allow' when omitted.
-                    default: allow
-                    enum:
-                        - allow
-                        - deny
                 scope:
                     type: string
                     description: The scope slug this grant applies to.

@@ -694,12 +694,6 @@ var RoleGrantModel = Type("RoleGrant", func() {
 		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass")
 	})
 
-	Attribute("effect", String, func() {
-		Description("Whether this grant allows or denies the scope. Defaults to 'allow' when omitted.")
-		Enum("allow", "deny")
-		Default("allow")
-	})
-
 	Attribute("selectors", ArrayOf(SelectorModel), func() {
 		Description("Selector constraints. Null means unrestricted.")
 	})
@@ -712,12 +706,6 @@ var ListRoleGrantModel = Type("ListRoleGrant", func() {
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
 		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass")
-	})
-
-	Attribute("effect", String, func() {
-		Description("Whether this grant allows or denies the scope. Defaults to 'allow' when omitted.")
-		Enum("allow", "deny")
-		Default("allow")
 	})
 
 	Attribute("sub_scopes", ArrayOf(String), func() {
