@@ -226,6 +226,9 @@ func flattenRoleGrants(grants []*RoleGrant) ([]roleGrantRow, error) {
 		if err := validatePolicyEffect(effect); err != nil {
 			return nil, err
 		}
+		if effect == PolicyEffectDeny {
+			return nil, fmt.Errorf("policy effect %q is deprecated; use exclusion scopes", effect)
+		}
 
 		selectors := grant.Selectors
 		// nil selectors = unrestricted wildcard access.

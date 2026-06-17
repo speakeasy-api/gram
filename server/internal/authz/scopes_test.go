@@ -1070,7 +1070,7 @@ func TestFlattenRoleGrants_emptyEffectDefaultsToAllow(t *testing.T) {
 	require.Equal(t, PolicyEffectAllow, rows[0].Effect)
 }
 
-func TestFlattenRoleGrants_deduplicatesByScopeEffectAndSelector(t *testing.T) {
+func TestFlattenRoleGrants_deduplicatesByScopeAndSelector(t *testing.T) {
 	t.Parallel()
 
 	selector := NewSelector(ScopeProjectRead, "proj_1")
@@ -1085,15 +1085,21 @@ func TestFlattenRoleGrants_deduplicatesByScopeEffectAndSelector(t *testing.T) {
 			Effect:    PolicyEffectAllow,
 			Selectors: []Selector{selector},
 		},
-		{
-			Scope:     string(ScopeProjectRead),
-			Effect:    PolicyEffectDeny,
-			Selectors: []Selector{selector},
-		},
 	})
 	require.NoError(t, err)
-	require.Len(t, rows, 2)
-	require.ElementsMatch(t, []PolicyEffect{PolicyEffectAllow, PolicyEffectDeny}, []PolicyEffect{rows[0].Effect, rows[1].Effect})
+	require.Len(t, rows, 1)
+	require.Equal(t, PolicyEffectAllow, rows[0].Effect)
+}
+
+func TestFlattenRoleGrants_rejectsDenyEffect(t *testing.T) {
+	t.Parallel()
+
+	_, err := flattenRoleGrants([]*RoleGrant{{
+		Scope:     string(ScopeProjectRead),
+		Effect:    PolicyEffectDeny,
+		Selectors: []Selector{NewSelector(ScopeProjectRead, "proj_1")},
+	}})
+	require.ErrorContains(t, err, `policy effect "deny" is deprecated`)
 }
 
 func TestEvaluateGrants_emptyEffectFailsClosed(t *testing.T) {
