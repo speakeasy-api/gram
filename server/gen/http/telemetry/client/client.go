@@ -57,6 +57,9 @@ type Client struct {
 	// getProjectOverview endpoint.
 	GetProjectOverviewDoer goahttp.Doer
 
+	// Query Doer is the HTTP client used to make requests to the query endpoint.
+	QueryDoer goahttp.Doer
+
 	// ListFilterOptions Doer is the HTTP client used to make requests to the
 	// listFilterOptions endpoint.
 	ListFilterOptionsDoer goahttp.Doer
@@ -115,6 +118,7 @@ func NewClient(
 		GetEmployeeDataFlowGraphDoer:  doer,
 		GetObservabilityOverviewDoer:  doer,
 		GetProjectOverviewDoer:        doer,
+		QueryDoer:                     doer,
 		ListFilterOptionsDoer:         doer,
 		ListAttributeKeysDoer:         doer,
 		GetHooksSummaryDoer:           doer,
@@ -365,6 +369,30 @@ func (c *Client) GetProjectOverview() goa.Endpoint {
 		resp, err := c.GetProjectOverviewDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("telemetry", "getProjectOverview", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// Query returns an endpoint that makes HTTP requests to the telemetry service
+// query server.
+func (c *Client) Query() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeQueryRequest(c.encoder)
+		decodeResponse = DecodeQueryResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildQueryRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.QueryDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "query", err)
 		}
 		return decodeResponse(resp)
 	}

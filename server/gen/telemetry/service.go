@@ -39,6 +39,12 @@ type Service interface {
 	// Get project-level overview including total chats, tool calls, active
 	// servers/users, and top lists
 	GetProjectOverview(context.Context, *GetProjectOverviewPayload) (res *GetProjectOverviewResult, err error)
+	// Generic, org-scoped analytics query over pre-aggregated usage metrics.
+	// Returns both a grouped table and a per-group hourly timeseries for the same
+	// slice of data, supporting arbitrary allowlisted group-by dimensions and
+	// filters (e.g. group by department_name, then drill in by filtering
+	// department_name and grouping by role).
+	Query(context.Context, *QueryPayload) (res *QueryResult, err error)
 	// List available filter options (API keys or users) for the observability
 	// overview
 	ListFilterOptions(context.Context, *ListFilterOptionsPayload) (res *ListFilterOptionsResult, err error)
@@ -78,7 +84,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [17]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "listToolUsageTraces", "getToolUsageFilterOptions", "listHooksTraces"}
+var MethodNames = [18]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "query", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "listToolUsageTraces", "getToolUsageFilterOptions", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -775,6 +781,97 @@ type ProjectSummary struct {
 	Models []*ModelUsage
 	// List of tools used with success/failure counts
 	Tools []*ToolUsage
+}
+
+// A single filter predicate on an allowlisted dimension
+type QueryFilter struct {
+	// Dimension to filter on
+	Dimension string
+	// Match if the dimension equals any of these values (IN semantics; for
+	// multi-valued dimensions like role/group, matches if any element is present).
+	Values []string
+}
+
+// Aggregated measure values for a group or time bucket
+type QueryMeasures struct {
+	// Total cost in USD
+	TotalCost float64
+	// Sum of input tokens
+	TotalInputTokens int64
+	// Sum of output tokens
+	TotalOutputTokens int64
+	// Sum of all tokens
+	TotalTokens int64
+	// Sum of cache read input tokens
+	CacheReadInputTokens int64
+	// Sum of cache creation input tokens
+	CacheCreationInputTokens int64
+	// Total number of tool calls
+	TotalToolCalls int64
+	// Number of distinct chat sessions
+	TotalChats int64
+}
+
+// QueryPayload is the payload type of the telemetry service query method.
+type QueryPayload struct {
+	SessionToken *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Optional dimension to break results down by. When omitted, a single
+	// aggregate row/series for the whole slice is returned.
+	GroupBy *string
+	// Optional filters; all filters are ANDed together.
+	Filters []*QueryFilter
+	// Optional timeseries bucket size in seconds. Defaults to an interval derived
+	// from the time range and is floored to 3600 (the source data is bucketed
+	// hourly).
+	GranularitySeconds *int64
+	// When group_by is set, keep at most this many groups (ranked by sort_by); the
+	// remainder are rolled into an 'Other' group. Defaults to 10.
+	TopN int
+	// Measure used to rank groups for top_n. Defaults to total_cost.
+	SortBy string
+}
+
+// A single time bucket within a series
+type QueryPoint struct {
+	// Bucket start time in Unix nanoseconds (string for JS precision)
+	BucketTimeUnixNano string
+	// Aggregated measures for this bucket
+	Measures *QueryMeasures
+}
+
+// QueryResult is the result type of the telemetry service query method.
+type QueryResult struct {
+	// Echoes the requested group_by dimension; empty when none was requested.
+	GroupBy string
+	// The timeseries bucket interval in seconds.
+	IntervalSeconds int64
+	// Grouped totals over the full time range, ordered by sort_by descending.
+	Table []*QueryRow
+	// One series per group value (aligned with table rows), each gap-filled.
+	Timeseries []*QuerySeries
+}
+
+// One row of the grouped table: measures aggregated over the full time range
+// for a single group value.
+type QueryRow struct {
+	// The dimension value for this row. Empty string when no group_by was
+	// requested; 'Other' for the rolled-up remainder beyond top_n.
+	GroupValue string
+	// Aggregated measures for this group
+	Measures *QueryMeasures
+}
+
+// A gap-filled timeseries for a single group value (one line on the chart).
+type QuerySeries struct {
+	// The dimension value for this series. Empty string when no group_by was
+	// requested; 'Other' for the rolled-up remainder beyond top_n.
+	GroupValue string
+	// Time buckets in ascending order, gap-filled with zeros.
+	Points []*QueryPoint
 }
 
 // Aggregated usage summary for a role

@@ -598,6 +598,81 @@ func BuildGetProjectOverviewPayload(telemetryGetProjectOverviewBody string, tele
 	return v, nil
 }
 
+// BuildQueryPayload builds the payload for the telemetry query endpoint from
+// CLI flags.
+func BuildQueryPayload(telemetryQueryBody string, telemetryQuerySessionToken string) (*telemetry.QueryPayload, error) {
+	var err error
+	var body QueryRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryQueryBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"filters\": [\n         {\n            \"dimension\": \"job_title\",\n            \"values\": [\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"granularity_seconds\": 1,\n      \"group_by\": \"department_name\",\n      \"sort_by\": \"total_tokens\",\n      \"to\": \"2025-12-26T10:00:00Z\",\n      \"top_n\": 2\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		if body.GroupBy != nil {
+			if !(*body.GroupBy == "department_name" || *body.GroupBy == "job_title" || *body.GroupBy == "employee_type" || *body.GroupBy == "division_name" || *body.GroupBy == "cost_center_name" || *body.GroupBy == "email" || *body.GroupBy == "model" || *body.GroupBy == "provider" || *body.GroupBy == "role" || *body.GroupBy == "group" || *body.GroupBy == "project_id") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.group_by", *body.GroupBy, []any{"department_name", "job_title", "employee_type", "division_name", "cost_center_name", "email", "model", "provider", "role", "group", "project_id"}))
+			}
+		}
+		for _, e := range body.Filters {
+			if e != nil {
+				if err2 := ValidateQueryFilterRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if body.TopN < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.top_n", body.TopN, 1, true))
+		}
+		if !(body.SortBy == "total_cost" || body.SortBy == "total_tokens" || body.SortBy == "total_input_tokens" || body.SortBy == "total_output_tokens" || body.SortBy == "cache_read_input_tokens" || body.SortBy == "cache_creation_input_tokens" || body.SortBy == "total_tool_calls" || body.SortBy == "total_chats") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort_by", body.SortBy, []any{"total_cost", "total_tokens", "total_input_tokens", "total_output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "total_tool_calls", "total_chats"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryQuerySessionToken != "" {
+			sessionToken = &telemetryQuerySessionToken
+		}
+	}
+	v := &telemetry.QueryPayload{
+		From:               body.From,
+		To:                 body.To,
+		GroupBy:            body.GroupBy,
+		GranularitySeconds: body.GranularitySeconds,
+		TopN:               body.TopN,
+		SortBy:             body.SortBy,
+	}
+	if body.Filters != nil {
+		v.Filters = make([]*telemetry.QueryFilter, len(body.Filters))
+		for i, val := range body.Filters {
+			if val == nil {
+				v.Filters[i] = nil
+				continue
+			}
+			v.Filters[i] = marshalQueryFilterRequestBodyToTelemetryQueryFilter(val)
+		}
+	}
+	{
+		var zero int
+		if v.TopN == zero {
+			v.TopN = 10
+		}
+	}
+	{
+		var zero string
+		if v.SortBy == zero {
+			v.SortBy = "total_cost"
+		}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildListFilterOptionsPayload builds the payload for the telemetry
 // listFilterOptions endpoint from CLI flags.
 func BuildListFilterOptionsPayload(telemetryListFilterOptionsBody string, telemetryListFilterOptionsApikeyToken string, telemetryListFilterOptionsSessionToken string, telemetryListFilterOptionsProjectSlugInput string) (*telemetry.ListFilterOptionsPayload, error) {
