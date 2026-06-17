@@ -142,7 +142,7 @@ func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 	require.NotContains(t, eng.DimensionValues, "department_name", "group_by dimension must be excluded")
 	require.ElementsMatch(t, []string{"a@x.com", "b@x.com"}, eng.DimensionValues["email"])
 	require.ElementsMatch(t, []string{"opus"}, eng.DimensionValues["model"])
-	require.ElementsMatch(t, []string{"claude-code", "cowork"}, eng.DimensionValues["provider"])
+	require.ElementsMatch(t, []string{"claude-code", "cowork"}, eng.DimensionValues["hook_source"])
 	require.ElementsMatch(t, []string{"admin", "dev"}, eng.DimensionValues["role"])
 	// Unset dimensions are present as keys with empty (filtered) lists.
 	require.Empty(t, eng.DimensionValues["job_title"])

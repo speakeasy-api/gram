@@ -22,7 +22,7 @@ export const GroupBy = {
   CostCenterName: "cost_center_name",
   Email: "email",
   Model: "model",
-  Provider: "provider",
+  HookSource: "hook_source",
   Role: "role",
   Group: "group",
   ProjectId: "project_id",

@@ -41,7 +41,7 @@ var attributeDimensionRegistry = map[string]attributeDimension{
 	"cost_center_name": {column: "cost_center_name", kind: attributeDimScalar},
 	"email":            {column: "user_email", kind: attributeDimScalar},
 	"model":            {column: "model", kind: attributeDimScalar},
-	"provider":         {column: "provider", kind: attributeDimScalar},
+	"hook_source":      {column: "hook_source", kind: attributeDimScalar},
 	"role":             {column: "roles", kind: attributeDimArray},
 	"group":            {column: "groups", kind: attributeDimArray},
 	"project_id":       {column: "gram_project_id", kind: attributeDimProject},

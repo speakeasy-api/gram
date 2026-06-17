@@ -331,7 +331,7 @@ CREATE TABLE IF NOT EXISTS attribute_metrics_summaries (
 
     -- Request dimensions
     model String,
-    provider String, -- consuming surface (gram.hook.source): claude-code, cowork, cursor, ...
+    hook_source String, -- consuming surface (gram.hook.source): claude-code, cowork, cursor, ...
 
     -- Multi-valued user dimensions stored intact (not exploded) so totals stay
     -- exact; the query layer arrayJoin()s these to attribute spend per role/group.
@@ -354,7 +354,7 @@ CREATE TABLE IF NOT EXISTS attribute_metrics_summaries (
     -- Tool call count
     total_tool_calls AggregateFunction(countIf, UInt8)
 ) ENGINE = AggregatingMergeTree
-ORDER BY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, provider, roles, groups)
+ORDER BY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups)
 TTL time_bucket + INTERVAL 30 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Pre-aggregated cost/token/usage metrics broken down by user-identity and request dimensions, powering the generic telemetry.query analytics endpoint.';
@@ -374,7 +374,7 @@ SELECT
 
     -- Request dimensions
     toString(attributes.gen_ai.response.model) AS model,
-    hook_source AS provider,
+    hook_source,
 
     -- Multi-valued dimensions cast from the JSON (Dynamic) arrays into typed
     -- arrays. CAST handles the JSON->Array(String) conversion; toString would
@@ -408,7 +408,7 @@ GROUP BY
     cost_center_name,
     user_email,
     model,
-    provider,
+    hook_source,
     roles,
     groups;
 

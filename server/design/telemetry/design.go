@@ -1201,7 +1201,7 @@ var queryDimensions = []any{
 	"cost_center_name",
 	"email",
 	"model",
-	"provider", // consuming surface (claude-code, cowork, cursor, ...)
+	"hook_source", // consuming surface (claude-code, cowork, cursor, ...)
 	"role",
 	"group",
 	"project_id",

@@ -41729,7 +41729,7 @@ components:
             - cost_center_name
             - email
             - model
-            - provider
+            - hook_source
             - role
             - group
             - project_id
@@ -41816,7 +41816,7 @@ components:
             - cost_center_name
             - email
             - model
-            - provider
+            - hook_source
             - role
             - group
             - project_id
