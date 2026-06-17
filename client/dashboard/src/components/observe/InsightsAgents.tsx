@@ -170,7 +170,7 @@ const COST_FILTERS = defineFilters([
     pinned: true,
     defaultPreset: "30d",
   },
-  { id: "client", label: "Agents", kind: "select" },
+  { id: "client", label: "Agent", kind: "select" },
 ]);
 
 export function InsightsAgentsContent(): JSX.Element {

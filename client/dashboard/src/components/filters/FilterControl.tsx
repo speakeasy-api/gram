@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Icon } from "@speakeasy-api/moonshine";
 import {
+  allLabelFor,
   flattenOptions,
   isGroupedOptions,
   type DateRangeValue,
@@ -81,9 +82,7 @@ export function FilterControl({
             />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={SELECT_ALL_VALUE}>
-              All {dim.label.toLowerCase()}
-            </SelectItem>
+            <SelectItem value={SELECT_ALL_VALUE}>{allLabelFor(dim)}</SelectItem>
             {flattenOptions(options).map((o) => (
               <SelectItem key={o.value} value={o.value}>
                 {o.label}

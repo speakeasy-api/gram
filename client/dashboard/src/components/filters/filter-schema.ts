@@ -78,6 +78,13 @@ interface BaseDimension<K extends FilterKind> {
    */
   hideChip?: boolean;
   placeholder?: string;
+  /**
+   * Overrides the empty-state "All …" label for select/multiselect dimensions
+   * (the chip and the sheet's "all" option). Defaults to `All <pluralized
+   * label>`; set this when the pluralized noun reads oddly (e.g. `allLabel:
+   * "All"` for a Risk filter instead of "All risks").
+   */
+  allLabel?: string;
 }
 
 export interface MultiselectDimension extends BaseDimension<"multiselect"> {}
@@ -197,12 +204,22 @@ function dateRangeLabel(value: DateRangeValue): string {
   return "All time";
 }
 
-// Naive English pluralizer for the "All …" empty-state chip (e.g. "All servers",
+// Naive English pluralizer for the "All …" empty-state label (e.g. "All servers",
 // "All policies"). Covers the dimension labels we use (server/user/policy/role).
-function pluralize(word: string): string {
+// Shared by the chip label and the sheet's select control.
+export function pluralize(word: string): string {
   if (/[^aeiou]y$/.test(word)) return `${word.slice(0, -1)}ies`;
   if (/(s|x|z|ch|sh)$/.test(word)) return `${word}es`;
   return `${word}s`;
+}
+
+/**
+ * The empty-state "All …" label for a select/multiselect dimension, used by the
+ * chip and the sheet's "all" option. Honors a dimension's `allLabel` override,
+ * otherwise pluralizes the label ("All servers", "All policies").
+ */
+export function allLabelFor(dim: FilterDimension): string {
+  return dim.allLabel ?? `All ${pluralize(dim.label.toLowerCase())}`;
 }
 
 /**
@@ -221,15 +238,11 @@ export function chipLabel(
       return dateRangeLabel(value as DateRangeValue);
     case "select": {
       const v = value as string | null;
-      return v
-        ? optionLabel(v, options)
-        : `All ${pluralize(dim.label.toLowerCase())}`;
+      return v ? optionLabel(v, options) : allLabelFor(dim);
     }
     case "multiselect": {
       const arr = value as string[];
-      return arr.length > 0
-        ? collapseValues(arr, options)
-        : `All ${pluralize(dim.label.toLowerCase())}`;
+      return arr.length > 0 ? collapseValues(arr, options) : allLabelFor(dim);
     }
     case "text":
       return `${dim.label}: ${value as string}`;

@@ -69,7 +69,7 @@ const SESSION_FILTERS = defineFilters([
     pinned: true,
     defaultPreset: "30d",
   },
-  { id: "has_risk", label: "Risk", kind: "select" },
+  { id: "has_risk", label: "Risk", kind: "select", allLabel: "All" },
 ]);
 
 const HAS_RISK_OPTIONS: OptionsById = {
