@@ -22,6 +22,7 @@ import { ArrowUpRight, Copy, ExternalLink } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
+import { useProtectedResourceMetadata } from "./settings/sections/authentication/useProtectedResourceMetadata";
 
 type OverviewTabProps = {
   mcpServer: McpServer | undefined;
@@ -31,13 +32,19 @@ type OverviewTabProps = {
   onShowAuthentication: () => void;
 };
 
-type StatusTone = "ready" | "needs-setup";
+type StatusTone = "ready" | "needs-setup" | "warning";
 type RowStatus = { label: string; tone: StatusTone };
 
 const READY_STATUS: RowStatus = { label: "READY", tone: "ready" };
 const NEEDS_SETUP_STATUS: RowStatus = {
   label: "NEEDS SETUP",
   tone: "needs-setup",
+};
+// Distinct from NEEDS SETUP: something is configured, but a required piece is
+// missing and the server won't work as intended until it's addressed.
+const ACTION_NEEDED_STATUS: RowStatus = {
+  label: "ACTION NEEDED",
+  tone: "warning",
 };
 
 /** "Ready" once set up, "Needs Setup" otherwise; undefined while loading. */
@@ -244,6 +251,10 @@ function useServerAddressOverview(
 type AuthenticationOverview = OverviewReadiness & {
   state: AuthState;
   secure: boolean;
+  // Upstream advertises OAuth protected-resource metadata, but no upstream
+  // remote_session_client is connected. Gram-only gating can read "secure"
+  // while upstream login still fails for every client — this surfaces that gap.
+  oauthGap: boolean;
   status: RowStatus | undefined;
 };
 
@@ -259,20 +270,42 @@ function useAuthenticationOverview(
 
   const hasIssuer = !!userSessionIssuerId;
   const hasRemote = (clientsResult?.result.items.length ?? 0) > 0;
+
+  // Only probe the upstream for OAuth metadata while no remote identity is
+  // connected — once a remote_session_client exists the gap is closed, so the
+  // RFC 9728 probe is wasted work.
+  const { status: probeStatus } = useProtectedResourceMetadata(
+    mcpServer.remoteMcpServerId,
+    !hasRemote,
+  );
+  const upstreamNeedsOAuth = probeStatus === "available";
+  const oauthGap = upstreamNeedsOAuth && !hasRemote;
+
   const state = deriveAuthState({
     isPublic: mcpServer.visibility === "public",
     hasIssuer,
     hasRemote,
   });
-  const loading = hasIssuer && isLoading;
+  const loading = (hasIssuer && isLoading) || probeStatus === "loading";
   const secure = state !== "none";
+  const ready = !loading && secure && !oauthGap;
+
+  let status: RowStatus | undefined;
+  if (loading) {
+    status = undefined;
+  } else if (oauthGap) {
+    status = ACTION_NEEDED_STATUS;
+  } else {
+    status = secure ? READY_STATUS : NEEDS_SETUP_STATUS;
+  }
 
   return {
-    ready: !loading && secure,
+    ready,
     loading,
     state,
     secure,
-    status: readyStatus(loading, secure),
+    oauthGap,
+    status,
   };
 }
 
@@ -417,6 +450,13 @@ const AUTH_ROW_COPY: Record<AuthState, string> = {
   none: "No authentication method configured - anyone with the URL can connect.",
 };
 
+// Shown instead of the AuthState copy when the upstream requires OAuth but no
+// upstream identity provider is connected. Takes precedence because the gap
+// makes the row's posture misleading: clients can pass Gram gating yet still
+// fail the upstream login.
+const OAUTH_GAP_COPY =
+  "The upstream server requires OAuth, but no upstream identity provider is connected. Connect one so clients can authenticate.";
+
 function deriveAuthState({
   isPublic,
   hasIssuer,
@@ -441,8 +481,11 @@ function AuthenticationOverviewRow({
   authentication: AuthenticationOverview;
   onConfigure: () => void;
 }) {
-  const actionLabel = authentication.secure ? "Manage" : "Configure";
-  const actionVariant = authentication.secure ? "secondary" : "primary";
+  // An unmet OAuth requirement needs the same call to action as an unsecured
+  // server even though gram gating reads "secure", so treat both as Configure.
+  const callToAction = !authentication.secure || authentication.oauthGap;
+  const actionLabel = callToAction ? "Configure" : "Manage";
+  const actionVariant = callToAction ? "primary" : "secondary";
 
   return (
     <OverviewRow
@@ -452,6 +495,8 @@ function AuthenticationOverviewRow({
       description={
         authentication.loading ? (
           <Skeleton className="h-4 w-[520px] max-w-full" />
+        ) : authentication.oauthGap ? (
+          OAUTH_GAP_COPY
         ) : (
           AUTH_ROW_COPY[authentication.state]
         )
@@ -623,7 +668,7 @@ function StatusDot({
   }
 
   const colorClassName =
-    status?.tone === "needs-setup" ? "bg-amber-500" : "bg-green-500";
+    status?.tone === "ready" ? "bg-green-500" : "bg-amber-500";
 
   return (
     <span
@@ -662,6 +707,10 @@ const STATUS_BADGE_TONE_CLASSES: Record<
     text: "text-green-700! dark:text-green-300!",
   },
   "needs-setup": {
+    root: "border-amber-500/25! bg-amber-500/10! dark:border-amber-500/30! dark:bg-amber-500/15!",
+    text: "text-amber-700! dark:text-amber-300!",
+  },
+  warning: {
     root: "border-amber-500/25! bg-amber-500/10! dark:border-amber-500/30! dark:bg-amber-500/15!",
     text: "text-amber-700! dark:text-amber-300!",
   },
