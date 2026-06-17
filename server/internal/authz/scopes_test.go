@@ -58,16 +58,16 @@ func TestScopeExclusionsCoversKnownScopes(t *testing.T) {
 		require.Contains(t, scopeExclusions, scope)
 	}
 
-	require.Equal(t, ScopeOrgReadExclusion, scopeExclusions[ScopeOrgRead])
-	require.Equal(t, ScopeOrgAdminExclusion, scopeExclusions[ScopeOrgAdmin])
-	require.Equal(t, ScopeProjectReadExclusion, scopeExclusions[ScopeProjectRead])
-	require.Equal(t, ScopeProjectWriteExclusion, scopeExclusions[ScopeProjectWrite])
-	require.Equal(t, ScopeMCPReadExclusion, scopeExclusions[ScopeMCPRead])
-	require.Equal(t, ScopeMCPWriteExclusion, scopeExclusions[ScopeMCPWrite])
-	require.Equal(t, ScopeMCPBlock, scopeExclusions[ScopeMCPConnect])
-	require.Equal(t, ScopeEnvironmentReadExclusion, scopeExclusions[ScopeEnvironmentRead])
-	require.Equal(t, ScopeEnvironmentWriteExclusion, scopeExclusions[ScopeEnvironmentWrite])
-	require.Equal(t, ScopeRiskPolicyBypass, scopeExclusions[ScopeRiskPolicyEvaluate])
+	require.Equal(t, []Scope{ScopeOrgReadExclusion}, scopeExclusions[ScopeOrgRead])
+	require.Equal(t, []Scope{ScopeOrgAdminExclusion, ScopeOrgReadExclusion}, scopeExclusions[ScopeOrgAdmin])
+	require.Equal(t, []Scope{ScopeProjectReadExclusion}, scopeExclusions[ScopeProjectRead])
+	require.Equal(t, []Scope{ScopeProjectWriteExclusion, ScopeProjectReadExclusion}, scopeExclusions[ScopeProjectWrite])
+	require.Equal(t, []Scope{ScopeMCPReadExclusion, ScopeMCPBlock}, scopeExclusions[ScopeMCPRead])
+	require.Equal(t, []Scope{ScopeMCPWriteExclusion, ScopeMCPReadExclusion, ScopeMCPBlock}, scopeExclusions[ScopeMCPWrite])
+	require.Equal(t, []Scope{ScopeMCPBlock}, scopeExclusions[ScopeMCPConnect])
+	require.Equal(t, []Scope{ScopeEnvironmentReadExclusion}, scopeExclusions[ScopeEnvironmentRead])
+	require.Equal(t, []Scope{ScopeEnvironmentWriteExclusion, ScopeEnvironmentReadExclusion}, scopeExclusions[ScopeEnvironmentWrite])
+	require.Equal(t, []Scope{ScopeRiskPolicyBypass}, scopeExclusions[ScopeRiskPolicyEvaluate])
 }
 
 func TestSystemRoleAdminExcludesRiskPolicyScopes(t *testing.T) {

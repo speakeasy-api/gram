@@ -210,6 +210,28 @@ func TestGrantExpressionEvaluate_projectWriteExclusionSubtractsProductionSelecto
 	require.Equal(t, GrantExpressionReasonMatched, result.Reason)
 }
 
+func TestGrantExpressionEvaluate_projectReadExclusionSubtractsProjectWrite(t *testing.T) {
+	t.Parallel()
+
+	const projectID = "project_123"
+	grants := []Grant{
+		NewGrant(ScopeProjectWrite, WildcardResource),
+		NewGrant(ScopeProjectReadExclusion, projectID),
+	}
+
+	result, err := expressionForCheck(Check{
+		Scope:         ScopeProjectWrite,
+		ResourceKind:  "",
+		ResourceID:    projectID,
+		Dimensions:    nil,
+		selectorMatch: selectorMatchNormal,
+		expanded:      false,
+	}).Evaluate(grants)
+	require.NoError(t, err)
+	require.False(t, result.Satisfied)
+	require.Equal(t, GrantExpressionReasonExclusionMatched, result.Reason)
+}
+
 func TestGrantExpressionEvaluate_mcpWriteExclusionSubtractsProductionSelector(t *testing.T) {
 	t.Parallel()
 
@@ -244,6 +266,52 @@ func TestGrantExpressionEvaluate_mcpWriteExclusionSubtractsProductionSelector(t 
 	require.NoError(t, err)
 	require.True(t, result.Satisfied)
 	require.Equal(t, GrantExpressionReasonMatched, result.Reason)
+}
+
+func TestGrantExpressionEvaluate_mcpReadExclusionSubtractsMCPWrite(t *testing.T) {
+	t.Parallel()
+
+	const projectID = "project_123"
+	grants := []Grant{
+		NewGrant(ScopeMCPWrite, WildcardResource),
+		NewGrantWithSelector(ScopeMCPReadExclusion, Selector{
+			SelectorKeyResourceKind: ResourceKindMCP,
+			SelectorKeyResourceID:   WildcardResource,
+			SelectorKeyProjectID:    projectID,
+		}),
+	}
+
+	result, err := expressionForCheck(MCPCheck(ScopeMCPWrite, "server_in_project", projectID)).Evaluate(grants)
+	require.NoError(t, err)
+	require.False(t, result.Satisfied)
+	require.Equal(t, GrantExpressionReasonExclusionMatched, result.Reason)
+
+	result, err = expressionForCheck(MCPCheck(ScopeMCPWrite, "server_other_project", "project_other")).Evaluate(grants)
+	require.NoError(t, err)
+	require.True(t, result.Satisfied)
+	require.Equal(t, GrantExpressionReasonMatched, result.Reason)
+}
+
+func TestGrantExpressionEvaluate_mcpBlockSubtractsMCPWrite(t *testing.T) {
+	t.Parallel()
+
+	const serverID = "server_123"
+	grants := []Grant{
+		NewGrant(ScopeMCPWrite, WildcardResource),
+		NewGrant(ScopeMCPBlock, serverID),
+	}
+
+	result, err := expressionForCheck(Check{
+		Scope:         ScopeMCPWrite,
+		ResourceKind:  "",
+		ResourceID:    serverID,
+		Dimensions:    nil,
+		selectorMatch: selectorMatchNormal,
+		expanded:      false,
+	}).Evaluate(grants)
+	require.NoError(t, err)
+	require.False(t, result.Satisfied)
+	require.Equal(t, GrantExpressionReasonExclusionMatched, result.Reason)
 }
 
 func TestGrantExpressionEvaluate_riskPolicyBypassIsEvaluateExclusion(t *testing.T) {

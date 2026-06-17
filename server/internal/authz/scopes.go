@@ -108,28 +108,32 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeRiskPolicyBypass:          nil,
 }
 
-var scopeExclusions = map[Scope]Scope{
-	ScopeRoot:                      "",
-	ScopeOrgRead:                   ScopeOrgReadExclusion,
-	ScopeOrgReadExclusion:          "",
-	ScopeOrgAdmin:                  ScopeOrgAdminExclusion,
-	ScopeOrgAdminExclusion:         "",
-	ScopeProjectRead:               ScopeProjectReadExclusion,
-	ScopeProjectReadExclusion:      "",
-	ScopeProjectWrite:              ScopeProjectWriteExclusion,
-	ScopeProjectWriteExclusion:     "",
-	ScopeMCPRead:                   ScopeMCPReadExclusion,
-	ScopeMCPReadExclusion:          "",
-	ScopeMCPWrite:                  ScopeMCPWriteExclusion,
-	ScopeMCPWriteExclusion:         "",
-	ScopeMCPConnect:                ScopeMCPBlock,
-	ScopeMCPBlock:                  "",
-	ScopeEnvironmentRead:           ScopeEnvironmentReadExclusion,
-	ScopeEnvironmentReadExclusion:  "",
-	ScopeEnvironmentWrite:          ScopeEnvironmentWriteExclusion,
-	ScopeEnvironmentWriteExclusion: "",
-	ScopeRiskPolicyEvaluate:        ScopeRiskPolicyBypass,
-	ScopeRiskPolicyBypass:          "",
+// scopeExclusions maps a checked scope to the scopes that subtract it.
+// Higher-privilege checks include lower-scope exclusions because higher scopes
+// imply lower scopes through scopeExpansions. For example, mcp:write implies
+// mcp:read, so mcp:read_exclusion also subtracts mcp:write.
+var scopeExclusions = map[Scope][]Scope{
+	ScopeRoot:                      nil,
+	ScopeOrgRead:                   {ScopeOrgReadExclusion},
+	ScopeOrgReadExclusion:          nil,
+	ScopeOrgAdmin:                  {ScopeOrgAdminExclusion, ScopeOrgReadExclusion},
+	ScopeOrgAdminExclusion:         nil,
+	ScopeProjectRead:               {ScopeProjectReadExclusion},
+	ScopeProjectReadExclusion:      nil,
+	ScopeProjectWrite:              {ScopeProjectWriteExclusion, ScopeProjectReadExclusion},
+	ScopeProjectWriteExclusion:     nil,
+	ScopeMCPRead:                   {ScopeMCPReadExclusion, ScopeMCPBlock},
+	ScopeMCPReadExclusion:          nil,
+	ScopeMCPWrite:                  {ScopeMCPWriteExclusion, ScopeMCPReadExclusion, ScopeMCPBlock},
+	ScopeMCPWriteExclusion:         nil,
+	ScopeMCPConnect:                {ScopeMCPBlock},
+	ScopeMCPBlock:                  nil,
+	ScopeEnvironmentRead:           {ScopeEnvironmentReadExclusion},
+	ScopeEnvironmentReadExclusion:  nil,
+	ScopeEnvironmentWrite:          {ScopeEnvironmentWriteExclusion, ScopeEnvironmentReadExclusion},
+	ScopeEnvironmentWriteExclusion: nil,
+	ScopeRiskPolicyEvaluate:        {ScopeRiskPolicyBypass},
+	ScopeRiskPolicyBypass:          nil,
 }
 
 // scopeSubScopes is the inverse of scopeExpansions: for each higher-privilege

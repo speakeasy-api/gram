@@ -165,6 +165,48 @@ func (g GrantCheck) instanceSelectorView() Selector {
 	return g.Check.selector()
 }
 
+// GrantUnion represents a set union of grant expressions. It is mostly useful
+// as the exclusion side of a GrantDifference when several grants can subtract
+// the same base permission.
+type GrantUnion struct {
+	Expressions []GrantExpression
+}
+
+func (g GrantUnion) Evaluate(grants []Grant) (GrantExpressionResult, error) {
+	for _, expression := range g.Expressions {
+		if expression == nil {
+			return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, errors.New("grant union requires non-nil expressions")
+		}
+
+		result, err := expression.Evaluate(grants)
+		if err != nil {
+			return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, fmt.Errorf("evaluate union expression: %w", err)
+		}
+		if result.Satisfied {
+			return GrantExpressionResult{Satisfied: true, Reason: GrantExpressionReasonMatched}, nil
+		}
+	}
+
+	return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonMissingBase}, nil
+}
+
+func (g GrantUnion) grantSet(grants []Grant) (grantSet, error) {
+	union := grantSet{}
+	for _, expression := range g.Expressions {
+		if expression == nil {
+			return nil, errors.New("grant union requires non-nil expressions")
+		}
+
+		set, err := expression.grantSet(grants)
+		if err != nil {
+			return nil, fmt.Errorf("evaluate union expression: %w", err)
+		}
+		union.addAll(set)
+	}
+
+	return union, nil
+}
+
 // GrantDifference represents "Base is allowed unless Exclusion also applies".
 //
 // It evaluates Base and Exclusion into sets of concrete permission instances,
@@ -255,6 +297,10 @@ func (g GrantDifference) grantSet(grants []Grant) (grantSet, error) {
 
 func (s grantSet) add(member grantSetMember) {
 	s[grantSetKey(member.Selector)] = member
+}
+
+func (s grantSet) addAll(other grantSet) {
+	maps.Copy(s, other)
 }
 
 // subtract removes every permission instance from s that is also present in

@@ -34,18 +34,23 @@ func MCPCheck(scope Scope, resourceID, projectID string) Check {
 }
 
 func expressionForCheck(check Check) GrantExpression {
-	exclusion, ok := scopeExclusions[check.Scope]
-	if !ok || exclusion == "" {
+	exclusions, ok := scopeExclusions[check.Scope]
+	if !ok || len(exclusions) == 0 {
 		return nil
 	}
 
 	instance := check.selector()
-	return GrantDifference{
-		Base: GrantCheck{Check: check, Instance: instance},
-		Exclusion: GrantCheck{
+	base := GrantCheck{Check: check, Instance: instance}
+	expressions := make([]GrantExpression, 0, len(exclusions))
+	for _, exclusion := range exclusions {
+		expressions = append(expressions, GrantCheck{
 			Check:    Check{Scope: exclusion, ResourceKind: check.ResourceKind, ResourceID: check.ResourceID, Dimensions: check.Dimensions, selectorMatch: selectorMatchStrict, expanded: false},
 			Instance: instance,
-		},
+		})
+	}
+	return GrantDifference{
+		Base:      base,
+		Exclusion: GrantUnion{Expressions: expressions},
 	}
 }
 
