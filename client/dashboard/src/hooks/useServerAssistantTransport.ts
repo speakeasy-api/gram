@@ -6,6 +6,7 @@ import {
 } from "@gram/client/react-query";
 import { useOrganization } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
+import { isNotFoundError } from "@/lib/route-errors";
 import { createServerAssistantTransport } from "@/lib/ServerAssistantTransport";
 import type { ElementsTransportFactory } from "@gram-ai/elements";
 
@@ -57,10 +58,8 @@ export function useServerAssistantTransport(
   // organization.projects). Scope the RBAC check to THAT project's id, not
   // useProject(), so a user with project:write on the target — but not on the
   // active one — still gets the writer path.
-  const targetProjectId = useMemo(
-    () => organization.projects.find((p) => p.slug === projectSlug)?.id ?? "",
-    [organization.projects, projectSlug],
-  );
+  const targetProjectId =
+    organization.projects.find((p) => p.slug === projectSlug)?.id ?? "";
   const canCreate =
     !!targetProjectId && hasScope("project:write", targetProjectId);
 
@@ -79,14 +78,9 @@ export function useServerAssistantTransport(
     },
   );
 
-  const fetched = getQuery.data;
-  const fetchedId = fetched?.id ?? "";
-  const queryError = getQuery.error as
-    | { statusCode?: number }
-    | null
-    | undefined;
-  const is404 = !!queryError && queryError.statusCode === 404;
-  const isOtherError = !!queryError && !is404;
+  const fetchedId = getQuery.data?.id ?? "";
+  const is404 = isNotFoundError(getQuery.error);
+  const isOtherError = !!getQuery.error && !is404;
 
   const ensure = useEnsureManagedAssistantMutation();
   const ensureMutate = ensure.mutate;

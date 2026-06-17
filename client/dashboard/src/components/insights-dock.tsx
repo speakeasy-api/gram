@@ -1056,9 +1056,6 @@ export function InsightsProvider({
         </div>
       )}
 
-      {/* Notice when the project has no managed assistant yet and the user
-          can't provision one — sendMessage is read-scoped, so once an admin
-          enables it the same user can chat. */}
       {assistantNeedsAdmin && (
         <div className="border-border bg-muted/50 text-muted-foreground mx-4 mt-1 flex items-start gap-2 rounded-md border px-3 py-2 text-xs">
           <Terminal className="mt-0.5 size-3.5 shrink-0" />
