@@ -14,6 +14,7 @@ import { telemetryGetUserMetricsSummary } from "../funcs/telemetryGetUserMetrics
 import { telemetryListAttributeKeys } from "../funcs/telemetryListAttributeKeys.js";
 import { telemetryListFilterOptions } from "../funcs/telemetryListFilterOptions.js";
 import { telemetryListHooksTraces } from "../funcs/telemetryListHooksTraces.js";
+import { telemetryListToolUsageTraces } from "../funcs/telemetryListToolUsageTraces.js";
 import { telemetrySearchChats } from "../funcs/telemetrySearchChats.js";
 import { telemetrySearchLogs } from "../funcs/telemetrySearchLogs.js";
 import { telemetrySearchToolCalls } from "../funcs/telemetrySearchToolCalls.js";
@@ -245,6 +246,25 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListHooksTracesResult> {
     return unwrapAsync(telemetryListHooksTraces(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listToolUsageTraces telemetry
+   *
+   * @remarks
+   * List target-aware MCP and tool usage traces
+   */
+  async listToolUsageTraces(
+    request: operations.ListToolUsageTracesRequest,
+    security?: operations.ListToolUsageTracesSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListToolUsageTracesResult> {
+    return unwrapAsync(telemetryListToolUsageTraces(
       this,
       request,
       security,

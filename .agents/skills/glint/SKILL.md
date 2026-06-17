@@ -60,22 +60,61 @@ Reach for type assertions on `types.Type` (`*types.Named`, `*types.Pointer`, `*t
 When the rule is fundamentally about the _shape_ of code rather than its types, AST matching is fine. [glint/no_anonymous_defer.go](../../../glint/no_anonymous_defer.go) walks `*ast.DeferStmt` and asserts the call target is `*ast.FuncLit`:
 
 ```go
-ast.Inspect(file, func(node ast.Node) bool {
-    deferStmt, ok := node.(*ast.DeferStmt)
-    if !ok {
-        return true
-    }
+ins := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
+
+ins.Preorder([]ast.Node{(*ast.DeferStmt)(nil)}, func(node ast.Node) {
+    deferStmt := node.(*ast.DeferStmt)
 
     if _, ok := deferStmt.Call.Fun.(*ast.FuncLit); !ok {
-        return true
+        return
     }
 
     pass.ReportRangef(deferStmt, "%s", message)
-    return true
 })
 ```
 
 There's no `*types.Type` that captures "anonymous deferred function" — the property only exists at the AST level — so AST matching is the right tool.
+
+### Traversal: depend on `inspect.Analyzer` for deep walks
+
+When a rule needs to find nodes anywhere in the tree (calls, defers, type specs nested in functions, etc.), declare a dependency on the shared inspector rather than hand-rolling `for _, file := range pass.Files { ast.Inspect(file, ...) }`. `inspect.Analyzer` parses each file once and shares the resulting `*inspector.Inspector` across every dependent analyzer, so the package's analyzers walk each file once collectively instead of once per analyzer. `Preorder` also filters by node type up front, replacing the `node.(*ast.T)` type-switch-and-`return true` boilerplate:
+
+```go
+import (
+    "go/ast"
+
+    "golang.org/x/tools/go/analysis"
+    "golang.org/x/tools/go/analysis/passes/inspect"
+    "golang.org/x/tools/go/ast/inspector"
+)
+
+return &analysis.Analyzer{
+    Name:     enforceO11yConventionsAnalyzer,
+    Doc:      enforceO11yConventionsDefaultMessage,
+    Requires: []*analysis.Analyzer{inspect.Analyzer},
+    Run: func(pass *analysis.Pass) (any, error) {
+        ins := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
+
+        ins.Preorder([]ast.Node{(*ast.CallExpr)(nil)}, func(node ast.Node) {
+            callExpr := node.(*ast.CallExpr)
+            // ...
+        })
+
+        return nil, nil
+    },
+}
+```
+
+Notes when adopting it:
+
+- The callback returns nothing, so there is no `return false` to prune a subtree the way `ast.Inspect` allows. If a rule genuinely depends on pruning descent (matching a node and deliberately skipping its children, for example), keep a manual `ast.Inspect` and say why in a comment.
+- `Preorder` walks every file in the package with no file boundary, so any per-file scoping has to happen per node instead of around a `pass.Files` loop. When a rule applies only to certain files, filter inside the callback via `pass.Fset.File(n.Pos()).Name()`. For example, [glint/no_testing_raw_sql.go](../../../glint/no_testing_raw_sql.go) checks for the `_test.go` suffix there because the test-only rule no longer has a file loop to gate.
+- Pulling the inspector from `pass.ResultOf` only works if the analyzer declared `inspect.Analyzer` in its `Requires`; otherwise the result is nil and the type assertion panics. This bites helpers shared across analyzers, since every caller must carry the dependency. For example, `findAnnotatedStructs` reads the inspector, so all four analyzers that call it list `inspect.Analyzer` in their `Requires`.
+
+Two situations where the manual walk is still the right call, and the inspector earns nothing:
+
+- **Per-file stateful detection.** When a rule accumulates state across a file and emits fixes scoped to that one `*ast.File` (an occurrence list, a "is this import used elsewhere" flag, import add/remove `SuggestedFixes`), the natural unit of work is the file, not the node. The shared inspector deliberately flattens that boundary, so adopting it would force re-bucketing nodes back by file to rebuild the same state, with no traversal saved. Keep the manual per-file `ast.Inspect` and leave a comment explaining the exemption. For example, [glint/no_sql_err_no_rows.go](../../../glint/no_sql_err_no_rows.go) collects each file's `ErrNoRows` occurrences alongside an `otherSqlUsage` flag before deciding which imports to rewrite.
+- **Top-level-declaration scans.** When a rule only cares about package-level declarations, iterating `file.Decls` directly is already a shallow single pass and expresses the intent precisely. Reaching for `Preorder` on `*ast.GenDecl` would additionally visit function-local declarations, widening the rule's scope, so the inspector is both unnecessary and subtly wrong here. For example, the `audit-*` analyzers (e.g. [glint/audit_event_urn_naming.go](../../../glint/audit_event_urn_naming.go)) walk `file.Decls` to inspect only package-level `*ast.GenDecl`/`*ast.TypeSpec`.
 
 ### Source-string matching is a last resort
 

@@ -306,6 +306,7 @@ function accessMember({
     id,
     joinedAt: new Date("2026-01-01"),
     name,
+    principalUrn: `user:${id}`,
     roleIds,
   };
 }
@@ -327,6 +328,7 @@ function accessRole({
     isSystem,
     memberCount: 0,
     name,
+    principalUrn: `role:organization:${id}`,
     slug: name.toLowerCase(),
     updatedAt: new Date("2026-01-01"),
   };
@@ -791,6 +793,202 @@ describe("ApprovalRequestsContent", () => {
           gramProject: "project-1",
           riskPolicyBypassApprovalRequestBody: {
             id: "request-edit",
+            grantedPrincipalUrns: ["role:organization:role-reviewers"],
+          },
+        },
+      });
+    });
+  });
+
+  it("preserves stale user principals when editing approved policy bypass access", async () => {
+    const approveRequest = vi.fn().mockResolvedValue({});
+    mockPolicyBypassLists({
+      approved: [
+        policyBypassRequest({
+          id: "request-stale-user",
+          label: "Stale user access",
+          serverURL: "https://stale-user.example.com/mcp",
+          status: "approved",
+          grantedPrincipalUrns: ["user:user-stale"],
+        }),
+      ],
+    });
+    mockAdminRBAC();
+    mocks.mutation.mockReturnValue({
+      isPending: false,
+      mutateAsync: approveRequest,
+    });
+
+    renderContent();
+
+    await waitFor(() => {
+      expect(screen.getByText("Stale user access")).toBeTruthy();
+    });
+    const row = screen.getByText("Stale user access").closest("tr");
+    if (!row) throw new Error("Approved request row not found");
+    fireEvent.click(within(row).getByRole("button", { name: "Edit" }));
+
+    fireEvent.click(screen.getAllByRole("radio")[2]!);
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => {
+      expect(approveRequest).toHaveBeenCalledWith({
+        request: {
+          gramProject: "project-1",
+          riskPolicyBypassApprovalRequestBody: {
+            id: "request-stale-user",
+            grantedPrincipalUrns: ["user:user-stale"],
+          },
+        },
+      });
+    });
+  });
+
+  it("updates pristine initial audience when roles load after opening", async () => {
+    mockPolicyBypassLists({
+      approved: [
+        policyBypassRequest({
+          id: "request-late-roles",
+          label: "Late roles access",
+          serverURL: "https://late-roles.example.com/mcp",
+          status: "approved",
+          grantedPrincipalUrns: ["role:organization:role-reviewers"],
+        }),
+      ],
+    });
+    mockAdminRBAC();
+
+    let currentRoles: Role[] = [];
+    mocks.useRoles.mockImplementation(() => ({
+      data: { roles: currentRoles },
+    }));
+
+    const queryClient = new QueryClient();
+    const renderTree = () => (
+      <MemoryRouter
+        initialEntries={["/speakeasy/projects/project-1/approval-requests"]}
+      >
+        <Routes>
+          <Route
+            path="/:orgSlug/projects/:projectSlug/approval-requests"
+            element={
+              <QueryClientProvider client={queryClient}>
+                <ApprovalRequestsContent projectSlug="project-1" />
+              </QueryClientProvider>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+    const view = render(renderTree());
+
+    await waitFor(() => {
+      expect(screen.getByText("Late roles access")).toBeTruthy();
+    });
+    const row = screen.getByText("Late roles access").closest("tr");
+    if (!row) throw new Error("Approved request row not found");
+    fireEvent.click(within(row).getByRole("button", { name: "Edit" }));
+
+    expect(screen.getAllByRole<HTMLInputElement>("radio")[2]?.checked).toBe(
+      true,
+    );
+
+    currentRoles = [
+      accessRole({ id: "role-admin", name: "Admin", isSystem: true }),
+      accessRole({ id: "role-reviewers", name: "Reviewers" }),
+    ];
+    view.rerender(renderTree());
+
+    await waitFor(() => {
+      expect(screen.getAllByRole<HTMLInputElement>("radio")[1]?.checked).toBe(
+        true,
+      );
+    });
+  });
+
+  it("does not reset reviewer edits when members refetch", async () => {
+    const approveRequest = vi.fn().mockResolvedValue({});
+    const approved = [
+      policyBypassRequest({
+        id: "request-members-refetch",
+        label: "Members refetch access",
+        serverURL: "https://members-refetch.example.com/mcp",
+        status: "approved",
+        grantedPrincipalUrns: ["user:all"],
+      }),
+    ];
+    mockPolicyBypassLists({ approved });
+    mockAdminRBAC();
+    mocks.mutation.mockReturnValue({
+      isPending: false,
+      mutateAsync: approveRequest,
+    });
+
+    let currentMembers = [
+      accessMember({
+        id: "user-1",
+        email: "requester@example.com",
+        name: "Requester",
+        roleIds: ["role-reviewers"],
+      }),
+      accessMember({
+        id: "user-2",
+        email: "reviewer@example.com",
+        name: "Reviewer",
+      }),
+    ];
+    mocks.useMembers.mockImplementation(() => ({
+      data: { members: currentMembers },
+    }));
+
+    const queryClient = new QueryClient();
+    const renderTree = () => (
+      <MemoryRouter
+        initialEntries={["/speakeasy/projects/project-1/approval-requests"]}
+      >
+        <Routes>
+          <Route
+            path="/:orgSlug/projects/:projectSlug/approval-requests"
+            element={
+              <QueryClientProvider client={queryClient}>
+                <ApprovalRequestsContent projectSlug="project-1" />
+              </QueryClientProvider>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+    const view = render(renderTree());
+
+    await waitFor(() => {
+      expect(screen.getByText("Members refetch access")).toBeTruthy();
+    });
+    const row = screen.getByText("Members refetch access").closest("tr");
+    if (!row) throw new Error("Approved request row not found");
+    fireEvent.click(within(row).getByRole("button", { name: "Edit" }));
+
+    fireEvent.click(screen.getAllByRole("radio")[1]!);
+    const reviewersOption = screen.getByText("Reviewers").closest("button");
+    if (!reviewersOption) throw new Error("Reviewers option not found");
+    fireEvent.click(reviewersOption);
+
+    currentMembers = [
+      accessMember({
+        id: "user-1",
+        email: "requester@example.com",
+        name: "Requester",
+      }),
+    ];
+    view.rerender(renderTree());
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => {
+      expect(approveRequest).toHaveBeenCalledWith({
+        request: {
+          gramProject: "project-1",
+          riskPolicyBypassApprovalRequestBody: {
+            id: "request-members-refetch",
             grantedPrincipalUrns: ["role:organization:role-reviewers"],
           },
         },

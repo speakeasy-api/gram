@@ -13804,9 +13804,9 @@ paths:
             x-speakeasy-name-override: update
             x-speakeasy-react-hook:
                 name: UpdateMcpServer
-    /rpc/organizationRemoteSessionIssuers.create:
+    /rpc/organizationRemoteSessionIssuers.createIssuer:
         post:
-            description: Create a new organization-level remote_session_issuer.
+            description: Create a remote_session_issuer in the caller's organization. With no project_id the issuer is organization-level (project_id NULL, inherited by every project); with a project_id (which must belong to the organization) it is project-specific. Requires org:admin.
             operationId: createOrganizationRemoteSessionIssuer
             parameters:
                 - allowEmptyValue: true
@@ -13827,7 +13827,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/CreateRemoteSessionIssuerForm'
+                            $ref: '#/components/schemas/CreateIssuerRequestBody'
                 required: true
             responses:
                 "200":
@@ -13893,15 +13893,109 @@ paths:
             security:
                 - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
-            summary: createOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
+            summary: createIssuer organizationRemoteSessionIssuers
             tags:
                 - organizationRemoteSessionIssuers
-            x-speakeasy-name-override: create
+            x-speakeasy-name-override: createIssuer
             x-speakeasy-react-hook:
                 name: CreateOrganizationRemoteSessionIssuer
-    /rpc/organizationRemoteSessionIssuers.delete:
+    /rpc/organizationRemoteSessionIssuers.deleteClient:
         delete:
-            description: Soft-delete an organization-level remote_session_issuer. Blocked if any remote_session_clients still reference it.
+            description: Soft-delete a remote_session_client in the caller's organization. Cascades to the remote_sessions minted against it. Requires org:admin.
+            operationId: deleteOrganizationRemoteSessionClient
+            parameters:
+                - allowEmptyValue: true
+                  description: The remote_session_client id.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The remote_session_client id.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: deleteClient organizationRemoteSessionIssuers
+            tags:
+                - organizationRemoteSessionIssuers
+            x-speakeasy-name-override: deleteClient
+            x-speakeasy-react-hook:
+                name: DeleteOrganizationRemoteSessionClient
+    /rpc/organizationRemoteSessionIssuers.deleteIssuer:
+        delete:
+            description: Soft-delete any remote_session_issuer (organizational or project-specific) in the caller's organization. Blocked when any remote_session_clients still reference it. Requires org:admin.
             operationId: deleteOrganizationRemoteSessionIssuer
             parameters:
                 - allowEmptyValue: true
@@ -13987,15 +14081,211 @@ paths:
             security:
                 - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
-            summary: deleteOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
+            summary: deleteIssuer organizationRemoteSessionIssuers
             tags:
                 - organizationRemoteSessionIssuers
-            x-speakeasy-name-override: delete
+            x-speakeasy-name-override: deleteIssuer
             x-speakeasy-react-hook:
                 name: DeleteOrganizationRemoteSessionIssuer
-    /rpc/organizationRemoteSessionIssuers.get:
+    /rpc/organizationRemoteSessionIssuers.getClient:
         get:
-            description: Get an organization-level remote_session_issuer by id.
+            description: Get a remote_session_client in the caller's organization by id. Requires org:read.
+            operationId: getOrganizationRemoteSessionClient
+            parameters:
+                - allowEmptyValue: true
+                  description: The remote_session_client id.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The remote_session_client id.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RemoteSessionClient'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: getClient organizationRemoteSessionIssuers
+            tags:
+                - organizationRemoteSessionIssuers
+            x-speakeasy-name-override: getClient
+            x-speakeasy-react-hook:
+                name: OrganizationRemoteSessionClient
+    /rpc/organizationRemoteSessionIssuers.getClientDeletePreflight:
+        get:
+            description: 'Authoritative impact summary for deleting a remote_session_client: associated session count and affected MCP server names. Requires org:read.'
+            operationId: getOrganizationRemoteSessionClientDeletePreflight
+            parameters:
+                - allowEmptyValue: true
+                  description: The remote_session_client id.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The remote_session_client id.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrganizationClientDeletePreflight'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: getClientDeletePreflight organizationRemoteSessionIssuers
+            tags:
+                - organizationRemoteSessionIssuers
+            x-speakeasy-name-override: getClientDeletePreflight
+            x-speakeasy-react-hook:
+                name: OrganizationRemoteSessionClientDeletePreflight
+    /rpc/organizationRemoteSessionIssuers.getIssuer:
+        get:
+            description: Get any remote_session_issuer (organizational or project-specific) in the caller's organization by id. Requires org:read.
             operationId: getOrganizationRemoteSessionIssuer
             parameters:
                 - allowEmptyValue: true
@@ -14085,32 +14375,26 @@ paths:
             security:
                 - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
-            summary: getOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
+            summary: getIssuer organizationRemoteSessionIssuers
             tags:
                 - organizationRemoteSessionIssuers
-            x-speakeasy-name-override: get
+            x-speakeasy-name-override: getIssuer
             x-speakeasy-react-hook:
                 name: OrganizationRemoteSessionIssuer
-    /rpc/organizationRemoteSessionIssuers.list:
+    /rpc/organizationRemoteSessionIssuers.getIssuerDeletePreflight:
         get:
-            description: List organization-level remote_session_issuers in the caller's organization.
-            operationId: listOrganizationRemoteSessionIssuers
+            description: 'Authoritative impact summary for deleting a remote_session_issuer: associated client count and affected MCP server names. Requires org:read.'
+            operationId: getOrganizationRemoteSessionIssuerDeletePreflight
             parameters:
                 - allowEmptyValue: true
-                  description: Pagination cursor.
+                  description: The remote_session_issuer id.
                   in: query
-                  name: cursor
+                  name: id
+                  required: true
                   schema:
-                    description: Pagination cursor.
+                    description: The remote_session_issuer id.
+                    format: uuid
                     type: string
-                - allowEmptyValue: true
-                  description: Page size (default 50, max 100).
-                  in: query
-                  name: limit
-                  schema:
-                    description: Page size (default 50, max 100).
-                    format: int64
-                    type: integer
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -14130,7 +14414,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/ListRemoteSessionIssuersResult'
+                                $ref: '#/components/schemas/OrganizationIssuerDeletePreflight'
                     description: OK response.
                 "400":
                     content:
@@ -14189,10 +14473,454 @@ paths:
             security:
                 - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
-            summary: listOrganizationRemoteSessionIssuers organizationRemoteSessionIssuers
+            summary: getIssuerDeletePreflight organizationRemoteSessionIssuers
             tags:
                 - organizationRemoteSessionIssuers
-            x-speakeasy-name-override: list
+            x-speakeasy-name-override: getIssuerDeletePreflight
+            x-speakeasy-react-hook:
+                name: OrganizationRemoteSessionIssuerDeletePreflight
+    /rpc/organizationRemoteSessionIssuers.listClientMcpServers:
+        get:
+            description: List the MCP servers a remote_session_client is attached to (resolved through user_session_issuers) in the caller's organization. Requires org:read.
+            operationId: listOrganizationRemoteSessionClientMcpServers
+            parameters:
+                - allowEmptyValue: true
+                  description: The remote_session_client id.
+                  in: query
+                  name: client_id
+                  required: true
+                  schema:
+                    description: The remote_session_client id.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListOrganizationMcpServersResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: listClientMcpServers organizationRemoteSessionIssuers
+            tags:
+                - organizationRemoteSessionIssuers
+            x-speakeasy-name-override: listClientMcpServers
+            x-speakeasy-react-hook:
+                name: OrganizationRemoteSessionClientMcpServers
+    /rpc/organizationRemoteSessionIssuers.listClientSessions:
+        get:
+            description: List the remote_sessions minted against a remote_session_client in the caller's organization. access_token_encrypted and refresh_token_encrypted are never returned. Requires org:read.
+            operationId: listOrganizationRemoteSessionClientSessions
+            parameters:
+                - allowEmptyValue: true
+                  description: The remote_session_client id.
+                  in: query
+                  name: client_id
+                  required: true
+                  schema:
+                    description: The remote_session_client id.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Pagination cursor.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Pagination cursor.
+                    type: string
+                - allowEmptyValue: true
+                  description: Page size (default 50, max 100).
+                  in: query
+                  name: limit
+                  schema:
+                    description: Page size (default 50, max 100).
+                    format: int64
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListOrganizationRemoteSessionsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: listClientSessions organizationRemoteSessionIssuers
+            tags:
+                - organizationRemoteSessionIssuers
+            x-speakeasy-name-override: listClientSessions
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
+            x-speakeasy-react-hook:
+                name: OrganizationRemoteSessionClientSessions
+    /rpc/organizationRemoteSessionIssuers.listClients:
+        get:
+            description: List the remote_session_clients registered with a given issuer in the caller's organization, each with its MCP server attachment count. Requires org:read.
+            operationId: listOrganizationRemoteSessionClients
+            parameters:
+                - allowEmptyValue: true
+                  description: The remote_session_issuer id to list clients for.
+                  in: query
+                  name: issuer_id
+                  required: true
+                  schema:
+                    description: The remote_session_issuer id to list clients for.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Pagination cursor.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Pagination cursor.
+                    type: string
+                - allowEmptyValue: true
+                  description: Page size (default 50, max 100).
+                  in: query
+                  name: limit
+                  schema:
+                    description: Page size (default 50, max 100).
+                    format: int64
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListOrganizationRemoteSessionClientsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: listClients organizationRemoteSessionIssuers
+            tags:
+                - organizationRemoteSessionIssuers
+            x-speakeasy-name-override: listClients
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
+            x-speakeasy-react-hook:
+                name: OrganizationRemoteSessionClients
+    /rpc/organizationRemoteSessionIssuers.listIssuers:
+        get:
+            description: List all remote_session_issuers in the caller's organization — organizational (project_id NULL) and project-specific — each with its associated client count and, for project-specific issuers, the owning project name. Requires org:read.
+            operationId: listOrganizationRemoteSessionIssuers
+            parameters:
+                - allowEmptyValue: true
+                  description: Pagination cursor.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Pagination cursor.
+                    type: string
+                - allowEmptyValue: true
+                  description: Page size (default 50, max 100).
+                  in: query
+                  name: limit
+                  schema:
+                    description: Page size (default 50, max 100).
+                    format: int64
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListOrganizationRemoteSessionIssuersResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: listIssuers organizationRemoteSessionIssuers
+            tags:
+                - organizationRemoteSessionIssuers
+            x-speakeasy-name-override: listIssuers
             x-speakeasy-pagination:
                 inputs:
                     - in: parameters
@@ -14203,9 +14931,476 @@ paths:
                 type: cursor
             x-speakeasy-react-hook:
                 name: OrganizationRemoteSessionIssuers
-    /rpc/organizationRemoteSessionIssuers.update:
+    /rpc/organizationRemoteSessionIssuers.moveIssuer:
         post:
-            description: Update fields on an existing organization-level remote_session_issuer.
+            description: 'Re-scope a remote_session_issuer in the caller''s organization: provide a project_id (which must belong to the organization) to make it project-specific, or omit it to make it organization-level (project_id NULL, inherited by every project). Requires org:admin.'
+            operationId: moveOrganizationRemoteSessionIssuer
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/MoveIssuerRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RemoteSessionIssuer'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: moveIssuer organizationRemoteSessionIssuers
+            tags:
+                - organizationRemoteSessionIssuers
+            x-speakeasy-name-override: moveIssuer
+            x-speakeasy-react-hook:
+                name: MoveOrganizationRemoteSessionIssuer
+    /rpc/organizationRemoteSessionIssuers.removeClientFromMcpServer:
+        post:
+            description: Detach a remote_session_client from an MCP server (clears the MCP server's user_session_issuer link) in the caller's organization. Requires org:admin.
+            operationId: removeOrganizationRemoteSessionClientFromMcpServer
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RemoveClientFromMcpServerRequestBody'
+                required: true
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: removeClientFromMcpServer organizationRemoteSessionIssuers
+            tags:
+                - organizationRemoteSessionIssuers
+            x-speakeasy-name-override: removeClientFromMcpServer
+            x-speakeasy-react-hook:
+                name: RemoveOrganizationRemoteSessionClientFromMcpServer
+    /rpc/organizationRemoteSessionIssuers.revokeAllClientSessions:
+        post:
+            description: Revoke (soft-delete) all remote_sessions minted against a remote_session_client in the caller's organization. Requires org:admin.
+            operationId: revokeAllOrganizationRemoteSessionClientSessions
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RevokeAllClientSessionsRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RevokeAllRemoteSessionsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: revokeAllClientSessions organizationRemoteSessionIssuers
+            tags:
+                - organizationRemoteSessionIssuers
+            x-speakeasy-name-override: revokeAllClientSessions
+            x-speakeasy-react-hook:
+                name: RevokeAllOrganizationRemoteSessionClientSessions
+    /rpc/organizationRemoteSessionIssuers.revokeSession:
+        post:
+            description: Revoke (soft-delete) a single remote_session in the caller's organization. Requires org:admin.
+            operationId: revokeOrganizationRemoteSession
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RiskIDRequestBody'
+                required: true
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: revokeSession organizationRemoteSessionIssuers
+            tags:
+                - organizationRemoteSessionIssuers
+            x-speakeasy-name-override: revokeSession
+            x-speakeasy-react-hook:
+                name: RevokeOrganizationRemoteSession
+    /rpc/organizationRemoteSessionIssuers.updateClient:
+        post:
+            description: Update a remote_session_client's non-secret fields in the caller's organization. Requires org:admin.
+            operationId: updateOrganizationRemoteSessionClient
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateRemoteSessionClientForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RemoteSessionClient'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+            summary: updateClient organizationRemoteSessionIssuers
+            tags:
+                - organizationRemoteSessionIssuers
+            x-speakeasy-name-override: updateClient
+            x-speakeasy-react-hook:
+                name: UpdateOrganizationRemoteSessionClient
+    /rpc/organizationRemoteSessionIssuers.updateIssuer:
+        post:
+            description: Update any remote_session_issuer (organizational or project-specific) in the caller's organization. Requires org:admin.
             operationId: updateOrganizationRemoteSessionIssuer
             parameters:
                 - allowEmptyValue: true
@@ -14292,10 +15487,10 @@ paths:
             security:
                 - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
-            summary: updateOrganizationRemoteSessionIssuer organizationRemoteSessionIssuers
+            summary: updateIssuer organizationRemoteSessionIssuers
             tags:
                 - organizationRemoteSessionIssuers
-            x-speakeasy-name-override: update
+            x-speakeasy-name-override: updateIssuer
             x-speakeasy-react-hook:
                 name: UpdateOrganizationRemoteSessionIssuer
     /rpc/organizations.createPortalSession:
@@ -25813,6 +27008,111 @@ paths:
             x-speakeasy-react-hook:
                 name: ListHooksTraces
                 type: query
+    /rpc/telemetry.listToolUsageTraces:
+        post:
+            description: List target-aware MCP and tool usage traces
+            operationId: listToolUsageTraces
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ListToolUsageTracesPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListToolUsageTracesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listToolUsageTraces telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: listToolUsageTraces
+            x-speakeasy-react-hook:
+                name: ListToolUsageTraces
+                type: query
     /rpc/telemetry.searchChats:
         post:
             description: Search and list chat session summaries that match a search filter
@@ -32103,6 +33403,9 @@ components:
                 photo_url:
                     type: string
                     description: Avatar URL.
+                principal_urn:
+                    type: string
+                    description: Canonical principal URN for this member.
                 role_ids:
                     type: array
                     items:
@@ -32110,6 +33413,7 @@ components:
                     description: All role IDs assigned to this member.
             required:
                 - id
+                - principal_urn
                 - name
                 - email
                 - role_ids
@@ -33738,6 +35042,9 @@ components:
                         - PostToolUse
                         - UserPromptSubmit
                         - Stop
+                last_assistant_message:
+                    type: string
+                    description: The final assistant message text for the turn (Stop only)
                 model:
                     type: string
                     description: The model identifier
@@ -33971,6 +35278,67 @@ components:
                 - organization_id
                 - name
                 - entries
+        CreateIssuerRequestBody:
+            type: object
+            properties:
+                authorization_endpoint:
+                    type: string
+                    description: Upstream authorization endpoint.
+                grant_types_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: Grant types advertised by the issuer.
+                issuer:
+                    type: string
+                    description: Issuer URL; matches the iss claim.
+                jwks_uri:
+                    type: string
+                    description: Upstream JWKS URI.
+                logo_asset_id:
+                    type: string
+                    description: Optional logo asset id.
+                    format: uuid
+                name:
+                    type: string
+                    description: Optional display name. Stored NULL when empty; clients fall back to the issuer URL/slug.
+                oidc:
+                    type: boolean
+                    description: When true, may unlock OIDC-aware behaviour. Default false.
+                passthrough:
+                    type: boolean
+                    description: When true, the MCP client registers and transacts directly with this issuer. Default false.
+                project_id:
+                    type: string
+                    description: Owning project id; the project must belong to the caller's organization. Omit to create an organization-level issuer.
+                    format: uuid
+                registration_endpoint:
+                    type: string
+                    description: Upstream RFC 7591 registration endpoint; absent for issuers without DCR.
+                response_types_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: Response types advertised by the issuer.
+                scopes_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: Scopes advertised by the issuer.
+                slug:
+                    type: string
+                    description: Project-unique slug.
+                token_endpoint:
+                    type: string
+                    description: Upstream token endpoint.
+                token_endpoint_auth_methods_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: Token endpoint auth methods advertised by the issuer.
+            required:
+                - slug
+                - issuer
         CreateKeyForm:
             type: object
             properties:
@@ -34432,6 +35800,18 @@ components:
                     enum:
                         - flag
                         - block
+                audience_principal_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: Principal URNs this policy applies to. For audience_type=everyone, the server stores user:all.
+                audience_type:
+                    type: string
+                    description: 'Policy audience type: everyone or targeted.'
+                    default: everyone
+                    enum:
+                        - everyone
+                        - targeted
                 auto_name:
                     type: boolean
                     description: Whether the policy name should be auto-generated.
@@ -37818,6 +39198,55 @@ components:
                     description: The members in your organization.
             required:
                 - members
+        ListOrganizationMcpServersResult:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OrganizationMcpServer'
+            description: Result type for the MCP servers attached to a remote_session_client.
+            required:
+                - items
+        ListOrganizationRemoteSessionClientsResult:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OrganizationRemoteSessionClient'
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page; empty when exhausted.
+            description: Result type for the organization-administrator client listing for a single issuer.
+            required:
+                - items
+        ListOrganizationRemoteSessionIssuersResult:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OrganizationRemoteSessionIssuer'
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page; empty when exhausted.
+            description: Result type for the organization-administrator issuer listing — organizational and project-specific issuers across the org.
+            required:
+                - items
+        ListOrganizationRemoteSessionsResult:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RemoteSession'
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page; empty when exhausted.
+            description: Result type for the remote_sessions minted against a remote_session_client.
+            required:
+                - items
         ListPackagesResult:
             type: object
             properties:
@@ -38162,6 +39591,93 @@ components:
                 - filtering_enabled
                 - scopes
                 - excluded
+        ListToolUsageTracesPayload:
+            type: object
+            properties:
+                cursor:
+                    type: string
+                    description: Cursor for pagination
+                filters:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/LogFilter'
+                    description: Arbitrary attribute filter conditions from the af URL param
+                from:
+                    type: string
+                    description: Start time in ISO 8601 format
+                    example: "2025-12-19T10:00:00Z"
+                    format: date-time
+                hook_sources:
+                    type: array
+                    items:
+                        type: string
+                    description: Hook plugin sources to include. Direct hosted MCP calls have no hook source and are excluded when this filter is set.
+                hosted_toolset_slugs:
+                    type: array
+                    items:
+                        type: string
+                    description: Hosted MCP toolset slugs to include
+                limit:
+                    type: integer
+                    description: Number of traces to return
+                    default: 100
+                    format: int64
+                    minimum: 1
+                    maximum: 1000
+                query:
+                    type: string
+                    description: Free-text attribute search string from the q URL param. Matches useful identifier attributes such as Gram URN, conversation ID, and trigger instance ID.
+                shadow_server_names:
+                    type: array
+                    items:
+                        type: string
+                    description: Shadow MCP server names to include
+                sort:
+                    type: string
+                    description: Sort order
+                    default: desc
+                    enum:
+                        - asc
+                        - desc
+                target_types:
+                    type: array
+                    items:
+                        type: string
+                        description: Tool usage target type
+                        enum:
+                            - hosted_mcp_server
+                            - shadow_mcp_server
+                            - local_tool
+                            - skill
+                    description: Target types to include. Empty means all target types.
+                to:
+                    type: string
+                    description: End time in ISO 8601 format
+                    example: "2025-12-19T11:00:00Z"
+                    format: date-time
+                user_filters:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolUsageUserFilter'
+                    description: Typed user identities to include
+            description: Payload for listing target-aware MCP and tool usage traces
+            required:
+                - from
+                - to
+        ListToolUsageTracesResult:
+            type: object
+            properties:
+                next_cursor:
+                    type: string
+                    description: Cursor for next page
+                traces:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolUsageTraceSummary'
+                    description: Target-aware tool usage trace rows
+            description: Result of listing target-aware MCP and tool usage traces
+            required:
+                - traces
         ListToolVariationGroupsResult:
             type: object
             properties:
@@ -38736,6 +40252,19 @@ components:
             required:
                 - name
                 - count
+        MoveIssuerRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The remote_session_issuer id.
+                    format: uuid
+                project_id:
+                    type: string
+                    description: Target owning project id; the project must belong to the caller's organization. Omit to make the issuer organization-level.
+                    format: uuid
+            required:
+                - id
         NotModified:
             type: object
             properties:
@@ -38973,9 +40502,15 @@ components:
                 observedTimeUnixNano:
                     type: string
                     description: Observed timestamp in nanoseconds
+                spanId:
+                    type: string
+                    description: Span ID
                 timeUnixNano:
                     type: string
                     description: Timestamp in nanoseconds since Unix epoch
+                traceId:
+                    type: string
+                    description: Trace ID
             description: Individual OTEL log record
         OTELLogsPayload:
             type: object
@@ -39311,6 +40846,22 @@ components:
                 - webhooks_enabled
                 - created_at
                 - updated_at
+        OrganizationClientDeletePreflight:
+            type: object
+            properties:
+                mcp_server_names:
+                    type: array
+                    items:
+                        type: string
+                    description: Display names of MCP servers this client is attached to.
+                session_count:
+                    type: integer
+                    description: Number of non-deleted remote_sessions minted against this client.
+                    format: int64
+            description: 'Authoritative impact summary for deleting a remote_session_client: how many sessions it holds and the names of the MCP servers it is attached to.'
+            required:
+                - session_count
+                - mcp_server_names
         OrganizationEntry:
             type: object
             properties:
@@ -39411,6 +40962,83 @@ components:
                 - state
                 - organization_name
                 - accept_invitation_url
+        OrganizationIssuerDeletePreflight:
+            type: object
+            properties:
+                client_count:
+                    type: integer
+                    description: Number of non-deleted remote_session_clients registered with this issuer.
+                    format: int64
+                mcp_server_names:
+                    type: array
+                    items:
+                        type: string
+                    description: Display names of MCP servers attached to this issuer's clients.
+            description: 'Authoritative impact summary for deleting a remote_session_issuer: how many clients reference it and the names of the MCP servers those clients are attached to.'
+            required:
+                - client_count
+                - mcp_server_names
+        OrganizationMcpServer:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The mcp_server id.
+                    format: uuid
+                name:
+                    type: string
+                    description: The MCP server name; empty when unset (display falls back to the URL).
+                project_id:
+                    type: string
+                    description: The owning project id.
+                    format: uuid
+                project_slug:
+                    type: string
+                    description: The owning project's slug, for linking to the MCP server in its project.
+                slug:
+                    type: string
+                    description: The MCP server slug.
+                url:
+                    type: string
+                    description: The remote MCP server URL; empty for non-remote (toolset-backed) servers.
+            description: An MCP server attached to a remote_session_client, with the fields the org-admin UI needs to display and link to it.
+            required:
+                - id
+                - project_id
+        OrganizationRemoteSessionClient:
+            type: object
+            properties:
+                active_session_count:
+                    type: integer
+                    description: Number of non-deleted (active) remote_sessions minted against this client.
+                    format: int64
+                client:
+                    $ref: '#/components/schemas/RemoteSessionClient'
+                mcp_server_count:
+                    type: integer
+                    description: Number of non-deleted MCP servers attached to this client (via user_session_issuers).
+                    format: int64
+            description: 'An organization-administrator view of a remote_session_client: the client plus the number of MCP servers it is attached to and the number of active sessions minted against it.'
+            required:
+                - client
+                - mcp_server_count
+                - active_session_count
+        OrganizationRemoteSessionIssuer:
+            type: object
+            properties:
+                client_count:
+                    type: integer
+                    description: Number of non-deleted remote_session_clients registered with this issuer.
+                    format: int64
+                issuer:
+                    $ref: '#/components/schemas/RemoteSessionIssuer'
+                project_name:
+                    type: string
+                    description: The owning project's name. Empty for organizational (project_id NULL) issuers.
+            description: 'An organization-administrator view of a remote_session_issuer: the issuer plus its associated client count and (for project-specific issuers) the owning project''s name.'
+            required:
+                - issuer
+                - client_count
         OrganizationUser:
             type: object
             properties:
@@ -40455,6 +42083,12 @@ components:
                     items:
                         type: string
                     description: Scopes held by this session.
+                subject_display_name:
+                    type: string
+                    description: Resolved display name when the subject is a Gram user. Absent for apikey/anonymous subjects or unresolved users.
+                subject_email:
+                    type: string
+                    description: Resolved email when the subject is a Gram user. Absent for apikey/anonymous subjects or unresolved users.
                 subject_urn:
                     type: string
                     description: The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).
@@ -40663,6 +42297,20 @@ components:
                 - oidc
                 - passthrough
                 - discovery_warnings
+        RemoveClientFromMcpServerRequestBody:
+            type: object
+            properties:
+                client_id:
+                    type: string
+                    description: The remote_session_client id.
+                    format: uuid
+                mcp_server_id:
+                    type: string
+                    description: The mcp_server id to detach from.
+                    format: uuid
+            required:
+                - client_id
+                - mcp_server_id
         RenderTemplateByIDRequestBody:
             type: object
             properties:
@@ -40802,6 +42450,25 @@ components:
                 - type
                 - status_codes
                 - content_types
+        RevokeAllClientSessionsRequestBody:
+            type: object
+            properties:
+                client_id:
+                    type: string
+                    description: The remote_session_client id.
+                    format: uuid
+            required:
+                - client_id
+        RevokeAllRemoteSessionsResult:
+            type: object
+            properties:
+                revoked_count:
+                    type: integer
+                    description: Number of remote_sessions revoked.
+                    format: int64
+            description: Result type for revoking all of a client's remote_sessions.
+            required:
+                - revoked_count
         RiskCapabilitiesResult:
             type: object
             properties:
@@ -41105,6 +42772,18 @@ components:
                     enum:
                         - flag
                         - block
+                audience_principal_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: Principal URNs the policy applies to. Contains user:all when audience_type is everyone.
+                audience_type:
+                    type: string
+                    description: 'Policy audience type: everyone or targeted.'
+                    default: everyone
+                    enum:
+                        - everyone
+                        - targeted
                 auto_name:
                     type: boolean
                     description: Whether the policy name is auto-generated. When true, the name is regenerated on each update.
@@ -41195,6 +42874,8 @@ components:
                 - sources
                 - enabled
                 - action
+                - audience_type
+                - audience_principal_urns
                 - auto_name
                 - version
                 - created_at
@@ -41584,6 +43265,9 @@ components:
                 name:
                     type: string
                     description: Display name of the role.
+                principal_urn:
+                    type: string
+                    description: Canonical principal URN for this role.
                 slug:
                     type: string
                     description: Stable WorkOS role slug.
@@ -41592,6 +43276,7 @@ components:
                     format: date-time
             required:
                 - id
+                - principal_urn
                 - name
                 - slug
                 - description
@@ -43712,6 +45397,120 @@ components:
                 - unique_tools
                 - unique_users
                 - unique_targets
+        ToolUsageTraceLogGroup:
+            type: object
+            properties:
+                kind:
+                    type: string
+                    description: Child-log lookup strategy for a tool usage trace row
+                    enum:
+                        - trace_id
+                        - correlation_id
+                        - trigger_event_id
+                        - log_id
+                value:
+                    type: string
+                    description: Lookup value
+            description: Descriptor used by the dashboard to fetch child logs for a trace row
+            required:
+                - kind
+                - value
+        ToolUsageTraceSummary:
+            type: object
+            properties:
+                block_reason:
+                    type: string
+                    description: Hook block reason when hook_status is blocked
+                event_source:
+                    type: string
+                    description: Telemetry event source
+                gram_urn:
+                    type: string
+                    description: Gram URN associated with the trace
+                hook_source:
+                    type: string
+                    description: Hook plugin source when the row came from hook telemetry
+                hook_status:
+                    type: string
+                    description: Hook execution status when the row came from hook telemetry
+                    enum:
+                        - success
+                        - failure
+                        - blocked
+                        - pending
+                http_status_code:
+                    type: integer
+                    description: HTTP status code when available
+                    format: int32
+                id:
+                    type: string
+                    description: Stable row identity for React keys and expansion state
+                log_count:
+                    type: integer
+                    description: Number of logs in the trace
+                    format: int64
+                log_group:
+                    $ref: '#/components/schemas/ToolUsageTraceLogGroup'
+                start_time_unix_nano:
+                    type: string
+                    description: Earliest log timestamp in Unix nanoseconds as a string for JavaScript integer safety
+                target_id:
+                    type: string
+                    description: Stable target identifier used by filters
+                target_kind:
+                    type: string
+                    description: Tool usage aggregation target kind
+                    enum:
+                        - server
+                        - local_tools
+                        - skill
+                target_label:
+                    type: string
+                    description: User-facing target label
+                target_type:
+                    type: string
+                    description: Tool usage target type
+                    enum:
+                        - hosted_mcp_server
+                        - shadow_mcp_server
+                        - local_tool
+                        - skill
+                tool_name:
+                    type: string
+                    description: Tool name shown in the row
+                trace_id:
+                    type: string
+                    description: Real OTel trace ID when the grouped logs have one
+                user_key:
+                    type: string
+                    description: Stable user identity value
+                user_kind:
+                    type: string
+                    description: Tool usage user identity kind
+                    enum:
+                        - email
+                        - external_user_id
+                        - user_id
+                        - unknown
+                user_label:
+                    type: string
+                    description: User-facing user identity label
+            description: A single target-aware tool usage trace row
+            required:
+                - id
+                - log_group
+                - start_time_unix_nano
+                - log_count
+                - gram_urn
+                - tool_name
+                - target_type
+                - target_kind
+                - target_id
+                - target_label
+                - user_key
+                - user_label
+                - user_kind
+                - event_source
         ToolUsageUserFilter:
             type: object
             properties:
@@ -44759,6 +46558,42 @@ components:
                     $ref: '#/components/schemas/OAuthProxyServerUpdateForm'
             required:
                 - oauth_proxy_server
+        UpdateOrganizationRemoteSessionClientForm:
+            type: object
+            properties:
+                audience:
+                    type: string
+                    description: Replace the upstream OAuth audience sent for this client.
+                    pattern: ^[!-~]+$
+                    maxLength: 512
+                client_secret:
+                    type: string
+                    description: Rotate the client secret. Gram re-encrypts before persisting; the plaintext is never returned.
+                id:
+                    type: string
+                    description: The remote_session_client id.
+                    format: uuid
+                scope:
+                    type: array
+                    items:
+                        type: string
+                        pattern: ^[!#-[\]-~]+$
+                        maxLength: 128
+                    description: Replace the explicit upstream OAuth scopes for this client.
+                token_endpoint_auth_method:
+                    type: string
+                    description: Change how the client authenticates at the issuer's token endpoint.
+                    enum:
+                        - client_secret_basic
+                        - client_secret_post
+                        - none
+                user_session_issuer_id:
+                    type: string
+                    description: Re-pair with a different user_session_issuer.
+                    format: uuid
+            description: Form for an org admin to update a remote_session_client's non-secret fields.
+            required:
+                - id
         UpdateOrganizationRequestBody:
             type: object
             properties:
@@ -45072,6 +46907,17 @@ components:
                     enum:
                         - flag
                         - block
+                audience_principal_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: Principal URNs this policy applies to. Omit to preserve the current target principals.
+                audience_type:
+                    type: string
+                    description: 'Policy audience type: everyone or targeted. Omit to preserve the current audience type.'
+                    enum:
+                        - everyone
+                        - targeted
                 auto_name:
                     type: boolean
                     description: Whether the policy name should be auto-generated.
@@ -46124,12 +47970,12 @@ tags:
       description: Managing remote MCP servers.
     - name: remoteSessionClients
       description: Manage remote_session_client records — credentials Gram uses when acting as an OAuth client of a remote_session_issuer. client_secret_encrypted is never returned.
-    - name: remoteSessionIssuers
-      description: Manage remote_session_issuer records — upstream Authorization Server identity records that Gram talks to as an OAuth client.
-    - name: organizationRemoteSessionIssuers
-      description: Manage organization-level remote_session_issuer records — cross-project upstream Authorization Server identity records inherited by every project in the organization.
     - name: remoteSessions
       description: Operator visibility into remote_sessions Gram is holding on a principal's behalf. Read + revoke; sessions are written by /mcp/{slug}/remote_login_callback and the silent-refresh path. access_token_encrypted and refresh_token_encrypted are never returned.
+    - name: organizationRemoteSessionIssuers
+      description: Manage organization-level remote_session_issuer records — cross-project upstream Authorization Server identity records inherited by every project in the organization.
+    - name: remoteSessionIssuers
+      description: Manage remote_session_issuer records — upstream Authorization Server identity records that Gram talks to as an OAuth client.
     - name: resources
       description: Dashboard API for interacting with resources.
     - name: risk

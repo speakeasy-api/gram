@@ -11,6 +11,7 @@ import {
   CreateMarketplaceStep,
   DistributeServersStep,
   InstrumentAgentsStep,
+  AdditionalAgentConfigStep,
   ConfirmTrafficStep,
   ConfigurePoliciesStep,
 } from "./steps";
@@ -42,6 +43,11 @@ const STEPS: Step[] = [
     description: "Connect AI coding assistants",
   },
   {
+    id: "additional-agent-config",
+    title: "Additional agent configuration",
+    description: "Optional API keys for usage and compliance data",
+  },
+  {
     id: "confirm-traffic",
     title: "Confirm traffic",
     description: "Verify connectivity and compliance",
@@ -66,9 +72,9 @@ export function SetupWizard(): JSX.Element | null {
   // Server-side onboarding signals used to resume at the right step on reload.
   // `onboardingStatus` covers SSO + DSYNC; `publishStatus` covers the
   // marketplace step. Steps after marketplace (distribute-servers,
-  // instrument-agents, confirm-traffic) have no server signal — once
-  // marketplace is published we land on distribute-servers and let the user
-  // click forward.
+  // instrument-agents, additional-agent-config, confirm-traffic) have no server
+  // signal — once marketplace is published we land on distribute-servers and
+  // let the user click forward.
   const { data: onboardingStatus, isLoading: isOnboardingStatusLoading } =
     useOnboardingStatus();
   const { data: publishStatus, isLoading: isPublishStatusLoading } =
@@ -198,12 +204,20 @@ export function SetupWizard(): JSX.Element | null {
         );
       case 5:
         return (
+          <AdditionalAgentConfigStep
+            onComplete={completeCurrentStep}
+            onSkip={completeCurrentStep}
+            onBack={goBack}
+          />
+        );
+      case 6:
+        return (
           <ConfirmTrafficStep
             onComplete={completeCurrentStep}
             onBack={goBack}
           />
         );
-      case 6:
+      case 7:
         return (
           <ConfigurePoliciesStep
             onComplete={completeCurrentStep}

@@ -38,6 +38,7 @@ describe("useObserveFilters", () => {
   const mockMembers: AccessMember[] = [
     {
       id: "m1",
+      principalUrn: "user:m1",
       email: "alice@example.com",
       name: "Alice",
       roleIds: ["role-admin"],
@@ -46,6 +47,7 @@ describe("useObserveFilters", () => {
     },
     {
       id: "m2",
+      principalUrn: "user:m2",
       email: "bob@example.com",
       name: "Bob",
       roleIds: ["role-member"],
@@ -56,6 +58,7 @@ describe("useObserveFilters", () => {
   const mockRoles: Role[] = [
     {
       id: "role-admin",
+      principalUrn: "role:organization:role-admin",
       name: "Admin",
       slug: "admin",
       description: "",
@@ -67,6 +70,7 @@ describe("useObserveFilters", () => {
     },
     {
       id: "role-member",
+      principalUrn: "role:organization:role-member",
       name: "Member",
       slug: "member",
       description: "",

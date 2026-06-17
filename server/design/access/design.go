@@ -733,9 +733,10 @@ var ListRoleGrantModel = Type("ListRoleGrant", func() {
 })
 
 var RoleModel = Type("Role", func() {
-	Required("id", "name", "slug", "description", "is_system", "grants", "member_count", "created_at", "updated_at")
+	Required("id", "principal_urn", "name", "slug", "description", "is_system", "grants", "member_count", "created_at", "updated_at")
 
 	Attribute("id", String, "Unique role identifier.")
+	Attribute("principal_urn", String, "Canonical principal URN for this role.")
 	Attribute("name", String, "Display name of the role.")
 	Attribute("slug", String, "Stable WorkOS role slug.")
 	Attribute("description", String, "Human-readable description.")
@@ -795,9 +796,10 @@ var UpdateRoleForm = Type("UpdateRoleForm", func() {
 })
 
 var MemberModel = Type("AccessMember", func() {
-	Required("id", "name", "email", "role_ids", "joined_at")
+	Required("id", "principal_urn", "name", "email", "role_ids", "joined_at")
 
 	Attribute("id", String, "User ID.")
+	Attribute("principal_urn", String, "Canonical principal URN for this member.")
 	Attribute("name", String, "Display name.")
 	Attribute("email", String, "Email address.")
 	Attribute("photo_url", String, "Avatar URL.")

@@ -467,8 +467,7 @@ func toTriggerError(ctx context.Context, logger *slog.Logger, err error, message
 		// Webhook signature failures are client faults: a 401 on a public
 		// endpoint, commonly a single trigger with a stale or wrong signing
 		// secret whose sender keeps retrying.
-		logger.WarnContext(ctx, "trigger webhook authentication failed", attr.SlogError(err))
-		return oops.E(oops.CodeUnauthorized, err, "%s", public)
+		return oops.E(oops.CodeUnauthorized, fmt.Errorf("trigger webhook authentication failed: %w", err), "%s", public).LogWarn(ctx, logger)
 	case errors.Is(err, pgx.ErrNoRows):
 		code = oops.CodeNotFound
 	}

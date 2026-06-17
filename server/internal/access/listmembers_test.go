@@ -35,11 +35,13 @@ func TestService_ListMembers(t *testing.T) {
 
 	// IDs should be Gram user IDs, not WorkOS user IDs.
 	require.Equal(t, "Ada Lovelace", byID["local_user_1"].Name)
+	require.Equal(t, "user:local_user_1", byID["local_user_1"].PrincipalUrn)
 	require.Equal(t, "ada@example.com", byID["local_user_1"].Email)
 	require.Equal(t, []string{adminID}, byID["local_user_1"].RoleIds)
 	require.NotEmpty(t, byID["local_user_1"].JoinedAt)
 
 	require.Equal(t, "Grace", byID["local_user_2"].Name)
+	require.Equal(t, "user:local_user_2", byID["local_user_2"].PrincipalUrn)
 	require.Equal(t, []string{builderID}, byID["local_user_2"].RoleIds)
 
 	require.Empty(t, byID[authCtx.UserID].RoleIds)
@@ -70,6 +72,7 @@ func TestService_ListMembers_SkipsMembersWithoutLocalUser(t *testing.T) {
 		byID[member.ID] = member
 	}
 	require.Equal(t, "Ada Lovelace", byID["local_user_1"].Name)
+	require.Equal(t, "user:local_user_1", byID["local_user_1"].PrincipalUrn)
 	require.Nil(t, byID["user_2"])
 	require.Empty(t, byID[authCtx.UserID].RoleIds)
 }
@@ -85,6 +88,7 @@ func TestService_ListMembers_IncludesConnectedUsersWithoutRoleAssignments(t *tes
 	require.Len(t, result.Members, 1)
 
 	require.Equal(t, authCtx.UserID, result.Members[0].ID)
+	require.Equal(t, "user:"+authCtx.UserID, result.Members[0].PrincipalUrn)
 	require.Empty(t, result.Members[0].RoleIds)
 	require.NotEmpty(t, result.Members[0].Name)
 }

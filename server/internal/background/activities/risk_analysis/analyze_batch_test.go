@@ -262,6 +262,7 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 		MessageTypes:   []string{message.ToolRequest},
 		Enabled:        true,
 		Action:         "flag",
+		AudienceType:   "everyone",
 		AutoName:       false,
 		Prompt:         pgtype.Text{String: "Block destructive shell commands", Valid: true},
 	})
@@ -334,6 +335,7 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 		MessageTypes:   []string{message.ToolRequest},
 		Enabled:        true,
 		Action:         "flag",
+		AudienceType:   "everyone",
 		AutoName:       false,
 		Prompt:         pgtype.Text{String: "Block destructive operations", Valid: true},
 	})
@@ -847,8 +849,10 @@ func seedCustomRulePolicySelection(t *testing.T, conn *pgxpool.Pool, td testData
 		PromptInjectionRules: policy.PromptInjectionRules,
 		DisabledRules:        policy.DisabledRules,
 		CustomRuleIds:        []string{ruleID},
+		MessageTypes:         policy.MessageTypes,
 		Enabled:              policy.Enabled,
 		Action:               "flag",
+		AudienceType:         policy.AudienceType,
 		AutoName:             policy.AutoName,
 		UserMessage:          policy.UserMessage,
 	})

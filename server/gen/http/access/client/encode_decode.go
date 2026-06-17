@@ -5433,14 +5433,15 @@ func DecodeResolveChallengeResponse(decoder func(*http.Response) goahttp.Decoder
 // from a value of type *RoleResponseBody.
 func unmarshalRoleResponseBodyToAccessRole(v *RoleResponseBody) *access.Role {
 	res := &access.Role{
-		ID:          *v.ID,
-		Name:        *v.Name,
-		Slug:        *v.Slug,
-		Description: *v.Description,
-		IsSystem:    *v.IsSystem,
-		MemberCount: *v.MemberCount,
-		CreatedAt:   *v.CreatedAt,
-		UpdatedAt:   *v.UpdatedAt,
+		ID:           *v.ID,
+		PrincipalUrn: *v.PrincipalUrn,
+		Name:         *v.Name,
+		Slug:         *v.Slug,
+		Description:  *v.Description,
+		IsSystem:     *v.IsSystem,
+		MemberCount:  *v.MemberCount,
+		CreatedAt:    *v.CreatedAt,
+		UpdatedAt:    *v.UpdatedAt,
 	}
 	res.Grants = make([]*access.RoleGrant, len(v.Grants))
 	for i, val := range v.Grants {
@@ -5605,11 +5606,12 @@ func unmarshalScopeDefinitionResponseBodyToAccessScopeDefinition(v *ScopeDefinit
 // *access.AccessMember from a value of type *AccessMemberResponseBody.
 func unmarshalAccessMemberResponseBodyToAccessAccessMember(v *AccessMemberResponseBody) *access.AccessMember {
 	res := &access.AccessMember{
-		ID:       *v.ID,
-		Name:     *v.Name,
-		Email:    *v.Email,
-		PhotoURL: v.PhotoURL,
-		JoinedAt: *v.JoinedAt,
+		ID:           *v.ID,
+		PrincipalUrn: *v.PrincipalUrn,
+		Name:         *v.Name,
+		Email:        *v.Email,
+		PhotoURL:     v.PhotoURL,
+		JoinedAt:     *v.JoinedAt,
 	}
 	res.RoleIds = make([]string, len(v.RoleIds))
 	for i, val := range v.RoleIds {

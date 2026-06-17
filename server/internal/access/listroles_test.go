@@ -46,6 +46,7 @@ func TestService_ListRoles(t *testing.T) {
 
 	adminRole := rolesByID[adminID]
 	require.NotNil(t, adminRole)
+	require.Equal(t, "role:organization:"+adminID, adminRole.PrincipalUrn)
 	require.Equal(t, "Admin", adminRole.Name)
 	require.True(t, adminRole.IsSystem)
 	require.Equal(t, 1, adminRole.MemberCount)
@@ -58,6 +59,7 @@ func TestService_ListRoles(t *testing.T) {
 
 	customRole := rolesByID[customID]
 	require.NotNil(t, customRole)
+	require.Equal(t, "role:organization:"+customID, customRole.PrincipalUrn)
 	require.Equal(t, "Custom Builder", customRole.Name)
 	require.False(t, customRole.IsSystem)
 	require.Equal(t, 2, customRole.MemberCount)

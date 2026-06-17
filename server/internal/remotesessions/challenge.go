@@ -367,11 +367,10 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 
 	q := r.URL.Query()
 	if errCode := q.Get("error"); errCode != "" {
-		logger.WarnContext(ctx, "remote authn challenge returned error",
+		return oops.E(oops.CodeUnauthorized, nil, "remote authn challenge denied: %s", errCode).LogWarn(ctx, logger,
 			attr.SlogOAuthError(errCode),
 			attr.SlogOAuthErrorDescription(q.Get("error_description")),
 		)
-		return oops.E(oops.CodeUnauthorized, nil, "remote authn challenge denied: %s", errCode)
 	}
 	stateID := q.Get("state")
 	if stateID == "" {

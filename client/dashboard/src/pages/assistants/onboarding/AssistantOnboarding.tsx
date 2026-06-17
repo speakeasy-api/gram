@@ -229,7 +229,7 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
           systemPrompt,
           mcps,
           model: {
-            defaultModel: "anthropic/claude-sonnet-4.6" as Model,
+            defaultModel: "anthropic/claude-opus-4.7" as Model,
             showModelPicker: false,
           },
           welcome,

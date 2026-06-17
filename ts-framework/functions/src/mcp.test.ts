@@ -218,4 +218,69 @@ describe("fromGram", () => {
       ]);
     });
   });
+
+  // Regression coverage for AGE-2779: errors raised while handling a tool call
+  // must be intercepted and surfaced as normal `isError` results rather than
+  // bubbling up as an opaque MCP "Internal Error".
+  describe("error interception", () => {
+    test("ctx.fail() yields an isError result with only the message", async () => {
+      const g = new Gram().tool({
+        name: "fail",
+        description: "Fails via ctx.fail",
+        inputSchema: {},
+        async execute(ctx) {
+          return ctx.fail({ error: "something broke" }, { status: 500 });
+        },
+      });
+
+      const client = await setup(g);
+      // Must resolve (not reject): the thrown Response is intercepted.
+      const result = await client.callTool({ name: "fail", arguments: {} });
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toEqual([
+        { type: "text", text: '{"error":"something broke"}' },
+      ]);
+      // No stack trace leaks into the user-facing message.
+      expect(JSON.stringify(result.content)).not.toContain("stack");
+    });
+
+    test("a thrown JavaScript error is reported with its message", async () => {
+      const g = new Gram().tool({
+        name: "throws",
+        description: "Throws a raw error",
+        inputSchema: {},
+        async execute() {
+          throw new Error("kaboom");
+        },
+      });
+
+      const client = await setup(g);
+      const result = await client.callTool({ name: "throws", arguments: {} });
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toEqual([{ type: "text", text: "kaboom" }]);
+    });
+
+    test("an input validation failure yields an isError result", async () => {
+      const g = new Gram().tool({
+        name: "needsName",
+        description: "Requires a name",
+        inputSchema: { name: z.string() },
+        async execute(ctx, input) {
+          return ctx.text(`Hello ${input.name}`);
+        },
+      });
+
+      const client = await setup(g);
+      // Missing required `name` triggers validation failure (ctx.fail, status 400).
+      const result = await client.callTool({
+        name: "needsName",
+        arguments: {},
+      });
+
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result.content)).not.toContain("stack");
+    });
+  });
 });

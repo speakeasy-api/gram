@@ -12,7 +12,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * How the client authenticates at the issuer's token endpoint. Null resolves to client_secret_basic at runtime.
  */
-export const RemoteSessionClientTokenEndpointAuthMethod = {
+export const TokenEndpointAuthMethod = {
   ClientSecretBasic: "client_secret_basic",
   ClientSecretPost: "client_secret_post",
   None: "none",
@@ -20,8 +20,8 @@ export const RemoteSessionClientTokenEndpointAuthMethod = {
 /**
  * How the client authenticates at the issuer's token endpoint. Null resolves to client_secret_basic at runtime.
  */
-export type RemoteSessionClientTokenEndpointAuthMethod = ClosedEnum<
-  typeof RemoteSessionClientTokenEndpointAuthMethod
+export type TokenEndpointAuthMethod = ClosedEnum<
+  typeof TokenEndpointAuthMethod
 >;
 
 /**
@@ -61,9 +61,7 @@ export type RemoteSessionClient = {
   /**
    * How the client authenticates at the issuer's token endpoint. Null resolves to client_secret_basic at runtime.
    */
-  tokenEndpointAuthMethod?:
-    | RemoteSessionClientTokenEndpointAuthMethod
-    | undefined;
+  tokenEndpointAuthMethod?: TokenEndpointAuthMethod | undefined;
   updatedAt: Date;
   /**
    * The user_session_issuer this client is paired with.
@@ -72,10 +70,9 @@ export type RemoteSessionClient = {
 };
 
 /** @internal */
-export const RemoteSessionClientTokenEndpointAuthMethod$inboundSchema:
-  z.ZodMiniEnum<typeof RemoteSessionClientTokenEndpointAuthMethod> = z.enum(
-    RemoteSessionClientTokenEndpointAuthMethod,
-  );
+export const TokenEndpointAuthMethod$inboundSchema: z.ZodMiniEnum<
+  typeof TokenEndpointAuthMethod
+> = z.enum(TokenEndpointAuthMethod);
 
 /** @internal */
 export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
@@ -101,7 +98,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
     remote_session_issuer_id: z.string(),
     scope: z.optional(z.array(z.string())),
     token_endpoint_auth_method: z.optional(
-      RemoteSessionClientTokenEndpointAuthMethod$inboundSchema,
+      TokenEndpointAuthMethod$inboundSchema,
     ),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),

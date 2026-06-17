@@ -33,6 +33,7 @@ type ruleSettings struct {
 	NoDirectChatMessageInsert  noDirectChatMessageInsertSettings  `json:"no-direct-chat-message-insert"`
 	NoSqlErrNoRows             noSqlErrNoRowsSettings             `json:"no-sql-err-no-rows"`
 	NoTestingRawSql            noTestingRawSqlSettings            `json:"no-testing-raw-sql"`
+	NoClientErrorLogError      noClientErrorLogErrorSettings      `json:"no-client-error-log-error"`
 }
 
 type plugin struct {
@@ -88,6 +89,9 @@ func (p *plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 	}
 	if !p.settings.Rules.NoTestingRawSql.Disabled {
 		analyzers = append(analyzers, newNoTestingRawSqlAnalyzer(p.settings.Rules.NoTestingRawSql))
+	}
+	if !p.settings.Rules.NoClientErrorLogError.Disabled {
+		analyzers = append(analyzers, newNoClientErrorLogErrorAnalyzer(p.settings.Rules.NoClientErrorLogError))
 	}
 
 	return analyzers, nil

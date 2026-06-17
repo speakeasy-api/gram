@@ -4,6 +4,8 @@ import (
 	"go/ast"
 
 	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/analysis/passes/inspect"
+	"golang.org/x/tools/go/ast/inspector"
 )
 
 const (
@@ -23,25 +25,21 @@ func newNoAnonymousDeferAnalyzer(rule noAnonymousDeferSettings) *analysis.Analyz
 	}
 
 	return &analysis.Analyzer{
-		Name: noAnonymousDeferAnalyzer,
-		Doc:  noAnonymousDeferDefaultMessage,
+		Name:     noAnonymousDeferAnalyzer,
+		Doc:      noAnonymousDeferDefaultMessage,
+		Requires: []*analysis.Analyzer{inspect.Analyzer},
 		Run: func(pass *analysis.Pass) (any, error) {
-			for _, file := range pass.Files {
-				ast.Inspect(file, func(node ast.Node) bool {
-					deferStmt, ok := node.(*ast.DeferStmt)
-					if !ok {
-						return true
-					}
+			ins := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
 
-					if _, ok := deferStmt.Call.Fun.(*ast.FuncLit); !ok {
-						return true
-					}
+			ins.Preorder([]ast.Node{(*ast.DeferStmt)(nil)}, func(node ast.Node) {
+				deferStmt := node.(*ast.DeferStmt)
 
-					pass.ReportRangef(deferStmt, "%s", message)
+				if _, ok := deferStmt.Call.Fun.(*ast.FuncLit); !ok {
+					return
+				}
 
-					return true
-				})
-			}
+				pass.ReportRangef(deferStmt, "%s", message)
+			})
 
 			return nil, nil
 		},

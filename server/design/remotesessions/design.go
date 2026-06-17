@@ -87,6 +87,8 @@ var RemoteSession = Type("RemoteSession", func() {
 		Format(FormatUUID)
 	})
 	Attribute("subject_urn", String, "The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).")
+	Attribute("subject_display_name", String, "Resolved display name when the subject is a Gram user. Absent for apikey/anonymous subjects or unresolved users.")
+	Attribute("subject_email", String, "Resolved email when the subject is a Gram user. Absent for apikey/anonymous subjects or unresolved users.")
 	Attribute("user_session_issuer_id", String, "The user_session_issuer this session is bound to.", func() {
 		Format(FormatUUID)
 	})

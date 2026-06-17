@@ -105,7 +105,12 @@ func TestBuildAuthorizationUrl_ScopeResolution(t *testing.T) {
 				Scope:                   tc.clientScope,
 			})
 			require.NoError(t, err)
-			_ = client
+
+			err = q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+				RemoteSessionClientID: client.ID,
+				UserSessionIssuerID:   userIssuer,
+			})
+			require.NoError(t, err)
 
 			clients, err := mgr.ListClients(ctx, *authCtx.ProjectID, userIssuer)
 			require.NoError(t, err)

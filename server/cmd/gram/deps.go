@@ -892,7 +892,7 @@ type pubSubBroker interface {
 func newPubSubClient(ctx context.Context, c *cli.Context, logger *slog.Logger) (*pubsub.Client, pubSubBroker, func(ctx context.Context) error, error) {
 	var emulated bool
 	var projectID string
-	opts := []option.ClientOption{option.WithLogger(logger)}
+	opts := []option.ClientOption{option.WithLogger(logger.With(attr.SlogComponent("gcp-pubsub-client")))}
 	switch {
 	case c.String("pubsub-emulator-host") != "":
 		emulated = true
@@ -917,9 +917,9 @@ func newPubSubClient(ctx context.Context, c *cli.Context, logger *slog.Logger) (
 
 	var broker pubSubBroker
 	if emulated {
-		broker = gcp.NewEmulatedPubSub(logger, projectID, client, gen.Descriptors)
+		broker = gcp.NewEmulatedPubSub(logger.With(attr.SlogComponent("gcp-emulated-pubsub-broker")), projectID, client, gen.Descriptors)
 	} else {
-		broker = gcp.NewPubSubBroker(logger, client, gen.Descriptors)
+		broker = gcp.NewPubSubBroker(logger.With(attr.SlogComponent("gcp-pubsub-broker")), client, gen.Descriptors)
 	}
 
 	return client, broker, func(context.Context) error { return client.Close() }, nil

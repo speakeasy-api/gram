@@ -16,7 +16,7 @@ from __future__ import annotations
 from typing import TypeVar
 
 from google.protobuf.message import Message
-from opentelemetry import trace
+from opentelemetry import propagate, trace
 from opentelemetry.trace import StatusCode
 
 from gram_infra.pubsub.subscriber import MessageCallback, MessageMetadata
@@ -42,11 +42,20 @@ def traced(
     """
 
     async def wrapper(message: M, meta: MessageMetadata) -> None:
+        # Continue the producer's trace: extract any W3C trace context the
+        # publisher propagated through the message attributes, so this span is a
+        # child of the publishing span instead of the root of a fresh trace. The
+        # message attributes act as the textmap carrier; ``extract`` uses the
+        # globally configured propagator (W3C tracecontext + baggage by default)
+        # and quietly yields an empty context when no trace headers are present,
+        # so unpropagated messages still start a new trace.
+        parent = propagate.extract(meta.attributes)
         # Disable the context manager's automatic exception handling and do it
         # explicitly so the span's status description carries the error message,
         # matching the Go receiver's ``span.SetStatus(codes.Error, err.Error())``.
         with _tracer.start_as_current_span(
             "stream.handleMessage",
+            context=parent,
             attributes={
                 attr.TOPIC_PROTO_NAME: topic_proto_name,
                 attr.SUBSCRIPTION_PROTO_NAME: subscription_proto_name,

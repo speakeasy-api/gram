@@ -149,9 +149,14 @@ func (g GrantCheck) grantSet(grants []Grant) (grantSet, error) {
 		return nil, err
 	}
 
+	checks := g.Check.expand()
+	if err := rejectDenyGrantsForExpressionScope(grants, g.Check.Scope); err != nil {
+		return nil, err
+	}
+
 	// matchingAllowGrant already applies Check expansion and the Check's
 	// selector match mode. Grant expressions do not reimplement selector logic.
-	grant, _ := matchingAllowGrant(grants, g.Check.expand())
+	grant, _ := matchingAllowGrant(grants, checks)
 	if grant == nil {
 		return grantSet{}, nil
 	}
@@ -182,6 +187,10 @@ func (g GrantDifference) Evaluate(grants []Grant) (GrantExpressionResult, error)
 	if err != nil {
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, fmt.Errorf("evaluate base expression: %w", err)
 	}
+	exception, err := g.Exception.grantSet(grants)
+	if err != nil {
+		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, fmt.Errorf("evaluate exception expression set: %w", err)
+	}
 	if !baseResult.Satisfied {
 		return baseResult, nil
 	}
@@ -192,10 +201,6 @@ func (g GrantDifference) Evaluate(grants []Grant) (GrantExpressionResult, error)
 	base, err := g.Base.grantSet(grants)
 	if err != nil {
 		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, fmt.Errorf("evaluate base expression set: %w", err)
-	}
-	exception, err := g.Exception.grantSet(grants)
-	if err != nil {
-		return GrantExpressionResult{Satisfied: false, Reason: GrantExpressionReasonError}, fmt.Errorf("evaluate exception expression set: %w", err)
 	}
 
 	base.subtract(exception)
@@ -249,6 +254,25 @@ func (s grantSet) subtract(other grantSet) {
 	for key := range other {
 		delete(s, key)
 	}
+}
+
+// rejectDenyGrantsForExpressionScope prevents legacy deny grants from being
+// interpreted inside set-expression evaluation. Deny grants have their own
+// deny-wins semantics in Require/RequireAny; grant expressions use explicit
+// set subtraction instead. Mixing both for the same referenced scope would make
+// the result ambiguous, so the expression fails fast even if the deny selector
+// would not match this specific runtime instance.
+func rejectDenyGrantsForExpressionScope(grants []Grant, scope Scope) error {
+	for _, grant := range grants {
+		if grant.Effect != PolicyEffectDeny {
+			continue
+		}
+		if grant.Scope != scope {
+			continue
+		}
+		return fmt.Errorf("%w: deny grant with scope %q cannot be evaluated by grant expressions", ErrUnsupportedMixedGrantSemantics, grant.Scope)
+	}
+	return nil
 }
 
 func grantSetKey(selector Selector) string {

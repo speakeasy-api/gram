@@ -35,9 +35,17 @@ export type OTELLogRecord = {
    */
   observedTimeUnixNano?: string | undefined;
   /**
+   * Span ID
+   */
+  spanId?: string | undefined;
+  /**
    * Timestamp in nanoseconds since Unix epoch
    */
   timeUnixNano?: string | undefined;
+  /**
+   * Trace ID
+   */
+  traceId?: string | undefined;
 };
 
 /** @internal */
@@ -46,7 +54,9 @@ export type OTELLogRecord$Outbound = {
   body?: OTELLogBody$Outbound | undefined;
   droppedAttributesCount?: number | undefined;
   observedTimeUnixNano?: string | undefined;
+  spanId?: string | undefined;
   timeUnixNano?: string | undefined;
+  traceId?: string | undefined;
 };
 
 /** @internal */
@@ -58,7 +68,9 @@ export const OTELLogRecord$outboundSchema: z.ZodMiniType<
   body: z.optional(OTELLogBody$outboundSchema),
   droppedAttributesCount: z.optional(z.int()),
   observedTimeUnixNano: z.optional(z.string()),
+  spanId: z.optional(z.string()),
   timeUnixNano: z.optional(z.string()),
+  traceId: z.optional(z.string()),
 });
 
 export function otelLogRecordToJSON(otelLogRecord: OTELLogRecord): string {

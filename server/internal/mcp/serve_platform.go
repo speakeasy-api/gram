@@ -409,7 +409,7 @@ func (s *Service) callPlatformToolsetTool(
 	}
 	outputBytes = int64(rw.body.Len())
 
-	chunk, err := formatResult(*rw, plan.Kind)
+	chunk, structured, err := formatResult(*rw, plan.Kind)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to format platform tool call result").LogError(ctx, logger)
 	}
@@ -417,8 +417,9 @@ func (s *Service) callPlatformToolsetTool(
 	bs, err := json.Marshal(result[toolCallResult]{
 		ID: req.ID,
 		Result: toolCallResult{
-			Content: []json.RawMessage{chunk},
-			IsError: rw.statusCode < 200 || rw.statusCode >= 300,
+			Content:           []json.RawMessage{chunk},
+			StructuredContent: structured,
+			IsError:           rw.statusCode < 200 || rw.statusCode >= 300,
 		},
 	})
 	if err != nil {
