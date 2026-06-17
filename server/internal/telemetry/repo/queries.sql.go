@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -4277,6 +4278,19 @@ func (q *Queries) ListClaudeUserPromptCandidatesForCorrelation(ctx context.Conte
 		return nil, nil
 	}
 
+	ctx = clickhouse.Context(ctx, clickhouse.WithParameters(clickhouse.Parameters{
+		"gram_project_id":               arg.GramProjectID,
+		"gram_chat_id":                  arg.GramChatID,
+		"session_id":                    arg.SessionID,
+		"message_prompt":                arg.MessagePrompt,
+		"message_time_unix_nano":        strconv.FormatInt(arg.MessageTimeUnixNano, 10),
+		"after_event_sequence":          strconv.FormatInt(arg.AfterEventSequence, 10),
+		"after_event_time_unix_nano":    strconv.FormatInt(arg.AfterEventTimeUnixNano, 10),
+		"min_fuzzy_length":              strconv.Itoa(arg.MinFuzzyLength),
+		"max_time_delta_nanos":          strconv.FormatInt(arg.MaxTimeDeltaNanos, 10),
+		"negative_max_time_delta_nanos": strconv.FormatInt(-arg.MaxTimeDeltaNanos, 10),
+	}))
+
 	rawEvents := sq.Select(
 		"toString(attributes.prompt.id) AS prompt_id",
 		"replaceRegexpAll(trimBoth(toString(attributes.prompt)), '\\\\s+', ' ') AS prompt",
@@ -4284,16 +4298,21 @@ func (q *Queries) ListClaudeUserPromptCandidatesForCorrelation(ctx context.Conte
 		"time_unix_nano",
 	).
 		From("telemetry_logs").
-		Where("gram_project_id = ?", arg.GramProjectID).
-		Where("gram_chat_id = ?", arg.GramChatID).
-		Where("toString(attributes.session.id) = ?", arg.SessionID).
+		Where("gram_project_id = {gram_project_id:String}").
+		Where("gram_chat_id = {gram_chat_id:String}").
+		Where("toString(attributes.session.id) = {session_id:String}").
 		Where("toString(attributes.event.name) = 'user_prompt'").
 		Where("toString(attributes.prompt.id) != ''").
 		Where("toString(attributes.prompt) != ''").
 		Where(squirrel.Or{
-			squirrel.Expr("event_sequence > ?", arg.AfterEventSequence),
-			squirrel.Expr("(event_sequence = ? AND time_unix_nano > ?)", arg.AfterEventSequence, arg.AfterEventTimeUnixNano),
-		})
+			squirrel.Expr("event_sequence > {after_event_sequence:Int64}"),
+			squirrel.Expr(`(
+				event_sequence = {after_event_sequence:Int64}
+				AND time_unix_nano > {after_event_time_unix_nano:Int64}
+			)`),
+		}).
+		Where(`time_unix_nano BETWEEN message_time_unix_nano + {negative_max_time_delta_nanos:Int64}
+			AND message_time_unix_nano + max_time_delta_nanos`)
 
 	scoredCandidates := sq.Select(
 		"prompt_id",
@@ -4308,8 +4327,8 @@ func (q *Queries) ListClaudeUserPromptCandidatesForCorrelation(ctx context.Conte
 				toFloat64(editDistanceUTF8(prompt, message_prompt))
 				/ toFloat64(greatest(lengthUTF8(prompt), message_len, 1))
 			)
-		) AS similarity`,
-		"abs(time_unix_nano - message_time_unix_nano) AS time_delta",
+		) AS similarity,
+		abs(time_unix_nano - message_time_unix_nano) AS time_delta`,
 	).
 		FromSelect(rawEvents, "raw_events")
 
@@ -4321,18 +4340,18 @@ func (q *Queries) ListClaudeUserPromptCandidatesForCorrelation(ctx context.Conte
 		"similarity",
 		"is_exact",
 	).
-		Prefix(
-			"WITH ? AS message_prompt, lengthUTF8(message_prompt) AS message_len, toInt64(?) AS message_time_unix_nano",
-			arg.MessagePrompt,
-			arg.MessageTimeUnixNano,
-		).
+		Prefix(`WITH
+			{message_prompt:String} AS message_prompt,
+			lengthUTF8(message_prompt) AS message_len,
+			{message_time_unix_nano:Int64} AS message_time_unix_nano,
+			{max_time_delta_nanos:Int64} AS max_time_delta_nanos`).
 		FromSelect(scoredCandidates, "scored_candidates").
 		Where(squirrel.Or{
 			squirrel.Expr("is_exact"),
 			squirrel.And{
-				squirrel.Expr("message_len >= ?", arg.MinFuzzyLength),
-				squirrel.Expr("lengthUTF8(prompt) >= ?", arg.MinFuzzyLength),
-				squirrel.Expr("time_delta <= ?", arg.MaxTimeDeltaNanos),
+				squirrel.Expr("message_len >= {min_fuzzy_length:UInt64}"),
+				squirrel.Expr("lengthUTF8(prompt) >= {min_fuzzy_length:UInt64}"),
+				squirrel.Expr("time_delta <= max_time_delta_nanos"),
 			},
 		}).
 		OrderBy("is_exact DESC", "similarity DESC", "time_delta ASC", "event_sequence ASC", "time_unix_nano ASC").
@@ -4342,8 +4361,11 @@ func (q *Queries) ListClaudeUserPromptCandidatesForCorrelation(ctx context.Conte
 	if err != nil {
 		return nil, fmt.Errorf("building list Claude user prompt candidates query: %w", err)
 	}
+	if len(args) > 0 {
+		return nil, fmt.Errorf("building list Claude user prompt candidates query: unexpected positional arguments")
+	}
 
-	rows, err := q.conn.Query(ctx, query, args...)
+	rows, err := q.conn.Query(ctx, query)
 	if err != nil {
 		return nil, err
 	}
