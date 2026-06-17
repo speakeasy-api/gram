@@ -59,6 +59,15 @@ function UserSessionsInner(): JSX.Element {
   const [subjectUrn, setSubjectUrn] = useState("all");
   const [issuerId, setIssuerId] = useState("all");
 
+  // Reset project-specific facet filters when switching projects so a stale
+  // client/user/server selection from one project isn't submitted to another.
+  const handleProjectChange = (slug: string) => {
+    setProjectSlug(slug);
+    setClientId("all");
+    setSubjectUrn("all");
+    setIssuerId("all");
+  };
+
   const { data: facets } = useUserSessionFacets({ gramProject: projectSlug });
 
   const {
@@ -94,7 +103,7 @@ function UserSessionsInner(): JSX.Element {
               <Type small muted>
                 Project
               </Type>
-              <Select value={projectSlug} onValueChange={setProjectSlug}>
+              <Select value={projectSlug} onValueChange={handleProjectChange}>
                 <SelectTrigger
                   size="sm"
                   className="bg-background min-w-[220px]"

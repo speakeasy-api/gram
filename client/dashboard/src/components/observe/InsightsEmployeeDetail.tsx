@@ -419,6 +419,8 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                 />
               </section>
 
+              {member?.id && <EmployeeSessions userId={member.id} />}
+
               {dataFlowQuery.error ? (
                 <ErrorAlert
                   title="Unable to load employee data flow"
@@ -476,8 +478,6 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                   onExpand={setExpandedChart}
                 />
               )}
-
-              {resolvedUserId && <EmployeeSessions userId={resolvedUserId} />}
             </>
           )}
         </div>
