@@ -1,14 +1,15 @@
 import { LogWorkbench } from "@/components/log-workbench";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
-  defineFilters,
-  useFilterState,
-  type FilterValue,
-} from "@/components/filters";
-import { Page } from "@/components/page-layout";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useSdkClient } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
-import { getPresetRange } from "@gram-ai/elements";
 import type { RiskResult } from "@gram/client/models/components";
 import {
   useRiskListPolicies,
@@ -18,7 +19,15 @@ import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { RefreshCw, Share2 } from "lucide-react";
-import { useCallback, useMemo, useRef, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import {
@@ -32,49 +41,15 @@ import {
 const RISK_EVENTS_GRID =
   "grid grid-cols-[172px_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,1.1fr)_110px] gap-3";
 
-// Strongly-typed filter schema for Risk Events. `policy_id` and the date range
-// are pinned (always visible in the bar); the rest live behind "More filters".
-// `listRiskResults` already accepts from/to, so the date range needs no backend
-// change. (Source isn't a list param, so it's intentionally omitted here.)
-const RISK_FILTERS = defineFilters([
-  { id: "policy_id", label: "Policy", kind: "select", pinned: true },
-  { id: "date", label: "Date range", kind: "daterange", pinned: true },
-  {
-    id: "rule_id",
-    label: "Rule ID",
-    kind: "text",
-    placeholder: "Rule ID contains...",
-  },
-  {
-    id: "user_id",
-    label: "User",
-    kind: "text",
-    placeholder: "User contains...",
-  },
-  { id: "unique", label: "Unique matches only", kind: "boolean" },
-]);
-
 export default function RiskEvents(): JSX.Element {
   const client = useSdkClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedChatId = searchParams.get("chat_id");
+  const policyFilter = searchParams.get("policy_id") ?? "";
+  const ruleFilter = searchParams.get("rule_id") ?? "";
+  const userFilter = searchParams.get("user_id") ?? "";
+  const uniqueOnly = searchParams.get("unique") === "1";
   const containerRef = useRef<HTMLDivElement>(null);
-
-  const { values, setValue, clearValue, clearAll } =
-    useFilterState(RISK_FILTERS);
-  const policyFilter = values.policy_id ?? "";
-  const ruleFilter = values.rule_id;
-  const userFilter = values.user_id;
-  const uniqueOnly = values.unique;
-
-  // The date range maps to the endpoint's from/to. A null preset with no custom
-  // range means "all time" (no from/to sent) — Risk Events' previous behavior.
-  const { from, to } = useMemo(() => {
-    const d = values.date;
-    if (d.customRange) return d.customRange;
-    if (d.preset) return getPresetRange(d.preset);
-    return { from: undefined, to: undefined };
-  }, [values.date]);
 
   const setSelectedChatId = useCallback(
     (chatId: string | null) => {
@@ -87,6 +62,81 @@ export default function RiskEvents(): JSX.Element {
             next.delete("chat_id");
           }
           return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  const setPolicyFilter = useCallback(
+    (policyId: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (policyId) {
+            next.set("policy_id", policyId);
+          } else {
+            next.delete("policy_id");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+      containerRef.current?.scrollTo({ top: 0 });
+    },
+    [setSearchParams],
+  );
+
+  const setRuleFilter = useCallback(
+    (ruleId: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (ruleId) {
+            next.set("rule_id", ruleId);
+          } else {
+            next.delete("rule_id");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+      containerRef.current?.scrollTo({ top: 0 });
+    },
+    [setSearchParams],
+  );
+
+  const setUserFilter = useCallback(
+    (userId: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (userId) {
+            next.set("user_id", userId);
+          } else {
+            next.delete("user_id");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+      containerRef.current?.scrollTo({ top: 0 });
+    },
+    [setSearchParams],
+  );
+
+  const setUniqueOnly = useCallback(
+    (next: boolean) => {
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev);
+          if (next) {
+            params.set("unique", "1");
+          } else {
+            params.delete("unique");
+          }
+          return params;
         },
         { replace: true },
       );
@@ -120,18 +170,6 @@ export default function RiskEvents(): JSX.Element {
     return m;
   }, [policies]);
 
-  // Page-supplied option lists for the schema's select/text dimensions.
-  const filterOptions = useMemo(
-    () => ({
-      policy_id: policies.map((p) => ({ label: p.name, value: p.id })),
-      rule_id: ruleSuggestions.map((r) => ({ label: r, value: r })),
-    }),
-    [policies, ruleSuggestions],
-  );
-
-  const fromIso = from?.toISOString();
-  const toIso = to?.toISOString();
-
   const resultsQuery = useInfiniteQuery({
     queryKey: [
       "risk",
@@ -141,8 +179,6 @@ export default function RiskEvents(): JSX.Element {
       ruleFilter,
       userFilter,
       uniqueOnly,
-      fromIso,
-      toIso,
     ],
     queryFn: async ({ pageParam }) => {
       return client.risk.results.list({
@@ -152,8 +188,6 @@ export default function RiskEvents(): JSX.Element {
         ruleId: ruleFilter || undefined,
         userId: userFilter || undefined,
         uniqueMatch: uniqueOnly || undefined,
-        from,
-        to,
       });
     },
     initialPageParam: undefined as string | undefined,
@@ -214,16 +248,47 @@ export default function RiskEvents(): JSX.Element {
           </div>
         }
         filters={
-          <Page.Toolbar>
-            <Page.Toolbar.Filters
-              schema={RISK_FILTERS}
-              values={values}
-              optionsById={filterOptions}
-              onChange={setValue as (id: string, value: FilterValue) => void}
-              onClear={clearValue as (id: string) => void}
-              onClearAll={clearAll}
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              value={policyFilter || "all"}
+              onValueChange={(value) =>
+                setPolicyFilter(value === "all" ? "" : value)
+              }
+            >
+              <SelectTrigger className="w-[260px]">
+                <SelectValue placeholder="Filter by policy" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All policies</SelectItem>
+                {policies.map((policy) => (
+                  <SelectItem key={policy.id} value={policy.id}>
+                    {policy.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <DebouncedTextFilter
+              value={ruleFilter}
+              onChange={setRuleFilter}
+              placeholder="Rule ID contains..."
+              ariaLabel="Filter by rule ID"
+              suggestions={ruleSuggestions}
             />
-          </Page.Toolbar>
+            <DebouncedTextFilter
+              value={userFilter}
+              onChange={setUserFilter}
+              placeholder="User contains..."
+              ariaLabel="Filter by user"
+            />
+            <label className="border-border hover:bg-muted/50 inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm">
+              <Checkbox
+                checked={uniqueOnly}
+                onCheckedChange={(next) => setUniqueOnly(next === true)}
+                aria-label="Unique matches only"
+              />
+              <span>Unique matches only</span>
+            </label>
+          </div>
         }
         status={
           resultsQuery.isFetching && results.length > 0 ? (
@@ -274,6 +339,74 @@ export default function RiskEvents(): JSX.Element {
         />
       </LogWorkbench>
     </RevealAllProvider>
+  );
+}
+
+// A debounced free-text filter input with optional <datalist> autocomplete.
+// Used for both the rule_id and user_id risk-event filters; both do
+// case-insensitive substring matching server-side.
+function DebouncedTextFilter({
+  value,
+  onChange,
+  placeholder,
+  ariaLabel,
+  suggestions,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  placeholder: string;
+  ariaLabel: string;
+  suggestions?: string[];
+}) {
+  const [local, setLocal] = useState(value);
+  const listId = useId();
+  useEffect(() => {
+    setLocal(value);
+  }, [value]);
+  useEffect(() => {
+    if (local === value) return;
+    const t = setTimeout(() => onChange(local), 350);
+    return () => clearTimeout(t);
+  }, [local, value, onChange]);
+
+  // Dedup and only include non-empty suggestions. Browser-native <datalist>
+  // does the substring matching client-side using these as candidates.
+  const options = useMemo(
+    () => Array.from(new Set((suggestions ?? []).filter(Boolean))),
+    [suggestions],
+  );
+
+  return (
+    <div className="border-border focus-within:border-ring inline-flex h-9 items-center gap-2 rounded-md border px-2">
+      <Icon name="search" className="text-muted-foreground size-4 shrink-0" />
+      <input
+        type="text"
+        value={local}
+        onChange={(e) => setLocal(e.target.value)}
+        placeholder={placeholder}
+        className="placeholder:text-muted-foreground w-[200px] bg-transparent text-sm outline-none"
+        aria-label={ariaLabel}
+        list={options.length > 0 ? listId : undefined}
+        autoComplete="off"
+      />
+      {options.length > 0 && (
+        <datalist id={listId}>
+          {options.map((opt) => (
+            <option key={opt} value={opt} />
+          ))}
+        </datalist>
+      )}
+      {local && (
+        <button
+          type="button"
+          onClick={() => setLocal("")}
+          className="text-muted-foreground hover:text-foreground"
+          aria-label="Clear filter"
+        >
+          <Icon name="x" className="size-3.5" />
+        </button>
+      )}
+    </div>
   );
 }
 
