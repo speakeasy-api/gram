@@ -40,7 +40,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 
 	orgID := authCtx.ActiveOrganizationID
 	projectID := authCtx.ProjectID.String()
-	metadata := s.codexSessionMetadata(ctx, payload, orgID, projectID, authCtx.UserID)
+	metadata := s.codexSessionMetadata(ctx, payload, orgID, projectID)
 	logger = logger.With(
 		attr.SlogOrganizationID(orgID),
 		attr.SlogProjectID(projectID),
@@ -149,12 +149,12 @@ func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload
 	}
 }
 
-func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPayload, orgID, projectID, authenticatedUserID string) *SessionMetadata {
+func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPayload, orgID, projectID string) *SessionMetadata {
 	metadata := &SessionMetadata{
 		SessionID:   conv.PtrValOr(payload.SessionID, ""),
 		ServiceName: "Codex",
 		UserEmail:   strings.TrimSpace(conv.PtrValOr(payload.UserEmail, "")),
-		UserID:      authenticatedUserID,
+		UserID:      "",
 		ClaudeOrgID: "",
 		GramOrgID:   orgID,
 		ProjectID:   projectID,
@@ -166,14 +166,13 @@ func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPa
 			if metadata.UserEmail == "" {
 				metadata.UserEmail = cached.UserEmail
 			}
-			if metadata.UserID == "" {
-				metadata.UserID = cached.UserID
-			}
 		}
 	}
 
-	if metadata.UserID == "" {
+	if metadata.UserEmail != "" {
 		metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, orgID)
+	} else {
+		metadata.UserID = ""
 	}
 
 	return metadata

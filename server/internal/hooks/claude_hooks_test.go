@@ -33,7 +33,26 @@ func (stubBlockingShadowMCPScanner) HasEnabledShadowMCPPolicy(_ context.Context,
 	return true, nil
 }
 
-func TestResolveClaudeScanContext_PrefersAuthContextOverCachedMetadata(t *testing.T) {
+type userScopedShadowMCPScanner struct {
+	userID string
+}
+
+func (s userScopedShadowMCPScanner) ScanForEnforcement(_ context.Context, _ string, _ uuid.UUID, _ string, _ string, _ string, _ string) (*risk.ScanResult, error) {
+	return nil, nil
+}
+
+func (s userScopedShadowMCPScanner) LookupShadowMCPBlockingPolicy(_ context.Context, _ string, _ uuid.UUID, userID string) (*risk.ShadowMCPPolicy, error) {
+	if userID != s.userID {
+		return nil, nil
+	}
+	return &risk.ShadowMCPPolicy{ID: "00000000-0000-0000-0000-000000000001", Name: "shadow-mcp-block"}, nil
+}
+
+func (s userScopedShadowMCPScanner) HasEnabledShadowMCPPolicy(_ context.Context, _ uuid.UUID) (bool, error) {
+	return true, nil
+}
+
+func TestResolveClaudeScanContext_PrefersAuthContextProjectOverCachedMetadata(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
@@ -54,7 +73,30 @@ func TestResolveClaudeScanContext_PrefersAuthContextOverCachedMetadata(t *testin
 	require.True(t, ok)
 	assert.Equal(t, authCtx.ActiveOrganizationID, got.organizationID)
 	assert.Equal(t, *authCtx.ProjectID, got.projectID)
-	assert.Equal(t, authCtx.UserID, got.userID)
+	assert.Empty(t, got.userID)
+}
+
+func TestResolveClaudeScanContext_ResolvesPayloadEmailBeforeAuthUserID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	userID := "user_payload_email_scan"
+	userEmail := "payload-email-scan@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, userEmail)
+
+	sessionID := uuid.NewString()
+	got, ok := ti.service.resolveClaudeScanContext(ctx, &gen.ClaudePayload{
+		SessionID: &sessionID,
+		UserEmail: &userEmail,
+	})
+	require.True(t, ok)
+	assert.Equal(t, authCtx.ActiveOrganizationID, got.organizationID)
+	assert.Equal(t, *authCtx.ProjectID, got.projectID)
+	assert.Equal(t, userID, got.userID)
 }
 
 func TestResolveClaudeScanContext_ResolvesAuthContextActorFromCachedEmail(t *testing.T) {
@@ -241,6 +283,46 @@ func TestClaude_PreToolUse_DeniesLocalStdioServer(t *testing.T) {
 	assert.Equal(t, "deny", *output.PermissionDecision)
 }
 
+func TestClaude_PreToolUse_TargetedShadowMCPPolicyUsesResolvedHookUser(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	hookUserID := "claude-hook-user"
+	hookUserEmail := "claude-hook-user@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, hookUserID, hookUserEmail)
+	ti.service.riskScanner = userScopedShadowMCPScanner{userID: hookUserID}
+
+	sessionID := uuid.NewString()
+	toolName := "mcp__mise__install_tool"
+	toolUseID := "toolu_claude_specific_user_policy"
+
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+		[]MCPServerEntry{{Source: "local", Name: "mise", Command: "mise mcp", Transport: "STDIO"}},
+		sessionMCPListTTL,
+	))
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &hookUserEmail,
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		ToolInput:     map[string]any{},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok, "HookSpecificOutput should be *HookSpecificOutput")
+	require.NotNil(t, output.PermissionDecision)
+	assert.Equal(t, "deny", *output.PermissionDecision)
+}
+
 func TestClaude_PreToolUse_DeniesLocalStdioServerWithLegacyIdentityRule(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
@@ -348,33 +430,29 @@ func TestClaude_PreToolUse_AllowsGramHostedServer(t *testing.T) {
 	assert.Equal(t, "allow", *output.PermissionDecision)
 }
 
-func TestMergeClaudeAuthContextMetadata_PreservesAuthUserIDWhenCacheIsEmpty(t *testing.T) {
+func TestMergeClaudeAuthContextMetadata_DoesNotSelectUserID(t *testing.T) {
 	t.Parallel()
 
-	metadata := mergeClaudeAuthContextMetadata(
-		SessionMetadata{
-			SessionID:   "session_test",
-			ServiceName: "",
-			UserEmail:   "",
-			UserID:      "user_from_auth",
-			ClaudeOrgID: "",
-			GramOrgID:   "org_from_auth",
-			ProjectID:   "project_from_auth",
-		},
-		SessionMetadata{
-			SessionID:   "session_test",
-			ServiceName: "claude-code",
-			UserEmail:   "local-hook-testing@example.com",
-			UserID:      "",
-			ClaudeOrgID: "claude_org",
-			GramOrgID:   "org_from_cache",
-			ProjectID:   "project_from_cache",
-		},
-	)
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
 
-	assert.Equal(t, "user_from_auth", metadata.UserID)
-	assert.Equal(t, "org_from_auth", metadata.GramOrgID)
-	assert.Equal(t, "project_from_auth", metadata.ProjectID)
+	authMetadata, ok := ti.service.claudeAuthContextMetadata(ctx, "session_test", "")
+	require.True(t, ok)
+	metadata := ti.service.mergeClaudeAuthContextMetadata(ctx, authMetadata, SessionMetadata{
+		SessionID:   "session_test",
+		ServiceName: "claude-code",
+		UserEmail:   "local-hook-testing@example.com",
+		UserID:      "",
+		ClaudeOrgID: "claude_org",
+		GramOrgID:   "org_from_cache",
+		ProjectID:   "project_from_cache",
+	})
+
+	assert.Empty(t, metadata.UserID)
+	assert.Equal(t, authCtx.ActiveOrganizationID, metadata.GramOrgID)
+	assert.Equal(t, authCtx.ProjectID.String(), metadata.ProjectID)
 	assert.Equal(t, "claude-code", metadata.ServiceName)
 	assert.Equal(t, "local-hook-testing@example.com", metadata.UserEmail)
 	assert.Equal(t, "claude_org", metadata.ClaudeOrgID)
@@ -448,7 +526,7 @@ func TestClaude_RecordHook_BuffersAuthContextCacheMissWithoutPayloadEmail(t *tes
 	assert.Equal(t, "UserPromptSubmit", buffered[0].HookEventName)
 }
 
-func TestClaude_RecordHook_UsesAuthContextUserIDOnCacheMissWithPayloadEmail(t *testing.T) {
+func TestClaude_RecordHook_DoesNotUseAuthUserIDWhenPayloadEmailDoesNotResolve(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
@@ -481,37 +559,33 @@ func TestClaude_RecordHook_UsesAuthContextUserIDOnCacheMissWithPayloadEmail(t *t
 		return err == nil && len(msgs) == 1
 	}, 2*time.Second, 25*time.Millisecond)
 
-	assert.Equal(t, authCtx.UserID, msgs[0].UserID.String)
+	assert.Empty(t, msgs[0].UserID.String)
 	assert.Equal(t, payloadEmail, msgs[0].ExternalUserID.String)
 }
 
-func TestMergeClaudeAuthContextMetadata_PrefersAuthUserIDOverCache(t *testing.T) {
+func TestMergeClaudeAuthContextMetadata_DropsCachedUserID(t *testing.T) {
 	t.Parallel()
 
-	metadata := mergeClaudeAuthContextMetadata(
-		SessionMetadata{
-			SessionID:   "session_test",
-			ServiceName: "",
-			UserEmail:   "",
-			UserID:      "user_from_auth",
-			ClaudeOrgID: "",
-			GramOrgID:   "org_from_auth",
-			ProjectID:   "project_from_auth",
-		},
-		SessionMetadata{
-			SessionID:   "session_test",
-			ServiceName: "claude-code",
-			UserEmail:   "local-hook-testing@example.com",
-			UserID:      "user_from_cache",
-			ClaudeOrgID: "claude_org",
-			GramOrgID:   "org_from_cache",
-			ProjectID:   "project_from_cache",
-		},
-	)
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
 
-	assert.Equal(t, "user_from_auth", metadata.UserID)
-	assert.Equal(t, "org_from_auth", metadata.GramOrgID)
-	assert.Equal(t, "project_from_auth", metadata.ProjectID)
+	authMetadata, ok := ti.service.claudeAuthContextMetadata(ctx, "session_test", "")
+	require.True(t, ok)
+	metadata := ti.service.mergeClaudeAuthContextMetadata(ctx, authMetadata, SessionMetadata{
+		SessionID:   "session_test",
+		ServiceName: "claude-code",
+		UserEmail:   "local-hook-testing@example.com",
+		UserID:      "user_from_cache",
+		ClaudeOrgID: "claude_org",
+		GramOrgID:   "org_from_cache",
+		ProjectID:   "project_from_cache",
+	})
+
+	assert.Empty(t, metadata.UserID)
+	assert.Equal(t, authCtx.ActiveOrganizationID, metadata.GramOrgID)
+	assert.Equal(t, authCtx.ProjectID.String(), metadata.ProjectID)
 	assert.Equal(t, "claude-code", metadata.ServiceName)
 	assert.Equal(t, "local-hook-testing@example.com", metadata.UserEmail)
 	assert.Equal(t, "claude_org", metadata.ClaudeOrgID)

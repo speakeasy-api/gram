@@ -53,10 +53,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 
 	orgID := authCtx.ActiveOrganizationID
 	projectID := authCtx.ProjectID.String()
-	actorUserID := authCtx.UserID
-	if actorUserID == "" {
-		actorUserID = s.resolveUserByEmail(ctx, conv.PtrValOr(payload.UserEmail, ""), orgID)
-	}
+	actorUserID := s.resolveUserByEmail(ctx, conv.PtrValOr(payload.UserEmail, ""), orgID)
 	logger = logger.With(
 		attr.SlogOrganizationID(orgID),
 		attr.SlogProjectID(projectID),

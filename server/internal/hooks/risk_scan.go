@@ -8,7 +8,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -82,52 +81,23 @@ func (s *Service) resolveClaudeScanContext(ctx context.Context, payload *gen.Cla
 		return claudeScanContext{organizationID: "", projectID: uuid.Nil, userID: ""}, false
 	}
 	sessionID := *payload.SessionID
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if ok && authCtx != nil && authCtx.ProjectID != nil {
-		metadata := SessionMetadata{
-			SessionID:   sessionID,
-			ServiceName: "",
-			UserEmail:   conv.PtrValOr(payload.UserEmail, ""),
-			UserID:      authCtx.UserID,
-			ClaudeOrgID: "",
-			GramOrgID:   authCtx.ActiveOrganizationID,
-			ProjectID:   authCtx.ProjectID.String(),
-		}
-		if metadata.UserID == "" && metadata.UserEmail != "" {
-			metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
-		}
-		if cached, err := s.getSessionMetadata(ctx, sessionID); err == nil {
-			metadata = mergeClaudeAuthContextMetadata(metadata, cached)
-		}
-		if metadata.UserID == "" && metadata.UserEmail != "" {
-			metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
-		}
-		return claudeScanContext{
-			organizationID: metadata.GramOrgID,
-			projectID:      *authCtx.ProjectID,
-			userID:         metadata.UserID,
-		}, true
+	payloadUserEmail := ""
+	if payload.UserEmail != nil {
+		payloadUserEmail = *payload.UserEmail
 	}
-
-	metadata, err := s.getSessionMetadata(ctx, sessionID)
+	metadata, err := s.resolveClaudeSessionMetadata(ctx, sessionID, payloadUserEmail)
 	if err != nil {
 		return claudeScanContext{organizationID: "", projectID: uuid.Nil, userID: ""}, false
 	}
-
 	projectID, err := uuid.Parse(metadata.ProjectID)
 	if err != nil {
 		return claudeScanContext{organizationID: "", projectID: uuid.Nil, userID: ""}, false
 	}
 
-	userID := metadata.UserID
-	if userID == "" {
-		userID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
-	}
-
 	return claudeScanContext{
 		organizationID: metadata.GramOrgID,
 		projectID:      projectID,
-		userID:         userID,
+		userID:         metadata.UserID,
 	}, true
 }
 

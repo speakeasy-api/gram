@@ -203,6 +203,38 @@ func TestCursor_BeforeMCPExecution_ShadowMCPBlockIncludesRequestLink(t *testing.
 	assert.Equal(t, *result.UserMessage, *result.AgentMessage)
 }
 
+func TestCursor_BeforeMCPExecution_TargetedShadowMCPPolicyUsesResolvedHookUser(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	hookUserID := "cursor-hook-user"
+	hookUserEmail := "cursor-hook-user@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, hookUserID, hookUserEmail)
+	ti.service.riskScanner = userScopedShadowMCPScanner{userID: hookUserID}
+
+	toolName := "list_issues"
+	toolUseID := "toolu_mcp_specific_user_policy"
+	conversationID := "conv-mcp-specific-user-policy"
+	serverURL := "https://mcp.linear.app/sse"
+	result, err := ti.service.Cursor(ctx, &hooks.CursorPayload{
+		HookEventName:  "beforeMCPExecution",
+		ToolName:       &toolName,
+		ToolUseID:      &toolUseID,
+		UserEmail:      &hookUserEmail,
+		ConversationID: &conversationID,
+		URL:            &serverURL,
+		ToolInput:      map[string]any{"foo": "bar"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Permission)
+	assert.Equal(t, "deny", *result.Permission)
+}
+
 func TestBuildCursorTelemetryAttributes_BeforeMCPExecution_ToolSourceFromURL(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)

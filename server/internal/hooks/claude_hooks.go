@@ -475,22 +475,12 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 	// carry user_email from the device agent; use it immediately when present
 	// so Claude can attribute hooks before OTEL logs arrive. Older hooks still
 	// fall back to buffering.
+	authMetadata, hasAuthMetadata := s.claudeAuthContextMetadata(ctx, sessionID, payloadUserEmail)
+
 	metadata, err := s.getSessionMetadata(ctx, sessionID)
 	if err == nil {
-		if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
-			authMetadata := SessionMetadata{
-				SessionID:   sessionID,
-				ServiceName: "",
-				UserEmail:   payloadUserEmail,
-				UserID:      authCtx.UserID,
-				ClaudeOrgID: "",
-				GramOrgID:   authCtx.ActiveOrganizationID,
-				ProjectID:   authCtx.ProjectID.String(),
-			}
-			if authMetadata.UserID == "" && authMetadata.UserEmail != "" {
-				authMetadata.UserID = s.resolveUserByEmail(ctx, authMetadata.UserEmail, authMetadata.GramOrgID)
-			}
-			metadata = mergeClaudeAuthContextMetadata(authMetadata, metadata)
+		if hasAuthMetadata {
+			metadata = s.mergeClaudeAuthContextMetadata(ctx, authMetadata, metadata)
 		}
 		// Persistence does DB writes plus a Temporal workflow start, which
 		// can take longer than Claude Code is willing to wait for a hook
@@ -498,33 +488,74 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 		// immediately on the response). Run it detached so the response
 		// returns promptly and the work completes in the background.
 		go s.persistHook(ctx, payload, &metadata)
-	} else {
-		if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil && payloadUserEmail != "" {
-			metadata := SessionMetadata{
-				SessionID:   sessionID,
-				ServiceName: "",
-				UserEmail:   payloadUserEmail,
-				UserID:      authCtx.UserID,
-				ClaudeOrgID: "",
-				GramOrgID:   authCtx.ActiveOrganizationID,
-				ProjectID:   authCtx.ProjectID.String(),
-			}
-			if metadata.UserID == "" && metadata.UserEmail != "" {
-				metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
-			}
-			go s.persistHook(ctx, payload, &metadata)
-			return
-		}
-		if err := s.bufferHook(ctx, sessionID, payload); err != nil {
-			logger.ErrorContext(ctx, "Failed to buffer hook",
-				attr.SlogEvent("claude_hook_buffer_failed"),
-				attr.SlogError(err),
-			)
-		}
+		return
+	}
+
+	if hasAuthMetadata && payloadUserEmail != "" {
+		go s.persistHook(ctx, payload, &authMetadata)
+		return
+	}
+
+	if err := s.bufferHook(ctx, sessionID, payload); err != nil {
+		logger.ErrorContext(ctx, "Failed to buffer hook",
+			attr.SlogEvent("claude_hook_buffer_failed"),
+			attr.SlogError(err),
+		)
 	}
 }
 
+func (s *Service) claudeAuthContextMetadata(ctx context.Context, sessionID, userEmail string) (SessionMetadata, bool) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return SessionMetadata{
+			SessionID:   "",
+			ServiceName: "",
+			UserEmail:   "",
+			UserID:      "",
+			ClaudeOrgID: "",
+			GramOrgID:   "",
+			ProjectID:   "",
+		}, false
+	}
+
+	metadata := SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "",
+		UserEmail:   userEmail,
+		UserID:      "",
+		ClaudeOrgID: "",
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}
+	if metadata.UserEmail != "" {
+		metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
+	}
+
+	return metadata, true
+}
+
+func (s *Service) resolveClaudeSessionMetadata(ctx context.Context, sessionID, userEmail string) (SessionMetadata, error) {
+	authMetadata, hasAuthMetadata := s.claudeAuthContextMetadata(ctx, sessionID, strings.TrimSpace(userEmail))
+
+	metadata, err := s.getSessionMetadata(ctx, sessionID)
+	if err == nil {
+		if hasAuthMetadata {
+			metadata = s.mergeClaudeAuthContextMetadata(ctx, authMetadata, metadata)
+		} else {
+			metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
+		}
+		return metadata, nil
+	}
+
+	if hasAuthMetadata {
+		return authMetadata, nil
+	}
+	return SessionMetadata{}, err
+}
+
 func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata) {
+	metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
+
 	if isConversationEvent(payload.HookEventName) {
 		if err := s.persistConversationEvent(ctx, payload, metadata); err != nil {
 			s.logger.ErrorContext(ctx, "Failed to persist conversation event", attr.SlogError(err))
@@ -610,43 +641,21 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 	// session, before OTEL Logs has had a chance to seed Redis. Redis is still
 	// consulted to enrich UserEmail / ServiceName / ClaudeOrgID for the
 	// downstream ClickHouse row, but absence of cached fields is non-fatal.
-	var metadata SessionMetadata
-	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
-		metadata = SessionMetadata{
-			SessionID:   sessionID,
-			ServiceName: "",
-			UserEmail:   strings.TrimSpace(conv.PtrValOr(payload.UserEmail, "")),
-			UserID:      authCtx.UserID,
-			ClaudeOrgID: "",
-			GramOrgID:   authCtx.ActiveOrganizationID,
-			ProjectID:   authCtx.ProjectID.String(),
-		}
-		if metadata.UserID == "" && metadata.UserEmail != "" {
-			metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
-		}
-		if cached, err := s.getSessionMetadata(ctx, sessionID); err == nil {
-			metadata = mergeClaudeAuthContextMetadata(metadata, cached)
-		}
-	} else {
-		var err error
-		metadata, err = s.getSessionMetadata(ctx, sessionID)
-		if err != nil {
-			// OTEL path with no cached metadata yet. Native tools are already
-			// skipped above; MCP calls must fail closed because buffered
-			// telemetry cannot undo an already-allowed tool call.
-			s.logger.WarnContext(ctx, "claude PreToolUse fired before session metadata available; denying MCP tool call",
-				attr.SlogEvent("claude_hook_pretooluse_no_metadata"),
-				attr.SlogHookSource("claude"),
-				attr.SlogHookEvent(payload.HookEventName),
-				attr.SlogGenAIConversationID(sessionID),
-				attr.SlogToolName(rawToolName),
-				attr.SlogError(err),
-			)
-			return denyUnverifiedMCP()
-		}
-		if metadata.UserID == "" {
-			metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
-		}
+	payloadUserEmail := strings.TrimSpace(conv.PtrValOr(payload.UserEmail, ""))
+	metadata, err := s.resolveClaudeSessionMetadata(ctx, sessionID, payloadUserEmail)
+	if err != nil {
+		// OTEL path with no cached metadata yet. Native tools are already
+		// skipped above; MCP calls must fail closed because buffered telemetry
+		// cannot undo an already-allowed tool call.
+		s.logger.WarnContext(ctx, "claude PreToolUse fired before session metadata available; denying MCP tool call",
+			attr.SlogEvent("claude_hook_pretooluse_no_metadata"),
+			attr.SlogHookSource("claude"),
+			attr.SlogHookEvent(payload.HookEventName),
+			attr.SlogGenAIConversationID(sessionID),
+			attr.SlogToolName(rawToolName),
+			attr.SlogError(err),
+		)
+		return denyUnverifiedMCP()
 	}
 
 	policy := s.lookupShadowMCPBlockingPolicy(ctx, metadata.GramOrgID, metadata.ProjectID, metadata.UserID)
@@ -793,14 +802,12 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 	return constructBlockResponse(payload.HookEventName, userReason), nil
 }
 
-func mergeClaudeAuthContextMetadata(metadata SessionMetadata, cached SessionMetadata) SessionMetadata {
+func (s *Service) mergeClaudeAuthContextMetadata(ctx context.Context, metadata SessionMetadata, cached SessionMetadata) SessionMetadata {
 	metadata.ServiceName = cached.ServiceName
 	if cached.UserEmail != "" {
 		metadata.UserEmail = cached.UserEmail
 	}
-	if metadata.UserID == "" && cached.UserID != "" {
-		metadata.UserID = cached.UserID
-	}
+	metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
 	metadata.ClaudeOrgID = cached.ClaudeOrgID
 	return metadata
 }
