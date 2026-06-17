@@ -207,8 +207,13 @@ export const wireUserSessionIssuerMachine = setup({
       on: {
         SUBMIT: [
           {
+            // Issuer already exists (e.g. retry after a later step failed): hand
+            // back to routing rather than jumping straight to the link. Routing
+            // re-derives the next incomplete step, so Gram retries always pass
+            // back through migratingGramRegistrations and can't skip the
+            // legacy-registration lift before linking.
             guard: "hasUserSessionIssuer",
-            target: "linkingUserSessionIssuer",
+            target: "routing",
             actions: assign({ error: () => null, errorStep: () => null }),
           },
           {
