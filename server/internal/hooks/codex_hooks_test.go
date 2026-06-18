@@ -17,10 +17,12 @@ func TestCodex_PreToolUse_ShadowMCPBlockWithIdentityEvidenceIncludesRequestLink(
 
 	sessionID := "codex-session-blocked"
 	toolName := "mcp__gram__do_thing"
+	userEmail := "anonymous-codex@example.com"
 
 	result, err := ti.service.Codex(ctx, &gen.CodexPayload{
 		HookEventName: "PreToolUse",
 		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
 		ToolName:      &toolName,
 		ToolInput:     map[string]any{"foo": "bar"},
 	})
@@ -32,6 +34,51 @@ func TestCodex_PreToolUse_ShadowMCPBlockWithIdentityEvidenceIncludesRequestLink(
 	require.Contains(t, *result.Reason, "Request access:")
 	require.Contains(t, *result.Reason, "/risk-policy-bypass/request#request_token=rpbr1.")
 	require.Contains(t, *result.Reason, shadowMCPApprovalRequestPrompt)
+}
+
+func TestCodex_PreToolUse_TargetedShadowMCPPolicyUsesResolvedHookUser(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	hookUserID := "codex-hook-user"
+	hookUserEmail := "codex-hook-user@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, hookUserID, hookUserEmail)
+	ti.service.riskScanner = userScopedShadowMCPScanner{userID: hookUserID}
+
+	sessionID := "codex-session-specific-user-policy"
+	toolName := "mcp__gram__do_thing"
+	result, err := ti.service.Codex(ctx, &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		UserEmail:     &hookUserEmail,
+		ToolName:      &toolName,
+		ToolInput:     map[string]any{"foo": "bar"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Decision)
+	require.Equal(t, "deny", *result.Decision)
+}
+
+func TestCodex_RequiresUserEmail(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	sessionID := "codex-session-missing-email"
+	toolName := "mcp__gram__do_thing"
+	result, err := ti.service.Codex(ctx, &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		ToolName:      &toolName,
+		ToolInput:     map[string]any{"foo": "bar"},
+	})
+	require.Error(t, err)
+	require.Nil(t, result)
+	require.ErrorContains(t, err, "codex hook payload missing user_email")
 }
 
 func TestBuildCodexTelemetryAttributes_UsesPayloadUserEmail(t *testing.T) {
@@ -62,9 +109,11 @@ func TestCodex_SessionStart_CapturesMCPInventory(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 
 	sessionID := "codex-session-with-inventory"
+	email := "dev@example.com"
 	_, err := ti.service.Codex(ctx, &gen.CodexPayload{
 		HookEventName: "SessionStart",
 		SessionID:     &sessionID,
+		UserEmail:     &email,
 		AdditionalData: map[string]any{
 			"mcp_inventory_codex": []any{
 				map[string]any{
@@ -262,12 +311,12 @@ func TestCodexSessionMetadata_CachesSessionStartEmail(t *testing.T) {
 	metadata := ti.service.codexSessionMetadata(ctx, &gen.CodexPayload{
 		HookEventName: "PreToolUse",
 		SessionID:     &sessionID,
-	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID)
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
 	require.Equal(t, email, metadata.UserEmail)
 	require.Equal(t, authCtx.UserID, metadata.UserID)
 }
 
-func TestCodexSessionMetadata_PrefersAuthenticatedUserIDOverCachedMetadata(t *testing.T) {
+func TestCodexSessionMetadata_IgnoresCachedUserIDWhenEmailDoesNotResolve(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 
@@ -290,8 +339,8 @@ func TestCodexSessionMetadata_PrefersAuthenticatedUserIDOverCachedMetadata(t *te
 	metadata := ti.service.codexSessionMetadata(ctx, &gen.CodexPayload{
 		HookEventName: "PreToolUse",
 		SessionID:     &sessionID,
-	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID)
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
 
 	require.Equal(t, email, metadata.UserEmail)
-	require.Equal(t, authCtx.UserID, metadata.UserID)
+	require.Empty(t, metadata.UserID)
 }
