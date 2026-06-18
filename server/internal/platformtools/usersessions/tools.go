@@ -145,7 +145,7 @@ func (t *ListTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload i
 		if in.Limit < 1 || in.Limit > maxLimit {
 			return oops.E(oops.CodeBadRequest, nil, "limit must be between 1 and %d", maxLimit)
 		}
-		limit = int32(in.Limit) //nolint:gosec // validated to [1,maxLimit] above
+		limit = int32(in.Limit)
 	}
 
 	issuer, err := parseNullUUID(in.UserSessionIssuerID, "user_session_issuer_id")
