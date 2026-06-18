@@ -26,9 +26,10 @@ func testRuntimeRecord(backend string) assistantRuntimeRecord {
 // stubRuntimeBackend records which calls land on it so router dispatch can be
 // asserted by backend identity.
 type stubRuntimeBackend struct {
-	name      string
-	serverURL *url.URL
-	imageRef  string
+	name       string
+	serverURL  *url.URL
+	imageRef   string
+	reusesIdle bool
 
 	ensureRecords []assistantRuntimeRecord
 	runTurnCount  int
@@ -40,6 +41,7 @@ func (s *stubRuntimeBackend) Backend() string               { return s.name }
 func (s *stubRuntimeBackend) SupportsBackend(b string) bool { return b == s.name }
 func (s *stubRuntimeBackend) ServerURL() *url.URL           { return s.serverURL }
 func (s *stubRuntimeBackend) ImageRef() string              { return s.imageRef }
+func (s *stubRuntimeBackend) ReusesIdleRuntimes() bool      { return s.reusesIdle }
 
 func (s *stubRuntimeBackend) Ensure(_ context.Context, r assistantRuntimeRecord) (RuntimeBackendEnsureResult, error) {
 	s.ensureRecords = append(s.ensureRecords, r)
@@ -73,8 +75,8 @@ var _ RuntimeBackend = (*stubRuntimeBackend)(nil)
 
 func newTestRouter(t *testing.T, target string) (*runtimeRouter, *stubRuntimeBackend, *stubRuntimeBackend) {
 	t.Helper()
-	fly := &stubRuntimeBackend{name: runtimeBackendFlyIO, serverURL: &url.URL{Scheme: "https", Host: "fly.example.com"}, imageRef: "fly:img", ensureRecords: nil, runTurnCount: 0, stopCount: 0, reapCount: 0}
-	gke := &stubRuntimeBackend{name: runtimeBackendGKE, serverURL: &url.URL{Scheme: "https", Host: "gke.example.com"}, imageRef: "gke:img", ensureRecords: nil, runTurnCount: 0, stopCount: 0, reapCount: 0}
+	fly := &stubRuntimeBackend{name: runtimeBackendFlyIO, serverURL: &url.URL{Scheme: "https", Host: "fly.example.com"}, imageRef: "fly:img", reusesIdle: true, ensureRecords: nil, runTurnCount: 0, stopCount: 0, reapCount: 0}
+	gke := &stubRuntimeBackend{name: runtimeBackendGKE, serverURL: &url.URL{Scheme: "https", Host: "gke.example.com"}, imageRef: "gke:img", reusesIdle: false, ensureRecords: nil, runTurnCount: 0, stopCount: 0, reapCount: 0}
 	router, err := newRuntimeRouter(target, map[string]RuntimeBackend{
 		runtimeBackendFlyIO: fly,
 		runtimeBackendGKE:   gke,
@@ -105,9 +107,13 @@ func TestRuntimeRouterTargetSurface(t *testing.T) {
 	require.Equal(t, runtimeBackendGKE, router.Backend())
 	require.Equal(t, gke.serverURL, router.ServerURL())
 	require.Equal(t, gke.imageRef, router.ImageRef())
+	require.False(t, router.ReusesIdleRuntimes(), "gke target resolves to the gke backend's non-reuse")
 	require.True(t, router.SupportsBackend(runtimeBackendFlyIO))
 	require.True(t, router.SupportsBackend(runtimeBackendGKE))
 	require.False(t, router.SupportsBackend("bogus"))
+
+	flyTarget, _, _ := newTestRouter(t, runtimeBackendFlyIO)
+	require.True(t, flyTarget.ReusesIdleRuntimes(), "fly target resolves to the fly backend's warm reuse")
 }
 
 func TestRuntimeRouterUnknownBackendErrors(t *testing.T) {
@@ -122,7 +128,7 @@ func TestNewRuntimeRouterRequiresTargetConfigured(t *testing.T) {
 	t.Parallel()
 
 	_, err := newRuntimeRouter(runtimeBackendGKE, map[string]RuntimeBackend{
-		runtimeBackendFlyIO: &stubRuntimeBackend{name: runtimeBackendFlyIO, serverURL: nil, imageRef: "", ensureRecords: nil, runTurnCount: 0, stopCount: 0, reapCount: 0},
+		runtimeBackendFlyIO: &stubRuntimeBackend{name: runtimeBackendFlyIO, serverURL: nil, imageRef: "", reusesIdle: true, ensureRecords: nil, runTurnCount: 0, stopCount: 0, reapCount: 0},
 	})
 	require.ErrorContains(t, err, `target backend "gke" is not configured`)
 

@@ -117,6 +117,10 @@ func (t *telemetryRuntimeBackend) ImageRef() string {
 	return t.inner.ImageRef()
 }
 
+func (t *telemetryRuntimeBackend) ReusesIdleRuntimes() bool {
+	return t.inner.ReusesIdleRuntimes()
+}
+
 func (t *telemetryRuntimeBackend) RecycleImage(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendRecycleResult, error) {
 	result, err := t.inner.RecycleImage(ctx, runtime)
 	if err != nil {

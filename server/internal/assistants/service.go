@@ -1112,9 +1112,19 @@ type RecycleAssistantRuntimeImagesParams struct {
 // RecycleActiveRuntimeImages best-effort rolls every active v2 runtime onto
 // the currently configured runtime image, so deploys absorb the image-pull +
 // reboot cost while runtimes are idle instead of the next turn paying it.
-// Busy or failed rows are not chased — the per-admission recycle in Ensure
-// catches them lazily.
+// Busy or failed rows are not chased — the per-admission path catches them
+// lazily.
+//
+// This is the in-place roll for backends that reuse idle runtimes (Fly). A
+// non-reuse backend (GKE) has no in-place swap and rolls onto a new image by
+// terminating idle runtimes instead (the warm-TTL expiry stops them, which
+// deletes the claim, and the next /turn re-admits onto a fresh warm-pool pod
+// already running the new image), so this sweep is a no-op for it.
 func (s *ServiceCore) RecycleActiveRuntimeImages(ctx context.Context, params RecycleAssistantRuntimeImagesParams) (RecycleAssistantRuntimeImagesResult, error) {
+	if !s.runtime.ReusesIdleRuntimes() {
+		return RecycleAssistantRuntimeImagesResult{}, nil
+	}
+
 	queries := assistantrepo.New(s.db)
 	rows, err := queries.ListActiveAssistantRuntimesForImageRecycle(ctx, runtimeStateActive)
 	if err != nil {

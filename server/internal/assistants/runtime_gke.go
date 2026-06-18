@@ -147,6 +147,14 @@ func (g *GKERuntimeBackend) ServerURL() *url.URL { return g.config.ServerURL }
 
 func (g *GKERuntimeBackend) ImageRef() string { return g.desiredImageRef() }
 
+// ReusesIdleRuntimes is false: Stop deletes the SandboxClaim, so the next
+// admission recreates the claim and adopts a fresh pre-warmed pod from the
+// pool — already running whatever image the SandboxTemplate now points at. A
+// new image therefore rolls in by terminating idle runtimes (the deploy sweep
+// and the warm-TTL expiry both do this) rather than the in-place RecycleImage
+// Fly relies on.
+func (g *GKERuntimeBackend) ReusesIdleRuntimes() bool { return false }
+
 func (g *GKERuntimeBackend) desiredImageRef() string {
 	if g.config.ImageTag == "" {
 		return g.config.OCIImage

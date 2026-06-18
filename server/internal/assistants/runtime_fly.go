@@ -221,6 +221,12 @@ func (f *FlyRuntimeBackend) ImageRef() string {
 	return f.desiredImageRef()
 }
 
+// ReusesIdleRuntimes is true: Stop pauses the machine but keeps the app and
+// allocated IP, so a later admit resumes the same incarnation. Fly has no warm
+// pool, so a new image is rolled onto that preserved machine in place via
+// RecycleImage rather than by discarding it.
+func (f *FlyRuntimeBackend) ReusesIdleRuntimes() bool { return true }
+
 // Ensure does not auto-recreate the app on ensureExisting errors. Health and
 // configure timeouts must bubble so Temporal retries drive convergence.
 // Destructive app recreation churns Fly's allocated IPs and creates DNS-stale

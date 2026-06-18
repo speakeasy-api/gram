@@ -53,6 +53,11 @@ func (r *runtimeRouter) SupportsBackend(backend string) bool {
 func (r *runtimeRouter) ServerURL() *url.URL { return r.backends[r.target].ServerURL() }
 func (r *runtimeRouter) ImageRef() string    { return r.backends[r.target].ImageRef() }
 
+// ReusesIdleRuntimes resolves against the target: it drives how a deploy rolls
+// new runtimes onto the configured image, which only concerns the backend that
+// admits them. The deploy sweep skips non-target rows for the same reason.
+func (r *runtimeRouter) ReusesIdleRuntimes() bool { return r.backends[r.target].ReusesIdleRuntimes() }
+
 func (r *runtimeRouter) Ensure(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendEnsureResult, error) {
 	b, err := r.route(runtime.Backend)
 	if err != nil {
