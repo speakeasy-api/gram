@@ -1,5 +1,9 @@
 import { SkeletonTable } from "@/components/ui/skeleton";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { Dimension, type QueryRow } from "@gram/client/models/components";
@@ -36,6 +40,63 @@ function costColor(t: number): string | undefined {
   return undefined; // neutral
 }
 
+// Percent change vs the previous period; null when there's no baseline.
+function relativeChange(
+  current: number,
+  prev: number | undefined,
+): number | null {
+  if (prev === undefined || prev <= 0) return null;
+  return ((current - prev) / prev) * 100;
+}
+
+function formatChange(pct: number): string {
+  return `${pct > 0 ? "+" : ""}${pct.toFixed(1)}%`;
+}
+
+// Same green/neutral/red treatment as cost: a rise in cost is red, a fall green.
+function changeColor(pct: number): string | undefined {
+  if (pct > 1) return "#e11d48"; // rose-600 — cost up
+  if (pct < -1) return "#059669"; // emerald-600 — cost down
+  return undefined; // ~flat
+}
+
+type LegendItem = { key: string; label: string; color: string };
+
+// An info icon whose tooltip is a colour legend: bold (coloured) key + a plain
+// description per line.
+function LegendTooltip({
+  intro,
+  items,
+}: {
+  intro: string;
+  items: LegendItem[];
+}): JSX.Element {
+  return (
+    <Tooltip>
+      <TooltipTrigger className="text-muted-foreground inline-flex cursor-help">
+        <Info className="size-3.5" />
+      </TooltipTrigger>
+      <TooltipContent>
+        <p className="text-primary-foreground/70 mb-1">{intro}</p>
+        <div className="space-y-0.5">
+          {items.map((it) => (
+            <div key={it.key}>
+              <span className="font-semibold" style={{ color: it.color }}>
+                {it.key}
+              </span>{" "}
+              {it.label}
+            </div>
+          ))}
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+const GREEN = "#10b981";
+const RED = "#f43f5e";
+const GREY = "#94a3b8";
+
 function displayValue(groupValue: string): string {
   return groupValue === "" ? "(unset)" : groupValue;
 }
@@ -63,11 +124,18 @@ function ModelIcon({
 
 // Shared grid template so the header and every row align.
 const GRID =
-  "grid grid-cols-[minmax(140px,20rem)_112px_116px_92px_104px_128px_1fr] items-center gap-3 px-6";
+  "grid grid-cols-[minmax(140px,20rem)_112px_116px_92px_104px_132px_128px_1fr] items-center gap-3 px-6";
 
 const PAGE_SIZE = 10;
 
-type SortKey = "name" | "cost" | "chats" | "tools" | "tokens" | "trend";
+type SortKey =
+  | "name"
+  | "cost"
+  | "change"
+  | "chats"
+  | "tools"
+  | "tokens"
+  | "trend";
 type SortDir = "asc" | "desc";
 type Sort = { key: SortKey; dir: SortDir };
 
@@ -75,12 +143,20 @@ function sortValue(
   row: QueryRow,
   key: SortKey,
   seriesByGroup: Map<string, number[]>,
+  prevCostByGroup: Map<string, number>,
 ): number | string {
   switch (key) {
     case "name":
       return displayValue(row.groupValue).toLowerCase();
     case "cost":
       return row.measures.totalCost ?? 0;
+    case "change":
+      return (
+        relativeChange(
+          row.measures.totalCost ?? 0,
+          prevCostByGroup.get(row.groupValue),
+        ) ?? Number.NEGATIVE_INFINITY
+      );
     case "chats":
       return row.measures.totalChats ?? 0;
     case "tools":
@@ -144,6 +220,8 @@ export type CostTableProps = {
   onDrill: (row: QueryRow) => void;
   // Per-group daily cost series for the trend sparkline, keyed by group value.
   seriesByGroup: Map<string, number[]>;
+  // Per-group total cost in the previous equal-length period, for % change.
+  prevCostByGroup: Map<string, number>;
   isLoading: boolean;
 };
 
@@ -154,6 +232,7 @@ export function CostTable({
   canDrill,
   onDrill,
   seriesByGroup,
+  prevCostByGroup,
   isLoading,
 }: CostTableProps): JSX.Element {
   const [sort, setSort] = useState<Sort>({ key: "cost", dir: "desc" });
@@ -176,8 +255,8 @@ export function CostTable({
     const main = rows.filter((r) => r.groupValue !== "Other");
     const other = rows.filter((r) => r.groupValue === "Other");
     main.sort((a, b) => {
-      const av = sortValue(a, sort.key, seriesByGroup);
-      const bv = sortValue(b, sort.key, seriesByGroup);
+      const av = sortValue(a, sort.key, seriesByGroup, prevCostByGroup);
+      const bv = sortValue(b, sort.key, seriesByGroup, prevCostByGroup);
       const cmp =
         typeof av === "string"
           ? av.localeCompare(bv as string)
@@ -185,7 +264,7 @@ export function CostTable({
       return sort.dir === "asc" ? cmp : -cmp;
     });
     return [...main, ...other];
-  }, [rows, sort, seriesByGroup]);
+  }, [rows, sort, seriesByGroup, prevCostByGroup]);
 
   if (isLoading) return <SkeletonTable />;
 
@@ -253,14 +332,35 @@ export function CostTable({
         </span>
         <span className="flex items-center justify-end gap-1">
           <HeaderButton
-            label="Cost trend"
+            label="% Change"
+            sortKey="change"
+            sort={sort}
+            onSort={onSort}
+          />
+          <LegendTooltip
+            intro="vs the previous period"
+            items={[
+              { key: "Green", label: "cost down", color: GREEN },
+              { key: "Red", label: "cost up", color: RED },
+              { key: "Grey", label: "roughly flat", color: GREY },
+            ]}
+          />
+        </span>
+        <span className="flex items-center justify-end gap-1">
+          <HeaderButton
+            label="Trend"
             sortKey="trend"
             sort={sort}
             onSort={onSort}
           />
-          <SimpleTooltip tooltip="Daily cost over 30 days — green if falling, red if rising.">
-            <Info className="size-3.5 cursor-help" />
-          </SimpleTooltip>
+          <LegendTooltip
+            intro="over the selected range"
+            items={[
+              { key: "Green", label: "trending down", color: GREEN },
+              { key: "Red", label: "trending up", color: RED },
+              { key: "Grey", label: "no clear trend", color: GREY },
+            ]}
+          />
         </span>
       </div>
 
@@ -277,6 +377,9 @@ export function CostTable({
           const isOther = row.groupValue === "Other";
           const costT =
             maxCost > minCost ? (cost - minCost) / (maxCost - minCost) : 0.5;
+          const pct = isOther
+            ? null
+            : relativeChange(cost, prevCostByGroup.get(row.groupValue));
           return (
             <button
               key={row.groupValue}
@@ -324,6 +427,16 @@ export function CostTable({
               </span>
               <span className="text-right tabular-nums">
                 {(row.measures.totalTokens ?? 0).toLocaleString()}
+              </span>
+              <span
+                className="text-right font-medium tabular-nums"
+                style={pct !== null ? { color: changeColor(pct) } : undefined}
+              >
+                {pct === null ? (
+                  <span className="text-muted-foreground/50">—</span>
+                ) : (
+                  formatChange(pct)
+                )}
               </span>
               <span className="flex justify-end">
                 <Sparkline values={seriesByGroup.get(row.groupValue) ?? []} />

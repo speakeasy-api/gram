@@ -170,6 +170,8 @@ export type EntityProfileProps = {
   onDrill: (row: QueryRow) => void;
   // Per-group daily cost series for the row sparklines.
   seriesByGroup: Map<string, number[]>;
+  // Per-group total cost in the previous period, for the % change column.
+  prevCostByGroup: Map<string, number>;
   // The date-range picker control, rendered next to the row count.
   rangePicker: ReactNode;
   isLoading: boolean;
@@ -193,6 +195,7 @@ export function EntityProfile({
   rows,
   onDrill,
   seriesByGroup,
+  prevCostByGroup,
   rangePicker,
   isLoading,
   isError,
@@ -309,6 +312,7 @@ export function EntityProfile({
               canDrill={canDrill}
               onDrill={onDrill}
               seriesByGroup={seriesByGroup}
+              prevCostByGroup={prevCostByGroup}
               isLoading={isLoading}
             />
           )}

@@ -106,6 +106,42 @@ export function CostsExplorer(): JSX.Element {
   });
   const attributes = detailData?.table?.[0]?.dimensionValues;
 
+  // Previous equal-length period (immediately before [from, to]) — for the
+  // per-group % change column.
+  const { prevFrom, prevTo } = useMemo(() => {
+    const durationMs = to.getTime() - from.getTime();
+    return { prevFrom: new Date(from.getTime() - durationMs), prevTo: from };
+  }, [from, to]);
+  const { data: prevData } = useQuery({
+    queryKey: [
+      "costs-explorer-prev",
+      prevFrom.toISOString(),
+      prevTo.toISOString(),
+      groupBy,
+      filters,
+    ],
+    queryFn: () =>
+      unwrapAsync(
+        telemetryQuery(client, {
+          queryPayload: {
+            from: prevFrom,
+            to: prevTo,
+            groupBy: groupBy as GroupBy,
+            sortBy: "total_cost",
+            topN: 100,
+            filters: filters.length ? filters : undefined,
+          },
+        }),
+      ),
+  });
+  const prevCostByGroup = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of prevData?.table ?? []) {
+      m.set(r.groupValue, r.measures.totalCost ?? 0);
+    }
+    return m;
+  }, [prevData]);
+
   const rows = data?.table ?? [];
 
   // Roll the child rows up into the current entity's headline stats.
@@ -194,6 +230,7 @@ export function CostsExplorer(): JSX.Element {
       rows={rows}
       onDrill={drillInto}
       seriesByGroup={seriesByGroup}
+      prevCostByGroup={prevCostByGroup}
       rangePicker={rangePicker}
       isLoading={isFetching && !data}
       isError={isError}
