@@ -20,6 +20,7 @@ import { SettingsSection } from "../../SettingsSection";
 import { AttachRemoteIdentityProviderSheet } from "./AttachRemoteIdentityProviderSheet";
 import { AuthenticationSetupActions } from "./AuthenticationSetupActions";
 import { DeleteRemoteIdentityProviderDialog } from "./DeleteRemoteIdentityProviderDialog";
+import { McpServerSessionsPanel } from "./McpServerSessionsPanel";
 import { ModifyRemoteIdentityProviderSheet } from "./ModifyRemoteIdentityProviderSheet";
 import { RemoteIdentityProvidersField } from "./RemoteIdentityProvidersField";
 import { UserSessionDurationField } from "./UserSessionDurationField";
@@ -146,52 +147,55 @@ export function AuthenticationSection({
   }
 
   return (
-    <SettingsSection id={MCP_AUTHENTICATION_SECTION_ID}>
-      <SettingsSection.Header>
-        <SettingsSection.Title>Authentication</SettingsSection.Title>
-        <SettingsSection.Description>
-          Configure the upstream identity provider and user session settings for
-          clients connecting to this server.
-        </SettingsSection.Description>
-      </SettingsSection.Header>
-      <SettingsSection.Panel>
-        <SettingsSection.Body>
-          <FieldGroup className="gap-6">{authenticationFields}</FieldGroup>
-        </SettingsSection.Body>
-        <SettingsSection.Footer>
-          <SettingsSection.FooterHint>
-            Authentication changes apply to new client connections.
-          </SettingsSection.FooterHint>
-        </SettingsSection.Footer>
-      </SettingsSection.Panel>
+    <>
+      <SettingsSection id={MCP_AUTHENTICATION_SECTION_ID}>
+        <SettingsSection.Header>
+          <SettingsSection.Title>Authentication</SettingsSection.Title>
+          <SettingsSection.Description>
+            Configure the upstream identity provider and user session settings
+            for clients connecting to this server.
+          </SettingsSection.Description>
+        </SettingsSection.Header>
+        <SettingsSection.Panel>
+          <SettingsSection.Body>
+            <FieldGroup className="gap-6">{authenticationFields}</FieldGroup>
+          </SettingsSection.Body>
+          <SettingsSection.Footer>
+            <SettingsSection.FooterHint>
+              Authentication changes apply to new client connections.
+            </SettingsSection.FooterHint>
+          </SettingsSection.Footer>
+        </SettingsSection.Panel>
 
-      <AttachRemoteIdentityProviderSheet
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
-        mcpServer={mcpServer}
-        userSessionIssuer={userSessionIssuer ?? null}
-        selectableIssuers={selectableIssuers}
-        initialIssuerUrl={sheetInitialUrl}
-      />
-
-      {deleteTarget && userSessionIssuerId && (
-        <DeleteRemoteIdentityProviderDialog
-          open={deleteOpen}
-          onOpenChange={setDeleteOpen}
-          userSessionIssuerId={userSessionIssuerId}
-          issuer={deleteTarget}
+        <AttachRemoteIdentityProviderSheet
+          open={sheetOpen}
+          onOpenChange={setSheetOpen}
+          mcpServer={mcpServer}
+          userSessionIssuer={userSessionIssuer ?? null}
+          selectableIssuers={selectableIssuers}
+          initialIssuerUrl={sheetInitialUrl}
         />
-      )}
 
-      {modifyTarget && userSessionIssuer && (
-        <ModifyRemoteIdentityProviderSheet
-          open={modifyOpen}
-          onOpenChange={setModifyOpen}
-          userSessionIssuer={userSessionIssuer}
-          issuer={modifyTarget}
-        />
-      )}
-    </SettingsSection>
+        {deleteTarget && userSessionIssuerId && (
+          <DeleteRemoteIdentityProviderDialog
+            open={deleteOpen}
+            onOpenChange={setDeleteOpen}
+            userSessionIssuerId={userSessionIssuerId}
+            issuer={deleteTarget}
+          />
+        )}
+
+        {modifyTarget && userSessionIssuer && (
+          <ModifyRemoteIdentityProviderSheet
+            open={modifyOpen}
+            onOpenChange={setModifyOpen}
+            userSessionIssuer={userSessionIssuer}
+            issuer={modifyTarget}
+          />
+        )}
+      </SettingsSection>
+      <McpServerSessionsPanel mcpServer={mcpServer} />
+    </>
   );
 }
 

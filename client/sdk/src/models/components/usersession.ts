@@ -12,6 +12,10 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  * An issued user_session record. refresh_token_hash is never returned.
  */
 export type UserSession = {
+  /**
+   * Name of the MCP client that established the session, if known.
+   */
+  clientName?: string | undefined;
   createdAt: Date;
   /**
    * Terminal session expiry; ceiling on refresh_expires_at.
@@ -22,6 +26,10 @@ export type UserSession = {
    */
   id: string;
   /**
+   * Slug of the user_session_issuer that gated this session.
+   */
+  issuerSlug: string;
+  /**
    * Current access-token JTI; used by the revocation path.
    */
   jti: string;
@@ -29,6 +37,18 @@ export type UserSession = {
    * Next refresh deadline.
    */
   refreshExpiresAt: Date;
+  /**
+   * When the session was revoked, if it has been.
+   */
+  revokedAt?: Date | undefined;
+  /**
+   * Resolved human-readable name of the subject, if known.
+   */
+  subjectDisplayName?: string | undefined;
+  /**
+   * Subject kind: 'user', 'apikey', or 'anonymous'.
+   */
+  subjectType: string;
   /**
    * The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).
    */
@@ -44,6 +64,7 @@ export type UserSession = {
 export const UserSession$inboundSchema: z.ZodMiniType<UserSession, unknown> = z
   .pipe(
     z.object({
+      client_name: z.optional(z.string()),
       created_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
@@ -53,11 +74,17 @@ export const UserSession$inboundSchema: z.ZodMiniType<UserSession, unknown> = z
         z.transform(v => new Date(v)),
       ),
       id: z.string(),
+      issuer_slug: z.string(),
       jti: z.string(),
       refresh_expires_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
       ),
+      revoked_at: z.optional(
+        z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+      ),
+      subject_display_name: z.optional(z.string()),
+      subject_type: z.string(),
       subject_urn: z.string(),
       updated_at: z.pipe(
         z.iso.datetime({ offset: true }),
@@ -67,9 +94,14 @@ export const UserSession$inboundSchema: z.ZodMiniType<UserSession, unknown> = z
     }),
     z.transform((v) => {
       return remap$(v, {
+        "client_name": "clientName",
         "created_at": "createdAt",
         "expires_at": "expiresAt",
+        "issuer_slug": "issuerSlug",
         "refresh_expires_at": "refreshExpiresAt",
+        "revoked_at": "revokedAt",
+        "subject_display_name": "subjectDisplayName",
+        "subject_type": "subjectType",
         "subject_urn": "subjectUrn",
         "updated_at": "updatedAt",
         "user_session_issuer_id": "userSessionIssuerId",

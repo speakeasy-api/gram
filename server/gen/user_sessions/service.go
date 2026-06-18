@@ -21,6 +21,9 @@ type Service interface {
 	// List issued user_sessions in the caller's project. refresh_token_hash is
 	// never returned.
 	ListUserSessions(context.Context, *ListUserSessionsPayload) (res *ListUserSessionsResult, err error)
+	// List available user session facet values (clients, users, servers) in the
+	// caller's project.
+	ListFacets(context.Context, *ListFacetsPayload) (res *ListUserSessionFacetsResult, err error)
 	// Mint a user_session for an issuer-gated toolset on behalf of the
 	// authenticated dashboard user. The minted JWT matches the shape of the one
 	// /mcp/{slug}/token would emit after a successful OAuth dance, so the runtime
@@ -50,7 +53,26 @@ const ServiceName = "userSessions"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [3]string{"listUserSessions", "mintUserSession", "revokeUserSession"}
+var MethodNames = [4]string{"listUserSessions", "listFacets", "mintUserSession", "revokeUserSession"}
+
+// ListFacetsPayload is the payload type of the userSessions service listFacets
+// method.
+type ListFacetsPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// ListUserSessionFacetsResult is the result type of the userSessions service
+// listFacets method.
+type ListUserSessionFacetsResult struct {
+	// Connecting client facets.
+	Clients []*UserSessionFacetOption
+	// Subject (user) facets.
+	Users []*UserSessionFacetOption
+	// Issuer/server facets.
+	Servers []*UserSessionFacetOption
+}
 
 // ListUserSessionsPayload is the payload type of the userSessions service
 // listUserSessions method.
@@ -59,6 +81,10 @@ type ListUserSessionsPayload struct {
 	SubjectUrn *string
 	// Filter by user_session_issuer id.
 	UserSessionIssuerID *string
+	// Filter by session status.
+	Status *string
+	// Filter by the connecting client id.
+	ClientID *string
 	// Pagination cursor: id of the last item from the previous page.
 	Cursor *string
 	// Page size (default 50, max 100).
@@ -104,6 +130,15 @@ type RevokeUserSessionPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+}
+
+type UserSessionFacetOption struct {
+	// The facet value used for filtering.
+	Value string
+	// The label shown for the facet value.
+	DisplayName string
+	// Number of sessions for this facet value.
+	Count int64
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

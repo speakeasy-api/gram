@@ -4,14 +4,14 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { dlv } from "../lib/dlv.js";
-import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
+import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -26,39 +26,30 @@ import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
-import {
-  createPageIterator,
-  haltIterator,
-  PageIterator,
-  Paginator,
-} from "../types/operations.js";
 
 /**
- * listUserSessions userSessions
+ * listFacets userSessions
  *
  * @remarks
- * List issued user_sessions in the caller's project. refresh_token_hash is never returned.
+ * List available user session facet values (clients, users, servers) in the caller's project.
  */
-export function userSessionsList(
+export function userSessionsListFacets(
   client: GramCore,
-  request?: operations.ListUserSessionsRequest | undefined,
-  security?: operations.ListUserSessionsSecurity | undefined,
+  request?: operations.ListUserSessionFacetsRequest | undefined,
+  security?: operations.ListUserSessionFacetsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
-  PageIterator<
-    Result<
-      operations.ListUserSessionsResponse,
-      | errors.ServiceError
-      | GramError
-      | ResponseValidationError
-      | ConnectionError
-      | RequestAbortedError
-      | RequestTimeoutError
-      | InvalidRequestError
-      | UnexpectedClientError
-      | SDKValidationError
-    >,
-    { cursor: string }
+  Result<
+    components.ListUserSessionFacetsResult,
+    | errors.ServiceError
+    | GramError
+    | ResponseValidationError
+    | ConnectionError
+    | RequestAbortedError
+    | RequestTimeoutError
+    | InvalidRequestError
+    | UnexpectedClientError
+    | SDKValidationError
   >
 > {
   return new APIPromise($do(
@@ -71,25 +62,22 @@ export function userSessionsList(
 
 async function $do(
   client: GramCore,
-  request?: operations.ListUserSessionsRequest | undefined,
-  security?: operations.ListUserSessionsSecurity | undefined,
+  request?: operations.ListUserSessionFacetsRequest | undefined,
+  security?: operations.ListUserSessionFacetsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
-    PageIterator<
-      Result<
-        operations.ListUserSessionsResponse,
-        | errors.ServiceError
-        | GramError
-        | ResponseValidationError
-        | ConnectionError
-        | RequestAbortedError
-        | RequestTimeoutError
-        | InvalidRequestError
-        | UnexpectedClientError
-        | SDKValidationError
-      >,
-      { cursor: string }
+    Result<
+      components.ListUserSessionFacetsResult,
+      | errors.ServiceError
+      | GramError
+      | ResponseValidationError
+      | ConnectionError
+      | RequestAbortedError
+      | RequestTimeoutError
+      | InvalidRequestError
+      | UnexpectedClientError
+      | SDKValidationError
     >,
     APICall,
   ]
@@ -98,27 +86,18 @@ async function $do(
     request,
     (value) =>
       z.parse(
-        z.optional(operations.ListUserSessionsRequest$outboundSchema),
+        z.optional(operations.ListUserSessionFacetsRequest$outboundSchema),
         value,
       ),
     "Input validation failed",
   );
   if (!parsed.ok) {
-    return [haltIterator(parsed), { status: "invalid" }];
+    return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/userSessions.list")();
-
-  const query = encodeFormQuery({
-    "client_id": payload?.client_id,
-    "cursor": payload?.cursor,
-    "limit": payload?.limit,
-    "status": payload?.status,
-    "subject_urn": payload?.subject_urn,
-    "user_session_issuer_id": payload?.user_session_issuer_id,
-  });
+  const path = pathToFunc("/rpc/userSessions.listFacets")();
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
@@ -166,7 +145,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listUserSessions",
+    operationID: "listUserSessionFacets",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -184,13 +163,12 @@ async function $do(
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
   }, options);
   if (!requestRes.ok) {
-    return [haltIterator(requestRes), { status: "invalid" }];
+    return [requestRes, { status: "invalid" }];
   }
   const req = requestRes.value;
 
@@ -213,7 +191,7 @@ async function $do(
     retryCodes: context.retryCodes,
   });
   if (!doResult.ok) {
-    return [haltIterator(doResult), { status: "request-error", request: req }];
+    return [doResult, { status: "request-error", request: req }];
   }
   const response = doResult.value;
 
@@ -221,8 +199,8 @@ async function $do(
     HttpMeta: { Response: response, Request: req },
   };
 
-  const [result, raw] = await M.match<
-    operations.ListUserSessionsResponse,
+  const [result] = await M.match<
+    components.ListUserSessionFacetsResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -233,9 +211,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, operations.ListUserSessionsResponse$inboundSchema, {
-      key: "Result",
-    }),
+    M.json(200, components.ListUserSessionFacetsResult$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,
@@ -245,58 +221,8 @@ async function $do(
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });
   if (!result.ok) {
-    return [haltIterator(result), {
-      status: "complete",
-      request: req,
-      response,
-    }];
+    return [result, { status: "complete", request: req, response }];
   }
 
-  const nextFunc = (
-    responseData: unknown,
-  ): {
-    next: Paginator<
-      Result<
-        operations.ListUserSessionsResponse,
-        | errors.ServiceError
-        | GramError
-        | ResponseValidationError
-        | ConnectionError
-        | RequestAbortedError
-        | RequestTimeoutError
-        | InvalidRequestError
-        | UnexpectedClientError
-        | SDKValidationError
-      >
-    >;
-    "~next"?: { cursor: string };
-  } => {
-    const nextCursor = dlv(responseData, "next_cursor");
-    if (typeof nextCursor !== "string") {
-      return { next: () => null };
-    }
-    if (nextCursor.trim() === "") {
-      return { next: () => null };
-    }
-
-    const nextVal = () =>
-      userSessionsList(
-        client,
-        {
-          ...request!,
-          cursor: nextCursor,
-        },
-        security,
-        options,
-      );
-
-    return { next: nextVal, "~next": { cursor: nextCursor } };
-  };
-
-  const page = { ...result, ...nextFunc(raw) };
-  return [{ ...page, ...createPageIterator(page, (v) => !v.ok) }, {
-    status: "complete",
-    request: req,
-    response,
-  }];
+  return [result, { status: "complete", request: req, response }];
 }

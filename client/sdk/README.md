@@ -612,6 +612,7 @@ run();
 ### [UserSessions](docs/sdks/usersessions/README.md)
 
 * [list](docs/sdks/usersessions/README.md#list) - listUserSessions userSessions
+* [listFacets](docs/sdks/usersessions/README.md#listfacets) - listFacets userSessions
 * [mint](docs/sdks/usersessions/README.md#mint) - mintUserSession userSessions
 * [revoke](docs/sdks/usersessions/README.md#revoke) - revokeUserSession userSessions
 
@@ -960,6 +961,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`userSessionIssuersMigrateLegacyGramRegistrations`](docs/sdks/usersessionissuers/README.md#migratelegacygramregistrations) - migrateLegacyGramRegistrations userSessionIssuers
 - [`userSessionIssuersUpdate`](docs/sdks/usersessionissuers/README.md#update) - updateUserSessionIssuer userSessionIssuers
 - [`userSessionsList`](docs/sdks/usersessions/README.md#list) - listUserSessions userSessions
+- [`userSessionsListFacets`](docs/sdks/usersessions/README.md#listfacets) - listFacets userSessions
 - [`userSessionsMint`](docs/sdks/usersessions/README.md#mint) - mintUserSession userSessions
 - [`userSessionsRevoke`](docs/sdks/usersessions/README.md#revoke) - revokeUserSession userSessions
 - [`variationsCreateGlobal`](docs/sdks/variations/README.md#createglobal) - createGlobal variations
@@ -1310,6 +1312,7 @@ To learn about this feature and how to get started, check
 - [`useUserSessionClient`](docs/sdks/usersessionclients/README.md#get) - getUserSessionClient userSessionClients
 - [`useUserSessionClients`](docs/sdks/usersessionclients/README.md#list) - listUserSessionClients userSessionClients
 - [`useUserSessionConsents`](docs/sdks/usersessionconsents/README.md#list) - listUserSessionConsents userSessionConsents
+- [`useUserSessionFacets`](docs/sdks/usersessions/README.md#listfacets) - listFacets userSessions
 - [`useUserSessionIssuer`](docs/sdks/usersessionissuers/README.md#get) - getUserSessionIssuer userSessionIssuers
 - [`useUserSessionIssuers`](docs/sdks/usersessionissuers/README.md#list) - listUserSessionIssuers userSessionIssuers
 - [`useUserSessions`](docs/sdks/usersessions/README.md#list) - listUserSessions userSessions

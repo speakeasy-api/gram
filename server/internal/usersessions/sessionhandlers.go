@@ -44,10 +44,18 @@ func (s *Service) ListUserSessions(ctx context.Context, payload *gen.ListUserSes
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id").LogError(ctx, s.logger)
 	}
 
+	clientFilter, err := conv.PtrToNullUUID(payload.ClientID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid client_id").LogError(ctx, s.logger)
+	}
+
 	rows, err := repo.New(s.db).ListUserSessionsByProjectID(ctx, repo.ListUserSessionsByProjectIDParams{
 		ProjectID:           *authCtx.ProjectID,
+		Status:              conv.PtrToPGTextEmpty(payload.Status),
 		SubjectUrn:          conv.PtrToPGTextEmpty(payload.SubjectUrn),
 		UserSessionIssuerID: issuerFilter,
+		ClientID:            clientFilter,
+		ID:                  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Cursor:              cursor,
 		LimitValue:          limit,
 	})
@@ -69,6 +77,50 @@ func (s *Service) ListUserSessions(ctx context.Context, payload *gen.ListUserSes
 	return &gen.ListUserSessionsResult{
 		Items:      items,
 		NextCursor: nextCursor,
+	}, nil
+}
+
+// ListFacets returns available facet values for the user session feed filters.
+func (s *Service) ListFacets(ctx context.Context, _ *gen.ListFacetsPayload) (*gen.ListUserSessionFacetsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	q := repo.New(s.db)
+	clients, err := q.ListUserSessionClientFacets(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list client facets").LogError(ctx, s.logger)
+	}
+	users, err := q.ListUserSessionUserFacets(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list user facets").LogError(ctx, s.logger)
+	}
+	servers, err := q.ListUserSessionServerFacets(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list server facets").LogError(ctx, s.logger)
+	}
+
+	clientOpts := make([]*gen.UserSessionFacetOption, len(clients))
+	for i, r := range clients {
+		clientOpts[i] = &gen.UserSessionFacetOption{Value: r.Value, DisplayName: r.DisplayName, Count: r.Count}
+	}
+	userOpts := make([]*gen.UserSessionFacetOption, len(users))
+	for i, r := range users {
+		userOpts[i] = &gen.UserSessionFacetOption{Value: r.Value, DisplayName: r.DisplayName, Count: r.Count}
+	}
+	serverOpts := make([]*gen.UserSessionFacetOption, len(servers))
+	for i, r := range servers {
+		serverOpts[i] = &gen.UserSessionFacetOption{Value: r.Value, DisplayName: r.DisplayName, Count: r.Count}
+	}
+
+	return &gen.ListUserSessionFacetsResult{
+		Clients: clientOpts,
+		Users:   userOpts,
+		Servers: serverOpts,
 	}, nil
 }
 
