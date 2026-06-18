@@ -12,6 +12,7 @@ import type { Operator } from "@gram/client/models/components/logfilter";
 import type { ActiveLogFilter } from "@/pages/logs/log-filter-types";
 import { FilterControl } from "./FilterControl";
 import { CustomFilterChip } from "./FilterChip";
+import { defaultValueForDimension } from "./filter-schema";
 import type {
   FilterDimension,
   FilterValue,
@@ -97,7 +98,7 @@ export function FilterSheet({
               </label>
               <FilterControl
                 dim={dim}
-                value={values[dim.id]!}
+                value={values[dim.id] ?? defaultValueForDimension(dim)}
                 onChange={(value) => onChange(dim.id, value)}
                 options={optionsById[dim.id]}
                 projectSlug={projectSlug}

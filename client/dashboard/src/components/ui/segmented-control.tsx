@@ -35,6 +35,7 @@ export function SegmentedControl<T extends string>({
           <button
             type="button"
             disabled={disabled}
+            aria-pressed={active}
             onClick={() => onChange(option.value)}
             className={cn(
               "flex h-full items-center rounded-sm border px-3 text-sm font-medium transition-colors",

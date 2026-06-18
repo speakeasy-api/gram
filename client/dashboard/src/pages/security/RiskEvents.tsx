@@ -18,7 +18,7 @@ import { Button, Icon } from "@speakeasy-api/moonshine";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { RefreshCw, Share2 } from "lucide-react";
-import { useCallback, useMemo, useRef, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import {
@@ -131,6 +131,12 @@ export default function RiskEvents(): JSX.Element {
 
   const fromIso = from?.toISOString();
   const toIso = to?.toISOString();
+
+  // Reset the virtualized list to the top whenever a filter changes, so users
+  // don't stay at a stale offset and miss the newly filtered results.
+  useEffect(() => {
+    containerRef.current?.scrollTo({ top: 0 });
+  }, [policyFilter, ruleFilter, userFilter, uniqueOnly, fromIso, toIso]);
 
   const resultsQuery = useInfiniteQuery({
     queryKey: [

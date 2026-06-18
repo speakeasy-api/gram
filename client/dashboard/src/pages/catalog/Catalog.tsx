@@ -318,7 +318,10 @@ function CatalogInner() {
                   }
                   onClear={() => {
                     setSearchQuery("");
-                    dimensionFilters.clearAll();
+                    // clearFilters resets category + sort + every filter param in
+                    // a single URL update (the unified state re-reads from it),
+                    // so a category-filtered empty state isn't left stuck.
+                    pageState.clearFilters();
                   }}
                 />
               )}

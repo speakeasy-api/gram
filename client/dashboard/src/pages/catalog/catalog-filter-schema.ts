@@ -59,24 +59,47 @@ export const CATALOG_FILTER_OPTIONS: OptionsById = {
   ],
 };
 
+// Allowed values per dimension. The unified filter state reads raw URL params,
+// so we sanitize to these before casting — an arbitrary `?auth=bogus` would
+// otherwise filter out every result.
+const VALID_AUTH_TYPES: readonly AuthType[] = [
+  "none",
+  "apikey",
+  "oauth",
+  "other",
+];
+const VALID_BEHAVIORS: readonly ToolBehavior[] = ["readonly", "write"];
+const VALID_MIN_USERS: readonly PopularityThreshold[] = [100, 1000, 10000];
+const VALID_UPDATED: readonly UpdatedRange[] = ["week", "month", "year"];
+const VALID_MIN_TOOLS: readonly ToolCountThreshold[] = [5, 10];
+
 /**
  * Bridge the unified value object back to the catalog's `FilterValues` shape so
- * the existing `filterAndSortServers` logic is reused verbatim. Absent
- * thresholds collapse to their "any" sentinel (0 / "any").
+ * the existing `filterAndSortServers` logic is reused verbatim. Values are
+ * sanitized to known options (invalid/absent collapse to the "any" sentinel:
+ * 0 / "any").
  */
 export function toCatalogFilterValues(
   values: FilterValues<typeof CATALOG_FILTERS>,
 ): CatalogFilterValues {
+  const minUsers = Number(values.minUsers);
+  const minTools = Number(values.minTools);
   return {
-    authTypes: values.auth as AuthType[],
-    toolBehaviors: values.behavior as ToolBehavior[],
-    minUsers: (values.minUsers
-      ? Number(values.minUsers)
-      : 0) as PopularityThreshold,
-    updatedRange: (values.updated ?? "any") as UpdatedRange,
-    minTools: (values.minTools
-      ? Number(values.minTools)
-      : 0) as ToolCountThreshold,
+    authTypes: values.auth.filter((v): v is AuthType =>
+      VALID_AUTH_TYPES.includes(v as AuthType),
+    ),
+    toolBehaviors: values.behavior.filter((v): v is ToolBehavior =>
+      VALID_BEHAVIORS.includes(v as ToolBehavior),
+    ),
+    minUsers: VALID_MIN_USERS.includes(minUsers as PopularityThreshold)
+      ? (minUsers as PopularityThreshold)
+      : 0,
+    updatedRange: VALID_UPDATED.includes(values.updated as UpdatedRange)
+      ? (values.updated as UpdatedRange)
+      : "any",
+    minTools: VALID_MIN_TOOLS.includes(minTools as ToolCountThreshold)
+      ? (minTools as ToolCountThreshold)
+      : 0,
   };
 }
 

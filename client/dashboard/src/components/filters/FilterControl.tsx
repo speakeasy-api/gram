@@ -232,7 +232,12 @@ function DebouncedTextInput({
       {local && (
         <button
           type="button"
-          onClick={() => setLocal("")}
+          onClick={() => {
+            // Propagate the clear immediately (bypass the debounce) so a quick
+            // close/unmount can't drop it and leave a stale filter applied.
+            setLocal("");
+            onChange("");
+          }}
           className="text-muted-foreground hover:text-foreground"
           aria-label="Clear filter"
         >
