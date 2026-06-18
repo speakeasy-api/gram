@@ -379,8 +379,8 @@ SELECT
     -- Multi-valued dimensions cast from the JSON (Dynamic) arrays into typed
     -- arrays. CAST handles the JSON->Array(String) conversion; toString would
     -- yield a ClickHouse array literal ['a','b'] that is not valid JSON.
-    CAST(attributes.user.roles AS Array(String)) AS roles,
-    CAST(attributes.user.groups AS Array(String)) AS groups,
+    arraySort(CAST(attributes.user.roles AS Array(String))) AS roles,
+    arraySort(CAST(attributes.user.groups AS Array(String))) AS groups,
 
     -- Cardinality
     uniqExactIfState(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '') AS total_chats,
