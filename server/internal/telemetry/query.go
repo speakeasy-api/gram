@@ -18,8 +18,9 @@ import (
 // anything finer would just return sparse hourly data.
 const minIntervalSeconds int64 = 3600
 
-// otherGroupLabel is the synthetic group value that holds the rolled-up
-// remainder beyond top_n.
+// otherGroupLabel is the default synthetic group value that holds the rolled-up
+// remainder beyond top_n. If a real group already uses this value, the response
+// picks a suffixed label so the synthetic rollup cannot collide with user data.
 const otherGroupLabel = "Other"
 
 // Query is a generic, org-scoped analytics query over the pre-aggregated
@@ -112,9 +113,10 @@ func buildQueryResult(
 ) *telem_gen.QueryResult {
 	buckets := bucketStarts(timeStart, timeEnd, intervalSeconds)
 
-	// Decide which group values are kept and which fold into "Other". The table
-	// rows arrive ordered by sort_by descending from ClickHouse.
+	// Decide which group values are kept and which fold into the synthetic
+	// rollup. The table rows arrive ordered by sort_by descending from ClickHouse.
 	kept, hasOther := selectGroups(groupBy, topN, tableRows)
+	otherLabel := uniqueOtherGroupLabel(tableRows)
 
 	// keptIndex preserves chart series ordering and lets the timeseries pass map
 	// each group value to its slot. "Other" (when present) is the final slot.
@@ -141,7 +143,7 @@ func buildQueryResult(
 	}
 	if hasOther {
 		table = append(table, &telem_gen.QueryRow{
-			GroupValue:      otherGroupLabel,
+			GroupValue:      otherLabel,
 			Measures:        toGenMeasures(otherTable),
 			DimensionValues: flattenDimensionValues(otherDimValues),
 		})
@@ -151,7 +153,7 @@ func buildQueryResult(
 	// seriesBuckets[seriesValue][bucketTime] = accumulated measures
 	seriesValues := append([]string{}, kept...)
 	if hasOther {
-		seriesValues = append(seriesValues, otherGroupLabel)
+		seriesValues = append(seriesValues, otherLabel)
 	}
 	if groupBy == "" && len(seriesValues) == 0 {
 		// No group_by: always emit a single empty-keyed series.
@@ -171,7 +173,7 @@ func buildQueryResult(
 			if !hasOther {
 				continue
 			}
-			seriesValue = otherGroupLabel
+			seriesValue = otherLabel
 		}
 		byBucket := seriesBuckets[seriesValue]
 		if byBucket == nil {
@@ -234,6 +236,22 @@ func selectGroups(groupBy string, topN int, tableRows []repo.AttributeMetricsRow
 		hasOther = true
 	}
 	return kept, hasOther
+}
+
+func uniqueOtherGroupLabel(tableRows []repo.AttributeMetricsRow) string {
+	seen := make(map[string]struct{}, len(tableRows))
+	for _, row := range tableRows {
+		seen[row.GroupValue] = struct{}{}
+	}
+	if _, ok := seen[otherGroupLabel]; !ok {
+		return otherGroupLabel
+	}
+	for i := 1; ; i++ {
+		label := otherGroupLabel + " (" + strconv.Itoa(i) + ")"
+		if _, ok := seen[label]; !ok {
+			return label
+		}
+	}
 }
 
 // bucketStarts returns the aligned bucket start times (unix nanoseconds) that

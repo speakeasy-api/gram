@@ -89,6 +89,35 @@ func TestBuildQueryResult_TopNAndOtherRollup(t *testing.T) {
 	require.InDelta(t, 0.0, other[b1], 1e-9)
 }
 
+func TestBuildQueryResult_OtherRollupLabelAvoidsRealGroupCollision(t *testing.T) {
+	t.Parallel()
+
+	tableRows := []repo.AttributeMetricsRow{
+		tableRow(otherGroupLabel, 5),
+		tableRow("A", 3),
+		tableRow("B", 1),
+	}
+	tsRows := []repo.AttributeMetricsTimePoint{
+		tsPoint(otherGroupLabel, 0, 5),
+		tsPoint("B", 0, 1),
+	}
+
+	res := buildQueryResult("department_name", 3600, 0, 0, 2, tableRows, tsRows)
+
+	require.Len(t, res.Table, 3)
+	require.Equal(t, otherGroupLabel, res.Table[0].GroupValue)
+	require.InDelta(t, 5.0, res.Table[0].Measures.TotalCost, 1e-9)
+	require.Equal(t, "A", res.Table[1].GroupValue)
+	require.Equal(t, "Other (1)", res.Table[2].GroupValue)
+	require.InDelta(t, 1.0, res.Table[2].Measures.TotalCost, 1e-9)
+
+	require.Len(t, res.Timeseries, 3)
+	realOther := seriesCostByBucket(t, res.Timeseries, otherGroupLabel)
+	require.InDelta(t, 5.0, realOther[strconv.FormatInt(0, 10)], 1e-9)
+	rollupOther := seriesCostByBucket(t, res.Timeseries, "Other (1)")
+	require.InDelta(t, 1.0, rollupOther[strconv.FormatInt(0, 10)], 1e-9)
+}
+
 func TestBuildQueryResult_DimensionValuesPassThroughAndOtherUnion(t *testing.T) {
 	t.Parallel()
 
