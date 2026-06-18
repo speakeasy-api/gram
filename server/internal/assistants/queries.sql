@@ -759,35 +759,49 @@ WHERE assistant_id = @assistant_id
   AND backend_metadata_json <> '{}'::jsonb;
 
 -- name: ListInactiveAssistantRuntimesForReap :many
--- Returns runtime rows that still carry backend metadata, are no longer
--- supposed to have a backend app, and whose owning assistant has had no
--- runtime activity since @inactive_before — orphans whose Stop/Reap never
--- completed. A row qualifies when it is finalized (soft-deleted or ended;
--- the state value is intentionally ignored since a tombstone can carry any
--- state, e.g. one stamped by a racing turn) or when its owning assistant is
--- soft-deleted (delete paths reap best-effort and rely on this janitor as
--- the safety net). A live row under a live assistant is never a candidate:
--- an idle runtime keeps its VM until the assistant is deleted.
+-- Returns runtime rows that still carry backend metadata and are safe to
+-- collect, in two cases:
+--   1. Orphans: finalized (soft-deleted or ended; the state value is ignored
+--      since a tombstone can carry any state, e.g. one stamped by a racing
+--      turn) or under a soft-deleted assistant, whose owning assistant has had
+--      no runtime activity since @inactive_before — i.e. Stop/Reap never
+--      completed. A live row under a live assistant is never an orphan: an
+--      idle runtime keeps its VM until the assistant is deleted.
+--   2. Superseded backend: a row on a backend the process no longer targets
+--      (backend <> @target_backend), parked at @stopped_state after its warm
+--      window. Collecting it frees the deprecated backend's resources so the
+--      next admit lands on the target backend. Active/starting/expiring rows
+--      are left to finish, so a live assistant is never disrupted mid-turn.
 SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
 WHERE r.backend_metadata_json <> '{}'::jsonb
   AND (
-    r.deleted IS TRUE
-    OR r.ended IS TRUE
-    OR EXISTS (
-      SELECT 1
-      FROM assistants a
-      WHERE a.id = r.assistant_id
-        AND a.project_id = r.project_id
-        AND a.deleted IS TRUE
+    (
+      (
+        r.deleted IS TRUE
+        OR r.ended IS TRUE
+        OR EXISTS (
+          SELECT 1
+          FROM assistants a
+          WHERE a.id = r.assistant_id
+            AND a.project_id = r.project_id
+            AND a.deleted IS TRUE
+        )
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM assistant_runtimes r2
+        WHERE r2.assistant_id = r.assistant_id
+          AND r2.updated_at >= @inactive_before
+          AND r2.backend_metadata_json <> '{}'::jsonb
+      )
     )
-  )
-  AND NOT EXISTS (
-    SELECT 1
-    FROM assistant_runtimes r2
-    WHERE r2.assistant_id = r.assistant_id
-      AND r2.updated_at >= @inactive_before
-      AND r2.backend_metadata_json <> '{}'::jsonb
+    OR (
+      r.backend <> @target_backend
+      AND r.deleted IS NOT TRUE
+      AND r.ended IS NOT TRUE
+      AND r.state = @stopped_state
+    )
   )
 ORDER BY r.updated_at ASC
 LIMIT @limit_count;
