@@ -96,7 +96,7 @@ export default function AssistantsIndex(): JSX.Element {
     throwOnError: false,
   });
 
-  const assistants = data?.assistants ?? [];
+  const assistants = useMemo(() => data?.assistants ?? [], [data]);
 
   const [search, setSearch] = useState("");
 
@@ -111,7 +111,7 @@ export default function AssistantsIndex(): JSX.Element {
     });
   }, [assistants, search]);
 
-  const showSearch = !isLoading && assistants.length > 6;
+  const showSearch = !isLoading && (assistants.length > 6 || search !== "");
   const showNoMatches =
     !isLoading && search !== "" && filteredAssistants.length === 0;
 
