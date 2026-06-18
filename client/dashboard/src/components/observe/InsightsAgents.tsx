@@ -1,6 +1,8 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ChartCard } from "@/components/chart/ChartCard";
-import { formatChartLabel, smoothData } from "@/components/chart/chartUtils";
+import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
+import { useChartZoom } from "@/components/chart/useChartZoom";
+import { buildAgentTokenTimeSeriesChartData } from "@/components/observe/agentTokenTimeSeriesChartData";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { formatCompact } from "@/lib/format";
 import { MetricCard } from "@/components/chart/MetricCard";
@@ -42,9 +44,9 @@ import {
   LinearScale,
   PointElement,
   Tooltip,
-  type ChartDataset,
   type ChartOptions,
 } from "chart.js";
+import ZoomPlugin from "chartjs-plugin-zoom";
 import {
   Button,
   type Column,
@@ -53,7 +55,7 @@ import {
   Table,
   sortTableData,
 } from "@speakeasy-api/moonshine";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bar, Chart } from "react-chartjs-2";
 import { Link } from "react-router";
 import { toast } from "sonner";
@@ -67,6 +69,7 @@ ChartJS.register(
   Filler,
   Tooltip,
   Legend,
+  ZoomPlugin,
 );
 
 type ValueMode = "tokens" | "cost";
@@ -121,12 +124,6 @@ function initials(name: string): string {
   if (parts.length >= 2)
     return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();
   return (name[0] ?? "?").toUpperCase();
-}
-
-function unixNanoToDate(value: string): Date {
-  const nanos = BigInt(value);
-  const millis = Number(nanos / 1_000_000n);
-  return new Date(millis);
 }
 
 function ValueModeToggle({
@@ -450,6 +447,13 @@ export function InsightsAgentsContent(): JSX.Element {
     setCustomRange(null);
     setCustomRangeLabel(null);
   };
+  const handleChartRangeSelect = useCallback(
+    (rangeFrom: Date, rangeTo: Date) => {
+      setCustomRange({ from: rangeFrom, to: rangeTo });
+      setCustomRangeLabel(formatChartZoomRangeLabel(rangeFrom, rangeTo));
+    },
+    [],
+  );
 
   return (
     <>
@@ -582,6 +586,9 @@ export function InsightsAgentsContent(): JSX.Element {
                   valueMode={valueMode}
                   expandedChart={expandedChart}
                   onExpand={setExpandedChart}
+                  onRangeSelect={handleChartRangeSelect}
+                  isZoomed={customRange !== null}
+                  onResetZoom={handleClearCustomRange}
                 />
                 <ClientBreakdownChart
                   title="Usage by Client"
@@ -630,6 +637,9 @@ function TokenTimeSeriesChart({
   valueMode,
   expandedChart,
   onExpand,
+  onRangeSelect,
+  isZoomed,
+  onResetZoom,
 }: {
   title: string;
   subtitle?: string;
@@ -639,6 +649,9 @@ function TokenTimeSeriesChart({
   valueMode: ValueMode;
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
+  onRangeSelect?: (from: Date, to: Date) => void;
+  isZoomed?: boolean;
+  onResetZoom?: () => void;
 }) {
   const isExpanded = expandedChart === chartId;
   const height = isExpanded ? 420 : 260;
@@ -649,82 +662,35 @@ function TokenTimeSeriesChart({
         : b.totalInputTokens + b.totalOutputTokens) > 0,
   );
 
-  // Mixed bar+line chart. Each dataset can override its `type` (chart.js
-  // supports per-dataset type overrides on a bar chart), so the dataset
-  // array is a union of bar and line dataset shapes.
-  const chartData = useMemo<{
-    labels: string[];
-    datasets: Array<
-      ChartDataset<"bar", number[]> | ChartDataset<"line", number[]>
-    >;
-  }>(() => {
-    const labels = timeSeries.map((b) =>
-      formatChartLabel(unixNanoToDate(b.bucketTimeUnixNano), timeRangeMs),
-    );
+  const { timestamps, chartData } = useMemo(
+    () =>
+      buildAgentTokenTimeSeriesChartData(timeSeries, timeRangeMs, valueMode),
+    [timeSeries, timeRangeMs, valueMode],
+  );
+  const resolveZoomRange = useCallback(
+    (min: number, max: number) => {
+      if (timestamps.length === 0) return null;
+      const fromIndex = Math.max(0, Math.floor(min));
+      const toIndex = Math.min(timestamps.length - 1, Math.ceil(max));
+      const from = timestamps[fromIndex];
+      const to = timestamps[toIndex];
+      if (from == null || to == null) return null;
+      return { from: new Date(from), to: new Date(to) };
+    },
+    [timestamps],
+  );
+  const { chartRef, zoomPluginOptions, resetZoom } = useChartZoom<
+    "bar" | "line",
+    number[],
+    string
+  >({
+    onRangeSelect,
+    resolveRange: resolveZoomRange,
+  });
 
-    // Raw bar datasets
-    const barDatasets =
-      valueMode === "cost"
-        ? [
-            {
-              label: "Cost",
-              data: timeSeries.map((b) => b.totalCost),
-              backgroundColor: "rgba(96, 165, 250, 0.35)",
-              stack: "stack",
-              order: 2,
-            },
-          ]
-        : [
-            {
-              label: "Input Tokens",
-              data: timeSeries.map((b) => b.totalInputTokens),
-              backgroundColor: "rgba(96, 165, 250, 0.35)",
-              stack: "stack",
-              order: 2,
-            },
-            {
-              label: "Output Tokens",
-              data: timeSeries.map((b) => b.totalOutputTokens),
-              backgroundColor: "rgba(52, 211, 153, 0.35)",
-              stack: "stack",
-              order: 2,
-            },
-            {
-              label: "Cache Read",
-              data: timeSeries.map((b) => b.cacheReadInputTokens),
-              backgroundColor: "rgba(167, 139, 250, 0.35)",
-              stack: "stack",
-              order: 2,
-            },
-          ];
-
-    // Smoothed trend line (total across all stacked values)
-    const rawTotal = timeSeries.map((b) =>
-      valueMode === "cost"
-        ? b.totalCost
-        : b.totalInputTokens + b.totalOutputTokens + b.cacheReadInputTokens,
-    );
-    const trendData = smoothData(rawTotal);
-
-    const trendDataset: ChartDataset<"line", number[]> = {
-      label: valueMode === "cost" ? "Cost Trend" : "Token Trend",
-      data: trendData,
-      type: "line",
-      borderColor: valueMode === "cost" ? "#818cf8" : "#3b82f6",
-      backgroundColor: "transparent",
-      pointRadius: 0,
-      pointHoverRadius: 4,
-      borderWidth: 2,
-      tension: 0.4,
-      fill: false,
-      order: 1,
-    };
-
-    return {
-      labels,
-      datasets: [...barDatasets, trendDataset],
-    };
-  }, [timeSeries, timeRangeMs, valueMode]);
+  useEffect(() => {
+    resetZoom();
+  }, [chartData, resetZoom]);
 
   const options = useMemo<ChartOptions<"bar">>(
     () => ({
@@ -757,6 +723,7 @@ function TokenTimeSeriesChart({
             },
           },
         },
+        zoom: zoomPluginOptions,
       },
       scales: {
         x: {
@@ -774,7 +741,7 @@ function TokenTimeSeriesChart({
         },
       },
     }),
-    [valueMode],
+    [valueMode, zoomPluginOptions],
   );
 
   return (
@@ -784,6 +751,8 @@ function TokenTimeSeriesChart({
       expandedChart={expandedChart}
       onExpand={onExpand}
       hasData={hasData}
+      isZoomed={isZoomed}
+      onResetZoom={onResetZoom}
     >
       {subtitle && (
         <p className="text-muted-foreground -mt-3 mb-2 text-xs">{subtitle}</p>
@@ -800,6 +769,7 @@ function TokenTimeSeriesChart({
               `"bar" | "line"` generic explicitly widens `<Chart>` to accept
               the union dataset shape. */}
           <Chart<"bar" | "line", number[], string>
+            ref={chartRef}
             type="bar"
             data={chartData}
             options={options}
