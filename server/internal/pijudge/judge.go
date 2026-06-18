@@ -128,7 +128,7 @@ var _ ra.PromptInjectionEngine = (*Engine)(nil).Classify
 // safeResult is the not-an-attack verdict. It is returned for empty messages and
 // for every fail-open path (canceled context, rate limit, judge error) so a
 // judge outage degrades to the L0 heuristics rather than dropping the scan.
-var safeResult = ra.PromptInjectionResult{Label: ra.LabelSafe, Score: 0}
+var safeResult = ra.PromptInjectionResult{Label: ra.LabelSafe, Score: 0, Rationale: ""}
 
 // New constructs an Engine. The composition root constructs the completions
 // client unconditionally, so it is always non-nil here.
@@ -213,7 +213,7 @@ func (c *Engine) classifyOne(ctx context.Context, req ra.PromptInjectionRequest,
 	}
 
 	start := time.Now()
-	isAttack, confidence, err := c.call(ctx, req, msg)
+	isAttack, confidence, rationale, err := c.call(ctx, req, msg)
 	c.metrics.RecordClassification(ctx, req.OrgID, labelFor(isAttack, err), o11y.OutcomeFromError(err), time.Since(start))
 	if err != nil {
 		c.logger.WarnContext(ctx, "pi judge call failed; failing open",
@@ -232,7 +232,7 @@ func (c *Engine) classifyOne(ctx context.Context, req ra.PromptInjectionRequest,
 	c.logger.InfoContext(ctx, "pi judge flagged prompt injection",
 		attr.SlogOrganizationID(req.OrgID),
 	)
-	return ra.PromptInjectionResult{Label: ra.LabelInjection, Score: confidence}
+	return ra.PromptInjectionResult{Label: ra.LabelInjection, Score: confidence, Rationale: rationale}
 }
 
 // judgePayload is the user turn: the captured event rendered as a structured
@@ -244,7 +244,7 @@ type judgePayload struct {
 	Message riskjudge.MessagePayload `json:"message"`
 }
 
-func (c *Engine) call(ctx context.Context, req ra.PromptInjectionRequest, msg ra.JudgeMessage) (isAttack bool, confidence float64, err error) {
+func (c *Engine) call(ctx context.Context, req ra.PromptInjectionRequest, msg ra.JudgeMessage) (isAttack bool, confidence float64, rationale string, err error) {
 	payload, err := json.Marshal(judgePayload{Message: riskjudge.RenderMessage(msg)})
 	if err != nil {
 		// Unreachable: the payload is strings, bools, and slices. Fall back to the
@@ -269,27 +269,30 @@ func (c *Engine) call(ctx context.Context, req ra.PromptInjectionRequest, msg ra
 		JSONSchema:     &c.schema,
 	})
 	if err != nil {
-		return false, 0, fmt.Errorf("openrouter object completion: %w", err)
+		return false, 0, "", fmt.Errorf("openrouter object completion: %w", err)
 	}
 	if response == nil || response.Message == nil {
-		return false, 0, fmt.Errorf("empty completion response")
+		return false, 0, "", fmt.Errorf("empty completion response")
 	}
 	raw := strings.TrimSpace(openrouter.GetText(*response.Message))
 	if raw == "" {
-		return false, 0, fmt.Errorf("empty completion content")
+		return false, 0, "", fmt.Errorf("empty completion content")
 	}
 
-	// The schema also requires a "rationale" (it makes the model articulate its
-	// call), but we deliberately do not read it back — it could echo payload
-	// content, and findings carry the canonical prompt-injection description.
+	// The schema also requires a "rationale" (the model's one-sentence
+	// explanation). We read it back and surface it as the finding description so a
+	// flagged event is explainable for triage. The system prompt instructs the
+	// judge not to echo secrets or raw payloads in it, and it is stored in the
+	// same privacy tier as the match text the finding already records.
 	var verdict struct {
 		IsAttack   bool    `json:"is_attack"`
 		Confidence float64 `json:"confidence"`
+		Rationale  string  `json:"rationale"`
 	}
 	if err := json.Unmarshal([]byte(raw), &verdict); err != nil {
-		return false, 0, fmt.Errorf("parse judge response: %w", err)
+		return false, 0, "", fmt.Errorf("parse judge response: %w", err)
 	}
-	return verdict.IsAttack, max(0, min(1, verdict.Confidence)), nil
+	return verdict.IsAttack, max(0, min(1, verdict.Confidence)), verdict.Rationale, nil
 }
 
 // VerdictSchema is the judge's structured-output JSON schema. Deliberately no
