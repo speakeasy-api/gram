@@ -108,6 +108,16 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     user_email SimpleAggregateFunction(any, String),
     hook_source SimpleAggregateFunction(any, String),
     skill_name SimpleAggregateFunction(any, String),
+    -- Tool-usage classification + identity cols, used to serve the unified Tool
+    -- Logs page (hosted MCP / shadow MCP / skill / local target classification and
+    -- multi-identity user resolution) directly from this MV instead of scanning raw
+    -- telemetry_logs. toolset_slug/external_user_id/user_id are materialized columns
+    -- on telemetry_logs; mcp_match/mcp_server_url are read from attributes.
+    toolset_slug SimpleAggregateFunction(any, String),
+    external_user_id SimpleAggregateFunction(any, String),
+    user_id SimpleAggregateFunction(any, String),
+    mcp_match SimpleAggregateFunction(any, String),
+    mcp_server_url SimpleAggregateFunction(any, String),
 
     -- Aggregates
     start_time_unix_nano SimpleAggregateFunction(min, Int64),
@@ -153,6 +163,11 @@ SELECT
     any(user_email) AS user_email,
     any(hook_source) AS hook_source,
     any(skill_name) AS skill_name,
+    any(toolset_slug) AS toolset_slug,
+    any(external_user_id) AS external_user_id,
+    any(user_id) AS user_id,
+    any(toString(attributes.gram.mcp.match)) AS mcp_match,
+    any(toString(attributes.gram.mcp.server_url)) AS mcp_server_url,
     min(time_unix_nano) AS start_time_unix_nano,
     toUInt64(count(*)) AS log_count,
     anyIfState(
