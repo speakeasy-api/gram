@@ -110,7 +110,6 @@ export function AppSidebar({
     routes.employees,
     routes.costs,
     routes.insights,
-    routes.telemetryQueryDemo,
     routes.agentSessions,
     routes.logs,
   ].some((r) => r.active);
@@ -202,12 +201,8 @@ export function AppSidebar({
               <CollapsibleNavGroup
                 label="Observe"
                 Icon={(p) => <Icon {...p} name="eye" />}
-                defaultHref={routes.employees.href()}
+                defaultHref={routes.costs.href()}
               >
-                <ScopeGatedNavItem
-                  item={routes.employees}
-                  scope={scopeFor(routes.employees)}
-                />
                 <ScopeGatedNavItem
                   item={routes.costs}
                   scope={scopeFor(routes.costs)}
@@ -217,16 +212,16 @@ export function AppSidebar({
                   scope={scopeFor(routes.insights)}
                 />
                 <ScopeGatedNavItem
-                  item={routes.telemetryQueryDemo}
-                  scope={scopeFor(routes.telemetryQueryDemo)}
-                />
-                <ScopeGatedNavItem
                   item={routes.agentSessions}
                   scope={scopeFor(routes.agentSessions)}
                 />
                 <ScopeGatedNavItem
                   item={routes.logs}
                   scope={scopeFor(routes.logs)}
+                />
+                <ScopeGatedNavItem
+                  item={routes.employees}
+                  scope={scopeFor(routes.employees)}
                 />
               </CollapsibleNavGroup>
 

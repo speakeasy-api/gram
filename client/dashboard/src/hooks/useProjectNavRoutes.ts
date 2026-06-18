@@ -62,7 +62,6 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       { route: routes.employees, scope: read },
       { route: routes.costs, scope: read },
       { route: routes.insights, scope: read },
-      { route: routes.telemetryQueryDemo, scope: read },
       { route: routes.agentSessions, scope: read },
       { route: routes.logs, scope: read },
       { route: routes.riskOverview, scope: read },

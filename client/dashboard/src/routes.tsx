@@ -421,7 +421,7 @@ const ROUTE_STRUCTURE = {
     component: TelemetryQueryDemo,
   },
   employees: {
-    title: "Employees",
+    title: "Employee Enrollment",
     url: "employees",
     icon: "users",
     component: InsightsEmployeesLayout,
@@ -439,6 +439,16 @@ const ROUTE_STRUCTURE = {
     url: "costs",
     icon: "credit-card",
     component: Costs,
+    subPages: {
+      // Catch-all so the drill path (`/costs/Division~R&D/Department~Eng/…`)
+      // renders the same explorer at any depth. CostsExplorer reads the drill
+      // levels from the pathname; no per-depth route definition is needed.
+      drill: {
+        title: "Costs",
+        url: "*",
+        component: Costs,
+      },
+    },
   },
   logs: {
     title: "Tool Logs",
@@ -599,6 +609,18 @@ export const useRoutes = (overrides?: {
   const matchesCurrent = (url: string) => {
     const urlParts = url.split("/").filter(Boolean);
     const currentParts = location.pathname.split("/").filter(Boolean);
+
+    // Splat routes (trailing `*`, e.g. the costs drill) match any deeper path
+    // that shares their prefix — keeps the sidebar item active while drilling.
+    if (urlParts[urlParts.length - 1] === "*") {
+      const prefix = urlParts.slice(0, -1);
+      return (
+        currentParts.length >= prefix.length &&
+        prefix.every(
+          (part, index) => part === currentParts[index] || part.startsWith(":"),
+        )
+      );
+    }
 
     if (urlParts.length !== currentParts.length) {
       return false;

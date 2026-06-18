@@ -23,7 +23,8 @@ import {
   GeminiIcon,
   HookSourceIcon,
 } from "../hooks/HookSourceIcon";
-import { Sparkline, trendDirection, trendOf } from "./Sparkline";
+import { Sparkline } from "./Sparkline";
+import { trendDirection, trendOf } from "./sparkline-math";
 
 function formatCost(value: number): string {
   return `$${value.toLocaleString(undefined, {
@@ -32,32 +33,18 @@ function formatCost(value: number): string {
   })}`;
 }
 
+// Average cost per chat session for a row; 0 when there are no sessions.
+function costPerSession(row: QueryRow): number {
+  const chats = row.measures.totalChats ?? 0;
+  return chats > 0 ? (row.measures.totalCost ?? 0) / chats : 0;
+}
+
 // Bucket the cost into three bands by its position in the column's range:
 // lowest third → emerald, middle → neutral (default text), highest → rose.
 function costColor(t: number): string | undefined {
   if (t >= 2 / 3) return "#e11d48"; // rose-600 — high cost
   if (t <= 1 / 3) return "#059669"; // emerald-600 — low cost
   return undefined; // neutral
-}
-
-// Percent change vs the previous period; null when there's no baseline.
-function relativeChange(
-  current: number,
-  prev: number | undefined,
-): number | null {
-  if (prev === undefined || prev <= 0) return null;
-  return ((current - prev) / prev) * 100;
-}
-
-function formatChange(pct: number): string {
-  return `${pct > 0 ? "+" : ""}${pct.toFixed(1)}%`;
-}
-
-// Same green/neutral/red treatment as cost: a rise in cost is red, a fall green.
-function changeColor(pct: number): string | undefined {
-  if (pct > 1) return "#e11d48"; // rose-600 — cost up
-  if (pct < -1) return "#059669"; // emerald-600 — cost down
-  return undefined; // ~flat
 }
 
 type LegendItem = { key: string; label: string; color: string };
@@ -143,7 +130,7 @@ const NAME_WIDTH: Partial<Record<Dimension, number>> = {
 
 function gridTemplate(groupBy: Dimension): string {
   const nameW = NAME_WIDTH[groupBy] ?? 170;
-  return `${nameW}px 88px 110px 90px 104px 104px 108px 1fr`;
+  return `${nameW}px 88px 120px 110px 90px 104px 150px 1fr`;
 }
 
 const PAGE_SIZE = 10;
@@ -151,7 +138,7 @@ const PAGE_SIZE = 10;
 type SortKey =
   | "name"
   | "cost"
-  | "change"
+  | "perSession"
   | "chats"
   | "tools"
   | "tokens"
@@ -163,20 +150,14 @@ function sortValue(
   row: QueryRow,
   key: SortKey,
   seriesByGroup: Map<string, number[]>,
-  prevCostByGroup: Map<string, number>,
 ): number | string {
   switch (key) {
     case "name":
       return displayValue(row.groupValue).toLowerCase();
     case "cost":
       return row.measures.totalCost ?? 0;
-    case "change":
-      return (
-        relativeChange(
-          row.measures.totalCost ?? 0,
-          prevCostByGroup.get(row.groupValue),
-        ) ?? Number.NEGATIVE_INFINITY
-      );
+    case "perSession":
+      return costPerSession(row);
     case "chats":
       return row.measures.totalChats ?? 0;
     case "tools":
@@ -222,7 +203,7 @@ function HeaderButton({
       type="button"
       onClick={() => onSort(sortKey)}
       className={cn(
-        "group hover:text-foreground inline-flex items-center gap-1 transition-colors",
+        "group hover:text-foreground inline-flex items-center gap-1 whitespace-nowrap transition-colors",
         active && "text-foreground",
       )}
     >
@@ -240,8 +221,6 @@ export type CostTableProps = {
   onDrill: (row: QueryRow) => void;
   // Per-group daily cost series for the trend sparkline, keyed by group value.
   seriesByGroup: Map<string, number[]>;
-  // Per-group total cost in the previous equal-length period, for % change.
-  prevCostByGroup: Map<string, number>;
   isLoading: boolean;
 };
 
@@ -252,7 +231,6 @@ export function CostTable({
   canDrill,
   onDrill,
   seriesByGroup,
-  prevCostByGroup,
   isLoading,
 }: CostTableProps): JSX.Element {
   const [sort, setSort] = useState<Sort>({ key: "cost", dir: "desc" });
@@ -275,8 +253,8 @@ export function CostTable({
     const main = rows.filter((r) => r.groupValue !== "Other");
     const other = rows.filter((r) => r.groupValue === "Other");
     main.sort((a, b) => {
-      const av = sortValue(a, sort.key, seriesByGroup, prevCostByGroup);
-      const bv = sortValue(b, sort.key, seriesByGroup, prevCostByGroup);
+      const av = sortValue(a, sort.key, seriesByGroup);
+      const bv = sortValue(b, sort.key, seriesByGroup);
       const cmp =
         typeof av === "string"
           ? av.localeCompare(bv as string)
@@ -284,7 +262,7 @@ export function CostTable({
       return sort.dir === "asc" ? cmp : -cmp;
     });
     return [...main, ...other];
-  }, [rows, sort, seriesByGroup, prevCostByGroup]);
+  }, [rows, sort, seriesByGroup]);
 
   if (isLoading) return <SkeletonTable />;
 
@@ -330,6 +308,14 @@ export function CostTable({
         </span>
         <span className="flex">
           <HeaderButton
+            label="Cost / session"
+            sortKey="perSession"
+            sort={sort}
+            onSort={onSort}
+          />
+        </span>
+        <span className="flex">
+          <HeaderButton
             label="Chat sessions"
             sortKey="chats"
             sort={sort}
@@ -354,23 +340,7 @@ export function CostTable({
         </span>
         <span className="flex items-center gap-1">
           <HeaderButton
-            label="% Change"
-            sortKey="change"
-            sort={sort}
-            onSort={onSort}
-          />
-          <LegendTooltip
-            intro="vs the previous period"
-            items={[
-              { key: "Green", label: "cost down", color: GREEN },
-              { key: "Red", label: "cost up", color: RED },
-              { key: "Grey", label: "roughly flat", color: GREY },
-            ]}
-          />
-        </span>
-        <span className="flex items-center gap-1">
-          <HeaderButton
-            label="Trend"
+            label="Trend This Period"
             sortKey="trend"
             sort={sort}
             onSort={onSort}
@@ -399,15 +369,14 @@ export function CostTable({
           const isOther = row.groupValue === "Other";
           const costT =
             maxCost > minCost ? (cost - minCost) / (maxCost - minCost) : 0.5;
-          const pct = isOther
-            ? null
-            : relativeChange(cost, prevCostByGroup.get(row.groupValue));
           return (
             <button
               key={row.groupValue}
               type="button"
               disabled={!drillable}
-              onClick={() => drillable && onDrill(row)}
+              onClick={() => {
+                if (drillable) onDrill(row);
+              }}
               className={cn(
                 GRID,
                 "w-full py-4 text-left text-sm transition-colors",
@@ -442,6 +411,11 @@ export function CostTable({
               >
                 {formatCost(cost)}
               </span>
+              <span className="text-muted-foreground text-left tabular-nums">
+                {(row.measures.totalChats ?? 0) > 0
+                  ? formatCost(costPerSession(row))
+                  : "—"}
+              </span>
               <span className="text-left tabular-nums">
                 {(row.measures.totalChats ?? 0).toLocaleString()}
               </span>
@@ -450,16 +424,6 @@ export function CostTable({
               </span>
               <span className="text-left tabular-nums">
                 {(row.measures.totalTokens ?? 0).toLocaleString()}
-              </span>
-              <span
-                className="text-left font-medium tabular-nums"
-                style={pct !== null ? { color: changeColor(pct) } : undefined}
-              >
-                {pct === null ? (
-                  <span className="text-muted-foreground/50">—</span>
-                ) : (
-                  formatChange(pct)
-                )}
               </span>
               <span className="flex">
                 <Sparkline values={seriesByGroup.get(row.groupValue) ?? []} />

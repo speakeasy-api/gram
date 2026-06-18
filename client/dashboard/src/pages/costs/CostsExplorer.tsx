@@ -8,18 +8,24 @@ import {
 import { useGramContext } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { useSlugs } from "@/contexts/Sdk";
-import { CostWidgets, type MixSpec } from "./CostWidgets";
+import { useRoutes } from "@/routes";
+import { type CardSpec, CostWidgets } from "./CostWidgets";
 import { EntityProfile } from "./EntityProfile";
 import {
-  CHAIN,
+  BREAKDOWN_PARAM,
   type Crumb,
+  defaultGroupBy,
+  encodeCrumb,
+  isDimension,
   LABELS,
   type Measures,
   nextDimension,
+  parseDrillPath,
   PIVOTS,
 } from "./taxonomy";
 
@@ -27,17 +33,19 @@ const EMPTY_MEASURES: Measures = { cost: 0, sessions: 0, tools: 0, tokens: 0 };
 
 // Per-breakdown secondary cuts shown as "mix" widgets above the table. Keyed by
 // the current group-by axis; complementary to it (never the same dimension).
+// The "who's driving it" + "what's the lever" cards per level (see widget plan).
+// Email → rendered as "Top spenders"; HookSource also gets a Cost/session stat.
 const MIX_DIMS: Partial<Record<Dimension, Dimension[]>> = {
-  [Dimension.DivisionName]: [Dimension.Model, Dimension.HookSource],
-  [Dimension.DepartmentName]: [Dimension.JobTitle, Dimension.Model],
-  [Dimension.Group]: [Dimension.JobTitle, Dimension.HookSource],
-  [Dimension.Email]: [Dimension.HookSource, Dimension.Model],
-  [Dimension.HookSource]: [Dimension.Model, Dimension.Role],
-  [Dimension.JobTitle]: [Dimension.DepartmentName, Dimension.Model],
-  [Dimension.EmployeeType]: [Dimension.DepartmentName, Dimension.Model],
-  [Dimension.CostCenterName]: [Dimension.DepartmentName, Dimension.Model],
-  [Dimension.Role]: [Dimension.DepartmentName, Dimension.Model],
-  [Dimension.Model]: [Dimension.HookSource, Dimension.DepartmentName],
+  [Dimension.DivisionName]: [Dimension.DepartmentName, Dimension.Email],
+  [Dimension.DepartmentName]: [Dimension.Email, Dimension.Model],
+  [Dimension.Group]: [Dimension.Email, Dimension.HookSource],
+  [Dimension.Email]: [Dimension.HookSource],
+  [Dimension.HookSource]: [Dimension.Model],
+  [Dimension.JobTitle]: [Dimension.Email, Dimension.DepartmentName],
+  [Dimension.EmployeeType]: [Dimension.Email, Dimension.DepartmentName],
+  [Dimension.CostCenterName]: [Dimension.Email, Dimension.DepartmentName],
+  [Dimension.Role]: [Dimension.Email, Dimension.DepartmentName],
+  [Dimension.Model]: [Dimension.Email, Dimension.HookSource],
 };
 
 /**
@@ -48,9 +56,39 @@ const MIX_DIMS: Partial<Record<Dimension, Dimension[]>> = {
  * otherwise the entity last drilled into).
  */
 export function CostsExplorer(): JSX.Element {
-  const [path, setPath] = useState<Crumb[]>([]);
-  const [groupBy, setGroupBy] = useState<Dimension>(Dimension.DivisionName);
   const { projectSlug } = useSlugs();
+  const routes = useRoutes();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // Drill state is the URL. The filter `path` is encoded as pathname segments
+  // (so the breadcrumb tracks it and the view is shareable/refresh-safe); the
+  // leaf breakdown axis rides in `?by=`. Both are derived here, never held in
+  // component state — navigation is the only way they change.
+  const costsBase = routes.costs.href();
+  const path: Crumb[] = useMemo(() => {
+    const tail = location.pathname.startsWith(costsBase)
+      ? location.pathname.slice(costsBase.length)
+      : "";
+    return parseDrillPath(tail);
+  }, [location.pathname, costsBase]);
+
+  const byParam = searchParams.get(BREAKDOWN_PARAM);
+  const groupBy = isDimension(byParam) ? byParam : defaultGroupBy(path);
+
+  // Navigate to a node: encode its filter path into the URL and pin the
+  // breakdown axis in `?by=`. `replace` for view-only changes (re-pivoting)
+  // that shouldn't add a back-button step.
+  const goToNode = (nextPath: Crumb[], by: Dimension, replace = false) => {
+    const tail = nextPath.map(encodeCrumb).join("/");
+    // Preserve the rest of the query (the date-range filter lives here too) and
+    // only override the breakdown axis.
+    const params = new URLSearchParams(searchParams);
+    params.set(BREAKDOWN_PARAM, by);
+    const url = `${tail ? `${costsBase}/${tail}` : costsBase}?${params.toString()}`;
+    void navigate(url, { replace });
+  };
 
   const {
     dateRange,
@@ -151,13 +189,6 @@ export function CostsExplorer(): JSX.Element {
         }),
       ),
   });
-  const prevCostByGroup = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const r of prevData?.table ?? []) {
-      m.set(r.groupValue, r.measures.totalCost ?? 0);
-    }
-    return m;
-  }, [prevData]);
 
   const rows = data?.table ?? [];
 
@@ -279,45 +310,86 @@ export function CostsExplorer(): JSX.Element {
       ),
   });
 
-  const mix: MixSpec[] = useMemo(() => {
-    const out: MixSpec[] = [];
+  const cards: CardSpec[] = useMemo(() => {
+    const out: CardSpec[] = [];
     const toRows = (t: QueryRow[]) =>
       t.map((r) => ({ label: r.groupValue, cost: r.measures.totalCost ?? 0 }));
+    const cardTitle = (dim: Dimension) =>
+      dim === Dimension.Email
+        ? "Top spenders"
+        : `Spend by ${(LABELS[dim] ?? "").toLowerCase()}`;
+    // Team view groups by user, so its table already ranks people — surface the
+    // top spenders as a compact card too (reuses the main rows, no extra query).
+    if (groupBy === Dimension.Email) {
+      const userRows = (data?.table ?? [])
+        .filter((r) => r.groupValue !== "Other")
+        .slice(0, 5);
+      out.push({
+        kind: "mix",
+        title: "Top spenders",
+        rows: toRows(userRows),
+        loading: isFetching && !data,
+      });
+    }
     if (mixDimA) {
       out.push({
-        title: `Cost by ${(LABELS[mixDimA] ?? "").toLowerCase()}`,
+        kind: "mix",
+        title: cardTitle(mixDimA),
         rows: toRows(mixDataA?.table ?? []),
         loading: mixLoadingA,
       });
     }
     if (mixDimB) {
       out.push({
-        title: `Cost by ${(LABELS[mixDimB] ?? "").toLowerCase()}`,
+        kind: "mix",
+        title: cardTitle(mixDimB),
         rows: toRows(mixDataB?.table ?? []),
         loading: mixLoadingB,
       });
     }
+    // Viewing a user (grouped by their agents): show how efficient sessions are.
+    if (groupBy === Dimension.HookSource) {
+      const cps = stats.sessions > 0 ? stats.cost / stats.sessions : null;
+      out.push({
+        kind: "stat",
+        title: "Cost per session",
+        value: cps !== null ? `$${cps.toFixed(2)}` : "—",
+        caption: `across ${stats.sessions.toLocaleString()} sessions`,
+        loading: isFetching && !data,
+      });
+    }
     return out;
-  }, [mixDimA, mixDimB, mixDataA, mixDataB, mixLoadingA, mixLoadingB]);
+  }, [
+    mixDimA,
+    mixDimB,
+    mixDataA,
+    mixDataB,
+    mixLoadingA,
+    mixLoadingB,
+    groupBy,
+    stats,
+    data,
+    isFetching,
+  ]);
 
-  // Drill into a row: filter by it and advance to the next axis.
+  // Drill into a row: append it to the filter path and advance to the next axis.
   const drillInto = (row: QueryRow) => {
-    if (nextDimension(groupBy) === null) return;
-    if (row.groupValue === "" || row.groupValue === "Other") return;
     const next = nextDimension(groupBy);
-    setPath((p) => [...p, { dim: groupBy, value: row.groupValue }]);
-    if (next) setGroupBy(next);
+    if (next === null) return;
+    if (row.groupValue === "" || row.groupValue === "Other") return;
+    goToNode([...path, { dim: groupBy, value: row.groupValue }], next);
   };
 
-  // Go up one ancestor: drop the current entity and regroup by the (new) last
-  // entity's child axis — i.e. show the parent's profile.
+  // Go up one ancestor: drop the deepest filter and regroup by the axis that
+  // produced it (the removed crumb's dimension) — i.e. show the parent's profile.
   const goUp = () => {
     if (path.length === 0) return;
-    const newPath = path.slice(0, -1);
-    setPath(newPath);
-    const last = newPath[newPath.length - 1];
-    setGroupBy(last ? (nextDimension(last.dim) ?? last.dim) : CHAIN[0]!.dim);
+    const removed = path[path.length - 1]!;
+    goToNode(path.slice(0, -1), removed.dim);
   };
+
+  // Re-pivot the current node's breakdown axis without drilling (view-only).
+  const changeGroupBy = (dim: Dimension) => goToNode(path, dim, true);
 
   // Offer a breakdown axis only if it can actually partition the current slice
   // into >1 row. `attributes` (the entity's distinct dimension values) tells us:
@@ -353,7 +425,7 @@ export function CostsExplorer(): JSX.Element {
       series={widgetSeries}
       totals={stats}
       prevTotals={prevTotals}
-      mix={mix}
+      cards={cards}
       loading={isFetching && !data}
     />
   );
@@ -367,11 +439,10 @@ export function CostsExplorer(): JSX.Element {
       stats={stats}
       groupBy={groupBy}
       pivotOptions={pivotOptions}
-      onGroupByChange={setGroupBy}
+      onGroupByChange={changeGroupBy}
       rows={rows}
       onDrill={drillInto}
       seriesByGroup={seriesByGroup}
-      prevCostByGroup={prevCostByGroup}
       rangePicker={rangePicker}
       isLoading={isFetching && !data}
       isError={isError}

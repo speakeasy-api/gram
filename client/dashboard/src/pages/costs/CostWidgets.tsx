@@ -1,5 +1,6 @@
 import type { Measures } from "./taxonomy";
-import { movingAverage, resample, smoothPath, Sparkline } from "./Sparkline";
+import { Sparkline } from "./Sparkline";
+import { movingAverage, resample, smoothPath } from "./sparkline-math";
 
 const BRAND = "#6366f1"; // indigo-500 — neutral headline accent
 const NEUTRAL = "#64748b"; // slate-500 — KPI sparklines
@@ -192,7 +193,6 @@ function MixCard({
   const costs = top.map((r) => r.cost);
   const max = Math.max(...costs, 0) || 1;
   const min = costs.length ? Math.min(...costs) : 0;
-  const total = rows.reduce((s, r) => s + r.cost, 0) || 1;
   return (
     <Card title={title}>
       <div className="mt-4 space-y-3.5">
@@ -219,7 +219,7 @@ function MixCard({
                 <div className="flex items-center justify-between gap-2 text-sm">
                   <span className="truncate">{r.label || "(unset)"}</span>
                   <span className="text-muted-foreground tabular-nums">
-                    {((r.cost / total) * 100).toFixed(0)}%
+                    {formatCost(r.cost)}
                   </span>
                 </div>
                 <div className="bg-muted h-2.5 overflow-hidden rounded-full">
@@ -282,20 +282,63 @@ export type WidgetSeries = {
   tokens: number[];
 };
 
-export type MixSpec = { title: string; rows: MixRow[]; loading: boolean };
+// A single big-number stat (e.g. cost per session).
+function StatCard({
+  title,
+  value,
+  caption,
+  loading,
+}: {
+  title: string;
+  value: string;
+  caption?: string;
+  loading: boolean;
+}): JSX.Element {
+  return (
+    <Card title={title}>
+      {loading ? (
+        <Skeleton className="mt-2 h-8 w-24" />
+      ) : (
+        <>
+          <div className="mt-1 text-2xl font-semibold tabular-nums">
+            {value}
+          </div>
+          {caption && (
+            <div className="text-muted-foreground mt-1 text-xs">{caption}</div>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
+
+export type MixCardSpec = {
+  kind: "mix";
+  title: string;
+  rows: MixRow[];
+  loading: boolean;
+};
+export type StatCardSpec = {
+  kind: "stat";
+  title: string;
+  value: string;
+  caption?: string;
+  loading: boolean;
+};
+export type CardSpec = MixCardSpec | StatCardSpec;
 
 export function CostWidgets({
   series,
   totals,
   prevTotals,
-  mix,
+  cards,
   loading,
 }: {
   series: WidgetSeries;
   totals: Measures;
   prevTotals: Measures;
-  // Per-level secondary breakdowns (1–2 cards); varies by the current axis.
-  mix: MixSpec[];
+  // Per-level secondary cards (mix breakdowns + stats); varies by the axis.
+  cards: CardSpec[];
   // True while the main slice is still loading (trend + KPI skeletons).
   loading: boolean;
 }): JSX.Element {
@@ -308,14 +351,24 @@ export function CostWidgets({
           prevTotal={prevTotals.cost}
           loading={loading}
         />
-        {mix.map((m) => (
-          <MixCard
-            key={m.title}
-            title={m.title}
-            rows={m.rows}
-            loading={m.loading}
-          />
-        ))}
+        {cards.map((c) =>
+          c.kind === "mix" ? (
+            <MixCard
+              key={c.title}
+              title={c.title}
+              rows={c.rows}
+              loading={c.loading}
+            />
+          ) : (
+            <StatCard
+              key={c.title}
+              title={c.title}
+              value={c.value}
+              caption={c.caption}
+              loading={c.loading}
+            />
+          ),
+        )}
       </div>
       <div className="grid grid-cols-3 gap-4">
         <KpiTile
