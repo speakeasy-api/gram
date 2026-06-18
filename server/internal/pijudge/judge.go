@@ -45,12 +45,17 @@ const (
 	// on the realtime hook path, so this is also the worst-case added latency
 	// before a fail-open allow on a stuck model.
 	judgeTimeout = 10 * time.Second
-	// defaultModel is the stage-1 judge. Haiku 4.5 was the best balance in the
-	// POC-193 benchmark (0 false positives, AUC 0.982, cheap) — and 0 FP is the
-	// right bias for an engine that can block a legitimate tool call. The final
-	// model + the escalation target for the cascade remain open decisions
-	// (POC-193); this is a sensible, tunable default, not a closed choice.
-	defaultModel = "anthropic/claude-haiku-4.5"
+	// defaultModel is the stage-1 judge. Moved off Haiku 4.5 to Gemini 2.5 Flash
+	// after POC-193 follow-up: on real captured traffic Haiku flip-flopped on
+	// legitimate agent/MCP machinery (OAuth auth events, context notes) — ~80%
+	// false-block on some, non-deterministically — while Gemini 2.5 Flash judged
+	// the same events SAFE deterministically, and scored higher recall on the
+	// benchmark feed (87.8% vs 80%) at comparable FPR. (gemini-3.5-flash was
+	// rejected — it reintroduced the flip-flop; gemini-3.1-flash-lite, which
+	// riskjudge already uses, is an equivalent FP-clean alternative.) Parse-fail
+	// and every other error path fails open (SAFE), so this stays a tunable
+	// default, not a closed choice (POC-193).
+	defaultModel = "google/gemini-2.5-flash"
 	// defaultTemperature keeps verdicts deterministic.
 	defaultTemperature = 0.0
 	// concurrency bounds how many judge calls run in parallel for one batched
