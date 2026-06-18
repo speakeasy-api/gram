@@ -1330,6 +1330,7 @@ type RiskPolicy struct {
 	CustomRuleIds        []string
 	ExemptRuleIds        []string
 	MessageTypes         []string
+	ApplicationConfig    []byte
 	Action               string
 	AudienceType         string
 	AutoName             bool

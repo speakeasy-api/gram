@@ -2963,7 +2963,19 @@ CREATE TABLE IF NOT EXISTS risk_policies (
   -- (an allowlist). Disjoint from custom_rule_ids — a rule is either a detector
   -- or an exemption in a given policy.
   exempt_rule_ids TEXT[] NOT NULL DEFAULT '{}',
+  -- DEPRECATED: superseded by application_config.include — message-type
+  -- selection is now a `message_type in (...)` condition within the include
+  -- predicate. Kept nullable and read as a fallback until application_config is
+  -- backfilled, then dropped in a contract migration (AGE-2785).
   message_types TEXT[],
+  -- Granular policy application as a self-describing JSON object:
+  --   { "include": <match_config>, "exempt": <match_config> }
+  -- A policy applies to a message when `include` matches AND `exempt` does not
+  -- (alongside exempt_rule_ids). `include` generalizes message_types (the cards
+  -- are coarse sugar over a `message_type in (...)` condition); `exempt` is the
+  -- inline exemption predicate. NULL or an absent key means all-in / none-exempt.
+  -- Named application_config (not "scope") to avoid colliding with RBAC scopes.
+  application_config JSONB,
   action TEXT NOT NULL DEFAULT 'flag',
   audience_type TEXT NOT NULL DEFAULT 'everyone',
   auto_name BOOLEAN NOT NULL DEFAULT TRUE,
