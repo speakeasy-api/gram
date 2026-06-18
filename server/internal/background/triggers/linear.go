@@ -47,6 +47,10 @@ type linearWebhookPayload struct {
 	Data      json.RawMessage `json:"data"`
 	URL       string          `json:"url,omitempty"`
 	CreatedAt string          `json:"createdAt,omitempty"`
+	// UpdatedFrom is present on `update` webhooks and carries the previous
+	// values of just the fields that changed, so filters and the assistant can
+	// react to a specific change (status, assignee, label, …).
+	UpdatedFrom json.RawMessage `json:"updatedFrom,omitempty"`
 	// WebhookTimestamp is the unix-millis send time Linear stamps into the
 	// signed body; bounding its age guards against replay (see linearIngest).
 	WebhookTimestamp int64 `json:"webhookTimestamp,omitempty"`
@@ -73,12 +77,16 @@ type linearEntityData struct {
 // downstream consumers. EventType is `<Type>.<action>` (e.g. `Issue.create`)
 // so a single allowlist + CEL expression can dispatch on either dimension.
 type linearTriggerEvent struct {
-	EventType  string          `json:"event_type" cel:"event_type"`
-	Type       string          `json:"type" cel:"type"`
-	Action     string          `json:"action" cel:"action"`
-	URL        string          `json:"url,omitempty" cel:"url"`
-	Data       json.RawMessage `json:"data,omitempty" cel:"data"`
-	ReceivedAt string          `json:"received_at,omitempty" cel:"received_at"`
+	EventType string          `json:"event_type" cel:"event_type"`
+	Type      string          `json:"type" cel:"type"`
+	Action    string          `json:"action" cel:"action"`
+	URL       string          `json:"url,omitempty" cel:"url"`
+	Data      json.RawMessage `json:"data,omitempty" cel:"data"`
+	// UpdatedFrom carries the prior values of the fields that changed on an
+	// `update` event. It is surfaced to the assistant turn (as JSON) so the
+	// assistant can act on the specific transition, not just the new snapshot.
+	UpdatedFrom json.RawMessage `json:"updated_from,omitempty" cel:"updated_from"`
+	ReceivedAt  string          `json:"received_at,omitempty" cel:"received_at"`
 }
 
 // supportedLinearEventTypes is the default-deny allowlist of `<Type>.<action>`
@@ -227,12 +235,13 @@ func linearIngest(body []byte, headers http.Header) (*WebhookIngest, error) {
 		EventID:       eventID,
 		CorrelationID: correlationID,
 		Event: linearTriggerEvent{
-			EventType:  eventType,
-			Type:       payload.Type,
-			Action:     payload.Action,
-			URL:        payload.URL,
-			Data:       payload.Data,
-			ReceivedAt: time.Now().UTC().Format(time.RFC3339Nano),
+			EventType:   eventType,
+			Type:        payload.Type,
+			Action:      payload.Action,
+			URL:         payload.URL,
+			Data:        payload.Data,
+			UpdatedFrom: payload.UpdatedFrom,
+			ReceivedAt:  time.Now().UTC().Format(time.RFC3339Nano),
 		},
 	}, nil
 }

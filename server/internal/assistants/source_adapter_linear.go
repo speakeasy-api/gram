@@ -12,12 +12,13 @@ type linearSourceRef struct {
 }
 
 type linearEventPayload struct {
-	EventType  string          `json:"event_type,omitempty"`
-	Type       string          `json:"type,omitempty"`
-	Action     string          `json:"action,omitempty"`
-	URL        string          `json:"url,omitempty"`
-	Data       json.RawMessage `json:"data,omitempty"`
-	ReceivedAt string          `json:"received_at,omitempty"`
+	EventType   string          `json:"event_type,omitempty"`
+	Type        string          `json:"type,omitempty"`
+	Action      string          `json:"action,omitempty"`
+	URL         string          `json:"url,omitempty"`
+	Data        json.RawMessage `json:"data,omitempty"`
+	UpdatedFrom json.RawMessage `json:"updated_from,omitempty"`
+	ReceivedAt  string          `json:"received_at,omitempty"`
 }
 
 type linearAdapter struct{ deterministicChatIDAdapter }
@@ -72,6 +73,11 @@ func (linearAdapter) DecodeTurn(event assistantThreadEventRecord) (string, error
 	// and the "inspect the event data" instruction below has nothing to act on.
 	if len(payload.Data) > 0 {
 		fmt.Fprintf(&b, "\n\n<event-data>\n%s\n</event-data>", string(payload.Data))
+	}
+	// On an update, surface which fields changed (their prior values) so the
+	// assistant can act on the specific transition, not just the new snapshot.
+	if len(payload.UpdatedFrom) > 0 {
+		fmt.Fprintf(&b, "\n\n<changed-fields-previous-values>\n%s\n</changed-fields-previous-values>", string(payload.UpdatedFrom))
 	}
 	b.WriteString("\n\nInspect the event data and act on it as configured.")
 	return b.String(), nil

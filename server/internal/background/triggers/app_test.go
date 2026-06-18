@@ -9,24 +9,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBoundCorrelationID(t *testing.T) {
+func TestBoundAssistantKey(t *testing.T) {
 	t.Parallel()
 
-	// Within the limit: returned unchanged so routing keys stay readable.
+	// Within the limit: returned unchanged so keys stay readable.
 	short := "github:octocat/Hello-World/pr:42"
-	require.Equal(t, short, boundCorrelationID(short))
+	require.Equal(t, short, boundAssistantKey(short))
 
-	// A long GitHub push (repo + branch) exceeds the assistant tables' 300-char
-	// correlation_id CHECK; it must be bounded, keep a readable prefix, and stay
-	// deterministic and distinct from other long ids.
+	// A long key (e.g. a GitHub push to a repo + branch with long names)
+	// exceeds the assistant tables' 300-char CHECK; it must be bounded, keep a
+	// readable prefix, and stay deterministic and distinct from other long keys.
 	long := "github:octocat/Hello-World/branch:" + strings.Repeat("a", 400)
-	bounded := boundCorrelationID(long)
-	require.LessOrEqual(t, utf8.RuneCountInString(bounded), maxCorrelationIDLen)
+	bounded := boundAssistantKey(long)
+	require.LessOrEqual(t, utf8.RuneCountInString(bounded), maxAssistantKeyLen)
 	require.True(t, strings.HasPrefix(bounded, "github:octocat/Hello-World/branch:"))
-	require.Equal(t, bounded, boundCorrelationID(long))
+	require.Equal(t, bounded, boundAssistantKey(long))
 
 	other := "github:octocat/Hello-World/branch:" + strings.Repeat("b", 400)
-	require.NotEqual(t, bounded, boundCorrelationID(other))
+	require.NotEqual(t, bounded, boundAssistantKey(other))
 }
 
 type fakeDispatcher struct {

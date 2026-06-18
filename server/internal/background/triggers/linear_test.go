@@ -245,6 +245,27 @@ func TestLinearIngestAcceptsFreshTimestamp(t *testing.T) {
 	require.NotNil(t, result.Event)
 }
 
+func TestLinearIngestCarriesUpdatedFrom(t *testing.T) {
+	t.Parallel()
+
+	definition, ok := GetDefinition("linear")
+	require.True(t, ok)
+
+	config, err := definition.DecodeConfig(nil)
+	require.NoError(t, err)
+
+	// Linear `update` webhooks include `updatedFrom` (prior values of the
+	// changed fields); it must survive into the normalized event so the
+	// assistant can act on the specific transition.
+	body := []byte(`{"type":"Issue","action":"update","data":{"id":"i1"},"updatedFrom":{"stateId":"old-state"}}`)
+
+	result, err := definition.HandleWebhook(body, http.Header{}, config)
+	require.NoError(t, err)
+	event, ok := result.Event.Event.(linearTriggerEvent)
+	require.True(t, ok)
+	require.JSONEq(t, `{"stateId":"old-state"}`, string(event.UpdatedFrom))
+}
+
 func TestLinearIngestRejectsMissingType(t *testing.T) {
 	t.Parallel()
 

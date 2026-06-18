@@ -838,27 +838,27 @@ func (a *App) ProcessScheduled(ctx context.Context, input ProcessScheduledInput)
 	return task, nil
 }
 
-// maxCorrelationIDLen mirrors the assistant tables' CHECK
-// (CHAR_LENGTH(correlation_id) <= 300). A correlation id over the limit (e.g. a
-// GitHub push to a repo + branch whose names are long) would otherwise be
-// accepted and dispatched but rejected at assistant enqueue, never reaching the
-// assistant.
-const maxCorrelationIDLen = 300
+// maxAssistantKeyLen mirrors the assistant tables' CHECKs
+// (CHAR_LENGTH(correlation_id) <= 300 and CHAR_LENGTH(event_id) <= 300). A key
+// over the limit (e.g. a GitHub push to a repo + branch whose names are long)
+// would otherwise be accepted and dispatched but rejected at assistant enqueue,
+// never reaching the assistant.
+const maxAssistantKeyLen = 300
 
-// boundCorrelationID caps a correlation id at maxCorrelationIDLen characters,
-// keeping a readable prefix and replacing the overflow with a short content
-// hash so the result stays deterministic (the same input always routes to the
-// same conversation) and collision-free. Truncation is rune-aware so a
-// multibyte character is never split into invalid UTF-8 (which a UTF8 database
-// would itself reject).
-func boundCorrelationID(id string) string {
-	if utf8.RuneCountInString(id) <= maxCorrelationIDLen {
+// boundAssistantKey caps an assistant key (the event id or correlation id) at
+// maxAssistantKeyLen characters, keeping a readable prefix and replacing the
+// overflow with a short content hash so the result stays deterministic (the
+// same input always maps to the same dedup key / conversation) and
+// collision-free. Truncation is rune-aware so a multibyte character is never
+// split into invalid UTF-8 (which a UTF8 database would itself reject).
+func boundAssistantKey(id string) string {
+	if utf8.RuneCountInString(id) <= maxAssistantKeyLen {
 		return id
 	}
 	sum := sha256.Sum256([]byte(id))
 	suffix := ":" + hex.EncodeToString(sum[:8])
 	runes := []rune(id)
-	return string(runes[:maxCorrelationIDLen-utf8.RuneCountInString(suffix)]) + suffix
+	return string(runes[:maxAssistantKeyLen-utf8.RuneCountInString(suffix)]) + suffix
 }
 
 func (a *App) ProcessEvent(ctx context.Context, instance triggerrepo.TriggerInstance, envelope EventEnvelope) (*Task, error) {
@@ -900,8 +900,8 @@ func (a *App) ProcessEvent(ctx context.Context, instance triggerrepo.TriggerInst
 		TargetKind:        instance.TargetKind,
 		TargetRef:         instance.TargetRef,
 		TargetDisplay:     instance.TargetDisplay,
-		EventID:           envelope.EventID,
-		CorrelationID:     boundCorrelationID(envelope.CorrelationID),
+		EventID:           boundAssistantKey(envelope.EventID),
+		CorrelationID:     boundAssistantKey(envelope.CorrelationID),
 		EventJSON:         nil,
 		RawPayload:        envelope.RawPayload,
 	}

@@ -62,6 +62,20 @@ func TestLinearAdapterDecodeTurnInlinesEventData(t *testing.T) {
 	require.Contains(t, got, "Inspect the event data")
 }
 
+func TestLinearAdapterDecodeTurnInlinesUpdatedFrom(t *testing.T) {
+	t.Parallel()
+
+	// On an update, the prior values of the changed fields must reach the turn
+	// so the assistant can act on the specific transition (e.g. a status change).
+	got, err := linearAdapter{}.DecodeTurn(assistantThreadEventRecord{
+		EventID:               "evt-1",
+		NormalizedPayloadJSON: []byte(`{"event_type":"Issue.update","data":{"id":"i1"},"updated_from":{"stateId":"old-state"}}`),
+	})
+	require.NoError(t, err)
+	require.Contains(t, got, "<changed-fields-previous-values>")
+	require.Contains(t, got, `"stateId":"old-state"`)
+}
+
 func TestLinearAdapterDecodeTurnOmitsEmptyData(t *testing.T) {
 	t.Parallel()
 
