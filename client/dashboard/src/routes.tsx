@@ -34,13 +34,13 @@ import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
 import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import {
-  InsightsAgentsPage,
   InsightsEmployeeDetailPage,
   InsightsEmployeesLayout,
   InsightsEmployeesPage,
   InsightsHooksPage,
   InsightsRoot,
 } from "./pages/insights/Insights";
+import Costs from "./pages/costs/Costs";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import CreateRemoteMcp from "./pages/sources/remote-mcp/CreateRemoteMcp";
@@ -438,7 +438,7 @@ const ROUTE_STRUCTURE = {
     title: "Costs",
     url: "costs",
     icon: "credit-card",
-    component: InsightsAgentsPage,
+    component: Costs,
   },
   logs: {
     title: "Tool Logs",
