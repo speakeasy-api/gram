@@ -138,6 +138,8 @@ type CodexRequestBody struct {
 	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
 	// Email of the authenticated Codex user, if available
 	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	// Additional hook-specific data
+	AdditionalData map[string]any `form:"additional_data,omitempty" json:"additional_data,omitempty" xml:"additional_data,omitempty"`
 	// Path to the conversation transcript file
 	TranscriptPath *string `form:"transcript_path,omitempty" json:"transcript_path,omitempty" xml:"transcript_path,omitempty"`
 	// The working directory when the event fired
@@ -2106,6 +2108,14 @@ func NewCodexPayload(body *CodexRequestBody, apikeyToken *string, projectSlugInp
 		PermissionType:       body.PermissionType,
 		Prompt:               body.Prompt,
 		LastAssistantMessage: body.LastAssistantMessage,
+	}
+	if body.AdditionalData != nil {
+		v.AdditionalData = make(map[string]any, len(body.AdditionalData))
+		for key, val := range body.AdditionalData {
+			tk := key
+			tv := val
+			v.AdditionalData[tk] = tv
+		}
 	}
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

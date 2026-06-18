@@ -34807,6 +34807,10 @@ components:
     CodexHookPayload:
       type: object
       properties:
+        additional_data:
+          type: object
+          description: Additional hook-specific data
+          additionalProperties: true
         cwd:
           type: string
           description: The working directory when the event fired

@@ -15,7 +15,6 @@ import (
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/mcpname"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
@@ -66,8 +65,22 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 		policy := s.lookupShadowMCPBlockingPolicy(ctx, orgID, projectID, metadata.UserID)
 		if policy != nil {
 			toolName := conv.PtrValOr(payload.ToolName, "")
-			evidence := codexShadowMCPEvidence(payload)
-			if detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, metadata.UserID, policy.ID, payload.ToolInput, toolName, evidence); denied {
+			evidence, matched := s.codexShadowMCPEvidence(ctx, payload)
+			detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, metadata.UserID, policy.ID, payload.ToolInput, toolName, evidence)
+			if !denied {
+				// Toolset validation proves a valid x-gram-toolset-id was
+				// echoed, but a shadow server's schema can coach the client
+				// into copying one. The inventory snapshot pins where the
+				// call actually routes — deny when it points at a non-Gram
+				// target. Unmatched prefixes and missing snapshots stay
+				// allowed: older plugin installs ship no inventory.
+				if d := s.codexInventoryProvenanceDetail(ctx, matched, orgID); d != "" {
+					if _, allowed := s.canBypassPolicy(ctx, orgID, metadata.UserID, policy.ID, evidence, toolName); !allowed {
+						detail, denied = d, true
+					}
+				}
+			}
+			if denied {
 				logger.InfoContext(ctx, "denying codex tool call: failed gram toolset validation",
 					attr.SlogEvent("codex_hook_denied"),
 					attr.SlogHookBlockReason(detail),
@@ -122,13 +135,18 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 }
 
 func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload, metadata *SessionMetadata, blockReason string) {
-	if payload.HookEventName == "SessionStart" && metadata.SessionID != "" && metadata.UserEmail != "" {
-		if err := s.cache.Set(ctx, sessionCacheKey(metadata.SessionID), *metadata, 24*time.Hour); err != nil {
-			s.logger.WarnContext(ctx, "failed to cache Codex session metadata",
-				attr.SlogError(err),
-				attr.SlogGenAIConversationID(metadata.SessionID),
-			)
+	if payload.HookEventName == "SessionStart" {
+		s.captureCodexMCPListSnapshot(ctx, payload)
+		if metadata.SessionID != "" && metadata.UserEmail != "" {
+			if err := s.cache.Set(ctx, sessionCacheKey(metadata.SessionID), *metadata, 24*time.Hour); err != nil {
+				s.logger.WarnContext(ctx, "failed to cache Codex session metadata",
+					attr.SlogError(err),
+					attr.SlogGenAIConversationID(metadata.SessionID),
+				)
+			}
 		}
+	} else {
+		s.refreshMCPListTTL(ctx, metadata.SessionID)
 	}
 
 	s.writeCodexHookToClickHouse(ctx, payload, metadata, blockReason)
@@ -150,6 +168,31 @@ func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload
 		if err := s.writeCodexAssistantResponseToPG(ctx, payload, metadata); err != nil {
 			s.logger.ErrorContext(ctx, "failed to persist Codex assistant response", attr.SlogError(err))
 		}
+	}
+}
+
+// captureCodexMCPListSnapshot parses the MCP inventory shipped by the Codex
+// SessionStart hook script (additional_data.mcp_inventory_codex, the parsed
+// output of `codex mcp list --json`) and caches it under
+// sessionMCPListCacheKey, sharing the snapshot shape and cache key with the
+// Claude flows so downstream matching and telemetry enrichment work
+// unchanged.
+func (s *Service) captureCodexMCPListSnapshot(ctx context.Context, payload *gen.CodexPayload) {
+	if payload.SessionID == nil || *payload.SessionID == "" || payload.AdditionalData == nil {
+		return
+	}
+	raw := payload.AdditionalData["mcp_inventory_codex"]
+	if raw == nil {
+		return
+	}
+
+	entries := ParseCodexMCPList(raw)
+	if err := s.cache.Set(ctx, sessionMCPListCacheKey(*payload.SessionID), entries, sessionMCPListTTL); err != nil {
+		s.logger.WarnContext(ctx, "failed to cache Codex MCP list snapshot",
+			attr.SlogEvent("codex_hook_mcp_list_cache_set_failed"),
+			attr.SlogError(err),
+			attr.SlogGenAIConversationID(*payload.SessionID),
+		)
 	}
 }
 
@@ -267,9 +310,30 @@ func (s *Service) buildCodexTelemetryAttributes(ctx context.Context, payload *ge
 	}
 
 	// Parse MCP tool names using the mcp__<server>__<tool> convention.
-	if server, fn, ok := mcpname.AttributeTool(toolName); ok {
-		attrs[attr.ToolCallSourceKey] = server
-		attrs[attr.ToolNameKey] = fn
+	if strings.HasPrefix(toolName, "mcp__") {
+		parts := strings.SplitN(toolName, "__", 3)
+		if len(parts) == 3 {
+			attrs[attr.ToolCallSourceKey] = parts[1]
+			attrs[attr.ToolNameKey] = parts[2]
+			if metadata.SessionID != "" {
+				if entries, err := s.getCachedMCPList(ctx, metadata.SessionID); err == nil {
+					matched := matchCodexCachedMCPEntry(entries, toolName)
+					if matched != nil && matched.ToolPrefix != "" {
+						// Sanitized prefixes can contain "__", in which case
+						// the naive split misattributes part of the server
+						// name to the tool — recompute from the full prefix.
+						if rest, ok := strings.CutPrefix(toolName, "mcp__"+matched.ToolPrefix+"__"); ok {
+							attrs[attr.ToolCallSourceKey] = matched.ToolPrefix
+							attrs[attr.ToolNameKey] = rest
+						}
+					}
+					if v := resolvedMCPMatch(matched, parts[1]); v != "" {
+						attrs[attr.MCPMatchKey] = v
+					}
+					applyMCPInventoryAttrs(attrs, matched)
+				}
+			}
+		}
 	}
 
 	return attrs
