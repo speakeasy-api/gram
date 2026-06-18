@@ -31,7 +31,6 @@ describe("role grant round-trip (grantsFromRole → sdkGrantsFromForm)", () => {
     const r = role([
       {
         scope: "mcp:connect",
-        effect: "allow",
         selectors: [{ resourceKind: "mcp", resourceId: "*" }],
       },
     ]);
@@ -41,34 +40,85 @@ describe("role grant round-trip (grantsFromRole → sdkGrantsFromForm)", () => {
     expect(sdkGrants).toEqual([{ scope: "mcp:connect", selectors: undefined }]);
   });
 
-  it("preserves an explicit wildcard deny grant", () => {
-    // Backend stores the kind-scoped wildcard {kind:"mcp", id:"*"} for both
-    // allow and deny effects. Allow can be collapsed to unrestricted because
-    // sdkGrantsFromForm re-emits unrestricted via selectors:undefined.
-    // Deny has no such fallback — if we collapse it to selectors:null,
-    // sdkGrantsFromForm drops the rule entirely and the deny is lost on save.
+  it("round-trips mcp:block as an exception for mcp:connect", () => {
     const r = role([
       {
         scope: "mcp:connect",
-        effect: "allow",
         selectors: [{ resourceKind: "mcp", resourceId: "*" }],
       },
       {
-        scope: "mcp:connect",
-        effect: "deny",
-        selectors: [{ resourceKind: "mcp", resourceId: "*" }],
+        scope: "mcp:block",
+        selectors: [{ resourceKind: "mcp", resourceId: "srv_1" }],
       },
     ]);
 
     const rules = grantsFromRole(r);
     const sdkGrants = sdkGrantsFromForm(rules);
 
-    expect(sdkGrants).toContainEqual(
-      expect.objectContaining({
-        scope: "mcp:connect",
-        effect: "deny",
-      }),
+    expect(rules["mcp:connect"]?.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ effect: "allow", selectors: null }),
+        expect.objectContaining({
+          effect: "deny",
+          selectors: [{ resourceKind: "mcp", resourceId: "srv_1" }],
+        }),
+      ]),
     );
+    expect(sdkGrants).toEqual([
+      { scope: "mcp:connect", selectors: undefined },
+      {
+        scope: "mcp:block",
+        selectors: [{ resourceKind: "mcp", resourceId: "srv_1" }],
+      },
+    ]);
+  });
+
+  it("serializes project and MCP exceptions as exclusion scopes", () => {
+    const grants: Record<string, RoleGrant> = {
+      "project:write": {
+        scope: "project:write",
+        rules: [
+          { id: "project-allow", effect: "allow", selectors: null },
+          {
+            id: "project-exception",
+            effect: "deny",
+            selectors: [{ resourceKind: "project", resourceId: "project_123" }],
+          },
+        ],
+      },
+      "mcp:write": {
+        scope: "mcp:write",
+        rules: [
+          { id: "mcp-allow", effect: "allow", selectors: null },
+          {
+            id: "mcp-exception",
+            effect: "deny",
+            selectors: [
+              {
+                resourceKind: "mcp",
+                resourceId: "*",
+                projectId: "project_123",
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    expect(sdkGrantsFromForm(grants)).toEqual([
+      { scope: "project:write", selectors: undefined },
+      {
+        scope: "project:write_exclusion",
+        selectors: [{ resourceKind: "project", resourceId: "project_123" }],
+      },
+      { scope: "mcp:write", selectors: undefined },
+      {
+        scope: "mcp:write_exclusion",
+        selectors: [
+          { resourceKind: "mcp", resourceId: "*", projectId: "project_123" },
+        ],
+      },
+    ]);
   });
 });
 
@@ -80,7 +130,6 @@ describe("diffGrants", () => {
     const before = [
       {
         scope: "risk_policy:evaluate" as const,
-        effect: "allow" as const,
         selectors: [
           {
             resourceKind: "risk_policy" as const,
@@ -93,7 +142,6 @@ describe("diffGrants", () => {
     const after = [
       {
         scope: "risk_policy:evaluate" as const,
-        effect: "allow" as const,
         selectors: [
           {
             resourceKind: "risk_policy" as const,
@@ -112,7 +160,7 @@ describe("diffGrants", () => {
 });
 
 describe("applyRemoveRule", () => {
-  it("unchecks the scope when an unrestricted allow is removed, dropping orphaned denies", () => {
+  it("unchecks the scope when an unrestricted allow is removed, dropping orphaned exceptions", () => {
     const grant: RoleGrant = {
       scope: "mcp:connect",
       rules: [
@@ -147,7 +195,7 @@ describe("applyRemoveRule", () => {
     expect(next!.rules[0]!.selectors).toBeNull();
   });
 
-  it("filters a deny without touching surviving allows", () => {
+  it("filters an exception without touching surviving allows", () => {
     const grant: RoleGrant = {
       scope: "mcp:connect",
       rules: [

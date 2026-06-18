@@ -170,7 +170,7 @@ export function computeRuleTooltip(
   resourceType: ResourceType,
   projects: ProjectRef[],
 ): string {
-  const verb = effect === "allow" ? "Permits" : "Denies";
+  const verb = effect === "allow" ? "Permits" : "Excludes";
 
   if (selectors === null) {
     return resourceType === "project"

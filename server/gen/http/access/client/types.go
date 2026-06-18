@@ -15087,8 +15087,8 @@ func ValidateRoleGrantResponseBody(body *RoleGrantResponseBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
 	if body.Scope != nil {
-		if !(*body.Scope == "org:read" || *body.Scope == "org:admin" || *body.Scope == "project:read" || *body.Scope == "project:write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:connect" || *body.Scope == "environment:read" || *body.Scope == "environment:write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass"}))
+		if !(*body.Scope == "org:read" || *body.Scope == "org:read_exclusion" || *body.Scope == "org:admin" || *body.Scope == "org:admin_exclusion" || *body.Scope == "project:read" || *body.Scope == "project:read_exclusion" || *body.Scope == "project:write" || *body.Scope == "project:write_exclusion" || *body.Scope == "mcp:read" || *body.Scope == "mcp:read_exclusion" || *body.Scope == "mcp:write" || *body.Scope == "mcp:write_exclusion" || *body.Scope == "mcp:connect" || *body.Scope == "mcp:block" || *body.Scope == "environment:read" || *body.Scope == "environment:read_exclusion" || *body.Scope == "environment:write" || *body.Scope == "environment:write_exclusion" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:read_exclusion", "org:admin", "org:admin_exclusion", "project:read", "project:read_exclusion", "project:write", "project:write_exclusion", "mcp:read", "mcp:read_exclusion", "mcp:write", "mcp:write_exclusion", "mcp:connect", "mcp:block", "environment:read", "environment:read_exclusion", "environment:write", "environment:write_exclusion", "risk_policy:evaluate", "risk_policy:bypass"}))
 		}
 	}
 	for _, e := range body.Selectors {
@@ -15129,8 +15129,8 @@ func ValidateSelectorResponseBody(body *SelectorResponseBody) (err error) {
 // ValidateRoleGrantRequestBody runs the validations defined on
 // RoleGrantRequestBody
 func ValidateRoleGrantRequestBody(body *RoleGrantRequestBody) (err error) {
-	if !(body.Scope == "org:read" || body.Scope == "org:admin" || body.Scope == "project:read" || body.Scope == "project:write" || body.Scope == "mcp:read" || body.Scope == "mcp:write" || body.Scope == "mcp:connect" || body.Scope == "environment:read" || body.Scope == "environment:write" || body.Scope == "risk_policy:evaluate" || body.Scope == "risk_policy:bypass") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass"}))
+	if !(body.Scope == "org:read" || body.Scope == "org:read_exclusion" || body.Scope == "org:admin" || body.Scope == "org:admin_exclusion" || body.Scope == "project:read" || body.Scope == "project:read_exclusion" || body.Scope == "project:write" || body.Scope == "project:write_exclusion" || body.Scope == "mcp:read" || body.Scope == "mcp:read_exclusion" || body.Scope == "mcp:write" || body.Scope == "mcp:write_exclusion" || body.Scope == "mcp:connect" || body.Scope == "mcp:block" || body.Scope == "environment:read" || body.Scope == "environment:read_exclusion" || body.Scope == "environment:write" || body.Scope == "environment:write_exclusion" || body.Scope == "risk_policy:evaluate" || body.Scope == "risk_policy:bypass") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"org:read", "org:read_exclusion", "org:admin", "org:admin_exclusion", "project:read", "project:read_exclusion", "project:write", "project:write_exclusion", "mcp:read", "mcp:read_exclusion", "mcp:write", "mcp:write_exclusion", "mcp:connect", "mcp:block", "environment:read", "environment:read_exclusion", "environment:write", "environment:write_exclusion", "risk_policy:evaluate", "risk_policy:bypass"}))
 	}
 	for _, e := range body.Selectors {
 		if e != nil {
@@ -15218,8 +15218,8 @@ func ValidateListRoleGrantResponseBody(body *ListRoleGrantResponseBody) (err err
 		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
 	}
 	if body.Scope != nil {
-		if !(*body.Scope == "org:read" || *body.Scope == "org:admin" || *body.Scope == "project:read" || *body.Scope == "project:write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:connect" || *body.Scope == "environment:read" || *body.Scope == "environment:write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass"}))
+		if !(*body.Scope == "org:read" || *body.Scope == "org:read_exclusion" || *body.Scope == "org:admin" || *body.Scope == "org:admin_exclusion" || *body.Scope == "project:read" || *body.Scope == "project:read_exclusion" || *body.Scope == "project:write" || *body.Scope == "project:write_exclusion" || *body.Scope == "mcp:read" || *body.Scope == "mcp:read_exclusion" || *body.Scope == "mcp:write" || *body.Scope == "mcp:write_exclusion" || *body.Scope == "mcp:connect" || *body.Scope == "mcp:block" || *body.Scope == "environment:read" || *body.Scope == "environment:read_exclusion" || *body.Scope == "environment:write" || *body.Scope == "environment:write_exclusion" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:read_exclusion", "org:admin", "org:admin_exclusion", "project:read", "project:read_exclusion", "project:write", "project:write_exclusion", "mcp:read", "mcp:read_exclusion", "mcp:write", "mcp:write_exclusion", "mcp:connect", "mcp:block", "environment:read", "environment:read_exclusion", "environment:write", "environment:write_exclusion", "risk_policy:evaluate", "risk_policy:bypass"}))
 		}
 	}
 	for _, e := range body.SubScopes {

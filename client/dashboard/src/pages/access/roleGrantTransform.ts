@@ -1,6 +1,7 @@
 import type { Role } from "@gram/client/models/components/role.js";
 import type { RoleGrant as SdkRoleGrant } from "@gram/client/models/components/rolegrant.js";
 
+import { Scope } from "./types";
 import type {
   AnnotationHint,
   PolicyEffect,
@@ -9,6 +10,23 @@ import type {
   Selector,
 } from "./types";
 import { DISPOSITION_TO_ANNOTATION } from "./types";
+
+const EXCLUSION_SCOPE_BY_SCOPE = new Map<Scope, Scope>([
+  [Scope.OrgRead, Scope.OrgReadExclusion],
+  [Scope.OrgAdmin, Scope.OrgAdminExclusion],
+  [Scope.ProjectRead, Scope.ProjectReadExclusion],
+  [Scope.ProjectWrite, Scope.ProjectWriteExclusion],
+  [Scope.McpRead, Scope.McpReadExclusion],
+  [Scope.McpWrite, Scope.McpWriteExclusion],
+  [Scope.McpConnect, Scope.McpBlock],
+  [Scope.EnvironmentRead, Scope.EnvironmentReadExclusion],
+  [Scope.EnvironmentWrite, Scope.EnvironmentWriteExclusion],
+  [Scope.RiskPolicyEvaluate, Scope.RiskPolicyBypass],
+]);
+
+const BASE_SCOPE_BY_EXCLUSION_SCOPE = new Map<Scope, Scope>(
+  [...EXCLUSION_SCOPE_BY_SCOPE].map(([scope, exclusion]) => [exclusion, scope]),
+);
 
 /** Split a flat selector array into groups by hierarchy level. */
 function groupSelectorsByLevel(selectors: Selector[]): Selector[][] {
@@ -55,25 +73,22 @@ export function grantsFromRole(role: Role): Record<string, RoleGrant> {
   const result: Record<string, RoleGrant> = {};
 
   for (const g of role.grants) {
-    if (!result[g.scope]) {
-      result[g.scope] = { scope: g.scope, rules: [] };
+    const scope = g.scope as Scope;
+    const baseScope = BASE_SCOPE_BY_EXCLUSION_SCOPE.get(scope) ?? scope;
+    const effect: PolicyEffect = BASE_SCOPE_BY_EXCLUSION_SCOPE.has(scope)
+      ? "deny"
+      : "allow";
+
+    if (!result[baseScope]) {
+      result[baseScope] = { scope: baseScope, rules: [] };
     }
 
-    const effect: PolicyEffect = (g.effect as PolicyEffect) ?? "allow";
-
-    // Only collapse the synthetic wildcard for allow grants. sdkGrantsFromForm
-    // re-emits unrestricted allow via selectors:undefined, but has no equivalent
-    // for deny — collapsing a deny wildcard to selectors:null would drop the
-    // deny on the next save. The backend intentionally keeps the explicit
-    // kind-scoped wildcard for deny grants (see scopeWildcardStaysExplicit in
-    // server/internal/authz/scopes_test.go).
     if (
       !g.selectors ||
       g.selectors.length === 0 ||
-      (effect === "allow" &&
-        isUnrestrictedSelectorList(g.selectors as Selector[]))
+      isUnrestrictedSelectorList(g.selectors as Selector[])
     ) {
-      result[g.scope]!.rules.push({
+      result[baseScope]!.rules.push({
         id: crypto.randomUUID(),
         effect,
         selectors: null,
@@ -95,7 +110,7 @@ export function grantsFromRole(role: Role): Record<string, RoleGrant> {
             .map((s) => DISPOSITION_TO_ANNOTATION[s.disposition!])
             .filter((a): a is AnnotationHint => !!a);
         }
-        result[g.scope]!.rules.push(rule)!;
+        result[baseScope]!.rules.push(rule)!;
       }
     }
   }
@@ -110,8 +125,9 @@ export function sdkGrantsFromForm(
 
   for (const grant of Object.values(grants)) {
     const allowSelectors: Selector[] = [];
-    const denySelectors: Selector[] = [];
+    const exceptionSelectors: Selector[] = [];
     let hasUnrestrictedAllow = false;
+    let hasUnrestrictedException = false;
 
     for (const rule of grant.rules) {
       if (rule.effect === "allow") {
@@ -119,23 +135,28 @@ export function sdkGrantsFromForm(
         else if (rule.selectors.length > 0) {
           allowSelectors.push(...rule.selectors);
         }
-      } else if (rule.selectors && rule.selectors.length > 0) {
-        denySelectors.push(...rule.selectors);
+      } else if (rule.selectors === null) {
+        hasUnrestrictedException = true;
+      } else if (rule.selectors.length > 0) {
+        exceptionSelectors.push(...rule.selectors);
       }
     }
 
-    if (!hasUnrestrictedAllow && allowSelectors.length === 0) continue;
-
-    sdkGrants.push({
-      scope: grant.scope,
-      selectors: hasUnrestrictedAllow ? undefined : allowSelectors,
-    });
-
-    if (denySelectors.length > 0) {
+    if (hasUnrestrictedAllow || allowSelectors.length > 0) {
       sdkGrants.push({
         scope: grant.scope,
-        effect: "deny",
-        selectors: denySelectors,
+        selectors: hasUnrestrictedAllow ? undefined : allowSelectors,
+      });
+    }
+
+    const exclusionScope = EXCLUSION_SCOPE_BY_SCOPE.get(grant.scope);
+    if (
+      exclusionScope &&
+      (hasUnrestrictedException || exceptionSelectors.length > 0)
+    ) {
+      sdkGrants.push({
+        scope: exclusionScope,
+        selectors: hasUnrestrictedException ? undefined : exceptionSelectors,
       });
     }
   }
@@ -145,7 +166,6 @@ export function sdkGrantsFromForm(
 
 type GrantIdentity = {
   scope: SdkRoleGrant["scope"];
-  effect: "allow" | "deny";
   selector?: Selector;
 };
 
@@ -162,18 +182,16 @@ function selectorKey(selector: Selector | undefined): string {
 }
 
 function grantIdentityKey(identity: GrantIdentity): string {
-  return `${identity.scope}\x00${identity.effect}\x00${selectorKey(identity.selector)}`;
+  return `${identity.scope}\x00${selectorKey(identity.selector)}`;
 }
 
 function grantIdentities(grants: SdkRoleGrant[]): GrantIdentity[] {
   return grants.flatMap((grant) => {
-    const effect = (grant.effect ?? "allow") as "allow" | "deny";
     if (!grant.selectors || grant.selectors.length === 0) {
-      return [{ scope: grant.scope, effect }];
+      return [{ scope: grant.scope }];
     }
     return grant.selectors.map((selector) => ({
       scope: grant.scope,
-      effect,
       selector: selector as Selector,
     }));
   });
@@ -187,13 +205,12 @@ function grantsFromIdentities(identities: GrantIdentity[]): SdkRoleGrant[] {
     if (!identity.selector) {
       unrestricted.push({
         scope: identity.scope,
-        effect: identity.effect === "deny" ? "deny" : undefined,
         selectors: undefined,
       });
       continue;
     }
 
-    const key = `${identity.scope}\x00${identity.effect}`;
+    const key = identity.scope;
     const existing = grouped.get(key);
     if (existing) {
       existing.selectors = [...(existing.selectors ?? []), identity.selector];
@@ -202,7 +219,6 @@ function grantsFromIdentities(identities: GrantIdentity[]): SdkRoleGrant[] {
 
     grouped.set(key, {
       scope: identity.scope,
-      effect: identity.effect === "deny" ? "deny" : undefined,
       selectors: [identity.selector],
     });
   }
@@ -246,10 +262,10 @@ export function diffGrants(
  * entirely from the form state.
  *
  *   - removing a narrower allow that leaves no allows → fall back to
- *     unrestricted ("All servers"); orphaned denies are dropped.
+ *     unrestricted ("All servers"); orphaned exceptions are dropped.
  *   - removing an unrestricted allow → orphan-clear: scope unchecks, any
- *     denies go with it.
- *   - removing a deny → just filter it out; allows preserved.
+ *     exceptions go with it.
+ *   - removing an exception → just filter it out; allows preserved.
  *   - removing one of several allows → just filter it out.
  */
 export function applyRemoveRule(
@@ -265,7 +281,7 @@ export function applyRemoveRule(
   if (removed.effect === "allow" && removed.selectors !== null && !hasAllow) {
     rules = [{ id: crypto.randomUUID(), effect: "allow", selectors: null }];
   } else if (!hasAllow) {
-    // No allows left — any remaining denies are orphaned, clear them too.
+    // No allows left — any remaining exceptions are orphaned, clear them too.
     rules = [];
   }
 

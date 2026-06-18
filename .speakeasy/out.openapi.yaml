@@ -39639,14 +39639,23 @@ components:
           description: The scope slug this grant applies to.
           enum:
             - org:read
+            - org:read_exclusion
             - org:admin
+            - org:admin_exclusion
             - project:read
+            - project:read_exclusion
             - project:write
+            - project:write_exclusion
             - mcp:read
+            - mcp:read_exclusion
             - mcp:write
+            - mcp:write_exclusion
             - mcp:connect
+            - mcp:block
             - environment:read
+            - environment:read_exclusion
             - environment:write
+            - environment:write_exclusion
             - risk_policy:evaluate
             - risk_policy:bypass
         selectors:
@@ -43775,14 +43784,23 @@ components:
           description: The scope slug this grant applies to.
           enum:
             - org:read
+            - org:read_exclusion
             - org:admin
+            - org:admin_exclusion
             - project:read
+            - project:read_exclusion
             - project:write
+            - project:write_exclusion
             - mcp:read
+            - mcp:read_exclusion
             - mcp:write
+            - mcp:write_exclusion
             - mcp:connect
+            - mcp:block
             - environment:read
+            - environment:read_exclusion
             - environment:write
+            - environment:write_exclusion
             - risk_policy:evaluate
             - risk_policy:bypass
         selectors:

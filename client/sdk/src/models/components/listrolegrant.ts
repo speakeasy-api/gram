@@ -15,14 +15,23 @@ import { Selector, Selector$inboundSchema } from "./selector.js";
  */
 export const ListRoleGrantScope = {
   OrgRead: "org:read",
+  OrgReadExclusion: "org:read_exclusion",
   OrgAdmin: "org:admin",
+  OrgAdminExclusion: "org:admin_exclusion",
   ProjectRead: "project:read",
+  ProjectReadExclusion: "project:read_exclusion",
   ProjectWrite: "project:write",
+  ProjectWriteExclusion: "project:write_exclusion",
   McpRead: "mcp:read",
+  McpReadExclusion: "mcp:read_exclusion",
   McpWrite: "mcp:write",
+  McpWriteExclusion: "mcp:write_exclusion",
   McpConnect: "mcp:connect",
+  McpBlock: "mcp:block",
   EnvironmentRead: "environment:read",
+  EnvironmentReadExclusion: "environment:read_exclusion",
   EnvironmentWrite: "environment:write",
+  EnvironmentWriteExclusion: "environment:write_exclusion",
   RiskPolicyEvaluate: "risk_policy:evaluate",
   RiskPolicyBypass: "risk_policy:bypass",
 } as const;

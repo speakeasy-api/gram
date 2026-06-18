@@ -691,7 +691,7 @@ var RoleGrantModel = Type("RoleGrant", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
-		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass")
+		Enum("org:read", "org:read_exclusion", "org:admin", "org:admin_exclusion", "project:read", "project:read_exclusion", "project:write", "project:write_exclusion", "mcp:read", "mcp:read_exclusion", "mcp:write", "mcp:write_exclusion", "mcp:connect", "mcp:block", "environment:read", "environment:read_exclusion", "environment:write", "environment:write_exclusion", "risk_policy:evaluate", "risk_policy:bypass")
 	})
 
 	Attribute("selectors", ArrayOf(SelectorModel), func() {
@@ -705,7 +705,7 @@ var ListRoleGrantModel = Type("ListRoleGrant", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
-		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass")
+		Enum("org:read", "org:read_exclusion", "org:admin", "org:admin_exclusion", "project:read", "project:read_exclusion", "project:write", "project:write_exclusion", "mcp:read", "mcp:read_exclusion", "mcp:write", "mcp:write_exclusion", "mcp:connect", "mcp:block", "environment:read", "environment:read_exclusion", "environment:write", "environment:write_exclusion", "risk_policy:evaluate", "risk_policy:bypass")
 	})
 
 	Attribute("sub_scopes", ArrayOf(String), func() {
