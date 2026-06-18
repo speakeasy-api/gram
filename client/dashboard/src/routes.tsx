@@ -779,7 +779,7 @@ const ORG_ROUTE_STRUCTURE = {
     component: OrgAuditLogs,
   },
   userSessions: {
-    title: "User Sessions",
+    title: "MCP Connections",
     url: "user-sessions",
     icon: "users",
     component: UserSessions,
