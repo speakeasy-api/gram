@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: d24d2ef73114835f3d9fb369ce934043
+  docChecksum: 1fa626837fb6e2a9f45de7cf89835ff6
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -155,7 +155,7 @@ trackedFiles:
   docs/models/components/cloneenvironmentrequestbody.md:
     last_write_checksum: sha1:b8f70e603600ad77b21e37d50cdcde0ee184a2c9
   docs/models/components/codexhookpayload.md:
-    last_write_checksum: sha1:ffc59883f5d326f7a0b4b20a99587d713d2cf626
+    last_write_checksum: sha1:a14857e5b7828d96031e7fe0c55cee74c4f7e6a4
   docs/models/components/codexhookpayloadhookeventname.md:
     last_write_checksum: sha1:ed0c0ecf80563e919dac680664a82bfa925761ed
   docs/models/components/codexhookresult.md:
@@ -4251,7 +4251,7 @@ trackedFiles:
   src/models/components/cloneenvironmentrequestbody.ts:
     last_write_checksum: sha1:b1706b25cf4df77a03adf7a51df0566edb5b9147
   src/models/components/codexhookpayload.ts:
-    last_write_checksum: sha1:d364b3d21470df3f5b405867214cc030f59d5736
+    last_write_checksum: sha1:9018fc5a655e6ad8967de89486683c1ab31e478e
   src/models/components/codexhookresult.ts:
     last_write_checksum: sha1:c2fc11be25bf3ec299077675ebe25642409b2aa4
   src/models/components/createassistantform.ts:
@@ -10223,48 +10223,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  getTokensUnderManagement:
-    speakeasy-default-get-tokens-under-management:
+  getManagedAssistant:
+    speakeasy-default-get-managed-assistant:
       responses:
         "200":
-          application/json: {"billing_cycle_anchor_day": 45608, "history": [{"days": [], "period_end": "2025-10-03T08:28:41.132Z", "period_start": "2025-11-21T03:43:48.395Z", "tokens": 106565}], "period_end": "2025-05-19T12:02:56.002Z", "period_start": "2024-03-30T22:21:20.885Z", "tokens": 436741}
+          application/json: {"created_at": "2024-02-05T22:44:27.577Z", "id": "c661aa46-07c0-4c6a-97bb-bc47883500cd", "instructions": "<value>", "max_concurrency": 130261, "model": "2", "name": "<value>", "project_id": "790956c2-fca6-450d-aa54-beb049272cc1", "status": "paused", "toolsets": [{"toolset_slug": "<value>"}], "updated_at": "2026-09-04T15:38:02.228Z", "warm_ttl_seconds": 120403}
         "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-  setBillingMetadata:
-    speakeasy-default-set-billing-metadata:
-      requestBody:
-        application/json: {"billing_cycle_anchor_day": 465189}
-      responses:
-        "200":
-          application/json: {"billing_cycle_anchor_day": 236992, "history": [{"days": [], "period_end": "2025-02-27T22:21:15.893Z", "period_start": "2024-10-19T14:44:13.021Z", "tokens": 186287}], "period_end": "2024-05-06T16:51:38.194Z", "period_start": "2024-06-29T13:58:57.267Z", "tokens": 961103}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  getToolUsageFilterOptions:
-    speakeasy-default-get-tool-usage-filter-options:
-      requestBody:
-        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
-      responses:
-        "200":
-          application/json: {"hosted_servers": [{"event_count": 411092, "toolset_slug": "<value>"}], "shadow_servers": [], "users": []}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  getToolUsageSummary:
-    speakeasy-default-get-tool-usage-summary:
-      requestBody:
-        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
-      responses:
-        "200":
-          application/json: {"target_time_series": [], "target_tool_breakdown": [{"event_count": 655679, "failure_count": 908450, "failure_rate": 3743.13, "success_count": 540045, "target_id": "<id>", "target_kind": "skill", "target_label": "<value>", "target_type": "hosted_mcp_server", "tool_name": "<value>"}], "targets": [], "totals": {"event_count": 497777, "failure_count": 36101, "failure_rate": 2345.24, "success_count": 527861, "unique_targets": 37301, "unique_tools": 472763, "unique_users": 968692}, "user_time_series": [], "users": [], "users_by_target": []}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   deleteOrganizationRemoteSessionClient:
     speakeasy-default-delete-organization-remote-session-client:
       parameters:
@@ -10398,6 +10365,28 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getToolUsageFilterOptions:
+    speakeasy-default-get-tool-usage-filter-options:
+      requestBody:
+        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+      responses:
+        "200":
+          application/json: {"hosted_servers": [{"event_count": 411092, "toolset_slug": "<value>"}], "shadow_servers": [], "users": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getToolUsageSummary:
+    speakeasy-default-get-tool-usage-summary:
+      requestBody:
+        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-19T11:00:00Z"}
+      responses:
+        "200":
+          application/json: {"target_time_series": [], "target_tool_breakdown": [{"event_count": 655679, "failure_count": 908450, "failure_rate": 3743.13, "success_count": 540045, "target_id": "<id>", "target_kind": "skill", "target_label": "<value>", "target_type": "hosted_mcp_server", "tool_name": "<value>"}], "targets": [], "totals": {"event_count": 497777, "failure_count": 36101, "failure_rate": 2345.24, "success_count": 527861, "unique_targets": 37301, "unique_tools": 472763, "unique_users": 968692}, "user_time_series": [], "users": [], "users_by_target": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listToolUsageTraces:
     speakeasy-default-list-tool-usage-traces:
       requestBody:
@@ -10409,15 +10398,26 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  getManagedAssistant:
-    speakeasy-default-get-managed-assistant:
+  getTokensUnderManagement:
+    speakeasy-default-get-tokens-under-management:
       responses:
         "200":
-          application/json: {"created_at": "2024-02-05T22:44:27.577Z", "id": "c661aa46-07c0-4c6a-97bb-bc47883500cd", "instructions": "<value>", "max_concurrency": 130261, "model": "2", "name": "<value>", "project_id": "790956c2-fca6-450d-aa54-beb049272cc1", "status": "paused", "toolsets": [{"toolset_slug": "<value>"}], "updated_at": "2026-09-04T15:38:02.228Z", "warm_ttl_seconds": 120403}
+          application/json: {"billing_cycle_anchor_day": 45608, "history": [{"days": [], "period_end": "2025-10-03T08:28:41.132Z", "period_start": "2025-11-21T03:43:48.395Z", "tokens": 106565}], "period_end": "2025-05-19T12:02:56.002Z", "period_start": "2024-03-30T22:21:20.885Z", "tokens": 436741}
         "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  setBillingMetadata:
+    speakeasy-default-set-billing-metadata:
+      requestBody:
+        application/json: {"billing_cycle_anchor_day": 465189}
+      responses:
+        "200":
+          application/json: {"billing_cycle_anchor_day": 236992, "history": [{"days": [], "period_end": "2025-02-27T22:21:15.893Z", "period_start": "2024-10-19T14:44:13.021Z", "tokens": 186287}], "period_end": "2024-05-06T16:51:38.194Z", "period_start": "2024-06-29T13:58:57.267Z", "tokens": 961103}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   migrateLegacyGramRegistrations:
     speakeasy-default-migrate-legacy-gram-registrations:
       requestBody:

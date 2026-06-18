@@ -35336,6 +35336,10 @@ components:
         CodexHookPayload:
             type: object
             properties:
+                additional_data:
+                    type: object
+                    description: Additional hook-specific data
+                    additionalProperties: true
                 cwd:
                     type: string
                     description: The working directory when the event fired
@@ -42295,6 +42299,7 @@ components:
                     items:
                         type: string
                     description: Match if the dimension equals any of these values (IN semantics; for multi-valued dimensions like role/group, matches if any element is present).
+                    minItems: 1
             description: A single filter predicate on an allowlisted dimension
             required:
                 - dimension

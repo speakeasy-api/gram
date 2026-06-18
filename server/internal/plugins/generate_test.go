@@ -1162,6 +1162,59 @@ func runCodexInstallScript(t *testing.T, script []byte, existingConfig string) (
 	return home, callLog
 }
 
+// SessionStart enriches the payload with the user's configured MCP server
+// inventory (shadow MCP visibility). The collection must be gated on a real
+// JSON field check of hook_event_name so the blocking PreToolUse path never
+// pays for a codex CLI invocation.
+func TestGenerateCodexObservabilityPluginScriptShipsMCPInventoryOnSessionStart(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := GeneratePluginPackages(nil, cfg)
+	require.NoError(t, err)
+
+	script := string(files[CodexObservabilitySlug(cfg)+"/hooks/hook.sh"])
+	require.Contains(t, script, `[codex_bin, "mcp", "list", "--json"]`, "hook.sh must collect the MCP inventory")
+	require.Contains(t, script, "mcp_inventory_codex", "hook.sh must ship the inventory under additional_data.mcp_inventory_codex")
+	require.Contains(t, script, `find_codex() if data.get("hook_event_name") == "SessionStart" else None`, "inventory collection must be gated on the parsed event name")
+	require.Contains(t, script, `/Applications/Codex.app/Contents/Resources/codex`, "binary resolution must cover desktop-app-only installs where codex is not on PATH")
+	require.Contains(t, script, "timeout=15", "codex invocation must be wall-time capped")
+	require.Contains(t, script, `additional["mcp_inventory_codex"] = slim`, "hook.sh must ship the sanitized projection — raw transport objects carry env vars and HTTP headers with credentials")
+	require.Contains(t, script, `redact_args(transport.get("args"))`, "stdio launch args must pass through credential redaction before upload")
+}
+
+// The hook scripts embed python inside bash single-quoted heredocs, where a
+// stray apostrophe in a comment is enough to break the whole script.
+// Substring assertions cannot catch that — run bash -n over every generated
+// shell script.
+func TestGeneratedHookScriptsAreValidBash(t *testing.T) {
+	t.Parallel()
+	bashPath, err := exec.LookPath("bash")
+	require.NoError(t, err, "bash is required to syntax-check generated hook scripts")
+
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	for _, platform := range []string{"claude", "cursor", "codex"} {
+		files, err := GenerateObservabilityPluginPackage(cfg, platform)
+		require.NoError(t, err)
+		for name, content := range files {
+			if !strings.HasSuffix(name, ".sh") {
+				continue
+			}
+			path := filepath.Join(t.TempDir(), filepath.Base(name))
+			require.NoError(t, os.WriteFile(path, content, 0o755))
+			out, err := exec.Command(bashPath, "-n", path).CombinedOutput()
+			require.NoError(t, err, "%s %s failed bash -n: %s", platform, name, out)
+		}
+	}
+}
+
 // An upgraded install already carries [hooks.state] entries whose trusted_hash
 // was computed against the previous hook command. When the command changes
 // (e.g. SessionStart moving from hook.sh to hook_async.sh) the installer must
