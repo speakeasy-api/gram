@@ -176,7 +176,7 @@ function UserSessionsInner(): JSX.Element {
                 <Skeleton key={i} className="h-12 w-full" />
               ))}
             </div>
-          ) : isError ? (
+          ) : isError && sessions.length === 0 ? (
             <div className="flex items-center justify-between gap-3">
               <p className="text-destructive text-sm">
                 Couldn&apos;t load sessions.
