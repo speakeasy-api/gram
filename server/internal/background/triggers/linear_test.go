@@ -5,8 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -205,6 +207,42 @@ func TestLinearFilterCEL(t *testing.T) {
 	match, err = config.Filter(linearTriggerEvent{EventType: "Issue.update", Action: "update"})
 	require.NoError(t, err)
 	require.False(t, match)
+}
+
+func TestLinearIngestRejectsStaleTimestamp(t *testing.T) {
+	t.Parallel()
+
+	definition, ok := GetDefinition("linear")
+	require.True(t, ok)
+
+	config, err := definition.DecodeConfig(nil)
+	require.NoError(t, err)
+
+	// A captured-and-replayed signed body carries an old webhookTimestamp; it
+	// must be rejected even though the (body) signature would still verify.
+	stale := time.Now().Add(-10 * time.Minute).UnixMilli()
+	body := []byte(fmt.Sprintf(`{"type":"Issue","action":"update","data":{"id":"i1"},"webhookTimestamp":%d}`, stale))
+
+	_, err = definition.HandleWebhook(body, http.Header{}, config)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "freshness")
+}
+
+func TestLinearIngestAcceptsFreshTimestamp(t *testing.T) {
+	t.Parallel()
+
+	definition, ok := GetDefinition("linear")
+	require.True(t, ok)
+
+	config, err := definition.DecodeConfig(nil)
+	require.NoError(t, err)
+
+	fresh := time.Now().UnixMilli()
+	body := []byte(fmt.Sprintf(`{"type":"Issue","action":"update","data":{"id":"i1"},"webhookTimestamp":%d}`, fresh))
+
+	result, err := definition.HandleWebhook(body, http.Header{}, config)
+	require.NoError(t, err)
+	require.NotNil(t, result.Event)
 }
 
 func TestLinearIngestRejectsMissingType(t *testing.T) {

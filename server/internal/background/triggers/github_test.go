@@ -236,6 +236,24 @@ func TestGitHubIngestDefaultFallsBackToRepo(t *testing.T) {
 	require.Equal(t, "github:octocat/Hello-World", result.Event.CorrelationID)
 }
 
+func TestGitHubIngestEmptyPingBodyMarshalsCleanly(t *testing.T) {
+	t.Parallel()
+
+	// GitHub ping events may carry an empty body. The normalized event's raw
+	// payload field is omitempty, so marshalling it (as ProcessEvent does) must
+	// not fail on a zero-length payload.
+	headers := http.Header{}
+	headers.Set("X-GitHub-Event", "ping")
+
+	ingest, err := githubIngest([]byte{}, headers)
+	require.NoError(t, err)
+	require.NotNil(t, ingest.Event)
+
+	encoded, err := json.Marshal(ingest.Event)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), `"payload"`)
+}
+
 func TestGitHubIngestRejectsMissingEventHeader(t *testing.T) {
 	t.Parallel()
 

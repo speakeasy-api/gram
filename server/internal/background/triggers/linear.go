@@ -47,7 +47,18 @@ type linearWebhookPayload struct {
 	Data      json.RawMessage `json:"data"`
 	URL       string          `json:"url,omitempty"`
 	CreatedAt string          `json:"createdAt,omitempty"`
+	// WebhookTimestamp is the unix-millis send time Linear stamps into the
+	// signed body; bounding its age guards against replay (see linearIngest).
+	WebhookTimestamp int64 `json:"webhookTimestamp,omitempty"`
 }
+
+// linearWebhookMaxAge bounds how stale a Linear webhook may be. Linear signs
+// only the raw body, so the Linear-Delivery header (the dedup id) can be
+// mutated on a replay of an otherwise-valid signed body to dodge dedup.
+// webhookTimestamp lives in the signed body and cannot, so bounding its age
+// caps the replay window. The window is generous relative to Linear's ~1 min
+// recommendation to tolerate clock skew. See https://linear.app/developers/webhooks.
+const linearWebhookMaxAge = 5 * time.Minute
 
 // linearEntityData is the subset of the `data` object common across Linear
 // entities that the trigger cares about: an `id` to correlate on, and an
@@ -154,6 +165,19 @@ func linearIngest(body []byte, headers http.Header) (*WebhookIngest, error) {
 	}
 	if payload.Type == "" {
 		return nil, fmt.Errorf("decode linear payload: missing type")
+	}
+
+	// Reject stale deliveries. webhookTimestamp is part of the signed body, so
+	// (unlike the Linear-Delivery header used as the dedup id below) it can't be
+	// tampered with on a replay; bounding its age caps the replay window.
+	if payload.WebhookTimestamp != 0 {
+		age := time.Now().UnixMilli() - payload.WebhookTimestamp
+		if age < 0 {
+			age = -age
+		}
+		if age > linearWebhookMaxAge.Milliseconds() {
+			return nil, fmt.Errorf("linear webhook timestamp outside freshness window")
+		}
 	}
 
 	eventType := payload.Type
