@@ -165,12 +165,12 @@ func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessi
 	}
 
 	filters := make([]repo.AttributeMetricsFilter, 0, len(payload.Filters))
-for _, f := range payload.Filters {
-	if f == nil {
-		return nil, oops.E(oops.CodeBadRequest, nil, "filters must not contain null entries")
+	for _, f := range payload.Filters {
+		if f == nil {
+			return nil, oops.E(oops.CodeBadRequest, nil, "filters must not contain null entries")
+		}
+		filters = append(filters, repo.AttributeMetricsFilter{Dimension: f.Dimension, Values: f.Values})
 	}
-	filters = append(filters, repo.AttributeMetricsFilter{Dimension: f.Dimension, Values: f.Values})
-}
 
 	items, err := s.chRepo.ListSessions(ctx, repo.ListSessionsParams{
 		ProjectIDs:       projectIDs,
