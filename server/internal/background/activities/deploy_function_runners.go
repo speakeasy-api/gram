@@ -222,12 +222,20 @@ func (d *DeployFunctionRunners) preflightFunction(
 		return empty, oops.E(oops.CodeInvariantViolation, nil, "function has empty asset integrity hash").LogError(ctx, logger)
 	}
 
+	// Operator-set infrastructure overrides win over the customer-supplied
+	// (gram.config.ts-driven) values when present.
 	mem := int(fnc.MemoryMib.Int32)
+	if fnc.MemoryMibOverride.Valid {
+		mem = int(fnc.MemoryMibOverride.Int32)
+	}
 	if mem < 0 || mem > constants.MaxFunctionMemoryMiB {
 		return empty, oops.E(oops.CodeInvariantViolation, nil, "function has invalid memory configuration").LogError(ctx, logger)
 	}
 
 	scale := int(fnc.Scale.Int32)
+	if fnc.ScaleOverride.Valid {
+		scale = int(fnc.ScaleOverride.Int32)
+	}
 	if scale < 0 || scale > constants.MaxFunctionScale {
 		return empty, oops.E(oops.CodeInvariantViolation, nil, "function has invalid scale configuration").LogError(ctx, logger)
 	}

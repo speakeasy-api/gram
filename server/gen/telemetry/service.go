@@ -378,6 +378,9 @@ type GetToolUsageSummaryPayload struct {
 	ShadowServerNames []string
 	// Typed user identities to include
 	UserFilters []*ToolUsageUserFilter
+	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
+	// and are excluded when this filter is set.
+	HookSources []string
 }
 
 // GetToolUsageSummaryResult is the result type of the telemetry service

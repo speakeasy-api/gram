@@ -122,10 +122,6 @@ type flyRuntimeFlapsFactory interface {
 	New(ctx context.Context) (flyRuntimeFlapsClient, error)
 }
 
-type flyRuntimeHTTPDoer interface {
-	Do(req *http.Request) (*http.Response, error)
-}
-
 type defaultFlyRuntimeFlapsFactory struct {
 	serviceName    string
 	serviceVersion string
@@ -156,7 +152,7 @@ type FlyRuntimeBackend struct {
 	config       FlyRuntimeConfig
 	client       flyRuntimeAPIClient
 	flapsFactory flyRuntimeFlapsFactory
-	httpClient   flyRuntimeHTTPDoer
+	httpClient   runtimeHTTPDoer
 }
 
 func NewFlyRuntimeBackend(logger *slog.Logger, tracerProvider trace.TracerProvider, httpPolicy *guardian.Policy, config FlyRuntimeConfig) *FlyRuntimeBackend {
@@ -224,6 +220,12 @@ func (f *FlyRuntimeBackend) ServerURL() *url.URL {
 func (f *FlyRuntimeBackend) ImageRef() string {
 	return f.desiredImageRef()
 }
+
+// ReusesIdleRuntimes is true: Stop pauses the machine but keeps the app and
+// allocated IP, so a later admit resumes the same incarnation. Fly has no warm
+// pool, so a new image is rolled onto that preserved machine in place via
+// RecycleImage rather than by discarding it.
+func (f *FlyRuntimeBackend) ReusesIdleRuntimes() bool { return true }
 
 // Ensure does not auto-recreate the app on ensureExisting errors. Health and
 // configure timeouts must bubble so Temporal retries drive convergence.
@@ -843,8 +845,9 @@ func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntim
 	}
 
 	reqBody, err := json.Marshal(runtimeTurnRequest{
-		Input:     prompt,
-		AuthToken: authToken,
+		Input:       prompt,
+		AuthToken:   authToken,
+		AssistantID: runtime.AssistantID.String(),
 	})
 	if err != nil {
 		return fmt.Errorf("marshal assistant fly runtime turn request: %w", err)
@@ -1120,7 +1123,7 @@ func (f *FlyRuntimeBackend) runtimeState(ctx context.Context, target flyRuntimeT
 // clientForTarget is a hook point for per-target dialing. The runner is
 // reachable via the app's hostname today; a future dedicated-IP design can
 // swap this to pin a request to a specific IP without changing callers.
-func (f *FlyRuntimeBackend) clientForTarget(_ flyRuntimeTarget) flyRuntimeHTTPDoer {
+func (f *FlyRuntimeBackend) clientForTarget(_ flyRuntimeTarget) runtimeHTTPDoer {
 	return f.httpClient
 }
 
