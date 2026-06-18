@@ -145,28 +145,6 @@ func (q *Queries) IsFeatureEnabled(ctx context.Context, arg IsFeatureEnabledPara
 	return enabled, err
 }
 
-const isUserSessionCaptureExcluded = `-- name: IsUserSessionCaptureExcluded :one
-SELECT EXISTS (
-        SELECT 1
-        FROM session_capture_exclusions
-        WHERE organization_id = $1
-            AND user_id = $2
-            AND deleted IS FALSE
-) AS excluded
-`
-
-type IsUserSessionCaptureExcludedParams struct {
-	OrganizationID string
-	UserID         string
-}
-
-func (q *Queries) IsUserSessionCaptureExcluded(ctx context.Context, arg IsUserSessionCaptureExcludedParams) (bool, error) {
-	row := q.db.QueryRow(ctx, isUserSessionCaptureExcluded, arg.OrganizationID, arg.UserID)
-	var excluded bool
-	err := row.Scan(&excluded)
-	return excluded, err
-}
-
 const listSessionCaptureExclusions = `-- name: ListSessionCaptureExclusions :many
 SELECT user_id
 FROM session_capture_exclusions
