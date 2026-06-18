@@ -9,6 +9,21 @@ The `server/internal/telemetry` package uses ClickHouse for high-performance ana
 
 > **CRITICAL:** The squirrel query builder is ONLY permitted for ClickHouse queries in the telemetry package. **DO NOT use squirrel for PostgreSQL queries** - all PostgreSQL queries MUST use SQLc-generated code. This is the only acceptable exception to our "no query builders" policy.
 
+### Read from summary views, not raw `telemetry_logs`
+
+The pre-aggregated **materialized views are the default read path** for anything that powers a dashboard, analytics surface, or filter control: `trace_summaries`, `metrics_summaries`, `attribute_metrics_summaries`, `attribute_keys`, `chat_token_summaries`. Query the **raw `telemetry_logs`** table **only** in the rare cases where per-log detail is genuinely required:
+
+- individual log records / a single trace's full log list (detail/inspection views),
+- free-text search over the log `body`,
+- arbitrary user-supplied attribute-path filters (e.g. `@user.region`) that a fixed-column summary cannot express,
+- an event shape not yet captured by any summary (e.g. traceless trigger events).
+
+**Why it matters:** raw `telemetry_logs` reads are full-range table scans with per-row JSON extraction; the summary views are pre-aggregated and cheap. A filter dropdown, summary card, count, or default list that scans raw logs on every page load is a **performance bug** — the unified Tool Logs page regressed exactly this way before being moved back onto `trace_summaries`. If a summary is missing a column you need, prefer **extending the MV (+ a backfill migration)** over falling back to a raw-log scan.
+
+**Reading `trace_summaries`** (one row per `trace_id`, `AggregatingMergeTree`): `GROUP BY trace_id`, use `*Merge` combinators for `AggregateFunction` columns (`anyIfMerge(http_status_code)`) and plain `any()`/`min()`/`sum()`/`max()` for `SimpleAggregateFunction` columns. Tool calls carry a real `trace_id` (recorded by the gateway in `ToolProxy.Do`), so hosted MCP, shadow MCP, skill, and local tool events are all present in the view.
+
+> **Gotcha — `ILLEGAL_AGGREGATION` (code 184):** when a grouped read is wrapped in a CTE/subquery that a *caller* then aggregates over (e.g. `uniqExact(tool_name)` over a `WITH normalized_events AS (... GROUP BY trace_id ...)`), ClickHouse merges the subquery back into the outer aggregate **if an aggregate alias shadows a base column** (`any(gram_urn) AS gram_urn`). Alias grouped aggregates to non-colliding names — prefix them, e.g. `any(gram_urn) AS g_gram_urn` — so the boundary holds.
+
 ### File Structure
 
 - **`queries.sql.go`**: Query implementations using squirrel
