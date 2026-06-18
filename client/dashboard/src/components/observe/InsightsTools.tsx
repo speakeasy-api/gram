@@ -20,6 +20,7 @@ import {
   encodeHostedServerFilter,
   encodeShadowServerFilter,
   parseTargetFilter,
+  selectedHookSources,
   selectedTargetValues,
   selectedUserEmails,
   toTargetTypes,
@@ -260,6 +261,10 @@ export function InsightsToolsContent(): JSX.Element {
     ];
     return emails.map((email) => ({ kind: "email" as const, key: email }));
   }, [activeFilters, roleEmails]);
+  const hookSourceFilters = useMemo(
+    () => selectedHookSources(activeFilters),
+    [activeFilters],
+  );
 
   const {
     data: summaryData,
@@ -278,6 +283,7 @@ export function InsightsToolsContent(): JSX.Element {
         hostedToolsetSlugs,
         shadowServerNames,
         userFilters,
+        hookSourceFilters,
         selectedHookTypes,
       ],
       queryFn: () =>
@@ -292,6 +298,8 @@ export function InsightsToolsContent(): JSX.Element {
                 shadowServerNames.length > 0 ? shadowServerNames : undefined,
               targetTypes: toTargetTypes(selectedHookTypes),
               userFilters: userFilters.length > 0 ? userFilters : undefined,
+              hookSources:
+                hookSourceFilters.length > 0 ? hookSourceFilters : undefined,
             },
           }),
         ),

@@ -1939,6 +1939,7 @@ type GetToolUsageSummaryParams struct {
 	HostedToolsetSlugs []string
 	ShadowServerNames  []string
 	UserFilters        []ToolUsageUserFilter
+	HookSources        []string
 	TargetLimit        uint64
 	UserLimit          uint64
 	UsersByTargetLimit uint64
@@ -2167,6 +2168,7 @@ func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsag
 		HostedToolsetSlugs: nil,
 		ShadowServerNames:  nil,
 		UserFilters:        nil,
+		HookSources:        nil,
 		TargetLimit:        0,
 		UserLimit:          0,
 		UsersByTargetLimit: 0,
@@ -2797,6 +2799,12 @@ func toolUsageFilteredSelect(arg GetToolUsageSummaryParams, columns ...string) (
 		sb = sb.Where(userFilters)
 	}
 
+	// Direct hosted MCP calls have no hook source (empty string), so requiring a
+	// specific hook source naturally excludes them — matching the Tool Logs page.
+	if len(arg.HookSources) > 0 {
+		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSources})
+	}
+
 	return sb, nil
 }
 
@@ -3086,6 +3094,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		userKind+" AS user_kind",
 		"toUInt8("+httpStatus+" >= 200 AND "+httpStatus+" < 400) AS success",
 		"toUInt8("+httpStatus+" >= 400) AS failure",
+		"'' AS hook_source",
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -3106,6 +3115,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		"any("+chAttr("gram.mcp.server_url")+") AS mcp_server_url",
 		"max(if("+chAttr("gen_ai.tool.call.result")+" != '', 1, 0)) AS has_result",
 		"max(if("+chAttr("gram.hook.error")+" != '', 1, 0)) AS has_error",
+		"any("+chAttr("gram.hook.source")+") AS hook_source",
 	).
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
@@ -3196,7 +3206,8 @@ SELECT
 	%s AS user_label,
 	%s AS user_kind,
 	toUInt8(has_result = 1 AND has_error = 0) AS success,
-	toUInt8(has_error = 1) AS failure
+	toUInt8(has_error = 1) AS failure,
+	hook_source
 FROM (%s)`, hookTargetType, hookTargetKind, hookTargetID, hookTargetLabel, hookToolName, userKey, userKey, userKind, hookSourceSQL)
 
 	hookArgs := make([]any, 0, 2+len(hookSourceArgs))
