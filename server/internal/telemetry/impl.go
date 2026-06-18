@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgsRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/telemetryerrs"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -44,6 +45,7 @@ type Service struct {
 	chatRepo              *chatRepo.Queries
 	hooksRepo             *hooksRepo.Queries
 	orgsRepo              *orgsRepo.Queries
+	projectsRepo          *projectsRepo.Queries
 	chConn                clickhouse.Conn
 	chRepo                *repo.Queries
 	logger                *slog.Logger
@@ -88,6 +90,7 @@ func NewService(
 		chatRepo:              chatRepo.New(db),
 		hooksRepo:             hooksRepo.New(db),
 		orgsRepo:              orgsRepo.New(db),
+		projectsRepo:          projectsRepo.New(db),
 		chConn:                chConn,
 		chRepo:                chRepo,
 		logger:                logger,

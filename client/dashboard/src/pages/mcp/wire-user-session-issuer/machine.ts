@@ -6,6 +6,7 @@ import type {
   CreateRemoteSessionIssuerInput,
   CreateUserSessionIssuerInput,
   LinkToolsetUserSessionIssuerInput,
+  MigrateGramRegistrationsInput,
   MigrationContext,
   MigrationEvent,
   MigrationFormState,
@@ -115,6 +116,9 @@ export const wireUserSessionIssuerMachine = setup({
       placeholder<LinkToolsetUserSessionIssuerInput>(
         "linkToolsetUserSessionIssuer",
       ),
+    migrateGramRegistrations: placeholder<MigrateGramRegistrationsInput>(
+      "migrateGramRegistrations",
+    ),
   },
   guards: {
     isGram: ({ context }) => context.paradigm === "gram",
@@ -183,7 +187,7 @@ export const wireUserSessionIssuerMachine = setup({
         },
         {
           guard: "isGram",
-          target: "linkingUserSessionIssuer",
+          target: "migratingGramRegistrations",
         },
         {
           guard: ({ context }) => context.remoteSessionIssuer === null,
@@ -203,8 +207,13 @@ export const wireUserSessionIssuerMachine = setup({
       on: {
         SUBMIT: [
           {
+            // Issuer already exists (e.g. retry after a later step failed): hand
+            // back to routing rather than jumping straight to the link. Routing
+            // re-derives the next incomplete step, so Gram retries always pass
+            // back through migratingGramRegistrations and can't skip the
+            // legacy-registration lift before linking.
             guard: "hasUserSessionIssuer",
-            target: "linkingUserSessionIssuer",
+            target: "routing",
             actions: assign({ error: () => null, errorStep: () => null }),
           },
           {
@@ -259,7 +268,7 @@ export const wireUserSessionIssuerMachine = setup({
         onDone: [
           {
             guard: "isGram",
-            target: "linkingUserSessionIssuer",
+            target: "migratingGramRegistrations",
             actions: [
               assign({
                 userSessionIssuer: ({ event }) => event.output,
@@ -316,6 +325,40 @@ export const wireUserSessionIssuerMachine = setup({
           actions: assign({
             error: ({ event }) =>
               errorMessage(event.error, "Failed to link user session issuer"),
+            errorStep: () => "userSessionIssuer" as const,
+          }),
+        },
+      },
+    },
+
+    // Gram-only: lift the legacy OAuth-proxy Redis registrations onto the new
+    // issuer before linking, so migrated MCP clients skip re-registration and
+    // re-auth. Idempotent, so re-running a resumed migration is safe. Removed
+    // with the legacy OAuth proxy.
+    migratingGramRegistrations: {
+      invoke: {
+        src: "migrateGramRegistrations",
+        input: ({ context }): MigrateGramRegistrationsInput => {
+          if (!context.userSessionIssuer) {
+            throw new Error("user session issuer is required");
+          }
+          return {
+            oauthProxyProviderId: context.defaults.proxyProvider.id,
+            userSessionIssuerId: context.userSessionIssuer.id,
+          };
+        },
+        onDone: {
+          target: "linkingUserSessionIssuer",
+          actions: assign({ error: () => null, errorStep: () => null }),
+        },
+        onError: {
+          target: "userSessionIssuer",
+          actions: assign({
+            error: ({ event }) =>
+              errorMessage(
+                event.error,
+                "Failed to migrate legacy client registrations",
+              ),
             errorStep: () => "userSessionIssuer" as const,
           }),
         },
@@ -655,6 +698,7 @@ function isStepRunning(
     case "userSessionIssuer":
       return (
         state.matches("creatingUserSessionIssuer") ||
+        state.matches("migratingGramRegistrations") ||
         state.matches("linkingUserSessionIssuer")
       );
     case "remoteSessionIssuer":

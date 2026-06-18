@@ -76,7 +76,7 @@ func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, m
 		piiScanner = &StubPIIScanner{}
 	}
 	if piScanner == nil {
-		piScanner = NewPromptInjectionScanner(logger, StubClassifier{}, nil)
+		piScanner = NewPromptInjectionScanner(logger, nil)
 	}
 	return &AnalyzeBatch{
 		logger:          logger,
@@ -365,8 +365,20 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 	}
 
 	if slices.Contains(args.Sources, SourcePromptInjection) {
+		// Resolve the L1 engine opt-in once on the parent ctx (group-aware,
+		// before fan-out) and pass it down, mirroring the prompt-policies gate.
+		l1Enabled := a.projectFlagEnabled(ctx, args.OrganizationID, args.ProjectID, feature.FlagPromptInjectionUseClassifier)
+		// Build the structured messages the L1 judge reasons over (actor + tool
+		// attribution), aligned with contents — only when L1 will actually run.
+		var msgs []JudgeMessage
+		if l1Enabled {
+			msgs = make([]JudgeMessage, len(messages))
+			for i := range messages {
+				msgs[i] = a.judgeMessageForRow(ctx, messages[i])
+			}
+		}
 		wg.Go(func() {
-			results, err := a.piScanner.ScanBatch(ctx, contents, args.OrganizationID)
+			results, err := a.piScanner.ScanBatch(ctx, contents, args.OrganizationID, args.ProjectID.String(), msgs, l1Enabled)
 			if err != nil {
 				a.logger.WarnContext(ctx, "prompt injection scan failed", attr.SlogError(err))
 				return
@@ -488,7 +500,7 @@ const judgeConcurrency = 8
 func (a *AnalyzeBatch) scanPromptJudge(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []repo.GetMessageContentBatchRow, appExcluded []bool) [][]Finding {
 	out := make([][]Finding, len(messages))
 	cfg := ParseJudgeConfig(policy.ModelConfig)
-	if !a.promptPoliciesEnabled(ctx, args.OrganizationID, args.ProjectID) {
+	if !a.projectFlagEnabled(ctx, args.OrganizationID, args.ProjectID, feature.FlagPromptPolicies) {
 		return out
 	}
 
@@ -544,20 +556,23 @@ func (a *AnalyzeBatch) scanPromptJudge(ctx context.Context, args AnalyzeBatchArg
 	return out
 }
 
-func (a *AnalyzeBatch) promptPoliciesEnabled(ctx context.Context, orgID string, projectID uuid.UUID) bool {
+// projectFlagEnabled resolves a per-project PostHog feature flag against the
+// same org/project groups the dashboard registers so a group-targeted release
+// matches identically. A nil flag provider, or a failed slug or flag lookup,
+// degrades to disabled. Shared by the prompt-policies and prompt-injection-engine
+// gates.
+func (a *AnalyzeBatch) projectFlagEnabled(ctx context.Context, orgID string, projectID uuid.UUID, flag feature.Flag) bool {
 	if a.flags == nil {
 		return false
 	}
-	// Resolve the org/project slugs so the flag evaluates against the same
-	// PostHog groups the dashboard uses. A failed lookup degrades to disabled.
 	groups, err := repo.New(a.db).GetProjectFlagGroups(ctx, projectID)
 	if err != nil {
-		a.logger.WarnContext(ctx, "resolve prompt policy flag groups failed", attr.SlogError(err), attr.SlogOrganizationID(orgID), attr.SlogProjectID(projectID.String()))
+		a.logger.WarnContext(ctx, "resolve project flag groups failed", attr.SlogError(err), attr.SlogOrganizationID(orgID), attr.SlogProjectID(projectID.String()))
 		return false
 	}
-	on, err := a.flags.IsFlagEnabled(ctx, feature.FlagPromptPolicies, orgID, feature.OrgProjectGroups(groups.OrganizationSlug, groups.ProjectSlug))
+	on, err := a.flags.IsFlagEnabled(ctx, flag, orgID, feature.OrgProjectGroups(groups.OrganizationSlug, groups.ProjectSlug))
 	if err != nil {
-		a.logger.WarnContext(ctx, "prompt policy flag check failed", attr.SlogError(err), attr.SlogOrganizationID(orgID))
+		a.logger.WarnContext(ctx, "project flag check failed", attr.SlogError(err), attr.SlogOrganizationID(orgID))
 		return false
 	}
 	return on

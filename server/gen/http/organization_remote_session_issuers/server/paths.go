@@ -87,6 +87,11 @@ func RevokeSessionOrganizationRemoteSessionIssuersPath() string {
 	return "/rpc/organizationRemoteSessionIssuers.revokeSession"
 }
 
+// RefreshSessionOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service refreshSession HTTP endpoint.
+func RefreshSessionOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.refreshSession"
+}
+
 // RevokeAllClientSessionsOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service revokeAllClientSessions HTTP endpoint.
 func RevokeAllClientSessionsOrganizationRemoteSessionIssuersPath() string {
 	return "/rpc/organizationRemoteSessionIssuers.revokeAllClientSessions"

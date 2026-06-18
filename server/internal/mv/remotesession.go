@@ -26,6 +26,7 @@ func BuildRemoteSessionView(row repo.RemoteSession, subjectDisplayName, subjectE
 		RemoteSessionClientID: row.RemoteSessionClientID.String(),
 		AccessExpiresAt:       row.AccessExpiresAt.Time.Format(time.RFC3339),
 		RefreshExpiresAt:      refreshExpiresAt,
+		HasRefreshToken:       row.RefreshTokenEncrypted.Valid && row.RefreshTokenEncrypted.String != "",
 		Scopes:                row.Scopes,
 		CreatedAt:             row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:             row.UpdatedAt.Time.Format(time.RFC3339),

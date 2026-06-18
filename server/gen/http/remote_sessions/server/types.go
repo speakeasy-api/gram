@@ -421,6 +421,10 @@ type RemoteSessionResponseBody struct {
 	AccessExpiresAt string `form:"access_expires_at" json:"access_expires_at" xml:"access_expires_at"`
 	// Upstream refresh-token expiry. Null when the session has no refresh token.
 	RefreshExpiresAt *string `form:"refresh_expires_at,omitempty" json:"refresh_expires_at,omitempty" xml:"refresh_expires_at,omitempty"`
+	// Whether the session holds an upstream refresh token. Gates the 'Refresh now'
+	// action; refresh_expires_at is insufficient because an upstream may issue a
+	// non-expiring refresh token. The token itself is never returned.
+	HasRefreshToken bool `form:"has_refresh_token" json:"has_refresh_token" xml:"has_refresh_token"`
 	// Scopes held by this session.
 	Scopes    []string `form:"scopes" json:"scopes" xml:"scopes"`
 	CreatedAt string   `form:"created_at" json:"created_at" xml:"created_at"`

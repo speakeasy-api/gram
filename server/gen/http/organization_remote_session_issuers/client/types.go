@@ -129,6 +129,14 @@ type RevokeSessionRequestBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 }
 
+// RefreshSessionRequestBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// request body.
+type RefreshSessionRequestBody struct {
+	// The remote_session id.
+	ID string `form:"id" json:"id" xml:"id"`
+}
+
 // RevokeAllClientSessionsRequestBody is the type of the
 // "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
 // endpoint HTTP request body.
@@ -400,6 +408,39 @@ type UpdateClientResponseBody struct {
 	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// RefreshSessionResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body.
+type RefreshSessionResponseBody struct {
+	// The remote_session id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The session's subject URN (user:<id> | apikey:<uuid> |
+	// anonymous:<mcp-session-id>).
+	SubjectUrn *string `form:"subject_urn,omitempty" json:"subject_urn,omitempty" xml:"subject_urn,omitempty"`
+	// Resolved display name when the subject is a Gram user. Absent for
+	// apikey/anonymous subjects or unresolved users.
+	SubjectDisplayName *string `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
+	// Resolved email when the subject is a Gram user. Absent for apikey/anonymous
+	// subjects or unresolved users.
+	SubjectEmail *string `form:"subject_email,omitempty" json:"subject_email,omitempty" xml:"subject_email,omitempty"`
+	// The user_session_issuer this session is bound to.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The remote_session_client this session was minted against.
+	RemoteSessionClientID *string `form:"remote_session_client_id,omitempty" json:"remote_session_client_id,omitempty" xml:"remote_session_client_id,omitempty"`
+	// Upstream access-token expiry. Independent of refresh_expires_at.
+	AccessExpiresAt *string `form:"access_expires_at,omitempty" json:"access_expires_at,omitempty" xml:"access_expires_at,omitempty"`
+	// Upstream refresh-token expiry. Null when the session has no refresh token.
+	RefreshExpiresAt *string `form:"refresh_expires_at,omitempty" json:"refresh_expires_at,omitempty" xml:"refresh_expires_at,omitempty"`
+	// Whether the session holds an upstream refresh token. Gates the 'Refresh now'
+	// action; refresh_expires_at is insufficient because an upstream may issue a
+	// non-expiring refresh token. The token itself is never returned.
+	HasRefreshToken *bool `form:"has_refresh_token,omitempty" json:"has_refresh_token,omitempty" xml:"has_refresh_token,omitempty"`
+	// Scopes held by this session.
+	Scopes    []string `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
+	CreatedAt *string  `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string  `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // RevokeAllClientSessionsResponseBody is the type of the
@@ -3450,6 +3491,196 @@ type RevokeSessionGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// RefreshSessionUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "unauthorized" error.
+type RefreshSessionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshSessionForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "forbidden" error.
+type RefreshSessionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshSessionBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "bad_request" error.
+type RefreshSessionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshSessionNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "not_found" error.
+type RefreshSessionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshSessionConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "conflict" error.
+type RefreshSessionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshSessionUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "unsupported_media" error.
+type RefreshSessionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshSessionInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "invalid" error.
+type RefreshSessionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshSessionInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "invariant_violation" error.
+type RefreshSessionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshSessionUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "unexpected" error.
+type RefreshSessionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RefreshSessionGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint HTTP
+// response body for the "gateway_error" error.
+type RefreshSessionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // RevokeAllClientSessionsUnauthorizedResponseBody is the type of the
 // "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
 // endpoint HTTP response body for the "unauthorized" error.
@@ -3769,6 +4000,10 @@ type RemoteSessionResponseBody struct {
 	AccessExpiresAt *string `form:"access_expires_at,omitempty" json:"access_expires_at,omitempty" xml:"access_expires_at,omitempty"`
 	// Upstream refresh-token expiry. Null when the session has no refresh token.
 	RefreshExpiresAt *string `form:"refresh_expires_at,omitempty" json:"refresh_expires_at,omitempty" xml:"refresh_expires_at,omitempty"`
+	// Whether the session holds an upstream refresh token. Gates the 'Refresh now'
+	// action; refresh_expires_at is insufficient because an upstream may issue a
+	// non-expiring refresh token. The token itself is never returned.
+	HasRefreshToken *bool `form:"has_refresh_token,omitempty" json:"has_refresh_token,omitempty" xml:"has_refresh_token,omitempty"`
 	// Scopes held by this session.
 	Scopes    []string `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
 	CreatedAt *string  `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -3909,6 +4144,16 @@ func NewRemoveClientFromMcpServerRequestBody(p *organizationremotesessionissuers
 // service.
 func NewRevokeSessionRequestBody(p *organizationremotesessionissuers.RevokeSessionPayload) *RevokeSessionRequestBody {
 	body := &RevokeSessionRequestBody{
+		ID: p.ID,
+	}
+	return body
+}
+
+// NewRefreshSessionRequestBody builds the HTTP request body from the payload
+// of the "refreshSession" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewRefreshSessionRequestBody(p *organizationremotesessionissuers.RefreshSessionPayload) *RefreshSessionRequestBody {
+	body := &RefreshSessionRequestBody{
 		ID: p.ID,
 	}
 	return body
@@ -6712,6 +6957,181 @@ func NewRevokeSessionGatewayError(body *RevokeSessionGatewayErrorResponseBody) *
 	return v
 }
 
+// NewRefreshSessionRemoteSessionOK builds a "organizationRemoteSessionIssuers"
+// service "refreshSession" endpoint result from a HTTP "OK" response.
+func NewRefreshSessionRemoteSessionOK(body *RefreshSessionResponseBody) *types.RemoteSession {
+	v := &types.RemoteSession{
+		ID:                    *body.ID,
+		SubjectUrn:            *body.SubjectUrn,
+		SubjectDisplayName:    body.SubjectDisplayName,
+		SubjectEmail:          body.SubjectEmail,
+		UserSessionIssuerID:   *body.UserSessionIssuerID,
+		RemoteSessionClientID: *body.RemoteSessionClientID,
+		AccessExpiresAt:       *body.AccessExpiresAt,
+		RefreshExpiresAt:      body.RefreshExpiresAt,
+		HasRefreshToken:       *body.HasRefreshToken,
+		CreatedAt:             *body.CreatedAt,
+		UpdatedAt:             *body.UpdatedAt,
+	}
+	v.Scopes = make([]string, len(body.Scopes))
+	for i, val := range body.Scopes {
+		v.Scopes[i] = val
+	}
+
+	return v
+}
+
+// NewRefreshSessionUnauthorized builds a organizationRemoteSessionIssuers
+// service refreshSession endpoint unauthorized error.
+func NewRefreshSessionUnauthorized(body *RefreshSessionUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshSessionForbidden builds a organizationRemoteSessionIssuers service
+// refreshSession endpoint forbidden error.
+func NewRefreshSessionForbidden(body *RefreshSessionForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshSessionBadRequest builds a organizationRemoteSessionIssuers
+// service refreshSession endpoint bad_request error.
+func NewRefreshSessionBadRequest(body *RefreshSessionBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshSessionNotFound builds a organizationRemoteSessionIssuers service
+// refreshSession endpoint not_found error.
+func NewRefreshSessionNotFound(body *RefreshSessionNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshSessionConflict builds a organizationRemoteSessionIssuers service
+// refreshSession endpoint conflict error.
+func NewRefreshSessionConflict(body *RefreshSessionConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshSessionUnsupportedMedia builds a organizationRemoteSessionIssuers
+// service refreshSession endpoint unsupported_media error.
+func NewRefreshSessionUnsupportedMedia(body *RefreshSessionUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshSessionInvalid builds a organizationRemoteSessionIssuers service
+// refreshSession endpoint invalid error.
+func NewRefreshSessionInvalid(body *RefreshSessionInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshSessionInvariantViolation builds a
+// organizationRemoteSessionIssuers service refreshSession endpoint
+// invariant_violation error.
+func NewRefreshSessionInvariantViolation(body *RefreshSessionInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshSessionUnexpected builds a organizationRemoteSessionIssuers
+// service refreshSession endpoint unexpected error.
+func NewRefreshSessionUnexpected(body *RefreshSessionUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRefreshSessionGatewayError builds a organizationRemoteSessionIssuers
+// service refreshSession endpoint gateway_error error.
+func NewRefreshSessionGatewayError(body *RefreshSessionGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewRevokeAllClientSessionsRevokeAllRemoteSessionsResultOK builds a
 // "organizationRemoteSessionIssuers" service "revokeAllClientSessions"
 // endpoint result from a HTTP "OK" response.
@@ -7256,6 +7676,60 @@ func ValidateUpdateClientResponseBody(body *UpdateClientResponseBody) (err error
 		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))
 		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateRefreshSessionResponseBody runs the validations defined on
+// RefreshSessionResponseBody
+func ValidateRefreshSessionResponseBody(body *RefreshSessionResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.SubjectUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("subject_urn", "body"))
+	}
+	if body.UserSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
+	}
+	if body.RemoteSessionClientID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_client_id", "body"))
+	}
+	if body.AccessExpiresAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("access_expires_at", "body"))
+	}
+	if body.HasRefreshToken == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_refresh_token", "body"))
+	}
+	if body.Scopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scopes", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	}
+	if body.RemoteSessionClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_client_id", *body.RemoteSessionClientID, goa.FormatUUID))
+	}
+	if body.AccessExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.access_expires_at", *body.AccessExpiresAt, goa.FormatDateTime))
+	}
+	if body.RefreshExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.refresh_expires_at", *body.RefreshExpiresAt, goa.FormatDateTime))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -11121,6 +11595,246 @@ func ValidateRevokeSessionGatewayErrorResponseBody(body *RevokeSessionGatewayErr
 	return
 }
 
+// ValidateRefreshSessionUnauthorizedResponseBody runs the validations defined
+// on refreshSession_unauthorized_response_body
+func ValidateRefreshSessionUnauthorizedResponseBody(body *RefreshSessionUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshSessionForbiddenResponseBody runs the validations defined on
+// refreshSession_forbidden_response_body
+func ValidateRefreshSessionForbiddenResponseBody(body *RefreshSessionForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshSessionBadRequestResponseBody runs the validations defined on
+// refreshSession_bad_request_response_body
+func ValidateRefreshSessionBadRequestResponseBody(body *RefreshSessionBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshSessionNotFoundResponseBody runs the validations defined on
+// refreshSession_not_found_response_body
+func ValidateRefreshSessionNotFoundResponseBody(body *RefreshSessionNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshSessionConflictResponseBody runs the validations defined on
+// refreshSession_conflict_response_body
+func ValidateRefreshSessionConflictResponseBody(body *RefreshSessionConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshSessionUnsupportedMediaResponseBody runs the validations
+// defined on refreshSession_unsupported_media_response_body
+func ValidateRefreshSessionUnsupportedMediaResponseBody(body *RefreshSessionUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshSessionInvalidResponseBody runs the validations defined on
+// refreshSession_invalid_response_body
+func ValidateRefreshSessionInvalidResponseBody(body *RefreshSessionInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshSessionInvariantViolationResponseBody runs the validations
+// defined on refreshSession_invariant_violation_response_body
+func ValidateRefreshSessionInvariantViolationResponseBody(body *RefreshSessionInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshSessionUnexpectedResponseBody runs the validations defined on
+// refreshSession_unexpected_response_body
+func ValidateRefreshSessionUnexpectedResponseBody(body *RefreshSessionUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRefreshSessionGatewayErrorResponseBody runs the validations defined
+// on refreshSession_gateway_error_response_body
+func ValidateRefreshSessionGatewayErrorResponseBody(body *RefreshSessionGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateRevokeAllClientSessionsUnauthorizedResponseBody runs the validations
 // defined on revokeAllClientSessions_unauthorized_response_body
 func ValidateRevokeAllClientSessionsUnauthorizedResponseBody(body *RevokeAllClientSessionsUnauthorizedResponseBody) (err error) {
@@ -11539,6 +12253,9 @@ func ValidateRemoteSessionResponseBody(body *RemoteSessionResponseBody) (err err
 	}
 	if body.AccessExpiresAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("access_expires_at", "body"))
+	}
+	if body.HasRefreshToken == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_refresh_token", "body"))
 	}
 	if body.Scopes == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scopes", "body"))

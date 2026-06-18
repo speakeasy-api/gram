@@ -14494,6 +14494,102 @@ paths:
       x-speakeasy-name-override: moveIssuer
       x-speakeasy-react-hook:
         name: MoveOrganizationRemoteSessionIssuer
+  /rpc/organizationRemoteSessionIssuers.refreshSession:
+    post:
+      description: Force an upstream token refresh on a single remote_session in the caller's organization, regardless of current access-token expiry. Returns the updated remote_session so callers can reflect the new expiry without a refetch. Fails with a bad-request error when the session holds no refresh token. Requires org:admin.
+      operationId: refreshOrganizationRemoteSession
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskIDRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteSession'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: refreshSession organizationRemoteSessionIssuers
+      tags:
+        - organizationRemoteSessionIssuers
+      x-speakeasy-name-override: refreshSession
+      x-speakeasy-react-hook:
+        name: RefreshOrganizationRemoteSession
   /rpc/organizationRemoteSessionIssuers.removeClientFromMcpServer:
     post:
       description: Detach a remote_session_client from an MCP server (clears the MCP server's user_session_issuer link) in the caller's organization. Requires org:admin.
@@ -21959,106 +22055,6 @@ paths:
       x-speakeasy-react-hook:
         name: RiskApprovePolicyBypassRequest
         type: mutation
-  /rpc/risk.capabilities.get:
-    get:
-      description: Get server-side risk analysis capabilities for the current project.
-      operationId: getRiskCapabilities
-      parameters:
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RiskCapabilitiesResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: getRiskCapabilities risk
-      tags:
-        - risk
-      x-speakeasy-group: risk.capabilities
-      x-speakeasy-name-override: get
-      x-speakeasy-react-hook:
-        name: RiskCapabilities
   /rpc/risk.categories:
     get:
       description: 'Return the canonical risk category definitions: metadata (label/description/icon) plus the classification (source / rule_id list / rule_id prefix) used to bucket findings. Dashboards and CLIs should call this instead of maintaining their own copy of the mapping.'
@@ -26699,6 +26695,95 @@ paths:
       x-speakeasy-name-override: listToolUsageTraces
       x-speakeasy-react-hook:
         name: ListToolUsageTraces
+        type: query
+  /rpc/telemetry.query:
+    post:
+      description: Generic, org-scoped analytics query over pre-aggregated usage metrics. Returns both a grouped table and a per-group hourly timeseries for the same slice of data, supporting arbitrary allowlisted group-by dimensions and filters (e.g. group by department_name, then drill in by filtering department_name and grouping by role).
+      operationId: query
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: query telemetry
+      tags:
+        - telemetry
+      x-speakeasy-name-override: query
+      x-speakeasy-react-hook:
+        name: TelemetryQuery
         type: query
   /rpc/telemetry.searchChats:
     post:
@@ -32016,6 +32101,111 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: UserSessionIssuers
+  /rpc/userSessionIssuers.migrateLegacyGramRegistrations:
+    post:
+      description: 'One-off migration: lift the legacy Redis dynamic-client registrations from a gram-type oauth_proxy_provider into user_session_clients on the given user_session_issuer, so migrated MCP clients skip re-registration and re-auth. Removed once the OAuth proxy is retired.'
+      operationId: migrateLegacyGramRegistrations
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MigrateLegacyGramRegistrationsForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MigrateLegacyGramRegistrationsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: migrateLegacyGramRegistrations userSessionIssuers
+      tags:
+        - userSessionIssuers
+      x-speakeasy-name-override: migrateLegacyGramRegistrations
+      x-speakeasy-react-hook:
+        name: MigrateLegacyGramRegistrations
   /rpc/userSessionIssuers.update:
     post:
       description: Update fields on an existing user_session_issuer.
@@ -34802,6 +34992,10 @@ components:
     CodexHookPayload:
       type: object
       properties:
+        additional_data:
+          type: object
+          description: Additional hook-specific data
+          additionalProperties: true
         cwd:
           type: string
           description: The working directory when the event fired
@@ -35638,7 +35832,7 @@ components:
           type: array
           items:
             type: string
-          description: Prompt-injection detection rule ids to enable in addition to the heuristic baseline (e.g. 'deberta-v3-classifier').
+          description: Prompt-injection detection rule ids to enable in addition to the heuristic baseline.
         sources:
           type: array
           items:
@@ -39998,6 +40192,31 @@ components:
         - visibility
         - created_at
         - updated_at
+    MigrateLegacyGramRegistrationsForm:
+      type: object
+      properties:
+        oauth_proxy_provider_id:
+          type: string
+          description: The gram-type oauth_proxy_provider whose Redis registrations are migrated.
+          format: uuid
+        user_session_issuer_id:
+          type: string
+          description: The target user_session_issuer the migrated user_session_clients attach to.
+          format: uuid
+      description: Form for migrating legacy gram OAuth-proxy client registrations onto a user_session_issuer.
+      required:
+        - oauth_proxy_provider_id
+        - user_session_issuer_id
+    MigrateLegacyGramRegistrationsResult:
+      type: object
+      properties:
+        migrated_count:
+          type: integer
+          description: Number of user_session_clients newly inserted; already-migrated registrations count as zero.
+          format: int64
+      description: Result of a legacy gram registration migration.
+      required:
+        - migrated_count
     MintUserSessionRequestBody:
       type: object
       properties:
@@ -41722,6 +41941,213 @@ components:
       required:
         - configured
         - connected
+    QueryFilter:
+      type: object
+      properties:
+        dimension:
+          type: string
+          description: Dimension to filter on
+          enum:
+            - department_name
+            - job_title
+            - employee_type
+            - division_name
+            - cost_center_name
+            - email
+            - model
+            - hook_source
+            - role
+            - group
+            - project_id
+        values:
+          type: array
+          items:
+            type: string
+          description: Match if the dimension equals any of these values (IN semantics; for multi-valued dimensions like role/group, matches if any element is present).
+          minItems: 1
+      description: A single filter predicate on an allowlisted dimension
+      required:
+        - dimension
+        - values
+    QueryMeasures:
+      type: object
+      properties:
+        cache_creation_input_tokens:
+          type: integer
+          description: Sum of cache creation input tokens
+          format: int64
+        cache_read_input_tokens:
+          type: integer
+          description: Sum of cache read input tokens
+          format: int64
+        total_chats:
+          type: integer
+          description: Number of distinct chat sessions
+          format: int64
+        total_cost:
+          type: number
+          description: Total cost in USD
+          format: double
+        total_input_tokens:
+          type: integer
+          description: Sum of input tokens
+          format: int64
+        total_output_tokens:
+          type: integer
+          description: Sum of output tokens
+          format: int64
+        total_tokens:
+          type: integer
+          description: Sum of all tokens
+          format: int64
+        total_tool_calls:
+          type: integer
+          description: Total number of tool calls
+          format: int64
+      description: Aggregated measure values for a group or time bucket
+      required:
+        - total_cost
+        - total_input_tokens
+        - total_output_tokens
+        - total_tokens
+        - cache_read_input_tokens
+        - cache_creation_input_tokens
+        - total_tool_calls
+        - total_chats
+    QueryPayload:
+      type: object
+      properties:
+        filters:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueryFilter'
+          description: Optional filters; all filters are ANDed together.
+        from:
+          type: string
+          description: Start time in ISO 8601 format
+          example: "2025-12-19T10:00:00Z"
+          format: date-time
+        granularity_seconds:
+          type: integer
+          description: Optional timeseries bucket size in seconds. Defaults to an interval derived from the time range and is floored to 3600 (the source data is bucketed hourly).
+          format: int64
+        group_by:
+          type: string
+          description: Optional dimension to break results down by. When omitted, a single aggregate row/series for the whole slice is returned.
+          example: department_name
+          enum:
+            - department_name
+            - job_title
+            - employee_type
+            - division_name
+            - cost_center_name
+            - email
+            - model
+            - hook_source
+            - role
+            - group
+            - project_id
+        sort_by:
+          type: string
+          description: Measure used to rank groups for top_n. Defaults to total_cost.
+          default: total_cost
+          enum:
+            - total_cost
+            - total_tokens
+            - total_input_tokens
+            - total_output_tokens
+            - cache_read_input_tokens
+            - cache_creation_input_tokens
+            - total_tool_calls
+            - total_chats
+        to:
+          type: string
+          description: End time in ISO 8601 format
+          example: "2025-12-26T10:00:00Z"
+          format: date-time
+        top_n:
+          type: integer
+          description: When group_by is set, keep at most this many groups (ranked by sort_by); the remainder are rolled into an 'Other' group. Defaults to 10.
+          default: 10
+          format: int64
+          minimum: 1
+      description: Payload for a generic org-scoped analytics query
+      required:
+        - from
+        - to
+    QueryPoint:
+      type: object
+      properties:
+        bucket_time_unix_nano:
+          type: string
+          description: Bucket start time in Unix nanoseconds (string for JS precision)
+        measures:
+          $ref: '#/components/schemas/QueryMeasures'
+      description: A single time bucket within a series
+      required:
+        - bucket_time_unix_nano
+        - measures
+    QueryResult:
+      type: object
+      properties:
+        group_by:
+          type: string
+          description: Echoes the requested group_by dimension; empty when none was requested.
+        interval_seconds:
+          type: integer
+          description: The timeseries bucket interval in seconds.
+          format: int64
+        table:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueryRow'
+          description: Grouped totals over the full time range, ordered by sort_by descending.
+        timeseries:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuerySeries'
+          description: One series per group value (aligned with table rows), each gap-filled.
+      description: 'Result of a generic analytics query: a grouped table and a matching per-group timeseries over the same data slice.'
+      required:
+        - group_by
+        - interval_seconds
+        - table
+        - timeseries
+    QueryRow:
+      type: object
+      properties:
+        dimension_values:
+          type: object
+          description: 'Distinct values of every allowlisted dimension other than the group_by dimension, observed within this group. Keyed by dimension identifier (the same keys used for group_by/filters, e.g. when grouping by department_name: ''email'' -> [...], ''job_title'' -> [...], ''role'' -> [...]). Empty values are omitted and each list is capped.'
+          additionalProperties:
+            type: array
+            items:
+              type: string
+        group_value:
+          type: string
+          description: The dimension value for this row. Empty string when no group_by was requested; 'Other' for the rolled-up remainder beyond top_n.
+        measures:
+          $ref: '#/components/schemas/QueryMeasures'
+      description: 'One row of the grouped table: measures aggregated over the full time range for a single group value.'
+      required:
+        - group_value
+        - measures
+        - dimension_values
+    QuerySeries:
+      type: object
+      properties:
+        group_value:
+          type: string
+          description: The dimension value for this series. Empty string when no group_by was requested; 'Other' for the rolled-up remainder beyond top_n.
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueryPoint'
+          description: Time buckets in ascending order, gap-filled with zeros.
+      description: A gap-filled timeseries for a single group value (one line on the chart).
+      required:
+        - group_value
+        - points
     RBACStatus:
       type: object
       properties:
@@ -41848,6 +42274,9 @@ components:
         created_at:
           type: string
           format: date-time
+        has_refresh_token:
+          type: boolean
+          description: Whether the session holds an upstream refresh token. Gates the 'Refresh now' action; refresh_expires_at is insufficient because an upstream may issue a non-expiring refresh token. The token itself is never returned.
         id:
           type: string
           description: The remote_session id.
@@ -41888,6 +42317,7 @@ components:
         - user_session_issuer_id
         - remote_session_client_id
         - access_expires_at
+        - has_refresh_token
         - scopes
         - created_at
         - updated_at
@@ -42251,14 +42681,6 @@ components:
       description: Result type for revoking all of a client's remote_sessions.
       required:
         - revoked_count
-    RiskCapabilitiesResult:
-      type: object
-      properties:
-        pi_classifier_enabled:
-          type: boolean
-          description: Whether the prompt-injection ML classifier is configured on this server.
-      required:
-        - pi_classifier_enabled
     RiskCategoriesResult:
       type: object
       properties:
@@ -42699,7 +43121,7 @@ components:
           type: array
           items:
             type: string
-          description: Prompt-injection detection rule ids enabled in addition to the heuristic baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.
+          description: Prompt-injection detection rule ids enabled in addition to the heuristic baseline. When empty, only heuristics run.
         sources:
           type: array
           items:
@@ -46839,7 +47261,7 @@ components:
           type: array
           items:
             type: string
-          description: Prompt-injection detection rule ids to enable in addition to the heuristic baseline (e.g. 'deberta-v3-classifier').
+          description: Prompt-injection detection rule ids to enable in addition to the heuristic baseline.
         sources:
           type: array
           items:

@@ -24,6 +24,7 @@ import Environments, {
   EnvironmentsRoot,
 } from "./pages/environments/Environments";
 import Home from "./pages/home/Home";
+import TelemetryQueryDemo from "./pages/demo/TelemetryQuery";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
@@ -190,6 +191,7 @@ const ROUTE_STRUCTURE = {
     title: "Project Assistant",
     url: "chat",
     icon: "message-circle",
+    stage: "beta",
     // Layout route: renders the index (ChatHome) or a conversation subpage.
     component: ChatRoot,
     indexComponent: ChatHome,
@@ -311,7 +313,7 @@ const ROUTE_STRUCTURE = {
     title: "Assistants",
     url: "assistants",
     icon: "bot",
-    stage: "preview",
+    stage: "beta",
     component: AssistantsRoot,
     indexComponent: AssistantsIndex,
     subPages: {
@@ -412,6 +414,12 @@ const ROUTE_STRUCTURE = {
     icon: "layout-dashboard",
     component: InsightsRoot,
     indexComponent: InsightsHooksPage,
+  },
+  telemetryQueryDemo: {
+    title: "Analytics Query (demo)",
+    url: "telemetry-query-demo",
+    icon: "flask-conical",
+    component: TelemetryQueryDemo,
   },
   employees: {
     title: "Employees",

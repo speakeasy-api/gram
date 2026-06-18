@@ -4,9 +4,11 @@ import (
 	"context"
 	"log/slog"
 
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 )
 
 // instrumentMCPToolCall is the OTel instrument name for the per-tool MCP
@@ -56,15 +58,20 @@ func NewProxyMetrics(meter metric.Meter, logger *slog.Logger) *ProxyMetrics {
 // `outcome` attribute today; consumers that need to distinguish accepted
 // from rejected attempts should aggregate this counter alongside the
 // proxy-level request status histogram in [proxy.Metrics].
-func (m *ProxyMetrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpURL string, remoteMCPServerID string, toolName string) {
+func (m *ProxyMetrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpURL string, identity proxy.ServerIdentity, toolName string) {
 	if m.mcpToolCallCounter == nil {
 		return
 	}
 
-	m.mcpToolCallCounter.Add(ctx, 1, metric.WithAttributes(
+	labels := []attribute.KeyValue{
 		attr.OrganizationID(orgID),
 		attr.McpURL(mcpURL),
-		attr.RemoteMCPServerID(remoteMCPServerID),
+		attr.RemoteMCPServerID(identity.RemoteMCPServerID),
 		attr.ToolName(toolName),
-	))
+	}
+	if identity.McpServerID != "" {
+		labels = append(labels, attr.McpServerID(identity.McpServerID))
+	}
+
+	m.mcpToolCallCounter.Add(ctx, 1, metric.WithAttributes(labels...))
 }

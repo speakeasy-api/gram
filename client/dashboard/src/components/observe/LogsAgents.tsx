@@ -22,19 +22,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useSearchParams } from "react-router";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
-import { ChatLogsFilters } from "@/pages/chatLogs/ChatLogsFilters";
 import { ChatLogsTable } from "@/pages/chatLogs/ChatLogsTable";
-import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
-import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { ArrowUpIcon, ArrowDownIcon } from "lucide-react";
+  defineFilters,
+  type FilterValue,
+  type OptionsById,
+} from "@/components/filters";
+import { Page } from "@/components/page-layout";
+import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
 import { isValidPreset } from "@/components/observe/observeFilterUtils";
 
 type SortField = "chronological" | "messageCount";
@@ -65,6 +60,24 @@ const UUID_RE =
 function isUuid(value: string | null): value is string {
   return !!value && UUID_RE.test(value);
 }
+
+const SESSION_FILTERS = defineFilters([
+  {
+    id: "date",
+    label: "Date range",
+    kind: "daterange",
+    pinned: true,
+    defaultPreset: "30d",
+  },
+  { id: "has_risk", label: "Risk", kind: "select", allLabel: "All" },
+]);
+
+const HAS_RISK_OPTIONS: OptionsById = {
+  has_risk: [
+    { value: "true", label: "With Risk" },
+    { value: "false", label: "No Risk" },
+  ],
+};
 
 export function LogsAgentsContent(): JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -213,6 +226,12 @@ export function LogsAgentsContent(): JSX.Element {
     [updateSearchParams],
   );
 
+  // Single setSearchParams so the synchronous clears don't clobber each other
+  // (react-router's setSearchParams reads a memoized snapshot).
+  const clearAllFilters = useCallback(() => {
+    updateSearchParams({ range: null, from: null, to: null, has_risk: null });
+  }, [updateSearchParams]);
+
   const clearAssistantFilter = useCallback(() => {
     updateSearchParams({ assistantId: null });
   }, [updateSearchParams]);
@@ -230,10 +249,6 @@ export function LogsAgentsContent(): JSX.Element {
     },
     [updateSearchParams],
   );
-
-  const toggleSortOrder = useCallback(() => {
-    setSortOrder(sortOrder === "desc" ? "asc" : "desc");
-  }, [sortOrder, setSortOrder]);
 
   const { data, isLoading, error, refetch, isLogsDisabled } =
     useLogsEnabledErrorCheck(
@@ -334,13 +349,14 @@ export function LogsAgentsContent(): JSX.Element {
         setSearchQuery={setSearchQuery}
         hasRisk={hasRisk}
         setHasRisk={setHasRisk}
+        clearAllFilters={clearAllFilters}
         assistantName={filteredAssistant?.name ?? null}
         hasAssistantFilter={!!assistantId}
         clearAssistantFilter={clearAssistantFilter}
         sortField={sortField}
         setSortField={setSortField}
         sortOrder={sortOrder}
-        toggleSortOrder={toggleSortOrder}
+        setSortOrder={setSortOrder}
         chats={chats}
         selectedChat={selectedChat}
         setSelectedChat={setSelectedChat}
@@ -369,13 +385,14 @@ function AgentSessionsPageContent({
   setSearchQuery,
   hasRisk,
   setHasRisk,
+  clearAllFilters,
   assistantName,
   hasAssistantFilter,
   clearAssistantFilter,
   sortField,
   setSortField,
   sortOrder,
-  toggleSortOrder,
+  setSortOrder,
   chats,
   selectedChat,
   setSelectedChat,
@@ -399,13 +416,14 @@ function AgentSessionsPageContent({
   setSearchQuery: (value: string) => void;
   hasRisk: string;
   setHasRisk: (value: string) => void;
+  clearAllFilters: () => void;
   assistantName: string | null;
   hasAssistantFilter: boolean;
   clearAssistantFilter: () => void;
   sortField: SortField;
   setSortField: (value: SortField) => void;
   sortOrder: SortOrder;
-  toggleSortOrder: () => void;
+  setSortOrder: (value: SortOrder) => void;
   chats: ChatOverview[];
   selectedChat: ChatOverview | null;
   setSelectedChat: (chat: ChatOverview | null) => void;
@@ -476,67 +494,64 @@ function AgentSessionsPageContent({
               </button>
             </Badge>
           )}
-          <div className="flex items-center gap-3">
-            <ChatLogsFilters
-              searchQuery={searchQuery}
-              onSearchQueryChange={setSearchQuery}
-              hasRisk={hasRisk}
-              onHasRiskChange={setHasRisk}
+          <Page.Toolbar>
+            <Page.Toolbar.Search
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder="Search by chat ID, user ID, or title..."
+              debounceMs={500}
             />
-            <div className="ml-auto flex shrink-0 items-center gap-3">
-              <div className="border-border flex h-10 items-center rounded-md border">
-                <span className="text-muted-foreground px-3 text-sm font-medium">
-                  Sort
-                </span>
-                <div className="bg-border h-5 w-px" />
-                <Select
-                  value={sortField}
-                  onValueChange={(v) => setSortField(v as SortField)}
-                >
-                  <SelectTrigger className="h-full min-w-[100px] rounded-none border-0 shadow-none">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="w-[280px]">
-                    <SelectItem
-                      value="chronological"
-                      description="Sort by latest chat message activity"
-                    >
-                      Date
-                    </SelectItem>
-                    <SelectItem
-                      value="messageCount"
-                      description="Sort by number of messages in the chat"
-                    >
-                      Messages
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                <div className="bg-border h-5 w-px" />
-                <div className="flex items-center px-1.5">
-                  <SimpleTooltip tooltip="Sort direction">
-                    <button
-                      type="button"
-                      onClick={toggleSortOrder}
-                      className="text-muted-foreground hover:text-foreground hover:bg-accent flex size-7 items-center justify-center rounded transition-colors"
-                    >
-                      {sortOrder === "desc" ? (
-                        <ArrowDownIcon className="size-4" />
-                      ) : (
-                        <ArrowUpIcon className="size-4" />
-                      )}
-                    </button>
-                  </SimpleTooltip>
-                </div>
-              </div>
-              <TimeRangePicker
-                preset={customRange ? null : dateRange}
-                customRange={customRange}
-                onPresetChange={setDateRangeParam}
-                onCustomRangeChange={setCustomRangeParam}
-                onClearCustomRange={clearCustomRange}
-              />
-            </div>
-          </div>
+            <Page.Toolbar.Filters
+              schema={SESSION_FILTERS}
+              values={{
+                date: {
+                  preset: customRange ? null : dateRange,
+                  customRange,
+                  customLabel: null,
+                },
+                has_risk: hasRisk || null,
+              }}
+              optionsById={HAS_RISK_OPTIONS}
+              onChange={(id: string, value: FilterValue) => {
+                if (id === "date") {
+                  const dateValue = value as {
+                    preset: DateRangePreset | null;
+                    customRange: { from: Date; to: Date } | null;
+                  };
+                  if (dateValue.customRange) {
+                    setCustomRangeParam(
+                      dateValue.customRange.from,
+                      dateValue.customRange.to,
+                    );
+                  } else if (dateValue.preset) {
+                    setDateRangeParam(dateValue.preset);
+                  } else {
+                    clearCustomRange();
+                  }
+                } else if (id === "has_risk") {
+                  setHasRisk((value as string | null) ?? "");
+                }
+              }}
+              onClear={(id: string) => {
+                if (id === "date") {
+                  setDateRangeParam("30d");
+                } else if (id === "has_risk") {
+                  setHasRisk("");
+                }
+              }}
+              onClearAll={clearAllFilters}
+            />
+            <Page.Toolbar.SortBy
+              value={sortField}
+              onChange={(v) => setSortField(v as SortField)}
+              options={[
+                { value: "chronological", label: "Date" },
+                { value: "messageCount", label: "Message Count" },
+              ]}
+              direction={sortOrder}
+              onDirectionChange={setSortOrder}
+            />
+          </Page.Toolbar>
         </div>
 
         <div className="min-h-0 flex-1 overflow-hidden border-t">

@@ -29,6 +29,7 @@ type Server struct {
 	GetEmployeeDataFlowGraph  http.Handler
 	GetObservabilityOverview  http.Handler
 	GetProjectOverview        http.Handler
+	Query                     http.Handler
 	ListFilterOptions         http.Handler
 	ListAttributeKeys         http.Handler
 	GetHooksSummary           http.Handler
@@ -75,6 +76,7 @@ func New(
 			{"GetEmployeeDataFlowGraph", "POST", "/rpc/telemetry.getEmployeeDataFlowGraph"},
 			{"GetObservabilityOverview", "POST", "/rpc/telemetry.getObservabilityOverview"},
 			{"GetProjectOverview", "POST", "/rpc/telemetry.getProjectOverview"},
+			{"Query", "POST", "/rpc/telemetry.query"},
 			{"ListFilterOptions", "POST", "/rpc/telemetry.listFilterOptions"},
 			{"ListAttributeKeys", "POST", "/rpc/telemetry.listAttributeKeys"},
 			{"GetHooksSummary", "POST", "/rpc/telemetry.getHooksSummary"},
@@ -93,6 +95,7 @@ func New(
 		GetEmployeeDataFlowGraph:  NewGetEmployeeDataFlowGraphHandler(e.GetEmployeeDataFlowGraph, mux, decoder, encoder, errhandler, formatter),
 		GetObservabilityOverview:  NewGetObservabilityOverviewHandler(e.GetObservabilityOverview, mux, decoder, encoder, errhandler, formatter),
 		GetProjectOverview:        NewGetProjectOverviewHandler(e.GetProjectOverview, mux, decoder, encoder, errhandler, formatter),
+		Query:                     NewQueryHandler(e.Query, mux, decoder, encoder, errhandler, formatter),
 		ListFilterOptions:         NewListFilterOptionsHandler(e.ListFilterOptions, mux, decoder, encoder, errhandler, formatter),
 		ListAttributeKeys:         NewListAttributeKeysHandler(e.ListAttributeKeys, mux, decoder, encoder, errhandler, formatter),
 		GetHooksSummary:           NewGetHooksSummaryHandler(e.GetHooksSummary, mux, decoder, encoder, errhandler, formatter),
@@ -118,6 +121,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetEmployeeDataFlowGraph = m(s.GetEmployeeDataFlowGraph)
 	s.GetObservabilityOverview = m(s.GetObservabilityOverview)
 	s.GetProjectOverview = m(s.GetProjectOverview)
+	s.Query = m(s.Query)
 	s.ListFilterOptions = m(s.ListFilterOptions)
 	s.ListAttributeKeys = m(s.ListAttributeKeys)
 	s.GetHooksSummary = m(s.GetHooksSummary)
@@ -142,6 +146,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetEmployeeDataFlowGraphHandler(mux, h.GetEmployeeDataFlowGraph)
 	MountGetObservabilityOverviewHandler(mux, h.GetObservabilityOverview)
 	MountGetProjectOverviewHandler(mux, h.GetProjectOverview)
+	MountQueryHandler(mux, h.Query)
 	MountListFilterOptionsHandler(mux, h.ListFilterOptions)
 	MountListAttributeKeysHandler(mux, h.ListAttributeKeys)
 	MountGetHooksSummaryHandler(mux, h.GetHooksSummary)
@@ -666,6 +671,59 @@ func NewGetProjectOverviewHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getProjectOverview")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountQueryHandler configures the mux to serve the "telemetry" service
+// "query" endpoint.
+func MountQueryHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/telemetry.query", f)
+}
+
+// NewQueryHandler creates a HTTP handler which loads the HTTP request and
+// calls the "telemetry" service "query" endpoint.
+func NewQueryHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeQueryRequest(mux, decoder)
+		encodeResponse = EncodeQueryResponse(encoder)
+		encodeError    = EncodeQueryError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "query")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
 		payload, err := decodeRequest(r)
 		if err != nil {

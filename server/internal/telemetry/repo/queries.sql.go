@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -4282,7 +4283,7 @@ func (q *Queries) ListClaudeUserPromptCandidatesForCorrelation(ctx context.Conte
 		"gram_project_id":               arg.GramProjectID,
 		"gram_chat_id":                  arg.GramChatID,
 		"session_id":                    arg.SessionID,
-		"message_prompt":                arg.MessagePrompt,
+		"message_prompt_b64":            base64.StdEncoding.EncodeToString([]byte(arg.MessagePrompt)),
 		"message_time_unix_nano":        strconv.FormatInt(arg.MessageTimeUnixNano, 10),
 		"after_event_sequence":          strconv.FormatInt(arg.AfterEventSequence, 10),
 		"after_event_time_unix_nano":    strconv.FormatInt(arg.AfterEventTimeUnixNano, 10),
@@ -4341,7 +4342,7 @@ func (q *Queries) ListClaudeUserPromptCandidatesForCorrelation(ctx context.Conte
 		"is_exact",
 	).
 		Prefix(`WITH
-			{message_prompt:String} AS message_prompt,
+			replaceRegexpAll(trimBoth(base64Decode({message_prompt_b64:String})), '\\s+', ' ') AS message_prompt,
 			lengthUTF8(message_prompt) AS message_len,
 			{message_time_unix_nano:Int64} AS message_time_unix_nano,
 			{max_time_delta_nanos:Int64} AS max_time_delta_nanos`).

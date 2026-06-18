@@ -18,6 +18,7 @@ type MCPServerEntry struct {
 	Status        string `json:"status"`                // "connected", "needs_auth", "failed", "unknown"
 	StatusRaw     string `json:"status_raw"`
 	ConnectorUUID string `json:"connector_uuid,omitempty"` // populated for entries shipped by the cowork branch
+	ToolPrefix    string `json:"tool_prefix,omitempty"`    // pre-computed mcp__<prefix>__ identity when the assistant's sanitizer differs from Claude's (Codex)
 }
 
 // ParseClaudeMCPList parses the textual output of `claude mcp list` into
@@ -49,7 +50,7 @@ func ParseClaudeMCPList(out string) []MCPServerEntry {
 func parseClaudeMCPListLine(line string) (MCPServerEntry, bool) {
 	sepIdx := strings.LastIndex(line, " - ")
 	if sepIdx < 0 {
-		return MCPServerEntry{RawLine: "", Source: "", PluginName: "", Name: "", URL: "", Command: "", Transport: "", Status: "", StatusRaw: "", ConnectorUUID: ""}, false
+		return MCPServerEntry{RawLine: "", Source: "", PluginName: "", Name: "", URL: "", Command: "", Transport: "", Status: "", StatusRaw: "", ConnectorUUID: "", ToolPrefix: ""}, false
 	}
 	head := strings.TrimSpace(line[:sepIdx])
 	statusRaw := strings.TrimSpace(line[sepIdx+3:])
@@ -67,12 +68,12 @@ func parseClaudeMCPListLine(line string) (MCPServerEntry, bool) {
 
 	colonIdx := strings.LastIndex(head, ": ")
 	if colonIdx < 0 {
-		return MCPServerEntry{RawLine: "", Source: "", PluginName: "", Name: "", URL: "", Command: "", Transport: "", Status: "", StatusRaw: "", ConnectorUUID: ""}, false
+		return MCPServerEntry{RawLine: "", Source: "", PluginName: "", Name: "", URL: "", Command: "", Transport: "", Status: "", StatusRaw: "", ConnectorUUID: "", ToolPrefix: ""}, false
 	}
 	name := strings.TrimSpace(head[:colonIdx])
 	target := strings.TrimSpace(head[colonIdx+2:])
 	if name == "" || target == "" {
-		return MCPServerEntry{RawLine: "", Source: "", PluginName: "", Name: "", URL: "", Command: "", Transport: "", Status: "", StatusRaw: "", ConnectorUUID: ""}, false
+		return MCPServerEntry{RawLine: "", Source: "", PluginName: "", Name: "", URL: "", Command: "", Transport: "", Status: "", StatusRaw: "", ConnectorUUID: "", ToolPrefix: ""}, false
 	}
 
 	e := MCPServerEntry{
@@ -86,6 +87,7 @@ func parseClaudeMCPListLine(line string) (MCPServerEntry, bool) {
 		Status:        classifyMCPStatus(statusRaw),
 		StatusRaw:     statusRaw,
 		ConnectorUUID: "",
+		ToolPrefix:    "",
 	}
 	e.Source, e.PluginName, e.Name = classifyMCPName(name)
 

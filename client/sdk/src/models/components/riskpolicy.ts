@@ -125,7 +125,7 @@ export type RiskPolicy = {
    */
   prompt?: string | undefined;
   /**
-   * Prompt-injection detection rule ids enabled in addition to the heuristic baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.
+   * Prompt-injection detection rule ids enabled in addition to the heuristic baseline. When empty, only heuristics run.
    */
   promptInjectionRules?: Array<string> | undefined;
   /**

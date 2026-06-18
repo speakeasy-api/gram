@@ -1190,6 +1190,27 @@ func (q *Queries) ListToolsetsWithVersionsByOrganization(ctx context.Context, or
 	return items, nil
 }
 
+const setToolsetCustomDomain = `-- name: SetToolsetCustomDomain :exec
+UPDATE toolsets
+SET
+    custom_domain_id = $1
+  , updated_at = clock_timestamp()
+WHERE slug = $2 AND project_id = $3
+`
+
+type SetToolsetCustomDomainParams struct {
+	CustomDomainID uuid.NullUUID
+	Slug           string
+	ProjectID      uuid.UUID
+}
+
+// Narrow setter used by test fixtures: UpdateToolset's COALESCE pattern can't
+// set custom_domain_id without also supplying every non-nullable column.
+func (q *Queries) SetToolsetCustomDomain(ctx context.Context, arg SetToolsetCustomDomainParams) error {
+	_, err := q.db.Exec(ctx, setToolsetCustomDomain, arg.CustomDomainID, arg.Slug, arg.ProjectID)
+	return err
+}
+
 const setToolsetMCPEnabledByID = `-- name: SetToolsetMCPEnabledByID :exec
 UPDATE toolsets
 SET mcp_enabled = $1

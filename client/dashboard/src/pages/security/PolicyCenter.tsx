@@ -649,9 +649,9 @@ function policyToCategories(
  *   per-rule allowlist applied post-scan for sources without entity-level
  *   query support (gitleaks). It also serves as a redundancy net for
  *   presidio in case of API drift.
- * - `promptInjectionRules` stays empty for backward compatibility — the
- *   detection engine (deberta classifier vs L0 regex) is chosen per-org
- *   via a feature flag, not by the policy author. */
+ * - `promptInjectionRules` stays empty for backward compatibility — whether
+ *   the L1 LLM judge runs on top of the L0 heuristics is chosen per-org via a
+ *   feature flag, not by the policy author. */
 function categoriesToPayload(
   cats: Set<RuleCategory>,
   disabledRules: Set<string>,
@@ -1406,7 +1406,7 @@ function PolicyCenterContent() {
     "Page: Policy Center.",
     `Total policies: ${policyRows.length}, enabled: ${enabledPolicies.length}.`,
     `Policy actions: ${policyRows.map((r) => `${r.policy.name} (${r.policy.action})`).join(", ") || "none"}.`,
-    "Available risk tools: listRiskPolicies, getRiskPolicy, getRiskCapabilities, getRiskPolicyStatus, listRiskResultsForAgent (finding-level with match redaction), listRiskResultsByChat, listShadowMCPApprovals.",
+    "Available risk tools: listRiskPolicies, getRiskPolicy, getRiskPolicyStatus, listRiskResultsForAgent (finding-level with match redaction), listRiskResultsByChat, listShadowMCPApprovals.",
     "Never echo match_redacted values verbatim. Refer to findings by rule_id and source.",
   ].join(" ");
 

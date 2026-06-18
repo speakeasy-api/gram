@@ -126,7 +126,7 @@ type Scanner struct {
 
 // NewScanner creates a RiskScanner. piiScanner may be nil if Presidio
 // is not available in the server process. piScanner must be non-nil; pass a
-// scanner wrapping ra.StubClassifier{} when --pi-classifier-url is empty.
+// scanner built with a nil engine to run L0 heuristics only.
 // Pre-creates a gitleaks detector to avoid per-scan rule compilation on the
 // real-time hook path; returns an error if the detector cannot be built
 // (init relies on viper global state and should never realistically fail,
@@ -138,7 +138,7 @@ func NewScanner(logger *slog.Logger, db *pgxpool.Pool, piiScanner ra.PIIScanner,
 	}
 
 	if piScanner == nil {
-		piScanner = ra.NewPromptInjectionScanner(logger, ra.StubClassifier{}, nil)
+		piScanner = ra.NewPromptInjectionScanner(logger, nil)
 	}
 
 	return &Scanner{
@@ -202,7 +202,19 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, organizationID string,
 		return p.PolicyType == "prompt_based" && inMessageScope(p)
 	}) {
 		// All enforcing policies for a project belong to the same org.
-		promptPoliciesOn = s.promptPoliciesEnabled(ctx, policies[0].OrganizationID, projectID)
+		promptPoliciesOn = s.projectFlagEnabled(ctx, policies[0].OrganizationID, projectID, feature.FlagPromptPolicies)
+	}
+
+	// Same once-per-scan resolution for the L1 prompt-injection engine: gate on
+	// a standard policy whose prompt_injection source applies to this message,
+	// so the slug/flag lookup is skipped for scans that can never run L1.
+	piEngineOn := false
+	if slices.ContainsFunc(policies, func(p repo.RiskPolicy) bool {
+		return p.PolicyType != "prompt_based" &&
+			slices.Contains(p.Sources, ra.SourcePromptInjection) &&
+			(len(p.MessageTypes) == 0 || slices.Contains(p.MessageTypes, messageType))
+	}) {
+		piEngineOn = s.projectFlagEnabled(ctx, policies[0].OrganizationID, projectID, feature.FlagPromptInjectionUseClassifier)
 	}
 
 	// Fan out across policies. The first goroutine that finds a match returns
@@ -230,7 +242,7 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, organizationID string,
 		}
 
 		g.Go(func() error {
-			result, scanErr := s.scanPolicy(gctx, p, text, messageType, toolName, promptPoliciesOn)
+			result, scanErr := s.scanPolicy(gctx, p, text, messageType, toolName, promptPoliciesOn, piEngineOn)
 			if scanErr != nil {
 				if errors.Is(scanErr, context.Canceled) {
 					return nil
@@ -337,7 +349,7 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 // text per call — its internal worker pool only fans out when n > 1, so
 // per-policy parallelism over sources buys roughly nothing. The
 // across-policies fan-out in ScanForEnforcement is the real win.
-func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type, toolName string, promptPoliciesOn bool) (*ScanResult, error) {
+func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type, toolName string, promptPoliciesOn bool, piEngineOn bool) (*ScanResult, error) {
 	// Build the structured view once; the application predicates and custom
 	// rules both evaluate against it.
 	view := ra.MessageView{Content: text, Type: messageType, Tools: nil}
@@ -434,7 +446,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 				}
 			}
 		case ra.SourcePromptInjection:
-			findings, err := s.piScanner.Scan(ctx, text, policy.OrganizationID)
+			findings, err := s.piScanner.Scan(ctx, text, policy.OrganizationID, policy.ProjectID.String(), ra.NewJudgeMessage(messageType, toolName, text), piEngineOn)
 			if err != nil {
 				return nil, fmt.Errorf("prompt injection scan: %w", err)
 			}
@@ -509,20 +521,23 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 	}
 }
 
-func (s *Scanner) promptPoliciesEnabled(ctx context.Context, orgID string, projectID uuid.UUID) bool {
+// projectFlagEnabled resolves a per-project PostHog feature flag, evaluating it
+// against the same org/project groups the dashboard registers so a
+// group-targeted release matches identically. A nil flag provider, or a failed
+// slug or flag lookup, degrades to disabled. Shared by the prompt-policies and
+// prompt-injection-engine gates.
+func (s *Scanner) projectFlagEnabled(ctx context.Context, orgID string, projectID uuid.UUID, flag feature.Flag) bool {
 	if s.flags == nil {
 		return false
 	}
-	// Resolve the org/project slugs so the flag evaluates against the same
-	// PostHog groups the dashboard uses. A failed lookup degrades to disabled.
 	groups, err := s.repo.GetProjectFlagGroups(ctx, projectID)
 	if err != nil {
-		s.logger.WarnContext(ctx, "resolve prompt policy flag groups failed", attr.SlogError(err), attr.SlogOrganizationID(orgID), attr.SlogProjectID(projectID.String()))
+		s.logger.WarnContext(ctx, "resolve project flag groups failed", attr.SlogError(err), attr.SlogOrganizationID(orgID), attr.SlogProjectID(projectID.String()))
 		return false
 	}
-	on, err := s.flags.IsFlagEnabled(ctx, feature.FlagPromptPolicies, orgID, feature.OrgProjectGroups(groups.OrganizationSlug, groups.ProjectSlug))
+	on, err := s.flags.IsFlagEnabled(ctx, flag, orgID, feature.OrgProjectGroups(groups.OrganizationSlug, groups.ProjectSlug))
 	if err != nil {
-		s.logger.WarnContext(ctx, "prompt policy flag check failed", attr.SlogError(err), attr.SlogOrganizationID(orgID))
+		s.logger.WarnContext(ctx, "project flag check failed", attr.SlogError(err), attr.SlogOrganizationID(orgID))
 		return false
 	}
 	return on

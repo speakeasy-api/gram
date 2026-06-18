@@ -77,6 +77,12 @@ type Service interface {
 	// Revoke (soft-delete) a single remote_session in the caller's organization.
 	// Requires org:admin.
 	RevokeSession(context.Context, *RevokeSessionPayload) (err error)
+	// Force an upstream token refresh on a single remote_session in the caller's
+	// organization, regardless of current access-token expiry. Returns the updated
+	// remote_session so callers can reflect the new expiry without a refetch.
+	// Fails with a bad-request error when the session holds no refresh token.
+	// Requires org:admin.
+	RefreshSession(context.Context, *RefreshSessionPayload) (res *types.RemoteSession, err error)
 	// Revoke (soft-delete) all remote_sessions minted against a
 	// remote_session_client in the caller's organization. Requires org:admin.
 	RevokeAllClientSessions(context.Context, *RevokeAllClientSessionsPayload) (res *RevokeAllRemoteSessionsResult, err error)
@@ -102,7 +108,7 @@ const ServiceName = "organizationRemoteSessionIssuers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [17]string{"createIssuer", "listIssuers", "getIssuer", "getIssuerDeletePreflight", "updateIssuer", "deleteIssuer", "moveIssuer", "listClients", "getClient", "getClientDeletePreflight", "listClientMcpServers", "listClientSessions", "updateClient", "deleteClient", "removeClientFromMcpServer", "revokeSession", "revokeAllClientSessions"}
+var MethodNames = [18]string{"createIssuer", "listIssuers", "getIssuer", "getIssuerDeletePreflight", "updateIssuer", "deleteIssuer", "moveIssuer", "listClients", "getClient", "getClientDeletePreflight", "listClientMcpServers", "listClientSessions", "updateClient", "deleteClient", "removeClientFromMcpServer", "revokeSession", "refreshSession", "revokeAllClientSessions"}
 
 // CreateIssuerPayload is the payload type of the
 // organizationRemoteSessionIssuers service createIssuer method.
@@ -345,6 +351,15 @@ type OrganizationRemoteSessionIssuer struct {
 	// The owning project's name. Empty for organizational (project_id NULL)
 	// issuers.
 	ProjectName *string
+}
+
+// RefreshSessionPayload is the payload type of the
+// organizationRemoteSessionIssuers service refreshSession method.
+type RefreshSessionPayload struct {
+	// The remote_session id.
+	ID           string
+	SessionToken *string
+	ApikeyToken  *string
 }
 
 // RemoveClientFromMcpServerPayload is the payload type of the

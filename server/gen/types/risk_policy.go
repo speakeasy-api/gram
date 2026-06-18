@@ -23,7 +23,7 @@ type RiskPolicy struct {
 	// Presidio entity types to scan for. When empty, scans all entities.
 	PresidioEntities []string
 	// Prompt-injection detection rule ids enabled in addition to the heuristic
-	// baseline (e.g. 'deberta-v3-classifier'). When empty, only heuristics run.
+	// baseline. When empty, only heuristics run.
 	PromptInjectionRules []string
 	// Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the
 	// policy author has unchecked within an otherwise-enabled category. Empty

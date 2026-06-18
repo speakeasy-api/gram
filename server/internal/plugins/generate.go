@@ -1045,7 +1045,11 @@ if command -v python3 >/dev/null 2>&1; then
 import base64
 import json
 import os
+import re
+import shutil
+import subprocess
 import sys
+import urllib.parse
 
 payload = sys.stdin.read()
 try:
@@ -1071,6 +1075,133 @@ if data.get("hook_event_name") == "SessionStart" and not data.get("user_email"):
 
     if email:
         data["user_email"] = email
+
+# SessionStart only: collect the configured MCP server inventory so Gram can
+# apply shadow-MCP policy and visibility to servers it is not proxying. The
+# gate is a real JSON field check, so the blocking PreToolUse path never pays
+# for a codex invocation; SessionStart itself is routed through hook_async.sh
+# so the latency is invisible to Codex. The timeout caps wall time in case
+# the codex CLI misbehaves.
+#
+# Only the fields Gram consumes are shipped — the raw transport object also
+# carries env vars and HTTP headers, which often contain credentials and
+# must never leave the machine. Stdio launch args are kept for server
+# identity (e.g. npx package names) but credential-shaped values are
+# redacted: values following a secret-named flag (including the short -H
+# header alias), inline flag=value pairs, header-shaped values whose name
+# suggests credentials, and well-known token prefixes.
+secret_flag = re.compile(r"(key|token|secret|password|passwd|auth|credential|header)", re.I)
+secret_value = re.compile(r"^(sk-|pk-|ghp_|gho_|github_pat_|xox[a-z]-|ya29\.|AKIA|eyJ)")
+secret_header = re.compile(r"^(authorization|proxy-authorization|cookie|[a-z0-9_-]*(key|token|secret|auth)[a-z0-9_-]*)\s*:", re.I)
+
+def redact_args(args):
+    if not isinstance(args, list):
+        return None
+    out = []
+    redact_next = False
+    for a in args:
+        if not isinstance(a, str):
+            continue
+        if redact_next:
+            out.append("[REDACTED]")
+            redact_next = False
+        elif "=" in a and secret_flag.search(a.split("=", 1)[0]):
+            out.append(a.split("=", 1)[0] + "=[REDACTED]")
+        elif a == "-H":
+            out.append(a)
+            redact_next = True
+        elif a.startswith("-H") and secret_header.match(a[2:]):
+            out.append("-H" + a[2:].split(":", 1)[0] + ": [REDACTED]")
+        elif a.startswith("-") and secret_flag.search(a):
+            out.append(a)
+            redact_next = True
+        elif secret_header.match(a):
+            out.append(a.split(":", 1)[0] + ": [REDACTED]")
+        elif secret_value.match(a):
+            out.append("[REDACTED]")
+        else:
+            out.append(a)
+    return out
+
+# URLs are their own credential channel: strip userinfo and the fragment
+# (OAuth-style #access_token=... never identifies a server) and redact
+# secret-named query parameters while preserving scheme/host/path, which
+# the server needs for provenance checks.
+def redact_url(url):
+    if not isinstance(url, str) or not url:
+        return url
+    try:
+        parts = urllib.parse.urlsplit(url)
+        netloc = parts.netloc.rsplit("@", 1)[-1]
+        pairs = []
+        for k, v in urllib.parse.parse_qsl(parts.query, keep_blank_values=True):
+            if secret_flag.search(k):
+                v = "[REDACTED]"
+            pairs.append((k, v))
+        query = urllib.parse.urlencode(pairs)
+        return urllib.parse.urlunsplit((parts.scheme, netloc, parts.path, query, ""))
+    except Exception:
+        return url
+
+# PATH lookup alone misses real installs: hooks fired by the Codex desktop
+# app inherit the minimal GUI environment, and desktop-only users never have
+# codex on PATH at all — the app references its bundled binary by absolute
+# path. Probe the managed-install and app-bundle locations directly; paths
+# absent on this platform simply fail the probe. NB: this comment is inside
+# a bash single-quoted heredoc — apostrophes here break the script.
+def find_codex():
+    found = shutil.which("codex")
+    if found:
+        return found
+    home = os.path.expanduser("~")
+    codex_home = os.environ.get("CODEX_HOME") or os.path.join(home, ".codex")
+    candidates = [
+        os.path.join(codex_home, "packages", "standalone", "current", "bin", "codex"),
+        os.path.join(home, ".local", "bin", "codex"),
+        "/usr/local/bin/codex",
+        "/Applications/Codex.app/Contents/Resources/codex",
+    ]
+    for candidate in candidates:
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    return None
+
+codex_bin = find_codex() if data.get("hook_event_name") == "SessionStart" else None
+if codex_bin:
+    try:
+        out = subprocess.run(
+            [codex_bin, "mcp", "list", "--json"],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            timeout=15,
+        ).stdout
+        inventory = json.loads(out)
+    except Exception:
+        inventory = None
+    if isinstance(inventory, list):
+        slim = []
+        for item in inventory:
+            if not isinstance(item, dict):
+                continue
+            transport = item.get("transport")
+            if not isinstance(transport, dict):
+                transport = {}
+            slim.append({
+                "name": item.get("name"),
+                "enabled": item.get("enabled"),
+                "auth_status": item.get("auth_status"),
+                "transport": {
+                    "type": transport.get("type"),
+                    "url": redact_url(transport.get("url")),
+                    "command": transport.get("command"),
+                    "args": redact_args(transport.get("args")),
+                },
+            })
+        additional = data.get("additional_data")
+        if not isinstance(additional, dict):
+            additional = {}
+        additional["mcp_inventory_codex"] = slim
+        data["additional_data"] = additional
 
 print(json.dumps(data, separators=(",", ":")), end="")
 ' 2>/dev/null) || true
