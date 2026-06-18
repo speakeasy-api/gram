@@ -156,6 +156,7 @@ export * from "./listPackages.js";
 export * from "./listProjects.js";
 export * from "./listResources.js";
 export * from "./listScopes.js";
+export * from "./listSessions.js";
 export * from "./listTools.js";
 export * from "./listToolsets.js";
 export * from "./listToolsetsForOrg.js";

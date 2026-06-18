@@ -2,6 +2,9 @@ package telemetry
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"sort"
 	"strconv"
 
@@ -22,6 +25,11 @@ const minIntervalSeconds int64 = 3600
 // remainder beyond top_n. If a real group already uses this value, the response
 // picks a suffixed label so the synthetic rollup cannot collide with user data.
 const otherGroupLabel = "Other"
+
+type listSessionsCursor struct {
+	SortValue  float64 `json:"sort_value"`
+	GramChatID string  `json:"gram_chat_id"`
+}
 
 // Query is a generic, org-scoped analytics query over the pre-aggregated
 // attribute_metrics_summaries view. It returns both a grouped table and a
@@ -97,6 +105,147 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 	}
 
 	return buildQueryResult(groupBy, interval, timeStart, timeEnd, payload.TopN, tableRows, tsRows), nil
+}
+
+// ListSessions returns org-scoped chat sessions for a filtered analytics slice.
+func (s *Service) ListSessions(ctx context.Context, payload *telem_gen.ListSessionsPayload) (*telem_gen.ListSessionsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
+	}
+
+	limit := payload.Limit
+	if limit == 0 {
+		limit = 50
+	}
+	if limit < 1 || limit > 1000 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "limit must be between 1 and 1000")
+	}
+
+	sortBy := payload.SortBy
+	if sortBy == "" {
+		sortBy = "total_cost"
+	}
+
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	projects, err := s.projectsRepo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list organization projects")
+	}
+	projectIDs := make([]string, 0, len(projects))
+	for _, p := range projects {
+		projectIDs = append(projectIDs, p.ID.String())
+	}
+
+	var cursorSortValue *float64
+	var cursorGramChatID string
+	if payload.Cursor != nil && *payload.Cursor != "" {
+		cursor, err := decodeListSessionsCursor(*payload.Cursor)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor")
+		}
+		cursorSortValue = &cursor.SortValue
+		cursorGramChatID = cursor.GramChatID
+	}
+
+	filters := make([]repo.AttributeMetricsFilter, 0, len(payload.Filters))
+	for _, f := range payload.Filters {
+		if f == nil {
+			return nil, oops.E(oops.CodeBadRequest, nil, "filters must not contain null entries")
+		}
+		filters = append(filters, repo.AttributeMetricsFilter{Dimension: f.Dimension, Values: f.Values})
+	}
+
+	items, err := s.chRepo.ListSessions(ctx, repo.ListSessionsParams{
+		ProjectIDs:       projectIDs,
+		TimeStart:        timeStart,
+		TimeEnd:          timeEnd,
+		Filters:          filters,
+		SortBy:           sortBy,
+		CursorSortValue:  cursorSortValue,
+		CursorGramChatID: cursorGramChatID,
+		Limit:            limit + 1,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing sessions")
+	}
+
+	var nextCursor *string
+	if len(items) > limit {
+		next := encodeListSessionsCursor(items[limit-1].SortValue, items[limit-1].GramChatID)
+		nextCursor = &next
+		items = items[:limit]
+	}
+
+	sessions := make([]*telem_gen.SessionSummary, len(items))
+	for i, item := range items {
+		sessions[i] = &telem_gen.SessionSummary{
+			GramChatID:        item.GramChatID,
+			ProjectID:         item.ProjectID,
+			UserEmail:         item.UserEmail,
+			HookSource:        item.HookSource,
+			Model:             item.Model,
+			StartTimeUnixNano: strconv.FormatInt(item.StartTimeUnixNano, 10),
+			EndTimeUnixNano:   strconv.FormatInt(item.EndTimeUnixNano, 10),
+			DurationSeconds:   sanitizeFloat64(item.DurationSeconds),
+			MessageCount:      item.MessageCount,
+			ToolCallCount:     item.ToolCallCount,
+			TotalInputTokens:  item.TotalInputTokens,
+			TotalOutputTokens: item.TotalOutputTokens,
+			TotalTokens:       item.TotalTokens,
+			TotalCost:         sanitizeFloat64(item.TotalCost),
+			Status:            item.Status,
+		}
+	}
+
+	return &telem_gen.ListSessionsResult{
+		Sessions:   sessions,
+		NextCursor: nextCursor,
+	}, nil
+}
+
+func encodeListSessionsCursor(sortValue float64, gramChatID string) string {
+	payload, err := json.Marshal(listSessionsCursor{
+		SortValue:  sortValue,
+		GramChatID: gramChatID,
+	})
+	if err != nil {
+		// The cursor payload is made from primitive values and should always marshal.
+		return ""
+	}
+	return base64.RawURLEncoding.EncodeToString(payload)
+}
+
+func decodeListSessionsCursor(cursor string) (listSessionsCursor, error) {
+	decoded, err := base64.RawURLEncoding.DecodeString(cursor)
+	if err != nil {
+		return listSessionsCursor{}, fmt.Errorf("decode list sessions cursor: %w", err)
+	}
+
+	var payload listSessionsCursor
+	if err := json.Unmarshal(decoded, &payload); err != nil {
+		return listSessionsCursor{}, fmt.Errorf("unmarshal list sessions cursor: %w", err)
+	}
+	if payload.GramChatID == "" {
+		return listSessionsCursor{}, fmt.Errorf("missing gram_chat_id")
+	}
+	return payload, nil
 }
 
 // buildQueryResult assembles the grouped table and matching per-group timeseries

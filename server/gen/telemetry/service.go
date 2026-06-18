@@ -45,6 +45,10 @@ type Service interface {
 	// filters (e.g. group by department_name, then drill in by filtering
 	// department_name and grouping by role).
 	Query(context.Context, *QueryPayload) (res *QueryResult, err error)
+	// Org-scoped list of individual chat sessions for a slice of usage, filtered
+	// by the same allowlisted dimensions as telemetry.query. Returns per-session
+	// cost, token, and tool metrics with cursor pagination.
+	ListSessions(context.Context, *ListSessionsPayload) (res *ListSessionsResult, err error)
 	// List available filter options (API keys or users) for the observability
 	// overview
 	ListFilterOptions(context.Context, *ListFilterOptionsPayload) (res *ListFilterOptionsResult, err error)
@@ -84,7 +88,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [18]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "query", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "listToolUsageTraces", "getToolUsageFilterOptions", "listHooksTraces"}
+var MethodNames = [19]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "query", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "listToolUsageTraces", "getToolUsageFilterOptions", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -603,6 +607,33 @@ type ListHooksTracesResult struct {
 	NextCursor *string
 }
 
+// ListSessionsPayload is the payload type of the telemetry service
+// listSessions method.
+type ListSessionsPayload struct {
+	SessionToken *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Optional filters; all filters are ANDed together.
+	Filters []*QueryFilter
+	// Measure used to rank sessions. Defaults to total_cost.
+	SortBy string
+	// Number of sessions to return (1-1000)
+	Limit int
+	// Opaque cursor for pagination
+	Cursor *string
+}
+
+// ListSessionsResult is the result type of the telemetry service listSessions
+// method.
+type ListSessionsResult struct {
+	// List of chat session summaries
+	Sessions []*SessionSummary
+	// Cursor for next page
+	NextCursor *string
+}
+
 // ListToolUsageTracesPayload is the payload type of the telemetry service
 // listToolUsageTraces method.
 type ListToolUsageTracesPayload struct {
@@ -1106,6 +1137,40 @@ type ServiceInfo struct {
 	Name string
 	// Service version
 	Version *string
+}
+
+// Org-scoped summary information for a chat session
+type SessionSummary struct {
+	// Chat session ID
+	GramChatID string
+	// Project ID that emitted this chat session
+	ProjectID string
+	// User email associated with this chat session
+	UserEmail *string
+	// Client or agent surface associated with this chat session
+	HookSource *string
+	// LLM model used in this chat session
+	Model *string
+	// Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
+	StartTimeUnixNano string
+	// Latest log timestamp in Unix nanoseconds (string for JS int64 precision)
+	EndTimeUnixNano string
+	// Chat session duration in seconds
+	DurationSeconds float64
+	// Number of LLM completion messages in this chat session
+	MessageCount int64
+	// Number of tool calls in this chat session
+	ToolCallCount int64
+	// Total input tokens used
+	TotalInputTokens int64
+	// Total output tokens used
+	TotalOutputTokens int64
+	// Total tokens used
+	TotalTokens int64
+	// Total cost in USD
+	TotalCost float64
+	// Chat session status
+	Status string
 }
 
 // Per-(skill, user) aggregated counts
