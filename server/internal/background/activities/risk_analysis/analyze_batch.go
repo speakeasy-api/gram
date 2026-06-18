@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -22,6 +23,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/activity"
 
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -69,9 +72,22 @@ type AnalyzeBatch struct {
 	mcpMatchLookup  MCPMatchLookup
 	judge           PromptJudge
 	flags           feature.Provider
+	presidioPub     gcp.Publisher[*riskv1.PresidioRequest]
 }
 
-func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, piiScanner PIIScanner, piScanner *PromptInjectionScanner, shadowMCPClient *shadowmcp.Client, mcpMatchLookup MCPMatchLookup, judge PromptJudge, flags feature.Provider) *AnalyzeBatch {
+func NewAnalyzeBatch(
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	meterProvider metric.MeterProvider,
+	db *pgxpool.Pool,
+	piiScanner PIIScanner,
+	piScanner *PromptInjectionScanner,
+	shadowMCPClient *shadowmcp.Client,
+	mcpMatchLookup MCPMatchLookup,
+	judge PromptJudge,
+	flags feature.Provider,
+	presidioPub gcp.Publisher[*riskv1.PresidioRequest],
+) *AnalyzeBatch {
 	if piiScanner == nil {
 		piiScanner = &StubPIIScanner{}
 	}
@@ -79,7 +95,7 @@ func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, m
 		piScanner = NewPromptInjectionScanner(logger, nil)
 	}
 	return &AnalyzeBatch{
-		logger:          logger,
+		logger:          logger.With(attr.SlogComponent("risk-analysis-dispatcher")),
 		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"),
 		metrics:         newRiskMetrics(meterProvider, logger),
 		db:              db,
@@ -90,6 +106,7 @@ func NewAnalyzeBatch(logger *slog.Logger, tracerProvider trace.TracerProvider, m
 		mcpMatchLookup:  mcpMatchLookup,
 		judge:           judge,
 		flags:           flags,
+		presidioPub:     presidioPub,
 	}
 }
 
@@ -306,6 +323,11 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 		contents[i] = msg.Content
 	}
 
+	requestID, err := uuid.NewV7()
+	if err != nil {
+		return nil, fmt.Errorf("generate scan request id: %w", err)
+	}
+
 	gitleaksFindings := make([][]Finding, n)
 	presidioFindings := make([][]Finding, n)
 	shadowMCPFindings := make([][]Finding, n)
@@ -331,6 +353,16 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 
 	if slices.Contains(args.Sources, "presidio") {
 		wg.Go(func() {
+			if _, err := a.presidioPub.Publish(ctx, riskv1.PresidioRequest_builder{
+				RequestId: new(requestID.String()),
+				CreatedAt: timestamppb.Now(),
+				ReplyUrn:  nil, // No reply support yet; fire and forget to exercise publish flow.
+				Contents:  contents,
+				Entities:  args.PresidioEntities,
+			}.Build()).Get(ctx); err != nil {
+				a.logger.WarnContext(ctx, "failed to publish presidio scan request", attr.SlogError(err))
+			}
+
 			// PIIScanner may return partial results alongside an error;
 			// always consume results so successful per-text findings are
 			// preserved even when some HTTP calls failed.

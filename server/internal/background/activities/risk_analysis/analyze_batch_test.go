@@ -10,9 +10,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/testsuite"
 
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -38,9 +41,19 @@ func (j *recordingPromptJudge) Evaluate(_ context.Context, in risk_analysis.Judg
 	return &risk_analysis.JudgeVerdict{Confidence: 0.9, Rationale: "matched tool call"}
 }
 
+// newPresidioPub returns a mock presidio publisher that accepts any publish
+// call and reports success. Tests that don't enable the "presidio" source
+// never invoke it; tests that do get a fire-and-forget success. Wiring a real
+// mock (never nil) keeps the publish path off the nil-deref cliff.
+func newPresidioPub() *gcp.MockPublisher[*riskv1.PresidioRequest] {
+	pub := gcp.NewMockPublisher[*riskv1.PresidioRequest]()
+	pub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
+	return pub
+}
+
 func TestAnalyzeBatch_EmptyMessageIDs(t *testing.T) {
 	t.Parallel()
-	ab := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil)
+	ab := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub())
 	require.NotNil(t, ab)
 
 	result, err := ab.Do(t.Context(), risk_analysis.AnalyzeBatchArgs{
@@ -95,6 +108,7 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		newPresidioPub(),
 	)
 
 	// Execute via Temporal test activity environment to satisfy activity.RecordHeartbeat
@@ -184,6 +198,7 @@ func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		newPresidioPub(),
 	)
 
 	var ts testsuite.WorkflowTestSuite
@@ -285,6 +300,7 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 		nil,
 		judge,
 		flags,
+		newPresidioPub(),
 	)
 
 	var ts testsuite.WorkflowTestSuite
@@ -366,6 +382,7 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 		nil,
 		judge,
 		flags,
+		newPresidioPub(),
 	)
 
 	var ts testsuite.WorkflowTestSuite
@@ -792,6 +809,7 @@ func executeAnalyzeBatch(t *testing.T, conn *pgxpool.Pool, td testData, messageI
 		nil,
 		nil,
 		nil,
+		newPresidioPub(),
 	)
 
 	var ts testsuite.WorkflowTestSuite
