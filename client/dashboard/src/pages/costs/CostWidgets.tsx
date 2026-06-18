@@ -213,13 +213,13 @@ function MixRowItem({
     </>
   );
   if (!onSelect) {
-    return <div className="space-y-1.5 py-1.5">{inner}</div>;
+    return <div className="space-y-1 py-1.5">{inner}</div>;
   }
   return (
     <button
       type="button"
       onClick={onSelect}
-      className="hover:bg-muted -mx-2 block w-full cursor-pointer space-y-1.5 rounded-md px-2 py-1.5 text-left transition-colors"
+      className="hover:bg-muted -mx-2 block w-full cursor-pointer space-y-1 rounded-md px-2 py-1.5 text-left transition-colors"
     >
       {inner}
     </button>
@@ -248,7 +248,7 @@ function MixCard({
   const canDrill = drillable && !!onDrill;
   return (
     <Card title={title}>
-      <div className="mt-3 space-y-1">
+      <div className="mt-3 space-y-0">
         {loading ? (
           MIX_SKELETON_ROWS.map((r, i) => (
             <div key={i} className="space-y-1.5">
