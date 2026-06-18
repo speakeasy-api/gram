@@ -203,28 +203,35 @@ func (g *GKERuntimeBackend) Ensure(ctx context.Context, runtime assistantRuntime
 		if !k8serrors.IsNotFound(getErr) {
 			return RuntimeBackendEnsureResult{}, fmt.Errorf("get sandbox claim %s: %w", name, getErr)
 		}
-		if _, createErr := g.claims().Create(ctx, g.buildClaim(name, runtime), metav1.CreateOptions{}); createErr != nil && !k8serrors.IsAlreadyExists(createErr) {
+		_, createErr := g.claims().Create(ctx, g.buildClaim(name, runtime), metav1.CreateOptions{})
+		switch {
+		case createErr == nil:
+			coldStart = true
+			// We created this claim. If readiness below fails, delete it so the
+			// next admission recreates a fresh claim rather than re-attaching to
+			// an unhealthy one with no persisted metadata. Only this branch owns
+			// the claim: a pre-existing claim, or one a racing Ensure created
+			// (AlreadyExists), is left alone — another turn may be using it. Use
+			// WithoutCancel so cleanup still runs when the failure was a timeout.
+			defer func() {
+				if err == nil {
+					return
+				}
+				delCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), gkeRuntimeReapCallTimeout)
+				defer cancel()
+				if delErr := g.claims().Delete(delCtx, name, metav1.DeleteOptions{}); delErr != nil && !k8serrors.IsNotFound(delErr) {
+					g.logger.WarnContext(ctx, "delete sandbox claim after failed ensure",
+						attr.SlogAssistantID(runtime.AssistantID.String()),
+						attr.SlogError(delErr),
+					)
+				}
+			}()
+		case k8serrors.IsAlreadyExists(createErr):
+			// A racing Ensure created the claim between our Get and Create. Attach
+			// to it like a pre-existing claim; the other turn owns its lifecycle.
+		default:
 			return RuntimeBackendEnsureResult{}, fmt.Errorf("create sandbox claim %s: %w", name, createErr)
 		}
-		coldStart = true
-		// We created this claim. If readiness below fails, delete it so the next
-		// admission recreates a fresh claim rather than re-attaching to an
-		// unhealthy one with no persisted metadata. A pre-existing claim is left
-		// alone — another turn may be using it. Use WithoutCancel so the cleanup
-		// still runs when the failure was a context timeout.
-		defer func() {
-			if err == nil {
-				return
-			}
-			delCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), gkeRuntimeReapCallTimeout)
-			defer cancel()
-			if delErr := g.claims().Delete(delCtx, name, metav1.DeleteOptions{}); delErr != nil && !k8serrors.IsNotFound(delErr) {
-				g.logger.WarnContext(ctx, "delete sandbox claim after failed ensure",
-					attr.SlogAssistantID(runtime.AssistantID.String()),
-					attr.SlogError(delErr),
-				)
-			}
-		}()
 	}
 
 	metadata, err := g.waitForSandbox(ctx, name)
