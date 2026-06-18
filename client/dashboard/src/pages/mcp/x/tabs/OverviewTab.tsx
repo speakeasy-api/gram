@@ -22,6 +22,7 @@ import { ArrowUpRight, Copy, ExternalLink } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
+import { RemoteMcpToolsSection } from "./RemoteMcpToolsSection";
 
 type OverviewTabProps = {
   mcpServer: McpServer | undefined;
@@ -94,35 +95,43 @@ function OverviewRows({
   const source = useSourceOverview(mcpServer.remoteMcpServerId);
 
   return (
-    <section>
-      <Heading variant="h3" className="mb-1 font-semibold normal-case">
-        Essentials
-      </Heading>
-      <EssentialsReadinessSummary
-        serverAddress={serverAddress}
-        authentication={authentication}
-        source={source}
-      />
-      <div>
-        <ServerAddressRow
+    <>
+      <section>
+        <Heading variant="h3" className="mb-1 font-semibold normal-case">
+          Essentials
+        </Heading>
+        <EssentialsReadinessSummary
           serverAddress={serverAddress}
-          onConfigure={onShowEndpoints}
-        />
-        <AuthenticationOverviewRow
           authentication={authentication}
-          onConfigure={onShowAuthentication}
+          source={source}
         />
-        {mcpServer.remoteMcpServerId ? (
-          <SourceOverviewRow source={source} />
-        ) : (
-          // /x/mcp only renders mcp_servers-backed (remote MCP) servers, which
-          // always carry a remoteMcpServerId, so this branch is currently
-          // unreachable. Kept for when toolset-backed servers migrate here
-          // (AGE-1902).
-          <ToolsOverviewRow toolsetId={mcpServer.toolsetId} />
-        )}
-      </div>
-    </section>
+        <div>
+          <ServerAddressRow
+            serverAddress={serverAddress}
+            onConfigure={onShowEndpoints}
+          />
+          <AuthenticationOverviewRow
+            authentication={authentication}
+            onConfigure={onShowAuthentication}
+          />
+          {mcpServer.remoteMcpServerId ? (
+            <SourceOverviewRow source={source} />
+          ) : (
+            // /x/mcp only renders mcp_servers-backed (remote MCP) servers, which
+            // always carry a remoteMcpServerId, so this branch is currently
+            // unreachable. Kept for when toolset-backed servers migrate here
+            // (AGE-1902).
+            <ToolsOverviewRow toolsetId={mcpServer.toolsetId} />
+          )}
+        </div>
+      </section>
+      <RemoteMcpToolsSection
+        mcpUrl={serverAddress.mcpUrl}
+        isResolvingUrl={serverAddress.loading}
+        mcpServerId={mcpServer.id}
+        isIssuerGated={!!mcpServer.userSessionIssuerId}
+      />
+    </>
   );
 }
 

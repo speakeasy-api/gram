@@ -14,12 +14,37 @@ export function getServerURL(): string {
   return __GRAM_SERVER_URL__ ?? window.location.origin;
 }
 
-// __PLAYGROUND_PROXY_URL__ is the dashboard origin in dev (so MCP requests
-// from the playground can ride the vite proxy and ferry cookies the Vercel
-// AI SDK can't forward across origins), and undefined in prod. The
-// playground is the only consumer; everything else uses getServerURL().
+// __PLAYGROUND_PROXY_URL__ is the dashboard origin in dev (so browser-side MCP
+// requests can ride the vite proxy and ferry cookies the Vercel AI SDK can't
+// forward across origins), and undefined in prod. Consumed by the playground
+// and the remote-MCP tools listing; everything else uses getServerURL().
 export function getPlaygroundMcpBaseURL(): string {
   return __PLAYGROUND_PROXY_URL__ ?? getServerURL();
+}
+
+// mcpConnectionUrl rebases a display MCP URL (built from getServerURL) onto the
+// dev proxy origin so a browser MCP client connects same-origin — the Vercel AI
+// SDK doesn't carry credentials cross-origin, and the gateway's proxied SSE
+// response doesn't survive the cross-origin hop. In prod the proxy base equals
+// getServerURL so this is a no-op, and custom-domain URLs (a different origin)
+// are left untouched.
+export function mcpConnectionUrl(
+  displayUrl: string | undefined,
+): string | undefined {
+  if (!displayUrl) return displayUrl;
+  const base = getPlaygroundMcpBaseURL();
+  const server = getServerURL();
+  if (base === server) return displayUrl;
+  try {
+    const url = new URL(displayUrl);
+    if (url.origin !== new URL(server).origin) return displayUrl;
+    const baseUrl = new URL(base);
+    url.protocol = baseUrl.protocol;
+    url.host = baseUrl.host;
+    return url.toString();
+  } catch {
+    return displayUrl;
+  }
 }
 
 export function buildLoginRedirectURL(redirectTo: string | null): string {
