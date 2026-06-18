@@ -375,10 +375,20 @@ func handleSlackInteraction(body []byte) (*WebhookIngest, error) {
 		BlockID:      action.BlockID,
 	}
 
+	// A block_actions interaction anchored to a channel message folds onto that
+	// message's conversation. An anchorless one (e.g. an App Home or modal
+	// button, which carries no channel) would otherwise fall back to a single
+	// team-level correlation id and mix every user's unrelated clicks into one
+	// conversation, so scope those to the acting user instead.
+	correlationID := slackCorrelationID(channelID, threadID, messageTs, payload.Team.ID)
+	if channelID == "" {
+		correlationID = "slack:" + payload.Team.ID + ":user:" + payload.User.ID
+	}
+
 	return &WebhookIngest{
 		Response:      nil,
 		EventID:       uuid.NewSHA1(uuid.NameSpaceURL, body).String(),
-		CorrelationID: slackCorrelationID(channelID, threadID, messageTs, payload.Team.ID),
+		CorrelationID: correlationID,
 		Event:         normalized,
 	}, nil
 }

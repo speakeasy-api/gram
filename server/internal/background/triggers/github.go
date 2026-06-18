@@ -55,7 +55,14 @@ type githubWebhookPayload struct {
 
 type githubIssue struct {
 	Number int `json:"number"`
+	// PullRequest is present on the issue object only when the issue is
+	// actually a pull request. GitHub attaches it to issue_comment payloads so
+	// a PR comment can be told apart from a plain issue comment; presence is
+	// the only signal we need, so the body is intentionally empty.
+	PullRequest *githubIssuePullRequestRef `json:"pull_request,omitempty"`
 }
+
+type githubIssuePullRequestRef struct{}
 
 type githubPullRequest struct {
 	Number int `json:"number"`
@@ -260,6 +267,13 @@ func githubCorrelationID(eventType string, payload githubWebhookPayload, repo st
 		}
 	case "issues", "issue_comment":
 		if payload.Issue != nil {
+			// issue_comment fires for comments on both issues and pull requests.
+			// When the issue carries a pull_request ref the comment is on a PR,
+			// so fold it onto the PR's conversation instead of opening a separate
+			// /issue: thread for the same number.
+			if payload.Issue.PullRequest != nil {
+				return "github:" + repo + "/pr:" + strconv.Itoa(payload.Issue.Number)
+			}
 			return "github:" + repo + "/issue:" + strconv.Itoa(payload.Issue.Number)
 		}
 	case "push":

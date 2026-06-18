@@ -164,6 +164,34 @@ func TestGitHubIngestIssueCommentFoldsOntoIssue(t *testing.T) {
 	require.Equal(t, "github:octocat/Hello-World/issue:7", result.Event.CorrelationID)
 }
 
+func TestGitHubIngestIssueCommentOnPRFoldsOntoPR(t *testing.T) {
+	t.Parallel()
+
+	definition, ok := GetDefinition("github")
+	require.True(t, ok)
+
+	config, err := definition.DecodeConfig(nil)
+	require.NoError(t, err)
+
+	// issue_comment fires for comments on both issues and PRs. GitHub marks a
+	// PR comment by attaching a pull_request ref to the issue object; the
+	// comment must fold onto the PR's conversation, not a separate /issue:
+	// thread that splits the discussion for the same number.
+	body := []byte(`{"action":"created","issue":{"number":42,"pull_request":{"url":"https://api.github.com/repos/octocat/Hello-World/pulls/42"}},"repository":{"full_name":"octocat/Hello-World"}}`)
+	headers := http.Header{}
+	headers.Set("X-GitHub-Event", "issue_comment")
+	headers.Set("X-GitHub-Delivery", "del-pr-comment-1")
+
+	result, err := definition.HandleWebhook(body, headers, config)
+	require.NoError(t, err)
+	require.NotNil(t, result.Event)
+	require.Equal(t, "github:octocat/Hello-World/pr:42", result.Event.CorrelationID)
+
+	event, ok := result.Event.Event.(githubTriggerEvent)
+	require.True(t, ok)
+	require.Equal(t, 42, event.Number)
+}
+
 func TestGitHubIngestPushKeysOnBranch(t *testing.T) {
 	t.Parallel()
 

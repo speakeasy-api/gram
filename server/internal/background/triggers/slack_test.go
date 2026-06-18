@@ -269,6 +269,43 @@ func TestSlackHandleWebhookBlockActionsRoutesToThread(t *testing.T) {
 	require.Equal(t, "approved", normalized.Text)
 }
 
+func TestSlackHandleWebhookBlockActionsAnchorlessKeysOnUser(t *testing.T) {
+	t.Parallel()
+
+	definition, ok := GetDefinition("slack")
+	require.True(t, ok)
+
+	config, err := definition.DecodeConfig(nil)
+	require.NoError(t, err)
+
+	// An App Home / modal button click carries no channel or message anchor.
+	// Without per-user scoping it would fall back to a single team-level
+	// correlation id and merge every user's unrelated clicks into one
+	// conversation; correlation must instead key on the acting user.
+	payloadA := `{"type":"block_actions","team":{"id":"T1"},"user":{"id":"U1"},"actions":[{"action_id":"x","block_id":"b","value":"v","type":"button"}]}`
+	bodyA := []byte("payload=" + url.QueryEscape(payloadA))
+	headersA := signedSlackHeaders(t, bodyA, "secret")
+	headersA.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resultA, err := definition.HandleWebhook(bodyA, headersA, config)
+	require.NoError(t, err)
+	require.NotNil(t, resultA.Event)
+	require.Equal(t, "slack:T1:user:U1", resultA.Event.CorrelationID)
+
+	// A different user's anchorless click in the same workspace must not share
+	// the conversation.
+	payloadB := `{"type":"block_actions","team":{"id":"T1"},"user":{"id":"U2"},"actions":[{"action_id":"x","block_id":"b","value":"v","type":"button"}]}`
+	bodyB := []byte("payload=" + url.QueryEscape(payloadB))
+	headersB := signedSlackHeaders(t, bodyB, "secret")
+	headersB.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resultB, err := definition.HandleWebhook(bodyB, headersB, config)
+	require.NoError(t, err)
+	require.NotNil(t, resultB.Event)
+	require.Equal(t, "slack:T1:user:U2", resultB.Event.CorrelationID)
+	require.NotEqual(t, resultA.Event.CorrelationID, resultB.Event.CorrelationID)
+}
+
 func TestSlackHandleWebhookBlockActionsTopLevelMessageKeysOnMessageTs(t *testing.T) {
 	t.Parallel()
 

@@ -38,8 +38,16 @@ func triggerCronWorkflowID(id uuid.UUID) string {
 	return "v1:trigger-cron-workflow:" + id.String()
 }
 
-func triggerDispatchWorkflowID(eventID string) string {
-	return "v1:trigger-dispatch-workflow:" + eventID
+// triggerDispatchWorkflowID scopes the dispatch dedup key to the trigger
+// instance the delivery targets. A webhook delivery is routed to exactly one
+// instance, so per-instance scoping preserves redelivery dedup (same instance
+// + same event id collapses) while preventing cross-instance collisions: the
+// content-hash fallback event id (used when a vendor sends no delivery id) is
+// deterministic from the request body alone, so two unrelated instances
+// receiving an identical body would otherwise share a workflow id and have one
+// dispatch silently dropped by REJECT_DUPLICATE.
+func triggerDispatchWorkflowID(triggerInstanceID, eventID string) string {
+	return "v1:trigger-dispatch-workflow:" + triggerInstanceID + ":" + eventID
 }
 
 func TriggerWakeWorkflowID(id uuid.UUID) string {
@@ -135,7 +143,7 @@ func ExecuteTriggerDispatchWorkflow(ctx context.Context, temporalEnv *tenv.Envir
 	queue := temporalEnv.Queue()
 
 	_, err := tclient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		ID:                    triggerDispatchWorkflowID(input.Task.EventID),
+		ID:                    triggerDispatchWorkflowID(input.Task.TriggerInstanceID, input.Task.EventID),
 		TaskQueue:             string(queue),
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
 	}, "TriggerDispatchWorkflow", input)
