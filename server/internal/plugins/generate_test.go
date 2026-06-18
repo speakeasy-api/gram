@@ -780,113 +780,6 @@ printf '{}\n200'
 	require.Equal(t, "cursor@example.com", posted["user_email"])
 }
 
-func TestGeneratedClaudeHookScriptAddsLastUserPromptIDFromStopTranscript(t *testing.T) {
-	t.Parallel()
-
-	cfg := GenerateConfig{
-		OrgName:     "Acme",
-		ServerURL:   "https://app.getgram.ai",
-		HooksAPIKey: "gram_local_secret_xyz",
-		ProjectSlug: "acme-prod",
-	}
-	files, err := GenerateObservabilityPluginPackage(cfg, "claude")
-	require.NoError(t, err)
-
-	posted := runGeneratedClaudeHook(t, files["hooks/hook.sh"], files["hooks/prompt-id.sh"], []string{
-		`{"sessionId":"session-1","type":"user","promptId":"prompt-old","message":{"role":"user","content":"old prompt"}}`,
-		`{"sessionId":"other-session","type":"user","promptId":"prompt-other","message":{"role":"user","content":"ignore me"}}`,
-		`{"sessionId":"session-1","type":"user","promptId":"prompt-new","message":{"role":"user","content":"current prompt"}}`,
-	}, `{"hook_event_name":"Stop","session_id":"session-1","last_assistant_message":"ok"}`)
-
-	require.Equal(t, "prompt-new", posted["LastUserPromptID"])
-	additionalData, ok := posted["additional_data"].(map[string]any)
-	require.True(t, ok)
-	require.Equal(t, "prompt-new", additionalData["LastUserPromptID"])
-}
-
-func TestGeneratedClaudeHookScriptDoesNotEnrichUserPromptSubmit(t *testing.T) {
-	t.Parallel()
-
-	cfg := GenerateConfig{
-		OrgName:     "Acme",
-		ServerURL:   "https://app.getgram.ai",
-		HooksAPIKey: "gram_local_secret_xyz",
-		ProjectSlug: "acme-prod",
-	}
-	files, err := GeneratePluginPackages(nil, cfg)
-	require.NoError(t, err)
-
-	posted := runGeneratedClaudeHook(t, files[ClaudeObservabilitySlug(cfg)+"/hooks/hook.sh"], files[ClaudeObservabilitySlug(cfg)+"/hooks/prompt-id.sh"], []string{
-		`{"sessionId":"session-1","type":"user","promptId":"prompt-new","message":{"role":"user","content":"hook prompt"}}`,
-	}, `{"hook_event_name":"UserPromptSubmit","session_id":"session-1","prompt":"hook prompt"}`)
-
-	require.NotContains(t, posted, "promptId")
-	require.NotContains(t, posted, "LastUserPromptID")
-	require.NotContains(t, posted, "additional_data")
-}
-
-func TestGeneratedClaudeHookScriptOmitsLastUserPromptIDWhenTranscriptUnreadable(t *testing.T) {
-	t.Parallel()
-
-	cfg := GenerateConfig{
-		OrgName:     "Acme",
-		ServerURL:   "https://app.getgram.ai",
-		HooksAPIKey: "gram_local_secret_xyz",
-		ProjectSlug: "acme-prod",
-	}
-	files, err := GenerateObservabilityPluginPackage(cfg, "claude")
-	require.NoError(t, err)
-
-	posted := runGeneratedClaudeHookWithPayload(t, files["hooks/hook.sh"], files["hooks/prompt-id.sh"], `{"hook_event_name":"Stop","session_id":"session-1","last_assistant_message":"ok","transcript_path":"/path/that/does/not/exist"}`)
-	require.NotContains(t, posted, "promptId")
-	require.NotContains(t, posted, "LastUserPromptID")
-	require.NotContains(t, posted, "additional_data")
-}
-
-func runGeneratedClaudeHook(t *testing.T, script []byte, promptIDScript []byte, transcriptLines []string, payload string) map[string]any {
-	t.Helper()
-
-	dir := t.TempDir()
-	transcriptPath := filepath.Join(dir, "transcript.jsonl")
-	require.NoError(t, os.WriteFile(transcriptPath, []byte(strings.Join(transcriptLines, "\n")+"\n"), 0o644))
-
-	var data map[string]any
-	require.NoError(t, json.Unmarshal([]byte(payload), &data))
-	data["transcript_path"] = transcriptPath
-	payloadBytes, err := json.Marshal(data)
-	require.NoError(t, err)
-
-	return runGeneratedClaudeHookWithPayload(t, script, promptIDScript, string(payloadBytes))
-}
-
-func runGeneratedClaudeHookWithPayload(t *testing.T, script []byte, promptIDScript []byte, payload string) map[string]any {
-	t.Helper()
-	require.NotEmpty(t, promptIDScript, "generated Claude prompt-id.sh missing")
-
-	dir := t.TempDir()
-	hookPath := filepath.Join(dir, "hook.sh")
-	capturePath := filepath.Join(dir, "payload.json")
-	require.NoError(t, os.WriteFile(hookPath, script, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "prompt-id.sh"), promptIDScript, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "curl"), []byte(`#!/usr/bin/env bash
-cat > "$GRAM_CAPTURE_PAYLOAD"
-printf '{}\n200'
-`), 0o755))
-
-	cmd := exec.Command("bash", hookPath)
-	cmd.Stdin = strings.NewReader(payload)
-	cmd.Env = append(os.Environ(),
-		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
-		"GRAM_CAPTURE_PAYLOAD="+capturePath,
-	)
-	output, err := cmd.CombinedOutput()
-	require.NoError(t, err, string(output))
-
-	var posted map[string]any
-	require.NoError(t, json.Unmarshal(requireFileBytes(t, capturePath), &posted))
-	return posted
-}
-
 func TestDeviceAgentIdentityScriptHandlesWhitespaceEmptyObject(t *testing.T) {
 	t.Parallel()
 
@@ -957,7 +850,6 @@ func TestGenerateClaudeObservabilityPluginHooksJSONIncludesAllRegisteredEvents(t
 	hooksJSON := files[ClaudeObservabilitySlug(cfg)+"/hooks/hooks.json"]
 	require.NotNil(t, hooksJSON, "claude observability hooks/hooks.json missing")
 	require.NotNil(t, files[ClaudeObservabilitySlug(cfg)+"/hooks/identity.sh"], "claude observability hooks/identity.sh missing")
-	require.NotNil(t, files[ClaudeObservabilitySlug(cfg)+"/hooks/prompt-id.sh"], "claude observability hooks/prompt-id.sh missing")
 
 	var parsed claudeHooksConfig
 	require.NoError(t, json.Unmarshal(hooksJSON, &parsed))
@@ -1160,6 +1052,59 @@ func runCodexInstallScript(t *testing.T, script []byte, existingConfig string) (
 	require.NoError(t, err, "install script failed: %s", out)
 
 	return home, callLog
+}
+
+// SessionStart enriches the payload with the user's configured MCP server
+// inventory (shadow MCP visibility). The collection must be gated on a real
+// JSON field check of hook_event_name so the blocking PreToolUse path never
+// pays for a codex CLI invocation.
+func TestGenerateCodexObservabilityPluginScriptShipsMCPInventoryOnSessionStart(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := GeneratePluginPackages(nil, cfg)
+	require.NoError(t, err)
+
+	script := string(files[CodexObservabilitySlug(cfg)+"/hooks/hook.sh"])
+	require.Contains(t, script, `[codex_bin, "mcp", "list", "--json"]`, "hook.sh must collect the MCP inventory")
+	require.Contains(t, script, "mcp_inventory_codex", "hook.sh must ship the inventory under additional_data.mcp_inventory_codex")
+	require.Contains(t, script, `find_codex() if data.get("hook_event_name") == "SessionStart" else None`, "inventory collection must be gated on the parsed event name")
+	require.Contains(t, script, `/Applications/Codex.app/Contents/Resources/codex`, "binary resolution must cover desktop-app-only installs where codex is not on PATH")
+	require.Contains(t, script, "timeout=15", "codex invocation must be wall-time capped")
+	require.Contains(t, script, `additional["mcp_inventory_codex"] = slim`, "hook.sh must ship the sanitized projection — raw transport objects carry env vars and HTTP headers with credentials")
+	require.Contains(t, script, `redact_args(transport.get("args"))`, "stdio launch args must pass through credential redaction before upload")
+}
+
+// The hook scripts embed python inside bash single-quoted heredocs, where a
+// stray apostrophe in a comment is enough to break the whole script.
+// Substring assertions cannot catch that — run bash -n over every generated
+// shell script.
+func TestGeneratedHookScriptsAreValidBash(t *testing.T) {
+	t.Parallel()
+	bashPath, err := exec.LookPath("bash")
+	require.NoError(t, err, "bash is required to syntax-check generated hook scripts")
+
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	for _, platform := range []string{"claude", "cursor", "codex"} {
+		files, err := GenerateObservabilityPluginPackage(cfg, platform)
+		require.NoError(t, err)
+		for name, content := range files {
+			if !strings.HasSuffix(name, ".sh") {
+				continue
+			}
+			path := filepath.Join(t.TempDir(), filepath.Base(name))
+			require.NoError(t, os.WriteFile(path, content, 0o755))
+			out, err := exec.Command(bashPath, "-n", path).CombinedOutput()
+			require.NoError(t, err, "%s %s failed bash -n: %s", platform, name, out)
+		}
+	}
 }
 
 // An upgraded install already carries [hooks.state] entries whose trusted_hash

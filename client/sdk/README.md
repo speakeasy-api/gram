@@ -355,6 +355,7 @@ run();
 * [listClients](docs/sdks/organizationremotesessionissuers/README.md#listclients) - listClients organizationRemoteSessionIssuers
 * [listIssuers](docs/sdks/organizationremotesessionissuers/README.md#listissuers) - listIssuers organizationRemoteSessionIssuers
 * [moveIssuer](docs/sdks/organizationremotesessionissuers/README.md#moveissuer) - moveIssuer organizationRemoteSessionIssuers
+* [refreshSession](docs/sdks/organizationremotesessionissuers/README.md#refreshsession) - refreshSession organizationRemoteSessionIssuers
 * [removeClientFromMcpServer](docs/sdks/organizationremotesessionissuers/README.md#removeclientfrommcpserver) - removeClientFromMcpServer organizationRemoteSessionIssuers
 * [revokeAllClientSessions](docs/sdks/organizationremotesessionissuers/README.md#revokeallclientsessions) - revokeAllClientSessions organizationRemoteSessionIssuers
 * [revokeSession](docs/sdks/organizationremotesessionissuers/README.md#revokesession) - revokeSession organizationRemoteSessionIssuers
@@ -527,7 +528,9 @@ run();
 * [listAttributeKeys](docs/sdks/telemetry/README.md#listattributekeys) - listAttributeKeys telemetry
 * [listFilterOptions](docs/sdks/telemetry/README.md#listfilteroptions) - listFilterOptions telemetry
 * [listHooksTraces](docs/sdks/telemetry/README.md#listhookstraces) - listHooksTraces telemetry
+* [listSessions](docs/sdks/telemetry/README.md#listsessions) - listSessions telemetry
 * [listToolUsageTraces](docs/sdks/telemetry/README.md#listtoolusagetraces) - listToolUsageTraces telemetry
+* [query](docs/sdks/telemetry/README.md#query) - query telemetry
 * [searchChats](docs/sdks/telemetry/README.md#searchchats) - searchChats telemetry
 * [searchLogs](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 * [searchToolCalls](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
@@ -603,6 +606,7 @@ run();
 * [delete](docs/sdks/usersessionissuers/README.md#delete) - deleteUserSessionIssuer userSessionIssuers
 * [get](docs/sdks/usersessionissuers/README.md#get) - getUserSessionIssuer userSessionIssuers
 * [list](docs/sdks/usersessionissuers/README.md#list) - listUserSessionIssuers userSessionIssuers
+* [migrateLegacyGramRegistrations](docs/sdks/usersessionissuers/README.md#migratelegacygramregistrations) - migrateLegacyGramRegistrations userSessionIssuers
 * [update](docs/sdks/usersessionissuers/README.md#update) - updateUserSessionIssuer userSessionIssuers
 
 ### [UserSessions](docs/sdks/usersessions/README.md)
@@ -784,6 +788,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`organizationRemoteSessionIssuersListClientSessions`](docs/sdks/organizationremotesessionissuers/README.md#listclientsessions) - listClientSessions organizationRemoteSessionIssuers
 - [`organizationRemoteSessionIssuersListIssuers`](docs/sdks/organizationremotesessionissuers/README.md#listissuers) - listIssuers organizationRemoteSessionIssuers
 - [`organizationRemoteSessionIssuersMoveIssuer`](docs/sdks/organizationremotesessionissuers/README.md#moveissuer) - moveIssuer organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersRefreshSession`](docs/sdks/organizationremotesessionissuers/README.md#refreshsession) - refreshSession organizationRemoteSessionIssuers
 - [`organizationRemoteSessionIssuersRemoveClientFromMcpServer`](docs/sdks/organizationremotesessionissuers/README.md#removeclientfrommcpserver) - removeClientFromMcpServer organizationRemoteSessionIssuers
 - [`organizationRemoteSessionIssuersRevokeAllClientSessions`](docs/sdks/organizationremotesessionissuers/README.md#revokeallclientsessions) - revokeAllClientSessions organizationRemoteSessionIssuers
 - [`organizationRemoteSessionIssuersRevokeSession`](docs/sdks/organizationremotesessionissuers/README.md#revokesession) - revokeSession organizationRemoteSessionIssuers
@@ -899,7 +904,9 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`telemetryListAttributeKeys`](docs/sdks/telemetry/README.md#listattributekeys) - listAttributeKeys telemetry
 - [`telemetryListFilterOptions`](docs/sdks/telemetry/README.md#listfilteroptions) - listFilterOptions telemetry
 - [`telemetryListHooksTraces`](docs/sdks/telemetry/README.md#listhookstraces) - listHooksTraces telemetry
+- [`telemetryListSessions`](docs/sdks/telemetry/README.md#listsessions) - listSessions telemetry
 - [`telemetryListToolUsageTraces`](docs/sdks/telemetry/README.md#listtoolusagetraces) - listToolUsageTraces telemetry
+- [`telemetryQuery`](docs/sdks/telemetry/README.md#query) - query telemetry
 - [`telemetrySearchChats`](docs/sdks/telemetry/README.md#searchchats) - searchChats telemetry
 - [`telemetrySearchLogs`](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 - [`telemetrySearchToolCalls`](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
@@ -951,6 +958,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`userSessionIssuersDelete`](docs/sdks/usersessionissuers/README.md#delete) - deleteUserSessionIssuer userSessionIssuers
 - [`userSessionIssuersGet`](docs/sdks/usersessionissuers/README.md#get) - getUserSessionIssuer userSessionIssuers
 - [`userSessionIssuersList`](docs/sdks/usersessionissuers/README.md#list) - listUserSessionIssuers userSessionIssuers
+- [`userSessionIssuersMigrateLegacyGramRegistrations`](docs/sdks/usersessionissuers/README.md#migratelegacygramregistrations) - migrateLegacyGramRegistrations userSessionIssuers
 - [`userSessionIssuersUpdate`](docs/sdks/usersessionissuers/README.md#update) - updateUserSessionIssuer userSessionIssuers
 - [`userSessionsList`](docs/sdks/usersessions/README.md#list) - listUserSessions userSessions
 - [`userSessionsListFacets`](docs/sdks/usersessions/README.md#listfacets) - listFacets userSessions
@@ -1138,6 +1146,7 @@ To learn about this feature and how to get started, check
 - [`useListProjects`](docs/sdks/projects/README.md#list) - listProjects projects
 - [`useListResources`](docs/sdks/resources/README.md#list) - listResources resources
 - [`useListScopes`](docs/sdks/access/README.md#listscopes) - listScopes access
+- [`useListSessions`](docs/sdks/telemetry/README.md#listsessions) - listSessions telemetry
 - [`useListTools`](docs/sdks/tools/README.md#list) - listTools tools
 - [`useListToolsets`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets
 - [`useListToolsetsForOrg`](docs/sdks/toolsets/README.md#listfororg) - listToolsetsForOrg toolsets
@@ -1153,6 +1162,7 @@ To learn about this feature and how to get started, check
 - [`useMcpRegistriesGetServerDetails`](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
 - [`useMcpServers`](docs/sdks/mcpservers/README.md#list) - listMcpServers mcpServers
 - [`useMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
+- [`useMigrateLegacyGramRegistrationsMutation`](docs/sdks/usersessionissuers/README.md#migratelegacygramregistrations) - migrateLegacyGramRegistrations userSessionIssuers
 - [`useMintUserSessionMutation`](docs/sdks/usersessions/README.md#mint) - mintUserSession userSessions
 - [`useMoveOrganizationRemoteSessionIssuerMutation`](docs/sdks/organizationremotesessionissuers/README.md#moveissuer) - moveIssuer organizationRemoteSessionIssuers
 - [`useOnboardingStatus`](docs/sdks/organizations/README.md#getonboardingstatus) - getOnboardingStatus organizations
@@ -1180,6 +1190,7 @@ To learn about this feature and how to get started, check
 - [`usePublishStatus`](docs/sdks/plugins/README.md#getpublishstatus) - getPublishStatus plugins
 - [`useRbacStatus`](docs/sdks/access/README.md#getrbacstatus) - getRBACStatus access
 - [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
+- [`useRefreshOrganizationRemoteSessionMutation`](docs/sdks/organizationremotesessionissuers/README.md#refreshsession) - refreshSession organizationRemoteSessionIssuers
 - [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
 - [`useRegisterMutation`](docs/sdks/auth/README.md#register) - register auth
 - [`useRemoteMcpServers`](docs/sdks/remotemcp/README.md#listservers) - listServers remoteMcp
@@ -1260,6 +1271,7 @@ To learn about this feature and how to get started, check
 - [`useShadowMCPApprovalRequests`](docs/sdks/access/README.md#listshadowmcpapprovalrequests) - listShadowMCPApprovalRequests access
 - [`useSwitchScopesMutation`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
 - [`useTelemetryCaptureEventMutation`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
+- [`useTelemetryQuery`](docs/sdks/telemetry/README.md#query) - query telemetry
 - [`useTemplate`](docs/sdks/templates/README.md#get) - getTemplate templates
 - [`useTemplates`](docs/sdks/templates/README.md#list) - listTemplates templates
 - [`useToolset`](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets

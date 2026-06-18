@@ -907,7 +907,7 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid,
   remote_session_issuer_id uuid NOT NULL,
-  user_session_issuer_id uuid NOT NULL,
+  user_session_issuer_id uuid,
 
   client_id TEXT NOT NULL,
   client_secret_encrypted TEXT,
@@ -950,9 +950,6 @@ CREATE TABLE IF NOT EXISTS remote_session_client_user_session_issuers (
 
 CREATE INDEX IF NOT EXISTS remote_session_client_user_session_issuers_issuer_idx
 ON remote_session_client_user_session_issuers (user_session_issuer_id, remote_session_client_id);
-
-CREATE UNIQUE INDEX IF NOT EXISTS remote_session_client_user_session_issuers_one_per_issuer
-ON remote_session_client_user_session_issuers (user_session_issuer_id);
 
 -- Remote sessions represent credentials for an external resource that have
 -- been granted to a single Gram subject

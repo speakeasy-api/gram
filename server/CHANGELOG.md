@@ -1,5 +1,66 @@
 # server
 
+## 0.72.0
+
+### Minor Changes
+
+- 1cd0ff9: Add an organization administrator "Refresh now" action for remote sessions. The
+  `organizationRemoteSessionIssuers` management service gains a `refreshSession`
+  method that forces an upstream `grant_type=refresh_token` exchange on a single
+  session regardless of its current access-token expiry, persists the rotated
+  tokens, and returns the updated session. The shared refresh code path is now
+  used by both the lazy MCP token-resolution path and this explicit admin action;
+  the upstream token POST runs outside any database transaction. The
+  `RemoteSession` type exposes a `has_refresh_token` flag (the encrypted token
+  itself stays unexposed) so the dashboard Sessions tab can offer "Refresh now"
+  only for sessions that can actually be refreshed. Operator-actionable refresh
+  failures (an upstream rejection of the refresh token, an unreadable stored
+  token, a missing token endpoint) surface as a bad-request with a clear "Unable
+  to refresh: ..." reason and each refresh is recorded as a
+  `remote-session:refresh` audit event.
+- 442d05c: Codex sessions now report the user's configured MCP servers to Gram on session start, giving shadow MCP servers the same observability as Gram-managed ones and letting access approvals scope to the server URL.
+- 7c8677b: Record `mcp_server_id` across `/mcp` runtime telemetry so MCP server activity can be sliced from either the remote or the fronting-server perspective.
+- 596af3f: Add `telemetry.listSessions`, an org-scoped endpoint for listing cost-bearing chat sessions filtered by the same dimensions as `telemetry.query`.
+
+### Patch Changes
+
+- 783b5cc: Resolve multiple remote-session authorizations per user session issuer at the
+  MCP runtime, keyed by remote session issuer, and enforce at most one client per
+  (user session issuer, remote session issuer) at attach time. The runtime
+  resolves a per-issuer token map and re-auths when any attached remote session
+  is missing or invalid; an application-level attach guard plus a runtime
+  invariant replace the database one_per_issuer index. Issuer-gated dispatch
+  fails closed when it cannot route among multiple upstream tokens.
+
+## 0.71.0
+
+### Minor Changes
+
+- 4b2f64c: Allow defining audiences when configuring policies.
+- ec6d14c: Add an organization administrator UI for managing Remote Identity Providers
+  (remote session issuers), their clients, and sessions across the organization.
+  The `organizationRemoteSessionIssuers` management service gains an org-scoped
+  admin surface: a combined listing of organizational and project-specific issuers
+  with client counts and project names, drill-downs into each issuer's clients
+  (with MCP server attachment counts), each client's attached MCP servers and
+  sessions, authoritative delete pre-flight summaries, and write operations to
+  update or delete issuers and clients, detach a client from an MCP server, revoke
+  a single session, and revoke all of a client's sessions. Reads require `org:read`
+  and writes require `org:admin`; destructive actions are audited, with a bulk
+  revoke-all recorded as a single audit event.
+- e594e20: Add a step to user session migrations that port existing client registrations from oauth proxy to user sessions
+
+### Patch Changes
+
+- 7c010e9: The Codex observability plugin install script now works on machines where the `codex` CLI is not on PATH: it probes well-known install locations, including the Codex desktop app bundle, before falling back to manual instructions. It also writes feature flags inside the `[features]` table instead of as root-level dotted keys, fixing a "duplicate key" config error on machines whose `config.toml` already has a `[features]` table, and cleans up dotted keys left behind by earlier versions of the script.
+- 3b32954: Codex sessions now record the final assistant message at end of turn, matching Claude Code behavior.
+- bcda11d: Upgrade the default assistant model to Claude Opus 4.7. The platform-managed Project Assistant, the assistant onboarding flow, and the onboarding system prompt's default recommendation now use `anthropic/claude-opus-4.7` instead of `anthropic/claude-sonnet-4.6`. Existing assistants are unaffected; only newly created assistants pick up the new default.
+- b6aafce: increase graceful-shutdown drain window to 60s
+- 2135280: MCP tool calls that return a JSON object now also include `structuredContent`, so clients can consume a parsed object instead of re-parsing the text result.
+- 5ea8559: Fix the per-tool `mcp:connect` RBAC checks in the remote MCP proxy to use the `mcp_servers` id instead of the `remote_mcp_servers` id, so they resolve grants against the same resource as the server-level check and the toolset path.
+- 0710154: Slack-connected assistants now decide whether a reply adds value before posting: ambient thread messages can be answered with silence, while @-mentions always get a reply. The `platform_slack_set_thread_status` tool accepts an empty status to clear the thread's loading indicator on silent turns.
+- 32c4165: Unify Tool Logs across hosted MCP servers, shadow MCP servers, local tools, and skills.
+
 ## 0.70.2
 
 ### Patch Changes

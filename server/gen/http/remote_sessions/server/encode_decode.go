@@ -508,6 +508,7 @@ func marshalTypesRemoteSessionToRemoteSessionResponseBody(v *types.RemoteSession
 		RemoteSessionClientID: v.RemoteSessionClientID,
 		AccessExpiresAt:       v.AccessExpiresAt,
 		RefreshExpiresAt:      v.RefreshExpiresAt,
+		HasRefreshToken:       v.HasRefreshToken,
 		CreatedAt:             v.CreatedAt,
 		UpdatedAt:             v.UpdatedAt,
 	}

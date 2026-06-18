@@ -36,6 +36,7 @@ type Server struct {
 	DeleteClient              http.Handler
 	RemoveClientFromMcpServer http.Handler
 	RevokeSession             http.Handler
+	RefreshSession            http.Handler
 	RevokeAllClientSessions   http.Handler
 }
 
@@ -82,6 +83,7 @@ func New(
 			{"DeleteClient", "DELETE", "/rpc/organizationRemoteSessionIssuers.deleteClient"},
 			{"RemoveClientFromMcpServer", "POST", "/rpc/organizationRemoteSessionIssuers.removeClientFromMcpServer"},
 			{"RevokeSession", "POST", "/rpc/organizationRemoteSessionIssuers.revokeSession"},
+			{"RefreshSession", "POST", "/rpc/organizationRemoteSessionIssuers.refreshSession"},
 			{"RevokeAllClientSessions", "POST", "/rpc/organizationRemoteSessionIssuers.revokeAllClientSessions"},
 		},
 		CreateIssuer:              NewCreateIssuerHandler(e.CreateIssuer, mux, decoder, encoder, errhandler, formatter),
@@ -100,6 +102,7 @@ func New(
 		DeleteClient:              NewDeleteClientHandler(e.DeleteClient, mux, decoder, encoder, errhandler, formatter),
 		RemoveClientFromMcpServer: NewRemoveClientFromMcpServerHandler(e.RemoveClientFromMcpServer, mux, decoder, encoder, errhandler, formatter),
 		RevokeSession:             NewRevokeSessionHandler(e.RevokeSession, mux, decoder, encoder, errhandler, formatter),
+		RefreshSession:            NewRefreshSessionHandler(e.RefreshSession, mux, decoder, encoder, errhandler, formatter),
 		RevokeAllClientSessions:   NewRevokeAllClientSessionsHandler(e.RevokeAllClientSessions, mux, decoder, encoder, errhandler, formatter),
 	}
 }
@@ -125,6 +128,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.DeleteClient = m(s.DeleteClient)
 	s.RemoveClientFromMcpServer = m(s.RemoveClientFromMcpServer)
 	s.RevokeSession = m(s.RevokeSession)
+	s.RefreshSession = m(s.RefreshSession)
 	s.RevokeAllClientSessions = m(s.RevokeAllClientSessions)
 }
 
@@ -150,6 +154,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountDeleteClientHandler(mux, h.DeleteClient)
 	MountRemoveClientFromMcpServerHandler(mux, h.RemoveClientFromMcpServer)
 	MountRevokeSessionHandler(mux, h.RevokeSession)
+	MountRefreshSessionHandler(mux, h.RefreshSession)
 	MountRevokeAllClientSessionsHandler(mux, h.RevokeAllClientSessions)
 }
 
@@ -1000,6 +1005,60 @@ func NewRevokeSessionHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "revokeSession")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationRemoteSessionIssuers")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRefreshSessionHandler configures the mux to serve the
+// "organizationRemoteSessionIssuers" service "refreshSession" endpoint.
+func MountRefreshSessionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/organizationRemoteSessionIssuers.refreshSession", f)
+}
+
+// NewRefreshSessionHandler creates a HTTP handler which loads the HTTP request
+// and calls the "organizationRemoteSessionIssuers" service "refreshSession"
+// endpoint.
+func NewRefreshSessionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRefreshSessionRequest(mux, decoder)
+		encodeResponse = EncodeRefreshSessionResponse(encoder)
+		encodeError    = EncodeRefreshSessionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "refreshSession")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationRemoteSessionIssuers")
 		payload, err := decodeRequest(r)
 		if err != nil {

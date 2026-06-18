@@ -302,6 +302,115 @@ SELECT
 FROM telemetry_logs
 GROUP BY gram_project_id, time_bucket;
 
+-- attribute_metrics_summaries pre-aggregates cost/token/usage metrics broken
+-- down by user-identity and request dimensions (WorkOS directory attributes,
+-- email, model, hook source) so the generic telemetry.query analytics endpoint
+-- can serve grouped tables and per-series timeseries without scanning raw logs.
+--
+-- Cardinality is bounded because the scalar dimensions are all functionally
+-- determined by the user (each user has one department, job title, etc.), so
+-- the row count is roughly (active users x model x hour) per project. roles and
+-- groups are stored as intact arrays in the sorting key (one array per user, so
+-- they do not multiply rows); the query layer uses arrayJoin() to attribute
+-- spend to each role/group and has() to filter. Keeping every dimension on one
+-- row is what lets a single MV serve arbitrary group-by + filter combinations,
+-- including drill-down (e.g. filter department_name, group by role).
+CREATE TABLE IF NOT EXISTS attribute_metrics_summaries (
+    -- Key columns
+    gram_project_id UUID,
+    time_bucket DateTime('UTC'),
+
+    -- User-identity dimensions (WorkOS directory attributes), all functionally
+    -- determined by the user so they do not inflate cardinality.
+    department_name String,
+    job_title String,
+    employee_type String,
+    division_name String,
+    cost_center_name String,
+    user_email String,
+
+    -- Request dimensions
+    model String,
+    hook_source String, -- consuming surface (gram.hook.source): claude-code, cowork, cursor, ...
+
+    -- Multi-valued user dimensions stored intact (not exploded) so totals stay
+    -- exact; the query layer arrayJoin()s these to attribute spend per role/group.
+    roles Array(String),
+    groups Array(String),
+
+    -- Cardinality
+    total_chats AggregateFunction(uniqExactIf, String, UInt8),
+
+    -- Token sums
+    total_input_tokens AggregateFunction(sumIf, Int64, UInt8),
+    total_output_tokens AggregateFunction(sumIf, Int64, UInt8),
+    total_tokens AggregateFunction(sumIf, Int64, UInt8),
+    cache_read_input_tokens AggregateFunction(sumIf, Int64, UInt8),
+    cache_creation_input_tokens AggregateFunction(sumIf, Int64, UInt8),
+
+    -- Cost
+    total_cost AggregateFunction(sumIf, Float64, UInt8),
+
+    -- Tool call count
+    total_tool_calls AggregateFunction(countIf, UInt8)
+) ENGINE = AggregatingMergeTree
+ORDER BY (gram_project_id, time_bucket, department_name, job_title, employee_type, division_name, cost_center_name, user_email, model, hook_source, roles, groups)
+TTL time_bucket + INTERVAL 30 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Pre-aggregated cost/token/usage metrics broken down by user-identity and request dimensions, powering the generic telemetry.query analytics endpoint.';
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS attribute_metrics_summaries_mv TO attribute_metrics_summaries AS
+SELECT
+    gram_project_id,
+    toStartOfHour(fromUnixTimestamp64Nano(time_unix_nano)) AS time_bucket,
+
+    -- User-identity dimensions
+    toString(attributes.user.attributes.department_name) AS department_name,
+    toString(attributes.user.attributes.job_title) AS job_title,
+    toString(attributes.user.attributes.employee_type) AS employee_type,
+    toString(attributes.user.attributes.division_name) AS division_name,
+    toString(attributes.user.attributes.cost_center_name) AS cost_center_name,
+    user_email AS user_email,
+
+    -- Request dimensions
+    toString(attributes.gen_ai.response.model) AS model,
+    hook_source,
+
+    -- Multi-valued dimensions extracted tolerantly from JSON/Dynamic values.
+    -- Bad or non-array payloads resolve to [] instead of failing MV ingestion.
+    arraySort(JSONExtract(ifNull(toJSONString(attributes.user.roles), '[]'), 'Array(String)')) AS roles,
+    arraySort(JSONExtract(ifNull(toJSONString(attributes.user.groups), '[]'), 'Array(String)')) AS groups,
+
+    -- Cardinality
+    uniqExactIfState(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '') AS total_chats,
+
+    -- Token sums
+    sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') AS total_input_tokens,
+    sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') AS total_output_tokens,
+    sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS total_tokens,
+    sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens)), toString(attributes.gen_ai.usage.cache_read.input_tokens) != '') AS cache_read_input_tokens,
+    sumIfState(toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens)), toString(attributes.gen_ai.usage.cache_creation.input_tokens) != '') AS cache_creation_input_tokens,
+
+    -- Cost
+    sumIfState(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '') AS total_cost,
+
+    -- Tool call count
+    countIfState(startsWith(toString(attributes.gram.tool.urn), 'tools:')) AS total_tool_calls
+FROM telemetry_logs
+GROUP BY
+    gram_project_id,
+    time_bucket,
+    department_name,
+    job_title,
+    employee_type,
+    division_name,
+    cost_center_name,
+    user_email,
+    model,
+    hook_source,
+    roles,
+    groups;
+
 CREATE TABLE IF NOT EXISTS chat_token_summaries (
     -- Key columns
     gram_project_id UUID,

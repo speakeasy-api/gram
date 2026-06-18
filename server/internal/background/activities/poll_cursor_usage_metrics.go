@@ -37,7 +37,7 @@ func NewPollCursorUsageMetrics(
 ) *PollCursorUsageMetrics {
 	return &PollCursorUsageMetrics{
 		integrations: aiintegrations.NewStore(logger, db, encryptionClient),
-		usagePoller: aiintegrations.NewUsagePollService(db, telemetryLogger, guardianPolicy, func(ctx context.Context, page int) {
+		usagePoller: aiintegrations.NewUsagePollService(telemetryLogger, guardianPolicy, func(ctx context.Context, page int) {
 			activity.RecordHeartbeat(ctx, map[string]any{
 				"page": page,
 			})

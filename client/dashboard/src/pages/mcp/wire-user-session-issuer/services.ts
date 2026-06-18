@@ -11,6 +11,7 @@ import {
   buildCreateRemoteSessionIssuerMutation,
   buildCreateUserSessionIssuerMutation,
   buildDiscoverRemoteSessionIssuerMutation,
+  buildMigrateLegacyGramRegistrationsMutation,
   buildSetToolsetUserSessionIssuerMutation,
 } from "@gram/client/react-query";
 import { fromPromise } from "xstate";
@@ -25,6 +26,7 @@ import type {
   CreateRemoteSessionIssuerInput,
   CreateUserSessionIssuerInput,
   LinkToolsetUserSessionIssuerInput,
+  MigrateGramRegistrationsInput,
   ResolveRemoteSessionClientInput,
   ResolveRemoteSessionIssuerInput,
   ResolveUserSessionIssuerInput,
@@ -300,6 +302,27 @@ function createMigrationServicesImpl(
     },
   );
 
+  const migrateGramRegistrations = fromPromise(
+    async ({
+      input,
+      signal,
+    }: {
+      input: MigrateGramRegistrationsInput;
+    } & SignalArg) => {
+      const { mutationFn } =
+        buildMigrateLegacyGramRegistrationsMutation(client);
+      await mutationFn({
+        request: {
+          migrateLegacyGramRegistrationsForm: {
+            oauthProxyProviderId: input.oauthProxyProviderId,
+            userSessionIssuerId: input.userSessionIssuerId,
+          },
+        },
+        ...fetchOptions({ signal }),
+      });
+    },
+  );
+
   const linkToolsetUserSessionIssuer = fromPromise(
     async ({
       input,
@@ -327,6 +350,7 @@ function createMigrationServicesImpl(
     createUserSessionIssuer,
     createRemoteSessionIssuer,
     createRemoteSessionClient,
+    migrateGramRegistrations,
     linkToolsetUserSessionIssuer,
   };
 }

@@ -130,11 +130,49 @@ WHERE remote_session_issuer_id = @remote_session_issuer_id AND deleted IS FALSE;
 
 -- name: GetOAuthProxyProviderForClone :one
 -- Read just the fields cloneOAuthProxyProvider needs: project scoping for
--- isolation, provider_type to refuse non-custom providers, and the secrets
--- JSONB so the handler can extract client_id / client_secret server-side.
-SELECT id, project_id, provider_type, secrets
+-- isolation, provider_type to refuse non-custom providers, the secrets
+-- JSONB so the handler can extract client_id / client_secret server-side,
+-- and oauth_proxy_server_id so the handler can find the MCP servers whose
+-- legacy client registrations need migrating.
+SELECT id, project_id, provider_type, secrets, oauth_proxy_server_id
 FROM oauth_proxy_providers
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+
+-- name: ListToolsetMCPEndpointsForOAuthProxyServer :many
+-- Finds every MCP server attached to an oauth_proxy_server so the clone
+-- handler can derive the public URLs legacy client registrations were keyed
+-- under. A toolset with a custom domain is reachable on both the default
+-- domain and the custom domain, so the handler scans both variants.
+SELECT t.mcp_slug, cd.domain AS custom_domain
+FROM toolsets AS t
+LEFT JOIN custom_domains AS cd ON cd.id = t.custom_domain_id AND cd.deleted IS FALSE
+WHERE t.oauth_proxy_server_id = @oauth_proxy_server_id
+  AND t.project_id = @project_id
+  AND t.mcp_slug IS NOT NULL
+  AND t.deleted IS FALSE;
+
+-- name: MigrateLegacyUserSessionClient :execrows
+-- Lifts one legacy OAuth proxy client registration (Redis) into
+-- user_session_clients, preserving the original client_id so already-known
+-- MCP clients skip re-registration after cutover. The conflict target
+-- matches the partial unique index on (user_session_issuer_id, client_id)
+-- WHERE deleted IS FALSE, so re-running a clone neither duplicates nor
+-- clobbers an existing active row.
+INSERT INTO user_session_clients (
+    project_id,
+    user_session_issuer_id,
+    client_id,
+    client_secret_hash,
+    client_name,
+    redirect_uris,
+    client_secret_expires_at
+)
+SELECT usi.project_id, usi.id, @client_id, @client_secret_hash, @client_name, @redirect_uris::text[], NULL
+FROM user_session_issuers AS usi
+WHERE usi.id = @user_session_issuer_id
+  AND usi.project_id = @project_id
+  AND usi.deleted IS FALSE
+ON CONFLICT (user_session_issuer_id, client_id) WHERE deleted IS FALSE DO NOTHING;
 
 -- name: CreateRemoteSessionClient :one
 INSERT INTO remote_session_clients (
@@ -757,3 +795,23 @@ WHERE s.id = @id
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
 RETURNING s.*, c.project_id AS client_project_id;
+
+-- name: GetOrganizationRemoteSessionByID :one
+-- Load a single active session by id, scoped through the client's issuer's
+-- organization_id. Returns the full embedded session row (including the
+-- encrypted refresh token, which the org-admin refresh handler needs but the
+-- API view never exposes), the owning client's project_id for audit
+-- attribution, and the resolved subject identity for the returned view.
+SELECT sqlc.embed(s),
+  c.project_id AS client_project_id,
+  u.display_name AS subject_display_name,
+  u.email AS subject_email
+FROM remote_sessions AS s
+JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
+WHERE s.id = @id
+  AND i.organization_id = @organization_id
+  AND s.deleted IS FALSE
+  AND c.deleted IS FALSE
+  AND i.deleted IS FALSE;

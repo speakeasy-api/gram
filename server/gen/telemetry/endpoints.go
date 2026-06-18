@@ -26,6 +26,8 @@ type Endpoints struct {
 	GetEmployeeDataFlowGraph  goa.Endpoint
 	GetObservabilityOverview  goa.Endpoint
 	GetProjectOverview        goa.Endpoint
+	Query                     goa.Endpoint
+	ListSessions              goa.Endpoint
 	ListFilterOptions         goa.Endpoint
 	ListAttributeKeys         goa.Endpoint
 	GetHooksSummary           goa.Endpoint
@@ -50,6 +52,8 @@ func NewEndpoints(s Service) *Endpoints {
 		GetEmployeeDataFlowGraph:  NewGetEmployeeDataFlowGraphEndpoint(s, a.APIKeyAuth),
 		GetObservabilityOverview:  NewGetObservabilityOverviewEndpoint(s, a.APIKeyAuth),
 		GetProjectOverview:        NewGetProjectOverviewEndpoint(s, a.APIKeyAuth),
+		Query:                     NewQueryEndpoint(s, a.APIKeyAuth),
+		ListSessions:              NewListSessionsEndpoint(s, a.APIKeyAuth),
 		ListFilterOptions:         NewListFilterOptionsEndpoint(s, a.APIKeyAuth),
 		ListAttributeKeys:         NewListAttributeKeysEndpoint(s, a.APIKeyAuth),
 		GetHooksSummary:           NewGetHooksSummaryEndpoint(s, a.APIKeyAuth),
@@ -72,6 +76,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetEmployeeDataFlowGraph = m(e.GetEmployeeDataFlowGraph)
 	e.GetObservabilityOverview = m(e.GetObservabilityOverview)
 	e.GetProjectOverview = m(e.GetProjectOverview)
+	e.Query = m(e.Query)
+	e.ListSessions = m(e.ListSessions)
 	e.ListFilterOptions = m(e.ListFilterOptions)
 	e.ListAttributeKeys = m(e.ListAttributeKeys)
 	e.GetHooksSummary = m(e.GetHooksSummary)
@@ -680,6 +686,52 @@ func NewGetProjectOverviewEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 			return nil, err
 		}
 		return s.GetProjectOverview(ctx, p)
+	}
+}
+
+// NewQueryEndpoint returns an endpoint function that calls the method "query"
+// of service "telemetry".
+func NewQueryEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*QueryPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.Query(ctx, p)
+	}
+}
+
+// NewListSessionsEndpoint returns an endpoint function that calls the method
+// "listSessions" of service "telemetry".
+func NewListSessionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListSessionsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListSessions(ctx, p)
 	}
 }
 

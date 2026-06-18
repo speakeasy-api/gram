@@ -21,7 +21,7 @@ import (
 func TestToolsCallClickHouseLogInterceptor_Name(t *testing.T) {
 	t.Parallel()
 
-	interceptor := remotemcp.NewToolsCallClickHouseLogInterceptor(telemetry.NewStub(testenv.NewLogger(t)), "server-id", testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallClickHouseLogInterceptor(telemetry.NewStub(testenv.NewLogger(t)), proxy.ServerIdentity{RemoteMCPServerID: "server-id", McpServerID: "mcp-server-id"}, testenv.NewLogger(t))
 	require.Equal(t, "tools-call-clickhouse-log", interceptor.Name())
 }
 
@@ -34,10 +34,11 @@ func TestToolsCallClickHouseLogInterceptor_EmitsRow(t *testing.T) {
 
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
-	telemLogger := telemetry.NewLogger(t.Context(), logger, chConn, logsEnabled, toolIOLogsEnabled)
+	telemLogger := telemetry.NewLogger(t.Context(), logger, chConn, logsEnabled, toolIOLogsEnabled, nil)
 
 	projectID := uuid.New()
 	serverID := uuid.New().String()
+	mcpServerID := uuid.New().String()
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID: "org-test",
 		UserID:               "user-123",
@@ -45,7 +46,7 @@ func TestToolsCallClickHouseLogInterceptor_EmitsRow(t *testing.T) {
 		ProjectID:            &projectID,
 	})
 
-	interceptor := remotemcp.NewToolsCallClickHouseLogInterceptor(telemLogger, serverID, logger)
+	interceptor := remotemcp.NewToolsCallClickHouseLogInterceptor(telemLogger, proxy.ServerIdentity{RemoteMCPServerID: serverID, McpServerID: mcpServerID}, logger)
 
 	req := &proxy.ToolsCallRequest{
 		UserRequest: nil,
@@ -80,6 +81,12 @@ func TestToolsCallClickHouseLogInterceptor_EmitsRow(t *testing.T) {
 
 	require.NoError(t, interceptor.InterceptToolsCallResponse(ctx, resp))
 
+	// The two correlation ids are distinct, so a row matching both columns
+	// proves the interceptor records the fronting mcp_servers id alongside
+	// the remote_mcp_servers id rather than reusing one for both. A single
+	// shared id is what masked the PR #3405 RBAC bug.
+	require.NotEqual(t, serverID, mcpServerID)
+
 	// Emission is fire-and-forget; poll the read side until the row appears.
 	expectedURN := "tools:externalmcp:" + serverID + ":list_things"
 	require.Eventually(t, func() bool {
@@ -89,10 +96,11 @@ func TestToolsCallClickHouseLogInterceptor_EmitsRow(t *testing.T) {
 			 WHERE gram_project_id = ?
 			   AND gram_urn = ?
 			   AND remote_mcp_server_id = ?
+			   AND mcp_server_id = ?
 			   AND tool_name = ?
 			   AND event_source = ?
 			   AND toInt32OrZero(toString(attributes.http.response.status_code)) = 200`,
-			projectID.String(), expectedURN, serverID, "list_things", "tool_call")
+			projectID.String(), expectedURN, serverID, mcpServerID, "list_things", "tool_call")
 		if err := row.Scan(&count); err != nil {
 			return false
 		}
@@ -109,16 +117,17 @@ func TestToolsCallClickHouseLogInterceptor_DurationMissingSentinel(t *testing.T)
 
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return false, nil }
-	telemLogger := telemetry.NewLogger(t.Context(), logger, chConn, logsEnabled, toolIOLogsEnabled)
+	telemLogger := telemetry.NewLogger(t.Context(), logger, chConn, logsEnabled, toolIOLogsEnabled, nil)
 
 	projectID := uuid.New()
 	serverID := uuid.New().String()
+	mcpServerID := uuid.New().String()
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID: "org-test",
 		ProjectID:            &projectID,
 	})
 
-	interceptor := remotemcp.NewToolsCallClickHouseLogInterceptor(telemLogger, serverID, logger)
+	interceptor := remotemcp.NewToolsCallClickHouseLogInterceptor(telemLogger, proxy.ServerIdentity{RemoteMCPServerID: serverID, McpServerID: mcpServerID}, logger)
 
 	// Skip the request side so the response has no stashed start time.
 	req := &proxy.ToolsCallRequest{
@@ -176,10 +185,11 @@ func TestToolsCallClickHouseLogInterceptor_NoAuthContextSkips(t *testing.T) {
 
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
-	telemLogger := telemetry.NewLogger(t.Context(), logger, chConn, logsEnabled, toolIOLogsEnabled)
+	telemLogger := telemetry.NewLogger(t.Context(), logger, chConn, logsEnabled, toolIOLogsEnabled, nil)
 
 	serverID := uuid.New().String()
-	interceptor := remotemcp.NewToolsCallClickHouseLogInterceptor(telemLogger, serverID, logger)
+	mcpServerID := uuid.New().String()
+	interceptor := remotemcp.NewToolsCallClickHouseLogInterceptor(telemLogger, proxy.ServerIdentity{RemoteMCPServerID: serverID, McpServerID: mcpServerID}, logger)
 
 	// Deliberately call without an auth context on ctx — the response side
 	// must short-circuit and emit nothing.
@@ -308,16 +318,17 @@ func runStatusCodeMappingCase(t *testing.T, tc statusCodeCase) int32 {
 
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
-	telemLogger := telemetry.NewLogger(t.Context(), logger, conn, logsEnabled, toolIOLogsEnabled)
+	telemLogger := telemetry.NewLogger(t.Context(), logger, conn, logsEnabled, toolIOLogsEnabled, nil)
 
 	projectID := uuid.New()
 	serverID := uuid.New().String()
+	mcpServerID := uuid.New().String()
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 		ActiveOrganizationID: "org-test",
 		ProjectID:            &projectID,
 	})
 
-	interceptor := remotemcp.NewToolsCallClickHouseLogInterceptor(telemLogger, serverID, logger)
+	interceptor := remotemcp.NewToolsCallClickHouseLogInterceptor(telemLogger, proxy.ServerIdentity{RemoteMCPServerID: serverID, McpServerID: mcpServerID}, logger)
 
 	req := &proxy.ToolsCallRequest{
 		UserRequest: nil,

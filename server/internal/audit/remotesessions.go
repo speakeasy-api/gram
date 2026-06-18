@@ -11,7 +11,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-const ActionRemoteSessionDelete Action = "remote-session:delete"
+const (
+	ActionRemoteSessionDelete  Action = "remote-session:delete"
+	ActionRemoteSessionRefresh Action = "remote-session:refresh"
+)
 
 type LogRemoteSessionDeleteEvent struct {
 	OrganizationID string
@@ -27,6 +30,44 @@ type LogRemoteSessionDeleteEvent struct {
 
 func (l *Logger) LogRemoteSessionDelete(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionDeleteEvent) error {
 	action := ActionRemoteSessionDelete
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.RemoteSessionURN.ID.String(),
+		SubjectType:        string(subjectTypeRemoteSession),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.SubjectURN.String()),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+		Metadata:       nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteSessionV1})
+}
+
+type LogRemoteSessionRefreshEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	RemoteSessionURN urn.RemoteSession
+	SubjectURN       urn.SessionSubject
+}
+
+func (l *Logger) LogRemoteSessionRefresh(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionRefreshEvent) error {
+	action := ActionRemoteSessionRefresh
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
