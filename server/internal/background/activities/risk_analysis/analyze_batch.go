@@ -25,13 +25,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
-	"github.com/speakeasy-api/gram/server/internal/mcpname"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
 
 // DescribeShadowMCP returns the canonical (rule_id, description) for an
@@ -706,7 +706,7 @@ func (a *AnalyzeBatch) scanMessageToolCalls(ctx context.Context, orgID string, r
 		}
 		// Native (non-MCP) tools don't carry the x-gram-toolset-id property
 		// and are out of scope for shadow-MCP enforcement.
-		if !mcpname.IsMCPToolName(toolName) {
+		if !toolref.IsMCPToolName(toolName) {
 			continue
 		}
 		var toolInput any
@@ -716,7 +716,7 @@ func (a *AnalyzeBatch) scanMessageToolCalls(ctx context.Context, orgID string, r
 				toolInput = nil
 			}
 		}
-		bareName := mcpname.MCPFunctionOf(toolName)
+		bareName := toolref.MCPFunctionOf(toolName)
 		if a.shadowMCPClient == nil {
 			continue
 		}
@@ -730,7 +730,7 @@ func (a *AnalyzeBatch) scanMessageToolCalls(ctx context.Context, orgID string, r
 		// attribute the hook recorded on the corresponding ClickHouse log,
 		// when one exists. The fallback keeps findings useful even if the
 		// CH lookup misses (no hook log yet, ClickHouse outage, ...).
-		match := mcpname.MCPServerOf(toolName)
+		match := toolref.MCPServerOf(toolName)
 		if match == "" {
 			match = toolName
 		}
@@ -777,7 +777,7 @@ func (a *AnalyzeBatch) scanMessageDestructiveToolCalls(ctx context.Context, orgI
 	var findings []Finding
 	for _, call := range calls {
 		toolName := call.Function.Name
-		if toolName == "" || !mcpname.IsMCPToolName(toolName) {
+		if toolName == "" || !toolref.IsMCPToolName(toolName) {
 			continue
 		}
 
@@ -788,7 +788,7 @@ func (a *AnalyzeBatch) scanMessageDestructiveToolCalls(ctx context.Context, orgI
 			}
 		}
 
-		bareName := mcpname.MCPFunctionOf(toolName)
+		bareName := toolref.MCPFunctionOf(toolName)
 		resolved, ok := a.shadowMCPClient.ResolveToolsetCall(ctx, toolInput, bareName, orgID)
 		if !ok || resolved.Tool.Annotations == nil || resolved.Tool.Annotations.DestructiveHint == nil || !*resolved.Tool.Annotations.DestructiveHint {
 			continue
