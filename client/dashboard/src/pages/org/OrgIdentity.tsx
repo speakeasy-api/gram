@@ -32,7 +32,12 @@ type IdentityCardProps = {
   children?: React.ReactNode;
 };
 
-function useIdentityInterestCapture(sectionId: IdentitySectionId) {
+/**
+ * Notifies our team that a non-entitled org wants SSO / Directory Sync. This
+ * capture backs the "our team has been contacted" upsell toast, so it stays even
+ * though the entitled-org configure buttons no longer emit tracking events.
+ */
+function useUpsellInterestCapture(sectionId: IdentitySectionId) {
   const telemetry = useTelemetry();
   const { session } = useSessionData();
 
@@ -49,7 +54,7 @@ function useIdentityInterestCapture(sectionId: IdentitySectionId) {
 }
 
 function ConfigureButton({ sectionId }: { sectionId: IdentitySectionId }) {
-  const captureInterest = useIdentityInterestCapture(sectionId);
+  const captureInterest = useUpsellInterestCapture(sectionId);
 
   return (
     <SimpleTooltip tooltip={UPSELL_COPY}>
@@ -69,41 +74,18 @@ function ConfigureButton({ sectionId }: { sectionId: IdentitySectionId }) {
   );
 }
 
-function useDirectorySyncPortalTelemetry() {
-  const telemetry = useTelemetry();
-  const { session } = useSessionData();
-
-  return () => {
-    telemetry.capture("identity_provider_interest", {
-      section: "directory_sync",
-      action: "dsync_portal_opened",
-      email: session?.user.email ?? "",
-      organization_id: session?.organization?.id ?? "",
-      organization_name: session?.organization?.name ?? "",
-      organization_slug: session?.organization?.slug ?? "",
-    });
-  };
-}
-
 /**
  * Routes an admin into Gram's guided setup wizard at the relevant step instead
  * of bouncing them straight to the WorkOS admin portal. Used when SSO / Directory
  * Sync has not been configured yet so first-run setup happens in-product.
  */
-function SetupStepButton({
-  step,
-  sectionId,
-}: {
-  step: "connect-idp" | "directory-sync";
-  sectionId: IdentitySectionId;
-}) {
+function SetupStepButton({ step }: { step: "connect-idp" | "directory-sync" }) {
   const orgRoutes = useOrgRoutes();
-  const captureInterest = useIdentityInterestCapture(sectionId);
 
   return (
     <RequireScope scope="org:admin" level="component">
       <orgRoutes.setup.Link queryParams={{ step }}>
-        <Button variant="secondary" size="sm" onClick={captureInterest}>
+        <Button variant="secondary" size="sm">
           Configure
         </Button>
       </orgRoutes.setup.Link>
@@ -113,8 +95,6 @@ function SetupStepButton({
 
 /** Launches the WorkOS admin portal to manage an existing SSO connection. */
 function SSOConfigureButton() {
-  const captureInterest = useIdentityInterestCapture("sso");
-
   const generatePortalLink = useGenerateWorkOSAdminPortalLinkMutation({
     onError: (error) => {
       toast.error(
@@ -134,7 +114,6 @@ function SSOConfigureButton() {
       },
       {
         onSuccess: (data) => {
-          captureInterest();
           window.open(data.url, "_blank", "noopener,noreferrer");
           toast.info("Continue setup in the WorkOS portal");
         },
@@ -163,8 +142,6 @@ function SSOConfigureButton() {
 
 /** Launches the WorkOS admin portal to manage an existing Directory Sync link. */
 function DirectorySyncConfigureButton() {
-  const captureOpened = useDirectorySyncPortalTelemetry();
-
   const generatePortalLink = useGenerateWorkOSAdminPortalLinkMutation({
     onError: (error) => {
       toast.error(
@@ -186,7 +163,6 @@ function DirectorySyncConfigureButton() {
       },
       {
         onSuccess: (data) => {
-          captureOpened();
           window.open(data.url, "_blank", "noopener,noreferrer");
           toast.info("Continue setup in the WorkOS portal");
         },
@@ -227,7 +203,7 @@ function SSOConfigureControl({
 }) {
   if (!featureEnabled) return <ConfigureButton sectionId="sso" />;
   if (active) return <SSOConfigureButton />;
-  return <SetupStepButton step="connect-idp" sectionId="sso" />;
+  return <SetupStepButton step="connect-idp" />;
 }
 
 /**
@@ -243,7 +219,7 @@ function DirectorySyncConfigureControl({
 }) {
   if (!featureEnabled) return <ConfigureButton sectionId="directory_sync" />;
   if (active) return <DirectorySyncConfigureButton />;
-  return <SetupStepButton step="directory-sync" sectionId="directory_sync" />;
+  return <SetupStepButton step="directory-sync" />;
 }
 
 function IdentitySection({
