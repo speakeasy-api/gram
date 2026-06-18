@@ -81,9 +81,14 @@ export function useRemoteMcpTools(
     },
     enabled: enabled && !!mcpUrl,
     // Auth-related failures shouldn't be hammered; the user re-triggers via the
-    // Authenticate flow (later increment) or a manual refetch.
+    // Authenticate flow or a manual refetch.
     retry: false,
     staleTime: 5 * 60 * 1000,
+    // The dashboard QueryClient throws query errors to the nearest error
+    // boundary by default. A 401 is an expected state here — it means the user
+    // must connect upstream — so keep it inline (`needsAuth`) and only let
+    // genuinely unexpected failures escape to the boundary.
+    throwOnError: (error) => !isUnauthorizedError(error),
   });
 
   return {

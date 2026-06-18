@@ -4,9 +4,10 @@ import { Type } from "@/components/ui/type";
 import { useRemoteMcpTools } from "@/hooks/useRemoteMcpTools";
 import { useRemoteMcpUserSessionToken } from "@/hooks/useRemoteMcpUserSessionToken";
 import { handleError } from "@/lib/errors";
-import { mcpConnectionUrl } from "@/lib/utils";
+import { firstPartyConnectUrl, mcpConnectionUrl } from "@/lib/utils";
+import { Button } from "@speakeasy-api/moonshine";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 
 type RemoteMcpToolsSectionProps = {
@@ -25,8 +26,9 @@ type RemoteMcpToolsSectionProps = {
  * Gram-proxied `/mcp/<slug>` endpoint via the AI SDK MCP client.
  *
  * For issuer-gated servers we mint a user-session JWT scoped to the mcp_server
- * and connect with it; without one the connection 401s into `needsAuth` (the
- * Authenticate flow lands in a later increment).
+ * and connect with it. When no upstream remote_session exists yet the gateway
+ * 401s into `needsAuth`, and we surface an Authenticate button that opens the
+ * first-party connect page in a new tab; returning focus re-attempts the list.
  *
  * Expected fetch failures are rendered inline (see RemoteMcpToolsBody). The
  * surrounding ErrorBoundary is the defensive layer for unexpected render-time
@@ -114,6 +116,23 @@ function RemoteMcpToolsSectionInner({
     [tools],
   );
 
+  // The first-party connect page is opened as a top-level new tab, so it rides
+  // the gram_session cookie on the backend origin (not the dev proxy).
+  const authUrl = useMemo(() => firstPartyConnectUrl(mcpUrl), [mcpUrl]);
+
+  // When the user comes back from the connect tab, re-attempt the listing so a
+  // freshly linked session surfaces without a manual refresh.
+  useEffect(() => {
+    if (!needsAuth) return;
+    const onFocus = () => refetch();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [needsAuth, refetch]);
+
+  const handleAuthenticate = () => {
+    if (authUrl) window.open(authUrl, "_blank", "noopener,noreferrer");
+  };
+
   const loading = isResolvingUrl || isTokenLoading || isLoading;
 
   return (
@@ -124,6 +143,7 @@ function RemoteMcpToolsSectionInner({
         isError={isError}
         toolEntries={toolEntries}
         onRetry={refetch}
+        onAuthenticate={authUrl ? handleAuthenticate : undefined}
       />
     </ToolsSectionShell>
   );
@@ -135,12 +155,14 @@ function RemoteMcpToolsBody({
   isError,
   toolEntries,
   onRetry,
+  onAuthenticate,
 }: {
   loading: boolean;
   needsAuth: boolean;
   isError: boolean;
   toolEntries: Array<[string, { description?: string }]>;
   onRetry: () => void;
+  onAuthenticate?: () => void;
 }): JSX.Element {
   if (loading) {
     return (
@@ -154,7 +176,13 @@ function RemoteMcpToolsBody({
 
   if (needsAuth) {
     return (
-      <EmptyState message="Authenticate with this server to list its tools." />
+      <EmptyState message="Authenticate with this server to list its tools.">
+        {onAuthenticate ? (
+          <Button variant="primary" onClick={onAuthenticate}>
+            <Button.Text>Authenticate</Button.Text>
+          </Button>
+        ) : null}
+      </EmptyState>
     );
   }
 
@@ -192,15 +220,18 @@ function RemoteMcpToolsBody({
 function EmptyState({
   message,
   onRetry,
+  children,
 }: {
   message: string;
   onRetry?: () => void;
+  children?: ReactNode;
 }): JSX.Element {
   return (
     <div className="border-border flex flex-col items-start gap-2 rounded-md border border-dashed px-4 py-6">
       <Type muted small>
         {message}
       </Type>
+      {children}
       {onRetry ? (
         <button
           type="button"

@@ -47,6 +47,29 @@ export function mcpConnectionUrl(
   }
 }
 
+// firstPartyConnectUrl derives the runtime first-party connect entry point
+// (`/x/mcp/<slug>/connect/first-party`) for a display MCP URL. It's always built
+// on the Gram server origin (getServerURL), never the display URL's origin: a
+// custom-domain endpoint's display URL is `https://<customer-domain>/mcp/<slug>`,
+// but the connect page is a Gram auth surface — the IDP callback, routes, and
+// any session live on the Gram origin, not the customer's MCP domain. Opened as
+// a top-level new tab; the IDP flow is state-based so no dev proxy is needed.
+// Returns undefined when the slug can't be derived.
+export function firstPartyConnectUrl(
+  displayUrl: string | undefined,
+): string | undefined {
+  if (!displayUrl) return undefined;
+  try {
+    const slug = new URL(displayUrl).pathname.split("/").filter(Boolean).pop();
+    if (!slug) return undefined;
+    const url = new URL(getServerURL());
+    url.pathname = `/x/mcp/${slug}/connect/first-party`;
+    return url.toString();
+  } catch {
+    return undefined;
+  }
+}
+
 export function buildLoginRedirectURL(redirectTo: string | null): string {
   let href = `${getServerURL()}/rpc/auth.login`;
   if (redirectTo) href += `?redirect=${encodeURIComponent(redirectTo)}`;
