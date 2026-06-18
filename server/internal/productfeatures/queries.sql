@@ -34,15 +34,6 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 ORDER BY user_id;
 
--- name: IsUserSessionCaptureExcluded :one
-SELECT EXISTS (
-        SELECT 1
-        FROM session_capture_exclusions
-        WHERE organization_id = @organization_id
-            AND user_id = @user_id
-            AND deleted IS FALSE
-) AS excluded;
-
 -- name: AddSessionCaptureExclusion :one
 INSERT INTO session_capture_exclusions (
     organization_id,
