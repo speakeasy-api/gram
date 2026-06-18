@@ -8,10 +8,10 @@ import { telemetryQuery } from "@gram/client/funcs/telemetryQuery";
 import {
   Dimension,
   GroupBy,
+  QueryPayloadSortBy,
   type QueryFilter,
   type QueryMeasures,
   type QueryResult,
-  SortBy,
 } from "@gram/client/models/components";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { useQuery } from "@tanstack/react-query";
@@ -39,7 +39,7 @@ ChartJS.register(
 
 const DIMENSIONS = Object.values(Dimension);
 const GROUP_BY_OPTIONS = Object.values(GroupBy);
-const SORT_BY_OPTIONS = Object.values(SortBy);
+const SORT_BY_OPTIONS = Object.values(QueryPayloadSortBy);
 
 // The measures available in QueryMeasures. Keyed so we can both plot a chosen
 // one on the chart and render every one in the table.
@@ -173,7 +173,7 @@ export default function TelemetryQueryDemo(): React.JSX.Element {
             from: new Date(c.from),
             to: new Date(c.to),
             groupBy: c.groupBy ? (c.groupBy as GroupBy) : undefined,
-            sortBy: c.sortBy ? (c.sortBy as SortBy) : undefined,
+            sortBy: c.sortBy ? (c.sortBy as QueryPayloadSortBy) : undefined,
             topN: c.topN,
             granularitySeconds: c.granularitySeconds
               ? Number(c.granularitySeconds)
