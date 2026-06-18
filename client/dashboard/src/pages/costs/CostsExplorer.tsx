@@ -318,6 +318,9 @@ export function CostsExplorer(): JSX.Element {
       dim === Dimension.Email
         ? "Top spenders"
         : `Spend by ${(LABELS[dim] ?? "").toLowerCase()}`;
+    // A mix card's rows are drillable when its dimension has a level below it
+    // (e.g. Department → Team); leaf dims like Agent are shown but not clickable.
+    const drillableDim = (dim: Dimension) => nextDimension(dim) !== null;
     // Team view groups by user, so its table already ranks people — surface the
     // top spenders as a compact card too (reuses the main rows, no extra query).
     if (groupBy === Dimension.Email) {
@@ -327,6 +330,8 @@ export function CostsExplorer(): JSX.Element {
       out.push({
         kind: "mix",
         title: "Top spenders",
+        dim: Dimension.Email,
+        drillable: drillableDim(Dimension.Email),
         rows: toRows(userRows),
         loading: isFetching && !data,
       });
@@ -335,6 +340,8 @@ export function CostsExplorer(): JSX.Element {
       out.push({
         kind: "mix",
         title: cardTitle(mixDimA),
+        dim: mixDimA,
+        drillable: drillableDim(mixDimA),
         rows: toRows(mixDataA?.table ?? []),
         loading: mixLoadingA,
       });
@@ -343,6 +350,8 @@ export function CostsExplorer(): JSX.Element {
       out.push({
         kind: "mix",
         title: cardTitle(mixDimB),
+        dim: mixDimB,
+        drillable: drillableDim(mixDimB),
         rows: toRows(mixDataB?.table ?? []),
         loading: mixLoadingB,
       });
@@ -372,13 +381,18 @@ export function CostsExplorer(): JSX.Element {
     isFetching,
   ]);
 
-  // Drill into a row: append it to the filter path and advance to the next axis.
-  const drillInto = (row: QueryRow) => {
-    const next = nextDimension(groupBy);
+  // Filter by a (dimension, value) and advance to that dimension's child axis.
+  // Used by both the main table (current axis) and the mix-card rows (their own
+  // cross-cut axis, e.g. drilling a department straight from the Division view).
+  const drillIntoDim = (dim: Dimension, value: string) => {
+    const next = nextDimension(dim);
     if (next === null) return;
-    if (row.groupValue === "" || row.groupValue === "Other") return;
-    goToNode([...path, { dim: groupBy, value: row.groupValue }], next);
+    if (value === "" || value === "Other") return;
+    goToNode([...path, { dim, value }], next);
   };
+
+  // Drill into a main-table row: use the current breakdown axis.
+  const drillInto = (row: QueryRow) => drillIntoDim(groupBy, row.groupValue);
 
   // Go up one ancestor: drop the deepest filter and regroup by the axis that
   // produced it (the removed crumb's dimension) — i.e. show the parent's profile.
@@ -426,6 +440,7 @@ export function CostsExplorer(): JSX.Element {
       totals={stats}
       prevTotals={prevTotals}
       cards={cards}
+      onDrill={drillIntoDim}
       loading={isFetching && !data}
     />
   );

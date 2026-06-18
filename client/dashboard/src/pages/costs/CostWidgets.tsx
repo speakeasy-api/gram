@@ -1,3 +1,4 @@
+import type { Dimension } from "@gram/client/models/components";
 import type { Measures } from "./taxonomy";
 import { Sparkline } from "./Sparkline";
 import { movingAverage, resample, smoothPath } from "./sparkline-math";
@@ -127,7 +128,7 @@ function Card({
 }): JSX.Element {
   return (
     <div className="border-border rounded-lg border p-4">
-      <div className="text-muted-foreground text-xs font-medium">{title}</div>
+      <div className="text-sm font-semibold">{title}</div>
       {children}
     </div>
   );
@@ -180,22 +181,74 @@ function TrendCard({
 
 export type MixRow = { label: string; cost: number };
 
+// One ranked row: label + cost + a graded bar. Becomes a button (with a muted
+// hover) when `onSelect` is supplied, so the user can drill straight into it.
+function MixRowItem({
+  label,
+  cost,
+  barPct,
+  barColor,
+  onSelect,
+}: {
+  label: string;
+  cost: number;
+  barPct: number;
+  barColor: string;
+  onSelect?: () => void;
+}): JSX.Element {
+  const inner = (
+    <>
+      <div className="flex items-center justify-between gap-2 text-sm">
+        <span className="truncate">{label || "(unset)"}</span>
+        <span className="text-muted-foreground tabular-nums">
+          {formatCost(cost)}
+        </span>
+      </div>
+      <div className="bg-muted h-2.5 overflow-hidden rounded-full">
+        <div
+          className="h-full rounded-full"
+          style={{ width: `${barPct}%`, backgroundColor: barColor }}
+        />
+      </div>
+    </>
+  );
+  if (!onSelect) {
+    return <div className="space-y-1.5 py-1.5">{inner}</div>;
+  }
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className="hover:bg-muted -mx-2 block w-full cursor-pointer space-y-1.5 rounded-md px-2 py-1.5 text-left transition-colors"
+    >
+      {inner}
+    </button>
+  );
+}
+
 function MixCard({
   title,
+  dim,
+  drillable,
   rows,
   loading,
+  onDrill,
 }: {
   title: string;
+  dim: Dimension;
+  drillable: boolean;
   rows: MixRow[];
   loading: boolean;
+  onDrill?: (dim: Dimension, value: string) => void;
 }): JSX.Element {
   const top = rows.slice(0, 5);
   const costs = top.map((r) => r.cost);
   const max = Math.max(...costs, 0) || 1;
   const min = costs.length ? Math.min(...costs) : 0;
+  const canDrill = drillable && !!onDrill;
   return (
     <Card title={title}>
-      <div className="mt-4 space-y-3.5">
+      <div className="mt-3 space-y-1">
         {loading ? (
           MIX_SKELETON_ROWS.map((r, i) => (
             <div key={i} className="space-y-1.5">
@@ -214,24 +267,17 @@ function MixCard({
         ) : (
           top.map((r) => {
             const t = max > min ? (r.cost - min) / (max - min) : 1;
+            const selectable =
+              canDrill && r.label !== "" && r.label !== "Other";
             return (
-              <div key={r.label} className="space-y-1.5">
-                <div className="flex items-center justify-between gap-2 text-sm">
-                  <span className="truncate">{r.label || "(unset)"}</span>
-                  <span className="text-muted-foreground tabular-nums">
-                    {formatCost(r.cost)}
-                  </span>
-                </div>
-                <div className="bg-muted h-2.5 overflow-hidden rounded-full">
-                  <div
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${(r.cost / max) * 100}%`,
-                      backgroundColor: gradeColor(t),
-                    }}
-                  />
-                </div>
-              </div>
+              <MixRowItem
+                key={r.label}
+                label={r.label}
+                cost={r.cost}
+                barPct={(r.cost / max) * 100}
+                barColor={gradeColor(t)}
+                onSelect={selectable ? () => onDrill!(dim, r.label) : undefined}
+              />
             );
           })
         )}
@@ -315,6 +361,9 @@ function StatCard({
 export type MixCardSpec = {
   kind: "mix";
   title: string;
+  // The dimension these rows rank, and whether it has a level to drill into.
+  dim: Dimension;
+  drillable: boolean;
   rows: MixRow[];
   loading: boolean;
 };
@@ -332,6 +381,7 @@ export function CostWidgets({
   totals,
   prevTotals,
   cards,
+  onDrill,
   loading,
 }: {
   series: WidgetSeries;
@@ -339,6 +389,8 @@ export function CostWidgets({
   prevTotals: Measures;
   // Per-level secondary cards (mix breakdowns + stats); varies by the axis.
   cards: CardSpec[];
+  // Drill into a mix-card row by its (dimension, value).
+  onDrill?: (dim: Dimension, value: string) => void;
   // True while the main slice is still loading (trend + KPI skeletons).
   loading: boolean;
 }): JSX.Element {
@@ -356,8 +408,11 @@ export function CostWidgets({
             <MixCard
               key={c.title}
               title={c.title}
+              dim={c.dim}
+              drillable={c.drillable}
               rows={c.rows}
               loading={c.loading}
+              onDrill={onDrill}
             />
           ) : (
             <StatCard
