@@ -123,6 +123,7 @@ func (f *Forwarder) Enqueue(ctx context.Context, job Job) {
 		f.dropped.Add(ctx, 1)
 		f.logger.WarnContext(ctx, "otel forward queue full, dropping job",
 			attr.SlogOrganizationID(job.OrgID),
+			attr.SlogURLFull(job.URL),
 		)
 	}
 }
@@ -155,12 +156,15 @@ func (f *Forwarder) send(ctx context.Context, job Job) {
 	sendCtx, span := f.tracer.Start(sendCtx, "otelforwarding.send")
 	defer span.End()
 
+	span.SetAttributes(attr.URLFull(job.URL))
+
 	req, err := http.NewRequestWithContext(sendCtx, http.MethodPost, job.URL, bytes.NewReader(job.Body))
 	if err != nil {
 		f.failed.Add(ctx, 1)
 		f.logger.WarnContext(sendCtx, "build otel forward request",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(job.OrgID),
+			attr.SlogURLFull(job.URL),
 		)
 		return
 	}
@@ -177,17 +181,24 @@ func (f *Forwarder) send(ctx context.Context, job Job) {
 		f.logger.WarnContext(sendCtx, "otel forward request failed",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(job.OrgID),
+			attr.SlogURLFull(job.URL),
 		)
 		return
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
-		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
-		f.failed.Add(ctx, 1)
+		// Capture the truncated response prefix we already read so the
+		// downstream's rejection reason (e.g. an auth error message) is
+		// recoverable from logs instead of discarded.
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		f.failed.Add(ctx, 1, metric.WithAttributes(attr.HTTPResponseStatusCode(resp.StatusCode)))
+		span.SetAttributes(attr.HTTPResponseStatusCode(resp.StatusCode))
 		f.logger.WarnContext(sendCtx, "otel forward returned error status",
 			attr.SlogHTTPResponseStatusCode(resp.StatusCode),
 			attr.SlogOrganizationID(job.OrgID),
+			attr.SlogURLFull(job.URL),
+			attr.SlogHTTPResponseBody(string(body)),
 		)
 		return
 	}
