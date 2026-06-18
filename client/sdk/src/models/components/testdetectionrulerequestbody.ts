@@ -4,10 +4,16 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import {
+  RiskMatchConfig,
+  RiskMatchConfig$Outbound,
+  RiskMatchConfig$outboundSchema,
+} from "./riskmatchconfig.js";
 
 export type TestDetectionRuleRequestBody = {
+  matchConfig?: RiskMatchConfig | undefined;
   /**
-   * Regex pattern. Required for `custom.*` rule ids since the server doesn't persist custom rules yet; ignored for built-in rules.
+   * Legacy regex pattern for `custom.*` rule ids; ignored for built-in rules and when match_config is set.
    */
   regex?: string | undefined;
   /**
@@ -22,6 +28,7 @@ export type TestDetectionRuleRequestBody = {
 
 /** @internal */
 export type TestDetectionRuleRequestBody$Outbound = {
+  match_config?: RiskMatchConfig$Outbound | undefined;
   regex?: string | undefined;
   rule_id: string;
   text: string;
@@ -33,12 +40,14 @@ export const TestDetectionRuleRequestBody$outboundSchema: z.ZodMiniType<
   TestDetectionRuleRequestBody
 > = z.pipe(
   z.object({
+    matchConfig: z.optional(RiskMatchConfig$outboundSchema),
     regex: z.optional(z.string()),
     ruleId: z.string(),
     text: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
+      matchConfig: "match_config",
       ruleId: "rule_id",
     });
   }),

@@ -35300,9 +35300,11 @@ components:
         description:
           type: string
           description: Description of what the rule detects.
+        match_config:
+          $ref: '#/components/schemas/RiskMatchConfig'
         regex:
           type: string
-          description: RE2-compatible regex pattern.
+          description: Legacy RE2-compatible regex pattern. Prefer match_config for new rules.
         rule_id:
           type: string
           description: Stable rule identifier, prefixed with `custom.`.
@@ -35322,7 +35324,6 @@ components:
       required:
         - rule_id
         - title
-        - regex
     CreateDeploymentForm:
       type: object
       properties:
@@ -43051,9 +43052,11 @@ components:
           type: string
           description: The custom detection rule ID.
           format: uuid
+        match_config:
+          $ref: '#/components/schemas/RiskMatchConfig'
         regex:
           type: string
-          description: RE2-compatible regex pattern.
+          description: Legacy RE2-compatible regex pattern. Superseded by match_config; empty when the rule uses match_config.
         rule_id:
           type: string
           description: Stable rule identifier, prefixed with `custom.`.
@@ -43145,6 +43148,69 @@ components:
           format: uuid
       required:
         - id
+    RiskMatchCondition:
+      type: object
+      properties:
+        case_insensitive:
+          type: boolean
+          description: Lowercase both sides for equals/not_equals/keyword.
+        op:
+          type: string
+          description: Comparison applied to the resolved target value.
+          enum:
+            - regex
+            - equals
+            - not_equals
+            - glob
+            - keyword
+            - exists
+            - contains
+            - not_contains
+            - starts_with
+            - ends_with
+            - in
+        path:
+          type: string
+          description: gjson/JSONPath into the tool_args JSON (tool_args target only).
+        target:
+          type: string
+          description: Message field the condition reads. The target also scopes the condition to a message type.
+          enum:
+            - content
+            - user_prompt
+            - assistant_text
+            - tool_result
+            - tool_name
+            - tool_server
+            - tool_function
+            - tool_args
+        value:
+          type: string
+          description: Operand for regex/equals/not_equals/glob. Empty is meaningful for equals (e.g. `tool_server == ""` matches native tools).
+        values:
+          type: array
+          items:
+            type: string
+          description: Keywords for the keyword op (case-insensitive substring).
+      required:
+        - target
+        - op
+    RiskMatchConfig:
+      type: object
+      properties:
+        combine:
+          type: string
+          description: How the conditions reduce to a verdict.
+          enum:
+            - and
+            - or
+        conditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskMatchCondition'
+          description: Conditions evaluated against a message; all (and) or any (or) must match.
+      required:
+        - conditions
     RiskOverviewCategory:
       type: object
       properties:
@@ -45171,9 +45237,11 @@ components:
         description:
           type: string
           description: Description of what the rule detects and why it matters.
+        match_config:
+          $ref: '#/components/schemas/RiskMatchConfig'
         regex:
           type: string
-          description: RE2-compatible regex pattern the rule should match against.
+          description: Legacy RE2-compatible regex pattern. Empty when match_config is returned; kept for back-compat.
         rule_id:
           type: string
           description: Suggested stable identifier, prefixed with `custom.`.
@@ -45341,9 +45409,11 @@ components:
     TestDetectionRuleRequestBody:
       type: object
       properties:
+        match_config:
+          $ref: '#/components/schemas/RiskMatchConfig'
         regex:
           type: string
-          description: Regex pattern. Required for `custom.*` rule ids since the server doesn't persist custom rules yet; ignored for built-in rules.
+          description: Legacy regex pattern for `custom.*` rule ids; ignored for built-in rules and when match_config is set.
         rule_id:
           type: string
           description: Rule identifier to evaluate (e.g. `secret.aws_access_token`, `pii.email_address`, `custom.acme_token`).
@@ -46907,9 +46977,11 @@ components:
           type: string
           description: The custom detection rule ID.
           format: uuid
+        match_config:
+          $ref: '#/components/schemas/RiskMatchConfig'
         regex:
           type: string
-          description: RE2-compatible regex pattern.
+          description: Legacy RE2-compatible regex pattern. Prefer match_config for new rules.
         severity:
           type: string
           description: Severity level for findings produced by this rule.
@@ -46925,7 +46997,6 @@ components:
       required:
         - id
         - title
-        - regex
         - severity
     UpdateDomainRequestBody:
       type: object

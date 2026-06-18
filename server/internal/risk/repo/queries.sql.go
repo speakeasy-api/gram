@@ -420,6 +420,7 @@ INSERT INTO risk_custom_detection_rules (
   , title
   , description
   , regex
+  , match_config
   , severity
 )
 VALUES (
@@ -430,6 +431,7 @@ VALUES (
   , $5
   , $6
   , $7
+  , $8
 )
 RETURNING id, project_id, organization_id, rule_id, title, description, regex, match_config, severity, created_at, updated_at, deleted_at, deleted
 `
@@ -441,6 +443,7 @@ type CreateCustomDetectionRuleParams struct {
 	Title          string
 	Description    string
 	Regex          pgtype.Text
+	MatchConfig    []byte
 	Severity       string
 }
 
@@ -452,6 +455,7 @@ func (q *Queries) CreateCustomDetectionRule(ctx context.Context, arg CreateCusto
 		arg.Title,
 		arg.Description,
 		arg.Regex,
+		arg.MatchConfig,
 		arg.Severity,
 	)
 	var i RiskCustomDetectionRule
@@ -2733,10 +2737,11 @@ UPDATE risk_custom_detection_rules
 SET title = $1
   , description = $2
   , regex = $3
-  , severity = $4
+  , match_config = $4
+  , severity = $5
   , updated_at = clock_timestamp()
-WHERE id = $5
-  AND project_id = $6
+WHERE id = $6
+  AND project_id = $7
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, rule_id, title, description, regex, match_config, severity, created_at, updated_at, deleted_at, deleted
 `
@@ -2745,6 +2750,7 @@ type UpdateCustomDetectionRuleParams struct {
 	Title       string
 	Description string
 	Regex       pgtype.Text
+	MatchConfig []byte
 	Severity    string
 	ID          uuid.UUID
 	ProjectID   uuid.UUID
@@ -2755,6 +2761,7 @@ func (q *Queries) UpdateCustomDetectionRule(ctx context.Context, arg UpdateCusto
 		arg.Title,
 		arg.Description,
 		arg.Regex,
+		arg.MatchConfig,
 		arg.Severity,
 		arg.ID,
 		arg.ProjectID,

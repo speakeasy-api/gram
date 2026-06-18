@@ -102,6 +102,47 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Required("id", "project_id", "name", "policy_type", "sources", "enabled", "action", "audience_type", "audience_principal_urns", "auto_name", "version", "created_at", "updated_at", "pending_messages", "total_messages")
 })
 
+// RiskMatchConditionTargetEnum constrains the message field a condition reads.
+// The target also implicitly scopes the condition to a message type (e.g.
+// tool_server only matches tool-request messages). Kept here so payloads and
+// the result type stay in sync.
+func RiskMatchConditionTargetEnum() {
+	Enum("content", "user_prompt", "assistant_text", "tool_result", "tool_name", "tool_server", "tool_function", "tool_args")
+}
+
+// RiskMatchConditionOpEnum constrains the comparison a condition applies.
+func RiskMatchConditionOpEnum() {
+	Enum("regex", "equals", "not_equals", "glob", "keyword", "exists", "contains", "not_contains", "starts_with", "ends_with", "in")
+}
+
+var RiskMatchCondition = Type("RiskMatchCondition", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("target", String, "Message field the condition reads. The target also scopes the condition to a message type.", func() {
+		RiskMatchConditionTargetEnum()
+	})
+	Attribute("op", String, "Comparison applied to the resolved target value.", func() {
+		RiskMatchConditionOpEnum()
+	})
+	Attribute("value", String, "Operand for regex/equals/not_equals/glob. Empty is meaningful for equals (e.g. `tool_server == \"\"` matches native tools).")
+	Attribute("values", ArrayOf(String), "Keywords for the keyword op (case-insensitive substring).")
+	Attribute("path", String, "gjson/JSONPath into the tool_args JSON (tool_args target only).")
+	Attribute("case_insensitive", Boolean, "Lowercase both sides for equals/not_equals/keyword.")
+
+	Required("target", "op")
+})
+
+var RiskMatchConfig = Type("RiskMatchConfig", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("combine", String, "How the conditions reduce to a verdict.", func() {
+		Enum("and", "or")
+	})
+	Attribute("conditions", ArrayOf(RiskMatchCondition), "Conditions evaluated against a message; all (and) or any (or) must match.")
+
+	Required("conditions")
+})
+
 var RiskCustomDetectionRule = Type("RiskCustomDetectionRule", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -111,7 +152,8 @@ var RiskCustomDetectionRule = Type("RiskCustomDetectionRule", func() {
 	Attribute("rule_id", String, "Stable rule identifier, prefixed with `custom.`.")
 	Attribute("title", String, "Human-readable title for the rule.")
 	Attribute("description", String, "Description of what the rule detects.")
-	Attribute("regex", String, "RE2-compatible regex pattern.")
+	Attribute("regex", String, "Legacy RE2-compatible regex pattern. Superseded by match_config; empty when the rule uses match_config.")
+	Attribute("match_config", RiskMatchConfig, "Sparse condition-based matcher. When set, supersedes regex.")
 	Attribute("severity", String, "Severity level for findings produced by this rule.", func() {
 		Enum("info", "low", "medium", "high", "critical")
 	})

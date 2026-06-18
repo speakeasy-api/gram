@@ -341,6 +341,14 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 // per-policy parallelism over sources buys roughly nothing. The
 // across-policies fan-out in ScanForEnforcement is the real win.
 func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type, toolName string, promptPoliciesOn bool, piEngineOn bool) (*ScanResult, error) {
+	// Build the structured view once; the custom rules evaluate against it.
+	view := ra.MessageView{Content: text, Type: messageType, Tools: nil}
+	if messageType == message.ToolRequest && toolName != "" {
+		// In realtime a tool-request's text carries the call arguments (the same
+		// body the judge sees), so it doubles as the tool_args source.
+		view.Tools = []ra.ToolView{ra.NewToolView(toolName, text)}
+	}
+
 	if policy.PolicyType == "prompt_based" {
 		return s.scanPromptPolicy(ctx, policy, text, messageType, toolName, promptPoliciesOn), nil
 	}
@@ -421,21 +429,22 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 			}
 		}
 	}
+	// Custom detection rules run last: they are detectors like the built-in
+	// sources above, so a compile/scan failure here must not skip those sources.
 	if len(policy.CustomRuleIds) > 0 {
-		findings, err := s.scanCustomRules(ctx, policy, text)
+		customScan, err := s.scanCustomRules(ctx, policy, view)
 		if err != nil {
 			return nil, err
 		}
-		findings = filter(findings)
-		if len(findings) > 0 {
+		if denyFindings := filter(customScan.Findings); len(denyFindings) > 0 {
 			return &ScanResult{
 				Action:      policy.Action,
 				PolicyID:    policy.ID.String(),
 				PolicyName:  policy.Name,
 				Source:      ra.SourceCustom,
 				MessageType: messageType,
-				RuleID:      findings[0].RuleID,
-				Description: findings[0].Description,
+				RuleID:      denyFindings[0].RuleID,
+				Description: denyFindings[0].Description,
 				UserMessage: conv.FromPGText[string](policy.UserMessage),
 			}, nil
 		}
@@ -522,35 +531,42 @@ func promptPolicyUnavailableResult(policy repo.RiskPolicy, messageType message.T
 	}
 }
 
-func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, text string) ([]ra.Finding, error) {
+func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, view ra.MessageView) (ra.CustomRuleScan, error) {
+	if len(policy.CustomRuleIds) == 0 {
+		return ra.CustomRuleScan{Findings: nil, Allowed: false}, nil
+	}
+
 	rules, err := s.repo.ListCustomDetectionRules(ctx, policy.ProjectID)
 	if err != nil {
-		return nil, fmt.Errorf("list custom detection rules: %w", err)
+		return ra.CustomRuleScan{}, fmt.Errorf("list custom detection rules: %w", err)
 	}
 
-	selected := make(map[string]struct{}, len(policy.CustomRuleIds))
+	// Rules attached as detectors deny: a match flags.
+	actions := make(map[string]ra.Action, len(policy.CustomRuleIds))
 	for _, id := range policy.CustomRuleIds {
-		selected[id] = struct{}{}
+		actions[id] = ra.ActionDeny
 	}
 
-	customRules := make([]ra.CustomDetectionRule, 0, len(policy.CustomRuleIds))
+	customRules := make([]ra.CustomDetectionRule, 0, len(actions))
 	for _, rule := range rules {
-		if _, ok := selected[rule.RuleID]; !ok {
+		action, ok := actions[rule.RuleID]
+		if !ok {
 			continue
 		}
 		customRules = append(customRules, ra.CustomDetectionRule{
 			RuleID:      rule.RuleID,
 			Title:       rule.Title,
 			Description: rule.Description,
-			Regex:       conv.PtrValOr(conv.FromPGText[string](rule.Regex), ""),
+			MatchConfig: ra.EffectiveMatchConfig(rule.MatchConfig, conv.PtrValOr(conv.FromPGText[string](rule.Regex), "")),
+			Action:      action,
 		})
 	}
 
 	compiled, err := ra.CompileCustomDetectionRules(customRules)
 	if err != nil {
-		return nil, fmt.Errorf("compile custom detection rules: %w", err)
+		return ra.CustomRuleScan{}, fmt.Errorf("compile custom detection rules: %w", err)
 	}
-	return ra.ScanCustomDetectionRules(text, compiled), nil
+	return ra.ScanCustomDetectionRules(view, compiled), nil
 }
 
 // scanGitleaks runs DetectString on the pre-created detector under

@@ -683,12 +683,13 @@ var _ = Service("risk", func() {
 			Attribute("rule_id", String, "Stable rule identifier, prefixed with `custom.`.")
 			Attribute("title", String, "Human-readable title for the rule.")
 			Attribute("description", String, "Description of what the rule detects.")
-			Attribute("regex", String, "RE2-compatible regex pattern.")
+			Attribute("regex", String, "Legacy RE2-compatible regex pattern. Prefer match_config for new rules.")
+			Attribute("match_config", shared.RiskMatchConfig, "Sparse condition-based matcher. When set, supersedes regex.")
 			Attribute("severity", String, "Severity level for findings produced by this rule.", func() {
 				Enum("info", "low", "medium", "high", "critical")
 				Default("medium")
 			})
-			Required("rule_id", "title", "regex")
+			Required("rule_id", "title")
 		})
 
 		Result(shared.RiskCustomDetectionRule)
@@ -774,11 +775,12 @@ var _ = Service("risk", func() {
 			})
 			Attribute("title", String, "Human-readable title for the rule.")
 			Attribute("description", String, "Description of what the rule detects.")
-			Attribute("regex", String, "RE2-compatible regex pattern.")
+			Attribute("regex", String, "Legacy RE2-compatible regex pattern. Prefer match_config for new rules.")
+			Attribute("match_config", shared.RiskMatchConfig, "Sparse condition-based matcher. When set, supersedes regex.")
 			Attribute("severity", String, "Severity level for findings produced by this rule.", func() {
 				Enum("info", "low", "medium", "high", "critical")
 			})
-			Required("id", "title", "regex", "severity")
+			Required("id", "title", "severity")
 		})
 
 		Result(shared.RiskCustomDetectionRule)
@@ -1015,7 +1017,8 @@ var _ = Service("risk", func() {
 				MinLength(1)
 				MaxLength(50000)
 			})
-			Attribute("regex", String, "Regex pattern. Required for `custom.*` rule ids since the server doesn't persist custom rules yet; ignored for built-in rules.")
+			Attribute("regex", String, "Legacy regex pattern for `custom.*` rule ids; ignored for built-in rules and when match_config is set.")
+			Attribute("match_config", shared.RiskMatchConfig, "Condition-based matcher for `custom.*` rule ids. Content-targeted conditions are evaluated against the sample text; tool-targeted rules cannot be simulated from text.")
 			Required("rule_id", "text")
 		})
 
@@ -1040,7 +1043,8 @@ var SuggestCustomDetectionRuleResult = Type("SuggestCustomDetectionRuleResult", 
 	Attribute("rule_id", String, "Suggested stable identifier, prefixed with `custom.`.")
 	Attribute("title", String, "Short, human-friendly title for the rule.")
 	Attribute("description", String, "Description of what the rule detects and why it matters.")
-	Attribute("regex", String, "RE2-compatible regex pattern the rule should match against.")
+	Attribute("regex", String, "Legacy RE2-compatible regex pattern. Empty when match_config is returned; kept for back-compat.")
+	Attribute("match_config", shared.RiskMatchConfig, "Suggested condition-based matcher (targets, ops, conditions). Preferred over regex when present.")
 	Attribute("severity", String, "Suggested severity level.", func() {
 		Enum("info", "low", "medium", "high", "critical")
 	})

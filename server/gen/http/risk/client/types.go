@@ -154,8 +154,10 @@ type CreateCustomDetectionRuleRequestBody struct {
 	Title string `form:"title" json:"title" xml:"title"`
 	// Description of what the rule detects.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// RE2-compatible regex pattern.
-	Regex string `form:"regex" json:"regex" xml:"regex"`
+	// Legacy RE2-compatible regex pattern. Prefer match_config for new rules.
+	Regex *string `form:"regex,omitempty" json:"regex,omitempty" xml:"regex,omitempty"`
+	// Sparse condition-based matcher. When set, supersedes regex.
+	MatchConfig *RiskMatchConfigRequestBody `form:"match_config,omitempty" json:"match_config,omitempty" xml:"match_config,omitempty"`
 	// Severity level for findings produced by this rule.
 	Severity string `form:"severity" json:"severity" xml:"severity"`
 }
@@ -169,8 +171,10 @@ type UpdateCustomDetectionRuleRequestBody struct {
 	Title string `form:"title" json:"title" xml:"title"`
 	// Description of what the rule detects.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// RE2-compatible regex pattern.
-	Regex string `form:"regex" json:"regex" xml:"regex"`
+	// Legacy RE2-compatible regex pattern. Prefer match_config for new rules.
+	Regex *string `form:"regex,omitempty" json:"regex,omitempty" xml:"regex,omitempty"`
+	// Sparse condition-based matcher. When set, supersedes regex.
+	MatchConfig *RiskMatchConfigRequestBody `form:"match_config,omitempty" json:"match_config,omitempty" xml:"match_config,omitempty"`
 	// Severity level for findings produced by this rule.
 	Severity string `form:"severity" json:"severity" xml:"severity"`
 }
@@ -238,9 +242,13 @@ type TestDetectionRuleRequestBody struct {
 	RuleID string `form:"rule_id" json:"rule_id" xml:"rule_id"`
 	// Sample text to scan.
 	Text string `form:"text" json:"text" xml:"text"`
-	// Regex pattern. Required for `custom.*` rule ids since the server doesn't
-	// persist custom rules yet; ignored for built-in rules.
+	// Legacy regex pattern for `custom.*` rule ids; ignored for built-in rules and
+	// when match_config is set.
 	Regex *string `form:"regex,omitempty" json:"regex,omitempty" xml:"regex,omitempty"`
+	// Condition-based matcher for `custom.*` rule ids. Content-targeted conditions
+	// are evaluated against the sample text; tool-targeted rules cannot be
+	// simulated from text.
+	MatchConfig *RiskMatchConfigRequestBody `form:"match_config,omitempty" json:"match_config,omitempty" xml:"match_config,omitempty"`
 }
 
 // CreateRiskPolicyResponseBody is the type of the "risk" service
@@ -712,8 +720,11 @@ type CreateCustomDetectionRuleResponseBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// Description of what the rule detects.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// RE2-compatible regex pattern.
+	// Legacy RE2-compatible regex pattern. Superseded by match_config; empty when
+	// the rule uses match_config.
 	Regex *string `form:"regex,omitempty" json:"regex,omitempty" xml:"regex,omitempty"`
+	// Sparse condition-based matcher. When set, supersedes regex.
+	MatchConfig *RiskMatchConfigResponseBody `form:"match_config,omitempty" json:"match_config,omitempty" xml:"match_config,omitempty"`
 	// Severity level for findings produced by this rule.
 	Severity *string `form:"severity,omitempty" json:"severity,omitempty" xml:"severity,omitempty"`
 	// When the custom detection rule was created.
@@ -740,8 +751,11 @@ type GetCustomDetectionRuleResponseBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// Description of what the rule detects.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// RE2-compatible regex pattern.
+	// Legacy RE2-compatible regex pattern. Superseded by match_config; empty when
+	// the rule uses match_config.
 	Regex *string `form:"regex,omitempty" json:"regex,omitempty" xml:"regex,omitempty"`
+	// Sparse condition-based matcher. When set, supersedes regex.
+	MatchConfig *RiskMatchConfigResponseBody `form:"match_config,omitempty" json:"match_config,omitempty" xml:"match_config,omitempty"`
 	// Severity level for findings produced by this rule.
 	Severity *string `form:"severity,omitempty" json:"severity,omitempty" xml:"severity,omitempty"`
 	// When the custom detection rule was created.
@@ -761,8 +775,11 @@ type UpdateCustomDetectionRuleResponseBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// Description of what the rule detects.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// RE2-compatible regex pattern.
+	// Legacy RE2-compatible regex pattern. Superseded by match_config; empty when
+	// the rule uses match_config.
 	Regex *string `form:"regex,omitempty" json:"regex,omitempty" xml:"regex,omitempty"`
+	// Sparse condition-based matcher. When set, supersedes regex.
+	MatchConfig *RiskMatchConfigResponseBody `form:"match_config,omitempty" json:"match_config,omitempty" xml:"match_config,omitempty"`
 	// Severity level for findings produced by this rule.
 	Severity *string `form:"severity,omitempty" json:"severity,omitempty" xml:"severity,omitempty"`
 	// When the custom detection rule was created.
@@ -847,8 +864,12 @@ type SuggestCustomDetectionRuleResponseBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// Description of what the rule detects and why it matters.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// RE2-compatible regex pattern the rule should match against.
+	// Legacy RE2-compatible regex pattern. Empty when match_config is returned;
+	// kept for back-compat.
 	Regex *string `form:"regex,omitempty" json:"regex,omitempty" xml:"regex,omitempty"`
+	// Suggested condition-based matcher (targets, ops, conditions). Preferred over
+	// regex when present.
+	MatchConfig *RiskMatchConfigResponseBody `form:"match_config,omitempty" json:"match_config,omitempty" xml:"match_config,omitempty"`
 	// Suggested severity level.
 	Severity *string `form:"severity,omitempty" json:"severity,omitempty" xml:"severity,omitempty"`
 }
@@ -6736,6 +6757,59 @@ type RiskPolicyBypassRequestResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// RiskMatchConfigRequestBody is used to define fields on request body types.
+type RiskMatchConfigRequestBody struct {
+	// How the conditions reduce to a verdict.
+	Combine *string `form:"combine,omitempty" json:"combine,omitempty" xml:"combine,omitempty"`
+	// Conditions evaluated against a message; all (and) or any (or) must match.
+	Conditions []*RiskMatchConditionRequestBody `form:"conditions" json:"conditions" xml:"conditions"`
+}
+
+// RiskMatchConditionRequestBody is used to define fields on request body types.
+type RiskMatchConditionRequestBody struct {
+	// Message field the condition reads. The target also scopes the condition to a
+	// message type.
+	Target string `form:"target" json:"target" xml:"target"`
+	// Comparison applied to the resolved target value.
+	Op string `form:"op" json:"op" xml:"op"`
+	// Operand for regex/equals/not_equals/glob. Empty is meaningful for equals
+	// (e.g. `tool_server == ""` matches native tools).
+	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
+	// Keywords for the keyword op (case-insensitive substring).
+	Values []string `form:"values,omitempty" json:"values,omitempty" xml:"values,omitempty"`
+	// gjson/JSONPath into the tool_args JSON (tool_args target only).
+	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
+	// Lowercase both sides for equals/not_equals/keyword.
+	CaseInsensitive *bool `form:"case_insensitive,omitempty" json:"case_insensitive,omitempty" xml:"case_insensitive,omitempty"`
+}
+
+// RiskMatchConfigResponseBody is used to define fields on response body types.
+type RiskMatchConfigResponseBody struct {
+	// How the conditions reduce to a verdict.
+	Combine *string `form:"combine,omitempty" json:"combine,omitempty" xml:"combine,omitempty"`
+	// Conditions evaluated against a message; all (and) or any (or) must match.
+	Conditions []*RiskMatchConditionResponseBody `form:"conditions,omitempty" json:"conditions,omitempty" xml:"conditions,omitempty"`
+}
+
+// RiskMatchConditionResponseBody is used to define fields on response body
+// types.
+type RiskMatchConditionResponseBody struct {
+	// Message field the condition reads. The target also scopes the condition to a
+	// message type.
+	Target *string `form:"target,omitempty" json:"target,omitempty" xml:"target,omitempty"`
+	// Comparison applied to the resolved target value.
+	Op *string `form:"op,omitempty" json:"op,omitempty" xml:"op,omitempty"`
+	// Operand for regex/equals/not_equals/glob. Empty is meaningful for equals
+	// (e.g. `tool_server == ""` matches native tools).
+	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
+	// Keywords for the keyword op (case-insensitive substring).
+	Values []string `form:"values,omitempty" json:"values,omitempty" xml:"values,omitempty"`
+	// gjson/JSONPath into the tool_args JSON (tool_args target only).
+	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
+	// Lowercase both sides for equals/not_equals/keyword.
+	CaseInsensitive *bool `form:"case_insensitive,omitempty" json:"case_insensitive,omitempty" xml:"case_insensitive,omitempty"`
+}
+
 // RiskCustomDetectionRuleResponseBody is used to define fields on response
 // body types.
 type RiskCustomDetectionRuleResponseBody struct {
@@ -6747,8 +6821,11 @@ type RiskCustomDetectionRuleResponseBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// Description of what the rule detects.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// RE2-compatible regex pattern.
+	// Legacy RE2-compatible regex pattern. Superseded by match_config; empty when
+	// the rule uses match_config.
 	Regex *string `form:"regex,omitempty" json:"regex,omitempty" xml:"regex,omitempty"`
+	// Sparse condition-based matcher. When set, supersedes regex.
+	MatchConfig *RiskMatchConfigResponseBody `form:"match_config,omitempty" json:"match_config,omitempty" xml:"match_config,omitempty"`
 	// Severity level for findings produced by this rule.
 	Severity *string `form:"severity,omitempty" json:"severity,omitempty" xml:"severity,omitempty"`
 	// When the custom detection rule was created.
@@ -7021,6 +7098,9 @@ func NewCreateCustomDetectionRuleRequestBody(p *risk.CreateCustomDetectionRulePa
 		Regex:       p.Regex,
 		Severity:    p.Severity,
 	}
+	if p.MatchConfig != nil {
+		body.MatchConfig = marshalTypesRiskMatchConfigToRiskMatchConfigRequestBody(p.MatchConfig)
+	}
 	{
 		var zero string
 		if body.Severity == zero {
@@ -7040,6 +7120,9 @@ func NewUpdateCustomDetectionRuleRequestBody(p *risk.UpdateCustomDetectionRulePa
 		Description: p.Description,
 		Regex:       p.Regex,
 		Severity:    p.Severity,
+	}
+	if p.MatchConfig != nil {
+		body.MatchConfig = marshalTypesRiskMatchConfigToRiskMatchConfigRequestBody(p.MatchConfig)
 	}
 	return body
 }
@@ -7136,6 +7219,9 @@ func NewTestDetectionRuleRequestBody(p *risk.TestDetectionRulePayload) *TestDete
 		RuleID: p.RuleID,
 		Text:   p.Text,
 		Regex:  p.Regex,
+	}
+	if p.MatchConfig != nil {
+		body.MatchConfig = marshalTypesRiskMatchConfigToRiskMatchConfigRequestBody(p.MatchConfig)
 	}
 	return body
 }
@@ -10548,6 +10634,9 @@ func NewCreateCustomDetectionRuleRiskCustomDetectionRuleOK(body *CreateCustomDet
 		CreatedAt:   *body.CreatedAt,
 		UpdatedAt:   *body.UpdatedAt,
 	}
+	if body.MatchConfig != nil {
+		v.MatchConfig = unmarshalRiskMatchConfigResponseBodyToTypesRiskMatchConfig(body.MatchConfig)
+	}
 
 	return v
 }
@@ -10881,6 +10970,9 @@ func NewGetCustomDetectionRuleRiskCustomDetectionRuleOK(body *GetCustomDetection
 		CreatedAt:   *body.CreatedAt,
 		UpdatedAt:   *body.UpdatedAt,
 	}
+	if body.MatchConfig != nil {
+		v.MatchConfig = unmarshalRiskMatchConfigResponseBodyToTypesRiskMatchConfig(body.MatchConfig)
+	}
 
 	return v
 }
@@ -11048,6 +11140,9 @@ func NewUpdateCustomDetectionRuleRiskCustomDetectionRuleOK(body *UpdateCustomDet
 		Severity:    *body.Severity,
 		CreatedAt:   *body.CreatedAt,
 		UpdatedAt:   *body.UpdatedAt,
+	}
+	if body.MatchConfig != nil {
+		v.MatchConfig = unmarshalRiskMatchConfigResponseBodyToTypesRiskMatchConfig(body.MatchConfig)
 	}
 
 	return v
@@ -12016,6 +12111,9 @@ func NewSuggestCustomDetectionRuleResultOK(body *SuggestCustomDetectionRuleRespo
 		Description: *body.Description,
 		Regex:       *body.Regex,
 		Severity:    *body.Severity,
+	}
+	if body.MatchConfig != nil {
+		v.MatchConfig = unmarshalRiskMatchConfigResponseBodyToTypesRiskMatchConfig(body.MatchConfig)
 	}
 
 	return v
@@ -13089,6 +13187,11 @@ func ValidateCreateCustomDetectionRuleResponseBody(body *CreateCustomDetectionRu
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
+	if body.MatchConfig != nil {
+		if err2 := ValidateRiskMatchConfigResponseBody(body.MatchConfig); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.Severity != nil {
 		if !(*body.Severity == "info" || *body.Severity == "low" || *body.Severity == "medium" || *body.Severity == "high" || *body.Severity == "critical") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.severity", *body.Severity, []any{"info", "low", "medium", "high", "critical"}))
@@ -13149,6 +13252,11 @@ func ValidateGetCustomDetectionRuleResponseBody(body *GetCustomDetectionRuleResp
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
+	if body.MatchConfig != nil {
+		if err2 := ValidateRiskMatchConfigResponseBody(body.MatchConfig); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.Severity != nil {
 		if !(*body.Severity == "info" || *body.Severity == "low" || *body.Severity == "medium" || *body.Severity == "high" || *body.Severity == "critical") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.severity", *body.Severity, []any{"info", "low", "medium", "high", "critical"}))
@@ -13192,6 +13300,11 @@ func ValidateUpdateCustomDetectionRuleResponseBody(body *UpdateCustomDetectionRu
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.MatchConfig != nil {
+		if err2 := ValidateRiskMatchConfigResponseBody(body.MatchConfig); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	if body.Severity != nil {
 		if !(*body.Severity == "info" || *body.Severity == "low" || *body.Severity == "medium" || *body.Severity == "high" || *body.Severity == "critical") {
@@ -13346,6 +13459,11 @@ func ValidateSuggestCustomDetectionRuleResponseBody(body *SuggestCustomDetection
 	}
 	if body.Severity == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("severity", "body"))
+	}
+	if body.MatchConfig != nil {
+		if err2 := ValidateRiskMatchConfigResponseBody(body.MatchConfig); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	if body.Severity != nil {
 		if !(*body.Severity == "info" || *body.Severity == "low" || *body.Severity == "medium" || *body.Severity == "high" || *body.Severity == "critical") {
@@ -20931,6 +21049,82 @@ func ValidateRiskPolicyBypassRequestResponseBody(body *RiskPolicyBypassRequestRe
 	return
 }
 
+// ValidateRiskMatchConfigRequestBody runs the validations defined on
+// RiskMatchConfigRequestBody
+func ValidateRiskMatchConfigRequestBody(body *RiskMatchConfigRequestBody) (err error) {
+	if body.Conditions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("conditions", "body"))
+	}
+	if body.Combine != nil {
+		if !(*body.Combine == "and" || *body.Combine == "or") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.combine", *body.Combine, []any{"and", "or"}))
+		}
+	}
+	for _, e := range body.Conditions {
+		if e != nil {
+			if err2 := ValidateRiskMatchConditionRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateRiskMatchConditionRequestBody runs the validations defined on
+// RiskMatchConditionRequestBody
+func ValidateRiskMatchConditionRequestBody(body *RiskMatchConditionRequestBody) (err error) {
+	if !(body.Target == "content" || body.Target == "user_prompt" || body.Target == "assistant_text" || body.Target == "tool_result" || body.Target == "tool_name" || body.Target == "tool_server" || body.Target == "tool_function" || body.Target == "tool_args") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target", body.Target, []any{"content", "user_prompt", "assistant_text", "tool_result", "tool_name", "tool_server", "tool_function", "tool_args"}))
+	}
+	if !(body.Op == "regex" || body.Op == "equals" || body.Op == "not_equals" || body.Op == "glob" || body.Op == "keyword" || body.Op == "exists" || body.Op == "contains" || body.Op == "not_contains" || body.Op == "starts_with" || body.Op == "ends_with" || body.Op == "in") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.op", body.Op, []any{"regex", "equals", "not_equals", "glob", "keyword", "exists", "contains", "not_contains", "starts_with", "ends_with", "in"}))
+	}
+	return
+}
+
+// ValidateRiskMatchConfigResponseBody runs the validations defined on
+// RiskMatchConfigResponseBody
+func ValidateRiskMatchConfigResponseBody(body *RiskMatchConfigResponseBody) (err error) {
+	if body.Conditions == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("conditions", "body"))
+	}
+	if body.Combine != nil {
+		if !(*body.Combine == "and" || *body.Combine == "or") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.combine", *body.Combine, []any{"and", "or"}))
+		}
+	}
+	for _, e := range body.Conditions {
+		if e != nil {
+			if err2 := ValidateRiskMatchConditionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateRiskMatchConditionResponseBody runs the validations defined on
+// RiskMatchConditionResponseBody
+func ValidateRiskMatchConditionResponseBody(body *RiskMatchConditionResponseBody) (err error) {
+	if body.Target == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("target", "body"))
+	}
+	if body.Op == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("op", "body"))
+	}
+	if body.Target != nil {
+		if !(*body.Target == "content" || *body.Target == "user_prompt" || *body.Target == "assistant_text" || *body.Target == "tool_result" || *body.Target == "tool_name" || *body.Target == "tool_server" || *body.Target == "tool_function" || *body.Target == "tool_args") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target", *body.Target, []any{"content", "user_prompt", "assistant_text", "tool_result", "tool_name", "tool_server", "tool_function", "tool_args"}))
+		}
+	}
+	if body.Op != nil {
+		if !(*body.Op == "regex" || *body.Op == "equals" || *body.Op == "not_equals" || *body.Op == "glob" || *body.Op == "keyword" || *body.Op == "exists" || *body.Op == "contains" || *body.Op == "not_contains" || *body.Op == "starts_with" || *body.Op == "ends_with" || *body.Op == "in") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.op", *body.Op, []any{"regex", "equals", "not_equals", "glob", "keyword", "exists", "contains", "not_contains", "starts_with", "ends_with", "in"}))
+		}
+	}
+	return
+}
+
 // ValidateRiskCustomDetectionRuleResponseBody runs the validations defined on
 // RiskCustomDetectionRuleResponseBody
 func ValidateRiskCustomDetectionRuleResponseBody(body *RiskCustomDetectionRuleResponseBody) (err error) {
@@ -20960,6 +21154,11 @@ func ValidateRiskCustomDetectionRuleResponseBody(body *RiskCustomDetectionRuleRe
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.MatchConfig != nil {
+		if err2 := ValidateRiskMatchConfigResponseBody(body.MatchConfig); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	if body.Severity != nil {
 		if !(*body.Severity == "info" || *body.Severity == "low" || *body.Severity == "medium" || *body.Severity == "high" || *body.Severity == "critical") {

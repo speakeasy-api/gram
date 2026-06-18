@@ -408,8 +408,8 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 
 	if len(customRules) > 0 {
 		wg.Go(func() {
-			for i, content := range contents {
-				customFindings[i] = ScanCustomDetectionRules(content, customRules)
+			for i, msg := range messages {
+				customFindings[i] = ScanCustomDetectionRules(a.customRuleMessageView(ctx, msg), customRules).Findings
 			}
 			activity.RecordHeartbeat(ctx, "custom")
 		})
@@ -603,8 +603,31 @@ func (a *AnalyzeBatch) judgeMessageForRow(ctx context.Context, msg repo.GetMessa
 	return NewJudgeMessage(messageType, "", msg.Content)
 }
 
-func (a *AnalyzeBatch) customRulesForPolicy(ctx context.Context, projectID uuid.UUID, ruleIDs []string) ([]CompiledCustomDetectionRule, error) {
-	if len(ruleIDs) == 0 {
+// customRuleMessageView builds the structured view the custom-rule engine
+// evaluates against: the message's text content, its type, and — for
+// tool-request messages — each recorded tool call with its MCP attribution.
+// Mirrors judgeMessageForRow so a rule sees the same per-call server/function
+// the judge does.
+func (a *AnalyzeBatch) customRuleMessageView(ctx context.Context, msg repo.GetMessageContentBatchRow) MessageView {
+	messageType, _ := messageRowMessageType(msg)
+	view := MessageView{Content: msg.Content, Type: messageType, Tools: nil}
+	if messageType != message.ToolRequest {
+		return view
+	}
+	for _, c := range a.parseRecordedToolCalls(ctx, SourceCustom, msg.ToolCalls) {
+		if c.Function.Name == "" && strings.TrimSpace(c.Function.Arguments) == "" {
+			continue
+		}
+		view.Tools = append(view.Tools, NewToolView(c.Function.Name, c.Function.Arguments))
+	}
+	return view
+}
+
+// customRulesForPolicy loads the custom rules a policy attaches as detectors
+// (risk_policies.custom_rule_ids) and compiles them to deny — a match produces a
+// finding.
+func (a *AnalyzeBatch) customRulesForPolicy(ctx context.Context, projectID uuid.UUID, detectorIDs []string) ([]CompiledCustomDetectionRule, error) {
+	if len(detectorIDs) == 0 {
 		return nil, nil
 	}
 
@@ -613,21 +636,23 @@ func (a *AnalyzeBatch) customRulesForPolicy(ctx context.Context, projectID uuid.
 		return nil, fmt.Errorf("list custom detection rules: %w", err)
 	}
 
-	selected := make(map[string]struct{}, len(ruleIDs))
-	for _, id := range ruleIDs {
-		selected[id] = struct{}{}
+	actions := make(map[string]Action, len(detectorIDs))
+	for _, id := range detectorIDs {
+		actions[id] = ActionDeny
 	}
 
-	customRules := make([]CustomDetectionRule, 0, len(ruleIDs))
+	customRules := make([]CustomDetectionRule, 0, len(actions))
 	for _, rule := range rules {
-		if _, ok := selected[rule.RuleID]; !ok {
+		action, ok := actions[rule.RuleID]
+		if !ok {
 			continue
 		}
 		customRules = append(customRules, CustomDetectionRule{
 			RuleID:      rule.RuleID,
 			Title:       rule.Title,
 			Description: rule.Description,
-			Regex:       conv.PtrValOr(conv.FromPGText[string](rule.Regex), ""),
+			MatchConfig: EffectiveMatchConfig(rule.MatchConfig, conv.PtrValOr(conv.FromPGText[string](rule.Regex), "")),
+			Action:      action,
 		})
 	}
 

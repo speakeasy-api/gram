@@ -346,6 +346,8 @@ export * from "./riskchatsummary.js";
 export * from "./riskcustomdetectionrule.js";
 export * from "./riskexclusion.js";
 export * from "./riskidrequestbody.js";
+export * from "./riskmatchcondition.js";
+export * from "./riskmatchconfig.js";
 export * from "./riskoverviewcategory.js";
 export * from "./riskoverviewresult.js";
 export * from "./riskoverviewtimeseriesfinding.js";

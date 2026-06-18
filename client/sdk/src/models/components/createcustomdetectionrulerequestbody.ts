@@ -5,6 +5,11 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
+import {
+  RiskMatchConfig,
+  RiskMatchConfig$Outbound,
+  RiskMatchConfig$outboundSchema,
+} from "./riskmatchconfig.js";
 
 /**
  * Severity level for findings produced by this rule.
@@ -26,10 +31,11 @@ export type CreateCustomDetectionRuleRequestBody = {
    * Description of what the rule detects.
    */
   description?: string | undefined;
+  matchConfig?: RiskMatchConfig | undefined;
   /**
-   * RE2-compatible regex pattern.
+   * Legacy RE2-compatible regex pattern. Prefer match_config for new rules.
    */
-  regex: string;
+  regex?: string | undefined;
   /**
    * Stable rule identifier, prefixed with `custom.`.
    */
@@ -52,7 +58,8 @@ export const Severity$outboundSchema: z.ZodMiniEnum<typeof Severity> = z.enum(
 /** @internal */
 export type CreateCustomDetectionRuleRequestBody$Outbound = {
   description?: string | undefined;
-  regex: string;
+  match_config?: RiskMatchConfig$Outbound | undefined;
+  regex?: string | undefined;
   rule_id: string;
   severity: string;
   title: string;
@@ -65,13 +72,15 @@ export const CreateCustomDetectionRuleRequestBody$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     description: z.optional(z.string()),
-    regex: z.string(),
+    matchConfig: z.optional(RiskMatchConfig$outboundSchema),
+    regex: z.optional(z.string()),
     ruleId: z.string(),
     severity: z._default(Severity$outboundSchema, "medium"),
     title: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
+      matchConfig: "match_config",
       ruleId: "rule_id",
     });
   }),

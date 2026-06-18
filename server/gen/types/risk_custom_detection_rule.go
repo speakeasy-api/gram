@@ -18,8 +18,11 @@ type RiskCustomDetectionRule struct {
 	Title string
 	// Description of what the rule detects.
 	Description string
-	// RE2-compatible regex pattern.
+	// Legacy RE2-compatible regex pattern. Superseded by match_config; empty when
+	// the rule uses match_config.
 	Regex string
+	// Sparse condition-based matcher. When set, supersedes regex.
+	MatchConfig *RiskMatchConfig
 	// Severity level for findings produced by this rule.
 	Severity string
 	// When the custom detection rule was created.

@@ -1561,13 +1561,20 @@ func (s *Service) CreateCustomDetectionRule(ctx context.Context, payload *gen.Cr
 	if payload.Description != nil {
 		description = strings.TrimSpace(*payload.Description)
 	}
-	regexPattern := strings.TrimSpace(payload.Regex)
+	regexPattern := strings.TrimSpace(conv.PtrValOr(payload.Regex, ""))
 	severity := payload.Severity
 	if severity == "" {
 		severity = "medium"
 	}
 	if err := validateCustomDetectionRule(ruleID, title, regexPattern, severity); err != nil {
 		return nil, err
+	}
+	matchConfig, err := customRuleMatchConfigToStorage(payload.MatchConfig)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid match_config")
+	}
+	if err := ra.ValidateMatchConfig(matchConfig); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid match_config")
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -1583,6 +1590,7 @@ func (s *Service) CreateCustomDetectionRule(ctx context.Context, payload *gen.Cr
 		Title:          title,
 		Description:    description,
 		Regex:          pgtype.Text{String: regexPattern, Valid: true},
+		MatchConfig:    matchConfig,
 		Severity:       severity,
 	})
 	if err != nil {
@@ -1669,9 +1677,16 @@ func (s *Service) UpdateCustomDetectionRule(ctx context.Context, payload *gen.Up
 	if payload.Description != nil {
 		description = strings.TrimSpace(*payload.Description)
 	}
-	regexPattern := strings.TrimSpace(payload.Regex)
+	regexPattern := strings.TrimSpace(conv.PtrValOr(payload.Regex, ""))
 	if err := validateCustomDetectionRuleFields(title, regexPattern, payload.Severity); err != nil {
 		return nil, err
+	}
+	matchConfig, err := customRuleMatchConfigToStorage(payload.MatchConfig)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid match_config")
+	}
+	if err := ra.ValidateMatchConfig(matchConfig); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid match_config")
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -1686,6 +1701,7 @@ func (s *Service) UpdateCustomDetectionRule(ctx context.Context, payload *gen.Up
 		Title:       title,
 		Description: description,
 		Regex:       pgtype.Text{String: regexPattern, Valid: true},
+		MatchConfig: matchConfig,
 		Severity:    payload.Severity,
 	})
 	if err != nil {
@@ -1790,6 +1806,7 @@ func heuristicCustomRuleSuggestion(prompt string, existingIDs []string) *gen.Sug
 		Title:       title,
 		Description: strings.TrimSpace(prompt),
 		Regex:       "",
+		MatchConfig: nil,
 		Severity:    "medium",
 	}
 }
@@ -1885,14 +1902,21 @@ func validateCustomDetectionRuleFields(title, regexPattern, severity string) err
 func (s *Service) suggestCustomRuleViaLLM(ctx context.Context, orgID, projectID, userPrompt string, existingIDs []string) (*gen.SuggestCustomDetectionRuleResult, error) {
 	systemPrompt := `You are a security-rules assistant for a runtime risk detection product.
 
-Given a single natural-language description of what an operator wants to detect, return a JSON object that the dashboard will use to prefill a "create custom detection rule" form.
+Given a single natural-language description of what an operator wants to detect, return a JSON object the dashboard uses to prefill a "create custom detection rule" form. The rule matches an agent message via a "match_config".
 
-Rules:
-- "rule_id" must start with the literal prefix "custom." and contain only [a-z0-9_]. Pick a stable, descriptive slug derived from the subject (e.g. "custom.acme_internal_token", "custom.qa_signing_key"). It must NOT appear in the provided existing_rule_ids list.
-- "title" is 2-6 words, title case.
-- "description" is 1-2 sentences describing what is detected and why it matters. No marketing copy.
-- "regex" is an RE2-compatible pattern that matches the described payload. Prefer anchors and character classes that minimise false positives. Do not include leading/trailing slashes.
-- "severity" is one of "info", "low", "medium", "high", "critical". Pick based on the leakage cost of the data described — credentials, PII, financial, healthcare are typically high or critical; logging IDs and internal references are typically low or medium.
+Fields:
+- "rule_id": starts with the literal prefix "custom." and contains only [a-z0-9_]. A stable, descriptive slug (e.g. "custom.acme_internal_token"). Must NOT appear in existing_rule_ids.
+- "title": 2-6 words, title case.
+- "description": 1-2 sentences on what is detected and why it matters. No marketing copy.
+- "severity": one of "info","low","medium","high","critical" — by leakage/impact cost (credentials, PII, financial, healthcare are typically high/critical).
+- "match_config": { "combine", "conditions": [ {target, op, value, path} ] }
+  - "combine": "and" (all conditions must match) or "or" (any). A rule has ONE combine across all its conditions — and/or cannot be mixed, and there is no grouping/nesting.
+  - Each condition reads a "target":
+    - "content": whole message text. "user_prompt"/"assistant_text"/"tool_result": that message part.
+    - "tool_name": raw tool-call name (e.g. mcp__mise__run_task). "tool_server": MCP server name ("" for native tools like Bash). "tool_function": bare function name (e.g. run_task). "tool_args": a value inside the tool arguments — set "path" to a JSON path like "$.scope".
+  - "op" — use ONLY these (the form renders no others): "equals"/"not_equals" (exact), "contains"/"not_contains" (substring), "in" (target is any of "values"), "starts_with"/"ends_with" (prefix/suffix), "regex" (RE2 pattern in "value"), "exists" (target present; no value).
+  - Most ops take a single "value". "in" takes a "values" array and matches when the target equals ANY listed value — use it to scope to several exact servers/tools/values in ONE condition. This keeps a value-set AND another clause in one rule: e.g. "pattern P for tool calls across servers X and Y" → "combine":"and", conditions:[{"target":"tool_server","op":"in","values":["X","Y"]}, {"target":"tool_args","op":"regex","value":"P"}]. "combine" is a single "and"/"or" across all conditions — it can't be mixed or nested.
+  - For secrets/PII/text patterns: target "content" (or "tool_result"/"user_prompt") with op "regex". For tool scoping: target "tool_server"/"tool_function"/"tool_args".
 
 Output ONLY the JSON object. No prose, no markdown fences.`
 
@@ -1902,17 +1926,37 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 	}
 	userMessage := fmt.Sprintf("Operator request: %s\n\nExisting rule ids (avoid colliding): %s", userPrompt, existingList)
 
-	strict := true
+	strict := false
+	conditionSchema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"target": map[string]any{"type": "string", "enum": []string{"content", "user_prompt", "assistant_text", "tool_result", "tool_name", "tool_server", "tool_function", "tool_args"}},
+			"op":     map[string]any{"type": "string", "enum": []string{"equals", "not_equals", "contains", "not_contains", "in", "starts_with", "ends_with", "regex", "exists"}},
+			"value":  map[string]any{"type": "string"},
+			"values": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			"path":   map[string]any{"type": "string"},
+		},
+		"required":             []string{"target", "op"},
+		"additionalProperties": false,
+	}
 	schema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"rule_id":     map[string]any{"type": "string", "pattern": "^custom\\.[a-z0-9_]+$"},
 			"title":       map[string]any{"type": "string", "minLength": 1, "maxLength": 80},
 			"description": map[string]any{"type": "string", "minLength": 1, "maxLength": 400},
-			"regex":       map[string]any{"type": "string", "minLength": 1, "maxLength": 400},
 			"severity":    map[string]any{"type": "string", "enum": []string{"info", "low", "medium", "high", "critical"}},
+			"match_config": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"combine":    map[string]any{"type": "string", "enum": []string{"and", "or"}},
+					"conditions": map[string]any{"type": "array", "minItems": 1, "items": conditionSchema},
+				},
+				"required":             []string{"combine", "conditions"},
+				"additionalProperties": false,
+			},
 		},
-		"required":             []string{"rule_id", "title", "description", "regex", "severity"},
+		"required":             []string{"rule_id", "title", "description", "severity", "match_config"},
 		"additionalProperties": false,
 	}
 
@@ -1953,11 +1997,11 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 	}
 
 	var parsed struct {
-		RuleID      string `json:"rule_id"`
-		Title       string `json:"title"`
-		Description string `json:"description"`
-		Regex       string `json:"regex"`
-		Severity    string `json:"severity"`
+		RuleID      string          `json:"rule_id"`
+		Title       string          `json:"title"`
+		Description string          `json:"description"`
+		Severity    string          `json:"severity"`
+		MatchConfig json.RawMessage `json:"match_config"`
 	}
 	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
 		return nil, fmt.Errorf("parse llm response: %w", err)
@@ -1966,14 +2010,17 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 	parsed.RuleID = strings.TrimSpace(parsed.RuleID)
 	parsed.Title = strings.TrimSpace(parsed.Title)
 	parsed.Description = strings.TrimSpace(parsed.Description)
-	parsed.Regex = strings.TrimSpace(parsed.Regex)
 	parsed.Severity = strings.ToLower(strings.TrimSpace(parsed.Severity))
 
 	if !strings.HasPrefix(parsed.RuleID, "custom.") || !customRuleIDPattern.MatchString(parsed.RuleID) {
 		return nil, fmt.Errorf("model returned invalid rule_id %q", parsed.RuleID)
 	}
-	if _, err := regexp.Compile(parsed.Regex); err != nil {
-		return nil, fmt.Errorf("model returned invalid regex: %w", err)
+	if err := ra.ValidateMatchConfig(parsed.MatchConfig); err != nil {
+		return nil, fmt.Errorf("model returned invalid match_config: %w", err)
+	}
+	matchConfig := customRuleMatchConfigFromStorage(parsed.MatchConfig)
+	if matchConfig == nil {
+		return nil, fmt.Errorf("model returned empty match_config")
 	}
 	if !customRuleSeverityAllow[parsed.Severity] {
 		parsed.Severity = "medium"
@@ -1986,7 +2033,8 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 		RuleID:      parsed.RuleID,
 		Title:       parsed.Title,
 		Description: parsed.Description,
-		Regex:       parsed.Regex,
+		Regex:       "",
+		MatchConfig: matchConfig,
 		Severity:    parsed.Severity,
 	}, nil
 }
@@ -2024,11 +2072,7 @@ func (s *Service) TestDetectionRule(ctx context.Context, payload *gen.TestDetect
 	case ruleID == "prompt_injection.default" || strings.HasPrefix(ruleID, "prompt_injection."):
 		return s.testPromptInjectionRule(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), text)
 	case strings.HasPrefix(ruleID, "custom."):
-		regex := ""
-		if payload.Regex != nil {
-			regex = *payload.Regex
-		}
-		return s.testCustomRule(ruleID, regex, text)
+		return s.testCustomRule(ruleID, conv.PtrValOr(payload.Regex, ""), payload.MatchConfig, text)
 	default:
 		return &gen.TestDetectionRuleResult{
 			Matches:   nil,
@@ -2118,38 +2162,70 @@ func (s *Service) testPromptInjectionRule(ctx context.Context, orgID, projectID,
 	}, nil
 }
 
-func (s *Service) testCustomRule(ruleID, pattern, text string) (*gen.TestDetectionRuleResult, error) {
+func (s *Service) testCustomRule(ruleID, pattern string, cfg *types.RiskMatchConfig, text string) (*gen.TestDetectionRuleResult, error) {
 	pattern = strings.TrimSpace(pattern)
-	if pattern == "" {
+	if pattern == "" && cfg == nil {
 		return &gen.TestDetectionRuleResult{
 			Matches:   nil,
 			Supported: false,
-			Reason:    new("Custom rules require a regex pattern. Custom rules are stored client-side, so pass `regex` in the request body."),
+			Reason:    new("Custom rules require a regex or match_config. Custom rules are stored client-side, so pass one in the request body."),
 		}, nil
 	}
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid custom regex")
+	// The playground only has pasted text, so it can simulate content- and
+	// user-prompt-targeted conditions but not tool calls or other message parts.
+	if cfg != nil && !customRuleTestableFromText(cfg) {
+		return &gen.TestDetectionRuleResult{
+			Matches:   nil,
+			Supported: false,
+			Reason:    new("This rule matches tool calls or other message parts the text playground can't simulate. Save it and run analysis to see matches."),
+		}, nil
 	}
-	idxs := re.FindAllStringIndex(text, -1)
-	matches := make([]*gen.TestDetectionRuleMatch, 0, len(idxs))
-	for _, pair := range idxs {
-		matches = append(matches, &gen.TestDetectionRuleMatch{
-			RuleID:      ruleID,
-			Description: new("Custom regex match"),
-			Match:       text[pair[0]:pair[1]],
-			StartPos:    pair[0],
-			EndPos:      pair[1],
-			Source:      "custom",
-			Confidence:  1.0,
-			Tags:        nil,
-		})
+
+	raw, err := customRuleMatchConfigToStorage(cfg)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid match_config")
+	}
+	// The playground reports whether the conditions match the sample text, so
+	// evaluate it as a plain detection (deny) rule regardless of how a policy
+	// would configure its action.
+	compiled, err := ra.CompileCustomDetectionRules([]ra.CustomDetectionRule{{
+		RuleID:      ruleID,
+		Title:       "",
+		Description: "Custom rule match",
+		MatchConfig: ra.EffectiveMatchConfig(raw, pattern),
+		Action:      ra.ActionDeny,
+	}})
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid custom rule")
+	}
+
+	findings := ra.ScanCustomDetectionRules(ra.MessageView{Content: text, Type: message.User, Tools: nil}, compiled).Findings
+	matches := make([]*gen.TestDetectionRuleMatch, 0, len(findings))
+	for _, f := range findings {
+		matches = append(matches, findingToMatch(f))
 	}
 	return &gen.TestDetectionRuleResult{
 		Matches:   matches,
 		Supported: true,
 		Reason:    nil,
 	}, nil
+}
+
+// customRuleTestableFromText reports whether every condition targets a part of
+// the message the text playground can stand in for (content or the user
+// prompt). Tool-call and other message-part targets cannot be simulated.
+func customRuleTestableFromText(cfg *types.RiskMatchConfig) bool {
+	for _, c := range cfg.Conditions {
+		if c == nil {
+			continue
+		}
+		switch ra.Target(c.Target) {
+		case ra.TargetContent, ra.TargetUserPrompt:
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func findingToMatch(f ra.Finding) *gen.TestDetectionRuleMatch {
@@ -2253,10 +2329,94 @@ func customDetectionRuleToType(row repo.RiskCustomDetectionRule) *types.RiskCust
 		Title:       row.Title,
 		Description: row.Description,
 		Regex:       conv.PtrValOr(conv.FromPGText[string](row.Regex), ""),
+		MatchConfig: customRuleMatchConfigFromStorage(row.MatchConfig),
 		Severity:    row.Severity,
 		CreatedAt:   row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:   row.UpdatedAt.Time.Format(time.RFC3339),
 	}
+}
+
+// customRuleMatchConfigToStorage converts the API match_config into the JSONB
+// representation the rule engine evaluates. Returns nil for a nil config so the
+// column stays NULL (the rule falls back to its regex). The engine and API
+// share the same JSON shape but distinct Go types, so we map explicitly rather
+// than re-marshal the Goa type (whose fields lack snake_case json tags).
+// matchConfigToEngine converts an API match_config into the engine struct,
+// returning nil for nil/empty (no conditions).
+func matchConfigToEngine(in *types.RiskMatchConfig) *ra.MatchConfig {
+	if in == nil {
+		return nil
+	}
+	cfg := ra.MatchConfig{
+		Combine:    ra.MatchCombine(conv.PtrValOr(in.Combine, "")),
+		Conditions: make([]ra.Condition, 0, len(in.Conditions)),
+	}
+	for _, c := range in.Conditions {
+		if c == nil {
+			continue
+		}
+		cfg.Conditions = append(cfg.Conditions, ra.Condition{
+			Target:          ra.Target(c.Target),
+			Op:              ra.Op(c.Op),
+			Value:           conv.PtrValOr(c.Value, ""),
+			Values:          c.Values,
+			Path:            conv.PtrValOr(c.Path, ""),
+			CaseInsensitive: conv.PtrValOr(c.CaseInsensitive, false),
+		})
+	}
+	if len(cfg.Conditions) == 0 {
+		return nil
+	}
+	return &cfg
+}
+
+// matchConfigFromEngine maps an engine match_config back into the API type,
+// returning nil for nil/empty.
+func matchConfigFromEngine(cfg *ra.MatchConfig) *types.RiskMatchConfig {
+	if cfg == nil || len(cfg.Conditions) == 0 {
+		return nil
+	}
+	out := &types.RiskMatchConfig{
+		Combine:    conv.PtrEmpty(string(cfg.Combine)),
+		Conditions: make([]*types.RiskMatchCondition, 0, len(cfg.Conditions)),
+	}
+	for _, c := range cfg.Conditions {
+		out.Conditions = append(out.Conditions, &types.RiskMatchCondition{
+			Target:          string(c.Target),
+			Op:              string(c.Op),
+			Value:           conv.PtrEmpty(c.Value),
+			Values:          c.Values,
+			Path:            conv.PtrEmpty(c.Path),
+			CaseInsensitive: conv.PtrEmpty(c.CaseInsensitive),
+		})
+	}
+	return out
+}
+
+func customRuleMatchConfigToStorage(in *types.RiskMatchConfig) ([]byte, error) {
+	cfg := matchConfigToEngine(in)
+	if cfg == nil {
+		return nil, nil
+	}
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("marshal match_config: %w", err)
+	}
+	return raw, nil
+}
+
+// customRuleMatchConfigFromStorage maps stored match_config JSONB back into the
+// API type. Returns nil for an empty/NULL column. The bytes were validated on
+// write, so a decode error is treated as "no config".
+func customRuleMatchConfigFromStorage(raw []byte) *types.RiskMatchConfig {
+	if len(raw) == 0 {
+		return nil
+	}
+	var cfg ra.MatchConfig
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return nil
+	}
+	return matchConfigFromEngine(&cfg)
 }
 
 func (s *Service) generatePolicyName(ctx context.Context, orgID, projectID string, sources, presidioEntities []string, action string, existingNames []string) string {
