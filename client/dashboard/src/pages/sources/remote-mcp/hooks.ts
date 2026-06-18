@@ -271,6 +271,13 @@ export function useLinkMcpServerToRemote(): UseMutationResult<
         },
       });
 
+      // Mirror the create flow: give the re-linked server its one permanent USI
+      // so it behaves identically to a freshly-created one — gateable, and its
+      // upstream-auth gap detectable on the overview tab. Best-effort, same as
+      // create; auto-config of the upstream client is intentionally left to the
+      // Authentication tab here.
+      await linkUserSessionIssuer(client, mcpServer);
+
       // Mirror the create flow: pre-stage a default endpoint. Best-effort.
       await createDefaultMcpEndpoint(client, mcpServer, orgSlug);
     },
@@ -278,6 +285,9 @@ export function useLinkMcpServerToRemote(): UseMutationResult<
       await Promise.all([
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
+        // Re-link now mints a fresh user_session_issuer too, so its cache goes
+        // stale just as it does on create.
+        invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
       ]);
     },
   });
