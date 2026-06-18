@@ -1,5 +1,6 @@
 import type { Role } from "@gram/client/models/components/role.js";
 import type { RoleGrant as SdkRoleGrant } from "@gram/client/models/components/rolegrant.js";
+import type { ScopeDefinition } from "@gram/client/models/components/scopedefinition.js";
 
 import { Scope } from "./types";
 import type {
@@ -11,22 +12,25 @@ import type {
 } from "./types";
 import { DISPOSITION_TO_ANNOTATION } from "./types";
 
-const BLOCKLIST_SCOPE_BY_SCOPE = new Map<Scope, Scope>([
-  [Scope.OrgRead, Scope.OrgBlockedRead],
-  [Scope.OrgAdmin, Scope.OrgBlockedAdmin],
-  [Scope.ProjectRead, Scope.ProjectBlockedRead],
-  [Scope.ProjectWrite, Scope.ProjectBlockedWrite],
-  [Scope.McpRead, Scope.McpBlockedRead],
-  [Scope.McpWrite, Scope.McpBlockedWrite],
-  [Scope.McpConnect, Scope.McpBlockedConnect],
-  [Scope.EnvironmentRead, Scope.EnvironmentBlockedRead],
-  [Scope.EnvironmentWrite, Scope.EnvironmentBlockedWrite],
-  [Scope.RiskPolicyEvaluate, Scope.RiskPolicyBypass],
-]);
+function blocklistScopeByScope(scopes: ScopeDefinition[]): Map<Scope, Scope> {
+  const result = new Map<Scope, Scope>();
+  for (const scope of scopes) {
+    if (!scope.exclusionScope) continue;
+    result.set(scope.slug as Scope, scope.exclusionScope as Scope);
+  }
+  return result;
+}
 
-const BASE_SCOPE_BY_BLOCKLIST_SCOPE = new Map<Scope, Scope>(
-  [...BLOCKLIST_SCOPE_BY_SCOPE].map(([scope, blocklist]) => [blocklist, scope]),
-);
+function baseScopeByBlocklistScope(
+  scopes: ScopeDefinition[],
+): Map<Scope, Scope> {
+  return new Map(
+    [...blocklistScopeByScope(scopes)].map(([scope, blocklist]) => [
+      blocklist,
+      scope,
+    ]),
+  );
+}
 
 /** Split a flat selector array into groups by hierarchy level. */
 function groupSelectorsByLevel(selectors: Selector[]): Selector[][] {
@@ -69,13 +73,17 @@ function isUnrestrictedSelectorList(selectors: Selector[]): boolean {
 }
 
 /** Convert API Role grants to rules-based RoleGrant map. */
-export function grantsFromRole(role: Role): Record<string, RoleGrant> {
+export function grantsFromRole(
+  role: Role,
+  scopes: ScopeDefinition[],
+): Record<string, RoleGrant> {
   const result: Record<string, RoleGrant> = {};
+  const baseScopeByBlocklist = baseScopeByBlocklistScope(scopes);
 
   for (const g of role.grants) {
     const scope = g.scope as Scope;
-    const baseScope = BASE_SCOPE_BY_BLOCKLIST_SCOPE.get(scope) ?? scope;
-    const effect: PolicyEffect = BASE_SCOPE_BY_BLOCKLIST_SCOPE.has(scope)
+    const baseScope = baseScopeByBlocklist.get(scope) ?? scope;
+    const effect: PolicyEffect = baseScopeByBlocklist.has(scope)
       ? "deny"
       : "allow";
 
@@ -120,8 +128,10 @@ export function grantsFromRole(role: Role): Record<string, RoleGrant> {
 
 export function sdkGrantsFromForm(
   grants: Record<string, RoleGrant>,
+  scopes: ScopeDefinition[],
 ): SdkRoleGrant[] {
   const sdkGrants: SdkRoleGrant[] = [];
+  const blocklistScopeByBase = blocklistScopeByScope(scopes);
 
   for (const grant of Object.values(grants)) {
     const allowSelectors: Selector[] = [];
@@ -149,7 +159,7 @@ export function sdkGrantsFromForm(
       });
     }
 
-    const blocklistScope = BLOCKLIST_SCOPE_BY_SCOPE.get(grant.scope);
+    const blocklistScope = blocklistScopeByBase.get(grant.scope);
     if (
       blocklistScope &&
       (hasUnrestrictedException || exceptionSelectors.length > 0)

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Role } from "@gram/client/models/components/role.js";
+import type { ScopeDefinition } from "@gram/client/models/components/scopedefinition.js";
 import type { RoleGrant } from "./types";
 import {
   applyRemoveRule,
@@ -7,6 +8,27 @@ import {
   grantsFromRole,
   sdkGrantsFromForm,
 } from "./roleGrantTransform";
+
+const scopeDefinitions = [
+  {
+    slug: "project:write",
+    description: "Create and modify projects and project-related resources.",
+    resourceType: "project",
+    exclusionScope: "project:blocked_write",
+  },
+  {
+    slug: "mcp:write",
+    description: "Create and modify MCP servers and configuration.",
+    resourceType: "mcp",
+    exclusionScope: "mcp:blocked_write",
+  },
+  {
+    slug: "mcp:connect",
+    description: "Connect to and use MCP servers.",
+    resourceType: "mcp",
+    exclusionScope: "mcp:blocked_connect",
+  },
+] satisfies ScopeDefinition[];
 
 function role(grants: Role["grants"]): Role {
   return {
@@ -35,7 +57,10 @@ describe("role grant round-trip (grantsFromRole → sdkGrantsFromForm)", () => {
       },
     ]);
 
-    const sdkGrants = sdkGrantsFromForm(grantsFromRole(r));
+    const sdkGrants = sdkGrantsFromForm(
+      grantsFromRole(r, scopeDefinitions),
+      scopeDefinitions,
+    );
 
     expect(sdkGrants).toEqual([{ scope: "mcp:connect", selectors: undefined }]);
   });
@@ -52,8 +77,8 @@ describe("role grant round-trip (grantsFromRole → sdkGrantsFromForm)", () => {
       },
     ]);
 
-    const rules = grantsFromRole(r);
-    const sdkGrants = sdkGrantsFromForm(rules);
+    const rules = grantsFromRole(r, scopeDefinitions);
+    const sdkGrants = sdkGrantsFromForm(rules, scopeDefinitions);
 
     expect(rules["mcp:connect"]?.rules).toEqual(
       expect.arrayContaining([
@@ -105,7 +130,7 @@ describe("role grant round-trip (grantsFromRole → sdkGrantsFromForm)", () => {
       },
     };
 
-    expect(sdkGrantsFromForm(grants)).toEqual([
+    expect(sdkGrantsFromForm(grants, scopeDefinitions)).toEqual([
       { scope: "project:write", selectors: undefined },
       {
         scope: "project:blocked_write",

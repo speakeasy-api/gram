@@ -35,7 +35,7 @@ func LoadGrants(ctx context.Context, db accessrepo.DBTX, organizationID string, 
 		}
 		grantRows = append(grantRows, Grant{
 			PrincipalUrn: row.PrincipalUrn.String(),
-			Scope:        NormalizeScope(Scope(row.Scope)),
+			Scope:        Scope(row.Scope),
 			Effect:       policyEffectFromText(row.Effect),
 			Selector:     selectors,
 		})

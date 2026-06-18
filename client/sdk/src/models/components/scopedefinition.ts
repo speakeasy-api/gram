@@ -10,6 +10,26 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
+ * The scope used to store exception rules for this scope.
+ */
+export const ExclusionScope = {
+  OrgBlockedRead: "org:blocked_read",
+  OrgBlockedAdmin: "org:blocked_admin",
+  ProjectBlockedRead: "project:blocked_read",
+  ProjectBlockedWrite: "project:blocked_write",
+  McpBlockedRead: "mcp:blocked_read",
+  McpBlockedWrite: "mcp:blocked_write",
+  McpBlockedConnect: "mcp:blocked_connect",
+  EnvironmentBlockedRead: "environment:blocked_read",
+  EnvironmentBlockedWrite: "environment:blocked_write",
+  RiskPolicyBypass: "risk_policy:bypass",
+} as const;
+/**
+ * The scope used to store exception rules for this scope.
+ */
+export type ExclusionScope = ClosedEnum<typeof ExclusionScope>;
+
+/**
  * The type of resource this scope applies to.
  */
 export const ResourceType = {
@@ -51,6 +71,10 @@ export type ScopeDefinition = {
    */
   description: string;
   /**
+   * The scope used to store exception rules for this scope.
+   */
+  exclusionScope?: ExclusionScope | undefined;
+  /**
    * The type of resource this scope applies to.
    */
   resourceType: ResourceType;
@@ -59,6 +83,11 @@ export type ScopeDefinition = {
    */
   slug: Slug;
 };
+
+/** @internal */
+export const ExclusionScope$inboundSchema: z.ZodMiniEnum<
+  typeof ExclusionScope
+> = z.enum(ExclusionScope);
 
 /** @internal */
 export const ResourceType$inboundSchema: z.ZodMiniEnum<typeof ResourceType> = z
@@ -74,11 +103,13 @@ export const ScopeDefinition$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     description: z.string(),
+    exclusion_scope: z.optional(ExclusionScope$inboundSchema),
     resource_type: ResourceType$inboundSchema,
     slug: Slug$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
+      "exclusion_scope": "exclusionScope",
       "resource_type": "resourceType",
     });
   }),

@@ -32,6 +32,13 @@ func TestService_ListScopes(t *testing.T) {
 	require.Equal(t, "risk_policy", bySlug[string(authz.ScopeRiskPolicyEvaluate)].ResourceType)
 	require.Equal(t, "risk_policy", bySlug[string(authz.ScopeRiskPolicyBypass)].ResourceType)
 	require.Equal(t, "Read organization metadata and members.", bySlug[string(authz.ScopeOrgRead)].Description)
+	require.NotNil(t, bySlug[string(authz.ScopeProjectWrite)].ExclusionScope)
+	require.Equal(t, string(authz.ScopeProjectBlockedWrite), *bySlug[string(authz.ScopeProjectWrite)].ExclusionScope)
+	require.NotNil(t, bySlug[string(authz.ScopeMCPConnect)].ExclusionScope)
+	require.Equal(t, string(authz.ScopeMCPBlockedConnect), *bySlug[string(authz.ScopeMCPConnect)].ExclusionScope)
+	require.NotNil(t, bySlug[string(authz.ScopeRiskPolicyEvaluate)].ExclusionScope)
+	require.Equal(t, string(authz.ScopeRiskPolicyBypass), *bySlug[string(authz.ScopeRiskPolicyEvaluate)].ExclusionScope)
+	require.Nil(t, bySlug[string(authz.ScopeRiskPolicyBypass)].ExclusionScope)
 }
 
 func TestService_ListScopes_Unauthorized(t *testing.T) {

@@ -177,7 +177,7 @@ export function CreateRoleDialog({
   if (editingRole && !initialized && scopesData && membersData) {
     setName(editingRole.name);
     setDescription(editingRole.description);
-    const roleGrants = grantsFromRole(editingRole);
+    const roleGrants = grantsFromRole(editingRole, scopesData.scopes);
     const grantedScopes = new Set(Object.keys(roleGrants));
     const autoExpanded = new Set(
       scopeGroups
@@ -434,10 +434,14 @@ export function CreateRoleDialog({
   // ─── Submit ───────────────────────────────────────────────────
 
   const handleSubmit = () => {
-    const sdkGrants = sdkGrantsFromForm(grants);
+    const scopeDefinitions = scopesData?.scopes ?? [];
+    const sdkGrants = sdkGrantsFromForm(grants, scopeDefinitions);
 
     if (isEditing) {
-      const initialGrants = sdkGrantsFromForm(grantsFromRole(editingRole));
+      const initialGrants = sdkGrantsFromForm(
+        grantsFromRole(editingRole, scopeDefinitions),
+        scopeDefinitions,
+      );
       const { addGrants, removeGrants } = diffGrants(initialGrants, sdkGrants);
 
       updateRole.mutate({

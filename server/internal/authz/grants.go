@@ -221,7 +221,7 @@ func flattenRoleGrants(grants []*RoleGrant) ([]roleGrantRow, error) {
 			continue
 		}
 
-		scope := NormalizeScope(Scope(grant.Scope))
+		scope := Scope(grant.Scope)
 		effect := conv.Default(grant.Effect, PolicyEffectAllow)
 		if err := validatePolicyEffect(effect); err != nil {
 			return nil, err
@@ -304,7 +304,7 @@ func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, o
 func scopedGrantsFromGrantRows(rows []repo.GetPrincipalGrantsRow) ([]*ScopedGrant, error) {
 	grantRows := make([]Grant, 0, len(rows))
 	for _, row := range rows {
-		scope := NormalizeScope(Scope(row.Scope))
+		scope := Scope(row.Scope)
 		selectors, err := SelectorFromRow(row.Selectors)
 		if err != nil {
 			return nil, err
@@ -364,7 +364,7 @@ func GrantsToScopedGrants(rows []Grant) []*ScopedGrant {
 func groupGrantsByScopeEffect(rows []Grant) map[scopeEffectKey][]Selector {
 	grouped := make(map[scopeEffectKey][]Selector)
 	for _, row := range rows {
-		key := scopeEffectKey{scope: string(NormalizeScope(row.Scope)), effect: row.Effect}
+		key := scopeEffectKey{scope: string(row.Scope), effect: row.Effect}
 		grouped[key] = append(grouped[key], row.Selector)
 	}
 	return grouped
@@ -461,7 +461,10 @@ func evaluateGrantCheck(grants []Grant, check Check) (grantCheckEvaluation, erro
 		return grantCheckEvaluation{Grant: allowGrant, Check: allowCheck, Denied: false}, nil
 	}
 
-	result, err := expression.Evaluate(grants)
+	// Legacy deny effects are handled by evaluateGrants above. Grant
+	// expressions model exclusions as allow-only set subtraction, so do not pass
+	// legacy deny rows into the expression evaluator from the engine path.
+	result, err := expression.Evaluate(allowGrants(grants))
 	if err != nil {
 		return grantCheckEvaluation{}, fmt.Errorf("evaluate exclusion expression: %w", err)
 	}
@@ -470,6 +473,21 @@ func evaluateGrantCheck(grants []Grant, check Check) (grantCheckEvaluation, erro
 	}
 
 	return grantCheckEvaluation{Grant: allowGrant, Check: allowCheck, Denied: false}, nil
+}
+
+func allowGrants(grants []Grant) []Grant {
+	for _, grant := range grants {
+		if grant.Effect == PolicyEffectDeny {
+			allowGrants := make([]Grant, 0, len(grants))
+			for _, grant := range grants {
+				if grant.Effect == PolicyEffectAllow {
+					allowGrants = append(allowGrants, grant)
+				}
+			}
+			return allowGrants
+		}
+	}
+	return grants
 }
 
 func hasMatchingDenyGrant(grants []Grant, checks []Check) bool {
@@ -521,11 +539,15 @@ func matchingAllowGrant(grants []Grant, checks []Check) (*Grant, *Check) {
 	return nil, nil
 }
 
-// allScopeGrants returns wildcard grants for every defined scope. Used to give
-// superadmins (e.g. during org impersonation) unrestricted access.
+// allScopeGrants returns wildcard grants for every user-visible scope. Used to
+// give superadmins (e.g. during org impersonation) unrestricted access without
+// exposing internal blocklist storage scopes as standalone permissions.
 func allScopeGrants() []Grant {
-	grants := make([]Grant, 0, len(allScopes))
-	for _, s := range allScopes {
+	grants := make([]Grant, 0, len(scopeVisibilityByScope))
+	for s, visibility := range scopeVisibilityByScope {
+		if visibility != scopeVisibilityUserVisible {
+			continue
+		}
 		grants = append(grants, NewGrant(s, WildcardResource))
 	}
 	return grants

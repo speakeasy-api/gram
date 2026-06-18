@@ -756,6 +756,10 @@ var ScopeModel = Type("ScopeDefinition", func() {
 		Description("The type of resource this scope applies to.")
 		Enum("org", "project", "mcp", "environment", "risk_policy")
 	})
+	Attribute("exclusion_scope", String, func() {
+		Description("The scope used to store exception rules for this scope.")
+		Enum("org:blocked_read", "org:blocked_admin", "project:blocked_read", "project:blocked_write", "mcp:blocked_read", "mcp:blocked_write", "mcp:blocked_connect", "environment:blocked_read", "environment:blocked_write", "risk_policy:bypass")
+	})
 })
 
 var ListScopesResult = Type("ListScopesResult", func() {

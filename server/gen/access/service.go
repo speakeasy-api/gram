@@ -588,6 +588,8 @@ type ScopeDefinition struct {
 	Description string
 	// The type of resource this scope applies to.
 	ResourceType string
+	// The scope used to store exception rules for this scope.
+	ExclusionScope *string
 }
 
 // A constraint that narrows which resources a grant applies to.

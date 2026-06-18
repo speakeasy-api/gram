@@ -44300,6 +44300,20 @@ components:
                 description:
                     type: string
                     description: What this scope protects.
+                exclusion_scope:
+                    type: string
+                    description: The scope used to store exception rules for this scope.
+                    enum:
+                        - org:blocked_read
+                        - org:blocked_admin
+                        - project:blocked_read
+                        - project:blocked_write
+                        - mcp:blocked_read
+                        - mcp:blocked_write
+                        - mcp:blocked_connect
+                        - environment:blocked_read
+                        - environment:blocked_write
+                        - risk_policy:bypass
                 resource_type:
                     type: string
                     description: The type of resource this scope applies to.

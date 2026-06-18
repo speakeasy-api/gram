@@ -222,7 +222,7 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 	return nil
 }
 
-// ListScopes exposes the stable set of grantable scopes so clients can build
+// ListScopes exposes the stable set of user-visible scopes so clients can build
 // role editing UX without hardcoding permission definitions.
 func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*gen.ListScopesResult, error) {
 	ac, err := s.authContext(ctx)
@@ -238,18 +238,33 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 	)
 
 	return &gen.ListScopesResult{Scopes: []*gen.ScopeDefinition{
-		{Slug: string(authz.ScopeOrgRead), Description: "Read organization metadata and members.", ResourceType: "org"},
-		{Slug: string(authz.ScopeOrgAdmin), Description: "Manage organization access and settings.", ResourceType: "org"},
-		{Slug: string(authz.ScopeProjectRead), Description: "View projects and project-related resources.", ResourceType: "project"},
-		{Slug: string(authz.ScopeProjectWrite), Description: "Create and modify projects and project-related resources.", ResourceType: "project"},
-		{Slug: string(authz.ScopeMCPRead), Description: "View MCP servers and configuration.", ResourceType: "mcp"},
-		{Slug: string(authz.ScopeMCPWrite), Description: "Create and modify MCP servers and configuration.", ResourceType: "mcp"},
-		{Slug: string(authz.ScopeMCPConnect), Description: "Connect to and use MCP servers.", ResourceType: "mcp"},
-		{Slug: string(authz.ScopeEnvironmentRead), Description: "View environments and their entries within the project.", ResourceType: "environment"},
-		{Slug: string(authz.ScopeEnvironmentWrite), Description: "Add, edit, clone, and remove environments within the project.", ResourceType: "environment"},
-		{Slug: string(authz.ScopeRiskPolicyEvaluate), Description: "Evaluate risk policies.", ResourceType: "risk_policy"},
-		{Slug: string(authz.ScopeRiskPolicyBypass), Description: "Bypass risk policies.", ResourceType: "risk_policy"},
+		scopeDefinition(authz.ScopeOrgRead, "Read organization metadata and members.", "org"),
+		scopeDefinition(authz.ScopeOrgAdmin, "Manage organization access and settings.", "org"),
+		scopeDefinition(authz.ScopeProjectRead, "View projects and project-related resources.", "project"),
+		scopeDefinition(authz.ScopeProjectWrite, "Create and modify projects and project-related resources.", "project"),
+		scopeDefinition(authz.ScopeMCPRead, "View MCP servers and configuration.", "mcp"),
+		scopeDefinition(authz.ScopeMCPWrite, "Create and modify MCP servers and configuration.", "mcp"),
+		scopeDefinition(authz.ScopeMCPConnect, "Connect to and use MCP servers.", "mcp"),
+		scopeDefinition(authz.ScopeEnvironmentRead, "View environments and their entries within the project.", "environment"),
+		scopeDefinition(authz.ScopeEnvironmentWrite, "Add, edit, clone, and remove environments within the project.", "environment"),
+		scopeDefinition(authz.ScopeRiskPolicyEvaluate, "Evaluate risk policies.", "risk_policy"),
+		scopeDefinition(authz.ScopeRiskPolicyBypass, "Bypass risk policies.", "risk_policy"),
 	}}, nil
+}
+
+func scopeDefinition(scope authz.Scope, description string, resourceType string) *gen.ScopeDefinition {
+	var exclusionScope *string
+	if exclusion, ok := authz.ExclusionScopeFor(scope); ok {
+		exclusionScopeValue := string(exclusion)
+		exclusionScope = &exclusionScopeValue
+	}
+
+	return &gen.ScopeDefinition{
+		Slug:           string(scope),
+		Description:    description,
+		ResourceType:   resourceType,
+		ExclusionScope: exclusionScope,
+	}
 }
 
 // ListMembers follows the original access API contract by returning WorkOS user
@@ -284,7 +299,7 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 		return nil, err
 	}
 	if !enforce {
-		return &gen.ListUserGrantsResult{Grants: allScopesGrants()}, nil
+		return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil
 	}
 
 	ac, _, err := s.roleOrgContext(ctx)
@@ -297,7 +312,7 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	// the MembershipSyncGuard doesn't block the dashboard.
 	if ac.IsAdmin {
 		if _, hasOverride := contextvalues.GetAdminOverrideFromContext(ctx); hasOverride {
-			return &gen.ListUserGrantsResult{Grants: allScopesGrants()}, nil
+			return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil
 		}
 	}
 
@@ -479,9 +494,9 @@ func scopedGrantToGenRoleGrant(g *authz.ScopedGrant) *gen.RoleGrant {
 	return &gen.RoleGrant{Scope: g.Scope, Selectors: selectors}
 }
 
-// allScopesGrants returns unrestricted grants for every known scope.
-// Used when RBAC is not enforced or for admin impersonation.
-func allScopesGrants() []*gen.ListRoleGrant {
+// userVisibleScopeGrants returns unrestricted grants for every first-class
+// permission scope. Used when RBAC is not enforced or for admin impersonation.
+func userVisibleScopeGrants() []*gen.ListRoleGrant {
 	return []*gen.ListRoleGrant{
 		{Scope: string(authz.ScopeOrgRead), Selectors: nil},
 		{Scope: string(authz.ScopeOrgAdmin), Selectors: nil},

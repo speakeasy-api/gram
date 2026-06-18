@@ -5164,9 +5164,10 @@ func unmarshalSelectorRequestBodyToAccessSelector(v *SelectorRequestBody) *acces
 // *access.ScopeDefinition.
 func marshalAccessScopeDefinitionToScopeDefinitionResponseBody(v *access.ScopeDefinition) *ScopeDefinitionResponseBody {
 	res := &ScopeDefinitionResponseBody{
-		Slug:         v.Slug,
-		Description:  v.Description,
-		ResourceType: v.ResourceType,
+		Slug:           v.Slug,
+		Description:    v.Description,
+		ResourceType:   v.ResourceType,
+		ExclusionScope: v.ExclusionScope,
 	}
 
 	return res
