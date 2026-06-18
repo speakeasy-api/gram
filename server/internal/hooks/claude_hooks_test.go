@@ -65,14 +65,36 @@ func TestResolveClaudeScanContext_PrefersAuthContextProjectOverCachedMetadata(t 
 	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
 		SessionID: sessionID,
 		ProjectID: cachedProjectID.String(),
+		UserEmail: "cached-scan@example.com",
 	}, 0))
 
-	got, ok := ti.service.resolveClaudeScanContext(ctx, &gen.ClaudePayload{
+	got, err := ti.service.resolveClaudeScanContext(ctx, &gen.ClaudePayload{
 		SessionID: &sessionID,
 	})
-	require.True(t, ok)
+	require.NoError(t, err)
 	assert.Equal(t, authCtx.ActiveOrganizationID, got.organizationID)
 	assert.Equal(t, *authCtx.ProjectID, got.projectID)
+	assert.Empty(t, got.userID)
+}
+
+func TestResolveClaudeScanContext_RejectsMetadataWithoutUserEmail(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+
+	sessionID := uuid.NewString()
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+		SessionID: sessionID,
+		ProjectID: uuid.NewString(),
+		UserEmail: "",
+	}, 0))
+
+	got, err := ti.service.resolveClaudeScanContext(ctx, &gen.ClaudePayload{
+		SessionID: &sessionID,
+	})
+	require.ErrorContains(t, err, "claude session metadata missing user email")
+	assert.Empty(t, got.organizationID)
+	assert.Equal(t, uuid.Nil, got.projectID)
 	assert.Empty(t, got.userID)
 }
 
@@ -89,11 +111,11 @@ func TestResolveClaudeScanContext_ResolvesPayloadEmailBeforeAuthUserID(t *testin
 	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, userEmail)
 
 	sessionID := uuid.NewString()
-	got, ok := ti.service.resolveClaudeScanContext(ctx, &gen.ClaudePayload{
+	got, err := ti.service.resolveClaudeScanContext(ctx, &gen.ClaudePayload{
 		SessionID: &sessionID,
 		UserEmail: &userEmail,
 	})
-	require.True(t, ok)
+	require.NoError(t, err)
 	assert.Equal(t, authCtx.ActiveOrganizationID, got.organizationID)
 	assert.Equal(t, *authCtx.ProjectID, got.projectID)
 	assert.Equal(t, userID, got.userID)
@@ -125,10 +147,10 @@ func TestResolveClaudeScanContext_ResolvesAuthContextActorFromCachedEmail(t *tes
 		ProjectID:   uuid.NewString(),
 	}, 0))
 
-	got, ok := ti.service.resolveClaudeScanContext(ctx, &gen.ClaudePayload{
+	got, err := ti.service.resolveClaudeScanContext(ctx, &gen.ClaudePayload{
 		SessionID: &sessionID,
 	})
-	require.True(t, ok)
+	require.NoError(t, err)
 	assert.Equal(t, authCtx.ActiveOrganizationID, got.organizationID)
 	assert.Equal(t, *authCtx.ProjectID, got.projectID)
 	assert.Equal(t, userID, got.userID)
@@ -156,6 +178,7 @@ func TestClaude_PreToolUse_UsesAuthContextWhenNoCachedMetadata(t *testing.T) {
 	sessionID := uuid.NewString()
 	toolName := "mcp__gram__do_thing"
 	toolUseID := "toolu_pretooluse_authctx"
+	userEmail := "claude-authctx@example.com"
 
 	// No MCP list snapshot is cached for this session, so the guard must
 	// deny with the retry/restart message. Reaching that check at all proves
@@ -164,6 +187,7 @@ func TestClaude_PreToolUse_UsesAuthContextWhenNoCachedMetadata(t *testing.T) {
 	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
 		HookEventName: "PreToolUse",
 		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
 		ToolName:      &toolName,
 		ToolUseID:     &toolUseID,
 		ToolInput:     map[string]any{"foo": "bar"},
@@ -191,10 +215,12 @@ func TestClaude_PreToolUse_DeniesWhenMCPListNotCached(t *testing.T) {
 	sessionID := uuid.NewString()
 	toolName := "mcp__gram__do_thing"
 	toolUseID := "toolu_no_mcp_list"
+	userEmail := "claude-no-mcp-list@example.com"
 
 	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
 		HookEventName: "PreToolUse",
 		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
 		ToolName:      &toolName,
 		ToolUseID:     &toolUseID,
 		ToolInput:     map[string]any{},
@@ -223,6 +249,7 @@ func TestClaude_PreToolUse_DeniesWhenMatchedServerNotGramHosted(t *testing.T) {
 	sessionID := uuid.NewString()
 	toolName := "mcp__plugin_slack_slack__send_message"
 	toolUseID := "toolu_non_gram_hosted"
+	userEmail := "claude-non-gram@example.com"
 
 	// Seed the cache with an entry that resolves the tool's server prefix
 	// but points at a non-Gram host.
@@ -234,6 +261,7 @@ func TestClaude_PreToolUse_DeniesWhenMatchedServerNotGramHosted(t *testing.T) {
 	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
 		HookEventName: "PreToolUse",
 		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
 		ToolName:      &toolName,
 		ToolUseID:     &toolUseID,
 		ToolInput:     map[string]any{},
@@ -261,6 +289,7 @@ func TestClaude_PreToolUse_DeniesLocalStdioServer(t *testing.T) {
 	sessionID := uuid.NewString()
 	toolName := "mcp__mise__install_tool"
 	toolUseID := "toolu_local_stdio"
+	userEmail := "claude-local-stdio@example.com"
 
 	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
 		[]MCPServerEntry{{Source: "local", Name: "mise", Command: "mise mcp", Transport: "STDIO"}},
@@ -270,6 +299,7 @@ func TestClaude_PreToolUse_DeniesLocalStdioServer(t *testing.T) {
 	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
 		HookEventName: "PreToolUse",
 		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
 		ToolName:      &toolName,
 		ToolUseID:     &toolUseID,
 		ToolInput:     map[string]any{},
@@ -336,6 +366,7 @@ func TestClaude_PreToolUse_DeniesLocalStdioServerWithLegacyIdentityRule(t *testi
 	sessionID := uuid.NewString()
 	toolName := "mcp__mise__install_tool"
 	toolUseID := "toolu_local_stdio_approved"
+	userEmail := "claude-legacy-identity@example.com"
 
 	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
 		[]MCPServerEntry{{Source: "local", Name: "mise", Command: "mise mcp", Transport: "STDIO"}},
@@ -346,6 +377,7 @@ func TestClaude_PreToolUse_DeniesLocalStdioServerWithLegacyIdentityRule(t *testi
 	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
 		HookEventName: "PreToolUse",
 		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
 		ToolName:      &toolName,
 		ToolUseID:     &toolUseID,
 		ToolInput:     map[string]any{},
@@ -372,6 +404,7 @@ func TestClaude_PreToolUse_DoesNotAllowUnconfiguredServerByIdentityRule(t *testi
 	sessionID := uuid.NewString()
 	toolName := "mcp__github__search"
 	toolUseID := "toolu_unconfigured_identity"
+	userEmail := "claude-unconfigured@example.com"
 
 	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
 		[]MCPServerEntry{{Source: "local", Name: "linear", Command: "linear mcp", Transport: "STDIO"}},
@@ -382,6 +415,7 @@ func TestClaude_PreToolUse_DoesNotAllowUnconfiguredServerByIdentityRule(t *testi
 	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
 		HookEventName: "PreToolUse",
 		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
 		ToolName:      &toolName,
 		ToolUseID:     &toolUseID,
 		ToolInput:     map[string]any{},
@@ -408,6 +442,7 @@ func TestClaude_PreToolUse_AllowsGramHostedServer(t *testing.T) {
 	sessionID := uuid.NewString()
 	toolName := "mcp__gram__do_thing"
 	toolUseID := "toolu_gram_hosted_ok"
+	userEmail := "claude-gram-hosted@example.com"
 
 	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
 		[]MCPServerEntry{{Source: "local", Name: "gram", URL: "https://app.getgram.ai/mcp/team-foo"}},
@@ -417,6 +452,7 @@ func TestClaude_PreToolUse_AllowsGramHostedServer(t *testing.T) {
 	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
 		HookEventName: "PreToolUse",
 		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
 		ToolName:      &toolName,
 		ToolUseID:     &toolUseID,
 		ToolInput:     map[string]any{},
@@ -654,6 +690,46 @@ func TestClaude_PreToolUse_DeniesMCPWhenNoAuthAndNoCachedMetadata(t *testing.T) 
 	require.NotNil(t, output.PermissionDecision)
 	assert.Equal(t, "deny", *output.PermissionDecision,
 		"MCP tool calls without enforcement metadata must fail closed")
+	require.NotNil(t, output.PermissionDecisionReason)
+	assert.Contains(t, *output.PermissionDecisionReason, "could not verify this MCP tool call")
+}
+
+func TestClaude_PreToolUse_DeniesMCPWhenResolvedMetadataHasNoUserEmail(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := uuid.NewString()
+	toolName := "mcp__gram__do_thing"
+	toolUseID := "toolu_pretooluse_no_email"
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "claude-code",
+		UserEmail:   "",
+		UserID:      "",
+		ClaudeOrgID: "claude_org",
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}, 0))
+
+	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		ToolName:      &toolName,
+		ToolUseID:     &toolUseID,
+		ToolInput:     map[string]any{"foo": "bar"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	output, ok := result.HookSpecificOutput.(*HookSpecificOutput)
+	require.True(t, ok)
+	require.NotNil(t, output.PermissionDecision)
+	assert.Equal(t, "deny", *output.PermissionDecision)
 	require.NotNil(t, output.PermissionDecisionReason)
 	assert.Contains(t, *output.PermissionDecisionReason, "could not verify this MCP tool call")
 }

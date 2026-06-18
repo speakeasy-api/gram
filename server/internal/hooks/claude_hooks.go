@@ -554,6 +554,17 @@ func (s *Service) resolveClaudeSessionMetadata(ctx context.Context, sessionID, u
 }
 
 func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata) {
+	metadata.UserEmail = strings.TrimSpace(metadata.UserEmail)
+	if metadata.UserEmail == "" {
+		s.logger.WarnContext(ctx, "skipping claude hook persistence without user email",
+			attr.SlogEvent("claude_hook_persist_no_user_email"),
+			attr.SlogHookSource("claude"),
+			attr.SlogHookEvent(payload.HookEventName),
+			attr.SlogGenAIConversationID(conv.PtrValOr(payload.SessionID, "")),
+		)
+		return
+	}
+
 	metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
 
 	if isConversationEvent(payload.HookEventName) {
@@ -654,6 +665,16 @@ func (s *Service) handlePreToolUse(ctx context.Context, payload *gen.ClaudePaylo
 			attr.SlogGenAIConversationID(sessionID),
 			attr.SlogToolName(rawToolName),
 			attr.SlogError(err),
+		)
+		return denyUnverifiedMCP()
+	}
+	if strings.TrimSpace(metadata.UserEmail) == "" {
+		s.logger.WarnContext(ctx, "claude PreToolUse metadata has no user email; denying MCP tool call",
+			attr.SlogEvent("claude_hook_pretooluse_no_user_email"),
+			attr.SlogHookSource("claude"),
+			attr.SlogHookEvent(payload.HookEventName),
+			attr.SlogGenAIConversationID(sessionID),
+			attr.SlogToolName(rawToolName),
 		)
 		return denyUnverifiedMCP()
 	}

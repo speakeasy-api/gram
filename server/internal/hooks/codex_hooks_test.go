@@ -17,10 +17,12 @@ func TestCodex_PreToolUse_ShadowMCPBlockWithIdentityEvidenceIncludesRequestLink(
 
 	sessionID := "codex-session-blocked"
 	toolName := "mcp__gram__do_thing"
+	userEmail := "anonymous-codex@example.com"
 
 	result, err := ti.service.Codex(ctx, &gen.CodexPayload{
 		HookEventName: "PreToolUse",
 		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
 		ToolName:      &toolName,
 		ToolInput:     map[string]any{"foo": "bar"},
 	})
@@ -60,6 +62,23 @@ func TestCodex_PreToolUse_TargetedShadowMCPPolicyUsesResolvedHookUser(t *testing
 	require.NotNil(t, result)
 	require.NotNil(t, result.Decision)
 	require.Equal(t, "deny", *result.Decision)
+}
+
+func TestCodex_RequiresUserEmail(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	sessionID := "codex-session-missing-email"
+	toolName := "mcp__gram__do_thing"
+	result, err := ti.service.Codex(ctx, &gen.CodexPayload{
+		HookEventName: "PreToolUse",
+		SessionID:     &sessionID,
+		ToolName:      &toolName,
+		ToolInput:     map[string]any{"foo": "bar"},
+	})
+	require.Error(t, err)
+	require.Nil(t, result)
+	require.ErrorContains(t, err, "codex hook payload missing user_email")
 }
 
 func TestBuildCodexTelemetryAttributes_UsesPayloadUserEmail(t *testing.T) {

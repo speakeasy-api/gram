@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpname"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
@@ -41,6 +42,9 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 	orgID := authCtx.ActiveOrganizationID
 	projectID := authCtx.ProjectID.String()
 	metadata := s.codexSessionMetadata(ctx, payload, orgID, projectID)
+	if metadata.UserEmail == "" {
+		return nil, oops.E(oops.CodeInvalid, nil, "codex hook payload missing user_email")
+	}
 	logger = logger.With(
 		attr.SlogOrganizationID(orgID),
 		attr.SlogProjectID(projectID),
