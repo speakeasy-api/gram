@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/require"
 
@@ -657,6 +658,84 @@ func TestDeploymentsService_Redeploy_ClonesMemoryAndScale(t *testing.T) {
 	require.Equal(t, int32(2048), *redeployed.Deployment.FunctionsAssets[0].MemoryMib)
 	require.NotNil(t, redeployed.Deployment.FunctionsAssets[0].Scale)
 	require.Equal(t, int32(3), *redeployed.Deployment.FunctionsAssets[0].Scale)
+}
+
+func TestDeploymentsService_Redeploy_CarriesInfraOverridesForward(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:24")
+
+	// Create initial deployment with config-driven memory and scale.
+	initial, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey:  "test-redeploy-infra-overrides",
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		Functions: []*gen.AddFunctionsForm{
+			{
+				AssetID:   fres.Asset.ID,
+				Name:      "my-functions",
+				Slug:      "my-functions",
+				Runtime:   "nodejs:24",
+				MemoryMib: new(uint(2048)),
+				Scale:     new(uint(3)),
+			},
+		},
+		Packages:         []*gen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create initial deployment")
+	require.Equal(t, "completed", initial.Deployment.Status)
+
+	initialDeploymentID, err := uuid.Parse(initial.Deployment.ID)
+	require.NoError(t, err, "parse initial deployment id")
+
+	// Simulate an operator setting durable Fly infrastructure overrides directly
+	// in the database.
+	err = testrepo.New(ti.conn).SetDeploymentFunctionInfraOverrides(ctx, testrepo.SetDeploymentFunctionInfraOverridesParams{
+		DeploymentID:      initialDeploymentID,
+		MemoryMibOverride: pgtype.Int4{Int32: 4096, Valid: true},
+		ScaleOverride:     pgtype.Int4{Int32: 5, Valid: true},
+	})
+	require.NoError(t, err, "set infrastructure overrides")
+
+	// Redeploy — a fresh customer deploy must not clear operator overrides.
+	redeployed, err := ti.service.Redeploy(ctx, &gen.RedeployPayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		DeploymentID:     initial.Deployment.ID,
+	})
+	require.NoError(t, err, "redeploy deployment")
+	require.Equal(t, "completed", redeployed.Deployment.Status)
+	require.NotEqual(t, initial.Deployment.ID, redeployed.Deployment.ID)
+
+	// The config-driven memory/scale are still cloned as before.
+	require.Len(t, redeployed.Deployment.FunctionsAssets, 1)
+	require.NotNil(t, redeployed.Deployment.FunctionsAssets[0].MemoryMib)
+	require.Equal(t, int32(2048), *redeployed.Deployment.FunctionsAssets[0].MemoryMib)
+	require.NotNil(t, redeployed.Deployment.FunctionsAssets[0].Scale)
+	require.Equal(t, int32(3), *redeployed.Deployment.FunctionsAssets[0].Scale)
+
+	// The operator overrides survived the clone unchanged.
+	redeployedID, err := uuid.Parse(redeployed.Deployment.ID)
+	require.NoError(t, err, "parse redeployed deployment id")
+
+	overrides, err := testrepo.New(ti.conn).GetDeploymentFunctionInfraOverrides(ctx, redeployedID)
+	require.NoError(t, err, "read cloned infrastructure overrides")
+	require.Len(t, overrides, 1)
+	require.True(t, overrides[0].MemoryMibOverride.Valid)
+	require.Equal(t, int32(4096), overrides[0].MemoryMibOverride.Int32)
+	require.True(t, overrides[0].ScaleOverride.Valid)
+	require.Equal(t, int32(5), overrides[0].ScaleOverride.Int32)
 }
 
 func TestDeploymentsService_Redeploy_DefaultsNullMemoryAndScale(t *testing.T) {
