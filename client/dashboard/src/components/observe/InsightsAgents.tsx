@@ -11,6 +11,7 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { Dialog } from "@/components/ui/dialog";
 import { ErrorAlert } from "@/components/ui/alert";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { slugify } from "@/lib/constants";
@@ -30,7 +31,13 @@ import type {
 import { useGramContext, useMembers } from "@gram/client/react-query";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
-import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
+import {
+  defineFilters,
+  useFilterState,
+  type FilterValue,
+  type OptionsById,
+} from "@/components/filters";
+import { Page } from "@/components/page-layout";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   BarElement,
@@ -137,24 +144,38 @@ function ValueModeToggle({
   onChange: (mode: ValueMode) => void;
 }) {
   return (
-    <div className="border-border flex h-[34px] items-center rounded-md border p-0.5">
-      {(["tokens", "cost"] as const).map((option) => (
-        <button
-          key={option}
-          onClick={() => onChange(option)}
-          className={cn(
-            "h-7 rounded px-3 text-xs font-medium transition-all duration-150",
-            mode === option
-              ? "text-foreground bg-white shadow-sm dark:bg-gray-900"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {option === "tokens" ? "Tokens" : "Cost ($)"}
-        </button>
-      ))}
-    </div>
+    <SegmentedControl
+      value={mode}
+      onChange={onChange}
+      options={[
+        {
+          value: "tokens",
+          label: "Tokens",
+          tooltip: "Show usage measured in tokens",
+        },
+        {
+          value: "cost",
+          label: "Cost ($)",
+          tooltip: "Show usage measured in US dollars",
+        },
+      ]}
+    />
   );
 }
+
+// Cost filters in the unified system. The date range is pinned (always-visible
+// pill); the client/agent filter lives behind "More filters" and surfaces as a
+// pill once set. `client` options are supplied at render from the usage data.
+const COST_FILTERS = defineFilters([
+  {
+    id: "date",
+    label: "Date range",
+    kind: "daterange",
+    pinned: true,
+    defaultPreset: "30d",
+  },
+  { id: "client", label: "Agent", kind: "select" },
+]);
 
 export function InsightsAgentsContent(): JSX.Element {
   const client = useGramContext();
@@ -163,15 +184,19 @@ export function InsightsAgentsContent(): JSX.Element {
     toolsToInclude: ["gram_search_users", "gram_list_organization_users"],
   });
 
-  const [dateRange, setDateRange] = useState<DateRangePreset>("30d");
-  const [customRange, setCustomRange] = useState<{
-    from: Date;
-    to: Date;
-  } | null>(null);
-  const [customRangeLabel, setCustomRangeLabel] = useState<string | null>(null);
+  // Filters now run through the unified system (URL-persisted). The existing
+  // query/derivation code reads dateRange/customRange/customRangeLabel/
+  // clientFilter, so we bridge the filter values back to those shapes rather
+  // than rewiring every consumer.
+  const costFilters = useFilterState(COST_FILTERS);
+  const dateValue = costFilters.values.date;
+  const dateRange: DateRangePreset = dateValue.preset ?? "30d";
+  const customRange = dateValue.customRange;
+  const customRangeLabel = dateValue.customLabel;
+  const clientFilter = costFilters.values.client ?? "all";
+
   const [valueMode, setValueMode] = useState<ValueMode>("tokens");
   const [expandedChart, setExpandedChart] = useState<string | null>(null);
-  const [clientFilter, setClientFilter] = useState<string>("all");
   const [groupByDimension, setGroupByDimension] = useState<"employee" | "role">(
     "employee",
   );
@@ -433,24 +458,6 @@ export function InsightsAgentsContent(): JSX.Element {
     membersLoading || usersQuery.isLoading || projectQuery.isLoading;
   const error = membersError ?? usersQuery.error ?? projectQuery.error;
 
-  const handlePresetChange = (preset: DateRangePreset) => {
-    setDateRange(preset);
-    setCustomRange(null);
-    setCustomRangeLabel(null);
-  };
-  const handleCustomRangeChange = (
-    rangeFrom: Date,
-    rangeTo: Date,
-    label?: string,
-  ) => {
-    setCustomRange({ from: rangeFrom, to: rangeTo });
-    setCustomRangeLabel(label ?? null);
-  };
-  const handleClearCustomRange = () => {
-    setCustomRange(null);
-    setCustomRangeLabel(null);
-  };
-
   return (
     <>
       <InsightsConfig
@@ -462,14 +469,8 @@ export function InsightsAgentsContent(): JSX.Element {
       />
       <div className="min-h-0 w-full flex-1 overflow-y-auto p-8 pb-24">
         <div className="mx-auto flex max-w-7xl flex-col gap-6">
-          <div
-            className={cn(
-              "flex gap-4 transition-all duration-300",
-              isInsightsOpen
-                ? "flex-col items-stretch"
-                : "flex-row items-center justify-between",
-            )}
-          >
+          {/* Page title, then the filter bar on its own row below it. */}
+          <div className="flex flex-col gap-4">
             <div className="flex min-w-0 flex-col gap-1">
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-semibold">AI Agent Costs</h1>
@@ -480,35 +481,24 @@ export function InsightsAgentsContent(): JSX.Element {
                 models over {rangeLabel}.
               </p>
             </div>
-            <div
-              className={cn(
-                "flex flex-wrap items-center gap-3",
-                isInsightsOpen ? "justify-start" : "shrink-0",
-              )}
-            >
-              <ValueModeToggle mode={valueMode} onChange={setValueMode} />
-              <select
-                value={clientFilter}
-                onChange={(e) => setClientFilter(e.target.value)}
-                className="border-border bg-background text-foreground h-[34px] rounded-md border px-2.5 text-xs"
-              >
-                <option value="all">All Agents</option>
-                {availableClients.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
-              <TimeRangePicker
-                preset={customRange ? null : dateRange}
-                customRange={customRange}
-                customRangeLabel={customRangeLabel}
-                onPresetChange={handlePresetChange}
-                onCustomRangeChange={handleCustomRangeChange}
-                onClearCustomRange={handleClearCustomRange}
-                disabled={isLoading}
+            <Page.Toolbar>
+              <Page.Toolbar.Filters
+                schema={COST_FILTERS}
+                values={costFilters.values}
+                optionsById={{ client: availableClients } satisfies OptionsById}
+                onChange={
+                  costFilters.setValue as (
+                    id: string,
+                    value: FilterValue,
+                  ) => void
+                }
+                onClear={costFilters.clearValue as (id: string) => void}
+                onClearAll={costFilters.clearAll}
               />
-            </div>
+              <Page.Toolbar.Actions>
+                <ValueModeToggle mode={valueMode} onChange={setValueMode} />
+              </Page.Toolbar.Actions>
+            </Page.Toolbar>
           </div>
 
           {error ? (
@@ -1316,22 +1306,22 @@ function EmployeeCostTable({
             {items.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <div className="border-border flex h-[34px] items-center rounded-md border p-0.5">
-          {(["employee", "role"] as const).map((option) => (
-            <button
-              key={option}
-              onClick={() => handleGroupByChange(option)}
-              className={cn(
-                "h-7 rounded px-3 text-xs font-medium transition-all duration-150",
-                groupByDimension === option
-                  ? "text-foreground bg-white shadow-sm dark:bg-gray-900"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {option === "employee" ? "Employee" : "Role"}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          value={groupByDimension}
+          onChange={handleGroupByChange}
+          options={[
+            {
+              value: "employee",
+              label: "Employee",
+              tooltip: "Break usage down per individual employee",
+            },
+            {
+              value: "role",
+              label: "Role",
+              tooltip: "Break usage down per role",
+            },
+          ]}
+        />
       </div>
       {isRoleView ? (
         roleUsageLoading ? (
