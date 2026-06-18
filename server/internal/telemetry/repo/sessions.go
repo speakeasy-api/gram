@@ -7,20 +7,6 @@ import (
 	"github.com/Masterminds/squirrel"
 )
 
-var sessionDimensionRegistry = map[string]attributeDimension{
-	"department_name":  {column: "toString(attributes.user.attributes.department_name)", kind: attributeDimScalar},
-	"job_title":        {column: "toString(attributes.user.attributes.job_title)", kind: attributeDimScalar},
-	"employee_type":    {column: "toString(attributes.user.attributes.employee_type)", kind: attributeDimScalar},
-	"division_name":    {column: "toString(attributes.user.attributes.division_name)", kind: attributeDimScalar},
-	"cost_center_name": {column: "toString(attributes.user.attributes.cost_center_name)", kind: attributeDimScalar},
-	"email":            {column: "user_email", kind: attributeDimScalar},
-	"model":            {column: "toString(attributes.gen_ai.response.model)", kind: attributeDimScalar},
-	"hook_source":      {column: "hook_source", kind: attributeDimScalar},
-	"role":             {column: "arraySort(JSONExtract(ifNull(toJSONString(attributes.user.roles), '[]'), 'Array(String)'))", kind: attributeDimArray},
-	"group":            {column: "arraySort(JSONExtract(ifNull(toJSONString(attributes.user.groups), '[]'), 'Array(String)'))", kind: attributeDimArray},
-	"project_id":       {column: "gram_project_id", kind: attributeDimProject},
-}
-
 // #nosec G101 -- These are allowlisted SQL measure expressions, not credentials.
 var sessionMeasureSelects = map[string]string{
 	"total_cost":                  "sumIf(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '')",
