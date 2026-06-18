@@ -1525,11 +1525,11 @@ print(json.dumps(p))
 # curl's -w '%%{http_code}' prints 000 itself on connection failure/timeout, so
 # don't append another fallback (that would double to "000000"). Guard only the
 # case where curl is missing entirely and the substitution comes back empty.
-http_code=$(curl -s -o /dev/null -w '%%{http_code}' -X POST \
+http_code=$(printf '%%s' "$enriched" | curl -s -o /dev/null -w '%%{http_code}' -X POST \
   -H "Content-Type: application/json" \
   ${auth_config_arg[@]+"${auth_config_arg[@]}"} \
   ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
-  -d "$enriched" \
+  --data-binary @- \
   --max-time 30 \
   "${server_url}/rpc/hooks.claude" 2>/dev/null)
 [ -z "$http_code" ] && http_code=000
