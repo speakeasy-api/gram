@@ -352,6 +352,9 @@ func handleToolsCall(
 			logAttrs[attr.APIKeyIDKey] = payload.apiKeyID
 		}
 		logAttrs.RecordToolsetSlug(payload.toolset)
+		if payload.mcpServerID != nil {
+			logAttrs[attr.McpServerIDKey] = payload.mcpServerID.String()
+		}
 		logAttrs.RecordMCPURL(mcpURL)
 		params := tm.LogParams{
 			Timestamp: time.Now(),

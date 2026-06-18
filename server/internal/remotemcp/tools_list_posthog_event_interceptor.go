@@ -32,7 +32,7 @@ const eventMCPServerToolsList = "mcp_server_tools_list"
 // tracks unifying the two runtimes onto this single event name.
 type ToolsListPostHogEventInterceptor struct {
 	posthog  *posthog.Posthog
-	serverID string
+	identity proxy.ServerIdentity
 	logger   *slog.Logger
 }
 
@@ -40,12 +40,12 @@ var _ proxy.ToolsListRequestInterceptor = (*ToolsListPostHogEventInterceptor)(ni
 
 // NewToolsListPostHogEventInterceptor constructs an interceptor scoped to a
 // single Remote MCP Server. Callers build a fresh instance per request so the
-// `remote_mcp_server_id` property is captured without re-parsing routing
-// state.
-func NewToolsListPostHogEventInterceptor(posthogClient *posthog.Posthog, serverID string, logger *slog.Logger) *ToolsListPostHogEventInterceptor {
+// `remote_mcp_server_id` and `mcp_server_id` properties are captured without
+// re-parsing routing state.
+func NewToolsListPostHogEventInterceptor(posthogClient *posthog.Posthog, identity proxy.ServerIdentity, logger *slog.Logger) *ToolsListPostHogEventInterceptor {
 	return &ToolsListPostHogEventInterceptor{
 		posthog:  posthogClient,
-		serverID: serverID,
+		identity: identity,
 		logger:   logger,
 	}
 }
@@ -87,7 +87,8 @@ func (i *ToolsListPostHogEventInterceptor) InterceptToolsListRequest(ctx context
 	if err := i.posthog.CaptureEvent(ctx, eventMCPServerToolsList, sessionID, map[string]any{
 		"project_id":           projectID,
 		"authenticated":        authenticated,
-		"remote_mcp_server_id": i.serverID,
+		"remote_mcp_server_id": i.identity.RemoteMCPServerID,
+		"mcp_server_id":        i.identity.McpServerID,
 		"mcp_domain":           requestContext.Host,
 		"mcp_url":              requestContext.Host + requestContext.ReqURL,
 		"disable_notification": true,

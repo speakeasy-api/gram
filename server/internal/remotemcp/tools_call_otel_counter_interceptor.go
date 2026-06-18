@@ -15,20 +15,21 @@ import (
 // the same metric tracks attempted calls regardless of upstream success.
 type ToolsCallOTELCounterInterceptor struct {
 	metrics  *ProxyMetrics
-	serverID string
+	identity proxy.ServerIdentity
 	logger   *slog.Logger
 }
 
 var _ proxy.ToolsCallRequestInterceptor = (*ToolsCallOTELCounterInterceptor)(nil)
 
 // NewToolsCallOTELCounterInterceptor constructs an interceptor bound to the
-// given metrics object and Remote MCP Server id. Construct one per request
-// so the counter's `gram.remote_mcp_server.id` label is closed over without
-// re-deriving it from the URL path on every call.
-func NewToolsCallOTELCounterInterceptor(m *ProxyMetrics, serverID string, logger *slog.Logger) *ToolsCallOTELCounterInterceptor {
+// given metrics object and server correlation ids. Construct one per request
+// so the counter's `gram.remote_mcp_server.id` and `gram.mcp_server.id`
+// labels are closed over without re-deriving them from the URL path on every
+// call.
+func NewToolsCallOTELCounterInterceptor(m *ProxyMetrics, identity proxy.ServerIdentity, logger *slog.Logger) *ToolsCallOTELCounterInterceptor {
 	return &ToolsCallOTELCounterInterceptor{
 		metrics:  m,
-		serverID: serverID,
+		identity: identity,
 		logger:   logger,
 	}
 }
@@ -56,6 +57,6 @@ func (i *ToolsCallOTELCounterInterceptor) InterceptToolsCallRequest(ctx context.
 		mcpURL = requestContext.Host + requestContext.ReqURL
 	}
 
-	i.metrics.RecordMCPToolCall(ctx, authCtx.ActiveOrganizationID, mcpURL, i.serverID, call.Params.Name)
+	i.metrics.RecordMCPToolCall(ctx, authCtx.ActiveOrganizationID, mcpURL, i.identity, call.Params.Name)
 	return nil
 }
