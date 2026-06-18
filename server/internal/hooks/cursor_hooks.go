@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpname"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
@@ -53,10 +54,11 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 
 	orgID := authCtx.ActiveOrganizationID
 	projectID := authCtx.ProjectID.String()
-	actorUserID := authCtx.UserID
-	if actorUserID == "" {
-		actorUserID = s.resolveUserByEmail(ctx, conv.PtrValOr(payload.UserEmail, ""), orgID)
+	userEmail := strings.TrimSpace(conv.PtrValOr(payload.UserEmail, ""))
+	if userEmail == "" {
+		return nil, oops.E(oops.CodeInvalid, nil, "cursor hook payload missing user_email")
 	}
+	actorUserID := s.resolveUserByEmail(ctx, userEmail, orgID)
 	logger = logger.With(
 		attr.SlogOrganizationID(orgID),
 		attr.SlogProjectID(projectID),

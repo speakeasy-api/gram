@@ -3,12 +3,14 @@ package hooks
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -45,8 +47,12 @@ func (s *Service) scanClaudeForEnforcement(ctx context.Context, payload *gen.Cla
 		return nil
 	}
 
-	scanContext, ok := s.resolveClaudeScanContext(ctx, payload)
-	if !ok {
+	scanContext, err := s.resolveClaudeScanContext(ctx, payload)
+	if err != nil {
+		s.logger.WarnContext(ctx, "could not resolve Claude risk scan context",
+			attr.SlogError(err),
+			attr.SlogEvent("risk_scan_context_error"),
+		)
 		return nil
 	}
 
@@ -77,58 +83,35 @@ type claudeScanContext struct {
 // hook risk scan. The plugin-auth context populated by Gram-Key + Gram-Project
 // wins when present. Session metadata cached by the OTEL Logs endpoint remains
 // the fallback for legacy hooks without plugin auth.
-func (s *Service) resolveClaudeScanContext(ctx context.Context, payload *gen.ClaudePayload) (claudeScanContext, bool) {
-	if payload == nil || payload.SessionID == nil {
-		return claudeScanContext{organizationID: "", projectID: uuid.Nil, userID: ""}, false
+func (s *Service) resolveClaudeScanContext(ctx context.Context, payload *gen.ClaudePayload) (claudeScanContext, error) {
+	if payload == nil {
+		return claudeScanContext{organizationID: "", projectID: uuid.Nil, userID: ""}, errors.New("claude payload is nil")
+	}
+	if payload.SessionID == nil || *payload.SessionID == "" {
+		return claudeScanContext{organizationID: "", projectID: uuid.Nil, userID: ""}, errors.New("claude payload missing session id")
 	}
 	sessionID := *payload.SessionID
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if ok && authCtx != nil && authCtx.ProjectID != nil {
-		metadata := SessionMetadata{
-			SessionID:   sessionID,
-			ServiceName: "",
-			UserEmail:   conv.PtrValOr(payload.UserEmail, ""),
-			UserID:      authCtx.UserID,
-			ClaudeOrgID: "",
-			GramOrgID:   authCtx.ActiveOrganizationID,
-			ProjectID:   authCtx.ProjectID.String(),
-		}
-		if metadata.UserID == "" && metadata.UserEmail != "" {
-			metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
-		}
-		if cached, err := s.getSessionMetadata(ctx, sessionID); err == nil {
-			metadata = mergeClaudeAuthContextMetadata(metadata, cached)
-		}
-		if metadata.UserID == "" && metadata.UserEmail != "" {
-			metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
-		}
-		return claudeScanContext{
-			organizationID: metadata.GramOrgID,
-			projectID:      *authCtx.ProjectID,
-			userID:         metadata.UserID,
-		}, true
+	payloadUserEmail := ""
+	if payload.UserEmail != nil {
+		payloadUserEmail = *payload.UserEmail
 	}
-
-	metadata, err := s.getSessionMetadata(ctx, sessionID)
+	metadata, err := s.resolveClaudeSessionMetadata(ctx, sessionID, payloadUserEmail)
 	if err != nil {
-		return claudeScanContext{organizationID: "", projectID: uuid.Nil, userID: ""}, false
+		return claudeScanContext{organizationID: "", projectID: uuid.Nil, userID: ""}, fmt.Errorf("resolve claude session metadata: %w", err)
 	}
-
+	if strings.TrimSpace(metadata.UserEmail) == "" {
+		return claudeScanContext{organizationID: "", projectID: uuid.Nil, userID: ""}, errors.New("claude session metadata missing user email")
+	}
 	projectID, err := uuid.Parse(metadata.ProjectID)
 	if err != nil {
-		return claudeScanContext{organizationID: "", projectID: uuid.Nil, userID: ""}, false
-	}
-
-	userID := metadata.UserID
-	if userID == "" {
-		userID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
+		return claudeScanContext{organizationID: "", projectID: uuid.Nil, userID: ""}, fmt.Errorf("parse claude project id: %w", err)
 	}
 
 	return claudeScanContext{
 		organizationID: metadata.GramOrgID,
 		projectID:      projectID,
-		userID:         userID,
-	}, true
+		userID:         metadata.UserID,
+	}, nil
 }
 
 // scanCursorForEnforcement runs the risk scanner for a Cursor hook payload.

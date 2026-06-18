@@ -40,11 +40,13 @@ func TestCursor_PostToolUse_ReturnsEmpty(t *testing.T) {
 
 	toolName := "Read"
 	toolUseID := "toolu_cursor_456"
+	userEmail := "dev@example.com"
 
 	result, err := ti.service.Cursor(ctx, &hooks.CursorPayload{
 		HookEventName: "postToolUse",
 		ToolName:      &toolName,
 		ToolUseID:     &toolUseID,
+		UserEmail:     &userEmail,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -57,12 +59,14 @@ func TestCursor_PostToolUseFailure_ReturnsEmpty(t *testing.T) {
 
 	toolName := "Bash"
 	toolUseID := "toolu_cursor_789"
+	userEmail := "dev@example.com"
 	isInterrupt := true
 
 	result, err := ti.service.Cursor(ctx, &hooks.CursorPayload{
 		HookEventName: "postToolUseFailure",
 		ToolName:      &toolName,
 		ToolUseID:     &toolUseID,
+		UserEmail:     &userEmail,
 		IsInterrupt:   &isInterrupt,
 		Error:         "command timed out",
 	})
@@ -74,9 +78,11 @@ func TestCursor_PostToolUseFailure_ReturnsEmpty(t *testing.T) {
 func TestCursor_UnknownEvent_ReturnsEmpty(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
+	userEmail := "dev@example.com"
 
 	result, err := ti.service.Cursor(ctx, &hooks.CursorPayload{
 		HookEventName: "someNewEvent",
+		UserEmail:     &userEmail,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -100,6 +106,24 @@ func TestCursor_RequiresAuth(t *testing.T) {
 	assert.Equal(t, "deny", *result.Permission)
 	require.NotNil(t, result.UserMessage)
 	assert.Contains(t, *result.UserMessage, "unauthorized")
+}
+
+func TestCursor_RequiresUserEmail(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	toolName := "Edit"
+	toolUseID := "toolu_cursor_missing_email"
+	conversationID := "conv-missing-email"
+	result, err := ti.service.Cursor(ctx, &hooks.CursorPayload{
+		HookEventName:  "preToolUse",
+		ToolName:       &toolName,
+		ToolUseID:      &toolUseID,
+		ConversationID: &conversationID,
+	})
+	require.Error(t, err)
+	require.Nil(t, result)
+	require.ErrorContains(t, err, "cursor hook payload missing user_email")
 }
 
 func TestBuildCursorTelemetryAttributes_BasicFields(t *testing.T) {
@@ -159,11 +183,13 @@ func TestCursor_BeforeMCPExecution_ReturnsAllow(t *testing.T) {
 	toolUseID := "toolu_mcp_123"
 	conversationID := "conv-mcp-abc"
 	serverURL := "https://mcp.linear.app/sse"
+	userEmail := "anonymous-cursor@example.com"
 
 	result, err := ti.service.Cursor(ctx, &hooks.CursorPayload{
 		HookEventName:  "beforeMCPExecution",
 		ToolName:       &toolName,
 		ToolUseID:      &toolUseID,
+		UserEmail:      &userEmail,
 		ConversationID: &conversationID,
 		URL:            &serverURL,
 	})
@@ -182,11 +208,13 @@ func TestCursor_BeforeMCPExecution_ShadowMCPBlockIncludesRequestLink(t *testing.
 	toolUseID := "toolu_mcp_blocked"
 	conversationID := "conv-mcp-blocked"
 	serverURL := "https://mcp.linear.app/sse"
+	userEmail := "anonymous-cursor@example.com"
 
 	result, err := ti.service.Cursor(ctx, &hooks.CursorPayload{
 		HookEventName:  "beforeMCPExecution",
 		ToolName:       &toolName,
 		ToolUseID:      &toolUseID,
+		UserEmail:      &userEmail,
 		ConversationID: &conversationID,
 		URL:            &serverURL,
 		ToolInput:      map[string]any{"foo": "bar"},
@@ -201,6 +229,38 @@ func TestCursor_BeforeMCPExecution_ShadowMCPBlockIncludesRequestLink(t *testing.
 	assert.Contains(t, *result.UserMessage, shadowMCPApprovalRequestPrompt)
 	require.NotNil(t, result.AgentMessage)
 	assert.Equal(t, *result.UserMessage, *result.AgentMessage)
+}
+
+func TestCursor_BeforeMCPExecution_TargetedShadowMCPPolicyUsesResolvedHookUser(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	hookUserID := "cursor-hook-user"
+	hookUserEmail := "cursor-hook-user@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, hookUserID, hookUserEmail)
+	ti.service.riskScanner = userScopedShadowMCPScanner{userID: hookUserID}
+
+	toolName := "list_issues"
+	toolUseID := "toolu_mcp_specific_user_policy"
+	conversationID := "conv-mcp-specific-user-policy"
+	serverURL := "https://mcp.linear.app/sse"
+	result, err := ti.service.Cursor(ctx, &hooks.CursorPayload{
+		HookEventName:  "beforeMCPExecution",
+		ToolName:       &toolName,
+		ToolUseID:      &toolUseID,
+		UserEmail:      &hookUserEmail,
+		ConversationID: &conversationID,
+		URL:            &serverURL,
+		ToolInput:      map[string]any{"foo": "bar"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Permission)
+	assert.Equal(t, "deny", *result.Permission)
 }
 
 func TestBuildCursorTelemetryAttributes_BeforeMCPExecution_ToolSourceFromURL(t *testing.T) {
