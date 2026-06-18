@@ -91,49 +91,7 @@ func (s *Service) resolveClaudeScanProjectID(ctx context.Context, sessionID stri
 	return uuid.Nil, false
 }
 
-// scanCursorForEnforcement runs the risk scanner for a Cursor hook payload.
-// Unlike Claude, Cursor hooks are authenticated so the project ID is known.
-func (s *Service) scanCursorForEnforcement(ctx context.Context, payload *gen.CursorPayload, orgID, projectID string) *risk.ScanResult {
-	if s.riskScanner == nil {
-		return nil
-	}
-
-	hookEvent, ok := parseCursorHookEvent(payload.HookEventName)
-	if !ok {
-		return nil
-	}
-
-	text := extractCursorText(payload, hookEvent)
-	// Empty body + tool attribution still matters for tool-scoped policies; only
-	// skip when there is neither.
-	toolName := conv.PtrValOr(payload.ToolName, "")
-	if text == "" && toolName == "" {
-		return nil
-	}
-
-	pid, err := uuid.Parse(projectID)
-	if err != nil {
-		return nil
-	}
-
-	messageType, ok := hookEventToMessageType(hookEvent)
-	if !ok {
-		return nil
-	}
-
-	result, err := s.riskScanner.ScanForEnforcement(ctx, pid, text, messageType, toolName)
-	if err != nil {
-		s.logger.WarnContext(ctx, "risk scan failed for Cursor hook",
-			attr.SlogError(err),
-			attr.SlogEvent("risk_scan_error"),
-		)
-		return nil
-	}
-
-	return result
-}
-
-func (s *Service) scanCursorEventForEnforcement(ctx context.Context, ev agentevents.Event[*gen.CursorPayload], projectID string) *risk.ScanResult {
+func (s *Service) scanCursorForEnforcement(ctx context.Context, ev agentevents.Event[*gen.CursorPayload]) *risk.ScanResult {
 	if s.riskScanner == nil {
 		return nil
 	}
@@ -170,7 +128,7 @@ func (s *Service) scanCursorEventForEnforcement(ctx context.Context, ev agenteve
 		return nil
 	}
 
-	pid, err := uuid.Parse(projectID)
+	pid, err := uuid.Parse(ev.AuthContext().ProjectID.String())
 	if err != nil {
 		return nil
 	}

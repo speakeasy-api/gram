@@ -94,7 +94,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		// beforeMCPExecution fires for MCP-routed (non-local) tool calls. Run
 		// the risk scanner first (block-only today), then fall through to the
 		// shadow-MCP guard so unapproved toolsets are still blocked.
-		if scanResult := s.scanCursorEventForEnforcement(ctx, ev, projectID); scanResult != nil {
+		if scanResult := s.scanCursorForEnforcement(ctx, ev); scanResult != nil {
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			blockReason = auditReason
@@ -151,7 +151,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 			result.Permission = new("allow")
 			break
 		}
-		if scanResult := s.scanCursorEventForEnforcement(ctx, ev, projectID); scanResult != nil {
+		if scanResult := s.scanCursorForEnforcement(ctx, ev); scanResult != nil {
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			blockReason = auditReason
@@ -161,7 +161,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 			result.Permission = new("allow")
 		}
 	case hookevents.UserPromptSubmit:
-		if scanResult := s.scanCursorEventForEnforcement(ctx, ev, projectID); scanResult != nil {
+		if scanResult := s.scanCursorForEnforcement(ctx, ev); scanResult != nil {
 			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			blockReason = auditReason
