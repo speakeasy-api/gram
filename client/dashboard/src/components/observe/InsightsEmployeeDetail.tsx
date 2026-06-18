@@ -53,7 +53,6 @@ import {
 import { useSlugs } from "@/contexts/Sdk";
 import { formatDateRangeLabel } from "@/components/observe/useDateRangeFilter";
 import {
-  CategoryScale,
   Chart as ChartJS,
   Filler,
   Legend,
@@ -63,8 +62,10 @@ import {
   Tooltip as ChartTooltip,
   type ChartOptions,
 } from "chart.js";
+import ZoomPlugin from "chartjs-plugin-zoom";
+import { useChartZoom } from "@/components/chart/useChartZoom";
 import { slugify } from "@/lib/constants";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Line } from "react-chartjs-2";
 import { useParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -86,13 +87,13 @@ import {
 import "@xyflow/react/dist/style.css";
 
 ChartJS.register(
-  CategoryScale,
   LinearScale,
   PointElement,
   LineElement,
   Filler,
   ChartTooltip,
   Legend,
+  ZoomPlugin,
 );
 
 const CHART_COLOR = "#60a5fa";
@@ -277,6 +278,20 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
     setCustomRange(null);
     setCustomRangeLabel(null);
   };
+  const handleChartRangeSelect = useCallback(
+    (from: Date, to: Date) => {
+      const fmt = (d: Date) =>
+        d.toLocaleString([], {
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        });
+      setCustomRange({ from, to });
+      setCustomRangeLabel(`${fmt(from)} – ${fmt(to)}`);
+    },
+    [setCustomRange, setCustomRangeLabel],
+  );
 
   const fallbackUserQuery = useQuery({
     queryKey: [
@@ -576,6 +591,9 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                   )}
                   expandedChart={expandedChart}
                   onExpand={setExpandedChart}
+                  onRangeSelect={handleChartRangeSelect}
+                  isZoomed={customRange !== null}
+                  onResetZoom={handleClearCustomRange}
                 />
               )}
             </>
@@ -1443,6 +1461,9 @@ function TokenTimeSeriesChart({
   hasData,
   expandedChart,
   onExpand,
+  onRangeSelect,
+  isZoomed,
+  onResetZoom,
 }: {
   title: string;
   chartId: string;
@@ -1451,31 +1472,29 @@ function TokenTimeSeriesChart({
   hasData: boolean;
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
+  onRangeSelect?: (from: Date, to: Date) => void;
+  isZoomed?: boolean;
+  onResetZoom?: () => void;
 }) {
   const isExpanded = expandedChart === chartId;
   const height = isExpanded ? 420 : 220;
 
-  const chartData = useMemo(() => {
-    const points = timeSeries.map((point) => {
-      const date = unixNanoToDate(point.bucketTimeUnixNano);
-      return {
-        label: formatChartLabel(date, timeRangeMs),
-        tooltipLabel: date.toLocaleString([], {
-          month: "short",
-          day: "numeric",
-          hour: "numeric",
-          minute: "2-digit",
-        }),
-        value: getTotalTokens(point),
-      };
-    });
+  const chartData = useMemo(
+    () =>
+      timeSeries.map((point) => ({
+        x: unixNanoToDate(point.bucketTimeUnixNano).getTime(),
+        y: getTotalTokens(point),
+      })),
+    [timeSeries],
+  );
 
-    return {
-      labels: points.map((p) => p.label),
-      tooltipLabels: points.map((p) => p.tooltipLabel),
-      values: points.map((p) => p.value),
-    };
-  }, [timeSeries, timeRangeMs]);
+  const { chartRef, zoomPluginOptions, resetZoom } = useChartZoom({
+    onRangeSelect,
+  });
+
+  useEffect(() => {
+    resetZoom();
+  }, [timeSeries, resetZoom]);
 
   const options = useMemo<ChartOptions<"line">>(
     () => ({
@@ -1486,17 +1505,31 @@ function TokenTimeSeriesChart({
         legend: { display: false },
         tooltip: {
           callbacks: {
-            title: (items) =>
-              chartData.tooltipLabels[items[0]?.dataIndex ?? 0] ?? "",
+            title: (items) => {
+              const x = items[0]?.parsed.x;
+              if (x == null) return "";
+              return new Date(x).toLocaleString([], {
+                month: "short",
+                day: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+              });
+            },
             label: (item) =>
               `Tokens: ${Number(item.parsed.y ?? 0).toLocaleString()}`,
           },
         },
+        zoom: zoomPluginOptions,
       },
       scales: {
         x: {
+          type: "linear",
           grid: { display: true, color: "rgba(128, 128, 128, 0.1)" },
-          ticks: { maxTicksLimit: 8 },
+          ticks: {
+            maxTicksLimit: 8,
+            callback: (value) =>
+              formatChartLabel(new Date(value as number), timeRangeMs),
+          },
         },
         y: {
           beginAtZero: true,
@@ -1505,7 +1538,7 @@ function TokenTimeSeriesChart({
         },
       },
     }),
-    [chartData.tooltipLabels],
+    [zoomPluginOptions, timeRangeMs],
   );
 
   return (
@@ -1515,6 +1548,8 @@ function TokenTimeSeriesChart({
       expandedChart={expandedChart}
       onExpand={onExpand}
       hasData={hasData}
+      isZoomed={isZoomed}
+      onResetZoom={onResetZoom}
     >
       {!hasData ? (
         <div className="text-muted-foreground flex h-[220px] items-center justify-center text-sm">
@@ -1523,12 +1558,12 @@ function TokenTimeSeriesChart({
       ) : (
         <div style={{ height }}>
           <Line
+            ref={chartRef}
             data={{
-              labels: chartData.labels,
               datasets: [
                 {
                   label: "Tokens",
-                  data: chartData.values,
+                  data: chartData,
                   borderColor: CHART_COLOR,
                   backgroundColor: `${CHART_COLOR}1a`,
                   pointBackgroundColor: CHART_COLOR,
