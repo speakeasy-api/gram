@@ -11,7 +11,6 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useViewMode } from "@/components/ui/use-view-mode";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
 import {
   useMcpEndpoints,
@@ -70,9 +69,6 @@ function MCPOverview() {
   const routes = useRoutes();
   const navigate = useNavigate();
   const client = useSdkClient();
-  const telemetry = useTelemetry();
-  const isRemoteMcpEnabled =
-    telemetry.isFeatureEnabled("gram-remote-mcp") ?? false;
 
   // TODO(AGE-1902): collapse this fetch with useToolsets() once Hosted
   // (toolset-backed) MCP servers also source from mcp_servers. Until then the
@@ -88,7 +84,6 @@ function MCPOverview() {
     isLoading: isLoadingMcpServers,
     isError: isMcpServersError,
   } = useMcpServers({ gramProject }, undefined, {
-    enabled: isRemoteMcpEnabled,
     throwOnError: false,
   });
   const {
@@ -96,7 +91,6 @@ function MCPOverview() {
     isLoading: isLoadingEndpoints,
     isError: isEndpointsError,
   } = useMcpEndpoints({ gramProject }, undefined, {
-    enabled: isRemoteMcpEnabled,
     throwOnError: false,
   });
   // Filter the listing to Remote-MCP-backed rows for now — the AGE-1902
@@ -121,8 +115,7 @@ function MCPOverview() {
   }, [endpointsResult]);
 
   const isLoading =
-    toolsets.isLoading ||
-    (isRemoteMcpEnabled && (isLoadingMcpServers || isLoadingEndpoints));
+    toolsets.isLoading || isLoadingMcpServers || isLoadingEndpoints;
 
   const hasRefreshError =
     toolsets.isError || isMcpServersError || isEndpointsError;

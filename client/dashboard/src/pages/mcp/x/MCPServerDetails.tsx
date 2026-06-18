@@ -77,8 +77,6 @@ export default function MCPServerDetails(): JSX.Element {
   const navigate = useNavigate();
   const routes = useRoutes();
   const telemetry = useTelemetry();
-  const isRemoteMcpEnabled =
-    telemetry.isFeatureEnabled("gram-remote-mcp") ?? false;
   const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
   const idOrSlug = mcpServerSlug ?? "";
   const activeTab = activeTabFromPath(location.pathname, idOrSlug);
@@ -104,20 +102,17 @@ export default function MCPServerDetails(): JSX.Element {
     isLoading,
     isError,
   } = useGetMcpServer(getMcpServerArgs(idOrSlug), undefined, {
-    enabled: isRemoteMcpEnabled && idOrSlug !== "",
+    enabled: idOrSlug !== "",
   });
 
   const mcpServerId = mcpServer?.id ?? "";
 
   const { data: endpointsResult, isLoading: isLoadingEndpoints } =
     useMcpEndpoints({ mcpServerId }, undefined, {
-      enabled: isRemoteMcpEnabled && mcpServerId !== "",
+      enabled: mcpServerId !== "",
     });
   const endpoints = endpointsResult?.mcpEndpoints ?? [];
 
-  if (!isRemoteMcpEnabled) {
-    return <Navigate to={routes.mcp.href()} replace />;
-  }
   if (!idOrSlug) {
     return <Navigate to={routes.mcp.href()} replace />;
   }
