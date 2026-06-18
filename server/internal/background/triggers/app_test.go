@@ -2,10 +2,32 @@ package triggers
 
 import (
 	"context"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestBoundCorrelationID(t *testing.T) {
+	t.Parallel()
+
+	// Within the limit: returned unchanged so routing keys stay readable.
+	short := "github:octocat/Hello-World/pr:42"
+	require.Equal(t, short, boundCorrelationID(short))
+
+	// A long GitHub push (repo + branch) exceeds the assistant tables' 300-char
+	// correlation_id CHECK; it must be bounded, keep a readable prefix, and stay
+	// deterministic and distinct from other long ids.
+	long := "github:octocat/Hello-World/branch:" + strings.Repeat("a", 400)
+	bounded := boundCorrelationID(long)
+	require.LessOrEqual(t, utf8.RuneCountInString(bounded), maxCorrelationIDLen)
+	require.True(t, strings.HasPrefix(bounded, "github:octocat/Hello-World/branch:"))
+	require.Equal(t, bounded, boundCorrelationID(long))
+
+	other := "github:octocat/Hello-World/branch:" + strings.Repeat("b", 400)
+	require.NotEqual(t, bounded, boundCorrelationID(other))
+}
 
 type fakeDispatcher struct {
 	kind   string
