@@ -90,6 +90,8 @@ export function AppSidebar({
   // Default true: opt-out via PostHog org-group targeting on `gram-deployments-page`.
   const isDeploymentsPageEnabled =
     telemetry.isFeatureEnabled("gram-deployments-page") ?? true;
+  const isTelemetryQueryDemoEnabled =
+    telemetry.isFeatureEnabled("gram-telemetry-query-demo-page") ?? false;
 
   const connectActive = [
     routes.sources,
@@ -110,7 +112,7 @@ export function AppSidebar({
     routes.employees,
     routes.costs,
     routes.insights,
-    routes.telemetryQueryDemo,
+    ...(isTelemetryQueryDemoEnabled ? [routes.telemetryQueryDemo] : []),
     routes.agentSessions,
     routes.logs,
   ].some((r) => r.active);
@@ -216,10 +218,12 @@ export function AppSidebar({
                   item={routes.insights}
                   scope={scopeFor(routes.insights)}
                 />
-                <ScopeGatedNavItem
-                  item={routes.telemetryQueryDemo}
-                  scope={scopeFor(routes.telemetryQueryDemo)}
-                />
+                {isTelemetryQueryDemoEnabled && (
+                  <ScopeGatedNavItem
+                    item={routes.telemetryQueryDemo}
+                    scope={scopeFor(routes.telemetryQueryDemo)}
+                  />
+                )}
                 <ScopeGatedNavItem
                   item={routes.agentSessions}
                   scope={scopeFor(routes.agentSessions)}
