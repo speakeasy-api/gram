@@ -552,6 +552,63 @@ func (q *Queries) GetOAuthProxyProviderForClone(ctx context.Context, arg GetOAut
 	return i, err
 }
 
+const getOrganizationRemoteSessionByID = `-- name: GetOrganizationRemoteSessionByID :one
+SELECT s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.refresh_expires_at, s.scopes, s.created_at, s.updated_at, s.deleted_at, s.deleted,
+  c.project_id AS client_project_id,
+  u.display_name AS subject_display_name,
+  u.email AS subject_email
+FROM remote_sessions AS s
+JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
+WHERE s.id = $1
+  AND i.organization_id = $2
+  AND s.deleted IS FALSE
+  AND c.deleted IS FALSE
+  AND i.deleted IS FALSE
+`
+
+type GetOrganizationRemoteSessionByIDParams struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+}
+
+type GetOrganizationRemoteSessionByIDRow struct {
+	RemoteSession      RemoteSession
+	ClientProjectID    uuid.NullUUID
+	SubjectDisplayName pgtype.Text
+	SubjectEmail       pgtype.Text
+}
+
+// Load a single active session by id, scoped through the client's issuer's
+// organization_id. Returns the full embedded session row (including the
+// encrypted refresh token, which the org-admin refresh handler needs but the
+// API view never exposes), the owning client's project_id for audit
+// attribution, and the resolved subject identity for the returned view.
+func (q *Queries) GetOrganizationRemoteSessionByID(ctx context.Context, arg GetOrganizationRemoteSessionByIDParams) (GetOrganizationRemoteSessionByIDRow, error) {
+	row := q.db.QueryRow(ctx, getOrganizationRemoteSessionByID, arg.ID, arg.OrganizationID)
+	var i GetOrganizationRemoteSessionByIDRow
+	err := row.Scan(
+		&i.RemoteSession.ID,
+		&i.RemoteSession.SubjectUrn,
+		&i.RemoteSession.UserSessionIssuerID,
+		&i.RemoteSession.RemoteSessionClientID,
+		&i.RemoteSession.AccessTokenEncrypted,
+		&i.RemoteSession.AccessExpiresAt,
+		&i.RemoteSession.RefreshTokenEncrypted,
+		&i.RemoteSession.RefreshExpiresAt,
+		&i.RemoteSession.Scopes,
+		&i.RemoteSession.CreatedAt,
+		&i.RemoteSession.UpdatedAt,
+		&i.RemoteSession.DeletedAt,
+		&i.RemoteSession.Deleted,
+		&i.ClientProjectID,
+		&i.SubjectDisplayName,
+		&i.SubjectEmail,
+	)
+	return i, err
+}
+
 const getOrganizationRemoteSessionClientByID = `-- name: GetOrganizationRemoteSessionClientByID :one
 SELECT c.id, c.project_id, c.remote_session_issuer_id, c.user_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.scope, c.audience, c.legacy_callback_url, c.created_at, c.updated_at, c.deleted_at, c.deleted
 FROM remote_session_clients AS c

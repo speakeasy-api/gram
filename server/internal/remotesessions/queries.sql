@@ -795,3 +795,23 @@ WHERE s.id = @id
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
 RETURNING s.*, c.project_id AS client_project_id;
+
+-- name: GetOrganizationRemoteSessionByID :one
+-- Load a single active session by id, scoped through the client's issuer's
+-- organization_id. Returns the full embedded session row (including the
+-- encrypted refresh token, which the org-admin refresh handler needs but the
+-- API view never exposes), the owning client's project_id for audit
+-- attribution, and the resolved subject identity for the returned view.
+SELECT sqlc.embed(s),
+  c.project_id AS client_project_id,
+  u.display_name AS subject_display_name,
+  u.email AS subject_email
+FROM remote_sessions AS s
+JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
+WHERE s.id = @id
+  AND i.organization_id = @organization_id
+  AND s.deleted IS FALSE
+  AND c.deleted IS FALSE
+  AND i.deleted IS FALSE;

@@ -14,6 +14,7 @@ import { organizationRemoteSessionIssuersListClients } from "../funcs/organizati
 import { organizationRemoteSessionIssuersListClientSessions } from "../funcs/organizationRemoteSessionIssuersListClientSessions.js";
 import { organizationRemoteSessionIssuersListIssuers } from "../funcs/organizationRemoteSessionIssuersListIssuers.js";
 import { organizationRemoteSessionIssuersMoveIssuer } from "../funcs/organizationRemoteSessionIssuersMoveIssuer.js";
+import { organizationRemoteSessionIssuersRefreshSession } from "../funcs/organizationRemoteSessionIssuersRefreshSession.js";
 import { organizationRemoteSessionIssuersRemoveClientFromMcpServer } from "../funcs/organizationRemoteSessionIssuersRemoveClientFromMcpServer.js";
 import { organizationRemoteSessionIssuersRevokeAllClientSessions } from "../funcs/organizationRemoteSessionIssuersRevokeAllClientSessions.js";
 import { organizationRemoteSessionIssuersRevokeSession } from "../funcs/organizationRemoteSessionIssuersRevokeSession.js";
@@ -292,6 +293,25 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.RemoteSessionIssuer> {
     return unwrapAsync(organizationRemoteSessionIssuersMoveIssuer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * refreshSession organizationRemoteSessionIssuers
+   *
+   * @remarks
+   * Force an upstream token refresh on a single remote_session in the caller's organization, regardless of current access-token expiry. Returns the updated remote_session so callers can reflect the new expiry without a refetch. Fails with a bad-request error when the session holds no refresh token. Requires org:admin.
+   */
+  async refreshSession(
+    request: operations.RefreshOrganizationRemoteSessionRequest,
+    security?: operations.RefreshOrganizationRemoteSessionSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.RemoteSession> {
+    return unwrapAsync(organizationRemoteSessionIssuersRefreshSession(
       this,
       request,
       security,

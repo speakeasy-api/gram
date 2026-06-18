@@ -18,6 +18,10 @@ export type RemoteSession = {
   accessExpiresAt: Date;
   createdAt: Date;
   /**
+   * Whether the session holds an upstream refresh token. Gates the 'Refresh now' action; refresh_expires_at is insufficient because an upstream may issue a non-expiring refresh token. The token itself is never returned.
+   */
+  hasRefreshToken: boolean;
+  /**
    * The remote_session id.
    */
   id: string;
@@ -66,6 +70,7 @@ export const RemoteSession$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    has_refresh_token: z.boolean(),
     id: z.string(),
     refresh_expires_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
@@ -85,6 +90,7 @@ export const RemoteSession$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "access_expires_at": "accessExpiresAt",
       "created_at": "createdAt",
+      "has_refresh_token": "hasRefreshToken",
       "refresh_expires_at": "refreshExpiresAt",
       "remote_session_client_id": "remoteSessionClientId",
       "subject_display_name": "subjectDisplayName",

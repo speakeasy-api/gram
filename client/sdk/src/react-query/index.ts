@@ -199,6 +199,7 @@ export * from "./publishPlugins.js";
 export * from "./publishStatus.js";
 export * from "./rbacStatus.js";
 export * from "./redeployDeployment.js";
+export * from "./refreshOrganizationRemoteSession.js";
 export * from "./register.js";
 export * from "./registerDomain.js";
 export * from "./remoteMcpServers.js";
