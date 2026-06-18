@@ -19,7 +19,7 @@ import (
 // conditions:
 //
 //	"does this user have mcp:connect for this server, unless they also have
-//	 a matching mcp:block grant?"
+//	 a matching mcp:blocked_connect grant?"
 //
 //	"does this risk policy apply to this request, unless the user also has
 //	 a matching risk_policy:bypass grant?"
@@ -31,7 +31,7 @@ import (
 //
 // The main operation today is difference:
 //
-//	base permission - exclusion permission
+//	base permission - negative permission
 //
 // For risk policy evaluation this means:
 //
@@ -216,7 +216,7 @@ func (g GrantUnion) grantSet(grants []Grant) (grantSet, error) {
 // Examples:
 //
 //	risk_policy:evaluate - risk_policy:bypass
-//	mcp:connect - mcp:block
+//	mcp:connect - mcp:blocked_connect
 //
 // The scopes on the two sides do not have to be the same. What matters is that
 // both sides produce the same Instance selector when the exclusion should

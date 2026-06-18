@@ -40,14 +40,14 @@ describe("role grant round-trip (grantsFromRole → sdkGrantsFromForm)", () => {
     expect(sdkGrants).toEqual([{ scope: "mcp:connect", selectors: undefined }]);
   });
 
-  it("round-trips mcp:block as an exception for mcp:connect", () => {
+  it("round-trips mcp:blocked_connect as an exception for mcp:connect", () => {
     const r = role([
       {
         scope: "mcp:connect",
         selectors: [{ resourceKind: "mcp", resourceId: "*" }],
       },
       {
-        scope: "mcp:block",
+        scope: "mcp:blocked_connect",
         selectors: [{ resourceKind: "mcp", resourceId: "srv_1" }],
       },
     ]);
@@ -67,7 +67,7 @@ describe("role grant round-trip (grantsFromRole → sdkGrantsFromForm)", () => {
     expect(sdkGrants).toEqual([
       { scope: "mcp:connect", selectors: undefined },
       {
-        scope: "mcp:block",
+        scope: "mcp:blocked_connect",
         selectors: [{ resourceKind: "mcp", resourceId: "srv_1" }],
       },
     ]);
@@ -108,12 +108,12 @@ describe("role grant round-trip (grantsFromRole → sdkGrantsFromForm)", () => {
     expect(sdkGrantsFromForm(grants)).toEqual([
       { scope: "project:write", selectors: undefined },
       {
-        scope: "project:write_exclusion",
+        scope: "project:blocked_write",
         selectors: [{ resourceKind: "project", resourceId: "project_123" }],
       },
       { scope: "mcp:write", selectors: undefined },
       {
-        scope: "mcp:write_exclusion",
+        scope: "mcp:blocked_write",
         selectors: [
           { resourceKind: "mcp", resourceId: "*", projectId: "project_123" },
         ],

@@ -223,7 +223,7 @@ A grant lives in data. A check lives in code. Authorization succeeds when at lea
 ## Grant Expressions and Set Difference
 
 Some authorization questions are not answered by one grant. They are answered by
-starting with a base grant set and subtracting an exclusion grant set:
+starting with a base grant set and subtracting an exclusion set:
 
 ```text
 effective result = base - exclusion
@@ -249,7 +249,7 @@ Read that as:
 > a bypass grant for this exact policy and this exact runtime target.
 
 The most important rule: **exclusion grants do not create access by themselves**.
-They only subtract something that the base side already proved.
+They only subtract from something that the base side already proved.
 
 ### Risk Policy Example
 
@@ -308,18 +308,18 @@ base - exclusion:
   {policy_id: policy_123, server_url: https://bcd.com}
 ```
 
-The exclusion is real, but it is for a different concrete permission instance.
+The exclusion grant is real, but it is for a different concrete permission instance.
 It does not subtract the `https://bcd.com` decision.
 
 ### MCP Example
 
-The same model can express "allow broad access except a narrow blocked target."
+The same model can express "allow broad access except a narrow blocklisted target."
 For example:
 
 ```text
 mcp_tool_call_allowed =
   mcp:connect(toolset_id, tool)
-  - mcp:block(toolset_id, tool)
+  - mcp:blocked_connect(toolset_id, tool)
 ```
 
 Assume the user has:
@@ -328,7 +328,7 @@ Assume the user has:
 1. mcp:connect
    selector: {resource_kind: "mcp", resource_id: "toolset_123"}
 
-2. mcp:block
+2. mcp:blocked_connect
    selector: {
      resource_kind: "mcp",
      resource_id: "toolset_123",
@@ -336,14 +336,14 @@ Assume the user has:
    }
 ```
 
-| Tool call being evaluated             | Block grant matches?                         | `mcp:connect - mcp:block` result                                                       |
-| ------------------------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `toolset_123`, `tool=search_docs`     | No. The block is only for `delete_database`. | Tool call is allowed.                                                                  |
-| `toolset_123`, `tool=delete_database` | Yes. Same toolset and same tool.             | Tool call is not allowed. The block subtracts the exact tool-call instance.            |
-| `toolset_456`, `tool=delete_database` | No. The block is for `toolset_123`.          | Tool call is not allowed unless another base `mcp:connect` grant covers `toolset_456`. |
+| Tool call being evaluated             | Blocklist grant matches?                               | `mcp:connect - mcp:blocked_connect` result                                             |
+| ------------------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| `toolset_123`, `tool=search_docs`     | No. The blocklist grant is only for `delete_database`. | Tool call is allowed.                                                                  |
+| `toolset_123`, `tool=delete_database` | Yes. Same toolset and same tool.                       | Tool call is not allowed. The blocklist grant subtracts the exact tool-call instance.  |
+| `toolset_456`, `tool=delete_database` | No. The blocklist grant is for `toolset_123`.          | Tool call is not allowed unless another base `mcp:connect` grant covers `toolset_456`. |
 
-Again, the exclusion side only subtracts. A block/bypass/exclusion grant without
-a matching base grant never grants anything.
+Again, the exclusion side only subtracts. A blocklist/bypass grant without a
+matching base grant never grants anything.
 
 ## Scopes vs Grants
 

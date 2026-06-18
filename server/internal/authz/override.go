@@ -28,11 +28,11 @@ func GrantsFromOverrides(overrides []RoleGrant) []Grant {
 	var grants []Grant
 	for _, o := range overrides {
 		if len(o.Selectors) == 0 {
-			grants = append(grants, NewGrant(Scope(o.Scope), WildcardResource))
+			grants = append(grants, NewGrant(NormalizeScope(Scope(o.Scope)), WildcardResource))
 			continue
 		}
 		for _, sel := range o.Selectors {
-			grants = append(grants, NewGrantWithSelector(Scope(o.Scope), sel))
+			grants = append(grants, NewGrantWithSelector(NormalizeScope(Scope(o.Scope)), sel))
 		}
 	}
 	return grants
@@ -58,7 +58,7 @@ func parseOverrideHeader(value string) []RoleGrant {
 			for r := range strings.SplitSeq(resourcesStr, "|") {
 				r = strings.TrimSpace(r)
 				if r != "" {
-					override.Selectors = append(override.Selectors, NewSelector(Scope(scope), r))
+					override.Selectors = append(override.Selectors, NewSelector(NormalizeScope(Scope(scope)), r))
 				}
 			}
 		}

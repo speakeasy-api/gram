@@ -173,13 +173,13 @@ func TestGrantExpressionEvaluate_nestedDifferencePreservesExclusionReason(t *tes
 	require.Equal(t, GrantExpressionReasonExclusionMatched, result.Reason)
 }
 
-func TestGrantExpressionEvaluate_projectWriteExclusionSubtractsProductionSelector(t *testing.T) {
+func TestGrantExpressionEvaluate_projectWriteBlocklistSubtractsProductionSelector(t *testing.T) {
 	t.Parallel()
 
 	const projectID = "0196cbd1-9328-74e7-b7bb-6e5357565573"
 	grants := []Grant{
 		NewGrant(ScopeProjectWrite, WildcardResource),
-		NewGrantWithSelector(ScopeProjectWriteExclusion, Selector{
+		NewGrantWithSelector(ScopeProjectBlockedWrite, Selector{
 			SelectorKeyResourceKind: ResourceKindProject,
 			SelectorKeyResourceID:   projectID,
 		}),
@@ -210,13 +210,13 @@ func TestGrantExpressionEvaluate_projectWriteExclusionSubtractsProductionSelecto
 	require.Equal(t, GrantExpressionReasonMatched, result.Reason)
 }
 
-func TestGrantExpressionEvaluate_projectReadExclusionSubtractsProjectWrite(t *testing.T) {
+func TestGrantExpressionEvaluate_projectReadBlocklistSubtractsProjectWrite(t *testing.T) {
 	t.Parallel()
 
 	const projectID = "project_123"
 	grants := []Grant{
 		NewGrant(ScopeProjectWrite, WildcardResource),
-		NewGrant(ScopeProjectReadExclusion, projectID),
+		NewGrant(ScopeProjectBlockedRead, projectID),
 	}
 
 	result, err := expressionForCheck(Check{
@@ -232,13 +232,13 @@ func TestGrantExpressionEvaluate_projectReadExclusionSubtractsProjectWrite(t *te
 	require.Equal(t, GrantExpressionReasonExclusionMatched, result.Reason)
 }
 
-func TestGrantExpressionEvaluate_mcpWriteExclusionSubtractsProductionSelector(t *testing.T) {
+func TestGrantExpressionEvaluate_mcpWriteBlocklistSubtractsProductionSelector(t *testing.T) {
 	t.Parallel()
 
 	const projectID = "0196cbd1-9328-74e7-b7bb-6e5357565573"
 	grants := []Grant{
 		NewGrant(ScopeMCPWrite, WildcardResource),
-		NewGrantWithSelector(ScopeMCPWriteExclusion, Selector{
+		NewGrantWithSelector(ScopeMCPBlockedWrite, Selector{
 			SelectorKeyResourceKind: ResourceKindMCP,
 			SelectorKeyResourceID:   WildcardResource,
 			SelectorKeyProjectID:    projectID,
@@ -268,13 +268,13 @@ func TestGrantExpressionEvaluate_mcpWriteExclusionSubtractsProductionSelector(t 
 	require.Equal(t, GrantExpressionReasonMatched, result.Reason)
 }
 
-func TestGrantExpressionEvaluate_mcpReadExclusionSubtractsMCPWrite(t *testing.T) {
+func TestGrantExpressionEvaluate_mcpReadBlocklistSubtractsMCPWrite(t *testing.T) {
 	t.Parallel()
 
 	const projectID = "project_123"
 	grants := []Grant{
 		NewGrant(ScopeMCPWrite, WildcardResource),
-		NewGrantWithSelector(ScopeMCPReadExclusion, Selector{
+		NewGrantWithSelector(ScopeMCPBlockedRead, Selector{
 			SelectorKeyResourceKind: ResourceKindMCP,
 			SelectorKeyResourceID:   WildcardResource,
 			SelectorKeyProjectID:    projectID,
@@ -292,13 +292,13 @@ func TestGrantExpressionEvaluate_mcpReadExclusionSubtractsMCPWrite(t *testing.T)
 	require.Equal(t, GrantExpressionReasonMatched, result.Reason)
 }
 
-func TestGrantExpressionEvaluate_mcpBlockSubtractsMCPWrite(t *testing.T) {
+func TestGrantExpressionEvaluate_mcpConnectBlocklistSubtractsMCPWrite(t *testing.T) {
 	t.Parallel()
 
 	const serverID = "server_123"
 	grants := []Grant{
 		NewGrant(ScopeMCPWrite, WildcardResource),
-		NewGrant(ScopeMCPBlock, serverID),
+		NewGrant(ScopeMCPBlockedConnect, serverID),
 	}
 
 	result, err := expressionForCheck(Check{

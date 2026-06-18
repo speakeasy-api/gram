@@ -39639,23 +39639,23 @@ components:
           description: The scope slug this grant applies to.
           enum:
             - org:read
-            - org:read_exclusion
+            - org:blocked_read
             - org:admin
-            - org:admin_exclusion
+            - org:blocked_admin
             - project:read
-            - project:read_exclusion
+            - project:blocked_read
             - project:write
-            - project:write_exclusion
+            - project:blocked_write
             - mcp:read
-            - mcp:read_exclusion
+            - mcp:blocked_read
             - mcp:write
-            - mcp:write_exclusion
+            - mcp:blocked_write
             - mcp:connect
-            - mcp:block
+            - mcp:blocked_connect
             - environment:read
-            - environment:read_exclusion
+            - environment:blocked_read
             - environment:write
-            - environment:write_exclusion
+            - environment:blocked_write
             - risk_policy:evaluate
             - risk_policy:bypass
         selectors:
@@ -43784,23 +43784,23 @@ components:
           description: The scope slug this grant applies to.
           enum:
             - org:read
-            - org:read_exclusion
+            - org:blocked_read
             - org:admin
-            - org:admin_exclusion
+            - org:blocked_admin
             - project:read
-            - project:read_exclusion
+            - project:blocked_read
             - project:write
-            - project:write_exclusion
+            - project:blocked_write
             - mcp:read
-            - mcp:read_exclusion
+            - mcp:blocked_read
             - mcp:write
-            - mcp:write_exclusion
+            - mcp:blocked_write
             - mcp:connect
-            - mcp:block
+            - mcp:blocked_connect
             - environment:read
-            - environment:read_exclusion
+            - environment:blocked_read
             - environment:write
-            - environment:write_exclusion
+            - environment:blocked_write
             - risk_policy:evaluate
             - risk_policy:bypass
         selectors:

@@ -221,7 +221,7 @@ func flattenRoleGrants(grants []*RoleGrant) ([]roleGrantRow, error) {
 			continue
 		}
 
-		scope := Scope(grant.Scope)
+		scope := NormalizeScope(Scope(grant.Scope))
 		effect := conv.Default(grant.Effect, PolicyEffectAllow)
 		if err := validatePolicyEffect(effect); err != nil {
 			return nil, err
@@ -304,7 +304,7 @@ func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, o
 func scopedGrantsFromGrantRows(rows []repo.GetPrincipalGrantsRow) ([]*ScopedGrant, error) {
 	grantRows := make([]Grant, 0, len(rows))
 	for _, row := range rows {
-		scope := Scope(row.Scope)
+		scope := NormalizeScope(Scope(row.Scope))
 		selectors, err := SelectorFromRow(row.Selectors)
 		if err != nil {
 			return nil, err
@@ -364,7 +364,7 @@ func GrantsToScopedGrants(rows []Grant) []*ScopedGrant {
 func groupGrantsByScopeEffect(rows []Grant) map[scopeEffectKey][]Selector {
 	grouped := make(map[scopeEffectKey][]Selector)
 	for _, row := range rows {
-		key := scopeEffectKey{scope: string(row.Scope), effect: row.Effect}
+		key := scopeEffectKey{scope: string(NormalizeScope(row.Scope)), effect: row.Effect}
 		grouped[key] = append(grouped[key], row.Selector)
 	}
 	return grouped

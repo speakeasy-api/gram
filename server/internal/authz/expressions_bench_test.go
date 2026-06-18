@@ -72,33 +72,33 @@ func BenchmarkGrantExpressionEvaluate(b *testing.B) {
 			},
 		},
 		{
-			name:       "project_write_expression_no_exclusion",
+			name:       "project_write_expression_no_deny",
 			expression: expressionForCheck(Check{Scope: ScopeProjectWrite, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal, expanded: false}),
 			grants: []Grant{
 				NewGrant(ScopeProjectWrite, WildcardResource),
 			},
 		},
 		{
-			name:       "project_write_expression_read_exclusion_match",
+			name:       "project_write_expression_read_deny_match",
 			expression: expressionForCheck(Check{Scope: ScopeProjectWrite, ResourceKind: "", ResourceID: "proj_123", Dimensions: nil, selectorMatch: selectorMatchNormal, expanded: false}),
 			grants: []Grant{
 				NewGrant(ScopeProjectWrite, WildcardResource),
-				NewGrant(ScopeProjectReadExclusion, "proj_123"),
+				NewGrant(ScopeProjectBlockedRead, "proj_123"),
 			},
 		},
 		{
-			name:       "mcp_write_expression_no_exclusion",
+			name:       "mcp_write_expression_no_deny",
 			expression: expressionForCheck(MCPCheck(ScopeMCPWrite, "server_123", "proj_123")),
 			grants: []Grant{
 				NewGrant(ScopeMCPWrite, WildcardResource),
 			},
 		},
 		{
-			name:       "mcp_write_expression_read_exclusion_match",
+			name:       "mcp_write_expression_read_deny_match",
 			expression: expressionForCheck(MCPCheck(ScopeMCPWrite, "server_123", "proj_123")),
 			grants: []Grant{
 				NewGrant(ScopeMCPWrite, WildcardResource),
-				NewGrantWithSelector(ScopeMCPReadExclusion, Selector{
+				NewGrantWithSelector(ScopeMCPBlockedRead, Selector{
 					SelectorKeyResourceKind: ResourceKindMCP,
 					SelectorKeyResourceID:   WildcardResource,
 					SelectorKeyProjectID:    "proj_123",

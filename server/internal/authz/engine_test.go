@@ -385,7 +385,7 @@ func TestEngineFindMatched_denyReturnsFalse(t *testing.T) {
 	require.Equal(t, []bool{true, false, true}, matched)
 }
 
-func TestEngineRequire_projectWriteExclusionBlocksAccess(t *testing.T) {
+func TestEngineRequire_projectWriteBlocklistBlocksAccess(t *testing.T) {
 	t.Parallel()
 
 	const projectID = "0196cbd1-9328-74e7-b7bb-6e5357565573"
@@ -394,7 +394,7 @@ func TestEngineRequire_projectWriteExclusionBlocksAccess(t *testing.T) {
 	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
 		NewGrant(ScopeProjectWrite, WildcardResource),
-		NewGrantWithSelector(ScopeProjectWriteExclusion, Selector{
+		NewGrantWithSelector(ScopeProjectBlockedWrite, Selector{
 			SelectorKeyResourceKind: ResourceKindProject,
 			SelectorKeyResourceID:   projectID,
 		}),
@@ -409,7 +409,7 @@ func TestEngineRequire_projectWriteExclusionBlocksAccess(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
-func TestEngineFilter_mcpWriteExclusionExcludesProjectScopedResources(t *testing.T) {
+func TestEngineFilter_mcpWriteBlocklistExcludesProjectScopedResources(t *testing.T) {
 	t.Parallel()
 
 	const projectID = "0196cbd1-9328-74e7-b7bb-6e5357565573"
@@ -418,7 +418,7 @@ func TestEngineFilter_mcpWriteExclusionExcludesProjectScopedResources(t *testing
 	engine := NewEngine(testenv.NewLogger(t), nil, chConn, staticRBAC(true), staticChallengeLogging(true), workos.NewStubClient())
 	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
 		NewGrant(ScopeMCPWrite, WildcardResource),
-		NewGrantWithSelector(ScopeMCPWriteExclusion, Selector{
+		NewGrantWithSelector(ScopeMCPBlockedWrite, Selector{
 			SelectorKeyResourceKind: ResourceKindMCP,
 			SelectorKeyResourceID:   WildcardResource,
 			SelectorKeyProjectID:    projectID,

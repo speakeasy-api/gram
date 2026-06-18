@@ -11,21 +11,21 @@ import type {
 } from "./types";
 import { DISPOSITION_TO_ANNOTATION } from "./types";
 
-const EXCLUSION_SCOPE_BY_SCOPE = new Map<Scope, Scope>([
-  [Scope.OrgRead, Scope.OrgReadExclusion],
-  [Scope.OrgAdmin, Scope.OrgAdminExclusion],
-  [Scope.ProjectRead, Scope.ProjectReadExclusion],
-  [Scope.ProjectWrite, Scope.ProjectWriteExclusion],
-  [Scope.McpRead, Scope.McpReadExclusion],
-  [Scope.McpWrite, Scope.McpWriteExclusion],
-  [Scope.McpConnect, Scope.McpBlock],
-  [Scope.EnvironmentRead, Scope.EnvironmentReadExclusion],
-  [Scope.EnvironmentWrite, Scope.EnvironmentWriteExclusion],
+const BLOCKLIST_SCOPE_BY_SCOPE = new Map<Scope, Scope>([
+  [Scope.OrgRead, Scope.OrgBlockedRead],
+  [Scope.OrgAdmin, Scope.OrgBlockedAdmin],
+  [Scope.ProjectRead, Scope.ProjectBlockedRead],
+  [Scope.ProjectWrite, Scope.ProjectBlockedWrite],
+  [Scope.McpRead, Scope.McpBlockedRead],
+  [Scope.McpWrite, Scope.McpBlockedWrite],
+  [Scope.McpConnect, Scope.McpBlockedConnect],
+  [Scope.EnvironmentRead, Scope.EnvironmentBlockedRead],
+  [Scope.EnvironmentWrite, Scope.EnvironmentBlockedWrite],
   [Scope.RiskPolicyEvaluate, Scope.RiskPolicyBypass],
 ]);
 
-const BASE_SCOPE_BY_EXCLUSION_SCOPE = new Map<Scope, Scope>(
-  [...EXCLUSION_SCOPE_BY_SCOPE].map(([scope, exclusion]) => [exclusion, scope]),
+const BASE_SCOPE_BY_BLOCKLIST_SCOPE = new Map<Scope, Scope>(
+  [...BLOCKLIST_SCOPE_BY_SCOPE].map(([scope, blocklist]) => [blocklist, scope]),
 );
 
 /** Split a flat selector array into groups by hierarchy level. */
@@ -74,8 +74,8 @@ export function grantsFromRole(role: Role): Record<string, RoleGrant> {
 
   for (const g of role.grants) {
     const scope = g.scope as Scope;
-    const baseScope = BASE_SCOPE_BY_EXCLUSION_SCOPE.get(scope) ?? scope;
-    const effect: PolicyEffect = BASE_SCOPE_BY_EXCLUSION_SCOPE.has(scope)
+    const baseScope = BASE_SCOPE_BY_BLOCKLIST_SCOPE.get(scope) ?? scope;
+    const effect: PolicyEffect = BASE_SCOPE_BY_BLOCKLIST_SCOPE.has(scope)
       ? "deny"
       : "allow";
 
@@ -149,13 +149,13 @@ export function sdkGrantsFromForm(
       });
     }
 
-    const exclusionScope = EXCLUSION_SCOPE_BY_SCOPE.get(grant.scope);
+    const blocklistScope = BLOCKLIST_SCOPE_BY_SCOPE.get(grant.scope);
     if (
-      exclusionScope &&
+      blocklistScope &&
       (hasUnrestrictedException || exceptionSelectors.length > 0)
     ) {
       sdkGrants.push({
-        scope: exclusionScope,
+        scope: blocklistScope,
         selectors: hasUnrestrictedException ? undefined : exceptionSelectors,
       });
     }

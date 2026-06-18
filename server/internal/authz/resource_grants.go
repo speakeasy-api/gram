@@ -271,7 +271,7 @@ func ListGrantsForResource(ctx context.Context, db repo.DBTX, resource Resource)
 		}
 		grants = append(grants, Grant{
 			PrincipalUrn: row.PrincipalUrn.String(),
-			Scope:        Scope(row.Scope),
+			Scope:        NormalizeScope(Scope(row.Scope)),
 			Effect:       policyEffectFromText(row.Effect),
 			Selector:     selector,
 		})

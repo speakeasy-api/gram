@@ -11,24 +11,55 @@ func TestScopeParts(t *testing.T) {
 	t.Parallel()
 
 	require.Equal(t, ScopeParts{Resource: "project", Action: "read"}, ScopeProjectRead.Parts())
+	require.Equal(t, ScopeParts{Resource: "project", Action: "blocked_write"}, ScopeProjectBlockedWrite.Parts())
 	require.Equal(t, ScopeParts{Resource: "risk_policy", Action: "evaluate"}, ScopeRiskPolicyEvaluate.Parts())
 	require.Equal(t, ScopeParts{Resource: "risk_policy", Action: "bypass"}, ScopeRiskPolicyBypass.Parts())
 	require.Equal(t, ScopeParts{Resource: "root", Action: ""}, ScopeRoot.Parts())
+}
+
+func TestNormalizeScope_legacyExclusionGrantNames(t *testing.T) {
+	t.Parallel()
+
+	cases := map[Scope]Scope{
+		"org:read_exclusion":          ScopeOrgBlockedRead,
+		"org:read:deny":               ScopeOrgBlockedRead,
+		"org:admin_exclusion":         ScopeOrgBlockedAdmin,
+		"org:admin:deny":              ScopeOrgBlockedAdmin,
+		"project:read_exclusion":      ScopeProjectBlockedRead,
+		"project:read:deny":           ScopeProjectBlockedRead,
+		"project:write_exclusion":     ScopeProjectBlockedWrite,
+		"project:write:deny":          ScopeProjectBlockedWrite,
+		"mcp:read_exclusion":          ScopeMCPBlockedRead,
+		"mcp:read:deny":               ScopeMCPBlockedRead,
+		"mcp:write_exclusion":         ScopeMCPBlockedWrite,
+		"mcp:write:deny":              ScopeMCPBlockedWrite,
+		"mcp:block":                   ScopeMCPBlockedConnect,
+		"mcp:connect:deny":            ScopeMCPBlockedConnect,
+		"environment:read_exclusion":  ScopeEnvironmentBlockedRead,
+		"environment:read:deny":       ScopeEnvironmentBlockedRead,
+		"environment:write_exclusion": ScopeEnvironmentBlockedWrite,
+		"environment:write:deny":      ScopeEnvironmentBlockedWrite,
+		ScopeProjectBlockedWrite:      ScopeProjectBlockedWrite,
+	}
+
+	for legacy, canonical := range cases {
+		require.Equal(t, canonical, NormalizeScope(legacy))
+	}
 }
 
 func TestAllScopesCoversDefinedGrantableScopes(t *testing.T) {
 	t.Parallel()
 
 	internalScopes := []Scope{
-		ScopeOrgReadExclusion,
-		ScopeOrgAdminExclusion,
-		ScopeProjectReadExclusion,
-		ScopeProjectWriteExclusion,
-		ScopeMCPReadExclusion,
-		ScopeMCPWriteExclusion,
-		ScopeMCPBlock,
-		ScopeEnvironmentReadExclusion,
-		ScopeEnvironmentWriteExclusion,
+		ScopeOrgBlockedRead,
+		ScopeOrgBlockedAdmin,
+		ScopeProjectBlockedRead,
+		ScopeProjectBlockedWrite,
+		ScopeMCPBlockedRead,
+		ScopeMCPBlockedWrite,
+		ScopeMCPBlockedConnect,
+		ScopeEnvironmentBlockedRead,
+		ScopeEnvironmentBlockedWrite,
 	}
 
 	seen := make(map[Scope]struct{}, len(allScopes))
@@ -58,15 +89,15 @@ func TestScopeExclusionsCoversKnownScopes(t *testing.T) {
 		require.Contains(t, scopeExclusions, scope)
 	}
 
-	require.Equal(t, []Scope{ScopeOrgReadExclusion}, scopeExclusions[ScopeOrgRead])
-	require.Equal(t, []Scope{ScopeOrgAdminExclusion, ScopeOrgReadExclusion}, scopeExclusions[ScopeOrgAdmin])
-	require.Equal(t, []Scope{ScopeProjectReadExclusion}, scopeExclusions[ScopeProjectRead])
-	require.Equal(t, []Scope{ScopeProjectWriteExclusion, ScopeProjectReadExclusion}, scopeExclusions[ScopeProjectWrite])
-	require.Equal(t, []Scope{ScopeMCPReadExclusion, ScopeMCPBlock}, scopeExclusions[ScopeMCPRead])
-	require.Equal(t, []Scope{ScopeMCPWriteExclusion, ScopeMCPReadExclusion, ScopeMCPBlock}, scopeExclusions[ScopeMCPWrite])
-	require.Equal(t, []Scope{ScopeMCPBlock}, scopeExclusions[ScopeMCPConnect])
-	require.Equal(t, []Scope{ScopeEnvironmentReadExclusion}, scopeExclusions[ScopeEnvironmentRead])
-	require.Equal(t, []Scope{ScopeEnvironmentWriteExclusion, ScopeEnvironmentReadExclusion}, scopeExclusions[ScopeEnvironmentWrite])
+	require.Equal(t, []Scope{ScopeOrgBlockedRead}, scopeExclusions[ScopeOrgRead])
+	require.Equal(t, []Scope{ScopeOrgBlockedAdmin, ScopeOrgBlockedRead}, scopeExclusions[ScopeOrgAdmin])
+	require.Equal(t, []Scope{ScopeProjectBlockedRead}, scopeExclusions[ScopeProjectRead])
+	require.Equal(t, []Scope{ScopeProjectBlockedWrite, ScopeProjectBlockedRead}, scopeExclusions[ScopeProjectWrite])
+	require.Equal(t, []Scope{ScopeMCPBlockedRead, ScopeMCPBlockedConnect}, scopeExclusions[ScopeMCPRead])
+	require.Equal(t, []Scope{ScopeMCPBlockedWrite, ScopeMCPBlockedRead, ScopeMCPBlockedConnect}, scopeExclusions[ScopeMCPWrite])
+	require.Equal(t, []Scope{ScopeMCPBlockedConnect}, scopeExclusions[ScopeMCPConnect])
+	require.Equal(t, []Scope{ScopeEnvironmentBlockedRead}, scopeExclusions[ScopeEnvironmentRead])
+	require.Equal(t, []Scope{ScopeEnvironmentBlockedWrite, ScopeEnvironmentBlockedRead}, scopeExclusions[ScopeEnvironmentWrite])
 	require.Equal(t, []Scope{ScopeRiskPolicyBypass}, scopeExclusions[ScopeRiskPolicyEvaluate])
 }
 
@@ -422,6 +453,36 @@ func TestGrantsToScopedGrants_separatesAllowAndDeny(t *testing.T) {
 	require.NotNil(t, denyGrant, "expected deny grant for project:read")
 	require.Len(t, allowGrant.Selectors, 2)
 	require.Len(t, denyGrant.Selectors, 1)
+}
+
+func TestGrantsToScopedGrants_normalizesLegacyExclusionGrantScopes(t *testing.T) {
+	t.Parallel()
+
+	scoped := GrantsToScopedGrants([]Grant{
+		{
+			PrincipalUrn: "role:test",
+			Scope:        Scope("project:write_exclusion"),
+			Effect:       PolicyEffectAllow,
+			Selector:     NewSelector(ScopeProjectBlockedWrite, "project_123"),
+		},
+		{
+			PrincipalUrn: "role:test",
+			Scope:        Scope("mcp:block"),
+			Effect:       PolicyEffectAllow,
+			Selector:     NewSelector(ScopeMCPBlockedConnect, "server_123"),
+		},
+		{
+			PrincipalUrn: "role:test",
+			Scope:        Scope("mcp:connect:deny"),
+			Effect:       PolicyEffectAllow,
+			Selector:     NewSelector(ScopeMCPBlockedConnect, "server_456"),
+		},
+	})
+
+	require.Len(t, scoped, 2)
+	require.Equal(t, string(ScopeMCPBlockedConnect), scoped[0].Scope)
+	require.Equal(t, string(ScopeProjectBlockedWrite), scoped[1].Scope)
+	require.Len(t, scoped[0].Selectors, 2)
 }
 
 func TestGrantsToScopedGrants_unrestrictedDenyCollapsesToNilSelectors(t *testing.T) {
