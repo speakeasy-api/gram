@@ -35,6 +35,7 @@ func seedDirectorySnapshotData(t *testing.T, ctx context.Context, conn *pgxpool.
 	userID := "user_hydrate_" + suffix
 	email := suffix + "@hydrate.example.com"
 	roleSlug := "hydrate-role-" + suffix
+	seedTime := time.Now().UTC()
 
 	_, err := orgrepo.New(conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
 		ID:       orgID,
@@ -60,7 +61,10 @@ func seedDirectorySnapshotData(t *testing.T, ctx context.Context, conn *pgxpool.
 		Email:                 conv.ToPGText(email),
 		// department_name and job_title are allowlisted predefined
 		// attributes; custom_thing and manager_email must be filtered out.
-		Attributes: []byte(`{"department_name":"Engineering","job_title":"Platform Engineer","custom_thing":"not-stamped","manager_email":"boss@example.com"}`),
+		Attributes:        []byte(`{"department_name":"Engineering","job_title":"Platform Engineer","custom_thing":"not-stamped","manager_email":"boss@example.com"}`),
+		WorkosCreatedAt:   conv.ToPGTimestamptz(seedTime),
+		WorkosUpdatedAt:   conv.ToPGTimestamptz(seedTime),
+		WorkosLastEventID: conv.ToPGText("event_directory_user_" + suffix),
 	})
 	require.NoError(t, err)
 
@@ -69,6 +73,9 @@ func seedDirectorySnapshotData(t *testing.T, ctx context.Context, conn *pgxpool.
 		WorkosDirectoryGroupID: "directory_group_" + suffix,
 		Name:                   "Developers",
 		Attributes:             []byte(`{"object":"directory_group"}`),
+		WorkosCreatedAt:        conv.ToPGTimestamptz(seedTime),
+		WorkosUpdatedAt:        conv.ToPGTimestamptz(seedTime),
+		WorkosLastEventID:      conv.ToPGText("event_directory_group_" + suffix),
 	})
 	require.NoError(t, err)
 
@@ -77,10 +84,10 @@ func seedDirectorySnapshotData(t *testing.T, ctx context.Context, conn *pgxpool.
 		DirectoryGroupID:       directoryGroupID,
 		WorkosDirectoryUserID:  "directory_user_" + suffix,
 		WorkosDirectoryGroupID: "directory_group_" + suffix,
+		WorkosCreatedAt:        conv.ToPGTimestamptz(seedTime),
 	})
 	require.NoError(t, err)
 
-	seedTime := time.Now().UTC()
 	err = accessrepo.New(conn).UpsertGlobalRole(ctx, accessrepo.UpsertGlobalRoleParams{
 		WorkosSlug:        roleSlug,
 		WorkosName:        roleSlug,
@@ -209,6 +216,9 @@ func TestUserInfoResolver_HydratesAndCachesUntilExpiry(t *testing.T) {
 		WorkosDirectoryUserID: "directory_user_" + suffix,
 		Email:                 conv.ToPGText(suffix + "@hydrate.example.com"),
 		Attributes:            []byte(`{"department_name":"Sales"}`),
+		WorkosCreatedAt:       conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosUpdatedAt:       conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosLastEventID:     conv.ToPGText("event_directory_user_update_" + suffix),
 	})
 	require.NoError(t, err)
 
