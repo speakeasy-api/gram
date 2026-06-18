@@ -456,7 +456,7 @@ func TestListRemoteSessionClients_ColumnOnlyClientNotVisible(t *testing.T) {
 	columnOnlyClient, err := repo.New(ti.conn).CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 		RemoteSessionIssuerID:   issuerUUID,
-		UserSessionIssuerID:     userIssuerID,
+		UserSessionIssuerID:     conv.ToNullUUID(userIssuerID),
 		ClientID:                "column-only-client",
 		ClientSecretEncrypted:   pgtype.Text{},
 		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
