@@ -22,7 +22,7 @@ import (
 // userInfoSnapshotTTL bounds how stale a hydrated snapshot can be. The
 // directory writer advances state in the worker process; the shared Redis
 // cache expires entries so the log path picks up new state within the TTL.
-const userInfoSnapshotTTL = 30 * time.Second
+const userInfoSnapshotTTL = 5 * time.Minute
 
 // userInfoSnapshot is the denormalized point-in-time directory state for a
 // resolved user, used to fill the directory-derived parts of a UserInfo.
