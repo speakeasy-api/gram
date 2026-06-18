@@ -745,6 +745,43 @@ printf '{}\n200'
 	require.Equal(t, 1, strings.Count(postedPayload, `"user_email"`), "identity enrichment must replace user_email, not append a duplicate key")
 }
 
+// Cursor blocks via the JSON body on stdout, not the exit code. When the Gram
+// server is unreachable or errors there is no decision to relay, so the hook
+// must fail CLOSED — emit a synthetic deny — rather than allow the call and
+// silently bypass blocking policies during an outage.
+func TestRenderCursorHookFailsClosedOnServerError(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	script := string(renderHookScript(cfg, "cursor"))
+
+	dir := t.TempDir()
+	hookPath := filepath.Join(dir, "hook.sh")
+	require.NoError(t, os.WriteFile(hookPath, []byte(script), 0o755))
+	// Fake curl that simulates a 5xx: body is an opaque error, status 500.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "curl"), []byte(`#!/usr/bin/env bash
+printf 'upstream error\n500'
+`), 0o755))
+
+	cmd := exec.Command("bash", hookPath)
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"beforeMCPExecution"}`)
+	cmd.Env = append(os.Environ(),
+		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"GRAM_DEVICE_AGENT_COMMANDS=missing-agent",
+	)
+	output, err := cmd.Output()
+	require.NoError(t, err, "hook must exit 0 so Cursor reads the stdout decision")
+
+	var decision map[string]any
+	require.NoError(t, json.Unmarshal(output, &decision), "stdout must be a single valid JSON object: %q", string(output))
+	require.Equal(t, "deny", decision["permission"], "must fail closed on server error")
+	require.NotEmpty(t, decision["user_message"], "deny must carry a human-readable reason")
+}
+
 func TestRenderHookScriptFallsBackWhenDeviceAgentMissing(t *testing.T) {
 	t.Parallel()
 

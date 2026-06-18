@@ -38,7 +38,12 @@ cleanup_auth_config() {
 }
 trap cleanup_auth_config EXIT
 if [ -n "${GRAM_HOOKS_API_KEY:-}" ] || [ -n "${GRAM_HOOKS_PROJECT_SLUG:-}" ]; then
-  auth_config=$(mktemp "${TMPDIR:-/tmp}/gram-hooks-curl.XXXXXX") || exit 2
+  if ! auth_config=$(mktemp "${TMPDIR:-/tmp}/gram-hooks-curl.XXXXXX"); then
+    # Fail closed (exit 2) like every other failure path, but say why —
+    # otherwise Claude shows a blocked tool call with an empty reason.
+    echo "Speakeasy hooks: could not create a temporary auth file on this machine, so the tool call was blocked. Check that ${TMPDIR:-/tmp} is writable." >&2
+    exit 2
+  fi
   chmod 600 "$auth_config" || true
   if [ -n "${GRAM_HOOKS_API_KEY:-}" ]; then
     printf 'header = "Gram-Key: %s"\n' "$GRAM_HOOKS_API_KEY" >>"$auth_config"
