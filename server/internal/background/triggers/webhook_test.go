@@ -149,23 +149,25 @@ func TestWebhookHandleDefersEventIDFallback(t *testing.T) {
 	require.Empty(t, r.Event.CorrelationID)
 }
 
-func TestWebhookFallbackEventIDScopesByInstance(t *testing.T) {
+func TestScopeWebhookEventID(t *testing.T) {
 	t.Parallel()
 
 	body := []byte(`{"a":1}`)
-	a := webhookFallbackEventID("instance-a", body)
+
+	// A vendor-supplied delivery id is prefixed with the instance, so two
+	// instances that happen to receive the same id don't dedupe each other's
+	// deliveries on the dispatch workflow id or the assistant enqueue key.
+	require.Equal(t, "instance-a:del-1", scopeWebhookEventID("instance-a", "del-1", body))
+	require.NotEqual(t, scopeWebhookEventID("instance-a", "del-1", body), scopeWebhookEventID("instance-b", "del-1", body))
+
+	// No vendor id: a content-hash fallback, also instance-scoped. Deterministic
+	// within an instance (a genuine redelivery dedups), distinct across
+	// instances and across bodies.
+	a := scopeWebhookEventID("instance-a", "", body)
 	require.NotEmpty(t, a)
-
-	// A genuine redelivery to the same instance produces the same id (dedups).
-	require.Equal(t, a, webhookFallbackEventID("instance-a", body))
-
-	// Two instances receiving an identical body must NOT collide — otherwise the
-	// assistant enqueue key (project, assistant, event_id) and the dispatch
-	// workflow id would treat the second delivery as a duplicate and drop it.
-	require.NotEqual(t, a, webhookFallbackEventID("instance-b", body))
-
-	// Different bodies to the same instance differ.
-	require.NotEqual(t, a, webhookFallbackEventID("instance-a", []byte(`{"a":2}`)))
+	require.Equal(t, a, scopeWebhookEventID("instance-a", "", body))
+	require.NotEqual(t, a, scopeWebhookEventID("instance-b", "", body))
+	require.NotEqual(t, a, scopeWebhookEventID("instance-a", "", []byte(`{"a":2}`)))
 }
 
 func TestHMACSchemeRejectsMissingSignatureHeader(t *testing.T) {

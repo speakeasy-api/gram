@@ -249,15 +249,21 @@ func NewWebhookDefinition(
 	}
 }
 
-// webhookFallbackEventID derives a dedup event id for a delivery whose vendor
-// supplied none, scoped to the trigger instance that received it. The body
-// hash alone is identical across instances that receive the same payload, so
-// folding in the instance id keeps redelivery dedup within an instance — both
-// the Temporal dispatch workflow id and the assistant enqueue key
-// (project_id, assistant_id, event_id) dedupe on this id — without collapsing
-// distinct instances' deliveries onto one another and silently dropping them.
-func webhookFallbackEventID(triggerInstanceID string, body []byte) string {
-	return uuid.NewSHA1(uuid.NameSpaceURL, append([]byte(triggerInstanceID+":"), body...)).String()
+// scopeWebhookEventID produces the per-instance dedup event id for a webhook
+// delivery. A delivery targets exactly one trigger instance, so deduping across
+// instances is never correct; prefixing the instance id keeps redelivery dedup
+// within an instance (same instance + same vendor id or body collapses) while
+// keeping instances independent. Both the Temporal dispatch workflow id and the
+// assistant enqueue key (project_id, assistant_id, event_id) dedupe on this id,
+// so scoping it here covers both layers — and covers vendor-supplied ids too,
+// not just the content-hash fallback. vendorID is the vendor's delivery/event
+// id, or empty to fall back to a content hash of the body.
+func scopeWebhookEventID(triggerInstanceID, vendorID string, body []byte) string {
+	id := vendorID
+	if id == "" {
+		id = uuid.NewSHA1(uuid.NameSpaceURL, body).String()
+	}
+	return triggerInstanceID + ":" + id
 }
 
 // evalWebhookFilter applies the default-deny event-type allowlist (defaulting
