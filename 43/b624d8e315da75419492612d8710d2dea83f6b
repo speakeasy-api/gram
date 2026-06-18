@@ -1,0 +1,38 @@
+server/design/access/design.go
+  s_95d069cf52f7b4::t_cfd479484e99cf 694,708
+client/dashboard/src/pages/access/CreateRoleDialog.tsx
+  s_95d069cf52f7b4::t_f05c73ec683758 92,103,288,293,322,337,504,536,549
+client/dashboard/src/pages/access/roleDialogState.test.ts
+  s_95d069cf52f7b4::t_ff1c80368b1cad 465,467,485,507,541,552
+client/dashboard/src/pages/access/GrantRuleDrawerContent.tsx
+  s_95d069cf52f7b4::t_be7220938b5108 44,46,49,183,192,841
+client/dashboard/src/pages/access/types.ts
+  s_95d069cf52f7b4::t_30049376885726 50-53,56,60,70,73
+client/dashboard/src/pages/access/roundtrip.test.ts
+  s_95d069cf52f7b4::t_d5acb82ae7bf67 42,49-50,57-64,66-120,162,197
+client/dashboard/src/pages/access/roleGrantTransform.ts
+  s_95d069cf52f7b4::t_b116be0bb7bc8e 4,14-27,29-30,76-83,89,91,113,128,130,138-141,145,148-159,185,191,213,265,267-268,284
+client/dashboard/src/pages/access/roleDialogState.ts
+  s_95d069cf52f7b4::t_87a2adc6938084 173
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "43b624d8e315da75419492612d8710d2dea83f6b",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_95d069cf52f7b4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ecfff-79bd-7ac0-8355-76dbf61e503f",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
