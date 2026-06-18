@@ -60,6 +60,10 @@ type Client struct {
 	// Query Doer is the HTTP client used to make requests to the query endpoint.
 	QueryDoer goahttp.Doer
 
+	// ListSessions Doer is the HTTP client used to make requests to the
+	// listSessions endpoint.
+	ListSessionsDoer goahttp.Doer
+
 	// ListFilterOptions Doer is the HTTP client used to make requests to the
 	// listFilterOptions endpoint.
 	ListFilterOptionsDoer goahttp.Doer
@@ -119,6 +123,7 @@ func NewClient(
 		GetObservabilityOverviewDoer:  doer,
 		GetProjectOverviewDoer:        doer,
 		QueryDoer:                     doer,
+		ListSessionsDoer:              doer,
 		ListFilterOptionsDoer:         doer,
 		ListAttributeKeysDoer:         doer,
 		GetHooksSummaryDoer:           doer,
@@ -393,6 +398,30 @@ func (c *Client) Query() goa.Endpoint {
 		resp, err := c.QueryDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("telemetry", "query", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListSessions returns an endpoint that makes HTTP requests to the telemetry
+// service listSessions server.
+func (c *Client) ListSessions() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListSessionsRequest(c.encoder)
+		decodeResponse = DecodeListSessionsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListSessionsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListSessionsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "listSessions", err)
 		}
 		return decodeResponse(resp)
 	}

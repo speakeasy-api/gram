@@ -26996,6 +26996,94 @@ paths:
             x-speakeasy-react-hook:
                 name: ListHooksTraces
                 type: query
+    /rpc/telemetry.listSessions:
+        post:
+            description: Org-scoped list of individual chat sessions for a slice of usage, filtered by the same allowlisted dimensions as telemetry.query. Returns per-session cost, token, and tool metrics with cursor pagination.
+            operationId: listSessions
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ListSessionsPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSessionsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listSessions telemetry
+            tags:
+                - telemetry
+            x-speakeasy-name-override: listSessions
+            x-speakeasy-react-hook:
+                name: ListSessions
+                type: query
     /rpc/telemetry.listToolUsageTraces:
         post:
             description: List target-aware MCP and tool usage traces
@@ -39850,6 +39938,56 @@ components:
             description: Result type for listing remote MCP servers
             required:
                 - remote_mcp_servers
+        ListSessionsPayload:
+            type: object
+            properties:
+                cursor:
+                    type: string
+                    description: Opaque cursor for pagination
+                filters:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/QueryFilter'
+                    description: Optional filters; all filters are ANDed together.
+                from:
+                    type: string
+                    description: Start time in ISO 8601 format
+                    example: "2025-12-19T10:00:00Z"
+                    format: date-time
+                limit:
+                    type: integer
+                    description: Number of sessions to return (1-1000)
+                    default: 50
+                    format: int64
+                    minimum: 1
+                    maximum: 1000
+                sort_by:
+                    type: string
+                    description: Measure used to rank sessions. Defaults to total_cost.
+                    default: total_cost
+                to:
+                    type: string
+                    description: End time in ISO 8601 format
+                    example: "2025-12-26T10:00:00Z"
+                    format: date-time
+            description: Payload for listing org-scoped chat sessions
+            required:
+                - from
+                - to
+        ListSessionsResult:
+            type: object
+            properties:
+                next_cursor:
+                    type: string
+                    description: Cursor for next page
+                sessions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SessionSummary'
+                    description: List of chat session summaries
+            description: Result of listing org-scoped chat sessions
+            required:
+                - sessions
         ListShadowMCPAccessRulesResult:
             type: object
             properties:
@@ -44622,6 +44760,78 @@ components:
             description: Service information
             required:
                 - name
+        SessionSummary:
+            type: object
+            properties:
+                duration_seconds:
+                    type: number
+                    description: Chat session duration in seconds
+                    format: double
+                end_time_unix_nano:
+                    type: string
+                    description: Latest log timestamp in Unix nanoseconds (string for JS int64 precision)
+                gram_chat_id:
+                    type: string
+                    description: Chat session ID
+                hook_source:
+                    type: string
+                    description: Client or agent surface associated with this chat session
+                message_count:
+                    type: integer
+                    description: Number of LLM completion messages in this chat session
+                    format: int64
+                model:
+                    type: string
+                    description: LLM model used in this chat session
+                project_id:
+                    type: string
+                    description: Project ID that emitted this chat session
+                start_time_unix_nano:
+                    type: string
+                    description: Earliest log timestamp in Unix nanoseconds (string for JS int64 precision)
+                status:
+                    type: string
+                    description: Chat session status
+                    enum:
+                        - success
+                        - error
+                tool_call_count:
+                    type: integer
+                    description: Number of tool calls in this chat session
+                    format: int64
+                total_cost:
+                    type: number
+                    description: Total cost in USD
+                    format: double
+                total_input_tokens:
+                    type: integer
+                    description: Total input tokens used
+                    format: int64
+                total_output_tokens:
+                    type: integer
+                    description: Total output tokens used
+                    format: int64
+                total_tokens:
+                    type: integer
+                    description: Total tokens used
+                    format: int64
+                user_email:
+                    type: string
+                    description: User email associated with this chat session
+            description: Org-scoped summary information for a chat session
+            required:
+                - gram_chat_id
+                - project_id
+                - start_time_unix_nano
+                - end_time_unix_nano
+                - duration_seconds
+                - message_count
+                - tool_call_count
+                - total_input_tokens
+                - total_output_tokens
+                - total_tokens
+                - total_cost
+                - status
         SetBillingMetadataRequestBody:
             type: object
             properties:

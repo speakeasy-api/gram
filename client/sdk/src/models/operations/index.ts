@@ -211,6 +211,7 @@ export * from "./listriskresultsforagent.js";
 export * from "./listroles.js";
 export * from "./listscopes.js";
 export * from "./listservernameoverrides.js";
+export * from "./listsessions.js";
 export * from "./listshadowmcpaccessrules.js";
 export * from "./listshadowmcpapprovalrequests.js";
 export * from "./listtemplates.js";

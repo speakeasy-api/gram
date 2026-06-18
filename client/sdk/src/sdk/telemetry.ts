@@ -14,6 +14,7 @@ import { telemetryGetUserMetricsSummary } from "../funcs/telemetryGetUserMetrics
 import { telemetryListAttributeKeys } from "../funcs/telemetryListAttributeKeys.js";
 import { telemetryListFilterOptions } from "../funcs/telemetryListFilterOptions.js";
 import { telemetryListHooksTraces } from "../funcs/telemetryListHooksTraces.js";
+import { telemetryListSessions } from "../funcs/telemetryListSessions.js";
 import { telemetryListToolUsageTraces } from "../funcs/telemetryListToolUsageTraces.js";
 import { telemetryQuery } from "../funcs/telemetryQuery.js";
 import { telemetrySearchChats } from "../funcs/telemetrySearchChats.js";
@@ -247,6 +248,25 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListHooksTracesResult> {
     return unwrapAsync(telemetryListHooksTraces(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listSessions telemetry
+   *
+   * @remarks
+   * Org-scoped list of individual chat sessions for a slice of usage, filtered by the same allowlisted dimensions as telemetry.query. Returns per-session cost, token, and tool metrics with cursor pagination.
+   */
+  async listSessions(
+    request: operations.ListSessionsRequest,
+    security?: operations.ListSessionsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ListSessionsResult> {
+    return unwrapAsync(telemetryListSessions(
       this,
       request,
       security,
