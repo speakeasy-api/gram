@@ -223,7 +223,7 @@ export function EntityProfile({
             style={{ background: palette.mesh }}
           />
         </div>
-        <div className="relative mx-auto w-full max-w-7xl px-8 pt-24 pb-10">
+        <div className="relative mx-auto w-full max-w-7xl px-8 pt-24 pb-6">
           {entity && (
             <button
               type="button"
@@ -277,7 +277,7 @@ export function EntityProfile({
         </div>
       </div>
 
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-8 pt-6 pb-24">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-8 pt-2 pb-24">
         {widgets}
         <div className="flex flex-col gap-3">
           <div className="mb-3 flex items-center justify-between gap-4">
