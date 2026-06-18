@@ -1,5 +1,37 @@
 # server
 
+## 0.72.0
+
+### Minor Changes
+
+- 1cd0ff9: Add an organization administrator "Refresh now" action for remote sessions. The
+  `organizationRemoteSessionIssuers` management service gains a `refreshSession`
+  method that forces an upstream `grant_type=refresh_token` exchange on a single
+  session regardless of its current access-token expiry, persists the rotated
+  tokens, and returns the updated session. The shared refresh code path is now
+  used by both the lazy MCP token-resolution path and this explicit admin action;
+  the upstream token POST runs outside any database transaction. The
+  `RemoteSession` type exposes a `has_refresh_token` flag (the encrypted token
+  itself stays unexposed) so the dashboard Sessions tab can offer "Refresh now"
+  only for sessions that can actually be refreshed. Operator-actionable refresh
+  failures (an upstream rejection of the refresh token, an unreadable stored
+  token, a missing token endpoint) surface as a bad-request with a clear "Unable
+  to refresh: ..." reason and each refresh is recorded as a
+  `remote-session:refresh` audit event.
+- 442d05c: Codex sessions now report the user's configured MCP servers to Gram on session start, giving shadow MCP servers the same observability as Gram-managed ones and letting access approvals scope to the server URL.
+- 7c8677b: Record `mcp_server_id` across `/mcp` runtime telemetry so MCP server activity can be sliced from either the remote or the fronting-server perspective.
+- 596af3f: Add `telemetry.listSessions`, an org-scoped endpoint for listing cost-bearing chat sessions filtered by the same dimensions as `telemetry.query`.
+
+### Patch Changes
+
+- 783b5cc: Resolve multiple remote-session authorizations per user session issuer at the
+  MCP runtime, keyed by remote session issuer, and enforce at most one client per
+  (user session issuer, remote session issuer) at attach time. The runtime
+  resolves a per-issuer token map and re-auths when any attached remote session
+  is missing or invalid; an application-level attach guard plus a runtime
+  invariant replace the database one_per_issuer index. Issuer-gated dispatch
+  fails closed when it cannot route among multiple upstream tokens.
+
 ## 0.71.0
 
 ### Minor Changes
