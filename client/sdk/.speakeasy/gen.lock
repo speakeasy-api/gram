@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 523eb3751b3f317da9bda9a5afaa72cf
+  docChecksum: 2c8642b0cd060ec3a84ec8549c5fd281
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -649,9 +649,9 @@ trackedFiles:
   docs/models/components/migratelegacygramregistrationsresult.md:
     last_write_checksum: sha1:4cc98660b1d0909d4f82be6af0f9f53732e5c6d8
   docs/models/components/mintusersessionrequestbody.md:
-    last_write_checksum: sha1:8b53450b9a389ed451bb0fa7839319ffaada87b9
+    last_write_checksum: sha1:bde62ea06d8080315af72ad971411d4d438b1758
   docs/models/components/mintusersessionresponsebody.md:
-    last_write_checksum: sha1:261bf8974244e297feeceee2efa02128676aeace
+    last_write_checksum: sha1:0cd966a900108f284609c61746269479ee7c99f3
   docs/models/components/modelusage.md:
     last_write_checksum: sha1:09f2b180ebfd3f1440502f2113a1edba982e8e0a
   docs/models/components/moveissuerrequestbody.md:
@@ -2795,7 +2795,7 @@ trackedFiles:
   docs/models/operations/migratelegacygramregistrationssecurityoption2.md:
     last_write_checksum: sha1:533e38c615d2cf0c4e675e82256066eac4620aed
   docs/models/operations/mintusersessionrequest.md:
-    last_write_checksum: sha1:29b29ceb0d44cfff3b0f72d493ee158017976eca
+    last_write_checksum: sha1:dcafafc102ba6508c55f4aecc87691fb37b89854
   docs/models/operations/mintusersessionsecurity.md:
     last_write_checksum: sha1:abfcf7eaa93c885147359e0420da36766e093161
   docs/models/operations/moveorganizationremotesessionissuerrequest.md:
@@ -3499,7 +3499,7 @@ trackedFiles:
   docs/sdks/usersessionissuers/README.md:
     last_write_checksum: sha1:5da1909d83c2b5c5f04790a6c286488edb59986f
   docs/sdks/usersessions/README.md:
-    last_write_checksum: sha1:2ac1b737145bb6160b3acadc48bc026f2425d8b3
+    last_write_checksum: sha1:04cf4b722d3d5afab325fd65424e68b48312a6fa
   docs/sdks/variations/README.md:
     last_write_checksum: sha1:8bbc786b4a44b9afad9988ba790b756c724270f8
   docs/types/rfcdate.md:
@@ -4161,7 +4161,7 @@ trackedFiles:
   src/funcs/userSessionsListFacets.ts:
     last_write_checksum: sha1:644d59aad05fd8c01c749a5c5a9f4d3aff47d99d
   src/funcs/userSessionsMint.ts:
-    last_write_checksum: sha1:037099aa7c368395ae044158a21b95cc495ac800
+    last_write_checksum: sha1:30ec86d6f9c41ea8b91bba0e3294bd2304eddb3f
   src/funcs/userSessionsRevoke.ts:
     last_write_checksum: sha1:251593d7a4218e12463d0159b544ee27007f707b
   src/funcs/variationsCreateGlobal.ts:
@@ -4716,9 +4716,9 @@ trackedFiles:
   src/models/components/migratelegacygramregistrationsresult.ts:
     last_write_checksum: sha1:26c989c5992c3eb0cab25cb3264ddc90dbdd97ff
   src/models/components/mintusersessionrequestbody.ts:
-    last_write_checksum: sha1:f71c7117fac7cb7aea1164ccad92126cae26edc8
+    last_write_checksum: sha1:e76d30af6fdb4493a23ee76cc581e0228b90091d
   src/models/components/mintusersessionresponsebody.ts:
-    last_write_checksum: sha1:6e50762cecfe5a1c131d2f9276246fb8e34bf82b
+    last_write_checksum: sha1:49a0c231d01651c153c5f044310b62ca8f12cb22
   src/models/components/modelusage.ts:
     last_write_checksum: sha1:7b01fb688a987bbb0683cf595f3e7ab1d25ce9cb
   src/models/components/moveissuerrequestbody.ts:
@@ -6403,7 +6403,7 @@ trackedFiles:
   src/react-query/migrateLegacyGramRegistrations.ts:
     last_write_checksum: sha1:45a10d3b4715a70972931d1fc7ef10f229a60605
   src/react-query/mintUserSession.ts:
-    last_write_checksum: sha1:18b6c3c8a8f0d7f1b7e7510e02dca16d9dd83208
+    last_write_checksum: sha1:c3920ee94ccb9bb389b1826e3cbc18945dce4e1d
   src/react-query/moveOrganizationRemoteSessionIssuer.ts:
     last_write_checksum: sha1:8794b97156d2bcf146bebd441643e22d32a4a1b1
   src/react-query/onboardingStatus.core.ts:
@@ -6969,7 +6969,7 @@ trackedFiles:
   src/sdk/usersessionissuers.ts:
     last_write_checksum: sha1:a018e930aa897ce82f4de04e21adcb75809c23ba
   src/sdk/usersessions.ts:
-    last_write_checksum: sha1:16e63909dd6788d093bc233e347de8e632885523
+    last_write_checksum: sha1:2b7abfefc62fb1c8fae3fa897e3dc7195076bbe2
   src/sdk/variations.ts:
     last_write_checksum: sha1:a3a8119cd8aa158d1ade9d100ab00b956c39a5e6
   src/types/async.ts:
@@ -9758,7 +9758,7 @@ examples:
   mintUserSession:
     speakeasy-default-mint-user-session:
       requestBody:
-        application/json: {"toolset_id": "0a4ec22f-dfe1-43ce-bcc9-553b85255c3d"}
+        application/json: {}
       responses:
         "200":
           application/json: {"access_token": "<value>", "expires_in": 758064}

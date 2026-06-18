@@ -16,9 +16,15 @@ import (
 // MintUserSessionRequestBody is the type of the "userSessions" service
 // "mintUserSession" endpoint HTTP request body.
 type MintUserSessionRequestBody struct {
-	// The toolset to bind the minted JWT to. Must be issuer-gated and live in the
+	// Bind the JWT to this toolset's /mcp/{slug} audience. Mutually exclusive with
+	// mcp_server_id; exactly one must be set. Must be issuer-gated and live in the
 	// caller's project.
-	ToolsetID string `form:"toolset_id" json:"toolset_id" xml:"toolset_id"`
+	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// Bind the JWT to this remote MCP server's user_session_issuer audience (the
+	// /x/mcp convention, since remote servers have no toolset). Mutually exclusive
+	// with toolset_id; exactly one must be set. Must be issuer-gated and live in
+	// the caller's project.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 }
 
 // ListUserSessionsResponseBody is the type of the "userSessions" service
@@ -44,7 +50,7 @@ type ListFacetsResponseBody struct {
 // "mintUserSession" endpoint HTTP response body.
 type MintUserSessionResponseBody struct {
 	// The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests
-	// to the toolset's /mcp/{slug} surface.
+	// to the bound /mcp/{slug} (or /x/mcp/{slug}) surface.
 	AccessToken *string `form:"access_token,omitempty" json:"access_token,omitempty" xml:"access_token,omitempty"`
 	// Lifetime of the access token in seconds.
 	ExpiresIn *int `form:"expires_in,omitempty" json:"expires_in,omitempty" xml:"expires_in,omitempty"`
@@ -845,7 +851,8 @@ type UserSessionFacetOptionResponseBody struct {
 // of the "mintUserSession" endpoint of the "userSessions" service.
 func NewMintUserSessionRequestBody(p *usersessions.MintUserSessionPayload) *MintUserSessionRequestBody {
 	body := &MintUserSessionRequestBody{
-		ToolsetID: p.ToolsetID,
+		ToolsetID:   p.ToolsetID,
+		McpServerID: p.McpServerID,
 	}
 	return body
 }
