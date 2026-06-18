@@ -53,7 +53,7 @@ func TestCursorProviderResolvesRiskScanFields(t *testing.T) {
 		ToolName:      &toolName,
 		ToolInput:     map[string]any{"limit": 10},
 	}
-	ev := agent.NewEvent(testContext(), payload)
+	ev := agent.NewEvent(testContext(), payload, time.Now())
 
 	eventType, ok, err := ev.EventType()
 	require.NoError(t, err)
@@ -85,7 +85,7 @@ func TestCursorProviderResolvesPromptScanFields(t *testing.T) {
 		HookEventName: "beforeSubmitPrompt",
 		Prompt:        &prompt,
 	}
-	ev := agent.NewEvent(testContext(), payload)
+	ev := agent.NewEvent(testContext(), payload, time.Now())
 
 	eventType, ok, err := ev.EventType()
 	require.NoError(t, err)
@@ -111,16 +111,13 @@ func newCursorAgent(t *testing.T) *agentevents.Agent[*gen.CursorPayload] {
 	return agent
 }
 
-func testContext() agentevents.EventContext {
+func testContext() *contextvalues.AuthContext {
 	projectID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-	return agentevents.EventContext{
-		Auth: &contextvalues.AuthContext{
-			ActiveOrganizationID: "org",
-			ProjectID:            &projectID,
-			UserID:               "user",
-			Email:                new("dev@example.com"),
-		},
-		Timestamp: time.Unix(123, 0),
+	return &contextvalues.AuthContext{
+		ActiveOrganizationID: "org",
+		ProjectID:            &projectID,
+		UserID:               "user",
+		Email:                new("dev@example.com"),
 	}
 }
 

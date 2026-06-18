@@ -29,10 +29,11 @@ var (
 )
 
 func getEventType(ev agentevents.Event[*gen.CursorPayload]) (types.EventType, bool, error) {
-	if ev.Raw == nil {
+	payload := ev.Raw()
+	if payload == nil {
 		return "", false, nil
 	}
-	hookEventType, ok := ParseHookEventType(ev.Raw.HookEventName)
+	hookEventType, ok := ParseHookEventType(payload.HookEventName)
 	if !ok {
 		return "", false, nil
 	}
@@ -44,7 +45,7 @@ func getEventType(ev agentevents.Event[*gen.CursorPayload]) (types.EventType, bo
 }
 
 func getScannableText(ev agentevents.Event[*gen.CursorPayload]) (string, bool, error) {
-	payload := ev.Raw
+	payload := ev.Raw()
 	if payload == nil {
 		return "", false, nil
 	}

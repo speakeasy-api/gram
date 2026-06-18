@@ -13,7 +13,6 @@ import (
 	"github.com/google/uuid"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
-	"github.com/speakeasy-api/gram/server/internal/agentevents"
 	agenttypes "github.com/speakeasy-api/gram/server/internal/agentevents/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
@@ -71,10 +70,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		AgentMessage:      nil,
 	}
 
-	ev := s.cursorEvents.NewEvent(agentevents.EventContext{
-		Auth:      authCtx,
-		Timestamp: time.Now(),
-	}, payload)
+	ev := s.cursorEvents.NewEvent(authCtx, payload, time.Now())
 
 	eventType, eventTypeOK, err := ev.EventType()
 	if err != nil {

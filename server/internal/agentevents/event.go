@@ -8,15 +8,19 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
-type EventContext struct {
-	Auth      *contextvalues.AuthContext
-	Timestamp time.Time
+type Event[T any] struct {
+	agent       *Agent[T]
+	authContext *contextvalues.AuthContext
+	raw         T
+	Timestamp   time.Time
 }
 
-type Event[T any] struct {
-	agent   *Agent[T]
-	Context EventContext
-	Raw     T
+func (e Event[T]) Raw() T {
+	return e.raw
+}
+
+func (e Event[T]) AuthContext() *contextvalues.AuthContext {
+	return e.authContext
 }
 
 func (e Event[T]) EventType() (types.EventType, bool, error) {

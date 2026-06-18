@@ -4,13 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/agentevents/types"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
 var (
-	ErrNilAgent      = errors.New("agentevents: nil agent")
-	ErrEmptyProvider = errors.New("agentevents: empty provider")
+	ErrNilAgent = errors.New("agentevents: nil agent")
 )
 
 type Agent[T any] struct {
@@ -20,18 +21,19 @@ type Agent[T any] struct {
 }
 
 func NewAgent[T any](provider types.Provider) (*Agent[T], error) {
-	if provider == "" {
-		return nil, ErrEmptyProvider
-	}
-
 	return &Agent[T]{
 		name:      provider,
 		resolvers: make(map[types.EventType]map[types.Field]FieldResolver[T, any]),
 	}, nil
 }
 
-func (a *Agent[T]) NewEvent(context EventContext, raw T) Event[T] {
-	return Event[T]{agent: a, Context: context, Raw: raw}
+func (a *Agent[T]) NewEvent(authContext *contextvalues.AuthContext, raw T, timestamp time.Time) Event[T] {
+	return Event[T]{
+		agent:       a,
+		authContext: authContext,
+		raw:         raw,
+		Timestamp:   timestamp,
+	}
 }
 
 func (a *Agent[T]) Register(resolvers ...Resolver[T]) error {
