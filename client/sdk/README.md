@@ -603,6 +603,7 @@ run();
 * [delete](docs/sdks/usersessionissuers/README.md#delete) - deleteUserSessionIssuer userSessionIssuers
 * [get](docs/sdks/usersessionissuers/README.md#get) - getUserSessionIssuer userSessionIssuers
 * [list](docs/sdks/usersessionissuers/README.md#list) - listUserSessionIssuers userSessionIssuers
+* [migrateLegacyGramRegistrations](docs/sdks/usersessionissuers/README.md#migratelegacygramregistrations) - migrateLegacyGramRegistrations userSessionIssuers
 * [update](docs/sdks/usersessionissuers/README.md#update) - updateUserSessionIssuer userSessionIssuers
 
 ### [UserSessions](docs/sdks/usersessions/README.md)
@@ -950,6 +951,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`userSessionIssuersDelete`](docs/sdks/usersessionissuers/README.md#delete) - deleteUserSessionIssuer userSessionIssuers
 - [`userSessionIssuersGet`](docs/sdks/usersessionissuers/README.md#get) - getUserSessionIssuer userSessionIssuers
 - [`userSessionIssuersList`](docs/sdks/usersessionissuers/README.md#list) - listUserSessionIssuers userSessionIssuers
+- [`userSessionIssuersMigrateLegacyGramRegistrations`](docs/sdks/usersessionissuers/README.md#migratelegacygramregistrations) - migrateLegacyGramRegistrations userSessionIssuers
 - [`userSessionIssuersUpdate`](docs/sdks/usersessionissuers/README.md#update) - updateUserSessionIssuer userSessionIssuers
 - [`userSessionsList`](docs/sdks/usersessions/README.md#list) - listUserSessions userSessions
 - [`userSessionsMint`](docs/sdks/usersessions/README.md#mint) - mintUserSession userSessions
@@ -1151,6 +1153,7 @@ To learn about this feature and how to get started, check
 - [`useMcpRegistriesGetServerDetails`](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
 - [`useMcpServers`](docs/sdks/mcpservers/README.md#list) - listMcpServers mcpServers
 - [`useMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
+- [`useMigrateLegacyGramRegistrationsMutation`](docs/sdks/usersessionissuers/README.md#migratelegacygramregistrations) - migrateLegacyGramRegistrations userSessionIssuers
 - [`useMintUserSessionMutation`](docs/sdks/usersessions/README.md#mint) - mintUserSession userSessions
 - [`useMoveOrganizationRemoteSessionIssuerMutation`](docs/sdks/organizationremotesessionissuers/README.md#moveissuer) - moveIssuer organizationRemoteSessionIssuers
 - [`useOnboardingStatus`](docs/sdks/organizations/README.md#getonboardingstatus) - getOnboardingStatus organizations

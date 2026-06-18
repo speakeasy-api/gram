@@ -229,6 +229,7 @@ export * from "./listusersessions.js";
 export * from "./listversions.js";
 export * from "./loadchat.js";
 export * from "./logout.js";
+export * from "./migratelegacygramregistrations.js";
 export * from "./mintusersession.js";
 export * from "./moveorganizationremotesessionissuer.js";
 export * from "./pausetriggerinstance.js";

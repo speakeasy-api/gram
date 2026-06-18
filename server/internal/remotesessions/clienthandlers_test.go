@@ -890,7 +890,7 @@ func TestCloneClientFromOAuthProxyProvider_HappyPath(t *testing.T) {
 	ctx = withAdmin(t, ctx)
 
 	secrets := []byte(`{"client_id":"upstream-cid","client_secret":"upstream-shhh"}`)
-	proxyProviderID := insertProxyProvider(t, ctx, ti.conn, "clone-happy", "custom", secrets)
+	proxyProviderID, _ := insertProxyProvider(t, ctx, ti.conn, "clone-happy", "custom", secrets)
 	issuerID := createRemoteIssuer(t, ctx, ti, "clone-happy", "")
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "clone-happy").String()
 
@@ -922,7 +922,7 @@ func TestCloneClientFromOAuthProxyProvider_NonAdminRejected(t *testing.T) {
 	// No withAdmin: the realistic default user is not an admin.
 
 	secrets := []byte(`{"client_id":"upstream-cid","client_secret":"upstream-shhh"}`)
-	proxyProviderID := insertProxyProvider(t, ctx, ti.conn, "clone-non-admin", "custom", secrets)
+	proxyProviderID, _ := insertProxyProvider(t, ctx, ti.conn, "clone-non-admin", "custom", secrets)
 	issuerID := createRemoteIssuer(t, ctx, ti, "clone-non-admin", "")
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "clone-non-admin").String()
 
@@ -946,7 +946,7 @@ func TestCloneClientFromOAuthProxyProvider_RejectsGramProvider(t *testing.T) {
 
 	// "gram" providers don't store a usable upstream client; clone should refuse.
 	secrets := []byte(`{}`)
-	proxyProviderID := insertProxyProvider(t, ctx, ti.conn, "clone-gram", "gram", secrets)
+	proxyProviderID, _ := insertProxyProvider(t, ctx, ti.conn, "clone-gram", "gram", secrets)
 	issuerID := createRemoteIssuer(t, ctx, ti, "clone-gram", "")
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "clone-gram").String()
 
@@ -978,7 +978,7 @@ func TestCloneClientFromOAuthProxyProvider_EnvBackedSecrets(t *testing.T) {
 		"CLIENT_SECRET": "env-upstream-shhh",
 	})
 	secrets := []byte(`{"environment_slug":"` + envSlug + `"}`)
-	proxyProviderID := insertProxyProvider(t, ctx, ti.conn, "clone-envback-ok", "custom", secrets)
+	proxyProviderID, _ := insertProxyProvider(t, ctx, ti.conn, "clone-envback-ok", "custom", secrets)
 	issuerID := createRemoteIssuer(t, ctx, ti, "clone-envback-ok", "")
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "clone-envback-ok").String()
 
@@ -1006,7 +1006,7 @@ func TestCloneClientFromOAuthProxyProvider_EnvMissingCredential(t *testing.T) {
 		"CLIENT_ID": "only-cid",
 	})
 	secrets := []byte(`{"environment_slug":"` + envSlug + `"}`)
-	proxyProviderID := insertProxyProvider(t, ctx, ti.conn, "clone-envback-missing", "custom", secrets)
+	proxyProviderID, _ := insertProxyProvider(t, ctx, ti.conn, "clone-envback-missing", "custom", secrets)
 	issuerID := createRemoteIssuer(t, ctx, ti, "clone-envback-missing", "")
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "clone-envback-missing").String()
 
@@ -1057,7 +1057,7 @@ func TestCloneClientFromOAuthProxyProvider_OrgLevelIssuer(t *testing.T) {
 	require.True(t, ok)
 
 	secrets := []byte(`{"client_id":"upstream-cid","client_secret":"upstream-shhh"}`)
-	proxyProviderID := insertProxyProvider(t, ctx, ti.conn, "clone-org", "custom", secrets)
+	proxyProviderID, _ := insertProxyProvider(t, ctx, ti.conn, "clone-org", "custom", secrets)
 	issuerID := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "clone-org")
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "clone-org").String()
 
@@ -1087,7 +1087,7 @@ func TestCloneClientFromOAuthProxyProvider_CrossOrgIssuerRejected(t *testing.T) 
 	issuerID := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, otherOrg, "clone-cross-org")
 
 	secrets := []byte(`{"client_id":"upstream-cid","client_secret":"upstream-shhh"}`)
-	proxyProviderID := insertProxyProvider(t, ctx, ti.conn, "clone-cross-org", "custom", secrets)
+	proxyProviderID, _ := insertProxyProvider(t, ctx, ti.conn, "clone-cross-org", "custom", secrets)
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "clone-cross-org").String()
 
 	_, err := ti.service.CloneClientFromOAuthProxyProvider(ctx, &clientsgen.CloneClientFromOAuthProxyProviderPayload{
