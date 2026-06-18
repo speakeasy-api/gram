@@ -2,7 +2,7 @@
 name = "gram-infra"
 version = "0.1.0"
 description = "Gram infra Python package: generated protobuf types and a Pub/Sub convenience layer"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 dependencies = [
   # protobuf must satisfy the runtime-version guard emitted in the generated
   # gen_py/**/*_pb2.py (ValidateProtobufRuntimeVersion(PUBLIC, 7, 35, 0)). The

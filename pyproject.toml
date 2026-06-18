@@ -1,7 +1,7 @@
 [project]
 name = "gram"
 version = "0.0.0"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 
 # The repo root is a virtual workspace root: it groups the members below but is
 # not itself an installable package (there is no `src/gram` module to build).
