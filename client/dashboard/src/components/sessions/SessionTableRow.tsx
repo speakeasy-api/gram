@@ -1,6 +1,12 @@
 import { useState } from "react";
 import type { UserSession } from "@gram/client/models/components";
 
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { DotRow } from "@/components/ui/dot-row";
 import { MoreActions } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
@@ -23,68 +29,86 @@ export function SessionTableRow({
   const status = sessionStatus(session);
   const canRevoke = status === "active";
 
+  const row = (
+    <DotRow>
+      {/* Subject */}
+      <td className="px-3 py-3">
+        <Type
+          variant="subheading"
+          as="div"
+          className="truncate text-sm"
+          title={subjectLabel(session)}
+        >
+          {subjectLabel(session)}
+        </Type>
+      </td>
+
+      {/* Client */}
+      <td className="px-3 py-3">
+        <Type small muted>
+          {session.clientName ?? "—"}
+        </Type>
+      </td>
+
+      {/* MCP server */}
+      <td className="px-3 py-3">
+        <Type small muted>
+          {session.issuerSlug}
+        </Type>
+      </td>
+
+      {/* Status */}
+      <td className="px-3 py-3">
+        <SessionStatusBadge session={session} />
+      </td>
+
+      {/* Expires / Revoked */}
+      <td className="px-3 py-3">
+        <Type small muted>
+          {sessionTimeLabel(session)}
+        </Type>
+      </td>
+
+      {/* Actions */}
+      <td className="px-3 py-3">
+        {canRevoke && (
+          <div
+            className="flex justify-end"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <MoreActions
+              actions={[
+                {
+                  label: "Revoke",
+                  icon: "trash" as const,
+                  destructive: true,
+                  onClick: () => setConfirmOpen(true),
+                },
+              ]}
+            />
+          </div>
+        )}
+      </td>
+    </DotRow>
+  );
+
   return (
     <>
-      <DotRow>
-        {/* Subject */}
-        <td className="px-3 py-3">
-          <Type
-            variant="subheading"
-            as="div"
-            className="truncate text-sm"
-            title={subjectLabel(session)}
-          >
-            {subjectLabel(session)}
-          </Type>
-        </td>
-
-        {/* Client */}
-        <td className="px-3 py-3">
-          <Type small muted>
-            {session.clientName ?? "—"}
-          </Type>
-        </td>
-
-        {/* MCP server */}
-        <td className="px-3 py-3">
-          <Type small muted>
-            {session.issuerSlug}
-          </Type>
-        </td>
-
-        {/* Status */}
-        <td className="px-3 py-3">
-          <SessionStatusBadge session={session} />
-        </td>
-
-        {/* Expires / Revoked */}
-        <td className="px-3 py-3">
-          <Type small muted>
-            {sessionTimeLabel(session)}
-          </Type>
-        </td>
-
-        {/* Actions */}
-        <td className="px-3 py-3">
-          {canRevoke && (
-            <div
-              className="flex justify-end"
-              onClick={(e) => e.stopPropagation()}
+      {canRevoke ? (
+        <ContextMenu>
+          <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
+          <ContextMenuContent>
+            <ContextMenuItem
+              variant="destructive"
+              onSelect={() => setConfirmOpen(true)}
             >
-              <MoreActions
-                actions={[
-                  {
-                    label: "Revoke",
-                    icon: "trash" as const,
-                    destructive: true,
-                    onClick: () => setConfirmOpen(true),
-                  },
-                ]}
-              />
-            </div>
-          )}
-        </td>
-      </DotRow>
+              Revoke session
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
+      ) : (
+        row
+      )}
 
       <RevokeSessionDialog
         session={session}
