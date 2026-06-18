@@ -46,7 +46,8 @@ import { unwrapAsync } from "@gram/client/types/fp";
 import { Badge, Icon } from "@speakeasy-api/moonshine";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { MetricCard } from "@/components/chart/MetricCard";
-import { formatChartLabel } from "@/components/chart/chartUtils";
+import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
+import { useChartZoom } from "@/components/chart/useChartZoom";
 import { useExpandedChart } from "@/hooks/useExpandedChart";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -64,6 +65,7 @@ import {
   type ChartOptions,
   type Scale,
 } from "chart.js";
+import ZoomPlugin from "chartjs-plugin-zoom";
 import { Bar, Line } from "react-chartjs-2";
 import { Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo } from "react";
@@ -72,6 +74,11 @@ import { useObserveFilters } from "@/components/observe/useObserveFilters";
 import { HooksEmptyState } from "@/pages/hooks/HooksEmptyState";
 import { HooksSetupButton } from "@/pages/hooks/HooksSetupDialog";
 import type { MultiSelectGroup } from "@/components/ui/multi-select";
+import {
+  bucketStartNsToMs,
+  buildToolUsageTimeSeries,
+  type TimeSeriesDataset,
+} from "./toolUsageTimeSeriesChartData";
 
 ChartJS.register(
   CategoryScale,
@@ -83,6 +90,7 @@ ChartJS.register(
   Filler,
   Tooltip,
   Legend,
+  ZoomPlugin,
 );
 
 const CHART_COLORS = {
@@ -484,6 +492,12 @@ function HooksInnerContent({
   useEffect(() => {
     if (summaryPending) setExpandedChart(null);
   }, [summaryPending, setExpandedChart]);
+  const handleChartRangeSelect = useCallback(
+    (from: Date, to: Date) => {
+      onCustomRangeChange(from, to, formatChartZoomRangeLabel(from, to));
+    },
+    [onCustomRangeChange],
+  );
   const hasSummaryData = (summaryData?.totals.eventCount ?? 0) > 0;
 
   return (
@@ -585,6 +599,9 @@ function HooksInnerContent({
                 summaryIsError={summaryIsError}
                 expandedChart={expandedChart}
                 onExpandedChartChange={setExpandedChart}
+                onRangeSelect={handleChartRangeSelect}
+                isZoomed={customRange !== null}
+                onResetZoom={onClearCustomRange}
               />
             )}
           </div>
@@ -1052,82 +1069,6 @@ function ServerErrorRateChart({
   );
 }
 
-type TimeSeriesDataset = {
-  label: string;
-  data: number[];
-  borderColor: string;
-  backgroundColor: string;
-  pointBackgroundColor: string;
-  fill: boolean;
-  tension: number;
-  borderWidth: number;
-  pointRadius: number;
-  pointHoverRadius: number;
-};
-
-function buildTimeSeriesFromSummary<
-  T extends { bucketStartNs: string; eventCount: number },
->(
-  timeSeries: T[],
-  keyFn: (p: T) => string,
-  timeRangeMs: number,
-  valueFn: (p: T) => number = (p) => p.eventCount,
-) {
-  if (timeSeries.length === 0)
-    return { labels: [], tooltipLabels: [], datasets: [] };
-
-  const seriesMap = new Map<string, Map<number, number>>();
-
-  for (const pt of timeSeries) {
-    const key = keyFn(pt);
-    if (!key) continue;
-    const ms = Number(BigInt(pt.bucketStartNs) / BigInt(1_000_000));
-    const series = seriesMap.get(key) ?? new Map<number, number>();
-    series.set(ms, (series.get(ms) ?? 0) + valueFn(pt));
-    seriesMap.set(key, series);
-  }
-
-  if (seriesMap.size === 0)
-    return { labels: [], tooltipLabels: [], datasets: [] };
-
-  const allTimestamps = new Set<number>();
-  for (const series of seriesMap.values()) {
-    for (const ts of series.keys()) allTimestamps.add(ts);
-  }
-  const sortedTs = Array.from(allTimestamps).sort((a, b) => a - b);
-  const labels = sortedTs.map((ts) =>
-    formatChartLabel(new Date(ts), timeRangeMs),
-  );
-  const tooltipLabels = sortedTs.map((ts) =>
-    new Date(ts).toLocaleString([], {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    }),
-  );
-
-  const datasets: TimeSeriesDataset[] = Array.from(seriesMap.entries()).map(
-    ([key, series], i) => {
-      const color = USER_SOURCE_COLORS[i % USER_SOURCE_COLORS.length]!;
-      return {
-        label: key,
-        data: sortedTs.map((ts) => series.get(ts) ?? 0),
-        borderColor: color,
-        backgroundColor: color + "1a",
-        pointBackgroundColor: color,
-        fill: false,
-        tension: 0.45,
-        borderWidth: 1.5,
-        pointRadius: 0,
-        pointHoverRadius: 4,
-      };
-    },
-  );
-
-  return { labels, tooltipLabels, datasets };
-}
-
 function ChartNoData({
   message = "No data in this period",
 }: {
@@ -1147,17 +1088,38 @@ function ChartNoData({
 
 function MultiLineChart({
   labels,
+  timestamps,
   tooltipLabels,
   datasets,
   tooltipAfterBody,
+  onRangeSelect,
   height = 200,
 }: {
   labels: string[];
+  timestamps: number[];
   tooltipLabels: string[];
   datasets: TimeSeriesDataset[];
   tooltipAfterBody?: (dataIndex: number) => string[];
+  onRangeSelect?: (from: Date, to: Date) => void;
   height?: number;
 }) {
+  const { chartRef, zoomPluginOptions, resetZoom } = useChartZoom({
+    onRangeSelect,
+    resolveRange: (min, max) => {
+      if (timestamps.length === 0) return null;
+      const fromIndex = Math.max(0, Math.floor(min));
+      const toIndex = Math.min(timestamps.length - 1, Math.ceil(max));
+      const from = timestamps[fromIndex];
+      const to = timestamps[toIndex];
+      if (from == null || to == null) return null;
+      return { from: new Date(from), to: new Date(to) };
+    },
+  });
+
+  useEffect(() => {
+    resetZoom();
+  }, [datasets, resetZoom]);
+
   if (labels.length === 0) {
     return <ChartNoData />;
   }
@@ -1186,6 +1148,7 @@ function MultiLineChart({
             : {}),
         },
       },
+      zoom: zoomPluginOptions,
     },
     scales: {
       x: {
@@ -1210,7 +1173,7 @@ function MultiLineChart({
       className="relative transition-all duration-200 ease-in-out"
       style={{ height }}
     >
-      <Line data={{ labels, datasets }} options={options} />
+      <Line ref={chartRef} data={{ labels, datasets }} options={options} />
     </div>
   );
 }
@@ -1222,6 +1185,9 @@ function ServerUsageTimeSeries({
   serverNameMappings,
   expandedChart,
   onExpand,
+  onRangeSelect,
+  isZoomed,
+  onResetZoom,
 }: {
   timeSeries: ToolUsageTargetTimeSeriesPoint[];
   from: Date;
@@ -1229,17 +1195,22 @@ function ServerUsageTimeSeries({
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
+  onRangeSelect?: (from: Date, to: Date) => void;
+  isZoomed?: boolean;
+  onResetZoom?: () => void;
 }) {
   const chartId = "server-usage";
   const expanded = expandedChart === chartId;
   const timeRangeMs = to.getTime() - from.getTime();
-  const { labels, tooltipLabels, datasets } = useMemo(
+  const { labels, timestamps, tooltipLabels, datasets } = useMemo(
     () =>
-      buildTimeSeriesFromSummary(
+      buildToolUsageTimeSeries(
         timeSeries,
         (pt) =>
           displayTargetLabel(pt.targetLabel, pt.targetType, serverNameMappings),
         timeRangeMs,
+        undefined,
+        USER_SOURCE_COLORS,
       ),
     [timeSeries, timeRangeMs, serverNameMappings],
   );
@@ -1250,11 +1221,15 @@ function ServerUsageTimeSeries({
       expandedChart={expandedChart}
       onExpand={onExpand}
       hasData={labels.length > 0}
+      isZoomed={isZoomed}
+      onResetZoom={onResetZoom}
     >
       <MultiLineChart
         labels={labels}
+        timestamps={timestamps}
         tooltipLabels={tooltipLabels}
         datasets={datasets}
+        onRangeSelect={onRangeSelect}
         height={
           expanded ? LINE_CHART_HEIGHT.expanded : LINE_CHART_HEIGHT.collapsed
         }
@@ -1269,19 +1244,31 @@ function UserUsageTimeSeries({
   to,
   expandedChart,
   onExpand,
+  onRangeSelect,
+  isZoomed,
+  onResetZoom,
 }: {
   timeSeries: ToolUsageUserTimeSeriesPoint[];
   from: Date;
   to: Date;
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
+  onRangeSelect?: (from: Date, to: Date) => void;
+  isZoomed?: boolean;
+  onResetZoom?: () => void;
 }) {
   const chartId = "user-usage";
   const expanded = expandedChart === chartId;
   const timeRangeMs = to.getTime() - from.getTime();
-  const { labels, tooltipLabels, datasets } = useMemo(
+  const { labels, timestamps, tooltipLabels, datasets } = useMemo(
     () =>
-      buildTimeSeriesFromSummary(timeSeries, (pt) => pt.userLabel, timeRangeMs),
+      buildToolUsageTimeSeries(
+        timeSeries,
+        (pt) => pt.userLabel,
+        timeRangeMs,
+        undefined,
+        USER_SOURCE_COLORS,
+      ),
     [timeSeries, timeRangeMs],
   );
   return (
@@ -1291,11 +1278,15 @@ function UserUsageTimeSeries({
       expandedChart={expandedChart}
       onExpand={onExpand}
       hasData={labels.length > 0}
+      isZoomed={isZoomed}
+      onResetZoom={onResetZoom}
     >
       <MultiLineChart
         labels={labels}
+        timestamps={timestamps}
         tooltipLabels={tooltipLabels}
         datasets={datasets}
+        onRangeSelect={onRangeSelect}
         height={
           expanded ? LINE_CHART_HEIGHT.expanded : LINE_CHART_HEIGHT.collapsed
         }
@@ -1310,22 +1301,30 @@ function SkillUsageTimeSeries({
   to,
   expandedChart,
   onExpand,
+  onRangeSelect,
+  isZoomed,
+  onResetZoom,
 }: {
   skillTimeSeries: ToolUsageTargetTimeSeriesPoint[];
   from: Date;
   to: Date;
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
+  onRangeSelect?: (from: Date, to: Date) => void;
+  isZoomed?: boolean;
+  onResetZoom?: () => void;
 }) {
   const chartId = "skill-usage";
   const expanded = expandedChart === chartId;
   const timeRangeMs = to.getTime() - from.getTime();
-  const { labels, tooltipLabels, datasets } = useMemo(
+  const { labels, timestamps, tooltipLabels, datasets } = useMemo(
     () =>
-      buildTimeSeriesFromSummary(
+      buildToolUsageTimeSeries(
         skillTimeSeries,
         (pt) => pt.targetLabel,
         timeRangeMs,
+        undefined,
+        USER_SOURCE_COLORS,
       ),
     [skillTimeSeries, timeRangeMs],
   );
@@ -1336,11 +1335,15 @@ function SkillUsageTimeSeries({
       expandedChart={expandedChart}
       onExpand={onExpand}
       hasData={labels.length > 0}
+      isZoomed={isZoomed}
+      onResetZoom={onResetZoom}
     >
       <MultiLineChart
         labels={labels}
+        timestamps={timestamps}
         tooltipLabels={tooltipLabels}
         datasets={datasets}
+        onRangeSelect={onRangeSelect}
         height={
           expanded ? LINE_CHART_HEIGHT.expanded : LINE_CHART_HEIGHT.collapsed
         }
@@ -1435,6 +1438,9 @@ function ErrorsOverTimeChart({
   serverNameMappings,
   expandedChart,
   onExpand,
+  onRangeSelect,
+  isZoomed,
+  onResetZoom,
 }: {
   timeSeries: ToolUsageTargetTimeSeriesPoint[];
   from: Date;
@@ -1442,72 +1448,78 @@ function ErrorsOverTimeChart({
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
+  onRangeSelect?: (from: Date, to: Date) => void;
+  isZoomed?: boolean;
+  onResetZoom?: () => void;
 }) {
   const timeRangeMs = to.getTime() - from.getTime();
-  const { labels, tooltipLabels, datasets, hasErrors, perServerByIndex } =
-    useMemo(() => {
-      const built = buildTimeSeriesFromSummary(
-        timeSeries,
-        () => "errors",
-        timeRangeMs,
-        (pt) => pt.failureCount,
+  const {
+    labels,
+    timestamps,
+    tooltipLabels,
+    datasets,
+    hasErrors,
+    perServerByIndex,
+  } = useMemo(() => {
+    const built = buildToolUsageTimeSeries(
+      timeSeries,
+      () => "errors",
+      timeRangeMs,
+      (pt) => pt.failureCount,
+      ["#ef4444"],
+    );
+    const errorColor = "#ef4444";
+    const recoloredDatasets = built.datasets.map((ds) => ({
+      ...ds,
+      label: "Errors",
+      borderColor: errorColor,
+      backgroundColor: errorColor + "1a",
+      pointBackgroundColor: errorColor,
+    }));
+    const tsIndex = new Map<number, number>(
+      built.timestamps.map((ts, i): [number, number] => [ts, i]),
+    );
+    const total = built.datasets[0]?.data.reduce((s, p) => s + p, 0) ?? 0;
+
+    const accumulator = new Map<number, Map<string, number>>(
+      built.timestamps.map((_, i): [number, Map<string, number>] => [
+        i,
+        new Map<string, number>(),
+      ]),
+    );
+
+    for (const pt of timeSeries) {
+      if (pt.failureCount === 0) continue;
+      const ms = bucketStartNsToMs(pt.bucketStartNs);
+      if (ms == null) continue;
+      const idx = tsIndex.get(ms);
+      if (idx === undefined) continue;
+      const displayName = displayTargetLabel(
+        pt.targetLabel,
+        pt.targetType,
+        serverNameMappings,
       );
-      const errorColor = "#ef4444";
-      const recoloredDatasets = built.datasets.map((ds) => ({
-        ...ds,
-        label: "Errors",
-        borderColor: errorColor,
-        backgroundColor: errorColor + "1a",
-        pointBackgroundColor: errorColor,
-      }));
-      const total = built.datasets[0]?.data.reduce((s, n) => s + n, 0) ?? 0;
+      const map = accumulator.get(idx)!;
+      map.set(displayName, (map.get(displayName) ?? 0) + pt.failureCount);
+    }
 
-      const allTimestamps = new Set<number>();
-      for (const pt of timeSeries) {
-        allTimestamps.add(Number(BigInt(pt.bucketStartNs) / BigInt(1_000_000)));
-      }
-      const sortedTs = Array.from(allTimestamps).sort((a, b) => a - b);
-      const tsIndex = new Map<number, number>(
-        sortedTs.map((ts, i): [number, number] => [ts, i]),
-      );
+    const perServerByIndex: { name: string; count: number }[][] = [];
+    for (const [i, map] of accumulator) {
+      perServerByIndex[i] = Array.from(map.entries())
+        .filter(([, count]) => count > 0)
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count);
+    }
 
-      const accumulator = new Map<number, Map<string, number>>(
-        sortedTs.map((_, i): [number, Map<string, number>] => [
-          i,
-          new Map<string, number>(),
-        ]),
-      );
-
-      for (const pt of timeSeries) {
-        if (pt.failureCount === 0) continue;
-        const ms = Number(BigInt(pt.bucketStartNs) / BigInt(1_000_000));
-        const idx = tsIndex.get(ms);
-        if (idx === undefined) continue;
-        const displayName = displayTargetLabel(
-          pt.targetLabel,
-          pt.targetType,
-          serverNameMappings,
-        );
-        const map = accumulator.get(idx)!;
-        map.set(displayName, (map.get(displayName) ?? 0) + pt.failureCount);
-      }
-
-      const perServerByIndex: { name: string; count: number }[][] = [];
-      for (const [i, map] of accumulator) {
-        perServerByIndex[i] = Array.from(map.entries())
-          .filter(([, count]) => count > 0)
-          .map(([name, count]) => ({ name, count }))
-          .sort((a, b) => b.count - a.count);
-      }
-
-      return {
-        labels: built.labels,
-        tooltipLabels: built.tooltipLabels,
-        datasets: recoloredDatasets,
-        hasErrors: total > 0,
-        perServerByIndex,
-      };
-    }, [timeSeries, timeRangeMs, serverNameMappings]);
+    return {
+      labels: built.labels,
+      timestamps: built.timestamps,
+      tooltipLabels: built.tooltipLabels,
+      datasets: recoloredDatasets,
+      hasErrors: total > 0,
+      perServerByIndex,
+    };
+  }, [timeSeries, timeRangeMs, serverNameMappings]);
 
   const chartId = "errors-over-time";
   const expanded = expandedChart === chartId;
@@ -1519,14 +1531,18 @@ function ErrorsOverTimeChart({
       expandedChart={expandedChart}
       onExpand={onExpand}
       hasData={hasErrors}
+      isZoomed={isZoomed}
+      onResetZoom={onResetZoom}
     >
       {!hasErrors ? (
         <ChartNoData message="No errors in this period" />
       ) : (
         <MultiLineChart
           labels={labels}
+          timestamps={timestamps}
           tooltipLabels={tooltipLabels}
           datasets={datasets}
+          onRangeSelect={onRangeSelect}
           height={
             expanded ? LINE_CHART_HEIGHT.expanded : LINE_CHART_HEIGHT.collapsed
           }
@@ -1553,6 +1569,9 @@ function HooksAnalytics({
   summaryIsError,
   expandedChart,
   onExpandedChartChange: setExpandedChart,
+  onRangeSelect,
+  isZoomed,
+  onResetZoom,
 }: {
   serverNameMappings: ReturnType<typeof useServerNameMappings>;
   from: Date;
@@ -1565,6 +1584,9 @@ function HooksAnalytics({
   summaryIsError: boolean;
   expandedChart: string | null;
   onExpandedChartChange: (id: string | null) => void;
+  onRangeSelect?: (from: Date, to: Date) => void;
+  isZoomed?: boolean;
+  onResetZoom?: () => void;
 }) {
   const targets = summaryData?.targets;
   const users = summaryData?.users ?? [];
@@ -1753,6 +1775,9 @@ function HooksAnalytics({
           serverNameMappings={serverNameMappings}
           expandedChart={expandedChart}
           onExpand={setExpandedChart}
+          onRangeSelect={onRangeSelect}
+          isZoomed={isZoomed}
+          onResetZoom={onResetZoom}
         />
 
         <UsersPerServerChart
@@ -1773,6 +1798,9 @@ function HooksAnalytics({
           to={to}
           expandedChart={expandedChart}
           onExpand={setExpandedChart}
+          onRangeSelect={onRangeSelect}
+          isZoomed={isZoomed}
+          onResetZoom={onResetZoom}
         />
 
         <UserEventCountsChart
@@ -1789,6 +1817,9 @@ function HooksAnalytics({
           to={to}
           expandedChart={expandedChart}
           onExpand={setExpandedChart}
+          onRangeSelect={onRangeSelect}
+          isZoomed={isZoomed}
+          onResetZoom={onResetZoom}
         />
 
         <UsersPerSkillChart
@@ -1805,6 +1836,9 @@ function HooksAnalytics({
           serverNameMappings={serverNameMappings}
           expandedChart={expandedChart}
           onExpand={setExpandedChart}
+          onRangeSelect={onRangeSelect}
+          isZoomed={isZoomed}
+          onResetZoom={onResetZoom}
         />
 
         <ServerErrorRateChart
