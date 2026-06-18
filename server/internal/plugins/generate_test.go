@@ -780,113 +780,6 @@ printf '{}\n200'
 	require.Equal(t, "cursor@example.com", posted["user_email"])
 }
 
-func TestGeneratedClaudeHookScriptAddsLastUserPromptIDFromStopTranscript(t *testing.T) {
-	t.Parallel()
-
-	cfg := GenerateConfig{
-		OrgName:     "Acme",
-		ServerURL:   "https://app.getgram.ai",
-		HooksAPIKey: "gram_local_secret_xyz",
-		ProjectSlug: "acme-prod",
-	}
-	files, err := GenerateObservabilityPluginPackage(cfg, "claude")
-	require.NoError(t, err)
-
-	posted := runGeneratedClaudeHook(t, files["hooks/hook.sh"], files["hooks/prompt-id.sh"], []string{
-		`{"sessionId":"session-1","type":"user","promptId":"prompt-old","message":{"role":"user","content":"old prompt"}}`,
-		`{"sessionId":"other-session","type":"user","promptId":"prompt-other","message":{"role":"user","content":"ignore me"}}`,
-		`{"sessionId":"session-1","type":"user","promptId":"prompt-new","message":{"role":"user","content":"current prompt"}}`,
-	}, `{"hook_event_name":"Stop","session_id":"session-1","last_assistant_message":"ok"}`)
-
-	require.Equal(t, "prompt-new", posted["LastUserPromptID"])
-	additionalData, ok := posted["additional_data"].(map[string]any)
-	require.True(t, ok)
-	require.Equal(t, "prompt-new", additionalData["LastUserPromptID"])
-}
-
-func TestGeneratedClaudeHookScriptDoesNotEnrichUserPromptSubmit(t *testing.T) {
-	t.Parallel()
-
-	cfg := GenerateConfig{
-		OrgName:     "Acme",
-		ServerURL:   "https://app.getgram.ai",
-		HooksAPIKey: "gram_local_secret_xyz",
-		ProjectSlug: "acme-prod",
-	}
-	files, err := GeneratePluginPackages(nil, cfg)
-	require.NoError(t, err)
-
-	posted := runGeneratedClaudeHook(t, files[ClaudeObservabilitySlug(cfg)+"/hooks/hook.sh"], files[ClaudeObservabilitySlug(cfg)+"/hooks/prompt-id.sh"], []string{
-		`{"sessionId":"session-1","type":"user","promptId":"prompt-new","message":{"role":"user","content":"hook prompt"}}`,
-	}, `{"hook_event_name":"UserPromptSubmit","session_id":"session-1","prompt":"hook prompt"}`)
-
-	require.NotContains(t, posted, "promptId")
-	require.NotContains(t, posted, "LastUserPromptID")
-	require.NotContains(t, posted, "additional_data")
-}
-
-func TestGeneratedClaudeHookScriptOmitsLastUserPromptIDWhenTranscriptUnreadable(t *testing.T) {
-	t.Parallel()
-
-	cfg := GenerateConfig{
-		OrgName:     "Acme",
-		ServerURL:   "https://app.getgram.ai",
-		HooksAPIKey: "gram_local_secret_xyz",
-		ProjectSlug: "acme-prod",
-	}
-	files, err := GenerateObservabilityPluginPackage(cfg, "claude")
-	require.NoError(t, err)
-
-	posted := runGeneratedClaudeHookWithPayload(t, files["hooks/hook.sh"], files["hooks/prompt-id.sh"], `{"hook_event_name":"Stop","session_id":"session-1","last_assistant_message":"ok","transcript_path":"/path/that/does/not/exist"}`)
-	require.NotContains(t, posted, "promptId")
-	require.NotContains(t, posted, "LastUserPromptID")
-	require.NotContains(t, posted, "additional_data")
-}
-
-func runGeneratedClaudeHook(t *testing.T, script []byte, promptIDScript []byte, transcriptLines []string, payload string) map[string]any {
-	t.Helper()
-
-	dir := t.TempDir()
-	transcriptPath := filepath.Join(dir, "transcript.jsonl")
-	require.NoError(t, os.WriteFile(transcriptPath, []byte(strings.Join(transcriptLines, "\n")+"\n"), 0o644))
-
-	var data map[string]any
-	require.NoError(t, json.Unmarshal([]byte(payload), &data))
-	data["transcript_path"] = transcriptPath
-	payloadBytes, err := json.Marshal(data)
-	require.NoError(t, err)
-
-	return runGeneratedClaudeHookWithPayload(t, script, promptIDScript, string(payloadBytes))
-}
-
-func runGeneratedClaudeHookWithPayload(t *testing.T, script []byte, promptIDScript []byte, payload string) map[string]any {
-	t.Helper()
-	require.NotEmpty(t, promptIDScript, "generated Claude prompt-id.sh missing")
-
-	dir := t.TempDir()
-	hookPath := filepath.Join(dir, "hook.sh")
-	capturePath := filepath.Join(dir, "payload.json")
-	require.NoError(t, os.WriteFile(hookPath, script, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "prompt-id.sh"), promptIDScript, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "curl"), []byte(`#!/usr/bin/env bash
-cat > "$GRAM_CAPTURE_PAYLOAD"
-printf '{}\n200'
-`), 0o755))
-
-	cmd := exec.Command("bash", hookPath)
-	cmd.Stdin = strings.NewReader(payload)
-	cmd.Env = append(os.Environ(),
-		"PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
-		"GRAM_CAPTURE_PAYLOAD="+capturePath,
-	)
-	output, err := cmd.CombinedOutput()
-	require.NoError(t, err, string(output))
-
-	var posted map[string]any
-	require.NoError(t, json.Unmarshal(requireFileBytes(t, capturePath), &posted))
-	return posted
-}
-
 func TestDeviceAgentIdentityScriptHandlesWhitespaceEmptyObject(t *testing.T) {
 	t.Parallel()
 
@@ -957,7 +850,6 @@ func TestGenerateClaudeObservabilityPluginHooksJSONIncludesAllRegisteredEvents(t
 	hooksJSON := files[ClaudeObservabilitySlug(cfg)+"/hooks/hooks.json"]
 	require.NotNil(t, hooksJSON, "claude observability hooks/hooks.json missing")
 	require.NotNil(t, files[ClaudeObservabilitySlug(cfg)+"/hooks/identity.sh"], "claude observability hooks/identity.sh missing")
-	require.NotNil(t, files[ClaudeObservabilitySlug(cfg)+"/hooks/prompt-id.sh"], "claude observability hooks/prompt-id.sh missing")
 
 	var parsed claudeHooksConfig
 	require.NoError(t, json.Unmarshal(hooksJSON, &parsed))
