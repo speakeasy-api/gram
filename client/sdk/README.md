@@ -280,7 +280,9 @@ run();
 ### [Features](docs/sdks/features/README.md)
 
 * [get](docs/sdks/features/README.md#get) - getProductFeatures features
+* [listSessionCaptureExclusions](docs/sdks/features/README.md#listsessioncaptureexclusions) - listSessionCaptureExclusions features
 * [set](docs/sdks/features/README.md#set) - setProductFeature features
+* [setSessionCaptureExclusions](docs/sdks/features/README.md#setsessioncaptureexclusions) - setSessionCaptureExclusions features
 
 ### [Hooks](docs/sdks/hooks/README.md)
 
@@ -760,7 +762,9 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`environmentsUpdateBySlug`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 - [`externalReceiveWorkOSWebhook`](docs/sdks/external/README.md#receiveworkoswebhook) - receiveWorkOSWebhook external
 - [`featuresGet`](docs/sdks/features/README.md#get) - getProductFeatures features
+- [`featuresListSessionCaptureExclusions`](docs/sdks/features/README.md#listsessioncaptureexclusions) - listSessionCaptureExclusions features
 - [`featuresSet`](docs/sdks/features/README.md#set) - setProductFeature features
+- [`featuresSetSessionCaptureExclusions`](docs/sdks/features/README.md#setsessioncaptureexclusions) - setSessionCaptureExclusions features
 - [`hooksHooksNumberClaude`](docs/sdks/hooks/README.md#hooksnumberclaude) - claude hooks
 - [`hooksHooksNumberCodex`](docs/sdks/hooks/README.md#hooksnumbercodex) - codex hooks
 - [`hooksHooksNumberCursor`](docs/sdks/hooks/README.md#hooksnumbercursor) - cursor hooks
@@ -1298,10 +1302,12 @@ To learn about this feature and how to get started, check
 - [`useServeFunction`](docs/sdks/assets/README.md#servefunction) - serveFunction assets
 - [`useServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
 - [`useServeOpenAPIv3`](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
+- [`useSessionCaptureExclusions`](docs/sdks/features/README.md#listsessioncaptureexclusions) - listSessionCaptureExclusions features
 - [`useSessionInfo`](docs/sdks/auth/README.md#info) - info auth
 - [`useSetBillingMetadataMutation`](docs/sdks/usage/README.md#setbillingmetadata) - setBillingMetadata usage
 - [`useSetPluginAssignmentsMutation`](docs/sdks/plugins/README.md#setpluginassignments) - setPluginAssignments plugins
 - [`useSetProjectLogoMutation`](docs/sdks/projects/README.md#setlogo) - setLogo projects
+- [`useSetSessionCaptureExclusionsMutation`](docs/sdks/features/README.md#setsessioncaptureexclusions) - setSessionCaptureExclusions features
 - [`useSetSourceEnvironmentLinkMutation`](docs/sdks/environments/README.md#setsourcelink) - setSourceEnvironmentLink environments
 - [`useSetToolsetEnvironmentLinkMutation`](docs/sdks/environments/README.md#settoolsetlink) - setToolsetEnvironmentLink environments
 - [`useSetToolsetToolVariationsGroupMutation`](docs/sdks/toolsets/README.md#settoolvariationsgroup) - setToolVariationsGroup toolsets

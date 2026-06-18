@@ -400,6 +400,7 @@ export * from "./sendmessageresult.js";
 export * from "./servernameoverride.js";
 export * from "./servervariable.js";
 export * from "./serviceinfo.js";
+export * from "./sessioncaptureexclusionsresult.js";
 export * from "./sessionsummary.js";
 export * from "./setbillingmetadatarequestbody.js";
 export * from "./setmcpmetadatarequestbody.js";
