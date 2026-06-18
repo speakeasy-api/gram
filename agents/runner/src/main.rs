@@ -39,10 +39,11 @@ enum Mode {
         #[arg(long, default_value = "0.0.0.0:8081", env = "GRAM_RUNNER_ADDR")]
         addr: SocketAddr,
 
-        /// The assistant id this VM serves. Stamped into /state for the
-        /// reaper's belt-and-suspenders identity check.
+        /// The assistant id this VM serves, stamped into /state. Optional: a
+        /// generic warm-pool sandbox boots without it and learns it from the
+        /// first turn instead (see ThreadTurnRequest.assistant_id).
         #[arg(long, env = "GRAM_ASSISTANT_ID")]
-        assistant_id: String,
+        assistant_id: Option<String>,
 
         /// Base URL of the management API the runner calls back into for
         /// bootstrap, completions, and MCP traffic.

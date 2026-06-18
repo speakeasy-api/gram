@@ -1309,6 +1309,7 @@ func insertActiveV2RuntimeRow(
 	t *testing.T,
 	conn *pgxpool.Pool,
 	projectID, assistantID, threadID uuid.UUID,
+	backend string,
 	state string,
 	metadata string,
 ) uuid.UUID {
@@ -1318,7 +1319,7 @@ func insertActiveV2RuntimeRow(
 		AssistantThreadID: threadID,
 		AssistantID:       assistantID,
 		ProjectID:         projectID,
-		Backend:           runtimeBackendFlyIO,
+		Backend:           backend,
 		State:             state,
 	}))
 	row, err := assistantsrepo.New(conn).GetAssistantRuntimeV2(t.Context(), assistantsrepo.GetAssistantRuntimeV2Params{
@@ -1343,7 +1344,7 @@ func TestServiceCoreRecycleActiveRuntimeImagesRecyclesAndPersists(t *testing.T) 
 	// insertReapableProject seeds no thread events, so the runtime reads as
 	// fully idle to the sweep's in-flight guard.
 	projectID, assistantID, threadID := insertReapableProject(t, conn, "recycle-persist")
-	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeStateActive, `{"app_name":"gram-asst-stale","machine_id":"m-1"}`)
+	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeBackendFlyIO, runtimeStateActive, `{"app_name":"gram-asst-stale","machine_id":"m-1"}`)
 
 	recycledMetadata := `{"app_name":"gram-asst-stale","machine_id":"m-1","last_boot_id":"boot-2"}`
 	recycleCalls := &atomic.Int64{}
@@ -1378,12 +1379,12 @@ func TestServiceCoreRecycleActiveRuntimeImagesSweepsOnlyActiveV2Rows(t *testing.
 	// Candidate: active v2 row with metadata. The fake reports no recycle
 	// (image already current), so it must count as skipped.
 	activeProj, activeAssistant, activeThread := insertReapableProject(t, conn, "recycle-active")
-	insertActiveV2RuntimeRow(t, conn, activeProj, activeAssistant, activeThread, runtimeStateActive, `{"app_name":"gram-asst-current","machine_id":"m-1"}`)
+	insertActiveV2RuntimeRow(t, conn, activeProj, activeAssistant, activeThread, runtimeBackendFlyIO, runtimeStateActive, `{"app_name":"gram-asst-current","machine_id":"m-1"}`)
 
 	// Non-candidates: a starting v2 row (mid-boot, already on the new
 	// image) and a v1 row (per-thread runtimes recycle on admission).
 	startingProj, startingAssistant, startingThread := insertReapableProject(t, conn, "recycle-starting")
-	insertActiveV2RuntimeRow(t, conn, startingProj, startingAssistant, startingThread, runtimeStateStarting, `{"app_name":"gram-asst-booting","machine_id":"m-2"}`)
+	insertActiveV2RuntimeRow(t, conn, startingProj, startingAssistant, startingThread, runtimeBackendFlyIO, runtimeStateStarting, `{"app_name":"gram-asst-booting","machine_id":"m-2"}`)
 	v1Proj, v1Assistant, v1Thread := insertReapableProject(t, conn, "recycle-v1")
 	insertReapableRuntimeRow(t, conn, v1Proj, v1Assistant, v1Thread, runtimeStateActive, "gram-asst-v1", time.Now().UTC())
 
@@ -1412,7 +1413,7 @@ func TestServiceCoreRecycleActiveRuntimeImagesSkipsAssistantsWithInFlightEvents(
 	// insertAssistantFixture seeds a pending thread event, which is exactly
 	// the in-flight signal the sweep must respect.
 	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
-	insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeStateActive, `{"app_name":"gram-asst-busy","machine_id":"m-1"}`)
+	insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeBackendFlyIO, runtimeStateActive, `{"app_name":"gram-asst-busy","machine_id":"m-1"}`)
 
 	recycleCalls := &atomic.Int64{}
 	backend := testRuntimeBackend{
@@ -1440,7 +1441,7 @@ func TestServiceCoreRecycleActiveRuntimeImagesIgnoresDeletedAssistants(t *testin
 	// delete belongs to the janitor; recycling it would bump updated_at and
 	// postpone the inactivity-based collection.
 	projectID, assistantID, threadID := insertReapableProject(t, conn, "recycle-deleted-assistant")
-	insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeStateActive, `{"app_name":"gram-asst-orphan","machine_id":"m-1"}`)
+	insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeBackendFlyIO, runtimeStateActive, `{"app_name":"gram-asst-orphan","machine_id":"m-1"}`)
 	require.NoError(t, assistantsrepo.New(conn).DeleteAssistant(t.Context(), assistantsrepo.DeleteAssistantParams{
 		AssistantID: assistantID,
 		ProjectID:   projectID,
@@ -1470,7 +1471,7 @@ func TestServiceCoreRecycleActiveRuntimeImagesUndoesRecycleWhenRowExpiresMidSwee
 
 	projectID, assistantID, threadID := insertReapableProject(t, conn, "recycle-raced")
 	originalMetadata := `{"app_name":"gram-asst-raced","machine_id":"m-1"}`
-	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeStateActive, originalMetadata)
+	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeBackendFlyIO, runtimeStateActive, originalMetadata)
 
 	// The fake recycles "successfully" but expires the row first, simulating
 	// the warm timer winning the race while the machine update was in flight.
@@ -1515,7 +1516,7 @@ func TestServiceCoreRecycleActiveRuntimeImagesCountsBackendErrors(t *testing.T) 
 	require.NoError(t, err)
 
 	projectID, assistantID, threadID := insertReapableProject(t, conn, "recycle-errors")
-	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeStateActive, `{"app_name":"gram-asst-flaky","machine_id":"m-1"}`)
+	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeBackendFlyIO, runtimeStateActive, `{"app_name":"gram-asst-flaky","machine_id":"m-1"}`)
 
 	backend := testRuntimeBackend{
 		backend:    runtimeBackendFlyIO,
@@ -1532,6 +1533,41 @@ func TestServiceCoreRecycleActiveRuntimeImagesCountsBackendErrors(t *testing.T) 
 	runtime, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{ID: runtimeID, ProjectID: projectID})
 	require.NoError(t, err)
 	require.JSONEq(t, `{"app_name":"gram-asst-flaky","machine_id":"m-1"}`, string(runtime.BackendMetadataJson))
+}
+
+// A non-reuse backend (GKE) has no in-place image swap: it rolls onto a new
+// image by terminating idle runtimes (warm-TTL expiry), so the in-place recycle
+// sweep is a no-op for it — it touches no rows and tears nothing down.
+func TestServiceCoreRecycleActiveRuntimeImagesNoOpsForNonReuseBackend(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "recycle_runtime_images_gke_noop")
+	require.NoError(t, err)
+
+	projectID, assistantID, threadID := insertReapableProject(t, conn, "recycle-gke-noop")
+	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeBackendGKE, runtimeStateActive, `{"claim_name":"gram-asst-idle"}`)
+
+	stopCalls := &atomic.Int64{}
+	recycleCalls := &atomic.Int64{}
+	backend := testRuntimeBackend{
+		backend:      runtimeBackendGKE,
+		statusResult: RuntimeBackendStatus{Configured: true, IdleSeconds: nil},
+		stopCalls:    stopCalls,
+		recycleCalls: recycleCalls,
+	}
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil)
+
+	result, err := core.RecycleActiveRuntimeImages(t.Context(), RecycleAssistantRuntimeImagesParams{OnRowProcessed: nil})
+	require.NoError(t, err)
+	require.Equal(t, 0, result.Recycled)
+	require.Equal(t, 0, result.Skipped)
+	require.Equal(t, 0, result.Errors)
+	require.EqualValues(t, 0, stopCalls.Load(), "the in-place sweep must not tear down GKE runtimes")
+	require.EqualValues(t, 0, recycleCalls.Load(), "GKE has no in-place recycle")
+
+	runtime, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{ID: runtimeID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateActive, runtime.State, "GKE rows roll via terminate-on-idle, not the sweep")
 }
 
 func TestServiceCoreReapInactiveAssistantRuntimesCollectsOnlyInactive(t *testing.T) {
@@ -1768,6 +1804,12 @@ func (t testRuntimeBackend) Ensure(context.Context, assistantRuntimeRecord) (Run
 
 func (t testRuntimeBackend) ImageRef() string {
 	return t.imageRef
+}
+
+func (t testRuntimeBackend) ReusesIdleRuntimes() bool {
+	// Mirror production: GKE tears idle runtimes down (no warm reuse), every
+	// other backend preserves them for warm restart.
+	return t.backend != runtimeBackendGKE
 }
 
 func (t testRuntimeBackend) RecycleImage(ctx context.Context, record assistantRuntimeRecord) (RuntimeBackendRecycleResult, error) {

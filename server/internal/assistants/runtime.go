@@ -4,11 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"strings"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/chat"
 )
+
+// runtimeHTTPDoer is the HTTP surface both backends use to reach the in-pod
+// runner. Production builds it from the guardian egress policy; tests inject a
+// plain client.
+type runtimeHTTPDoer interface {
+	Do(req *http.Request) (*http.Response, error)
+}
 
 // defaultRuntimeGuestPort is the HTTP port the runner listens on inside a
 // guest VM. Backends use it when wiring service ports on freshly launched
@@ -78,6 +86,11 @@ type runtimeToolCall struct {
 type runtimeTurnRequest struct {
 	Input     string `json:"input"`
 	AuthToken string `json:"auth_token,omitempty"`
+	// AssistantID lets a runner that booted without GRAM_ASSISTANT_ID env
+	// (e.g. a generic warm-pool sandbox on GKE) learn which assistant it serves
+	// from the turn. Boot env wins when present, so it is harmless and unused
+	// on Fly.
+	AssistantID string `json:"assistant_id,omitempty"`
 }
 
 type runtimeHTTPRequest struct {

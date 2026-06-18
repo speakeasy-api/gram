@@ -25,6 +25,14 @@ type RuntimeBackend interface {
 	// machines with, in the "<repo>:<tag>" form. Stable for the lifetime
 	// of the process — the tag is stamped at build time.
 	ImageRef() string
+	// ReusesIdleRuntimes reports whether a stopped runtime's resources are
+	// kept for warm restart on the next admission (true) or torn down so the
+	// next admission always provisions a fresh one (false). It selects how a
+	// deploy rolls the fleet onto a new image: reusing backends (Fly) keep the
+	// machine and need an in-place RecycleImage; non-reusing backends (GKE)
+	// drop the idle runtime so re-admission adopts a fresh warm-pool pod
+	// already running the new image — no in-place swap exists or is needed.
+	ReusesIdleRuntimes() bool
 	Ensure(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendEnsureResult, error)
 	// RecycleImage rolls the runtime's existing machine onto the configured
 	// runtime image when it is running a stale one, without launching
