@@ -1,16 +1,27 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/heading";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { Switch } from "@/components/ui/switch";
 import { Type } from "@/components/ui/type";
 import { FeatureName } from "@gram/client/models/components";
+import { useProductFeatures } from "@gram/client/react-query";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet";
+import {
+  invalidateAllListOrganizationUsers,
+  useListOrganizationUsers,
+} from "@gram/client/react-query/listOrganizationUsers";
+import {
+  invalidateAllSessionCaptureExclusions,
+  useSessionCaptureExclusions,
+} from "@gram/client/react-query/sessionCaptureExclusions";
+import { useSetSessionCaptureExclusionsMutation } from "@gram/client/react-query/setSessionCaptureExclusions";
 import { Stack } from "@speakeasy-api/moonshine";
-import { Eye, FileText, Monitor, ShieldCheck } from "lucide-react";
-import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Eye, FileText, Monitor, ShieldCheck, UserMinus } from "lucide-react";
+import { useMemo, useState } from "react";
 import { AIIntegrationsSection } from "./AIIntegrationsSection";
 import { OtelForwardingSection } from "./OtelForwardingSection";
-import { useProductFeatures } from "@gram/client/react-query";
 
 export default function OrgLogs(): JSX.Element {
   return (
@@ -49,6 +60,35 @@ function OrgLogsInner() {
     sessionCaptureEnabled ?? featuresData?.sessionCaptureEnabled ?? false;
   const effectiveObservabilityModeEnabled =
     observabilityModeEnabled ?? featuresData?.observabilityModeEnabled ?? false;
+
+  const queryClient = useQueryClient();
+  const { data: usersData, isLoading: usersLoading } =
+    useListOrganizationUsers();
+  const { data: exclusionsData, isLoading: exclusionsLoading } =
+    useSessionCaptureExclusions();
+
+  const memberOptions = useMemo(
+    () =>
+      [...(usersData?.users ?? [])]
+        .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""))
+        .map((u) => ({
+          label: u.name ? `${u.name} (${u.email})` : u.email,
+          value: u.userId,
+        })),
+    [usersData],
+  );
+  const excludedUserIds = exclusionsData?.userIds ?? [];
+
+  const { mutate: setExclusions, status: exclusionsMutationStatus } =
+    useSetSessionCaptureExclusionsMutation({
+      onSuccess: async () => {
+        await Promise.all([
+          invalidateAllSessionCaptureExclusions(queryClient),
+          invalidateAllListOrganizationUsers(queryClient),
+        ]);
+      },
+    });
+  const isMutatingExclusions = exclusionsMutationStatus === "pending";
 
   const { mutate: setLogsFeature, status: logsMutationStatus } =
     useFeaturesSetMutation({
@@ -252,6 +292,46 @@ function OrgLogsInner() {
                 />
               </RequireScope>
             )}
+          </Stack>
+
+          <div className="border-border border-t" />
+
+          <Stack gap={2}>
+            <Stack direction="horizontal" align="center" gap={2}>
+              <UserMinus className="text-muted-foreground h-4 w-4" />
+              <Type variant="body" className="font-medium">
+                Excluded Members
+              </Type>
+            </Stack>
+            <Type variant="body" className="text-muted-foreground ml-6 text-sm">
+              Pick team members whose agent sessions should never be captured
+              even while session capture is on for the organization.
+            </Type>
+            <div className="ml-6">
+              <RequireScope scope="org:admin" level="component">
+                <MultiSelect
+                  key={excludedUserIds.join(",")}
+                  options={memberOptions}
+                  defaultValue={excludedUserIds}
+                  onValueChange={(userIds) =>
+                    setExclusions({
+                      request: {
+                        sessionCaptureExclusionsResult: { userIds },
+                      },
+                    })
+                  }
+                  placeholder="No members excluded"
+                  searchable
+                  disabled={
+                    usersLoading ||
+                    exclusionsLoading ||
+                    isMutatingExclusions ||
+                    !effectiveSessionCaptureEnabled
+                  }
+                  className="bg-background"
+                />
+              </RequireScope>
+            </div>
           </Stack>
         </Stack>
       </div>
