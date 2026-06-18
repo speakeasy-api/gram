@@ -83,29 +83,55 @@ type linearTriggerEvent struct {
 
 // supportedLinearEventTypes is the default-deny allowlist of `<Type>.<action>`
 // event types the Linear trigger accepts when an instance does not narrow
-// `event_types`. Linear's data-change webhooks only ever send the actions
-// `create`, `update`, and `remove` (archiving surfaces as an `update` with
-// `archivedAt` set, not a distinct action — see
-// https://linear.app/developers/webhooks), so the list enumerates those verbs
-// per entity; CEL filters narrow further.
+// `event_types`. It enumerates every data-change resource type Linear delivers,
+// each with the only actions Linear sends for them — `create`, `update`, and
+// `remove` (archiving surfaces as an `update` with `archivedAt` set, not a
+// distinct action — see https://linear.app/developers/webhooks). Special-shaped
+// event webhooks (IssueSLA, OAuthAppRevoked) follow different payload shapes
+// and aren't decoded by this data-change ingest. CEL filters narrow further.
 var supportedLinearEventTypes = []string{
-	"Issue.create",
-	"Issue.update",
-	"Issue.remove",
 	"Comment.create",
 	"Comment.update",
 	"Comment.remove",
-	"Project.create",
-	"Project.update",
-	"Project.remove",
+	"Customer.create",
+	"Customer.update",
+	"Customer.remove",
+	"CustomerRequest.create",
+	"CustomerRequest.update",
+	"CustomerRequest.remove",
 	"Cycle.create",
 	"Cycle.update",
 	"Cycle.remove",
 	"Document.create",
 	"Document.update",
 	"Document.remove",
+	"Initiative.create",
+	"Initiative.update",
+	"Initiative.remove",
+	"InitiativeUpdate.create",
+	"InitiativeUpdate.update",
+	"InitiativeUpdate.remove",
+	"Issue.create",
+	"Issue.update",
+	"Issue.remove",
+	"IssueAttachment.create",
+	"IssueAttachment.update",
+	"IssueAttachment.remove",
+	"IssueLabel.create",
+	"IssueLabel.update",
+	"IssueLabel.remove",
+	"Project.create",
+	"Project.update",
+	"Project.remove",
+	"ProjectUpdate.create",
+	"ProjectUpdate.update",
+	"ProjectUpdate.remove",
 	"Reaction.create",
+	"Reaction.update",
 	"Reaction.remove",
+	"User.create",
+	"User.update",
+	"User.remove",
 }
 
 // linearSigningSecretEnv is the environment variable holding the Linear

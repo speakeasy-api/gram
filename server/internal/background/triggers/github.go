@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"hash"
 	"net/http"
+	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
@@ -100,37 +101,87 @@ type githubTriggerEvent struct {
 
 // supportedGitHubEventTypes is the default-deny allowlist of X-GitHub-Event
 // values the GitHub trigger accepts when an instance does not narrow
-// `event_types`. These are the event categories GitHub delivers via webhook
-// (see https://docs.github.com/webhooks/webhook-events-and-payloads); CEL
-// filters narrow further on action/repo/number.
+// `event_types`. It is the full set GitHub can deliver to a repository or
+// organization webhook (see
+// https://docs.github.com/webhooks/webhook-events-and-payloads) so any event a
+// user subscribes to can be opted into; CEL filters narrow further on
+// action/repo/number.
 var supportedGitHubEventTypes = []string{
-	"push",
+	"branch_protection_configuration",
+	"branch_protection_rule",
+	"check_run",
+	"check_suite",
+	"code_scanning_alert",
+	"commit_comment",
+	"create",
+	"custom_property",
+	"custom_property_values",
+	"delete",
+	"dependabot_alert",
+	"deploy_key",
+	"deployment",
+	"deployment_protection_rule",
+	"deployment_review",
+	"deployment_status",
+	"discussion",
+	"discussion_comment",
+	"fork",
+	"github_app_authorization",
+	"gollum",
+	"installation",
+	"installation_repositories",
+	"installation_target",
+	"issue_comment",
+	"issue_dependencies",
+	"issues",
+	"label",
+	"marketplace_purchase",
+	"member",
+	"membership",
+	"merge_group",
+	"meta",
+	"milestone",
+	"org_block",
+	"organization",
+	"package",
+	"page_build",
+	"personal_access_token_request",
+	"ping",
+	"project",
+	"project_card",
+	"project_column",
+	"projects_v2",
+	"projects_v2_item",
+	"projects_v2_status_update",
+	"public",
 	"pull_request",
 	"pull_request_review",
 	"pull_request_review_comment",
 	"pull_request_review_thread",
-	"issues",
-	"issue_comment",
-	"commit_comment",
+	"push",
+	"registry_package",
 	"release",
-	"create",
-	"delete",
-	"fork",
-	"star",
-	"watch",
-	"label",
-	"milestone",
-	"deployment",
-	"deployment_status",
-	"check_run",
-	"check_suite",
-	"status",
-	"gollum",
 	"repository",
-	"member",
+	"repository_advisory",
+	"repository_dispatch",
+	"repository_import",
+	"repository_ruleset",
+	"repository_vulnerability_alert",
+	"secret_scanning_alert",
+	"secret_scanning_alert_location",
+	"secret_scanning_scan",
+	"security_advisory",
+	"security_and_analysis",
+	"sponsorship",
+	"star",
+	"status",
+	"sub_issues",
 	"team",
-	"organization",
-	"ping",
+	"team_add",
+	"watch",
+	"workflow_dispatch",
+	"workflow_job",
+	"workflow_run",
 }
 
 // githubWebhookSecretEnv is the environment variable holding the GitHub
@@ -187,6 +238,19 @@ func githubIngest(body []byte, headers http.Header) (*WebhookIngest, error) {
 	eventType := headers.Get("X-GitHub-Event")
 	if eventType == "" {
 		return nil, fmt.Errorf("missing X-GitHub-Event header")
+	}
+
+	// A webhook configured with the application/x-www-form-urlencoded content
+	// type delivers the JSON under a `payload` form field rather than as the
+	// raw body. Unwrap it so both GitHub content types ingest. The signature is
+	// computed over the raw body in either case, so authentication has already
+	// run against the untouched body.
+	if strings.HasPrefix(strings.ToLower(headers.Get("Content-Type")), "application/x-www-form-urlencoded") {
+		values, err := url.ParseQuery(string(body))
+		if err != nil {
+			return nil, fmt.Errorf("decode github form body: %w", err)
+		}
+		body = []byte(values.Get("payload"))
 	}
 
 	// GitHub ping events carry an empty body or a zen-only body; still

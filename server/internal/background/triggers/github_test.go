@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -234,6 +235,36 @@ func TestGitHubIngestDefaultFallsBackToRepo(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result.Event)
 	require.Equal(t, "github:octocat/Hello-World", result.Event.CorrelationID)
+}
+
+func TestGitHubIngestFormURLEncodedBody(t *testing.T) {
+	t.Parallel()
+
+	definition, ok := GetDefinition("github")
+	require.True(t, ok)
+
+	config, err := definition.DecodeConfig(nil)
+	require.NoError(t, err)
+
+	// A webhook configured with the x-www-form-urlencoded content type delivers
+	// the JSON under a `payload` form field; it must ingest the same as a raw
+	// JSON body.
+	jsonBody := `{"action":"opened","pull_request":{"number":42},"repository":{"full_name":"octocat/Hello-World"}}`
+	body := []byte("payload=" + url.QueryEscape(jsonBody))
+	headers := http.Header{}
+	headers.Set("Content-Type", "application/x-www-form-urlencoded")
+	headers.Set("X-GitHub-Event", "pull_request")
+	headers.Set("X-GitHub-Delivery", "del-form-1")
+
+	result, err := definition.HandleWebhook(body, headers, config)
+	require.NoError(t, err)
+	require.NotNil(t, result.Event)
+	require.Equal(t, "github:octocat/Hello-World/pr:42", result.Event.CorrelationID)
+
+	event, ok := result.Event.Event.(githubTriggerEvent)
+	require.True(t, ok)
+	require.Equal(t, "pull_request", event.EventType)
+	require.Equal(t, 42, event.Number)
 }
 
 func TestGitHubIngestEmptyPingBodyMarshalsCleanly(t *testing.T) {
