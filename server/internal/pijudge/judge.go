@@ -213,8 +213,8 @@ func (c *Engine) classifyOne(ctx context.Context, req ra.PromptInjectionRequest,
 	}
 
 	start := time.Now()
-	isAttack, confidence, rationale, err := c.call(ctx, req, msg)
-	c.metrics.RecordClassification(ctx, req.OrgID, labelFor(isAttack, err), o11y.OutcomeFromError(err), time.Since(start))
+	verdict, err := c.call(ctx, req, msg)
+	c.metrics.RecordClassification(ctx, req.OrgID, labelFor(verdict.IsAttack, err), o11y.OutcomeFromError(err), time.Since(start))
 	if err != nil {
 		c.logger.WarnContext(ctx, "pi judge call failed; failing open",
 			attr.SlogError(err),
@@ -222,17 +222,17 @@ func (c *Engine) classifyOne(ctx context.Context, req ra.PromptInjectionRequest,
 		)
 		return safeResult
 	}
-	if !isAttack {
+	if !verdict.IsAttack {
 		return safeResult
 	}
-	c.metrics.RecordConfidence(ctx, req.OrgID, confidence)
+	c.metrics.RecordConfidence(ctx, req.OrgID, verdict.Confidence)
 	// Structured finding signal without raw payload (privacy): the dashboard
 	// surfaces findings and the judge_confidence metric carries the score; this
 	// log is for fleet-level visibility.
 	c.logger.InfoContext(ctx, "pi judge flagged prompt injection",
 		attr.SlogOrganizationID(req.OrgID),
 	)
-	return ra.PromptInjectionResult{Label: ra.LabelInjection, Score: confidence, Rationale: rationale}
+	return ra.PromptInjectionResult{Label: ra.LabelInjection, Score: verdict.Confidence, Rationale: verdict.Rationale}
 }
 
 // judgePayload is the user turn: the captured event rendered as a structured
@@ -244,7 +244,15 @@ type judgePayload struct {
 	Message riskjudge.MessagePayload `json:"message"`
 }
 
-func (c *Engine) call(ctx context.Context, req ra.PromptInjectionRequest, msg ra.JudgeMessage) (isAttack bool, confidence float64, rationale string, err error) {
+// judgeVerdict is the judge's structured-output response: the model's call plus
+// the one-sentence rationale that explains it.
+type judgeVerdict struct {
+	IsAttack   bool    `json:"is_attack"`
+	Confidence float64 `json:"confidence"`
+	Rationale  string  `json:"rationale"`
+}
+
+func (c *Engine) call(ctx context.Context, req ra.PromptInjectionRequest, msg ra.JudgeMessage) (judgeVerdict, error) {
 	payload, err := json.Marshal(judgePayload{Message: riskjudge.RenderMessage(msg)})
 	if err != nil {
 		// Unreachable: the payload is strings, bools, and slices. Fall back to the
@@ -269,14 +277,14 @@ func (c *Engine) call(ctx context.Context, req ra.PromptInjectionRequest, msg ra
 		JSONSchema:     &c.schema,
 	})
 	if err != nil {
-		return false, 0, "", fmt.Errorf("openrouter object completion: %w", err)
+		return judgeVerdict{}, fmt.Errorf("openrouter object completion: %w", err)
 	}
 	if response == nil || response.Message == nil {
-		return false, 0, "", fmt.Errorf("empty completion response")
+		return judgeVerdict{}, fmt.Errorf("empty completion response")
 	}
 	raw := strings.TrimSpace(openrouter.GetText(*response.Message))
 	if raw == "" {
-		return false, 0, "", fmt.Errorf("empty completion content")
+		return judgeVerdict{}, fmt.Errorf("empty completion content")
 	}
 
 	// The schema also requires a "rationale" (the model's one-sentence
@@ -284,15 +292,12 @@ func (c *Engine) call(ctx context.Context, req ra.PromptInjectionRequest, msg ra
 	// flagged event is explainable for triage. The system prompt instructs the
 	// judge not to echo secrets or raw payloads in it, and it is stored in the
 	// same privacy tier as the match text the finding already records.
-	var verdict struct {
-		IsAttack   bool    `json:"is_attack"`
-		Confidence float64 `json:"confidence"`
-		Rationale  string  `json:"rationale"`
-	}
+	var verdict judgeVerdict
 	if err := json.Unmarshal([]byte(raw), &verdict); err != nil {
-		return false, 0, "", fmt.Errorf("parse judge response: %w", err)
+		return judgeVerdict{}, fmt.Errorf("parse judge response: %w", err)
 	}
-	return verdict.IsAttack, max(0, min(1, verdict.Confidence)), verdict.Rationale, nil
+	verdict.Confidence = max(0, min(1, verdict.Confidence))
+	return verdict, nil
 }
 
 // VerdictSchema is the judge's structured-output JSON schema. Deliberately no
