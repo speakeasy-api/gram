@@ -528,6 +528,7 @@ run();
 * [listFilterOptions](docs/sdks/telemetry/README.md#listfilteroptions) - listFilterOptions telemetry
 * [listHooksTraces](docs/sdks/telemetry/README.md#listhookstraces) - listHooksTraces telemetry
 * [listToolUsageTraces](docs/sdks/telemetry/README.md#listtoolusagetraces) - listToolUsageTraces telemetry
+* [query](docs/sdks/telemetry/README.md#query) - query telemetry
 * [searchChats](docs/sdks/telemetry/README.md#searchchats) - searchChats telemetry
 * [searchLogs](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 * [searchToolCalls](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
@@ -900,6 +901,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`telemetryListFilterOptions`](docs/sdks/telemetry/README.md#listfilteroptions) - listFilterOptions telemetry
 - [`telemetryListHooksTraces`](docs/sdks/telemetry/README.md#listhookstraces) - listHooksTraces telemetry
 - [`telemetryListToolUsageTraces`](docs/sdks/telemetry/README.md#listtoolusagetraces) - listToolUsageTraces telemetry
+- [`telemetryQuery`](docs/sdks/telemetry/README.md#query) - query telemetry
 - [`telemetrySearchChats`](docs/sdks/telemetry/README.md#searchchats) - searchChats telemetry
 - [`telemetrySearchLogs`](docs/sdks/telemetry/README.md#searchlogs) - searchLogs telemetry
 - [`telemetrySearchToolCalls`](docs/sdks/telemetry/README.md#searchtoolcalls) - searchToolCalls telemetry
@@ -1261,6 +1263,7 @@ To learn about this feature and how to get started, check
 - [`useShadowMCPApprovalRequests`](docs/sdks/access/README.md#listshadowmcpapprovalrequests) - listShadowMCPApprovalRequests access
 - [`useSwitchScopesMutation`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
 - [`useTelemetryCaptureEventMutation`](docs/sdks/telemetry/README.md#captureevent) - captureEvent telemetry
+- [`useTelemetryQuery`](docs/sdks/telemetry/README.md#query) - query telemetry
 - [`useTemplate`](docs/sdks/templates/README.md#get) - getTemplate templates
 - [`useTemplates`](docs/sdks/templates/README.md#list) - listTemplates templates
 - [`useToolset`](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets

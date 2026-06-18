@@ -307,6 +307,31 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetProjectOverview", "type": "query"}`)
 	})
 
+	Method("query", func() {
+		Description("Generic, org-scoped analytics query over pre-aggregated usage metrics. Returns both a grouped table and a per-group hourly timeseries for the same slice of data, supporting arbitrary allowlisted group-by dimensions and filters (e.g. group by department_name, then drill in by filtering department_name and grouping by role).")
+
+		// Org-scoped: the query spans every project in the caller's
+		// organization. project_id is an optional filter, not the auth scope.
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(QueryPayload)
+			security.SessionPayload()
+		})
+
+		Result(QueryResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.query")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "query")
+		Meta("openapi:extension:x-speakeasy-name-override", "query")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TelemetryQuery", "type": "query"}`)
+	})
+
 	Method("listFilterOptions", func() {
 		Description("List available filter options (API keys or users) for the observability overview")
 		Security(security.ByKey, security.ProjectSlug, func() {
@@ -1163,6 +1188,142 @@ var EmployeeDataFlowEdge = Type("EmployeeDataFlowEdge", func() {
 })
 
 // Observability Overview types
+
+// queryDimensions is the allowlist of dimensions that telemetry.query may
+// group by or filter on. Each maps to a safe column expression in the repo
+// layer; "role"/"group" are multi-valued (arrayJoin to group, has() to
+// filter). Clients can never supply arbitrary JSON paths or SQL.
+var queryDimensions = []any{
+	"department_name",
+	"job_title",
+	"employee_type",
+	"division_name",
+	"cost_center_name",
+	"email",
+	"model",
+	"hook_source", // consuming surface (claude-code, cowork, cursor, ...)
+	"role",
+	"group",
+	"project_id",
+}
+
+// queryMeasures is the allowlist of measures available for ranking (sort_by).
+// Every measure is always returned in QueryMeasures regardless of this choice.
+var queryMeasures = []any{
+	"total_cost",
+	"total_tokens",
+	"total_input_tokens",
+	"total_output_tokens",
+	"cache_read_input_tokens",
+	"cache_creation_input_tokens",
+	"total_tool_calls",
+	"total_chats",
+}
+
+var QueryPayload = Type("QueryPayload", func() {
+	Description("Payload for a generic org-scoped analytics query")
+
+	Attribute("from", String, "Start time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-26T10:00:00Z")
+	})
+	Attribute("group_by", String, "Optional dimension to break results down by. When omitted, a single aggregate row/series for the whole slice is returned.", func() {
+		Enum(queryDimensions...)
+		Example("department_name")
+	})
+	Attribute("filters", ArrayOf(QueryFilter), "Optional filters; all filters are ANDed together.")
+	Attribute("granularity_seconds", Int64, "Optional timeseries bucket size in seconds. Defaults to an interval derived from the time range and is floored to 3600 (the source data is bucketed hourly).")
+	Attribute("top_n", Int, "When group_by is set, keep at most this many groups (ranked by sort_by); the remainder are rolled into an 'Other' group. Defaults to 10.", func() {
+		Default(10)
+		Minimum(1)
+	})
+	Attribute("sort_by", String, "Measure used to rank groups for top_n. Defaults to total_cost.", func() {
+		Enum(queryMeasures...)
+		Default("total_cost")
+	})
+
+	Required("from", "to")
+})
+
+var QueryFilter = Type("QueryFilter", func() {
+	Description("A single filter predicate on an allowlisted dimension")
+
+	Attribute("dimension", String, "Dimension to filter on", func() {
+		Enum(queryDimensions...)
+	})
+	Attribute("values", ArrayOf(String), "Match if the dimension equals any of these values (IN semantics; for multi-valued dimensions like role/group, matches if any element is present).", func() {
+		MinLength(1)
+	})
+
+	Required("dimension", "values")
+})
+
+var QueryMeasures = Type("QueryMeasures", func() {
+	Description("Aggregated measure values for a group or time bucket")
+
+	Attribute("total_cost", Float64, "Total cost in USD")
+	Attribute("total_input_tokens", Int64, "Sum of input tokens")
+	Attribute("total_output_tokens", Int64, "Sum of output tokens")
+	Attribute("total_tokens", Int64, "Sum of all tokens")
+	Attribute("cache_read_input_tokens", Int64, "Sum of cache read input tokens")
+	Attribute("cache_creation_input_tokens", Int64, "Sum of cache creation input tokens")
+	Attribute("total_tool_calls", Int64, "Total number of tool calls")
+	Attribute("total_chats", Int64, "Number of distinct chat sessions")
+
+	Required(
+		"total_cost",
+		"total_input_tokens",
+		"total_output_tokens",
+		"total_tokens",
+		"cache_read_input_tokens",
+		"cache_creation_input_tokens",
+		"total_tool_calls",
+		"total_chats",
+	)
+})
+
+var QueryRow = Type("QueryRow", func() {
+	Description("One row of the grouped table: measures aggregated over the full time range for a single group value.")
+
+	Attribute("group_value", String, "The dimension value for this row. Empty string when no group_by was requested; 'Other' for the rolled-up remainder beyond top_n.")
+	Attribute("measures", QueryMeasures, "Aggregated measures for this group")
+	Attribute("dimension_values", MapOf(String, ArrayOf(String)), "Distinct values of every allowlisted dimension other than the group_by dimension, observed within this group. Keyed by dimension identifier (the same keys used for group_by/filters, e.g. when grouping by department_name: 'email' -> [...], 'job_title' -> [...], 'role' -> [...]). Empty values are omitted and each list is capped.")
+
+	Required("group_value", "measures", "dimension_values")
+})
+
+var QueryPoint = Type("QueryPoint", func() {
+	Description("A single time bucket within a series")
+
+	Attribute("bucket_time_unix_nano", String, "Bucket start time in Unix nanoseconds (string for JS precision)")
+	Attribute("measures", QueryMeasures, "Aggregated measures for this bucket")
+
+	Required("bucket_time_unix_nano", "measures")
+})
+
+var QuerySeries = Type("QuerySeries", func() {
+	Description("A gap-filled timeseries for a single group value (one line on the chart).")
+
+	Attribute("group_value", String, "The dimension value for this series. Empty string when no group_by was requested; 'Other' for the rolled-up remainder beyond top_n.")
+	Attribute("points", ArrayOf(QueryPoint), "Time buckets in ascending order, gap-filled with zeros.")
+
+	Required("group_value", "points")
+})
+
+var QueryResult = Type("QueryResult", func() {
+	Description("Result of a generic analytics query: a grouped table and a matching per-group timeseries over the same data slice.")
+
+	Attribute("group_by", String, "Echoes the requested group_by dimension; empty when none was requested.")
+	Attribute("interval_seconds", Int64, "The timeseries bucket interval in seconds.")
+	Attribute("table", ArrayOf(QueryRow), "Grouped totals over the full time range, ordered by sort_by descending.")
+	Attribute("timeseries", ArrayOf(QuerySeries), "One series per group value (aligned with table rows), each gap-filled.")
+
+	Required("group_by", "interval_seconds", "table", "timeseries")
+})
 
 var GetObservabilityOverviewPayload = Type("GetObservabilityOverviewPayload", func() {
 	Description("Payload for getting observability overview metrics")

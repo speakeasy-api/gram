@@ -21,8 +21,8 @@ export interface ProjectNavRoute {
  * Single source of truth shared by the sidebar (`AppSidebar`) and the command
  * palette so the two never drift — the palette only lists pages a user can
  * actually reach from the nav, in the same order, behind the same scopes.
- * Honors the same feature flags the sidebar uses to gate Deployments and
- * Assistants.
+ * Honors the same feature flags the sidebar uses to gate Deployments,
+ * Assistants, and demo pages.
  *
  * The returned array is memoized so consumers can safely use it as a `useEffect`
  * dependency without re-running every render (this hook feeds the command
@@ -36,6 +36,8 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   // Default true: opt-out via PostHog org-group targeting on `gram-deployments-page`.
   const isDeploymentsPageEnabled =
     telemetry.isFeatureEnabled("gram-deployments-page") ?? true;
+  const isTelemetryQueryDemoEnabled =
+    telemetry.isFeatureEnabled("gram-telemetry-query-demo-page") ?? false;
 
   return useMemo<ProjectNavRoute[]>(() => {
     const read: Scope[] = ["project:read"];
@@ -62,6 +64,9 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       { route: routes.employees, scope: read },
       { route: routes.costs, scope: read },
       { route: routes.insights, scope: read },
+      ...(isTelemetryQueryDemoEnabled
+        ? [{ route: routes.telemetryQueryDemo, scope: read }]
+        : []),
       { route: routes.agentSessions, scope: read },
       { route: routes.logs, scope: read },
       { route: routes.riskOverview, scope: read },
@@ -71,5 +76,10 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       { route: routes.detectionRules, scope: readWrite },
       { route: routes.settings, scope: ["project:write"] },
     ];
-  }, [routes, isAssistantsEnabled, isDeploymentsPageEnabled]);
+  }, [
+    routes,
+    isAssistantsEnabled,
+    isDeploymentsPageEnabled,
+    isTelemetryQueryDemoEnabled,
+  ]);
 }

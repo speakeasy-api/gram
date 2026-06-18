@@ -15,6 +15,7 @@ import { telemetryListAttributeKeys } from "../funcs/telemetryListAttributeKeys.
 import { telemetryListFilterOptions } from "../funcs/telemetryListFilterOptions.js";
 import { telemetryListHooksTraces } from "../funcs/telemetryListHooksTraces.js";
 import { telemetryListToolUsageTraces } from "../funcs/telemetryListToolUsageTraces.js";
+import { telemetryQuery } from "../funcs/telemetryQuery.js";
 import { telemetrySearchChats } from "../funcs/telemetrySearchChats.js";
 import { telemetrySearchLogs } from "../funcs/telemetrySearchLogs.js";
 import { telemetrySearchToolCalls } from "../funcs/telemetrySearchToolCalls.js";
@@ -265,6 +266,25 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListToolUsageTracesResult> {
     return unwrapAsync(telemetryListToolUsageTraces(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * query telemetry
+   *
+   * @remarks
+   * Generic, org-scoped analytics query over pre-aggregated usage metrics. Returns both a grouped table and a per-group hourly timeseries for the same slice of data, supporting arbitrary allowlisted group-by dimensions and filters (e.g. group by department_name, then drill in by filtering department_name and grouping by role).
+   */
+  async query(
+    request: operations.QueryRequest,
+    security?: operations.QuerySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.QueryResult> {
+    return unwrapAsync(telemetryQuery(
       this,
       request,
       security,

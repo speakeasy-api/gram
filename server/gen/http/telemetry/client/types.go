@@ -161,6 +161,29 @@ type GetProjectOverviewRequestBody struct {
 	To string `form:"to" json:"to" xml:"to"`
 }
 
+// QueryRequestBody is the type of the "telemetry" service "query" endpoint
+// HTTP request body.
+type QueryRequestBody struct {
+	// Start time in ISO 8601 format
+	From string `form:"from" json:"from" xml:"from"`
+	// End time in ISO 8601 format
+	To string `form:"to" json:"to" xml:"to"`
+	// Optional dimension to break results down by. When omitted, a single
+	// aggregate row/series for the whole slice is returned.
+	GroupBy *string `form:"group_by,omitempty" json:"group_by,omitempty" xml:"group_by,omitempty"`
+	// Optional filters; all filters are ANDed together.
+	Filters []*QueryFilterRequestBody `form:"filters,omitempty" json:"filters,omitempty" xml:"filters,omitempty"`
+	// Optional timeseries bucket size in seconds. Defaults to an interval derived
+	// from the time range and is floored to 3600 (the source data is bucketed
+	// hourly).
+	GranularitySeconds *int64 `form:"granularity_seconds,omitempty" json:"granularity_seconds,omitempty" xml:"granularity_seconds,omitempty"`
+	// When group_by is set, keep at most this many groups (ranked by sort_by); the
+	// remainder are rolled into an 'Other' group. Defaults to 10.
+	TopN int `form:"top_n" json:"top_n" xml:"top_n"`
+	// Measure used to rank groups for top_n. Defaults to total_cost.
+	SortBy string `form:"sort_by" json:"sort_by" xml:"sort_by"`
+}
+
 // ListFilterOptionsRequestBody is the type of the "telemetry" service
 // "listFilterOptions" endpoint HTTP request body.
 type ListFilterOptionsRequestBody struct {
@@ -370,6 +393,19 @@ type GetProjectOverviewResponseBody struct {
 	Comparison *ProjectOverviewSummaryResponseBody `form:"comparison,omitempty" json:"comparison,omitempty" xml:"comparison,omitempty"`
 	// Indicates whether metrics are session-based or tool-call-based
 	MetricsMode *string `form:"metrics_mode,omitempty" json:"metrics_mode,omitempty" xml:"metrics_mode,omitempty"`
+}
+
+// QueryResponseBody is the type of the "telemetry" service "query" endpoint
+// HTTP response body.
+type QueryResponseBody struct {
+	// Echoes the requested group_by dimension; empty when none was requested.
+	GroupBy *string `form:"group_by,omitempty" json:"group_by,omitempty" xml:"group_by,omitempty"`
+	// The timeseries bucket interval in seconds.
+	IntervalSeconds *int64 `form:"interval_seconds,omitempty" json:"interval_seconds,omitempty" xml:"interval_seconds,omitempty"`
+	// Grouped totals over the full time range, ordered by sort_by descending.
+	Table []*QueryRowResponseBody `form:"table,omitempty" json:"table,omitempty" xml:"table,omitempty"`
+	// One series per group value (aligned with table rows), each gap-filled.
+	Timeseries []*QuerySeriesResponseBody `form:"timeseries,omitempty" json:"timeseries,omitempty" xml:"timeseries,omitempty"`
 }
 
 // ListFilterOptionsResponseBody is the type of the "telemetry" service
@@ -2318,6 +2354,186 @@ type GetProjectOverviewGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// QueryUnauthorizedResponseBody is the type of the "telemetry" service "query"
+// endpoint HTTP response body for the "unauthorized" error.
+type QueryUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryForbiddenResponseBody is the type of the "telemetry" service "query"
+// endpoint HTTP response body for the "forbidden" error.
+type QueryForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryBadRequestResponseBody is the type of the "telemetry" service "query"
+// endpoint HTTP response body for the "bad_request" error.
+type QueryBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryNotFoundResponseBody is the type of the "telemetry" service "query"
+// endpoint HTTP response body for the "not_found" error.
+type QueryNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryConflictResponseBody is the type of the "telemetry" service "query"
+// endpoint HTTP response body for the "conflict" error.
+type QueryConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryUnsupportedMediaResponseBody is the type of the "telemetry" service
+// "query" endpoint HTTP response body for the "unsupported_media" error.
+type QueryUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryInvalidResponseBody is the type of the "telemetry" service "query"
+// endpoint HTTP response body for the "invalid" error.
+type QueryInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryInvariantViolationResponseBody is the type of the "telemetry" service
+// "query" endpoint HTTP response body for the "invariant_violation" error.
+type QueryInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryUnexpectedResponseBody is the type of the "telemetry" service "query"
+// endpoint HTTP response body for the "unexpected" error.
+type QueryUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// QueryGatewayErrorResponseBody is the type of the "telemetry" service "query"
+// endpoint HTTP response body for the "gateway_error" error.
+type QueryGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ListFilterOptionsUnauthorizedResponseBody is the type of the "telemetry"
 // service "listFilterOptions" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -4130,6 +4346,67 @@ type LLMClientUsageResponseBody struct {
 	ActivityCount *int64 `form:"activity_count,omitempty" json:"activity_count,omitempty" xml:"activity_count,omitempty"`
 }
 
+// QueryFilterRequestBody is used to define fields on request body types.
+type QueryFilterRequestBody struct {
+	// Dimension to filter on
+	Dimension string `form:"dimension" json:"dimension" xml:"dimension"`
+	// Match if the dimension equals any of these values (IN semantics; for
+	// multi-valued dimensions like role/group, matches if any element is present).
+	Values []string `form:"values" json:"values" xml:"values"`
+}
+
+// QueryRowResponseBody is used to define fields on response body types.
+type QueryRowResponseBody struct {
+	// The dimension value for this row. Empty string when no group_by was
+	// requested; 'Other' for the rolled-up remainder beyond top_n.
+	GroupValue *string `form:"group_value,omitempty" json:"group_value,omitempty" xml:"group_value,omitempty"`
+	// Aggregated measures for this group
+	Measures *QueryMeasuresResponseBody `form:"measures,omitempty" json:"measures,omitempty" xml:"measures,omitempty"`
+	// Distinct values of every allowlisted dimension other than the group_by
+	// dimension, observed within this group. Keyed by dimension identifier (the
+	// same keys used for group_by/filters, e.g. when grouping by department_name:
+	// 'email' -> [...], 'job_title' -> [...], 'role' -> [...]). Empty values are
+	// omitted and each list is capped.
+	DimensionValues map[string][]string `form:"dimension_values,omitempty" json:"dimension_values,omitempty" xml:"dimension_values,omitempty"`
+}
+
+// QueryMeasuresResponseBody is used to define fields on response body types.
+type QueryMeasuresResponseBody struct {
+	// Total cost in USD
+	TotalCost *float64 `form:"total_cost,omitempty" json:"total_cost,omitempty" xml:"total_cost,omitempty"`
+	// Sum of input tokens
+	TotalInputTokens *int64 `form:"total_input_tokens,omitempty" json:"total_input_tokens,omitempty" xml:"total_input_tokens,omitempty"`
+	// Sum of output tokens
+	TotalOutputTokens *int64 `form:"total_output_tokens,omitempty" json:"total_output_tokens,omitempty" xml:"total_output_tokens,omitempty"`
+	// Sum of all tokens
+	TotalTokens *int64 `form:"total_tokens,omitempty" json:"total_tokens,omitempty" xml:"total_tokens,omitempty"`
+	// Sum of cache read input tokens
+	CacheReadInputTokens *int64 `form:"cache_read_input_tokens,omitempty" json:"cache_read_input_tokens,omitempty" xml:"cache_read_input_tokens,omitempty"`
+	// Sum of cache creation input tokens
+	CacheCreationInputTokens *int64 `form:"cache_creation_input_tokens,omitempty" json:"cache_creation_input_tokens,omitempty" xml:"cache_creation_input_tokens,omitempty"`
+	// Total number of tool calls
+	TotalToolCalls *int64 `form:"total_tool_calls,omitempty" json:"total_tool_calls,omitempty" xml:"total_tool_calls,omitempty"`
+	// Number of distinct chat sessions
+	TotalChats *int64 `form:"total_chats,omitempty" json:"total_chats,omitempty" xml:"total_chats,omitempty"`
+}
+
+// QuerySeriesResponseBody is used to define fields on response body types.
+type QuerySeriesResponseBody struct {
+	// The dimension value for this series. Empty string when no group_by was
+	// requested; 'Other' for the rolled-up remainder beyond top_n.
+	GroupValue *string `form:"group_value,omitempty" json:"group_value,omitempty" xml:"group_value,omitempty"`
+	// Time buckets in ascending order, gap-filled with zeros.
+	Points []*QueryPointResponseBody `form:"points,omitempty" json:"points,omitempty" xml:"points,omitempty"`
+}
+
+// QueryPointResponseBody is used to define fields on response body types.
+type QueryPointResponseBody struct {
+	// Bucket start time in Unix nanoseconds (string for JS precision)
+	BucketTimeUnixNano *string `form:"bucket_time_unix_nano,omitempty" json:"bucket_time_unix_nano,omitempty" xml:"bucket_time_unix_nano,omitempty"`
+	// Aggregated measures for this bucket
+	Measures *QueryMeasuresResponseBody `form:"measures,omitempty" json:"measures,omitempty" xml:"measures,omitempty"`
+}
+
 // FilterOptionResponseBody is used to define fields on response body types.
 type FilterOptionResponseBody struct {
 	// Unique identifier for the option
@@ -4715,6 +4992,42 @@ func NewGetProjectOverviewRequestBody(p *telemetry.GetProjectOverviewPayload) *G
 	body := &GetProjectOverviewRequestBody{
 		From: p.From,
 		To:   p.To,
+	}
+	return body
+}
+
+// NewQueryRequestBody builds the HTTP request body from the payload of the
+// "query" endpoint of the "telemetry" service.
+func NewQueryRequestBody(p *telemetry.QueryPayload) *QueryRequestBody {
+	body := &QueryRequestBody{
+		From:               p.From,
+		To:                 p.To,
+		GroupBy:            p.GroupBy,
+		GranularitySeconds: p.GranularitySeconds,
+		TopN:               p.TopN,
+		SortBy:             p.SortBy,
+	}
+	if p.Filters != nil {
+		body.Filters = make([]*QueryFilterRequestBody, len(p.Filters))
+		for i, val := range p.Filters {
+			if val == nil {
+				body.Filters[i] = nil
+				continue
+			}
+			body.Filters[i] = marshalTelemetryQueryFilterToQueryFilterRequestBody(val)
+		}
+	}
+	{
+		var zero int
+		if body.TopN == zero {
+			body.TopN = 10
+		}
+	}
+	{
+		var zero string
+		if body.SortBy == zero {
+			body.SortBy = "total_cost"
+		}
 	}
 	return body
 }
@@ -6615,6 +6928,179 @@ func NewGetProjectOverviewGatewayError(body *GetProjectOverviewGatewayErrorRespo
 	return v
 }
 
+// NewQueryResultOK builds a "telemetry" service "query" endpoint result from a
+// HTTP "OK" response.
+func NewQueryResultOK(body *QueryResponseBody) *telemetry.QueryResult {
+	v := &telemetry.QueryResult{
+		GroupBy:         *body.GroupBy,
+		IntervalSeconds: *body.IntervalSeconds,
+	}
+	v.Table = make([]*telemetry.QueryRow, len(body.Table))
+	for i, val := range body.Table {
+		if val == nil {
+			v.Table[i] = nil
+			continue
+		}
+		v.Table[i] = unmarshalQueryRowResponseBodyToTelemetryQueryRow(val)
+	}
+	v.Timeseries = make([]*telemetry.QuerySeries, len(body.Timeseries))
+	for i, val := range body.Timeseries {
+		if val == nil {
+			v.Timeseries[i] = nil
+			continue
+		}
+		v.Timeseries[i] = unmarshalQuerySeriesResponseBodyToTelemetryQuerySeries(val)
+	}
+
+	return v
+}
+
+// NewQueryUnauthorized builds a telemetry service query endpoint unauthorized
+// error.
+func NewQueryUnauthorized(body *QueryUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryForbidden builds a telemetry service query endpoint forbidden error.
+func NewQueryForbidden(body *QueryForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryBadRequest builds a telemetry service query endpoint bad_request
+// error.
+func NewQueryBadRequest(body *QueryBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryNotFound builds a telemetry service query endpoint not_found error.
+func NewQueryNotFound(body *QueryNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryConflict builds a telemetry service query endpoint conflict error.
+func NewQueryConflict(body *QueryConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryUnsupportedMedia builds a telemetry service query endpoint
+// unsupported_media error.
+func NewQueryUnsupportedMedia(body *QueryUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryInvalid builds a telemetry service query endpoint invalid error.
+func NewQueryInvalid(body *QueryInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryInvariantViolation builds a telemetry service query endpoint
+// invariant_violation error.
+func NewQueryInvariantViolation(body *QueryInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryUnexpected builds a telemetry service query endpoint unexpected
+// error.
+func NewQueryUnexpected(body *QueryUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewQueryGatewayError builds a telemetry service query endpoint gateway_error
+// error.
+func NewQueryGatewayError(body *QueryGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListFilterOptionsResultOK builds a "telemetry" service
 // "listFilterOptions" endpoint result from a HTTP "OK" response.
 func NewListFilterOptionsResultOK(body *ListFilterOptionsResponseBody) *telemetry.ListFilterOptionsResult {
@@ -8099,6 +8585,37 @@ func ValidateGetProjectOverviewResponseBody(body *GetProjectOverviewResponseBody
 	if body.MetricsMode != nil {
 		if !(*body.MetricsMode == "session" || *body.MetricsMode == "tool_call") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.metrics_mode", *body.MetricsMode, []any{"session", "tool_call"}))
+		}
+	}
+	return
+}
+
+// ValidateQueryResponseBody runs the validations defined on QueryResponseBody
+func ValidateQueryResponseBody(body *QueryResponseBody) (err error) {
+	if body.GroupBy == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("group_by", "body"))
+	}
+	if body.IntervalSeconds == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("interval_seconds", "body"))
+	}
+	if body.Table == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("table", "body"))
+	}
+	if body.Timeseries == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeseries", "body"))
+	}
+	for _, e := range body.Table {
+		if e != nil {
+			if err2 := ValidateQueryRowResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Timeseries {
+		if e != nil {
+			if err2 := ValidateQuerySeriesResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -10760,6 +11277,246 @@ func ValidateGetProjectOverviewGatewayErrorResponseBody(body *GetProjectOverview
 	return
 }
 
+// ValidateQueryUnauthorizedResponseBody runs the validations defined on
+// query_unauthorized_response_body
+func ValidateQueryUnauthorizedResponseBody(body *QueryUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryForbiddenResponseBody runs the validations defined on
+// query_forbidden_response_body
+func ValidateQueryForbiddenResponseBody(body *QueryForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryBadRequestResponseBody runs the validations defined on
+// query_bad_request_response_body
+func ValidateQueryBadRequestResponseBody(body *QueryBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryNotFoundResponseBody runs the validations defined on
+// query_not_found_response_body
+func ValidateQueryNotFoundResponseBody(body *QueryNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryConflictResponseBody runs the validations defined on
+// query_conflict_response_body
+func ValidateQueryConflictResponseBody(body *QueryConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryUnsupportedMediaResponseBody runs the validations defined on
+// query_unsupported_media_response_body
+func ValidateQueryUnsupportedMediaResponseBody(body *QueryUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryInvalidResponseBody runs the validations defined on
+// query_invalid_response_body
+func ValidateQueryInvalidResponseBody(body *QueryInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryInvariantViolationResponseBody runs the validations defined on
+// query_invariant_violation_response_body
+func ValidateQueryInvariantViolationResponseBody(body *QueryInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryUnexpectedResponseBody runs the validations defined on
+// query_unexpected_response_body
+func ValidateQueryUnexpectedResponseBody(body *QueryUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateQueryGatewayErrorResponseBody runs the validations defined on
+// query_gateway_error_response_body
+func ValidateQueryGatewayErrorResponseBody(body *QueryGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateListFilterOptionsUnauthorizedResponseBody runs the validations
 // defined on listFilterOptions_unauthorized_response_body
 func ValidateListFilterOptionsUnauthorizedResponseBody(body *ListFilterOptionsUnauthorizedResponseBody) (err error) {
@@ -13167,6 +13924,107 @@ func ValidateLLMClientUsageResponseBody(body *LLMClientUsageResponseBody) (err e
 	}
 	if body.ActivityCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("activity_count", "body"))
+	}
+	return
+}
+
+// ValidateQueryFilterRequestBody runs the validations defined on
+// QueryFilterRequestBody
+func ValidateQueryFilterRequestBody(body *QueryFilterRequestBody) (err error) {
+	if body.Values == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("values", "body"))
+	}
+	if !(body.Dimension == "department_name" || body.Dimension == "job_title" || body.Dimension == "employee_type" || body.Dimension == "division_name" || body.Dimension == "cost_center_name" || body.Dimension == "email" || body.Dimension == "model" || body.Dimension == "hook_source" || body.Dimension == "role" || body.Dimension == "group" || body.Dimension == "project_id") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dimension", body.Dimension, []any{"department_name", "job_title", "employee_type", "division_name", "cost_center_name", "email", "model", "hook_source", "role", "group", "project_id"}))
+	}
+	if len(body.Values) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.values", body.Values, len(body.Values), 1, true))
+	}
+	return
+}
+
+// ValidateQueryRowResponseBody runs the validations defined on
+// QueryRowResponseBody
+func ValidateQueryRowResponseBody(body *QueryRowResponseBody) (err error) {
+	if body.GroupValue == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("group_value", "body"))
+	}
+	if body.Measures == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("measures", "body"))
+	}
+	if body.DimensionValues == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("dimension_values", "body"))
+	}
+	if body.Measures != nil {
+		if err2 := ValidateQueryMeasuresResponseBody(body.Measures); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateQueryMeasuresResponseBody runs the validations defined on
+// QueryMeasuresResponseBody
+func ValidateQueryMeasuresResponseBody(body *QueryMeasuresResponseBody) (err error) {
+	if body.TotalCost == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_cost", "body"))
+	}
+	if body.TotalInputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_input_tokens", "body"))
+	}
+	if body.TotalOutputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_output_tokens", "body"))
+	}
+	if body.TotalTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_tokens", "body"))
+	}
+	if body.CacheReadInputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cache_read_input_tokens", "body"))
+	}
+	if body.CacheCreationInputTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cache_creation_input_tokens", "body"))
+	}
+	if body.TotalToolCalls == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_tool_calls", "body"))
+	}
+	if body.TotalChats == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("total_chats", "body"))
+	}
+	return
+}
+
+// ValidateQuerySeriesResponseBody runs the validations defined on
+// QuerySeriesResponseBody
+func ValidateQuerySeriesResponseBody(body *QuerySeriesResponseBody) (err error) {
+	if body.GroupValue == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("group_value", "body"))
+	}
+	if body.Points == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("points", "body"))
+	}
+	for _, e := range body.Points {
+		if e != nil {
+			if err2 := ValidateQueryPointResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateQueryPointResponseBody runs the validations defined on
+// QueryPointResponseBody
+func ValidateQueryPointResponseBody(body *QueryPointResponseBody) (err error) {
+	if body.BucketTimeUnixNano == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("bucket_time_unix_nano", "body"))
+	}
+	if body.Measures == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("measures", "body"))
+	}
+	if body.Measures != nil {
+		if err2 := ValidateQueryMeasuresResponseBody(body.Measures); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	return
 }

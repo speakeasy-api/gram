@@ -279,6 +279,7 @@ export * from "./shadowMCPAccessRules.js";
 export * from "./shadowMCPApprovalRequests.js";
 export * from "./switchScopes.js";
 export * from "./telemetryCaptureEvent.js";
+export * from "./telemetryQuery.js";
 export * from "./template.js";
 export * from "./templates.js";
 export * from "./toolset.js";
