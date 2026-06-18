@@ -1,4 +1,4 @@
-h1:bgD7d/dmkHnbN0wsVnH7ncqAZx7bfmpZcDFzH+NHPUc=
+h1:bNFqsxeRpc08rZtEE2tT5QGnTx+OofgQKEOW8vjoKtU=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -221,3 +221,4 @@ h1:bgD7d/dmkHnbN0wsVnH7ncqAZx7bfmpZcDFzH+NHPUc=
 20260618115411_risk-results-add-llm-judge-reason.sql h1:aI+VA7W9POYKH1mpSAUDTa4sfmr7gXkdmkBtXVK1NLI=
 20260618141330_risk-results-drop-llm-judge-reason.sql h1:D1AdewSg0AisvTZYT5ta9zDyUH5sFMWvaew/BPmLDtI=
 20260618145406_remotesession-clients-relax-issuer-binding.sql h1:Ilx2asUwFZi73cQMVj5yrXGc5aq6QihR2Sd4uaC4h6o=
+20260618194743_deployments-functions-add-infra-overrides.sql h1:MNR3+BYsl1tfjLes6MbKUWqGkw/nMs8HO2cfyZvTTPs=
