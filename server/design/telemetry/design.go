@@ -842,6 +842,7 @@ var ListSessionsPayload = Type("ListSessionsPayload", func() {
 	})
 	Attribute("filters", ArrayOf(QueryFilter), "Optional filters; all filters are ANDed together.")
 	Attribute("sort_by", String, "Measure used to rank sessions. Defaults to total_cost.", func() {
+		Enum("total_cost", "total_tokens", "total_input_tokens", "total_output_tokens", "tool_call_count", "message_count", "duration_seconds")
 		Default("total_cost")
 	})
 	Attribute("limit", Int, "Number of sessions to return (1-1000)", func() {
