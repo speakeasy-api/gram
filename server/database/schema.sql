@@ -3073,11 +3073,6 @@ CREATE TABLE IF NOT EXISTS risk_results (
   confidence DOUBLE PRECISION,
   tags TEXT[],
 
-  -- The LLM judge's one-sentence explanation of why this finding fired. NULL for
-  -- L0 heuristic findings and any engine that emits no judge reason. Expand step
-  -- (nullable, populated going forward) so existing rows are unaffected.
-  llm_judge_reason TEXT,
-
   -- Populated on rows that represent a message the scanner could not analyze
   -- after exhausting its retry budget
   dead_letter_reason TEXT,
