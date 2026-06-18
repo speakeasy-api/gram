@@ -35,6 +35,8 @@ const (
 	StatusCancelled     = "cancelled"
 
 	DefinitionSlugSlack     = "slack"
+	DefinitionSlugLinear    = "linear"
+	DefinitionSlugGithub    = "github"
 	DefinitionSlugCron      = "cron"
 	DefinitionSlugWake      = "wake"
 	DefinitionSlugDashboard = "dashboard"

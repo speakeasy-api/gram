@@ -42,6 +42,8 @@ const (
 	StatusPaused = "paused"
 
 	sourceKindSlack     = bgtriggers.DefinitionSlugSlack
+	sourceKindLinear    = bgtriggers.DefinitionSlugLinear
+	sourceKindGithub    = bgtriggers.DefinitionSlugGithub
 	sourceKindCron      = bgtriggers.DefinitionSlugCron
 	sourceKindWake      = bgtriggers.DefinitionSlugWake
 	sourceKindDashboard = bgtriggers.DefinitionSlugDashboard
@@ -1407,6 +1409,47 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 			}
 		}
 		return sourceKindSlack, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
+	case sourceKindLinear:
+		var event linearEventPayload
+		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
+			return "", nil, nil, nil, fmt.Errorf("decode linear trigger event: %w", err)
+		}
+		sourceRefJSON, err := json.Marshal(linearSourceRef{
+			EventType: event.EventType,
+			URL:       event.URL,
+		})
+		if err != nil {
+			return "", nil, nil, nil, fmt.Errorf("marshal linear source ref: %w", err)
+		}
+		sourcePayloadJSON := task.RawPayload
+		if !json.Valid(sourcePayloadJSON) {
+			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
+			if err != nil {
+				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
+			}
+		}
+		return sourceKindLinear, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
+	case sourceKindGithub:
+		var event githubEventPayload
+		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
+			return "", nil, nil, nil, fmt.Errorf("decode github trigger event: %w", err)
+		}
+		sourceRefJSON, err := json.Marshal(githubSourceRef{
+			EventType: event.EventType,
+			Action:    event.Action,
+			Repo:      event.Repo,
+		})
+		if err != nil {
+			return "", nil, nil, nil, fmt.Errorf("marshal github source ref: %w", err)
+		}
+		sourcePayloadJSON := task.RawPayload
+		if !json.Valid(sourcePayloadJSON) {
+			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
+			if err != nil {
+				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
+			}
+		}
+		return sourceKindGithub, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	case sourceKindCron:
 		var event cronEventPayload
 		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
