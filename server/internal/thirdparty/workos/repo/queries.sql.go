@@ -198,13 +198,32 @@ func (q *Queries) GetDirectoryGroupIDByWorkOSID(ctx context.Context, workosDirec
 	return id, err
 }
 
+const getDirectoryGroupSyncStateByWorkOSID = `-- name: GetDirectoryGroupSyncStateByWorkOSID :one
+SELECT id, workos_updated_at, workos_last_event_id
+FROM directory_groups
+WHERE workos_directory_group_id = $1
+`
+
+type GetDirectoryGroupSyncStateByWorkOSIDRow struct {
+	ID                uuid.UUID
+	WorkosUpdatedAt   pgtype.Timestamptz
+	WorkosLastEventID pgtype.Text
+}
+
+func (q *Queries) GetDirectoryGroupSyncStateByWorkOSID(ctx context.Context, workosDirectoryGroupID string) (GetDirectoryGroupSyncStateByWorkOSIDRow, error) {
+	row := q.db.QueryRow(ctx, getDirectoryGroupSyncStateByWorkOSID, workosDirectoryGroupID)
+	var i GetDirectoryGroupSyncStateByWorkOSIDRow
+	err := row.Scan(&i.ID, &i.WorkosUpdatedAt, &i.WorkosLastEventID)
+	return i, err
+}
+
 const getDirectoryUserAttributesByUserID = `-- name: GetDirectoryUserAttributesByUserID :one
 SELECT attributes
 FROM directory_users
 WHERE user_id = $1
   AND organization_id = $2
   AND deleted_at IS NULL
-ORDER BY updated_at DESC
+ORDER BY workos_updated_at DESC, updated_at DESC
 LIMIT 1
 `
 
