@@ -1939,6 +1939,7 @@ type GetToolUsageSummaryParams struct {
 	HostedToolsetSlugs []string
 	ShadowServerNames  []string
 	UserFilters        []ToolUsageUserFilter
+	HookSources        []string
 	TargetLimit        uint64
 	UserLimit          uint64
 	UsersByTargetLimit uint64
@@ -2167,6 +2168,7 @@ func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsag
 		HostedToolsetSlugs: nil,
 		ShadowServerNames:  nil,
 		UserFilters:        nil,
+		HookSources:        nil,
 		TargetLimit:        0,
 		UserLimit:          0,
 		UsersByTargetLimit: 0,
@@ -2797,6 +2799,12 @@ func toolUsageFilteredSelect(arg GetToolUsageSummaryParams, columns ...string) (
 		sb = sb.Where(userFilters)
 	}
 
+	// Direct hosted MCP calls have no hook source (empty string), so requiring a
+	// specific hook source naturally excludes them — matching the Tool Logs page.
+	if len(arg.HookSources) > 0 {
+		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSources})
+	}
+
 	return sb, nil
 }
 
@@ -3286,6 +3294,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		"any(skill_name) AS g_skill_name",
 		"any(mcp_match) AS g_mcp_match",
 		"any(mcp_server_url) AS g_mcp_server_url",
+		"any(hook_source) AS g_hook_source",
 		"max(has_result) AS g_has_result",
 		"max(has_error) AS g_has_error",
 	).
@@ -3313,7 +3322,8 @@ SELECT
 	%s AS user_label,
 	%s AS user_kind,
 	toUInt8(g_http_status_code >= 200 AND g_http_status_code < 400) AS success,
-	toUInt8(g_http_status_code >= 400) AS failure
+	toUInt8(g_http_status_code >= 400) AS failure,
+	'' AS hook_source
 FROM (%s)`,
 		ToolUsageTargetTypeHostedMCP,
 		toolUsageTargetKindServer,
@@ -3400,7 +3410,8 @@ SELECT
 	%s AS user_label,
 	%s AS user_kind,
 	toUInt8(g_has_result = 1 AND g_has_error = 0) AS success,
-	toUInt8(g_has_error = 1) AS failure
+	toUInt8(g_has_error = 1) AS failure,
+	g_hook_source AS hook_source
 FROM (%s)`, hookTargetType, hookTargetKind, hookTargetID, hookTargetLabel, hookToolName, userKey, userKey, userKind, hookSourceSQL)
 
 	hookArgs := make([]any, 0, 2+len(hookSourceArgs))
