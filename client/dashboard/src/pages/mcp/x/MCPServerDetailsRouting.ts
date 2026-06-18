@@ -1,4 +1,4 @@
-const VALID_TABS = ["overview", "team-access", "settings"] as const;
+const VALID_TABS = ["overview", "tools", "team-access", "settings"] as const;
 const LEGACY_AUTHENTICATION_TAB = "authentication";
 
 export type TabValue = (typeof VALID_TABS)[number];

@@ -2,9 +2,8 @@ import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { useMcpEndpointUrl } from "@/hooks/useToolsetUrl";
+import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import { remoteMcpRouteParam } from "@/lib/sources";
-import { getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import type {
   McpEndpoint,
@@ -19,10 +18,9 @@ import {
 } from "@gram/client/react-query/index.js";
 import { Badge, Button } from "@speakeasy-api/moonshine";
 import { ArrowUpRight, Copy, ExternalLink } from "lucide-react";
-import { useMemo, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
-import { RemoteMcpToolsSection } from "./RemoteMcpToolsSection";
 
 type OverviewTabProps = {
   mcpServer: McpServer | undefined;
@@ -95,43 +93,35 @@ function OverviewRows({
   const source = useSourceOverview(mcpServer.remoteMcpServerId);
 
   return (
-    <>
-      <section>
-        <Heading variant="h3" className="mb-1 font-semibold normal-case">
-          Essentials
-        </Heading>
-        <EssentialsReadinessSummary
-          serverAddress={serverAddress}
-          authentication={authentication}
-          source={source}
-        />
-        <div>
-          <ServerAddressRow
-            serverAddress={serverAddress}
-            onConfigure={onShowEndpoints}
-          />
-          <AuthenticationOverviewRow
-            authentication={authentication}
-            onConfigure={onShowAuthentication}
-          />
-          {mcpServer.remoteMcpServerId ? (
-            <SourceOverviewRow source={source} />
-          ) : (
-            // /x/mcp only renders mcp_servers-backed (remote MCP) servers, which
-            // always carry a remoteMcpServerId, so this branch is currently
-            // unreachable. Kept for when toolset-backed servers migrate here
-            // (AGE-1902).
-            <ToolsOverviewRow toolsetId={mcpServer.toolsetId} />
-          )}
-        </div>
-      </section>
-      <RemoteMcpToolsSection
-        mcpUrl={serverAddress.mcpUrl}
-        isResolvingUrl={serverAddress.loading}
-        mcpServerId={mcpServer.id}
-        isIssuerGated={!!mcpServer.userSessionIssuerId}
+    <section>
+      <Heading variant="h3" className="mb-1 font-semibold normal-case">
+        Essentials
+      </Heading>
+      <EssentialsReadinessSummary
+        serverAddress={serverAddress}
+        authentication={authentication}
+        source={source}
       />
-    </>
+      <div>
+        <ServerAddressRow
+          serverAddress={serverAddress}
+          onConfigure={onShowEndpoints}
+        />
+        <AuthenticationOverviewRow
+          authentication={authentication}
+          onConfigure={onShowAuthentication}
+        />
+        {mcpServer.remoteMcpServerId ? (
+          <SourceOverviewRow source={source} />
+        ) : (
+          // /x/mcp only renders mcp_servers-backed (remote MCP) servers, which
+          // always carry a remoteMcpServerId, so this branch is currently
+          // unreachable. Kept for when toolset-backed servers migrate here
+          // (AGE-1902).
+          <ToolsOverviewRow toolsetId={mcpServer.toolsetId} />
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -230,23 +220,18 @@ function useServerAddressOverview(
   endpoints: McpEndpoint[],
   isLoadingEndpoints: boolean,
 ): ServerAddressOverview {
-  const endpoint = useMemo(
-    () => endpoints.find((e) => e.customDomainId) ?? endpoints[0],
-    [endpoints],
+  const { mcpUrl, installPageUrl, loading } = useResolvedMcpServerUrl(
+    endpoints,
+    isLoadingEndpoints,
   );
-  const { mcpUrl: resolvedUrl } = useMcpEndpointUrl(endpoint);
-  const fallbackUrl = endpoint?.slug
-    ? `${getServerURL()}/mcp/${endpoint.slug}`
-    : undefined;
-  const mcpUrl = resolvedUrl ?? fallbackUrl;
-  const ready = !isLoadingEndpoints && !!mcpUrl;
+  const ready = !loading && !!mcpUrl;
 
   return {
     ready,
-    loading: isLoadingEndpoints,
+    loading,
     mcpUrl,
-    installPageUrl: mcpUrl ? `${mcpUrl}/install` : undefined,
-    status: readyStatus(isLoadingEndpoints, ready),
+    installPageUrl,
+    status: readyStatus(loading, ready),
   };
 }
 

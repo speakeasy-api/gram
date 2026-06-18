@@ -1,15 +1,49 @@
 import { createMCPClient } from "@ai-sdk/mcp";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
+import { z } from "zod";
 
 /**
- * The tool map returned by the AI SDK MCP client's `tools()` call: a record
- * keyed by tool name. We keep the SDK's shape rather than re-modeling it so the
- * connection stays as vanilla as the playground / elements path
- * (see elements/src/hooks/useMCPTools.ts).
+ * MCP tool annotation hints (the optional `annotations` object on a tool in the
+ * `tools/list` response). All fields are advisory and may be absent; malformed
+ * hint values are dropped (`.catch`) rather than failing the whole decode.
  */
-export type RemoteMcpToolSet = Awaited<
-  ReturnType<Awaited<ReturnType<typeof createMCPClient>>["tools"]>
+const remoteMcpToolAnnotationsSchema = z.object({
+  /** Human-friendly display name for the tool. */
+  title: z.string().optional(),
+  readOnlyHint: z.boolean().optional().catch(undefined),
+  destructiveHint: z.boolean().optional().catch(undefined),
+  idempotentHint: z.boolean().optional().catch(undefined),
+  openWorldHint: z.boolean().optional().catch(undefined),
+});
+
+/** A single tool from the `tools/list` response (extra fields are ignored). */
+const remoteMcpToolSchema = z.object({
+  name: z.string(),
+  description: z.string().optional(),
+  // Raw JSON Schema for the tool's input; kept opaque and parsed lazily in the
+  // UI when rendering parameters.
+  inputSchema: z.unknown().optional(),
+  annotations: remoteMcpToolAnnotationsSchema.optional(),
+});
+
+/** The decoded shape of an MCP `tools/list` result. */
+const listToolsResultSchema = z.object({
+  tools: z.array(remoteMcpToolSchema),
+});
+
+export type RemoteMcpToolAnnotations = z.infer<
+  typeof remoteMcpToolAnnotationsSchema
 >;
+
+/** The slice of an MCP tool we surface for the dashboard listing. */
+export interface RemoteMcpTool {
+  description?: string;
+  inputSchema?: unknown;
+  annotations?: RemoteMcpToolAnnotations;
+}
+
+/** A record of tools keyed by tool name, mirroring the `tools/list` response. */
+type RemoteMcpToolSet = Record<string, RemoteMcpTool>;
 
 export interface UseRemoteMcpToolsResult {
   tools: RemoteMcpToolSet | undefined;
@@ -72,7 +106,29 @@ export function useRemoteMcpTools(
         transport: { type: "http", url: mcpUrl, headers },
       });
       try {
-        return await client.tools();
+        // Use the raw `tools/list` call rather than client.tools(): the latter
+        // strips annotations (it forwards only name/description/inputSchema),
+        // and we want the MCP annotation hints. inputSchema comes through
+        // unwrapped, which the section's schema reader already handles.
+        //
+        // `listTools` isn't on the public `MCPClient` type (which only ships
+        // *executable* tools via `tools()`), so we reach it structurally and
+        // decode its untyped result with Zod rather than asserting a shape.
+        // Tracked for the ai-v6 migration in AIS-169.
+        const raw = await (
+          client as unknown as { listTools: () => Promise<unknown> }
+        ).listTools();
+        const { tools } = listToolsResultSchema.parse(raw);
+
+        const toolSet: RemoteMcpToolSet = {};
+        for (const tool of tools) {
+          toolSet[tool.name] = {
+            description: tool.description,
+            inputSchema: tool.inputSchema,
+            annotations: tool.annotations,
+          };
+        }
+        return toolSet;
       } finally {
         // Streamable HTTP keeps a connection open; release it once we have the
         // tool list so we don't leak sockets across refetches.
