@@ -123,8 +123,28 @@ function ModelIcon({
 }
 
 // Shared grid template so the header and every row align.
-const GRID =
-  "grid grid-cols-[minmax(140px,20rem)_112px_116px_92px_104px_132px_128px_1fr] items-center gap-3 px-6";
+const GRID = "grid items-center gap-3 px-6";
+
+// Fixed widths keep the header and every row aligned (separate grids can't share
+// a `max-content` track). The name column is sized per breakdown level so emails
+// fit without leaving short names (divisions, roles) in a sea of whitespace.
+const NAME_WIDTH: Partial<Record<Dimension, number>> = {
+  [Dimension.Email]: 260,
+  [Dimension.JobTitle]: 215,
+  [Dimension.DepartmentName]: 190,
+  [Dimension.Model]: 180,
+  [Dimension.DivisionName]: 160,
+  [Dimension.Group]: 160,
+  [Dimension.CostCenterName]: 150,
+  [Dimension.HookSource]: 150,
+  [Dimension.EmployeeType]: 140,
+  [Dimension.Role]: 130,
+};
+
+function gridTemplate(groupBy: Dimension): string {
+  const nameW = NAME_WIDTH[groupBy] ?? 170;
+  return `${nameW}px 88px 110px 90px 104px 104px 108px 1fr`;
+}
 
 const PAGE_SIZE = 10;
 
@@ -270,6 +290,7 @@ export function CostTable({
 
   const showModelIcon = groupBy === Dimension.Model;
   const showAgentIcon = groupBy === Dimension.HookSource;
+  const cols = gridTemplate(groupBy);
 
   const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
   const safePage = Math.min(page, Math.max(totalPages - 1, 0));
@@ -286,9 +307,10 @@ export function CostTable({
   const maxCost = realCosts.length ? Math.max(...realCosts) : 0;
 
   return (
-    <div className="border-border divide-border divide-y overflow-hidden rounded-lg border">
+    <div className="border-border divide-border divide-y overflow-x-auto rounded-lg border">
       <div
         className={cn(GRID, "text-muted-foreground py-3.5 text-sm font-medium")}
+        style={{ gridTemplateColumns: cols }}
       >
         <span className="flex">
           <HeaderButton
@@ -298,7 +320,7 @@ export function CostTable({
             onSort={onSort}
           />
         </span>
-        <span className="flex justify-end">
+        <span className="flex">
           <HeaderButton
             label="Total Cost"
             sortKey="cost"
@@ -306,7 +328,7 @@ export function CostTable({
             onSort={onSort}
           />
         </span>
-        <span className="flex justify-end">
+        <span className="flex">
           <HeaderButton
             label="Chat sessions"
             sortKey="chats"
@@ -314,7 +336,7 @@ export function CostTable({
             onSort={onSort}
           />
         </span>
-        <span className="flex justify-end">
+        <span className="flex">
           <HeaderButton
             label="Tool calls"
             sortKey="tools"
@@ -322,7 +344,7 @@ export function CostTable({
             onSort={onSort}
           />
         </span>
-        <span className="flex justify-end">
+        <span className="flex">
           <HeaderButton
             label="Tokens"
             sortKey="tokens"
@@ -330,7 +352,7 @@ export function CostTable({
             onSort={onSort}
           />
         </span>
-        <span className="flex items-center justify-end gap-1">
+        <span className="flex items-center gap-1">
           <HeaderButton
             label="% Change"
             sortKey="change"
@@ -346,7 +368,7 @@ export function CostTable({
             ]}
           />
         </span>
-        <span className="flex items-center justify-end gap-1">
+        <span className="flex items-center gap-1">
           <HeaderButton
             label="Trend"
             sortKey="trend"
@@ -392,6 +414,7 @@ export function CostTable({
                 (safePage * PAGE_SIZE + i) % 2 === 1 && "bg-muted/25",
                 drillable ? "hover:bg-muted cursor-pointer" : "cursor-default",
               )}
+              style={{ gridTemplateColumns: cols }}
             >
               <div className="flex min-w-0 items-center gap-2">
                 {showModelIcon && (
@@ -406,7 +429,7 @@ export function CostTable({
                     className="size-4 shrink-0"
                   />
                 )}
-                <span className="truncate font-medium">
+                <span className="max-w-[22rem] truncate font-medium">
                   {displayValue(row.groupValue)}
                 </span>
                 {drillable && (
@@ -414,22 +437,22 @@ export function CostTable({
                 )}
               </div>
               <span
-                className="text-right font-medium tabular-nums"
+                className="text-left font-medium tabular-nums"
                 style={isOther ? undefined : { color: costColor(costT) }}
               >
                 {formatCost(cost)}
               </span>
-              <span className="text-right tabular-nums">
+              <span className="text-left tabular-nums">
                 {(row.measures.totalChats ?? 0).toLocaleString()}
               </span>
-              <span className="text-right tabular-nums">
+              <span className="text-left tabular-nums">
                 {(row.measures.totalToolCalls ?? 0).toLocaleString()}
               </span>
-              <span className="text-right tabular-nums">
+              <span className="text-left tabular-nums">
                 {(row.measures.totalTokens ?? 0).toLocaleString()}
               </span>
               <span
-                className="text-right font-medium tabular-nums"
+                className="text-left font-medium tabular-nums"
                 style={pct !== null ? { color: changeColor(pct) } : undefined}
               >
                 {pct === null ? (
@@ -438,7 +461,7 @@ export function CostTable({
                   formatChange(pct)
                 )}
               </span>
-              <span className="flex justify-end">
+              <span className="flex">
                 <Sparkline values={seriesByGroup.get(row.groupValue) ?? []} />
               </span>
             </button>

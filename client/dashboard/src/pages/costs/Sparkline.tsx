@@ -63,10 +63,13 @@ export function Sparkline({
   values,
   width = 96,
   height = 28,
+  color: fixedColor,
 }: {
   values: number[];
   width?: number;
   height?: number;
+  // Force a colour (e.g. neutral for usage metrics); omit to colour by trend.
+  color?: string;
 }): JSX.Element | null {
   const usable = values.filter((v) => Number.isFinite(v));
   if (usable.length < 2 || usable.every((v) => v === 0)) {
@@ -89,7 +92,7 @@ export function Sparkline({
     y: pad + innerH - ((v - min) / span) * innerH,
   }));
 
-  const color = TREND_COLOR[trendDirection(values)];
+  const color = fixedColor ?? TREND_COLOR[trendDirection(values)];
 
   return (
     <svg
@@ -112,7 +115,7 @@ export function Sparkline({
 }
 
 // Centered moving average to tame daily spikes before drawing.
-function movingAverage(values: number[], window: number): number[] {
+export function movingAverage(values: number[], window: number): number[] {
   if (values.length <= 2) return values;
   const half = Math.floor(window / 2);
   return values.map((_, i) => {
@@ -129,7 +132,7 @@ function movingAverage(values: number[], window: number): number[] {
 }
 
 // Collapse a series into k evenly-spaced averaged buckets.
-function resample(values: number[], k: number): number[] {
+export function resample(values: number[], k: number): number[] {
   if (values.length <= k) return values;
   const out: number[] = [];
   for (let i = 0; i < k; i++) {
@@ -141,7 +144,7 @@ function resample(values: number[], k: number): number[] {
 }
 
 // A smooth curve through the points via Catmull-Rom → cubic-bezier conversion.
-function smoothPath(pts: { x: number; y: number }[]): string {
+export function smoothPath(pts: { x: number; y: number }[]): string {
   if (pts.length < 2) return "";
   const d = [`M ${pts[0]!.x.toFixed(1)},${pts[0]!.y.toFixed(1)}`];
   for (let i = 0; i < pts.length - 1; i++) {

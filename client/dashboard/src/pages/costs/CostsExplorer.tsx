@@ -12,16 +12,33 @@ import { useMemo, useState } from "react";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { useSlugs } from "@/contexts/Sdk";
+import { CostWidgets, type MixSpec } from "./CostWidgets";
 import { EntityProfile } from "./EntityProfile";
 import {
   CHAIN,
   type Crumb,
+  LABELS,
   type Measures,
   nextDimension,
   PIVOTS,
 } from "./taxonomy";
 
 const EMPTY_MEASURES: Measures = { cost: 0, sessions: 0, tools: 0, tokens: 0 };
+
+// Per-breakdown secondary cuts shown as "mix" widgets above the table. Keyed by
+// the current group-by axis; complementary to it (never the same dimension).
+const MIX_DIMS: Partial<Record<Dimension, Dimension[]>> = {
+  [Dimension.DivisionName]: [Dimension.Model, Dimension.HookSource],
+  [Dimension.DepartmentName]: [Dimension.JobTitle, Dimension.Model],
+  [Dimension.Group]: [Dimension.JobTitle, Dimension.HookSource],
+  [Dimension.Email]: [Dimension.HookSource, Dimension.Model],
+  [Dimension.HookSource]: [Dimension.Model, Dimension.Role],
+  [Dimension.JobTitle]: [Dimension.DepartmentName, Dimension.Model],
+  [Dimension.EmployeeType]: [Dimension.DepartmentName, Dimension.Model],
+  [Dimension.CostCenterName]: [Dimension.DepartmentName, Dimension.Model],
+  [Dimension.Role]: [Dimension.DepartmentName, Dimension.Model],
+  [Dimension.Model]: [Dimension.HookSource, Dimension.DepartmentName],
+};
 
 /**
  * Top-level cost explorer — the org bird's-eye view that walks the taxonomy.
@@ -170,6 +187,119 @@ export function CostsExplorer(): JSX.Element {
     return map;
   }, [data]);
 
+  // Previous-period totals per measure (for the KPI deltas).
+  const prevTotals: Measures = useMemo(() => {
+    const table = prevData?.table ?? [];
+    return table.reduce<Measures>(
+      (acc, r) => ({
+        cost: acc.cost + (r.measures.totalCost ?? 0),
+        sessions: acc.sessions + (r.measures.totalChats ?? 0),
+        tools: acc.tools + (r.measures.totalToolCalls ?? 0),
+        tokens: acc.tokens + (r.measures.totalTokens ?? 0),
+      }),
+      { ...EMPTY_MEASURES },
+    );
+  }, [prevData]);
+
+  // Each measure summed across groups per time bucket — drives the hero trend
+  // chart and the KPI sparklines.
+  const widgetSeries = useMemo(() => {
+    const ts = data?.timeseries ?? [];
+    const n = ts[0]?.points.length ?? 0;
+    const cost = Array<number>(n).fill(0);
+    const chats = Array<number>(n).fill(0);
+    const tools = Array<number>(n).fill(0);
+    const tokens = Array<number>(n).fill(0);
+    for (const s of ts) {
+      s.points.forEach((p, i) => {
+        cost[i] = (cost[i] ?? 0) + (p.measures.totalCost ?? 0);
+        chats[i] = (chats[i] ?? 0) + (p.measures.totalChats ?? 0);
+        tools[i] = (tools[i] ?? 0) + (p.measures.totalToolCalls ?? 0);
+        tokens[i] = (tokens[i] ?? 0) + (p.measures.totalTokens ?? 0);
+      });
+    }
+    return { cost, chats, tools, tokens };
+  }, [data]);
+
+  // Per-level secondary breakdowns: the configured cuts for the current axis,
+  // minus any already filtered or that don't vary within this slice (≤1 value).
+  const mixDims = (MIX_DIMS[groupBy] ?? [Dimension.Model]).filter(
+    (d) =>
+      d !== groupBy &&
+      !path.some((c) => c.dim === d) &&
+      (!attributes || (attributes[d]?.length ?? 0) > 1),
+  );
+  const mixDimA = mixDims[0];
+  const mixDimB = mixDims[1];
+
+  const { data: mixDataA, isLoading: mixLoadingA } = useQuery({
+    queryKey: [
+      "costs-explorer-mix-a",
+      from.toISOString(),
+      to.toISOString(),
+      mixDimA,
+      filters,
+    ],
+    enabled: !!mixDimA,
+    queryFn: () =>
+      unwrapAsync(
+        telemetryQuery(client, {
+          queryPayload: {
+            from,
+            to,
+            groupBy: mixDimA as GroupBy,
+            sortBy: "total_cost",
+            topN: 5,
+            filters: filters.length ? filters : undefined,
+          },
+        }),
+      ),
+  });
+  const { data: mixDataB, isLoading: mixLoadingB } = useQuery({
+    queryKey: [
+      "costs-explorer-mix-b",
+      from.toISOString(),
+      to.toISOString(),
+      mixDimB,
+      filters,
+    ],
+    enabled: !!mixDimB,
+    queryFn: () =>
+      unwrapAsync(
+        telemetryQuery(client, {
+          queryPayload: {
+            from,
+            to,
+            groupBy: mixDimB as GroupBy,
+            sortBy: "total_cost",
+            topN: 5,
+            filters: filters.length ? filters : undefined,
+          },
+        }),
+      ),
+  });
+
+  const mix: MixSpec[] = useMemo(() => {
+    const out: MixSpec[] = [];
+    const toRows = (t: QueryRow[]) =>
+      t.map((r) => ({ label: r.groupValue, cost: r.measures.totalCost ?? 0 }));
+    if (mixDimA) {
+      out.push({
+        title: `Cost by ${(LABELS[mixDimA] ?? "").toLowerCase()}`,
+        rows: toRows(mixDataA?.table ?? []),
+        loading: mixLoadingA,
+      });
+    }
+    if (mixDimB) {
+      out.push({
+        title: `Cost by ${(LABELS[mixDimB] ?? "").toLowerCase()}`,
+        rows: toRows(mixDataB?.table ?? []),
+        loading: mixLoadingB,
+      });
+    }
+    return out;
+  }, [mixDimA, mixDimB, mixDataA, mixDataB, mixLoadingA, mixLoadingB]);
+
   // Drill into a row: filter by it and advance to the next axis.
   const drillInto = (row: QueryRow) => {
     if (nextDimension(groupBy) === null) return;
@@ -218,9 +348,20 @@ export function CostsExplorer(): JSX.Element {
     />
   );
 
+  const widgets = (
+    <CostWidgets
+      series={widgetSeries}
+      totals={stats}
+      prevTotals={prevTotals}
+      mix={mix}
+      loading={isFetching && !data}
+    />
+  );
+
   return (
     <EntityProfile
       entity={currentEntity}
+      widgets={widgets}
       onBack={goUp}
       parentValue={parentValue}
       stats={stats}

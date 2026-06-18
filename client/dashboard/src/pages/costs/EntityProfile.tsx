@@ -174,6 +174,8 @@ export type EntityProfileProps = {
   prevCostByGroup: Map<string, number>;
   // The date-range picker control, rendered next to the row count.
   rangePicker: ReactNode;
+  // The summary widgets row (trend chart, mix, KPIs), rendered above the table.
+  widgets: ReactNode;
   isLoading: boolean;
   isError: boolean;
 };
@@ -197,6 +199,7 @@ export function EntityProfile({
   seriesByGroup,
   prevCostByGroup,
   rangePicker,
+  widgets,
   isLoading,
   isError,
 }: EntityProfileProps): JSX.Element {
@@ -278,6 +281,7 @@ export function EntityProfile({
       </div>
 
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-8 pt-6 pb-24">
+        {widgets}
         <div className="flex flex-col gap-3">
           <div className="mb-3 flex items-center justify-between gap-4">
             <h2 className="flex items-center gap-2 text-sm font-semibold">
