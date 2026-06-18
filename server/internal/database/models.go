@@ -1292,6 +1292,7 @@ type RiskCustomDetectionRule struct {
 	Title          string
 	Description    string
 	Regex          pgtype.Text
+	MatchConfig    []byte
 	Severity       string
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz

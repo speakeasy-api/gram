@@ -2998,7 +2998,15 @@ CREATE TABLE IF NOT EXISTS risk_custom_detection_rules (
   rule_id TEXT NOT NULL,
   title TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
+  -- Legacy single-pattern matcher. Superseded by match_config; retained
+  -- (nullable) so existing rules keep evaluating until a later ticket
+  -- backfills them into match_config and contracts this column away.
   regex TEXT,
+  -- Sparse, self-describing matcher config: an ANDed/ORed list of
+  -- {target, op, value, path?} conditions over message targets (content,
+  -- user_prompt, tool_server, tool_function, tool_args, ...). When NULL the
+  -- rule falls back to the regex column. See rule_engine.go for the shape.
+  match_config JSONB,
   severity TEXT NOT NULL DEFAULT 'medium',
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
