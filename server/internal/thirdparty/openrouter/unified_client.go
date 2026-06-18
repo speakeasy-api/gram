@@ -739,15 +739,9 @@ func (c *ChatClient) emitGenAITelemetry(
 	}
 
 	c.telemetryLogger.Log(ctx, telemetry.LogParams{
-		Timestamp: time.Now(),
-		ToolInfo:  toolInfo,
-		UserInfo: telemetry.UserInfo{
-			UserID:     userID,
-			Email:      userEmail,
-			Attributes: telemetry.UserAttributes{},
-			Groups:     nil,
-			Roles:      nil,
-		},
+		Timestamp:  time.Now(),
+		ToolInfo:   toolInfo,
+		UserInfo:   telemetry.UserInfoByID(userID),
 		Attributes: attrs,
 	})
 }

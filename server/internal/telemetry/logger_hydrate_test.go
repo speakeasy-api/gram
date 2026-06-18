@@ -2,6 +2,7 @@ package telemetry_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -128,11 +129,9 @@ func TestCreateLog_HydratesDirectorySnapshot(t *testing.T) {
 	timestamp := time.Now().UTC()
 
 	ti.telemLogger.Log(ctx, telemetry.LogParams{
-		Timestamp: timestamp,
-		ToolInfo:  toolInfo,
-		UserInfo: telemetry.UserInfo{
-			UserID: seed.userID,
-		},
+		Timestamp:  timestamp,
+		ToolInfo:   toolInfo,
+		UserInfo:   telemetry.UserInfoByID(seed.userID),
 		Attributes: attrs,
 	})
 
@@ -169,11 +168,9 @@ func TestCreateLog_NoDirectorySnapshotWhenNoDirectoryData(t *testing.T) {
 	timestamp := time.Now().UTC()
 
 	ti.telemLogger.Log(ctx, telemetry.LogParams{
-		Timestamp: timestamp,
-		ToolInfo:  toolInfo,
-		UserInfo: telemetry.UserInfo{
-			UserID: "user_without_directory_data",
-		},
+		Timestamp:  timestamp,
+		ToolInfo:   toolInfo,
+		UserInfo:   telemetry.UserInfoByID("user_without_directory_data"),
 		Attributes: attrs,
 	})
 
@@ -200,13 +197,13 @@ func TestUserInfoResolver_HydratesAndCachesUntilExpiry(t *testing.T) {
 
 	resolver := telemetry.NewUserInfoResolver(logger, conn, cache.NewRedisCacheAdapter(redisClient))
 
-	info := resolver.Hydrate(ctx, seed.orgID, telemetry.UserInfo{UserID: seed.userID})
-	require.Equal(t, telemetry.UserAttributes{
-		DepartmentName: "Engineering",
-		JobTitle:       "Platform Engineer",
-	}, info.Attributes)
-	require.Equal(t, []string{"Developers"}, info.Groups)
-	require.Equal(t, []string{"hydrate-role-" + suffix}, info.Roles)
+	info, snapshot := resolver.Hydrate(ctx, seed.orgID, telemetry.UserInfoByID(seed.userID))
+	require.Equal(t, seed.userID, info.UserID())
+	require.Equal(t, suffix+"@hydrate.example.com", info.Email())
+	requireSnapshotAttributeContains(t, snapshot, "Engineering")
+	requireSnapshotAttributeContains(t, snapshot, "Platform Engineer")
+	require.Equal(t, []string{"Developers"}, snapshot.AsAttributes()[attr.UserGroupsKey])
+	require.Equal(t, []string{"hydrate-role-" + suffix}, snapshot.AsAttributes()[attr.UserRolesKey])
 
 	// Change the persisted attributes; within the TTL the cached snapshot
 	// is still served.
@@ -222,14 +219,14 @@ func TestUserInfoResolver_HydratesAndCachesUntilExpiry(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	cached := resolver.Hydrate(ctx, seed.orgID, telemetry.UserInfo{UserID: seed.userID})
-	require.Equal(t, "Engineering", cached.Attributes.DepartmentName)
+	_, cached := resolver.Hydrate(ctx, seed.orgID, telemetry.UserInfoByID(seed.userID))
+	requireSnapshotAttributeContains(t, cached, "Engineering")
 
 	// Once the cache entry expires (simulated by dropping it) the snapshot
 	// is reloaded from Postgres.
 	require.NoError(t, resolver.InvalidateForTest(ctx, seed.orgID, seed.userID))
-	refreshed := resolver.Hydrate(ctx, seed.orgID, telemetry.UserInfo{UserID: seed.userID})
-	require.Equal(t, "Sales", refreshed.Attributes.DepartmentName)
+	_, refreshed := resolver.Hydrate(ctx, seed.orgID, telemetry.UserInfoByID(seed.userID))
+	requireSnapshotAttributeContains(t, refreshed, "Sales")
 }
 
 func TestUserInfoResolver_EmptySnapshotForUnknownUser(t *testing.T) {
@@ -244,8 +241,17 @@ func TestUserInfoResolver_EmptySnapshotForUnknownUser(t *testing.T) {
 
 	resolver := telemetry.NewUserInfoResolver(logger, conn, cache.NewRedisCacheAdapter(redisClient))
 
-	info := resolver.Hydrate(ctx, "org_unknown", telemetry.UserInfo{UserID: "user_unknown"})
-	require.True(t, info.Attributes.IsZero())
-	require.Empty(t, info.Groups)
-	require.Empty(t, info.Roles)
+	info, snapshot := resolver.Hydrate(ctx, "org_unknown", telemetry.UserInfoByID("user_unknown"))
+	require.Equal(t, "user_unknown", info.UserID())
+	require.Empty(t, snapshot.AsAttributes())
+}
+
+func requireSnapshotAttributeContains(t *testing.T, snapshot interface {
+	AsAttributes() map[attr.Key]any
+}, expected string) {
+	t.Helper()
+
+	raw, err := json.Marshal(snapshot.AsAttributes()[attr.UserAttributesKey])
+	require.NoError(t, err)
+	require.Contains(t, string(raw), expected)
 }

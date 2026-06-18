@@ -41,6 +41,7 @@ type LogParams struct {
 
 	observedTimestamp  time.Time
 	resourceAttributes map[attr.Key]any
+	userSnapshot       userInfoSnapshot
 }
 
 func WithOTELMetadata(params LogParams, observedTimestamp time.Time, resourceAttributes map[attr.Key]any) LogParams {
@@ -175,11 +176,11 @@ func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
 // empty payloads. Caller-provided parts win, and the caller's attribute map
 // is never touched.
 func (l *Logger) hydrateUserInfo(ctx context.Context, param LogParams) LogParams {
-	if l.users == nil || param.UserInfo.UserID == "" || param.ToolInfo.OrganizationID == "" {
+	if l.users == nil || param.ToolInfo.OrganizationID == "" || (param.UserInfo.userID == "" && param.UserInfo.email == "") {
 		return param
 	}
 
-	param.UserInfo = l.users.Hydrate(ctx, param.ToolInfo.OrganizationID, param.UserInfo)
+	param.UserInfo, param.userSnapshot = l.users.Hydrate(ctx, param.ToolInfo.OrganizationID, param.UserInfo)
 	return param
 }
 
@@ -196,6 +197,7 @@ func buildTelemetryLogParams(params LogParams) (*repo.InsertTelemetryLogParams, 
 	maps.Copy(allAttrs, params.Attributes)
 	maps.Copy(allAttrs, params.ToolInfo.AsAttributes())
 	maps.Copy(allAttrs, params.UserInfo.AsAttributes())
+	maps.Copy(allAttrs, params.userSnapshot.AsAttributes())
 
 	observedTimestamp := params.observedTimestamp
 	if observedTimestamp.IsZero() {

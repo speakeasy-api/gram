@@ -40,14 +40,14 @@ type ToolInfo struct {
 	OrganizationID string
 }
 
-// UserAttributes is the v0 allowlist of directory attributes stamped onto
+// userAttributes is the v0 allowlist of directory attributes stamped onto
 // telemetry rows: the struct fields are the allowlist. They are WorkOS
 // predefined attributes (https://workos.com/docs/directory-sync/attributes):
 // named and schematized by WorkOS, auto-mapped across directory providers, so
 // they mean the same thing for every organization. Customer-defined custom
 // attributes are deliberately excluded for now; Postgres keeps the full
 // payload, so expanding this later only requires hydrating new rows.
-type UserAttributes struct {
+type userAttributes struct {
 	DepartmentName string `json:"department_name,omitempty"`
 	JobTitle       string `json:"job_title,omitempty"`
 	EmployeeType   string `json:"employee_type,omitempty"`
@@ -55,45 +55,51 @@ type UserAttributes struct {
 	CostCenterName string `json:"cost_center_name,omitempty"`
 }
 
-func (a UserAttributes) IsZero() bool {
-	return a == UserAttributes{}
+func emptyUserAttributes() userAttributes {
+	return userAttributes{
+		DepartmentName: "",
+		JobTitle:       "",
+		EmployeeType:   "",
+		DivisionName:   "",
+		CostCenterName: "",
+	}
 }
 
-// UserInfo identifies the user a telemetry log row is attributed to, plus the
-// point-in-time directory context stamped alongside. Callers provide identity
-// (UserID, Email) on LogParams instead of stamping user identity keys into
-// the attributes map directly; the logger fills the directory-derived parts
-// (Attributes, Groups, Roles) during hydration and merges everything into the
-// row's attributes.
-type UserInfo struct {
-	UserID string
-	Email  string
+func (a userAttributes) IsZero() bool {
+	return a == emptyUserAttributes()
+}
 
-	// Attributes is the allowlisted subset of the WorkOS attributes payload
-	// from the user's directory_users row.
-	Attributes UserAttributes
-	// Groups are the names of the user's current directory groups.
-	Groups []string
-	// Roles are the user's current role slugs from the existing role tables.
-	Roles []string
+// UserInfo identifies the user a telemetry log row is attributed to. Callers
+// provide either a Gram user ID or an email address; the logger resolves the
+// other identity field and directory context during hydration.
+type UserInfo struct {
+	userID string
+	email  string
+}
+
+func UserInfoByID(userID string) UserInfo {
+	return UserInfo{userID: userID, email: ""}
+}
+
+func UserInfoByEmail(email string) UserInfo {
+	return UserInfo{userID: "", email: email}
+}
+
+func (u UserInfo) UserID() string {
+	return u.userID
+}
+
+func (u UserInfo) Email() string {
+	return u.email
 }
 
 func (u UserInfo) AsAttributes() map[attr.Key]any {
-	attrs := make(map[attr.Key]any, 5)
-	if u.UserID != "" {
-		attrs[attr.UserIDKey] = u.UserID
+	attrs := make(map[attr.Key]any, 2)
+	if u.userID != "" {
+		attrs[attr.UserIDKey] = u.userID
 	}
-	if u.Email != "" {
-		attrs[attr.UserEmailKey] = u.Email
-	}
-	if !u.Attributes.IsZero() {
-		attrs[attr.UserAttributesKey] = u.Attributes
-	}
-	if len(u.Groups) > 0 {
-		attrs[attr.UserGroupsKey] = u.Groups
-	}
-	if len(u.Roles) > 0 {
-		attrs[attr.UserRolesKey] = u.Roles
+	if u.email != "" {
+		attrs[attr.UserEmailKey] = u.email
 	}
 	return attrs
 }

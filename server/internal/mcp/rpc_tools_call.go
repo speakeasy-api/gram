@@ -364,13 +364,7 @@ func handleToolsCall(
 				OrganizationID: descriptor.OrganizationID,
 				FunctionID:     nil,
 			},
-			UserInfo: tm.UserInfo{
-				UserID:     payload.userID,
-				Email:      gramEmail,
-				Attributes: tm.UserAttributes{},
-				Groups:     nil,
-				Roles:      nil,
-			},
+			UserInfo:   tm.UserInfoByID(payload.userID),
 			Attributes: logAttrs,
 		}
 		telemLogger.Log(ctx, params)

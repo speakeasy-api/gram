@@ -431,10 +431,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		}
 		var userInfo tm.UserInfo
 		if authCtx != nil {
-			userInfo.UserID = authCtx.UserID
-			if authCtx.Email != nil {
-				userInfo.Email = *authCtx.Email
-			}
+			userInfo = tm.UserInfoByID(authCtx.UserID)
 			if authCtx.ExternalUserID != "" {
 				attrRecorder[attr.ExternalUserIDKey] = authCtx.ExternalUserID
 			}

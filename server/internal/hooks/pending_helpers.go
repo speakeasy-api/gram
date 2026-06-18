@@ -86,15 +86,9 @@ func (s *Service) persistToolCallEvent(ctx context.Context, payload *gen.ClaudeP
 
 	if s.telemetryLogger != nil {
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
-			Timestamp: time.Now(),
-			ToolInfo:  toolInfo,
-			UserInfo: telemetry.UserInfo{
-				UserID:     metadata.UserID,
-				Email:      metadata.UserEmail,
-				Attributes: telemetry.UserAttributes{},
-				Groups:     nil,
-				Roles:      nil,
-			},
+			Timestamp:  time.Now(),
+			ToolInfo:   toolInfo,
+			UserInfo:   telemetry.UserInfoByID(metadata.UserID),
 			Attributes: attrs,
 		})
 
@@ -324,16 +318,15 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 			FunctionID:     nil,
 		}
 
+		userInfo := telemetry.UserInfoByEmail(m.UserEmail)
+		if userID := emailToUserID[conv.NormalizeEmail(m.UserEmail)]; userID != "" {
+			userInfo = telemetry.UserInfoByID(userID)
+		}
+
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
-			Timestamp: time.Unix(0, m.TimestampNano),
-			ToolInfo:  toolInfo,
-			UserInfo: telemetry.UserInfo{
-				UserID:     emailToUserID[conv.NormalizeEmail(m.UserEmail)],
-				Email:      m.UserEmail,
-				Attributes: telemetry.UserAttributes{},
-				Groups:     nil,
-				Roles:      nil,
-			},
+			Timestamp:  time.Unix(0, m.TimestampNano),
+			ToolInfo:   toolInfo,
+			UserInfo:   userInfo,
 			Attributes: attrs,
 		})
 	}

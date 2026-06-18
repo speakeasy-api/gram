@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -18,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	cursorapi "github.com/speakeasy-api/gram/server/internal/thirdparty/cursor"
-	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 const (
@@ -28,18 +26,16 @@ const (
 )
 
 type UsagePollService struct {
-	users           *usersrepo.Queries
 	guardianPolicy  *guardian.Policy
 	telemetryLogger *telemetry.Logger
 	heartbeat       func(ctx context.Context, page int)
 }
 
-func NewUsagePollService(db *pgxpool.Pool, telemetryLogger *telemetry.Logger, guardianPolicy *guardian.Policy, heartbeat func(ctx context.Context, page int)) *UsagePollService {
+func NewUsagePollService(telemetryLogger *telemetry.Logger, guardianPolicy *guardian.Policy, heartbeat func(ctx context.Context, page int)) *UsagePollService {
 	if heartbeat == nil {
 		panic("ai integration usage poll service requires heartbeat")
 	}
 	return &UsagePollService{
-		users:           usersrepo.New(db),
 		guardianPolicy:  guardianPolicy,
 		telemetryLogger: telemetryLogger,
 		heartbeat:       heartbeat,
@@ -102,45 +98,12 @@ func (s *UsagePollService) SyncCursorUsage(ctx context.Context, cfg Config, endT
 
 	g.Go(func() error {
 		logParams := make([]telemetry.LogParams, 0)
-		userIDsByEmail := make(map[string]string)
 		for event := range rawEvents {
 			logParams = append(logParams, s.buildCursorUsageEvent(cfg, event))
-
-			email := conv.NormalizeEmail(event.UserEmail)
-			if email == "" {
-				continue
-			}
-			if _, ok := userIDsByEmail[email]; ok {
-				continue
-			}
-			userIDsByEmail[email] = ""
 		}
 
 		if err := <-fetchErr; err != nil {
 			return err
-		}
-
-		emails := make([]string, 0, len(userIDsByEmail))
-		for email := range userIDsByEmail {
-			emails = append(emails, email)
-		}
-
-		users, err := s.users.GetConnectedUsersByEmails(gctx, usersrepo.GetConnectedUsersByEmailsParams{
-			Emails:         emails,
-			OrganizationID: cfg.OrganizationID,
-		})
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "internal error hydrating events")
-		}
-
-		for _, user := range users {
-			userIDsByEmail[conv.NormalizeEmail(user.Email)] = user.ID
-		}
-
-		for i := range logParams {
-			if userID := userIDsByEmail[logParams[i].UserInfo.Email]; userID != "" {
-				logParams[i].UserInfo.UserID = userID
-			}
 		}
 
 		if err := s.writeCursorUsageTelemetry(gctx, logParams); err != nil {
@@ -169,13 +132,7 @@ func (s *UsagePollService) buildCursorUsageEvent(cfg Config, event cursorapi.Usa
 			DeploymentID:   "",
 			FunctionID:     nil,
 		},
-		UserInfo: telemetry.UserInfo{
-			UserID:     "",
-			Email:      userEmail,
-			Attributes: telemetry.UserAttributes{},
-			Groups:     nil,
-			Roles:      nil,
-		},
+		UserInfo: telemetry.UserInfoByEmail(userEmail),
 		Attributes: map[attr.Key]any{
 			attr.EventSourceKey:                        string(telemetry.EventSourceAPI),
 			attr.LogBodyKey:                            "Cursor usage metrics",

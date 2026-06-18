@@ -280,15 +280,9 @@ func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.
 
 	if s.telemetryLogger != nil {
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
-			Timestamp: time.Now(),
-			ToolInfo:  toolInfo,
-			UserInfo: telemetry.UserInfo{
-				UserID:     userID,
-				Email:      conv.PtrValOr(payload.UserEmail, ""),
-				Attributes: telemetry.UserAttributes{},
-				Groups:     nil,
-				Roles:      nil,
-			},
+			Timestamp:  time.Now(),
+			ToolInfo:   toolInfo,
+			UserInfo:   telemetry.UserInfoByID(userID),
 			Attributes: attrs,
 		})
 
@@ -368,15 +362,9 @@ func (s *Service) writeCursorMetricsToClickHouse(ctx context.Context, payload *g
 	}
 
 	s.telemetryLogger.Log(ctx, telemetry.LogParams{
-		Timestamp: time.Now(),
-		ToolInfo:  toolInfo,
-		UserInfo: telemetry.UserInfo{
-			UserID:     userID,
-			Email:      conv.PtrValOr(payload.UserEmail, ""),
-			Attributes: telemetry.UserAttributes{},
-			Groups:     nil,
-			Roles:      nil,
-		},
+		Timestamp:  time.Now(),
+		ToolInfo:   toolInfo,
+		UserInfo:   telemetry.UserInfoByID(userID),
 		Attributes: attrs,
 	})
 

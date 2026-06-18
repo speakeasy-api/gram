@@ -204,15 +204,9 @@ func (s *Service) writeCodexHookToClickHouse(ctx context.Context, payload *gen.C
 
 	if s.telemetryLogger != nil {
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
-			Timestamp: time.Now(),
-			ToolInfo:  toolInfo,
-			UserInfo: telemetry.UserInfo{
-				UserID:     metadata.UserID,
-				Email:      metadata.UserEmail,
-				Attributes: telemetry.UserAttributes{},
-				Groups:     nil,
-				Roles:      nil,
-			},
+			Timestamp:  time.Now(),
+			ToolInfo:   toolInfo,
+			UserInfo:   telemetry.UserInfoByID(metadata.UserID),
 			Attributes: attrs,
 		})
 

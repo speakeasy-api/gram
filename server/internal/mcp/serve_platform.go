@@ -394,13 +394,7 @@ func (s *Service) callPlatformToolsetTool(
 				OrganizationID: descriptor.OrganizationID,
 				FunctionID:     nil,
 			},
-			UserInfo: tm.UserInfo{
-				UserID:     authCtx.UserID,
-				Email:      gramEmail,
-				Attributes: tm.UserAttributes{},
-				Groups:     nil,
-				Roles:      nil,
-			},
+			UserInfo:   tm.UserInfoByID(authCtx.UserID),
 			Attributes: logAttrs,
 		})
 	}()

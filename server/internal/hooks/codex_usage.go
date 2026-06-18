@@ -213,16 +213,15 @@ func (s *Service) writeCodexUsageToClickHouse(ctx context.Context, payload *gen.
 			ts = time.Unix(0, p.TimestampNano)
 		}
 
+		userInfo := telemetry.UserInfoByEmail(p.UserEmail)
+		if userID := emailToUserID[conv.NormalizeEmail(p.UserEmail)]; userID != "" {
+			userInfo = telemetry.UserInfoByID(userID)
+		}
+
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
-			Timestamp: ts,
-			ToolInfo:  toolInfo,
-			UserInfo: telemetry.UserInfo{
-				UserID:     emailToUserID[conv.NormalizeEmail(p.UserEmail)],
-				Email:      conv.NormalizeEmail(p.UserEmail),
-				Attributes: telemetry.UserAttributes{},
-				Groups:     nil,
-				Roles:      nil,
-			},
+			Timestamp:  ts,
+			ToolInfo:   toolInfo,
+			UserInfo:   userInfo,
 			Attributes: attrs,
 		})
 	}

@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 // userInfoSnapshotTTL bounds how stale a hydrated snapshot can be. The
@@ -26,9 +27,23 @@ const userInfoSnapshotTTL = 30 * time.Second
 // userInfoSnapshot is the denormalized point-in-time directory state for a
 // resolved user, used to fill the directory-derived parts of a UserInfo.
 type userInfoSnapshot struct {
-	Attributes UserAttributes `json:"attributes"`
+	Attributes userAttributes `json:"attributes"`
 	Groups     []string       `json:"groups"`
 	Roles      []string       `json:"roles"`
+}
+
+func (s userInfoSnapshot) AsAttributes() map[attr.Key]any {
+	attrs := make(map[attr.Key]any, 3)
+	if !s.Attributes.IsZero() {
+		attrs[attr.UserAttributesKey] = s.Attributes
+	}
+	if len(s.Groups) > 0 {
+		attrs[attr.UserGroupsKey] = s.Groups
+	}
+	if len(s.Roles) > 0 {
+		attrs[attr.UserRolesKey] = s.Roles
+	}
+	return attrs
 }
 
 type cachedUserInfoSnapshot struct {
@@ -77,23 +92,55 @@ func NewUserInfoResolver(logger *slog.Logger, db *pgxpool.Pool, cacheImpl cache.
 	}
 }
 
-// Hydrate fills the directory-derived parts of info (attributes, groups,
-// roles) for the user in the organization. Caller-provided parts are kept.
-// Cache and lookup failures degrade gracefully: any cache error is treated
-// as a miss, and Postgres lookup failures resolve to an empty snapshot that
-// is still cached so a struggling database does not get hammered by the log
-// path.
-func (r *UserInfoResolver) Hydrate(ctx context.Context, organizationID string, info UserInfo) UserInfo {
-	snapshot := r.resolve(ctx, organizationID, info.UserID)
+// Hydrate completes the caller-provided user identity and returns the
+// directory-derived snapshot for that user in the organization. Cache and
+// lookup failures degrade gracefully: any cache error is treated as a miss,
+// and Postgres lookup failures resolve to an empty snapshot that is still
+// cached so a struggling database does not get hammered by the log path.
+func (r *UserInfoResolver) Hydrate(ctx context.Context, organizationID string, info UserInfo) (UserInfo, userInfoSnapshot) {
+	info = r.resolveIdentity(ctx, organizationID, info)
+	if info.userID == "" {
+		return info, userInfoSnapshot{Attributes: emptyUserAttributes(), Groups: nil, Roles: nil}
+	}
+	return info, r.resolve(ctx, organizationID, info.userID)
+}
 
-	if info.Attributes.IsZero() {
-		info.Attributes = snapshot.Attributes
+func (r *UserInfoResolver) resolveIdentity(ctx context.Context, organizationID string, info UserInfo) UserInfo {
+	if info.userID != "" && info.email != "" {
+		return info
 	}
-	if len(info.Groups) == 0 {
-		info.Groups = snapshot.Groups
-	}
-	if len(info.Roles) == 0 {
-		info.Roles = snapshot.Roles
+
+	users := usersrepo.New(r.db)
+	switch {
+	case info.userID != "":
+		user, err := users.GetUser(ctx, info.userID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return info
+		}
+		if err != nil {
+			r.logger.WarnContext(ctx, "failed to load telemetry user by ID",
+				attr.SlogError(err), attr.SlogUserID(info.userID), attr.SlogOrganizationID(organizationID))
+			return info
+		}
+		info.email = user.Email
+	case info.email != "":
+		email := conv.NormalizeEmail(info.email)
+		user, err := users.GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
+			Email:          email,
+			OrganizationID: organizationID,
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			info.email = email
+			return info
+		}
+		if err != nil {
+			r.logger.WarnContext(ctx, "failed to load telemetry user by email",
+				attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+			info.email = email
+			return info
+		}
+		info.userID = user.ID
+		info.email = user.Email
 	}
 	return info
 }
@@ -119,7 +166,7 @@ func (r *UserInfoResolver) resolve(ctx context.Context, organizationID string, u
 }
 
 func (r *UserInfoResolver) load(ctx context.Context, organizationID string, userID string) userInfoSnapshot {
-	snapshot := userInfoSnapshot{Attributes: UserAttributes{}, Groups: nil, Roles: nil}
+	snapshot := userInfoSnapshot{Attributes: emptyUserAttributes(), Groups: nil, Roles: nil}
 
 	workosQueries := workosrepo.New(r.db)
 
@@ -140,7 +187,7 @@ func (r *UserInfoResolver) load(ctx context.Context, organizationID string, user
 		// Values come from customer-controlled IdP mappings: accept
 		// non-empty strings only so the ClickHouse JSON column sees
 		// consistent types.
-		snapshot.Attributes = UserAttributes{
+		snapshot.Attributes = userAttributes{
 			DepartmentName: stringAttribute(payload, "department_name"),
 			JobTitle:       stringAttribute(payload, "job_title"),
 			EmployeeType:   stringAttribute(payload, "employee_type"),

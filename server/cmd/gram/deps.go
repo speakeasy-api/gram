@@ -788,7 +788,7 @@ func newTriggersApp(
 					FunctionID:     nil,
 					OrganizationID: entry.Instance.OrganizationID,
 				},
-				UserInfo:   telemetry.UserInfo{UserID: "", Email: "", Attributes: telemetry.UserAttributes{}, Groups: nil, Roles: nil},
+				UserInfo:   telemetry.UserInfo{},
 				Attributes: entry.Attributes,
 			})
 		}),

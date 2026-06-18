@@ -949,13 +949,7 @@ func (s *Service) writeClaudeBlockToClickHouse(ctx context.Context, payload *gen
 			DeploymentID:   "",
 			FunctionID:     nil,
 		},
-		UserInfo: telemetry.UserInfo{
-			UserID:     metadata.UserID,
-			Email:      conv.NormalizeEmail(metadata.UserEmail),
-			Attributes: telemetry.UserAttributes{},
-			Groups:     nil,
-			Roles:      nil,
-		},
+		UserInfo:   telemetry.UserInfoByID(metadata.UserID),
 		Attributes: attrs,
 	})
 }

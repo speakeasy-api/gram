@@ -146,17 +146,6 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 		logAttrs[attr.ExternalUserIDKey] = authCtx.ExternalUserID
 	}
 
-	userInfo := tm.UserInfo{
-		UserID:     authCtx.UserID,
-		Email:      "",
-		Attributes: tm.UserAttributes{},
-		Groups:     nil,
-		Roles:      nil,
-	}
-	if authCtx.Email != nil {
-		userInfo.Email = *authCtx.Email
-	}
-
 	params := tm.LogParams{
 		Timestamp: end,
 		ToolInfo: tm.ToolInfo{
@@ -168,7 +157,7 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 			OrganizationID: authCtx.ActiveOrganizationID,
 			FunctionID:     nil,
 		},
-		UserInfo:   userInfo,
+		UserInfo:   tm.UserInfoByID(authCtx.UserID),
 		Attributes: logAttrs,
 	}
 

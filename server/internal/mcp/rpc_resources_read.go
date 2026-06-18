@@ -20,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
@@ -140,11 +139,6 @@ func handleResourcesRead(
 		return nil, err
 	}
 
-	var resourceEmail string
-	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx.Email != nil {
-		resourceEmail = *authCtx.Email
-	}
-
 	logAttrs := tm.HTTPLogAttributes{}
 	defer func() {
 		// for billing purposes we still treat fetching a resource as a type of tool call right now
@@ -195,13 +189,7 @@ func handleResourcesRead(
 				OrganizationID: descriptor.OrganizationID,
 				FunctionID:     nil,
 			},
-			UserInfo: tm.UserInfo{
-				UserID:     payload.userID,
-				Email:      conv.NormalizeEmail(resourceEmail),
-				Attributes: tm.UserAttributes{},
-				Groups:     nil,
-				Roles:      nil,
-			},
+			UserInfo:   tm.UserInfoByID(payload.userID),
 			Attributes: logAttrs,
 		}
 		telemLogger.Log(ctx, params)
