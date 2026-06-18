@@ -68,10 +68,12 @@ body=$(echo "$response" | sed '$d')
 # Forward the body to stdout so Claude can read PreToolUse decisions from it.
 echo "$body"
 
-# Only treat real 2xx/3xx as allow. curl returns 000 on connection failure,
-# DNS error, or timeout — that must NOT silently allow the call, otherwise
-# blocking policies are bypassed any time the Gram server is unreachable.
-if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 400 ]; then
+# Only treat a real 2xx as allow. curl returns 000 on connection failure, DNS
+# error, or timeout, and a 3xx (e.g. an http->https redirect, which curl does
+# not follow here) carries no decision body — neither must silently allow the
+# call, otherwise blocking policies are bypassed when the server is unreachable
+# or misconfigured.
+if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
   exit 0
 fi
 

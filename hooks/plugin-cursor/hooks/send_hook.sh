@@ -94,8 +94,10 @@ response=$(printf '%s' "$payload" | curl -s -w "\n%{http_code}" -X POST \
 http_code=$(echo "$response" | tail -1)
 body=$(echo "$response" | sed '$d')
 
-# Relay the server's decision verbatim so Cursor can honor allow/deny.
-if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 400 ]; then
+# Relay the server's decision verbatim so Cursor can honor allow/deny. Only a
+# real 2xx carries a decision; a 3xx (e.g. an unfollowed http->https redirect)
+# does not, so it falls through to the fail-closed branch below.
+if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
   echo "$body"
   exit 0
 fi

@@ -1243,8 +1243,10 @@ response=$(printf '%%s' "$payload" | curl -s -w "\n%%{http_code}" -X POST \
 http_code=$(echo "$response" | tail -1)
 body=$(echo "$response" | sed '$d')
 
-# Relay the server's decision verbatim so Cursor can honor allow/deny.
-if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 400 ]; then
+# Relay the server's decision verbatim so Cursor can honor allow/deny. Only a
+# real 2xx carries a decision; a 3xx (e.g. an unfollowed http->https redirect)
+# does not, so it falls through to the fail-closed branch below.
+if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
   echo "$body"
   exit 0
 fi
@@ -1303,8 +1305,9 @@ body=$(echo "$response" | sed '$d')
 echo "$body"
 
 # curl returns 000 on connection failure — treat as block so an unreachable
-# Speakeasy server cannot silently bypass blocking policies.
-if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 400 ]; then
+# Speakeasy server cannot silently bypass blocking policies. A 3xx (e.g. an
+# unfollowed http->https redirect) carries no decision, so only 2xx is allow.
+if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
   exit 0
 fi
 
@@ -1534,7 +1537,7 @@ http_code=$(printf '%%s' "$enriched" | curl -s -o /dev/null -w '%%{http_code}' -
   "${server_url}/rpc/hooks.claude" 2>/dev/null)
 [ -z "$http_code" ] && http_code=000
 
-if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 400 ]; then
+if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
   debug "inventory delivered (HTTP ${http_code})"
 elif [ "$http_code" = "000" ]; then
   debug "inventory NOT delivered: could not reach ${server_url} (connection failure or timeout)"

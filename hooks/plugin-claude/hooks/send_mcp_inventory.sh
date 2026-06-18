@@ -180,7 +180,7 @@ http_code=$(printf '%s' "$enriched" | curl -s -o /dev/null -w '%{http_code}' -X 
   "${server_url}/rpc/hooks.claude" 2>/dev/null)
 [ -z "$http_code" ] && http_code=000
 
-if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 400 ]; then
+if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
   debug "inventory delivered (HTTP ${http_code})"
 elif [ "$http_code" = "000" ]; then
   debug "inventory NOT delivered: could not reach ${server_url} (connection failure or timeout)"
