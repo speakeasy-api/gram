@@ -102,6 +102,7 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, http.MethodGet, "/x/mcp/{mcpSlug}/authorize", oops.ErrHandle(service.logger, service.handleOAuthAuthorize).ServeHTTP)
 	o11y.AttachHandler(mux, http.MethodGet, "/x/mcp/{mcpSlug}/connect", oops.ErrHandle(service.logger, service.handleOAuthConsent).ServeHTTP)
 	o11y.AttachHandler(mux, http.MethodPost, "/x/mcp/{mcpSlug}/connect", oops.ErrHandle(service.logger, service.handleOAuthConsent).ServeHTTP)
+	o11y.AttachHandler(mux, http.MethodGet, "/x/mcp/{mcpSlug}/connect/first-party", oops.ErrHandle(service.logger, service.handleFirstPartyConnect).ServeHTTP)
 	o11y.AttachHandler(mux, http.MethodPost, "/x/mcp/{mcpSlug}/token", oops.ErrHandle(service.logger, service.handleOAuthToken).ServeHTTP)
 	o11y.AttachHandler(mux, http.MethodPost, "/x/mcp/{mcpSlug}/revoke", oops.ErrHandle(service.logger, service.handleOAuthRevoke).ServeHTTP)
 	o11y.AttachHandler(mux, http.MethodGet, "/x/mcp/idp_callback", oops.ErrHandle(service.logger, service.mcpService.HandleIDPCallback).ServeHTTP)
@@ -144,6 +145,20 @@ func (s *Service) handleOAuthConsent(w http.ResponseWriter, r *http.Request) err
 	}
 	if err := s.mcpService.ServeConsent(w, r, endpoint); err != nil {
 		return fmt.Errorf("serve oauth consent: %w", err)
+	}
+	return nil
+}
+
+// handleFirstPartyConnect adapts the chi /x/mcp/{mcpSlug}/connect/first-party
+// route to mcp.Service.ServeFirstPartyConnect — the dashboard's first-party
+// entry point for linking an issuer-gated server's upstream sessions.
+func (s *Service) handleFirstPartyConnect(w http.ResponseWriter, r *http.Request) error {
+	endpoint, err := s.resolveOAuthEndpoint(r)
+	if err != nil {
+		return err
+	}
+	if err := s.mcpService.ServeFirstPartyConnect(w, r, endpoint); err != nil {
+		return fmt.Errorf("serve first-party connect: %w", err)
 	}
 	return nil
 }
