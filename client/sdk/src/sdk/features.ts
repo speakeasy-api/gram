@@ -3,7 +3,9 @@
  */
 
 import { featuresGet } from "../funcs/featuresGet.js";
+import { featuresListSessionCaptureExclusions } from "../funcs/featuresListSessionCaptureExclusions.js";
 import { featuresSet } from "../funcs/featuresSet.js";
+import { featuresSetSessionCaptureExclusions } from "../funcs/featuresSetSessionCaptureExclusions.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -30,6 +32,25 @@ export class Features extends ClientSDK {
   }
 
   /**
+   * listSessionCaptureExclusions features
+   *
+   * @remarks
+   * List the Gram user IDs excluded from session capture for the active organization.
+   */
+  async listSessionCaptureExclusions(
+    request?: operations.ListSessionCaptureExclusionsRequest | undefined,
+    security?: operations.ListSessionCaptureExclusionsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.SessionCaptureExclusionsResult> {
+    return unwrapAsync(featuresListSessionCaptureExclusions(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * setProductFeature features
    *
    * @remarks
@@ -41,6 +62,25 @@ export class Features extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(featuresSet(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setSessionCaptureExclusions features
+   *
+   * @remarks
+   * Replace the set of users excluded from session capture for the active organization with the provided list of Gram user IDs.
+   */
+  async setSessionCaptureExclusions(
+    request: operations.SetSessionCaptureExclusionsRequest,
+    security?: operations.SetSessionCaptureExclusionsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.SessionCaptureExclusionsResult> {
+    return unwrapAsync(featuresSetSessionCaptureExclusions(
       this,
       request,
       security,
