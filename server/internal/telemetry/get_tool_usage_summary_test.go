@@ -256,17 +256,20 @@ func TestGetToolUsageSummary_FiltersByHookSource(t *testing.T) {
 		statusCode:  200,
 	})
 
-	time.Sleep(200 * time.Millisecond)
-
-	result, err := ti.service.GetToolUsageSummary(ctx, &gen.GetToolUsageSummaryPayload{
+	payload := &gen.GetToolUsageSummaryPayload{
 		From:        now.Add(-1 * time.Hour).Format(time.RFC3339),
 		To:          now.Add(1 * time.Hour).Format(time.RFC3339),
 		HookSources: []string{"cowork"},
-	})
+	}
 
-	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
-	require.NotNil(t, result)
-	require.Equal(t, int64(1), result.Totals.EventCount)
+	// Poll until ClickHouse reflects the inserts (eventual consistency). Only the
+	// cowork event matches the filter, so the count settles at exactly 1.
+	var result *gen.GetToolUsageSummaryResult
+	require.Eventually(t, func() bool {
+		var err error
+		result, err = ti.service.GetToolUsageSummary(ctx, payload)
+		return err == nil && result != nil && result.Totals.EventCount == 1
+	}, 2*time.Second, 50*time.Millisecond, "expected only the cowork hook event in the filtered summary")
 
 	targets := toolUsageTargetsByKey(result.Targets)
 	require.NotNil(t, targets["shadow_mcp_server:server:shadow-db"])
