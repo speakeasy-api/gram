@@ -138,8 +138,10 @@ INSERT INTO deployments_functions (
   , runtime
   , memory_mib
   , scale
+  , memory_mib_override
+  , scale_override
 )
-SELECT 
+SELECT
   $1
   , current.asset_id
   , current.name
@@ -147,6 +149,10 @@ SELECT
   , current.runtime
   , COALESCE(current.memory_mib, $2::int)
   , COALESCE(current.scale, $3::int)
+  -- Operator overrides are carried forward as-is (NULL or value) so they
+  -- survive a later customer deploy instead of being reset.
+  , current.memory_mib_override
+  , current.scale_override
 FROM deployments_functions as current
 WHERE current.deployment_id = $4
   AND current.asset_id <> ALL ($5::uuid[])
