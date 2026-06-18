@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/google/cel-go/cel"
-	"github.com/google/uuid"
 	"slices"
 )
 
@@ -385,9 +384,13 @@ func handleSlackInteraction(body []byte) (*WebhookIngest, error) {
 		correlationID = "slack:" + payload.Team.ID + ":user:" + payload.User.ID
 	}
 
+	// Slack interaction envelopes carry no event_id; leave it empty so the
+	// dispatcher derives an instance-scoped content-hash fallback. A bare body
+	// hash here would be identical across trigger instances and collide on the
+	// downstream dedup keys.
 	return &WebhookIngest{
 		Response:      nil,
-		EventID:       uuid.NewSHA1(uuid.NameSpaceURL, body).String(),
+		EventID:       "",
 		CorrelationID: correlationID,
 		Event:         normalized,
 	}, nil

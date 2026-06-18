@@ -138,7 +138,7 @@ func TestLinearIngestCommentFoldsOntoIssue(t *testing.T) {
 	require.Equal(t, "linear:issue:issue-1", result.Event.CorrelationID)
 }
 
-func TestLinearIngestFallsBackToContentHashEventID(t *testing.T) {
+func TestLinearIngestLeavesEventIDEmptyWithoutDeliveryHeader(t *testing.T) {
 	t.Parallel()
 
 	definition, ok := GetDefinition("linear")
@@ -152,7 +152,9 @@ func TestLinearIngestFallsBackToContentHashEventID(t *testing.T) {
 	result, err := definition.HandleWebhook(body, http.Header{}, config)
 	require.NoError(t, err)
 	require.NotNil(t, result.Event)
-	require.NotEmpty(t, result.Event.EventID)
+	// No Linear-Delivery header: the event id is left empty here and filled
+	// with an instance-scoped content-hash fallback by the dispatcher.
+	require.Empty(t, result.Event.EventID)
 }
 
 func TestLinearFilterDefaultDeny(t *testing.T) {
@@ -171,6 +173,16 @@ func TestLinearFilterDefaultDeny(t *testing.T) {
 
 	// Unsupported type is denied by default.
 	match, err = config.Filter(linearTriggerEvent{EventType: "Issue.bogus"})
+	require.NoError(t, err)
+	require.False(t, match)
+
+	// Linear sends "remove" (not "delete") for deletions; the allowlist must
+	// match what Linear actually delivers.
+	match, err = config.Filter(linearTriggerEvent{EventType: "Issue.remove"})
+	require.NoError(t, err)
+	require.True(t, match)
+
+	match, err = config.Filter(linearTriggerEvent{EventType: "Issue.delete"})
 	require.NoError(t, err)
 	require.False(t, match)
 }

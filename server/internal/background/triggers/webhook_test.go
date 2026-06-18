@@ -127,50 +127,45 @@ func TestHMACSchemeBase64SHA1(t *testing.T) {
 	require.NoError(t, scheme.Verify(body, headers, "shh"))
 }
 
-func TestWebhookFallbackEventIDHashesBody(t *testing.T) {
+func TestWebhookHandleDefersEventIDFallback(t *testing.T) {
 	t.Parallel()
 
 	vendor := WebhookVendor{
 		Slug:      "test-vendor",
 		EventType: reflect.TypeFor[struct{}](),
 		Ingest: func(_ []byte, _ http.Header) (*WebhookIngest, error) {
-			// No vendor delivery id: exercises the content-hash fallback.
+			// No vendor delivery id and no correlation id.
 			return &WebhookIngest{Event: map[string]any{"ok": true}}, nil
 		},
 	}
 	def := NewWebhookDefinition(vendor, nil, nil, func(map[string]any) (Config, error) { return nil, nil })
 
-	r1, err := def.HandleWebhook([]byte(`{"a":1}`), http.Header{}, nil)
+	r, err := def.HandleWebhook([]byte(`{"a":1}`), http.Header{}, nil)
 	require.NoError(t, err)
-	require.NotNil(t, r1.Event)
-	require.NotEmpty(t, r1.Event.EventID)
-
-	// Identical body -> identical fallback id so a genuine redelivery dedups.
-	r2, err := def.HandleWebhook([]byte(`{"a":1}`), http.Header{}, nil)
-	require.NoError(t, err)
-	require.Equal(t, r1.Event.EventID, r2.Event.EventID)
-
-	// Different body -> different id.
-	r3, err := def.HandleWebhook([]byte(`{"a":2}`), http.Header{}, nil)
-	require.NoError(t, err)
-	require.NotEqual(t, r1.Event.EventID, r3.Event.EventID)
+	require.NotNil(t, r.Event)
+	// The content-hash fallback is applied by the dispatcher once the trigger
+	// instance is known (so it can be scoped per instance), not here.
+	require.Empty(t, r.Event.EventID)
+	require.Empty(t, r.Event.CorrelationID)
 }
 
-func TestTriggerDispatchWorkflowIDScopesByInstance(t *testing.T) {
+func TestWebhookFallbackEventIDScopesByInstance(t *testing.T) {
 	t.Parallel()
 
-	// The content-hash fallback event id is deterministic from the request body
-	// alone, so two unrelated trigger instances receiving an identical body
-	// produce the same event id. The dispatch workflow id must fold in the
-	// instance id so REJECT_DUPLICATE doesn't collapse the two deliveries and
-	// silently drop one.
-	eventID := "same-content-hash"
-	a := triggerDispatchWorkflowID("instance-a", eventID)
-	b := triggerDispatchWorkflowID("instance-b", eventID)
-	require.NotEqual(t, a, b)
+	body := []byte(`{"a":1}`)
+	a := webhookFallbackEventID("instance-a", body)
+	require.NotEmpty(t, a)
 
-	// Redelivery to the same instance still dedups (same workflow id).
-	require.Equal(t, a, triggerDispatchWorkflowID("instance-a", eventID))
+	// A genuine redelivery to the same instance produces the same id (dedups).
+	require.Equal(t, a, webhookFallbackEventID("instance-a", body))
+
+	// Two instances receiving an identical body must NOT collide — otherwise the
+	// assistant enqueue key (project, assistant, event_id) and the dispatch
+	// workflow id would treat the second delivery as a duplicate and drop it.
+	require.NotEqual(t, a, webhookFallbackEventID("instance-b", body))
+
+	// Different bodies to the same instance differ.
+	require.NotEqual(t, a, webhookFallbackEventID("instance-a", []byte(`{"a":2}`)))
 }
 
 func TestHMACSchemeRejectsMissingSignatureHeader(t *testing.T) {

@@ -224,19 +224,16 @@ func NewWebhookDefinition(
 			if ingest.Response != nil && ingest.Event == nil {
 				return &WebhookIngressResult{Response: ingest.Response, Event: nil, Task: nil}, nil
 			}
-			eventID := ingest.EventID
-			if eventID == "" {
-				eventID = uuid.NewSHA1(uuid.NameSpaceURL, body).String()
-			}
-			correlationID := ingest.CorrelationID
-			if correlationID == "" {
-				correlationID = eventID
-			}
+			// EventID and CorrelationID fallbacks are applied by the dispatcher
+			// (App.ProcessWebhook) once the trigger instance id is known. The
+			// content-hash fallback must be scoped per instance — a bare body
+			// hash is identical across instances that receive the same payload,
+			// which would collide on the downstream dedup keys.
 			return &WebhookIngressResult{
 				Response: ingest.Response,
 				Event: &EventEnvelope{
-					EventID:           eventID,
-					CorrelationID:     correlationID,
+					EventID:           ingest.EventID,
+					CorrelationID:     ingest.CorrelationID,
 					TriggerInstanceID: "",
 					DefinitionSlug:    vendor.Slug,
 					Event:             ingest.Event,
@@ -250,6 +247,17 @@ func NewWebhookDefinition(
 		BuildDirectEvent:    nil,
 		ExtractSchedule:     nil,
 	}
+}
+
+// webhookFallbackEventID derives a dedup event id for a delivery whose vendor
+// supplied none, scoped to the trigger instance that received it. The body
+// hash alone is identical across instances that receive the same payload, so
+// folding in the instance id keeps redelivery dedup within an instance — both
+// the Temporal dispatch workflow id and the assistant enqueue key
+// (project_id, assistant_id, event_id) dedupe on this id — without collapsing
+// distinct instances' deliveries onto one another and silently dropping them.
+func webhookFallbackEventID(triggerInstanceID string, body []byte) string {
+	return uuid.NewSHA1(uuid.NameSpaceURL, append([]byte(triggerInstanceID+":"), body...)).String()
 }
 
 // evalWebhookFilter applies the default-deny event-type allowlist (defaulting

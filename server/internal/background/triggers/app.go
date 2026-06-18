@@ -732,6 +732,17 @@ func (a *App) ProcessWebhook(ctx context.Context, instanceID uuid.UUID, body []b
 	result.Event.TriggerInstanceID = instance.ID.String()
 	result.Event.DefinitionSlug = instance.DefinitionSlug
 
+	// Fill the dedup event id and correlation id fallbacks now that the trigger
+	// instance is known. The content-hash fallback is scoped to the instance so
+	// two instances receiving an identical body don't collide on the dispatch
+	// workflow id or the assistant enqueue key and silently drop a delivery.
+	if result.Event.EventID == "" {
+		result.Event.EventID = webhookFallbackEventID(result.Event.TriggerInstanceID, body)
+	}
+	if result.Event.CorrelationID == "" {
+		result.Event.CorrelationID = result.Event.EventID
+	}
+
 	task, err := a.ProcessEvent(ctx, instance, *result.Event)
 	if err != nil {
 		return nil, fmt.Errorf("process event: %w", err)

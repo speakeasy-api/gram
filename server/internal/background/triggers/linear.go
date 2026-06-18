@@ -72,33 +72,29 @@ type linearTriggerEvent struct {
 
 // supportedLinearEventTypes is the default-deny allowlist of `<Type>.<action>`
 // event types the Linear trigger accepts when an instance does not narrow
-// `event_types`. Linear's actions are open-ended (create, update, delete,
-// archive, restore, …), so the list enumerates the entity × verb combinations
-// the assistant commonly cares about; CEL filters narrow further.
+// `event_types`. Linear's data-change webhooks only ever send the actions
+// `create`, `update`, and `remove` (archiving surfaces as an `update` with
+// `archivedAt` set, not a distinct action — see
+// https://linear.app/developers/webhooks), so the list enumerates those verbs
+// per entity; CEL filters narrow further.
 var supportedLinearEventTypes = []string{
 	"Issue.create",
 	"Issue.update",
-	"Issue.delete",
-	"Issue.archive",
-	"Issue.restore",
+	"Issue.remove",
 	"Comment.create",
 	"Comment.update",
-	"Comment.delete",
+	"Comment.remove",
 	"Project.create",
 	"Project.update",
-	"Project.delete",
-	"Project.archive",
-	"Project.restore",
+	"Project.remove",
 	"Cycle.create",
 	"Cycle.update",
-	"Cycle.delete",
-	"Cycle.archive",
-	"Cycle.restore",
+	"Cycle.remove",
 	"Document.create",
 	"Document.update",
-	"Document.delete",
+	"Document.remove",
 	"Reaction.create",
-	"Reaction.delete",
+	"Reaction.remove",
 }
 
 // linearSigningSecretEnv is the environment variable holding the Linear
