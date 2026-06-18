@@ -55,6 +55,12 @@ func seedDirectorySnapshotData(t *testing.T, ctx context.Context, conn *pgxpool.
 	})
 	require.NoError(t, err)
 
+	_, err = orgrepo.New(conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: orgID,
+		UserID:         conv.ToPGText(userID),
+	})
+	require.NoError(t, err)
+
 	directoryUserID, err := workosrepo.New(conn).UpsertDirectoryUser(ctx, workosrepo.UpsertDirectoryUserParams{
 		OrganizationID:        orgID,
 		UserID:                conv.ToPGText(userID),

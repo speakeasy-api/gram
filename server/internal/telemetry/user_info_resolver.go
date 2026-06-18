@@ -111,8 +111,8 @@ func (r *UserInfoResolver) resolveIdentity(ctx context.Context, organizationID s
 	}
 
 	users := usersrepo.New(r.db)
-	switch {
-	case info.userID != "":
+	email := conv.NormalizeEmail(info.email)
+	if email == "" && info.userID != "" {
 		user, err := users.GetUser(ctx, info.userID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return info
@@ -122,26 +122,28 @@ func (r *UserInfoResolver) resolveIdentity(ctx context.Context, organizationID s
 				attr.SlogError(err), attr.SlogUserID(info.userID), attr.SlogOrganizationID(organizationID))
 			return info
 		}
-		info.email = user.Email
-	case info.email != "":
-		email := conv.NormalizeEmail(info.email)
-		user, err := users.GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
-			Email:          email,
-			OrganizationID: organizationID,
-		})
-		if errors.Is(err, pgx.ErrNoRows) {
-			info.email = email
-			return info
-		}
-		if err != nil {
-			r.logger.WarnContext(ctx, "failed to load telemetry user by email",
-				attr.SlogError(err), attr.SlogOrganizationID(organizationID))
-			info.email = email
-			return info
-		}
-		info.userID = user.ID
-		info.email = user.Email
+		email = conv.NormalizeEmail(user.Email)
 	}
+	if email == "" {
+		return info
+	}
+
+	user, err := users.GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
+		Email:          email,
+		OrganizationID: organizationID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		info.email = email
+		return info
+	}
+	if err != nil {
+		r.logger.WarnContext(ctx, "failed to load connected telemetry user by email",
+			attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+		info.email = email
+		return info
+	}
+	info.userID = user.ID
+	info.email = user.Email
 	return info
 }
 
