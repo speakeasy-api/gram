@@ -195,6 +195,7 @@ run();
 * [delete](docs/sdks/assistants/README.md#delete) - deleteAssistant assistants
 * [ensureManaged](docs/sdks/assistants/README.md#ensuremanaged) - ensureManagedAssistant assistants
 * [get](docs/sdks/assistants/README.md#get) - getAssistant assistants
+* [getManaged](docs/sdks/assistants/README.md#getmanaged) - getManagedAssistant assistants
 * [list](docs/sdks/assistants/README.md#list) - listAssistants assistants
 * [sendMessage](docs/sdks/assistants/README.md#sendmessage) - sendMessage assistants
 * [update](docs/sdks/assistants/README.md#update) - updateAssistant assistants
@@ -458,10 +459,6 @@ run();
 
 * [list](docs/sdks/resources/README.md#list) - listResources resources
 
-### [Risk.Capabilities](docs/sdks/capabilities/README.md)
-
-* [get](docs/sdks/capabilities/README.md#get) - getRiskCapabilities risk
-
 ### [Risk.Categories](docs/sdks/categories/README.md)
 
 * [list](docs/sdks/categories/README.md#list) - listRiskCategories risk
@@ -607,6 +604,7 @@ run();
 * [delete](docs/sdks/usersessionissuers/README.md#delete) - deleteUserSessionIssuer userSessionIssuers
 * [get](docs/sdks/usersessionissuers/README.md#get) - getUserSessionIssuer userSessionIssuers
 * [list](docs/sdks/usersessionissuers/README.md#list) - listUserSessionIssuers userSessionIssuers
+* [migrateLegacyGramRegistrations](docs/sdks/usersessionissuers/README.md#migratelegacygramregistrations) - migrateLegacyGramRegistrations userSessionIssuers
 * [update](docs/sdks/usersessionissuers/README.md#update) - updateUserSessionIssuer userSessionIssuers
 
 ### [UserSessions](docs/sdks/usersessions/README.md)
@@ -687,6 +685,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`assistantsDelete`](docs/sdks/assistants/README.md#delete) - deleteAssistant assistants
 - [`assistantsEnsureManaged`](docs/sdks/assistants/README.md#ensuremanaged) - ensureManagedAssistant assistants
 - [`assistantsGet`](docs/sdks/assistants/README.md#get) - getAssistant assistants
+- [`assistantsGetManaged`](docs/sdks/assistants/README.md#getmanaged) - getManagedAssistant assistants
 - [`assistantsList`](docs/sdks/assistants/README.md#list) - listAssistants assistants
 - [`assistantsSendMessage`](docs/sdks/assistants/README.md#sendmessage) - sendMessage assistants
 - [`assistantsUpdate`](docs/sdks/assistants/README.md#update) - updateAssistant assistants
@@ -859,7 +858,6 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`remoteSessionsList`](docs/sdks/remotesessions/README.md#list) - listRemoteSessions remoteSessions
 - [`remoteSessionsRevoke`](docs/sdks/remotesessions/README.md#revoke) - revokeRemoteSession remoteSessions
 - [`resourcesList`](docs/sdks/resources/README.md#list) - listResources resources
-- [`riskCapabilitiesGet`](docs/sdks/capabilities/README.md#get) - getRiskCapabilities risk
 - [`riskCategoriesList`](docs/sdks/categories/README.md#list) - listRiskCategories risk
 - [`riskCustomRulesCreate`](docs/sdks/customrules/README.md#create) - createCustomDetectionRule risk
 - [`riskCustomRulesDelete`](docs/sdks/customrules/README.md#delete) - deleteCustomDetectionRule risk
@@ -955,6 +953,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`userSessionIssuersDelete`](docs/sdks/usersessionissuers/README.md#delete) - deleteUserSessionIssuer userSessionIssuers
 - [`userSessionIssuersGet`](docs/sdks/usersessionissuers/README.md#get) - getUserSessionIssuer userSessionIssuers
 - [`userSessionIssuersList`](docs/sdks/usersessionissuers/README.md#list) - listUserSessionIssuers userSessionIssuers
+- [`userSessionIssuersMigrateLegacyGramRegistrations`](docs/sdks/usersessionissuers/README.md#migratelegacygramregistrations) - migrateLegacyGramRegistrations userSessionIssuers
 - [`userSessionIssuersUpdate`](docs/sdks/usersessionissuers/README.md#update) - updateUserSessionIssuer userSessionIssuers
 - [`userSessionsList`](docs/sdks/usersessions/README.md#list) - listUserSessions userSessions
 - [`userSessionsMint`](docs/sdks/usersessions/README.md#mint) - mintUserSession userSessions
@@ -1001,6 +1000,7 @@ To learn about this feature and how to get started, check
 - [`useAssistantsCreateMutation`](docs/sdks/assistants/README.md#create) - createAssistant assistants
 - [`useAssistantsDeleteMutation`](docs/sdks/assistants/README.md#delete) - deleteAssistant assistants
 - [`useAssistantsGet`](docs/sdks/assistants/README.md#get) - getAssistant assistants
+- [`useAssistantsGetManaged`](docs/sdks/assistants/README.md#getmanaged) - getManagedAssistant assistants
 - [`useAssistantsList`](docs/sdks/assistants/README.md#list) - listAssistants assistants
 - [`useAssistantsUpdateMutation`](docs/sdks/assistants/README.md#update) - updateAssistant assistants
 - [`useAuditLogFacets`](docs/sdks/auditlogs/README.md#listfacets) - listFacets auditlogs
@@ -1155,6 +1155,7 @@ To learn about this feature and how to get started, check
 - [`useMcpRegistriesGetServerDetails`](docs/sdks/mcpregistries/README.md#getserverdetails) - getServerDetails mcpRegistries
 - [`useMcpServers`](docs/sdks/mcpservers/README.md#list) - listMcpServers mcpServers
 - [`useMembers`](docs/sdks/access/README.md#listmembers) - listMembers access
+- [`useMigrateLegacyGramRegistrationsMutation`](docs/sdks/usersessionissuers/README.md#migratelegacygramregistrations) - migrateLegacyGramRegistrations userSessionIssuers
 - [`useMintUserSessionMutation`](docs/sdks/usersessions/README.md#mint) - mintUserSession userSessions
 - [`useMoveOrganizationRemoteSessionIssuerMutation`](docs/sdks/organizationremotesessionissuers/README.md#moveissuer) - moveIssuer organizationRemoteSessionIssuers
 - [`useOnboardingStatus`](docs/sdks/organizations/README.md#getonboardingstatus) - getOnboardingStatus organizations
@@ -1207,7 +1208,6 @@ To learn about this feature and how to get started, check
 - [`useRevokeUserSessionConsentMutation`](docs/sdks/usersessionconsents/README.md#revoke) - revokeUserSessionConsent userSessionConsents
 - [`useRevokeUserSessionMutation`](docs/sdks/usersessions/README.md#revoke) - revokeUserSession userSessions
 - [`useRiskApprovePolicyBypassRequestMutation`](docs/sdks/policybypassrequests/README.md#approve) - approveRiskPolicyBypassRequest risk
-- [`useRiskCapabilities`](docs/sdks/capabilities/README.md#get) - getRiskCapabilities risk
 - [`useRiskCategories`](docs/sdks/categories/README.md#list) - listRiskCategories risk
 - [`useRiskCreateCustomDetectionRuleMutation`](docs/sdks/customrules/README.md#create) - createCustomDetectionRule risk
 - [`useRiskCreateExclusionMutation`](docs/sdks/exclusions/README.md#create) - createRiskExclusion risk

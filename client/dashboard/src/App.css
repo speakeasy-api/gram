@@ -86,6 +86,19 @@
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Radix positions every popover/select/dropdown inside a wrapper tagged
+   `data-radix-popper-content-wrapper`. shadcn content components add their own
+   `z-50`, but third-party poppers (the Elements `TimeRangePicker`) ship no
+   z-index — and Radix writes an *inline* `z-index: auto` on that wrapper, so
+   such poppers render *behind* a `z-50` Sheet/Dialog panel and look like they
+   never opened. Overriding an inline style requires `!important`; floating
+   layers must paint above panels, so lift the wrapper regardless of its
+   content classes. (shadcn poppers already carry `z-50`, so this is a no-op
+   for them.) */
+[data-radix-popper-content-wrapper] {
+  z-index: 50 !important;
+}
+
 /* Dismissable CTA "genie": each CTA pairs a dismissable surface with a sidebar
    resume button sharing a view-transition-name (`onboarding-cta` for the setup
    banner — see `useOnboardingCta` — and `insights-dock` for the Project

@@ -29,6 +29,11 @@ type Service interface {
 	// Soft-delete a user_session_issuer. Cascades to dependent user_sessions,
 	// user_session_consents, and remote_session_clients.
 	DeleteUserSessionIssuer(context.Context, *DeleteUserSessionIssuerPayload) (err error)
+	// One-off migration: lift the legacy Redis dynamic-client registrations from a
+	// gram-type oauth_proxy_provider into user_session_clients on the given
+	// user_session_issuer, so migrated MCP clients skip re-registration and
+	// re-auth. Removed once the OAuth proxy is retired.
+	MigrateLegacyGramRegistrations(context.Context, *MigrateLegacyGramRegistrationsPayload) (res *MigrateLegacyGramRegistrationsResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -51,7 +56,7 @@ const ServiceName = "userSessionIssuers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"createUserSessionIssuer", "updateUserSessionIssuer", "listUserSessionIssuers", "getUserSessionIssuer", "deleteUserSessionIssuer"}
+var MethodNames = [6]string{"createUserSessionIssuer", "updateUserSessionIssuer", "listUserSessionIssuers", "getUserSessionIssuer", "deleteUserSessionIssuer", "migrateLegacyGramRegistrations"}
 
 // CreateUserSessionIssuerPayload is the payload type of the userSessionIssuers
 // service createUserSessionIssuer method.
@@ -107,6 +112,26 @@ type ListUserSessionIssuersResult struct {
 	Items []*types.UserSessionIssuer
 	// Cursor for the next page; empty when exhausted.
 	NextCursor *string
+}
+
+// MigrateLegacyGramRegistrationsPayload is the payload type of the
+// userSessionIssuers service migrateLegacyGramRegistrations method.
+type MigrateLegacyGramRegistrationsPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The gram-type oauth_proxy_provider whose Redis registrations are migrated.
+	OauthProxyProviderID string
+	// The target user_session_issuer the migrated user_session_clients attach to.
+	UserSessionIssuerID string
+}
+
+// MigrateLegacyGramRegistrationsResult is the result type of the
+// userSessionIssuers service migrateLegacyGramRegistrations method.
+type MigrateLegacyGramRegistrationsResult struct {
+	// Number of user_session_clients newly inserted; already-migrated
+	// registrations count as zero.
+	MigratedCount int
 }
 
 // UpdateUserSessionIssuerPayload is the payload type of the userSessionIssuers

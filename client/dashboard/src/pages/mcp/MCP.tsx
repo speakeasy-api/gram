@@ -7,10 +7,8 @@ import { MCPServerTableRow } from "@/components/mcp/MCPServerTableRow";
 import { MCPTableRow, MCPTableRowSkeleton } from "@/components/mcp/MCPTableRow";
 import { Page } from "@/components/page-layout";
 import { DotTable } from "@/components/ui/dot-table";
-import { SearchBar } from "@/components/ui/search-bar";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { ViewToggle } from "@/components/ui/view-toggle";
 import { useViewMode } from "@/components/ui/use-view-mode";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -26,6 +24,18 @@ import { Outlet, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useToolsets } from "../toolsets/useToolsets";
 import { MCPEmptyState } from "./MCPEmptyState";
+import {
+  useFilterState as useMcpDimensionFilters,
+  type FilterValue,
+} from "@/components/filters";
+import {
+  hasActiveMcpFilters,
+  matchesMcpFilters,
+  mcpServerFacets,
+  MCP_FILTERS,
+  MCP_FILTER_OPTIONS,
+  toolsetFacets,
+} from "./mcp-filter-schema";
 
 const BUILT_IN_SERVERS = [
   {
@@ -121,11 +131,14 @@ function MCPOverview() {
   const [newMcpDialogOpen, setNewMcpDialogOpen] = useState(false);
   const [newMcpServerName, setNewMcpServerName] = useState("");
   const [search, setSearch] = useState("");
+  const mcpFilters = useMcpDimensionFilters(MCP_FILTERS);
 
   const filteredToolsets = useMemo(() => {
     const query = search.toLowerCase();
     return [...toolsets]
       .filter((toolset) => {
+        if (!matchesMcpFilters(toolsetFacets(toolset), mcpFilters.values))
+          return false;
         if (!query) return true;
         return (
           toolset.name.toLowerCase().includes(query) ||
@@ -133,12 +146,14 @@ function MCPOverview() {
         );
       })
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [toolsets, search]);
+  }, [toolsets, search, mcpFilters.values]);
 
   const filteredMcpServers = useMemo(() => {
     const query = search.toLowerCase();
     return [...mcpServers]
       .filter((server) => {
+        if (!matchesMcpFilters(mcpServerFacets(server), mcpFilters.values))
+          return false;
         if (!query) return true;
         return (
           (server.name?.toLowerCase().includes(query) ?? false) ||
@@ -146,12 +161,16 @@ function MCPOverview() {
         );
       })
       .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
-  }, [mcpServers, search]);
+  }, [mcpServers, search, mcpFilters.values]);
 
-  const showSearch = !isLoading && toolsets.length + mcpServers.length > 6;
+  // Show the filter bar once there's anything to filter. Filters can drive the
+  // result set to empty on their own, so the no-matches state must consider an
+  // active filter, not just a search query.
+  const hasItems = toolsets.length + mcpServers.length > 0;
+  const showFilters = !isLoading && hasItems;
   const showNoMatches =
     !isLoading &&
-    search !== "" &&
+    (search !== "" || hasActiveMcpFilters(mcpFilters.values)) &&
     filteredToolsets.length === 0 &&
     filteredMcpServers.length === 0;
 
@@ -254,9 +273,6 @@ function MCPOverview() {
         {hasRefreshError ? (
           <Page.Section.CTA>{refreshErrorIndicator}</Page.Section.CTA>
         ) : null}
-        <Page.Section.CTA>
-          <ViewToggle value={viewMode} onChange={setViewMode} />
-        </Page.Section.CTA>
         <Page.Section.CTA>{newMcpServerButton}</Page.Section.CTA>
         <Page.Section.Description className="max-w-2xl">
           Sources exposed as MCP servers. These include all types of sources
@@ -264,17 +280,34 @@ function MCPOverview() {
           custom remote MCPs imported by URL.
         </Page.Section.Description>
         <Page.Section.Body>
-          {showSearch && (
-            <SearchBar
-              value={search}
-              onChange={setSearch}
-              placeholder="Search MCP servers..."
-              className="mb-4"
-            />
+          {showFilters && (
+            <Page.Toolbar className="mb-4">
+              <Page.Toolbar.Search
+                value={search}
+                onChange={setSearch}
+                placeholder="Search MCP servers..."
+              />
+              <Page.Toolbar.Filters
+                schema={MCP_FILTERS}
+                values={mcpFilters.values}
+                optionsById={MCP_FILTER_OPTIONS}
+                onChange={
+                  mcpFilters.setValue as (
+                    id: string,
+                    value: FilterValue,
+                  ) => void
+                }
+                onClear={mcpFilters.clearValue as (id: string) => void}
+                onClearAll={mcpFilters.clearAll}
+              />
+              <Page.Toolbar.ViewAs value={viewMode} onChange={setViewMode} />
+            </Page.Toolbar>
           )}
           {showNoMatches ? (
             <Type muted className="py-8 text-center">
-              No MCP servers matching &ldquo;{search}&rdquo;
+              {search !== ""
+                ? `No MCP servers matching “${search}”`
+                : "No MCP servers match your filters"}
             </Type>
           ) : viewMode === "grid" ? (
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">

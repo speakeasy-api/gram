@@ -68,7 +68,8 @@ export const RULE_CATEGORY_META: Record<
   },
   prompt_injection: {
     label: "Prompt Injection",
-    description: "Indirect injection via tool outputs, hidden instructions",
+    description:
+      "Jailbreaks, instruction overrides, and prompt extraction — in a user prompt or smuggled through tool outputs. Evaluated semantically by an LLM judge.",
     icon: "syringe",
   },
   off_policy: {
@@ -1381,10 +1382,10 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
       hidden: true,
     },
   ],
-  // prompt_injection is enabled at the category level; the detection
-  // engine (deberta classifier vs L0 regex/keyword heuristics) is selected
-  // per-org via the prompt-injection-use-classifier feature flag, not by the
-  // policy author.
+  // prompt_injection is enabled at the category level; whether the L1 LLM
+  // judge runs on top of the L0 regex/keyword heuristics is selected per-org
+  // via the prompt-injection-use-classifier feature flag, not by the policy
+  // author.
   prompt_injection: [],
   off_policy: [
     {

@@ -33,6 +33,10 @@ type Service interface {
 	// fresh chat id. The reply is delivered asynchronously; poll the chat service
 	// (loadChat) to read it.
 	SendMessage(context.Context, *SendMessagePayload) (res *SendMessageResult, err error)
+	// Get the project's built-in Project Assistant if it exists. Returns 404 when
+	// no managed assistant has been provisioned yet — call ensureManagedAssistant
+	// to create one.
+	GetManagedAssistant(context.Context, *GetManagedAssistantPayload) (res *types.Assistant, err error)
 	// Get the project's built-in Project Assistant, provisioning it on first
 	// access. Idempotent — safe to call on every sidebar open.
 	EnsureManagedAssistant(context.Context, *EnsureManagedAssistantPayload) (res *types.Assistant, err error)
@@ -58,7 +62,7 @@ const ServiceName = "assistants"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"listAssistants", "getAssistant", "createAssistant", "updateAssistant", "deleteAssistant", "sendMessage", "ensureManagedAssistant"}
+var MethodNames = [8]string{"listAssistants", "getAssistant", "createAssistant", "updateAssistant", "deleteAssistant", "sendMessage", "getManagedAssistant", "ensureManagedAssistant"}
 
 // CreateAssistantPayload is the payload type of the assistants service
 // createAssistant method.
@@ -102,6 +106,13 @@ type EnsureManagedAssistantPayload struct {
 type GetAssistantPayload struct {
 	// The assistant ID.
 	ID               string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// GetManagedAssistantPayload is the payload type of the assistants service
+// getManagedAssistant method.
+type GetManagedAssistantPayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
 }
