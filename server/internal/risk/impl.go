@@ -325,6 +325,16 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		return nil, oops.E(oops.CodeUnexpected, err, "generate policy id").LogError(ctx, s.logger)
 	}
 
+	// Application predicates (scope/exemption) apply to both standard and prompt
+	// policies, so they are not gated by policyType like the detection fields.
+	applicationConfig, err := applicationConfigToStorage(payload.ApplicationConfig)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid application_config")
+	}
+	if err := ra.ValidateApplicationConfig(applicationConfig); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid application_config")
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
@@ -342,7 +352,11 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		PromptInjectionRules: createPolicyDetectionField(policyType, payload.PromptInjectionRules),
 		DisabledRules:        createPolicyDetectionField(policyType, payload.DisabledRules),
 		CustomRuleIds:        createPolicyDetectionField(policyType, payload.CustomRuleIds),
+		// Exemptions are policy application, not detection — they apply to prompt
+		// policies too, so (unlike custom_rule_ids) they are not nulled by type.
+		ExemptRuleIds:        payload.ExemptRuleIds,
 		MessageTypes:         payload.MessageTypes,
+		ApplicationConfig:    applicationConfig,
 		Enabled:              enabled,
 		Action:               action,
 		AudienceType:         audienceType,
@@ -509,12 +523,33 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		customRuleIds = payload.CustomRuleIds
 	}
 
+	exemptRuleIds := current.ExemptRuleIds
+	if payload.ExemptRuleIds != nil {
+		if err := validateCustomRuleIDs(payload.ExemptRuleIds); err != nil {
+			return nil, err
+		}
+		exemptRuleIds = payload.ExemptRuleIds
+	}
+
 	messageTypes := current.MessageTypes
 	if payload.MessageTypes != nil {
 		if err := validateMessageTypes(payload.MessageTypes); err != nil {
 			return nil, err
 		}
 		messageTypes = payload.MessageTypes
+	}
+
+	// Application predicates: omit to preserve; send (possibly empty) to replace.
+	applicationConfig := current.ApplicationConfig
+	if payload.ApplicationConfig != nil {
+		ac, err := applicationConfigToStorage(payload.ApplicationConfig)
+		if err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid application_config")
+		}
+		if err := ra.ValidateApplicationConfig(ac); err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid application_config")
+		}
+		applicationConfig = ac
 	}
 
 	enabled := current.Enabled
@@ -639,7 +674,9 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		PromptInjectionRules: promptInjectionRules,
 		DisabledRules:        disabledRules,
 		CustomRuleIds:        customRuleIds,
+		ExemptRuleIds:        exemptRuleIds,
 		MessageTypes:         messageTypes,
+		ApplicationConfig:    applicationConfig,
 		Enabled:              enabled,
 		Action:               action,
 		AudienceType:         audienceType,
@@ -2274,7 +2311,9 @@ func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types
 		PromptInjectionRules:  row.PromptInjectionRules,
 		DisabledRules:         row.DisabledRules,
 		CustomRuleIds:         row.CustomRuleIds,
+		ExemptRuleIds:         row.ExemptRuleIds,
 		MessageTypes:          row.MessageTypes,
+		ApplicationConfig:     applicationConfigFromStorage(row.ApplicationConfig),
 		Enabled:               row.Enabled,
 		Action:                row.Action,
 		AudienceType:          row.AudienceType,
@@ -2305,7 +2344,9 @@ func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []
 		PromptInjectionRules:  row.PromptInjectionRules,
 		DisabledRules:         row.DisabledRules,
 		CustomRuleIds:         row.CustomRuleIds,
+		ExemptRuleIds:         row.ExemptRuleIds,
 		MessageTypes:          row.MessageTypes,
+		ApplicationConfig:     applicationConfigFromStorage(row.ApplicationConfig),
 		Enabled:               row.Enabled,
 		Action:                row.Action,
 		AudienceType:          row.AudienceType,
@@ -2417,6 +2458,73 @@ func customRuleMatchConfigFromStorage(raw []byte) *types.RiskMatchConfig {
 		return nil
 	}
 	return matchConfigFromEngine(&cfg)
+}
+
+// applicationConfigToStorage marshals an API application_config into the
+// risk_policies.application_config JSONB { includes, exempts }. Returns nil when
+// no predicate is set.
+func applicationConfigToStorage(in *types.RiskPolicyApplication) ([]byte, error) {
+	if in == nil {
+		return nil, nil
+	}
+	app := ra.PolicyApplication{
+		Includes: matchConfigsToEngine(in.Includes),
+		Exempts:  matchConfigsToEngine(in.Exempts),
+	}
+	if len(app.Includes) == 0 && len(app.Exempts) == 0 {
+		return nil, nil
+	}
+	raw, err := json.Marshal(app)
+	if err != nil {
+		return nil, fmt.Errorf("marshal application_config: %w", err)
+	}
+	return raw, nil
+}
+
+// applicationConfigFromStorage maps stored application_config JSONB back into the
+// API type. Returns nil for empty/NULL or undecodable bytes (validated on write).
+func applicationConfigFromStorage(raw []byte) *types.RiskPolicyApplication {
+	if len(raw) == 0 {
+		return nil
+	}
+	var app ra.PolicyApplication
+	if err := json.Unmarshal(raw, &app); err != nil {
+		return nil
+	}
+	includes := matchConfigsFromEngine(app.Includes)
+	exempts := matchConfigsFromEngine(app.Exempts)
+	if len(includes) == 0 && len(exempts) == 0 {
+		return nil
+	}
+	return &types.RiskPolicyApplication{Includes: includes, Exempts: exempts}
+}
+
+// matchConfigsToEngine maps a list of API match_configs to engine structs,
+// dropping empty entries; returns nil for an all-empty list.
+func matchConfigsToEngine(in []*types.RiskMatchConfig) []*ra.MatchConfig {
+	out := make([]*ra.MatchConfig, 0, len(in))
+	for _, c := range in {
+		if cfg := matchConfigToEngine(c); cfg != nil {
+			out = append(out, cfg)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func matchConfigsFromEngine(in []*ra.MatchConfig) []*types.RiskMatchConfig {
+	out := make([]*types.RiskMatchConfig, 0, len(in))
+	for _, c := range in {
+		if cfg := matchConfigFromEngine(c); cfg != nil {
+			out = append(out, cfg)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func (s *Service) generatePolicyName(ctx context.Context, orgID, projectID string, sources, presidioEntities []string, action string, existingNames []string) string {

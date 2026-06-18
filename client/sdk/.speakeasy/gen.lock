@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 622a0c4aafdc96cbde2beb08cce58b9d
+  docChecksum: fe16fda3f3e4c7155d1f026fb7bd4591
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -225,7 +225,7 @@ trackedFiles:
   docs/models/components/createriskexclusionrequestbody.md:
     last_write_checksum: sha1:d8987530cafa6706a32d252da413c1d4448c935e
   docs/models/components/createriskpolicyrequestbody.md:
-    last_write_checksum: sha1:2fa44602ca0b0375bf577535ffc6aa8d106c1f59
+    last_write_checksum: sha1:2d207da346e0560237d690ed6c0f41638facf8a5
   docs/models/components/createroleform.md:
     last_write_checksum: sha1:2862fd945c42babf0cce10ca510a35cc00b91201
   docs/models/components/createserverform.md:
@@ -903,9 +903,11 @@ trackedFiles:
   docs/models/components/riskoverviewuser.md:
     last_write_checksum: sha1:e27f5822bf1197b237ac5f37aab0c8d439d3dfa0
   docs/models/components/riskpolicy.md:
-    last_write_checksum: sha1:fca1af04ecfb1034bab8fc21a5d1363318871233
+    last_write_checksum: sha1:63a94ddb0770d16469aefca55cc8a62d3da4d877
   docs/models/components/riskpolicyaction.md:
     last_write_checksum: sha1:3729eadfe620fd4d1c367a384ab82ea55ab8b2d3
+  docs/models/components/riskpolicyapplication.md:
+    last_write_checksum: sha1:99cd2f81f093d458bb2cdb94a572c80d2a6e7f9f
   docs/models/components/riskpolicyaudiencetype.md:
     last_write_checksum: sha1:ab38f2624d9aebddb92594af920ed857ee4b0ea7
   docs/models/components/riskpolicybypassapprovalrequestbody.md:
@@ -1277,7 +1279,7 @@ trackedFiles:
   docs/models/components/updateriskexclusionrequestbodymatchtype.md:
     last_write_checksum: sha1:ec9f6d08a9258982255cf0e134a82f8e2f7cd348
   docs/models/components/updateriskpolicyrequestbody.md:
-    last_write_checksum: sha1:3307e27b8f09557e74320fe50451bf4fffd02ed2
+    last_write_checksum: sha1:8d39e31e5707048153ba0929f2ebeeaade2d25c6
   docs/models/components/updateriskpolicyrequestbodyaction.md:
     last_write_checksum: sha1:d0440dea4e7b2af3804fd303de46f1f8c1472d10
   docs/models/components/updateriskpolicyrequestbodyaudiencetype.md:
@@ -4351,7 +4353,7 @@ trackedFiles:
   src/models/components/createriskexclusionrequestbody.ts:
     last_write_checksum: sha1:6dafc15fd69b59c7aeb7dedc1060612c7882efcc
   src/models/components/createriskpolicyrequestbody.ts:
-    last_write_checksum: sha1:a7cd4d2080931ee82194a37b2f3e1c4d7300ead2
+    last_write_checksum: sha1:0a203d26cdcc0dd882dceff0155dd22a40de35a9
   src/models/components/createroleform.ts:
     last_write_checksum: sha1:85aeb0cf9b2bcc28284e482e51fc8b2d97ca4a1e
   src/models/components/createserverform.ts:
@@ -4529,7 +4531,7 @@ trackedFiles:
     last_write_checksum: sha1:311e62a412f4d5baa16d1130eb70af497a7ca6a4
   src/models/components/index.ts:
     id: 0aa842dce54d
-    last_write_checksum: sha1:e2f3d43e7a5c3a72f58b31726ebc7514f14a63d6
+    last_write_checksum: sha1:ce1e629d4591b78d133b40ca81e94984fbc1d7b1
     pristine_git_object: 4c964f216a07beb3007a26774ce7bdaa48c9f74c
   src/models/components/inforesponsebody.ts:
     last_write_checksum: sha1:549d388111333748195b4791e63fd64f4a6e7140
@@ -4927,7 +4929,9 @@ trackedFiles:
   src/models/components/riskoverviewuser.ts:
     last_write_checksum: sha1:eb4da626d8348818266f75b28ae1dac267441b5d
   src/models/components/riskpolicy.ts:
-    last_write_checksum: sha1:d52c48a739f82c2233c3cf3945e89b93386d17e6
+    last_write_checksum: sha1:6ddcfa2b5dfe17091ae0ec6dd075bf1920221e4e
+  src/models/components/riskpolicyapplication.ts:
+    last_write_checksum: sha1:33188a8b7e5570150853779a5f54e14511a59e08
   src/models/components/riskpolicybypassapprovalrequestbody.ts:
     last_write_checksum: sha1:e55bacae622a6a00c2ce0b2825a3294c239bf39a
   src/models/components/riskpolicybypassrequest.ts:
@@ -5175,7 +5179,7 @@ trackedFiles:
   src/models/components/updateriskexclusionrequestbody.ts:
     last_write_checksum: sha1:c39b1489c4edc24484c2e8709ac3d90fabc02962
   src/models/components/updateriskpolicyrequestbody.ts:
-    last_write_checksum: sha1:7eab7ac0b6a6b50aec36f3906364c9e71b6c89bd
+    last_write_checksum: sha1:49300d73c70582b9dcf61d52f8578d6e8de15245
   src/models/components/updateroleform.ts:
     last_write_checksum: sha1:8b8b4268330a9ca348f2950ccbba16748c5cb25d
   src/models/components/updateserverform.ts:

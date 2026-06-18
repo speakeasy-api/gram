@@ -25,7 +25,7 @@ func BuildCreateRiskPolicyPayload(riskCreateRiskPolicyBody string, riskCreateRis
 	{
 		err = json.Unmarshal([]byte(riskCreateRiskPolicyBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"policy_type\": \"prompt_based\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"application_config\": {\n         \"exempts\": [\n            {\n               \"combine\": \"or\",\n               \"conditions\": [\n                  {\n                     \"case_insensitive\": false,\n                     \"op\": \"equals\",\n                     \"path\": \"abc123\",\n                     \"target\": \"user_prompt\",\n                     \"value\": \"abc123\",\n                     \"values\": [\n                        \"abc123\"\n                     ]\n                  }\n               ]\n            }\n         ],\n         \"includes\": [\n            {\n               \"combine\": \"or\",\n               \"conditions\": [\n                  {\n                     \"case_insensitive\": false,\n                     \"op\": \"equals\",\n                     \"path\": \"abc123\",\n                     \"target\": \"user_prompt\",\n                     \"value\": \"abc123\",\n                     \"values\": [\n                        \"abc123\"\n                     ]\n                  }\n               ]\n            }\n         ]\n      },\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"exempt_rule_ids\": [\n         \"abc123\"\n      ],\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"policy_type\": \"prompt_based\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -92,11 +92,20 @@ func BuildCreateRiskPolicyPayload(riskCreateRiskPolicyBody string, riskCreateRis
 			v.CustomRuleIds[i] = val
 		}
 	}
+	if body.ExemptRuleIds != nil {
+		v.ExemptRuleIds = make([]string, len(body.ExemptRuleIds))
+		for i, val := range body.ExemptRuleIds {
+			v.ExemptRuleIds[i] = val
+		}
+	}
 	if body.MessageTypes != nil {
 		v.MessageTypes = make([]string, len(body.MessageTypes))
 		for i, val := range body.MessageTypes {
 			v.MessageTypes[i] = val
 		}
+	}
+	if body.ApplicationConfig != nil {
+		v.ApplicationConfig = marshalRiskPolicyApplicationRequestBodyToTypesRiskPolicyApplication(body.ApplicationConfig)
 	}
 	{
 		var zero string
@@ -202,9 +211,14 @@ func BuildUpdateRiskPolicyPayload(riskUpdateRiskPolicyBody string, riskUpdateRis
 	{
 		err = json.Unmarshal([]byte(riskUpdateRiskPolicyBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"block\",\n      \"application_config\": {\n         \"exempts\": [\n            {\n               \"combine\": \"or\",\n               \"conditions\": [\n                  {\n                     \"case_insensitive\": false,\n                     \"op\": \"equals\",\n                     \"path\": \"abc123\",\n                     \"target\": \"user_prompt\",\n                     \"value\": \"abc123\",\n                     \"values\": [\n                        \"abc123\"\n                     ]\n                  }\n               ]\n            }\n         ],\n         \"includes\": [\n            {\n               \"combine\": \"or\",\n               \"conditions\": [\n                  {\n                     \"case_insensitive\": false,\n                     \"op\": \"equals\",\n                     \"path\": \"abc123\",\n                     \"target\": \"user_prompt\",\n                     \"value\": \"abc123\",\n                     \"values\": [\n                        \"abc123\"\n                     ]\n                  }\n               ]\n            }\n         ]\n      },\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"exempt_rule_ids\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.ApplicationConfig != nil {
+			if err2 := ValidateRiskPolicyApplicationRequestBody(body.ApplicationConfig); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 		if body.Action != nil {
 			if !(*body.Action == "flag" || *body.Action == "block") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "block"}))
@@ -277,11 +291,20 @@ func BuildUpdateRiskPolicyPayload(riskUpdateRiskPolicyBody string, riskUpdateRis
 			v.CustomRuleIds[i] = val
 		}
 	}
+	if body.ExemptRuleIds != nil {
+		v.ExemptRuleIds = make([]string, len(body.ExemptRuleIds))
+		for i, val := range body.ExemptRuleIds {
+			v.ExemptRuleIds[i] = val
+		}
+	}
 	if body.MessageTypes != nil {
 		v.MessageTypes = make([]string, len(body.MessageTypes))
 		for i, val := range body.MessageTypes {
 			v.MessageTypes[i] = val
 		}
+	}
+	if body.ApplicationConfig != nil {
+		v.ApplicationConfig = marshalRiskPolicyApplicationRequestBodyToTypesRiskPolicyApplication(body.ApplicationConfig)
 	}
 	if body.AudiencePrincipalUrns != nil {
 		v.AudiencePrincipalUrns = make([]string, len(body.AudiencePrincipalUrns))

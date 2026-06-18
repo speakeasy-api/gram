@@ -207,11 +207,20 @@ type CreateRiskPolicyPayload struct {
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string
-	// Custom detection rule ids to enable for this policy.
+	// Custom detection rule ids to attach as detectors: a match produces a finding.
 	CustomRuleIds []string
+	// Custom detection rule ids to attach as exemptions: when one matches a
+	// message, the whole policy is skipped for that message (an allowlist).
+	// Disjoint from custom_rule_ids.
+	ExemptRuleIds []string
 	// Message types this policy applies to. When empty or omitted, the policy
 	// scans all supported types.
 	MessageTypes []string
+	// Granular policy application: includes (a message is evaluated when it
+	// matches ANY include; supersedes message_types) and exempts (a message is
+	// skipped when it matches ANY exempt). Omit to rely only on message_types +
+	// exempt_rule_ids.
+	ApplicationConfig *types.RiskPolicyApplication
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.
@@ -857,12 +866,20 @@ type UpdateRiskPolicyPayload struct {
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string
-	// Custom detection rule ids to enable for this policy. Omit to preserve the
-	// current selection.
+	// Custom detection rule ids to attach as detectors: a match produces a
+	// finding. Omit to preserve the current selection.
 	CustomRuleIds []string
+	// Custom detection rule ids to attach as exemptions: when one matches a
+	// message, the whole policy is skipped for that message (an allowlist).
+	// Disjoint from custom_rule_ids.
+	ExemptRuleIds []string
 	// Message types this policy applies to. Omit to preserve the current
 	// selection; send an empty array to apply to all types.
 	MessageTypes []string
+	// Granular policy application: includes (a message is evaluated when it
+	// matches ANY include; supersedes message_types) and exempts (a message is
+	// skipped when it matches ANY exempt). Omit to preserve the current value.
+	ApplicationConfig *types.RiskPolicyApplication
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag or block.

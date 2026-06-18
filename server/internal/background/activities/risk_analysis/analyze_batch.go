@@ -186,7 +186,17 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	if err != nil {
 		return nil, err
 	}
-	messages = filterMessagesByMessageTypes(messages, args.MessageTypes)
+	// Policy application: a defined include predicate is the fine-grained scope
+	// and supersedes the coarse message_types filter; exempt takes a matched
+	// message out of the policy entirely. Computed once, applied to the source
+	// scanners and the judge.
+	app, err := CompileApplication(policy.ApplicationConfig)
+	if err != nil {
+		return nil, fmt.Errorf("compile application_config: %w", err)
+	}
+	if !app.HasInclude() {
+		messages = filterMessagesByMessageTypes(messages, args.MessageTypes)
+	}
 	scannedCount = len(messages)
 	if len(messages) == 0 {
 		if err := a.writeResults(ctx, args, nil); err != nil {
@@ -195,7 +205,7 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		return &AnalyzeBatchResult{Processed: 0, Findings: 0}, nil
 	}
 
-	customRules, err := a.customRulesForPolicy(ctx, args.ProjectID, policy.CustomRuleIds)
+	customRules, err := a.customRulesForPolicy(ctx, args.ProjectID, policy.CustomRuleIds, policy.ExemptRuleIds)
 	if err != nil {
 		return nil, err
 	}
@@ -213,18 +223,19 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 		return nil, fmt.Errorf("list exclusions: %w", err)
 	}
 
-	findings, err := a.scan(ctx, args, messages, customRules, NewExclusionSet(exclusions))
+	appExcluded := a.applicationExcluded(ctx, app, messages)
+
+	findings, err := a.scan(ctx, args, messages, customRules, NewExclusionSet(exclusions), appExcluded)
 	if err != nil {
 		return nil, err
 	}
 
 	// prompt_based policies are evaluated by the LLM judge rather than the
-	// source-based scanners above. The judge runs on every message left after
-	// the policy's message_types filter (already applied by
-	// filterMessagesByMessageTypes), so it covers whatever types the policy
-	// declares.
+	// source-based scanners above. The judge runs on every in-scope message left
+	// after the policy's message_types filter and application predicates, so it
+	// covers whatever the policy declares.
 	if policy.PolicyType == "prompt_based" {
-		judgeFindings := a.scanPromptJudge(ctx, args, policy, messages)
+		judgeFindings := a.scanPromptJudge(ctx, args, policy, messages, appExcluded)
 		for i := range findings {
 			findings[i] = append(findings[i], judgeFindings[i]...)
 		}
@@ -312,7 +323,7 @@ func messageRowMessageType(msg repo.GetMessageContentBatchRow) (message.Type, bo
 // destructive_tool, cli_destructive) run serially after the parallel scans
 // — shadow_mcp/destructive_tool make per-message DB calls; cli_destructive
 // is purely in-memory regex but kept in the same lane for consistency.
-func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages []repo.GetMessageContentBatchRow, customRules []CompiledCustomDetectionRule, exclusions ExclusionSet) ([][]Finding, error) {
+func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages []repo.GetMessageContentBatchRow, customRules []CompiledCustomDetectionRule, exclusions ExclusionSet, appExcluded []bool) ([][]Finding, error) {
 	ctx, scanSpan := a.tracer.Start(ctx, "risk.scanMessages")
 	defer scanSpan.End()
 	activity.RecordHeartbeat(ctx, 0)
@@ -335,6 +346,9 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 	cliDestructiveFindings := make([][]Finding, n)
 	promptInjectionFindings := make([][]Finding, n)
 	customFindings := make([][]Finding, n)
+	// allowlisted[i] is set when an allow-effect custom rule matches message i;
+	// every finding for that message is then dropped at merge time.
+	allowlisted := make([]bool, n)
 
 	var wg sync.WaitGroup
 	var gitleaksErr error
@@ -409,7 +423,9 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 	if len(customRules) > 0 {
 		wg.Go(func() {
 			for i, msg := range messages {
-				customFindings[i] = ScanCustomDetectionRules(a.customRuleMessageView(ctx, msg), customRules).Findings
+				res := ScanCustomDetectionRules(a.customRuleMessageView(ctx, msg), customRules)
+				customFindings[i] = res.Findings
+				allowlisted[i] = res.Allowed
 			}
 			activity.RecordHeartbeat(ctx, "custom")
 		})
@@ -459,6 +475,13 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 
 	merged := make([][]Finding, n)
 	for i := range n {
+		// The message is short-circuited — no findings recorded, including ones
+		// other detectors produced — when an allow-effect custom rule matched, or
+		// the policy's application predicates put it out of scope / exempt it.
+		if allowlisted[i] || (appExcluded != nil && appExcluded[i]) {
+			merged[i] = nil
+			continue
+		}
 		// Gitleaks findings come first so they take priority over presidio
 		// when both scanners match the same text region. Tool-call findings are
 		// non-overlapping with content scanners, so they pass through dedup.
@@ -472,6 +495,22 @@ func (a *AnalyzeBatch) scan(ctx context.Context, args AnalyzeBatchArgs, messages
 		merged[i] = dedup(combined)
 	}
 	return merged, nil
+}
+
+// applicationExcluded marks messages a policy's application_config takes out of
+// scope (include does not match) or exempts. Returns nil when the policy has no
+// application predicates, so the common path allocates nothing and callers skip
+// the per-message check.
+func (a *AnalyzeBatch) applicationExcluded(ctx context.Context, app CompiledApplication, messages []repo.GetMessageContentBatchRow) []bool {
+	if !app.Active() {
+		return nil
+	}
+	excluded := make([]bool, len(messages))
+	for i, msg := range messages {
+		view := a.customRuleMessageView(ctx, msg)
+		excluded[i] = !app.Includes(view) || app.Exempts(view)
+	}
+	return excluded
 }
 
 // judgeConcurrency bounds the number of in-flight judge calls per batch. Judge
@@ -490,7 +529,7 @@ const judgeConcurrency = 8
 // them to the policy's message_types via filterMessagesByMessageTypes — so it
 // covers whatever types the policy declares. Messages are evaluated
 // concurrently with a bounded worker pool.
-func (a *AnalyzeBatch) scanPromptJudge(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []repo.GetMessageContentBatchRow) [][]Finding {
+func (a *AnalyzeBatch) scanPromptJudge(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []repo.GetMessageContentBatchRow, appExcluded []bool) [][]Finding {
 	out := make([][]Finding, len(messages))
 	cfg := ParseJudgeConfig(policy.ModelConfig)
 	if !a.projectFlagEnabled(ctx, args.OrganizationID, args.ProjectID, feature.FlagPromptPolicies) {
@@ -499,6 +538,11 @@ func (a *AnalyzeBatch) scanPromptJudge(ctx context.Context, args AnalyzeBatchArg
 
 	indices := make([]int, 0, len(messages))
 	for i, msg := range messages {
+		// Skip messages the policy's application predicates put out of scope or
+		// exempt — never pay for a judge call the policy wouldn't act on.
+		if appExcluded != nil && appExcluded[i] {
+			continue
+		}
 		if _, ok := messageRowMessageType(msg); ok {
 			indices = append(indices, i)
 		}
@@ -623,11 +667,13 @@ func (a *AnalyzeBatch) customRuleMessageView(ctx context.Context, msg repo.GetMe
 	return view
 }
 
-// customRulesForPolicy loads the custom rules a policy attaches as detectors
-// (risk_policies.custom_rule_ids) and compiles them to deny — a match produces a
-// finding.
-func (a *AnalyzeBatch) customRulesForPolicy(ctx context.Context, projectID uuid.UUID, detectorIDs []string) ([]CompiledCustomDetectionRule, error) {
-	if len(detectorIDs) == 0 {
+// customRulesForPolicy loads the custom rules a policy attaches and compiles
+// them with the right polarity: rules in detectorIDs (risk_policies.custom_rule_ids)
+// deny — a match produces a finding — while rules in exemptIDs
+// (risk_policies.exempt_rule_ids) allow — a match short-circuits the whole policy
+// for that message. The two id sets are disjoint by construction.
+func (a *AnalyzeBatch) customRulesForPolicy(ctx context.Context, projectID uuid.UUID, detectorIDs, exemptIDs []string) ([]CompiledCustomDetectionRule, error) {
+	if len(detectorIDs) == 0 && len(exemptIDs) == 0 {
 		return nil, nil
 	}
 
@@ -636,9 +682,12 @@ func (a *AnalyzeBatch) customRulesForPolicy(ctx context.Context, projectID uuid.
 		return nil, fmt.Errorf("list custom detection rules: %w", err)
 	}
 
-	actions := make(map[string]Action, len(detectorIDs))
+	actions := make(map[string]Action, len(detectorIDs)+len(exemptIDs))
 	for _, id := range detectorIDs {
 		actions[id] = ActionDeny
+	}
+	for _, id := range exemptIDs {
+		actions[id] = ActionAllow
 	}
 
 	customRules := make([]CustomDetectionRule, 0, len(actions))

@@ -30,8 +30,10 @@ var _ = Service("risk", func() {
 			Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to detect.")
 			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline.")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
-			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to enable for this policy.")
+			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding.")
+			Attribute("exempt_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as exemptions: when one matches a message, the whole policy is skipped for that message (an allowlist). Disjoint from custom_rule_ids.")
 			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. When empty or omitted, the policy scans all supported types.")
+			Attribute("application_config", shared.RiskPolicyApplication, "Granular policy application: includes (a message is evaluated when it matches ANY include; supersedes message_types) and exempts (a message is skipped when it matches ANY exempt). Omit to rely only on message_types + exempt_rule_ids.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
 			Attribute("action", String, "Policy action: flag or block.", func() {
 				shared.RiskPolicyActionEnum()
@@ -133,8 +135,10 @@ var _ = Service("risk", func() {
 			Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to detect.")
 			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline.")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
-			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to enable for this policy. Omit to preserve the current selection.")
+			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.")
+			Attribute("exempt_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as exemptions: when one matches a message, the whole policy is skipped for that message (an allowlist). Disjoint from custom_rule_ids.")
 			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. Omit to preserve the current selection; send an empty array to apply to all types.")
+			Attribute("application_config", shared.RiskPolicyApplication, "Granular policy application: includes (a message is evaluated when it matches ANY include; supersedes message_types) and exempts (a message is skipped when it matches ANY exempt). Omit to preserve the current value.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
 			Attribute("action", String, "Policy action: flag or block.", func() {
 				shared.RiskPolicyActionEnum()

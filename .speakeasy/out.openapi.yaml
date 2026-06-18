@@ -35976,6 +35976,8 @@ components:
           enum:
             - flag
             - block
+        application_config:
+          $ref: '#/components/schemas/RiskPolicyApplication'
         audience_principal_urns:
           type: array
           items:
@@ -35995,7 +35997,7 @@ components:
           type: array
           items:
             type: string
-          description: Custom detection rule ids to enable for this policy.
+          description: 'Custom detection rule ids to attach as detectors: a match produces a finding.'
         disabled_rules:
           type: array
           items:
@@ -36004,6 +36006,11 @@ components:
         enabled:
           type: boolean
           description: Whether the policy is active.
+        exempt_rule_ids:
+          type: array
+          items:
+            type: string
+          description: 'Custom detection rule ids to attach as exemptions: when one matches a message, the whole policy is skipped for that message (an allowlist). Disjoint from custom_rule_ids.'
         message_types:
           type: array
           items:
@@ -43327,6 +43334,8 @@ components:
           enum:
             - flag
             - block
+        application_config:
+          $ref: '#/components/schemas/RiskPolicyApplication'
         audience_principal_urns:
           type: array
           items:
@@ -43350,7 +43359,7 @@ components:
           type: array
           items:
             type: string
-          description: Custom detection rule ids enabled for this policy.
+          description: 'Custom detection rule ids attached as detectors: a match produces a finding.'
         disabled_rules:
           type: array
           items:
@@ -43359,6 +43368,11 @@ components:
         enabled:
           type: boolean
           description: Whether the policy is active.
+        exempt_rule_ids:
+          type: array
+          items:
+            type: string
+          description: 'Custom detection rule ids attached as exemptions: when one matches a message, the whole policy is skipped for that message (an allowlist). Disjoint from custom_rule_ids.'
         id:
           type: string
           description: The risk policy ID.
@@ -43437,6 +43451,19 @@ components:
         - updated_at
         - pending_messages
         - total_messages
+    RiskPolicyApplication:
+      type: object
+      properties:
+        exempts:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskMatchConfig'
+          description: Exempt predicates. A message is skipped for the whole policy when it matches ANY exempt (alongside exempt_rule_ids). Empty/omitted means no inline exemption.
+        includes:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskMatchConfig'
+          description: Include predicates (the fine-grained scope). A message is evaluated when it matches ANY include; the list supersedes message_types. Empty/omitted scopes by message_types instead.
     RiskPolicyBypassApprovalRequestBody:
       type: object
       properties:
@@ -47539,6 +47566,8 @@ components:
           enum:
             - flag
             - block
+        application_config:
+          $ref: '#/components/schemas/RiskPolicyApplication'
         audience_principal_urns:
           type: array
           items:
@@ -47557,7 +47586,7 @@ components:
           type: array
           items:
             type: string
-          description: Custom detection rule ids to enable for this policy. Omit to preserve the current selection.
+          description: 'Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.'
         disabled_rules:
           type: array
           items:
@@ -47566,6 +47595,11 @@ components:
         enabled:
           type: boolean
           description: Whether the policy is active.
+        exempt_rule_ids:
+          type: array
+          items:
+            type: string
+          description: 'Custom detection rule ids to attach as exemptions: when one matches a message, the whole policy is skipped for that message (an allowlist). Disjoint from custom_rule_ids.'
         id:
           type: string
           description: The policy ID.

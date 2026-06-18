@@ -188,10 +188,18 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, organizationID string,
 	// condition under which the fan-out would run the judge — a prompt_based
 	// policy whose message_types apply to this message — so the lookup is
 	// skipped entirely for scans that can never enforce one.
+	// A defined include predicate is the policy's fine-grained scope and
+	// supersedes message_types, so an include-scoped policy is always a candidate
+	// here — the per-message include/exempt check then runs in scanPolicy.
+	inMessageScope := func(p repo.RiskPolicy) bool {
+		return ra.ApplicationHasInclude(p.ApplicationConfig) ||
+			len(p.MessageTypes) == 0 ||
+			slices.Contains(p.MessageTypes, messageType)
+	}
+
 	promptPoliciesOn := false
 	if slices.ContainsFunc(policies, func(p repo.RiskPolicy) bool {
-		return p.PolicyType == "prompt_based" &&
-			(len(p.MessageTypes) == 0 || slices.Contains(p.MessageTypes, messageType))
+		return p.PolicyType == "prompt_based" && inMessageScope(p)
 	}) {
 		// All enforcing policies for a project belong to the same org.
 		promptPoliciesOn = s.projectFlagEnabled(ctx, policies[0].OrganizationID, projectID, feature.FlagPromptPolicies)
@@ -228,7 +236,8 @@ func (s *Scanner) ScanForEnforcement(ctx context.Context, organizationID string,
 		if !policyApplication.Satisfied {
 			continue
 		}
-		if len(p.MessageTypes) > 0 && !slices.Contains(p.MessageTypes, messageType) {
+		// A defined include predicate supersedes message_types (see inMessageScope).
+		if !inMessageScope(p) {
 			continue
 		}
 
@@ -341,12 +350,24 @@ func (s *Scanner) recordScan(ctx context.Context, projectID string, outcome o11y
 // per-policy parallelism over sources buys roughly nothing. The
 // across-policies fan-out in ScanForEnforcement is the real win.
 func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text string, messageType message.Type, toolName string, promptPoliciesOn bool, piEngineOn bool) (*ScanResult, error) {
-	// Build the structured view once; the custom rules evaluate against it.
+	// Build the structured view once; the application predicates and custom
+	// rules both evaluate against it.
 	view := ra.MessageView{Content: text, Type: messageType, Tools: nil}
 	if messageType == message.ToolRequest && toolName != "" {
 		// In realtime a tool-request's text carries the call arguments (the same
 		// body the judge sees), so it doubles as the tool_args source.
 		view.Tools = []ra.ToolView{ra.NewToolView(toolName, text)}
+	}
+
+	// Policy application gates both kinds before any detection: include narrows
+	// scope (alongside message_types); exempt — or an allow rule, below — takes
+	// the message out of the policy.
+	app, err := ra.CompileApplication(policy.ApplicationConfig)
+	if err != nil {
+		return nil, fmt.Errorf("compile application_config: %w", err)
+	}
+	if !app.Includes(view) || app.Exempts(view) {
+		return nil, nil
 	}
 
 	if policy.PolicyType == "prompt_based" {
@@ -367,6 +388,21 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 	exclusions := ra.NewExclusionSet(exclusionRows)
 	filter := func(findings []ra.Finding) []ra.Finding {
 		return exclusions.FilterFindings(disabled.FilterFindings(findings))
+	}
+
+	// Evaluate custom rules up front: an allow-effect rule that matches
+	// allowlists the message and short-circuits the whole policy (no block from
+	// any source). Deny findings are held for the block check after the
+	// built-in sources.
+	var customScan ra.CustomRuleScan
+	if len(policy.CustomRuleIds) > 0 || len(policy.ExemptRuleIds) > 0 {
+		customScan, err = s.scanCustomRules(ctx, policy, view)
+		if err != nil {
+			return nil, err
+		}
+		if customScan.Allowed {
+			return nil, nil
+		}
 	}
 
 	for _, source := range policy.Sources {
@@ -429,25 +465,17 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, text s
 			}
 		}
 	}
-	// Custom detection rules run last: they are detectors like the built-in
-	// sources above, so a compile/scan failure here must not skip those sources.
-	if len(policy.CustomRuleIds) > 0 {
-		customScan, err := s.scanCustomRules(ctx, policy, view)
-		if err != nil {
-			return nil, err
-		}
-		if denyFindings := filter(customScan.Findings); len(denyFindings) > 0 {
-			return &ScanResult{
-				Action:      policy.Action,
-				PolicyID:    policy.ID.String(),
-				PolicyName:  policy.Name,
-				Source:      ra.SourceCustom,
-				MessageType: messageType,
-				RuleID:      denyFindings[0].RuleID,
-				Description: denyFindings[0].Description,
-				UserMessage: conv.FromPGText[string](policy.UserMessage),
-			}, nil
-		}
+	if denyFindings := filter(customScan.Findings); len(denyFindings) > 0 {
+		return &ScanResult{
+			Action:      policy.Action,
+			PolicyID:    policy.ID.String(),
+			PolicyName:  policy.Name,
+			Source:      ra.SourceCustom,
+			MessageType: messageType,
+			RuleID:      denyFindings[0].RuleID,
+			Description: denyFindings[0].Description,
+			UserMessage: conv.FromPGText[string](policy.UserMessage),
+		}, nil
 	}
 	return nil, nil
 }
@@ -532,7 +560,7 @@ func promptPolicyUnavailableResult(policy repo.RiskPolicy, messageType message.T
 }
 
 func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, view ra.MessageView) (ra.CustomRuleScan, error) {
-	if len(policy.CustomRuleIds) == 0 {
+	if len(policy.CustomRuleIds) == 0 && len(policy.ExemptRuleIds) == 0 {
 		return ra.CustomRuleScan{Findings: nil, Allowed: false}, nil
 	}
 
@@ -541,10 +569,15 @@ func (s *Scanner) scanCustomRules(ctx context.Context, policy repo.RiskPolicy, v
 		return ra.CustomRuleScan{}, fmt.Errorf("list custom detection rules: %w", err)
 	}
 
-	// Rules attached as detectors deny: a match flags.
-	actions := make(map[string]ra.Action, len(policy.CustomRuleIds))
+	// Rules attached as detectors deny (a match flags); rules attached as
+	// exemptions allow (a match short-circuits the whole policy for the message).
+	// The two id sets are disjoint by construction.
+	actions := make(map[string]ra.Action, len(policy.CustomRuleIds)+len(policy.ExemptRuleIds))
 	for _, id := range policy.CustomRuleIds {
 		actions[id] = ra.ActionDeny
+	}
+	for _, id := range policy.ExemptRuleIds {
+		actions[id] = ra.ActionAllow
 	}
 
 	customRules := make([]ra.CustomDetectionRule, 0, len(actions))

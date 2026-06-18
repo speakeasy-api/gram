@@ -73,8 +73,10 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("presidio_entities", ArrayOf(String), "Presidio entity types to scan for. When empty, scans all entities.")
 	Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids enabled in addition to the heuristic baseline. When empty, only heuristics run.")
 	Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the policy author has unchecked within an otherwise-enabled category. Empty means every rule in the selected categories runs; matching findings are dropped at scan time.")
-	Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids enabled for this policy.")
+	Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids attached as detectors: a match produces a finding.")
+	Attribute("exempt_rule_ids", ArrayOf(String), "Custom detection rule ids attached as exemptions: when one matches a message, the whole policy is skipped for that message (an allowlist). Disjoint from custom_rule_ids.")
 	Attribute("message_types", ArrayOf(String), "Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message.")
+	Attribute("application_config", RiskPolicyApplication, "Granular policy application: include (which messages the policy evaluates; when set it supersedes message_types) and exempt (messages skipped entirely). Null when the policy relies only on message_types + exempt_rule_ids.")
 	Attribute("enabled", Boolean, "Whether the policy is active.")
 	Attribute("action", String, "Policy action: flag (log only) or block (deny in real-time).", func() {
 		RiskPolicyActionEnum()
@@ -141,6 +143,18 @@ var RiskMatchConfig = Type("RiskMatchConfig", func() {
 	Attribute("conditions", ArrayOf(RiskMatchCondition), "Conditions evaluated against a message; all (and) or any (or) must match.")
 
 	Required("conditions")
+})
+
+// RiskPolicyApplication is a policy's granular application predicate set, stored
+// in risk_policies.application_config. include narrows which messages the policy
+// evaluates (in addition to the coarse message_types filter); exempt takes a
+// matched message out of the policy entirely (an inline allowlist alongside
+// exempt_rule_ids).
+var RiskPolicyApplication = Type("RiskPolicyApplication", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("includes", ArrayOf(RiskMatchConfig), "Include predicates (the fine-grained scope). A message is evaluated when it matches ANY include; the list supersedes message_types. Empty/omitted scopes by message_types instead.")
+	Attribute("exempts", ArrayOf(RiskMatchConfig), "Exempt predicates. A message is skipped for the whole policy when it matches ANY exempt (alongside exempt_rule_ids). Empty/omitted means no inline exemption.")
 })
 
 var RiskCustomDetectionRule = Type("RiskCustomDetectionRule", func() {

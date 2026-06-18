@@ -6,6 +6,11 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 import {
+  RiskPolicyApplication,
+  RiskPolicyApplication$Outbound,
+  RiskPolicyApplication$outboundSchema,
+} from "./riskpolicyapplication.js";
+import {
   RiskPolicyModelConfig,
   RiskPolicyModelConfig$Outbound,
   RiskPolicyModelConfig$outboundSchema,
@@ -44,6 +49,7 @@ export type UpdateRiskPolicyRequestBody = {
    * Policy action: flag or block.
    */
   action?: UpdateRiskPolicyRequestBodyAction | undefined;
+  applicationConfig?: RiskPolicyApplication | undefined;
   /**
    * Principal URNs this policy applies to. Omit to preserve the current target principals.
    */
@@ -57,7 +63,7 @@ export type UpdateRiskPolicyRequestBody = {
    */
   autoName?: boolean | undefined;
   /**
-   * Custom detection rule ids to enable for this policy. Omit to preserve the current selection.
+   * Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.
    */
   customRuleIds?: Array<string> | undefined;
   /**
@@ -68,6 +74,10 @@ export type UpdateRiskPolicyRequestBody = {
    * Whether the policy is active.
    */
   enabled?: boolean | undefined;
+  /**
+   * Custom detection rule ids to attach as exemptions: when one matches a message, the whole policy is skipped for that message (an allowlist). Disjoint from custom_rule_ids.
+   */
+  exemptRuleIds?: Array<string> | undefined;
   /**
    * The policy ID.
    */
@@ -117,12 +127,14 @@ export const UpdateRiskPolicyRequestBodyAudienceType$outboundSchema:
 /** @internal */
 export type UpdateRiskPolicyRequestBody$Outbound = {
   action?: string | undefined;
+  application_config?: RiskPolicyApplication$Outbound | undefined;
   audience_principal_urns?: Array<string> | undefined;
   audience_type?: string | undefined;
   auto_name?: boolean | undefined;
   custom_rule_ids?: Array<string> | undefined;
   disabled_rules?: Array<string> | undefined;
   enabled?: boolean | undefined;
+  exempt_rule_ids?: Array<string> | undefined;
   id: string;
   message_types?: Array<string> | undefined;
   model_config?: RiskPolicyModelConfig$Outbound | undefined;
@@ -141,6 +153,7 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     action: z.optional(UpdateRiskPolicyRequestBodyAction$outboundSchema),
+    applicationConfig: z.optional(RiskPolicyApplication$outboundSchema),
     audiencePrincipalUrns: z.optional(z.array(z.string())),
     audienceType: z.optional(
       UpdateRiskPolicyRequestBodyAudienceType$outboundSchema,
@@ -149,6 +162,7 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     customRuleIds: z.optional(z.array(z.string())),
     disabledRules: z.optional(z.array(z.string())),
     enabled: z.optional(z.boolean()),
+    exemptRuleIds: z.optional(z.array(z.string())),
     id: z.string(),
     messageTypes: z.optional(z.array(z.string())),
     modelConfig: z.optional(RiskPolicyModelConfig$outboundSchema),
@@ -161,11 +175,13 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      applicationConfig: "application_config",
       audiencePrincipalUrns: "audience_principal_urns",
       audienceType: "audience_type",
       autoName: "auto_name",
       customRuleIds: "custom_rule_ids",
       disabledRules: "disabled_rules",
+      exemptRuleIds: "exempt_rule_ids",
       messageTypes: "message_types",
       modelConfig: "model_config",
       presidioEntities: "presidio_entities",

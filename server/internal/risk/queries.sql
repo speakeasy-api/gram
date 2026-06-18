@@ -10,7 +10,9 @@ INSERT INTO risk_policies (
   , prompt_injection_rules
   , disabled_rules
   , custom_rule_ids
+  , exempt_rule_ids
   , message_types
+  , application_config
   , enabled
   , action
   , audience_type
@@ -31,7 +33,9 @@ VALUES (
   , @prompt_injection_rules
   , @disabled_rules
   , COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
+  , COALESCE(sqlc.arg(exempt_rule_ids)::text[], '{}'::text[])
   , sqlc.arg(message_types)::text[]
+  , sqlc.narg(application_config)::jsonb
   , @enabled
   , @action
   , @audience_type
@@ -86,7 +90,9 @@ SET name = @name
   , prompt_injection_rules = @prompt_injection_rules
   , disabled_rules = @disabled_rules
   , custom_rule_ids = COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
+  , exempt_rule_ids = COALESCE(sqlc.arg(exempt_rule_ids)::text[], '{}'::text[])
   , message_types = sqlc.arg(message_types)::text[]
+  , application_config = sqlc.narg(application_config)::jsonb
   , enabled = @enabled
   , action = @action
   , audience_type = @audience_type
@@ -100,7 +106,9 @@ SET name = @name
         OR prompt_injection_rules IS DISTINCT FROM @prompt_injection_rules
         OR disabled_rules IS DISTINCT FROM @disabled_rules
         OR custom_rule_ids IS DISTINCT FROM COALESCE(sqlc.arg(custom_rule_ids)::text[], '{}'::text[])
+        OR exempt_rule_ids IS DISTINCT FROM COALESCE(sqlc.arg(exempt_rule_ids)::text[], '{}'::text[])
         OR message_types IS DISTINCT FROM sqlc.arg(message_types)::text[]
+        OR application_config IS DISTINCT FROM sqlc.narg(application_config)::jsonb
         OR enabled IS DISTINCT FROM @enabled
         OR action IS DISTINCT FROM @action
         OR prompt IS DISTINCT FROM sqlc.narg(prompt)::text

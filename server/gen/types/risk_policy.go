@@ -30,12 +30,21 @@ type RiskPolicy struct {
 	// means every rule in the selected categories runs; matching findings are
 	// dropped at scan time.
 	DisabledRules []string
-	// Custom detection rule ids enabled for this policy.
+	// Custom detection rule ids attached as detectors: a match produces a finding.
 	CustomRuleIds []string
+	// Custom detection rule ids attached as exemptions: when one matches a
+	// message, the whole policy is skipped for that message (an allowlist).
+	// Disjoint from custom_rule_ids.
+	ExemptRuleIds []string
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
 	// assistant_message.
 	MessageTypes []string
+	// Granular policy application: include (which messages the policy evaluates;
+	// when set it supersedes message_types) and exempt (messages skipped
+	// entirely). Null when the policy relies only on message_types +
+	// exempt_rule_ids.
+	ApplicationConfig *RiskPolicyApplication
 	// Whether the policy is active.
 	Enabled bool
 	// Policy action: flag (log only) or block (deny in real-time).
