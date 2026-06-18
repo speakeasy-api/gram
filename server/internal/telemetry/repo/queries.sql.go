@@ -1071,8 +1071,6 @@ func (q *Queries) GetChatMetricsByIDs(ctx context.Context, arg GetChatMetricsByI
 		return make(map[string]ChatMetricsRow), nil
 	}
 
-	println("\n\n\n", strings.Join(arg.ChatIDs, ", "), "\n\n\n")
-
 	sb := sq.Select(
 		"gram_chat_id",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') as total_input_tokens",
