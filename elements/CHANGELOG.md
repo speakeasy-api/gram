@@ -1,5 +1,11 @@
 # @gram-ai/elements
 
+## 1.37.1
+
+### Patch Changes
+
+- bf94bd2: Expand the pool of whimsical "thinking" verbs cycled in the chat while the assistant is working (e.g. Ruminating, Sleuthing, Triangulating, Spelunking, "Connecting the dots") so the loading indicator repeats far less often.
+
 ## 1.37.0
 
 ### Minor Changes
