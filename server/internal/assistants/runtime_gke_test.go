@@ -47,13 +47,14 @@ func seedUnstructured(t *testing.T, dyn dynamic.Interface, gvr schema.GroupVersi
 func newTestGKEBackend(t *testing.T, dyn dynamic.Interface, doer runtimeHTTPDoer, port int) *GKERuntimeBackend {
 	t.Helper()
 	return NewGKERuntimeBackend(testenv.NewLogger(t), testenv.NewTracerProvider(t), doer, GKERuntimeConfig{
-		Dynamic:         dyn,
-		Namespace:       "gram-test",
-		SandboxTemplate: "gram-asst-pool",
-		GuestPort:       port,
-		OCIImage:        "registry.example.com/gram-assistant-runtime",
-		ImageTag:        "test",
-		ServerURL:       &url.URL{Scheme: "https", Host: "gram.example.com"},
+		Dynamic:          dyn,
+		Namespace:        "gram-test",
+		SandboxTemplate:  "gram-asst-pool",
+		GuestPort:        port,
+		OCIImage:         "registry.example.com/gram-assistant-runtime",
+		ImageTag:         "test",
+		ServerURL:        &url.URL{Scheme: "https", Host: "gram.example.com"},
+		RunnerCIDRBlocks: []string{"10.52.0.0/16"},
 	})
 }
 

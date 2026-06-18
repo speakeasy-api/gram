@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -87,6 +88,11 @@ type GKERuntimeConfig struct {
 	// GRAM_SERVER_URL (for the bootstrap call) and OTLP config are baked into
 	// the SandboxTemplate, so the claim carries no env and adopts a warm pod.
 	ServerURL *url.URL
+	// RunnerCIDRBlocks are the pod CIDR(s) runner pods draw IPs from. The server
+	// dials runners by pod IP (resolved from the Kubernetes API) — RFC1918
+	// addresses the guardian egress policy blocks by default — so these blocks
+	// are allowlisted for the runner HTTP client only.
+	RunnerCIDRBlocks []string
 }
 
 func (c GKERuntimeConfig) Validate() error {
@@ -104,6 +110,14 @@ func (c GKERuntimeConfig) Validate() error {
 	}
 	if c.ServerURL == nil || c.ServerURL.Hostname() == "" {
 		return fmt.Errorf("gke assistant runtime requires a public --assistant-runtime-server-url or --server-url")
+	}
+	if len(c.RunnerCIDRBlocks) == 0 {
+		return fmt.Errorf("--assistant-runtime-gke-runner-cidr is required: the server dials runner pod IPs, which the egress policy blocks unless their CIDR is allowlisted")
+	}
+	for _, cidr := range c.RunnerCIDRBlocks {
+		if _, _, err := net.ParseCIDR(cidr); err != nil {
+			return fmt.Errorf("invalid --assistant-runtime-gke-runner-cidr %q: %w", cidr, err)
+		}
 	}
 	return nil
 }
@@ -193,6 +207,24 @@ func (g *GKERuntimeBackend) Ensure(ctx context.Context, runtime assistantRuntime
 			return RuntimeBackendEnsureResult{}, fmt.Errorf("create sandbox claim %s: %w", name, createErr)
 		}
 		coldStart = true
+		// We created this claim. If readiness below fails, delete it so the next
+		// admission recreates a fresh claim rather than re-attaching to an
+		// unhealthy one with no persisted metadata. A pre-existing claim is left
+		// alone — another turn may be using it. Use WithoutCancel so the cleanup
+		// still runs when the failure was a context timeout.
+		defer func() {
+			if err == nil {
+				return
+			}
+			delCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), gkeRuntimeReapCallTimeout)
+			defer cancel()
+			if delErr := g.claims().Delete(delCtx, name, metav1.DeleteOptions{}); delErr != nil && !k8serrors.IsNotFound(delErr) {
+				g.logger.WarnContext(ctx, "delete sandbox claim after failed ensure",
+					attr.SlogAssistantID(runtime.AssistantID.String()),
+					attr.SlogError(delErr),
+				)
+			}
+		}()
 	}
 
 	metadata, err := g.waitForSandbox(ctx, name)
@@ -356,7 +388,6 @@ func (g *GKERuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntim
 		Input:       prompt,
 		AuthToken:   authToken,
 		AssistantID: runtime.AssistantID.String(),
-		ProjectID:   runtime.ProjectID.String(),
 	})
 	if err != nil {
 		return fmt.Errorf("marshal gke runtime turn request: %w", err)

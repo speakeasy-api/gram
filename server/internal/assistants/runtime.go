@@ -86,12 +86,11 @@ type runtimeToolCall struct {
 type runtimeTurnRequest struct {
 	Input     string `json:"input"`
 	AuthToken string `json:"auth_token,omitempty"`
-	// AssistantID and ProjectID let a runner that booted without
-	// GRAM_ASSISTANT_ID / GRAM_ASSISTANT_PROJECT_ID env (e.g. a generic
-	// warm-pool sandbox on GKE) learn its identity from the turn. Boot env
-	// wins when present, so these are harmless and unused on Fly.
+	// AssistantID lets a runner that booted without GRAM_ASSISTANT_ID env
+	// (e.g. a generic warm-pool sandbox on GKE) learn which assistant it serves
+	// from the turn. Boot env wins when present, so it is harmless and unused
+	// on Fly.
 	AssistantID string `json:"assistant_id,omitempty"`
-	ProjectID   string `json:"project_id,omitempty"`
 }
 
 type runtimeHTTPRequest struct {

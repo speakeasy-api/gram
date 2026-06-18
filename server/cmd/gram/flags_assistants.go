@@ -52,6 +52,11 @@ var assistantRuntimeFlags = []cli.Flag{
 		Usage:   "Base64-encoded CA certificate of the assistant runtime cluster.",
 		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_CLUSTER_CA"},
 	},
+	&cli.StringSliceFlag{
+		Name:    "assistant-runtime-gke-runner-cidr",
+		Usage:   "Pod CIDR(s) the assistant runner pods are reachable on. The server dials runners by pod IP, so these are allowlisted past the guardian egress policy (which blocks RFC1918 by default).",
+		EnvVars: []string{"GRAM_ASSISTANT_RUNTIME_GKE_RUNNER_CIDR"},
+	},
 	&cli.StringFlag{
 		Name:    "assistant-runtime-server-url",
 		Usage:   "Optional host-reachable server base URL for assistant runtimes. Defaults to --server-url.",
@@ -163,13 +168,14 @@ func assistantRuntimeConfigFromCLI(c *cli.Context, serverURL *url.URL) (assistan
 		// assistant cluster (k8s.NewRemoteDynamicClient); the egress-controlled
 		// HTTP client is built from the guardian policy in NewRuntimeBackend.
 		GKE: assistants.GKERuntimeConfig{
-			Dynamic:         nil,
-			Namespace:       gkeNamespace,
-			SandboxTemplate: c.String("assistant-runtime-gke-sandbox-template"),
-			GuestPort:       0,
-			OCIImage:        c.String("assistant-runtime-oci-image"),
-			ImageTag:        AssistantRuntimeImageHash,
-			ServerURL:       resolvedServerURL,
+			Dynamic:          nil,
+			Namespace:        gkeNamespace,
+			SandboxTemplate:  c.String("assistant-runtime-gke-sandbox-template"),
+			GuestPort:        0,
+			OCIImage:         c.String("assistant-runtime-oci-image"),
+			ImageTag:         AssistantRuntimeImageHash,
+			ServerURL:        resolvedServerURL,
+			RunnerCIDRBlocks: c.StringSlice("assistant-runtime-gke-runner-cidr"),
 		},
 	}, nil
 }

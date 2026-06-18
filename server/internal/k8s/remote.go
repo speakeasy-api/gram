@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -35,8 +36,16 @@ func NewRemoteDynamicClient(ctx context.Context, endpoint string, caCert []byte)
 		return nil, fmt.Errorf("resolve google token source for remote cluster: %w", err)
 	}
 
+	// Accept a bare host (the common case) or a full URL — prepend the scheme
+	// only when the caller didn't, so an endpoint that already carries one
+	// doesn't become "https://https://...".
+	host := endpoint
+	if !strings.Contains(host, "://") {
+		host = "https://" + host
+	}
+
 	config := &rest.Config{
-		Host:            "https://" + endpoint,
+		Host:            host,
 		TLSClientConfig: rest.TLSClientConfig{CAData: caCert},
 	}
 	config.Wrap(func(rt http.RoundTripper) http.RoundTripper {

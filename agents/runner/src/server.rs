@@ -80,12 +80,6 @@ async fn thread_turn(
         return Err((StatusCode::BAD_REQUEST, "missing thread_id".to_string()));
     }
 
-    // A warm-pool sandbox boots without GRAM_ASSISTANT_ID; the first turn that
-    // carries one stamps it for /state. Set-once, so a boot env value wins.
-    if let Some(assistant_id) = &request.assistant_id {
-        let _ = host.assistant_id.set(assistant_id.clone());
-    }
-
     // Idempotency key is namespaced by thread so two threads sharing an
     // event_id namespace can't collide.
     let idempotency_key = headers
@@ -118,6 +112,19 @@ async fn thread_turn(
     let thread = ensure_thread(&host, &thread_id, request.auth_token)
         .await
         .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
+
+    // A warm-pool sandbox boots without GRAM_ASSISTANT_ID and learns its
+    // assistant from the first turn that carries one. Bind it only after
+    // bootstrap succeeds (so a failed turn can't poison the pod's identity) and
+    // never from an empty/whitespace id. Set-once: a boot env value wins.
+    if let Some(assistant_id) = request
+        .assistant_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+    {
+        let _ = host.assistant_id.set(assistant_id.to_string());
+    }
 
     thread
         .enqueue(request.input)

@@ -94,9 +94,14 @@ func NewRuntimeBackend(logger *slog.Logger, tracerProvider trace.TracerProvider,
 			return nil, fmt.Errorf("invalid gke assistant runtime config: %w", err)
 		}
 		// Reach the in-pod runner through the guardian egress policy, matching
-		// the Fly backend. The policy must permit the in-cluster sandbox
-		// network for traffic to land.
-		backends[runtimeBackendGKE] = NewGKERuntimeBackend(logger, tracerProvider, httpPolicy.PooledClient(guardian.WithDefaultRetryConfig()), config.GKE)
+		// the Fly backend, but allowlist the runner pod CIDR: the server dials
+		// runners by their RFC1918 pod IP (resolved from the Kubernetes API),
+		// which the default policy would otherwise reject as SSRF.
+		gkeClient := httpPolicy.PooledClient(
+			guardian.WithDefaultRetryConfig(),
+			guardian.WithAllowedCIDRBlocks(config.GKE.RunnerCIDRBlocks...),
+		)
+		backends[runtimeBackendGKE] = NewGKERuntimeBackend(logger, tracerProvider, gkeClient, config.GKE)
 	}
 
 	router, err := newRuntimeRouter(config.Provider, backends)

@@ -143,7 +143,9 @@ pub async fn build_host(
     let gram_client =
         GramBootstrapClient::new(server_url, build_bootstrap_client(http_client.clone()));
     let assistant_id_cell = OnceLock::new();
-    if let Some(id) = assistant_id {
+    // Ignore an empty/whitespace boot env so warm-pool pods stay unbound and
+    // can learn their assistant from the first turn.
+    if let Some(id) = assistant_id.filter(|id| !id.trim().is_empty()) {
         let _ = assistant_id_cell.set(id);
     }
     let host = Arc::new(RuntimeHost {

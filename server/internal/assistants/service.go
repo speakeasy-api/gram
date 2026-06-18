@@ -1122,7 +1122,7 @@ type RecycleAssistantRuntimeImagesParams struct {
 // already running the new image), so this sweep is a no-op for it.
 func (s *ServiceCore) RecycleActiveRuntimeImages(ctx context.Context, params RecycleAssistantRuntimeImagesParams) (RecycleAssistantRuntimeImagesResult, error) {
 	if !s.runtime.ReusesIdleRuntimes() {
-		return RecycleAssistantRuntimeImagesResult{}, nil
+		return RecycleAssistantRuntimeImagesResult{Recycled: 0, Skipped: 0, Errors: 0}, nil
 	}
 
 	queries := assistantrepo.New(s.db)
