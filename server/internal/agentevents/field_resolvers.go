@@ -23,10 +23,10 @@ func Resolve[T any, V any](field types.Field, resolve FieldResolver[T, V]) Resol
 	}
 }
 
-func GetValue[T any, V any](e Event[T], field types.Field) (V, bool, error) {
+func GetValue[T any, V any](e Event[T], eventType types.EventType, field types.Field) (V, bool, error) {
 	var zero V
 
-	value, ok, err := e.resolve(field)
+	value, ok, err := e.resolve(resolveparams{eventType: eventType, field: field})
 	if err != nil || !ok || value == nil {
 		return zero, ok, err
 	}
@@ -42,7 +42,7 @@ func GetField[T any, V any](name string) FieldResolver[T, V] {
 	return func(ev Event[T]) (V, bool, error) {
 		var zero V
 
-		value, ok, err := rawStructField(ev.Raw, name)
+		value, ok, err := rawStructField(ev.Raw(), name)
 		if err != nil || !ok {
 			return zero, false, err
 		}

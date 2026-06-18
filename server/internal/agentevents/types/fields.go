@@ -7,8 +7,8 @@ type Field string
 const (
 	FieldEventType Field = "event.type"
 
-	FieldScannableText   Field = "scan.text"
-	FieldScanMessageType Field = "scan.message_type"
-
-	FieldToolName Field = "tool.name"
+	FieldPrompt     Field = "prompt"
+	FieldToolName   Field = "tool.name"
+	FieldToolInput  Field = "tool.input"
+	FieldToolOutput Field = "tool.output"
 )

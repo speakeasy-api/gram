@@ -3,13 +3,12 @@ package hooks
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/google/uuid"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/agentevents"
-	agenttypes "github.com/speakeasy-api/gram/server/internal/agentevents/types"
+	eventtypes "github.com/speakeasy-api/gram/server/internal/agentevents/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -139,19 +138,17 @@ func (s *Service) scanCursorEventForEnforcement(ctx context.Context, ev agenteve
 		return nil
 	}
 
-	text, ok, err := ev.String(agenttypes.FieldScannableText)
-	if err != nil {
-		s.logger.WarnContext(ctx, "risk scan field resolution failed for Cursor hook",
-			attr.SlogError(err),
-			attr.SlogEvent("risk_scan_error"),
-		)
+	eventType, ok, err := ev.EventType()
+	if err != nil || !ok {
 		return nil
 	}
-	if !ok {
-		text = ""
+
+	text, messageType, ok, err := cursorRiskScanText(ev, eventType)
+	if err != nil || !ok {
+		return nil
 	}
 
-	toolName, ok, err := ev.String(agenttypes.FieldToolName)
+	toolName, ok, err := ev.String(eventType, eventtypes.FieldToolName)
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan tool name resolution failed for Cursor hook",
 			attr.SlogError(err),
@@ -169,22 +166,6 @@ func (s *Service) scanCursorEventForEnforcement(ctx context.Context, ev agenteve
 		return nil
 	}
 
-	value, ok, err := ev.Any(agenttypes.FieldScanMessageType)
-	if err != nil {
-		s.logger.WarnContext(ctx, "risk scan message type resolution failed for Cursor hook",
-			attr.SlogError(err),
-			attr.SlogEvent("risk_scan_error"),
-		)
-		return nil
-	}
-	if !ok {
-		return nil
-	}
-
-	messageType, ok := value.(message.Type)
-	if !ok {
-		messageType = message.Type(fmt.Sprint(value))
-	}
 	if messageType == "" {
 		return nil
 	}
@@ -204,6 +185,22 @@ func (s *Service) scanCursorEventForEnforcement(ctx context.Context, ev agenteve
 	}
 
 	return result
+}
+
+func cursorRiskScanText(ev agentevents.Event[*gen.CursorPayload], eventType eventtypes.EventType) (string, message.Type, bool, error) {
+	switch eventType {
+	case eventtypes.UserPromptSubmit:
+		prompt, ok, err := ev.String(eventType, eventtypes.FieldPrompt)
+		return prompt, message.User, ok, err
+	case eventtypes.BeforeToolUse, eventtypes.BeforeMCPExecution:
+		toolInput, ok, err := ev.Any(eventType, eventtypes.FieldToolInput)
+		if err != nil || !ok || toolInput == nil {
+			return "", message.ToolRequest, ok, err
+		}
+		return marshalToJSON(toolInput), message.ToolRequest, true, nil
+	default:
+		return "", "", false, nil
+	}
 }
 
 // scanCodexForEnforcement runs the risk scanner for a Codex hook payload.

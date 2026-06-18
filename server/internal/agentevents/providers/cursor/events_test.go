@@ -13,7 +13,6 @@ import (
 	cursoragent "github.com/speakeasy-api/gram/server/internal/agentevents/providers/cursor"
 	"github.com/speakeasy-api/gram/server/internal/agentevents/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/message"
 )
 
 func TestParseHookEventType(t *testing.T) {
@@ -58,22 +57,39 @@ func TestCursorProviderResolvesRiskScanFields(t *testing.T) {
 	eventType, ok, err := ev.EventType()
 	require.NoError(t, err)
 	require.True(t, ok)
-	assert.Equal(t, types.MCPToolCallStarted, eventType)
+	assert.Equal(t, types.BeforeMCPExecution, eventType)
 
-	resolvedToolName, ok, err := ev.String(types.FieldToolName)
+	resolvedToolName, ok, err := ev.String(eventType, types.FieldToolName)
 	require.NoError(t, err)
 	require.True(t, ok)
 	assert.Equal(t, "MCP:list_issues", resolvedToolName)
 
-	scannable, ok, err := ev.String(types.FieldScannableText)
+	toolInput, ok, err := ev.Any(eventType, types.FieldToolInput)
 	require.NoError(t, err)
 	require.True(t, ok)
-	assert.JSONEq(t, `{"limit":10}`, scannable)
+	assert.Equal(t, map[string]any{"limit": 10}, toolInput)
+}
 
-	scanType, ok, err := ev.Any(types.FieldScanMessageType)
+func TestCursorProviderResolvesToolOutput(t *testing.T) {
+	t.Parallel()
+
+	agent := newCursorAgent(t)
+	toolOutput := map[string]any{"status": "ok"}
+	payload := &gen.CursorPayload{
+		HookEventName: "postToolUse",
+		ToolResponse:  toolOutput,
+	}
+	ev := agent.NewEvent(testContext(), payload, time.Now())
+
+	eventType, ok, err := ev.EventType()
 	require.NoError(t, err)
 	require.True(t, ok)
-	assert.Equal(t, message.ToolRequest, scanType)
+	assert.Equal(t, types.AfterToolUse, eventType)
+
+	resolvedOutput, ok, err := ev.Any(eventType, types.FieldToolOutput)
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.Equal(t, toolOutput, resolvedOutput)
 }
 
 func TestCursorProviderResolvesPromptScanFields(t *testing.T) {
@@ -92,15 +108,10 @@ func TestCursorProviderResolvesPromptScanFields(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, types.UserPromptSubmit, eventType)
 
-	scannable, ok, err := ev.String(types.FieldScannableText)
+	resolvedPrompt, ok, err := ev.String(eventType, types.FieldPrompt)
 	require.NoError(t, err)
 	require.True(t, ok)
-	assert.Equal(t, prompt, scannable)
-
-	scanType, ok, err := ev.Any(types.FieldScanMessageType)
-	require.NoError(t, err)
-	require.True(t, ok)
-	assert.Equal(t, message.User, scanType)
+	assert.Equal(t, prompt, resolvedPrompt)
 }
 
 func newCursorAgent(t *testing.T) *agentevents.Agent[*gen.CursorPayload] {
@@ -121,6 +132,7 @@ func testContext() *contextvalues.AuthContext {
 	}
 }
 
+//go:fix inline
 //go:fix inline
 func ptr[T any](v T) *T {
 	return new(v)

@@ -1,19 +1,19 @@
 package types
 
-// EventType is the provider-neutral lifecycle event resolved from a hook
-// payload before hooks decide how to handle it.
+// EventType is the provider-neutral hook processing event resolved from a hook
+// payload before handlers decide how to respond.
 type EventType string
 
 const (
-	AnyEventType              EventType = "*"
-	UserPromptSubmit          EventType = "user.prompt.submit"
-	AssistantResponseComplete EventType = "assistant.response.complete"
-	ToolCallStarted           EventType = "tool_call.started"
-	ToolCallCompleted         EventType = "tool_call.completed"
-	ToolCallFailed            EventType = "tool_call.failed"
-	MCPToolCallStarted        EventType = "mcp_tool_call.started"
-	MCPToolCallCompleted      EventType = "mcp_tool_call.completed"
-	SessionEnded              EventType = "session.ended"
+	AnyEventType        EventType = "*"
+	UserPromptSubmit    EventType = "user_prompt_submit"
+	AfterAgentResponse  EventType = "after_agent_response"
+	BeforeToolUse       EventType = "before_tool_use"
+	AfterToolUse        EventType = "after_tool_use"
+	AfterToolUseFailure EventType = "after_tool_use_failure"
+	BeforeMCPExecution  EventType = "before_mcp_execution"
+	AfterMCPExecution   EventType = "after_mcp_execution"
+	Stop                EventType = "stop"
 )
 
 type HookEventType string

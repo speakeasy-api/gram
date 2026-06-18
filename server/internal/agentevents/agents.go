@@ -10,10 +10,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
-var (
-	ErrNilAgent = errors.New("agentevents: nil agent")
-)
-
 type Agent[T any] struct {
 	name      types.Provider
 	mu        sync.RWMutex

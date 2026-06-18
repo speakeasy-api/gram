@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
-	agenttypes "github.com/speakeasy-api/gram/server/internal/agentevents/types"
+	hookevents "github.com/speakeasy-api/gram/server/internal/agentevents/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
@@ -90,7 +90,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 	var blockReason string
 
 	switch eventType {
-	case agenttypes.MCPToolCallStarted:
+	case hookevents.BeforeMCPExecution:
 		// beforeMCPExecution fires for MCP-routed (non-local) tool calls. Run
 		// the risk scanner first (block-only today), then fall through to the
 		// shadow-MCP guard so unapproved toolsets are still blocked.
@@ -139,7 +139,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		} else {
 			result.Permission = new("allow")
 		}
-	case agenttypes.ToolCallStarted:
+	case hookevents.BeforeToolUse:
 		// preToolUse fires for ALL Cursor tool calls including MCP ones, while
 		// beforeMCPExecution also fires for MCP-routed calls and already runs
 		// the scan there. Skip the scan here for MCP tools to avoid scanning
@@ -160,7 +160,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		} else {
 			result.Permission = new("allow")
 		}
-	case agenttypes.UserPromptSubmit:
+	case hookevents.UserPromptSubmit:
 		if scanResult := s.scanCursorEventForEnforcement(ctx, ev, projectID); scanResult != nil {
 			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
