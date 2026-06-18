@@ -44,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	pfRepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	telemrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -645,9 +646,19 @@ func (s *Service) ListUsers(ctx context.Context, _ *gen.ListUsersPayload) (*gen.
 		return nil, oops.E(oops.CodeUnexpected, err, "list organization users").LogError(ctx, s.logger)
 	}
 
+	excludedUserIDs, err := pfRepo.New(s.db).ListSessionCaptureExclusions(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list session capture exclusions").LogError(ctx, s.logger)
+	}
+	excludedSet := make(map[string]struct{}, len(excludedUserIDs))
+	for _, uid := range excludedUserIDs {
+		excludedSet[uid] = struct{}{}
+	}
+
 	out := make([]*gen.OrganizationUser, 0, len(rows))
 	for i := range rows {
-		out = append(out, organizationUserToGen(&rows[i]))
+		_, loggingExcluded := excludedSet[conv.FromPGTextOrEmpty[string](rows[i].UserID)]
+		out = append(out, organizationUserToGen(&rows[i], loggingExcluded))
 	}
 	return &gen.ListUsersResult{Users: out}, nil
 }
@@ -1581,7 +1592,7 @@ func magicAuthAllowed(authMethods map[string]bool) bool {
 	return true
 }
 
-func organizationUserToGen(row *orgrepo.ListOrganizationUsersRow) *gen.OrganizationUser {
+func organizationUserToGen(row *orgrepo.ListOrganizationUsersRow, loggingExcluded bool) *gen.OrganizationUser {
 	if row == nil {
 		return nil
 	}
@@ -1609,6 +1620,7 @@ func organizationUserToGen(row *orgrepo.ListOrganizationUsersRow) *gen.Organizat
 		CreatedAt:          createdAt,
 		UpdatedAt:          updatedAt,
 		LastLogin:          lastLogin,
+		LoggingExcluded:    loggingExcluded,
 	}
 }
 

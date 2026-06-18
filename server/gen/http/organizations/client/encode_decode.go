@@ -3257,6 +3257,7 @@ func unmarshalOrganizationUserResponseBodyToOrganizationsOrganizationUser(v *Org
 		CreatedAt:          *v.CreatedAt,
 		UpdatedAt:          *v.UpdatedAt,
 		LastLogin:          v.LastLogin,
+		LoggingExcluded:    *v.LoggingExcluded,
 	}
 
 	return res

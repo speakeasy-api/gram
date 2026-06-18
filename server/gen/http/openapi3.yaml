@@ -43463,6 +43463,9 @@ components:
                     type: string
                     description: Timestamp of the user's most recent login.
                     format: date-time
+                logging_excluded:
+                    type: boolean
+                    description: Whether this user is excluded from session capture for the active organization.
                 name:
                     type: string
                     description: User display name.
@@ -43489,6 +43492,7 @@ components:
                 - email
                 - created_at
                 - updated_at
+                - logging_excluded
         OtelForwardingConfig:
             type: object
             properties:
