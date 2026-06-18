@@ -1122,7 +1122,7 @@ func (q *Queries) GetDeploymentByIdempotencyKey(ctx context.Context, arg GetDepl
 }
 
 const getDeploymentFunctions = `-- name: GetDeploymentFunctions :many
-SELECT df.id, df.deployment_id, df.asset_id, df.name, df.slug, df.runtime, df.runner_version, df.memory_mib, df.scale
+SELECT df.id, df.deployment_id, df.asset_id, df.name, df.slug, df.runtime, df.runner_version, df.memory_mib, df.scale, df.memory_mib_override, df.scale_override
 FROM deployments_functions df
 INNER JOIN deployments d ON df.deployment_id = d.id
 WHERE 
@@ -1154,6 +1154,8 @@ func (q *Queries) GetDeploymentFunctions(ctx context.Context, arg GetDeploymentF
 			&i.RunnerVersion,
 			&i.MemoryMib,
 			&i.Scale,
+			&i.MemoryMibOverride,
+			&i.ScaleOverride,
 		); err != nil {
 			return nil, err
 		}

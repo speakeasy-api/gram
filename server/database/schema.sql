@@ -413,6 +413,12 @@ CREATE TABLE IF NOT EXISTS deployments_functions (
   memory_mib INT,
   scale INT,
 
+  -- Durable operator overrides for Fly infrastructure settings. When set, these
+  -- take precedence over the customer-supplied memory_mib/scale (sourced from
+  -- gram.config.ts) and survive later customer deploys.
+  memory_mib_override INT,
+  scale_override INT,
+
   CONSTRAINT deployments_functions_pkey PRIMARY KEY (id),
   CONSTRAINT deployments_functions_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE,
   CONSTRAINT deployments_functions_asset_id_fkey FOREIGN KEY (asset_id) REFERENCES assets (id) ON DELETE CASCADE
