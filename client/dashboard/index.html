@@ -2,8 +2,23 @@
 <html lang="en" class="dark:scheme-dark">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" id="favicon" href="/favicon.png" />
-    <link rel="alternate icon" id="favicon-alt" href="/favicon.ico" />
+    <!-- Favicon adapts to the browser/OS color scheme, matching the
+         Speakeasy marketing site. The PNGs are bare transparent logos, so
+         the visible variant must track the tab-bar background — which
+         follows prefers-color-scheme, not the in-app theme. -->
+    <link
+      rel="icon"
+      type="image/png"
+      href="/favicon.png"
+      media="(prefers-color-scheme: light)"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      href="/favicon-dark.png"
+      media="(prefers-color-scheme: dark)"
+    />
+    <link rel="alternate icon" href="/favicon.ico" />
 
     <!-- Apply the theme class before first paint to avoid a flash of the
          wrong theme on load. Mirrors App.tsx (key: "preferred-theme",
@@ -18,14 +33,6 @@
           var root = document.documentElement;
           root.classList.remove("light", "dark");
           root.classList.add(theme);
-          var favicon = document.getElementById("favicon");
-          var faviconAlt = document.getElementById("favicon-alt");
-          if (favicon)
-            favicon.href =
-              theme === "dark" ? "/favicon-dark.png" : "/favicon.png";
-          if (faviconAlt)
-            faviconAlt.href =
-              theme === "dark" ? "/favicon-dark.ico" : "/favicon.ico";
         } catch (e) {
           /* localStorage unavailable — fall back to CSS defaults */
         }
