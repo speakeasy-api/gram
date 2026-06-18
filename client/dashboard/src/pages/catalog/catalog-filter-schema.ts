@@ -26,9 +26,9 @@ import {
 export const CATALOG_FILTERS = defineFilters([
   { id: "auth", label: "Auth type", kind: "multiselect" },
   { id: "behavior", label: "Tool behavior", kind: "multiselect" },
-  { id: "minUsers", label: "Popularity", kind: "select" },
-  { id: "updated", label: "Last updated", kind: "select" },
-  { id: "minTools", label: "Tool count", kind: "select" },
+  { id: "minUsers", label: "Popularity", kind: "select", allLabel: "All" },
+  { id: "updated", label: "Last updated", kind: "select", allLabel: "All" },
+  { id: "minTools", label: "Tool count", kind: "select", allLabel: "All" },
 ]);
 
 /** Option lists for the catalog's select/multiselect dimensions. */
