@@ -76,8 +76,9 @@ func (m *McpInputs) toInternal() *mcpInputs {
 	oauthInputs := make([]oauthTokenInputs, len(m.OauthTokenInputs))
 	for i, ot := range m.OauthTokenInputs {
 		oauthInputs[i] = oauthTokenInputs{
-			securityKeys: ot.SecurityKeys,
-			Token:        ot.Token,
+			securityKeys:          ot.SecurityKeys,
+			remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			Token:                 ot.Token,
 		}
 	}
 
@@ -95,8 +96,10 @@ func (m *McpInputs) toInternal() *mcpInputs {
 		externalUserID:   m.ExternalUserID,
 		apiKeyID:         m.APIKeyID,
 		// Internal clients (agent workflows) always use the project-default
-		// variation group and never filter by tag.
+		// variation group, never filter by tag, and have no fronting
+		// mcp_servers row to record.
 		toolVariationsGroupID: nil,
+		mcpServerID:           nil,
 		tags:                  nil,
 	}
 }

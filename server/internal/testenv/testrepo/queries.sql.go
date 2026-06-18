@@ -350,7 +350,7 @@ func (q *Queries) ListDeploymentHTTPTools(ctx context.Context, deploymentID uuid
 }
 
 const listRiskResultsAll = `-- name: ListRiskResultsAll :many
-SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, llm_judge_reason, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
+SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
 FROM risk_results
 WHERE project_id = $1
   AND risk_policy_id = $2
@@ -390,7 +390,6 @@ func (q *Queries) ListRiskResultsAll(ctx context.Context, arg ListRiskResultsAll
 			&i.EndPos,
 			&i.Confidence,
 			&i.Tags,
-			&i.LlmJudgeReason,
 			&i.DeadLetterReason,
 			&i.ExcludedAt,
 			&i.ExcludedExclusionID,

@@ -681,7 +681,7 @@ func BuildListSessionsPayload(telemetryListSessionsBody string, telemetryListSes
 	{
 		err = json.Unmarshal([]byte(telemetryListSessionsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"filters\": [\n         {\n            \"dimension\": \"job_title\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"limit\": 2,\n      \"sort_by\": \"abc123\",\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"filters\": [\n         {\n            \"dimension\": \"job_title\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"limit\": 2,\n      \"sort_by\": \"total_tokens\",\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
@@ -691,6 +691,9 @@ func BuildListSessionsPayload(telemetryListSessionsBody string, telemetryListSes
 					err = goa.MergeErrors(err, err2)
 				}
 			}
+		}
+		if !(body.SortBy == "total_cost" || body.SortBy == "total_tokens" || body.SortBy == "total_input_tokens" || body.SortBy == "total_output_tokens" || body.SortBy == "tool_call_count" || body.SortBy == "message_count" || body.SortBy == "duration_seconds") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort_by", body.SortBy, []any{"total_cost", "total_tokens", "total_input_tokens", "total_output_tokens", "tool_call_count", "message_count", "duration_seconds"}))
 		}
 		if body.Limit < 1 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", body.Limit, 1, true))

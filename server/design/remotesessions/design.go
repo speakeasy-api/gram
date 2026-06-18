@@ -101,6 +101,7 @@ var RemoteSession = Type("RemoteSession", func() {
 	Attribute("refresh_expires_at", String, "Upstream refresh-token expiry. Null when the session has no refresh token.", func() {
 		Format(FormatDateTime)
 	})
+	Attribute("has_refresh_token", Boolean, "Whether the session holds an upstream refresh token. Gates the 'Refresh now' action; refresh_expires_at is insufficient because an upstream may issue a non-expiring refresh token. The token itself is never returned.")
 	Attribute("scopes", ArrayOf(String), "Scopes held by this session.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
@@ -109,7 +110,7 @@ var RemoteSession = Type("RemoteSession", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "subject_urn", "user_session_issuer_id", "remote_session_client_id", "access_expires_at", "scopes", "created_at", "updated_at")
+	Required("id", "subject_urn", "user_session_issuer_id", "remote_session_client_id", "access_expires_at", "has_refresh_token", "scopes", "created_at", "updated_at")
 })
 
 var ListRemoteSessionsResult = Type("ListRemoteSessionsResult", func() {

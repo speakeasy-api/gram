@@ -722,6 +722,42 @@ func BuildRevokeSessionPayload(organizationRemoteSessionIssuersRevokeSessionBody
 	return v, nil
 }
 
+// BuildRefreshSessionPayload builds the payload for the
+// organizationRemoteSessionIssuers refreshSession endpoint from CLI flags.
+func BuildRefreshSessionPayload(organizationRemoteSessionIssuersRefreshSessionBody string, organizationRemoteSessionIssuersRefreshSessionSessionToken string, organizationRemoteSessionIssuersRefreshSessionApikeyToken string) (*organizationremotesessionissuers.RefreshSessionPayload, error) {
+	var err error
+	var body RefreshSessionRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationRemoteSessionIssuersRefreshSessionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionIssuersRefreshSessionSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersRefreshSessionSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if organizationRemoteSessionIssuersRefreshSessionApikeyToken != "" {
+			apikeyToken = &organizationRemoteSessionIssuersRefreshSessionApikeyToken
+		}
+	}
+	v := &organizationremotesessionissuers.RefreshSessionPayload{
+		ID: body.ID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}
+
 // BuildRevokeAllClientSessionsPayload builds the payload for the
 // organizationRemoteSessionIssuers revokeAllClientSessions endpoint from CLI
 // flags.

@@ -30,6 +30,10 @@ type RemoteSession struct {
 	AccessExpiresAt string
 	// Upstream refresh-token expiry. Null when the session has no refresh token.
 	RefreshExpiresAt *string
+	// Whether the session holds an upstream refresh token. Gates the 'Refresh now'
+	// action; refresh_expires_at is insufficient because an upstream may issue a
+	// non-expiring refresh token. The token itself is never returned.
+	HasRefreshToken bool
 	// Scopes held by this session.
 	Scopes    []string
 	CreatedAt string

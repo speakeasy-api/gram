@@ -4,11 +4,29 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { ClosedEnum } from "../../types/enums.js";
 import {
   QueryFilter,
   QueryFilter$Outbound,
   QueryFilter$outboundSchema,
 } from "./queryfilter.js";
+
+/**
+ * Measure used to rank sessions. Defaults to total_cost.
+ */
+export const SortBy = {
+  TotalCost: "total_cost",
+  TotalTokens: "total_tokens",
+  TotalInputTokens: "total_input_tokens",
+  TotalOutputTokens: "total_output_tokens",
+  ToolCallCount: "tool_call_count",
+  MessageCount: "message_count",
+  DurationSeconds: "duration_seconds",
+} as const;
+/**
+ * Measure used to rank sessions. Defaults to total_cost.
+ */
+export type SortBy = ClosedEnum<typeof SortBy>;
 
 /**
  * Payload for listing org-scoped chat sessions
@@ -33,12 +51,17 @@ export type ListSessionsPayload = {
   /**
    * Measure used to rank sessions. Defaults to total_cost.
    */
-  sortBy?: string | undefined;
+  sortBy?: SortBy | undefined;
   /**
    * End time in ISO 8601 format
    */
   to: Date;
 };
+
+/** @internal */
+export const SortBy$outboundSchema: z.ZodMiniEnum<typeof SortBy> = z.enum(
+  SortBy,
+);
 
 /** @internal */
 export type ListSessionsPayload$Outbound = {
@@ -60,7 +83,7 @@ export const ListSessionsPayload$outboundSchema: z.ZodMiniType<
     filters: z.optional(z.array(QueryFilter$outboundSchema)),
     from: z.pipe(z.date(), z.transform(v => v.toISOString())),
     limit: z._default(z.int(), 50),
-    sortBy: z._default(z.string(), "total_cost"),
+    sortBy: z._default(SortBy$outboundSchema, "total_cost"),
     to: z.pipe(z.date(), z.transform(v => v.toISOString())),
   }),
   z.transform((v) => {

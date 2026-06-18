@@ -239,6 +239,7 @@ export * from "./publishplugins.js";
 export * from "./query.js";
 export * from "./receiveworkoswebhook.js";
 export * from "./redeploydeployment.js";
+export * from "./refreshorganizationremotesession.js";
 export * from "./register.js";
 export * from "./registerdomain.js";
 export * from "./removeoauthserver.js";

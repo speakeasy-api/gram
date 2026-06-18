@@ -88,7 +88,7 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 // because the metric measures upstream health. User-facing outcomes are
 // available via span status (set to error on rejection) and the
 // gram.remote_mcp.proxy.requests counter dimensioned by error class.
-func (m *Metrics) Record(ctx context.Context, serverID string, method string, upstreamStatus int, responseBytes int64, duration time.Duration) {
+func (m *Metrics) Record(ctx context.Context, identity ServerIdentity, method string, upstreamStatus int, responseBytes int64, duration time.Duration) {
 	if m == nil {
 		return
 	}
@@ -97,8 +97,11 @@ func (m *Metrics) Record(ctx context.Context, serverID string, method string, up
 		attr.HTTPRequestMethod(method),
 		attr.RemoteMCPProxyRemoteStatusClass(statusClass(upstreamStatus)),
 	}
-	if serverID != "" {
-		labels = append(labels, attr.RemoteMCPServerID(serverID))
+	if identity.RemoteMCPServerID != "" {
+		labels = append(labels, attr.RemoteMCPServerID(identity.RemoteMCPServerID))
+	}
+	if identity.McpServerID != "" {
+		labels = append(labels, attr.McpServerID(identity.McpServerID))
 	}
 
 	attrsOpt := metric.WithAttributes(labels...)

@@ -355,6 +355,7 @@ run();
 * [listClients](docs/sdks/organizationremotesessionissuers/README.md#listclients) - listClients organizationRemoteSessionIssuers
 * [listIssuers](docs/sdks/organizationremotesessionissuers/README.md#listissuers) - listIssuers organizationRemoteSessionIssuers
 * [moveIssuer](docs/sdks/organizationremotesessionissuers/README.md#moveissuer) - moveIssuer organizationRemoteSessionIssuers
+* [refreshSession](docs/sdks/organizationremotesessionissuers/README.md#refreshsession) - refreshSession organizationRemoteSessionIssuers
 * [removeClientFromMcpServer](docs/sdks/organizationremotesessionissuers/README.md#removeclientfrommcpserver) - removeClientFromMcpServer organizationRemoteSessionIssuers
 * [revokeAllClientSessions](docs/sdks/organizationremotesessionissuers/README.md#revokeallclientsessions) - revokeAllClientSessions organizationRemoteSessionIssuers
 * [revokeSession](docs/sdks/organizationremotesessionissuers/README.md#revokesession) - revokeSession organizationRemoteSessionIssuers
@@ -786,6 +787,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`organizationRemoteSessionIssuersListClientSessions`](docs/sdks/organizationremotesessionissuers/README.md#listclientsessions) - listClientSessions organizationRemoteSessionIssuers
 - [`organizationRemoteSessionIssuersListIssuers`](docs/sdks/organizationremotesessionissuers/README.md#listissuers) - listIssuers organizationRemoteSessionIssuers
 - [`organizationRemoteSessionIssuersMoveIssuer`](docs/sdks/organizationremotesessionissuers/README.md#moveissuer) - moveIssuer organizationRemoteSessionIssuers
+- [`organizationRemoteSessionIssuersRefreshSession`](docs/sdks/organizationremotesessionissuers/README.md#refreshsession) - refreshSession organizationRemoteSessionIssuers
 - [`organizationRemoteSessionIssuersRemoveClientFromMcpServer`](docs/sdks/organizationremotesessionissuers/README.md#removeclientfrommcpserver) - removeClientFromMcpServer organizationRemoteSessionIssuers
 - [`organizationRemoteSessionIssuersRevokeAllClientSessions`](docs/sdks/organizationremotesessionissuers/README.md#revokeallclientsessions) - revokeAllClientSessions organizationRemoteSessionIssuers
 - [`organizationRemoteSessionIssuersRevokeSession`](docs/sdks/organizationremotesessionissuers/README.md#revokesession) - revokeSession organizationRemoteSessionIssuers
@@ -1186,6 +1188,7 @@ To learn about this feature and how to get started, check
 - [`usePublishStatus`](docs/sdks/plugins/README.md#getpublishstatus) - getPublishStatus plugins
 - [`useRbacStatus`](docs/sdks/access/README.md#getrbacstatus) - getRBACStatus access
 - [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
+- [`useRefreshOrganizationRemoteSessionMutation`](docs/sdks/organizationremotesessionissuers/README.md#refreshsession) - refreshSession organizationRemoteSessionIssuers
 - [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
 - [`useRegisterMutation`](docs/sdks/auth/README.md#register) - register auth
 - [`useRemoteMcpServers`](docs/sdks/remotemcp/README.md#listservers) - listServers remoteMcp

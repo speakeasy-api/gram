@@ -876,7 +876,7 @@ func TestProxy_Post_RecordsMetrics(t *testing.T) {
 
 	p := newProxyForTest(t, upstream.URL)
 	p.Metrics = metrics
-	p.ServerID = "srv-abc"
+	p.Identity = proxy.ServerIdentity{RemoteMCPServerID: "srv-abc", McpServerID: "mcp-abc"}
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
 	req.Header.Set("Content-Type", "application/json")
@@ -899,6 +899,7 @@ func TestProxy_Post_RecordsMetrics(t *testing.T) {
 		attr.HTTPRequestMethod(http.MethodPost),
 		attr.RemoteMCPProxyRemoteStatusClass("2xx"),
 		attr.RemoteMCPServerID("srv-abc"),
+		attr.McpServerID("mcp-abc"),
 	)
 
 	duration, ok := byName[proxy.MeterRequestDuration]

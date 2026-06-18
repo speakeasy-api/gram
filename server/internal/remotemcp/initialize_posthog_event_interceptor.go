@@ -23,18 +23,22 @@ const eventMCPInitialized = "mcp_initialized"
 // requests to it, so the interceptor never has to dispatch on method.
 // Analytics emission is best-effort and never rejects.
 type InitializePostHogEventInterceptor struct {
-	posthog *posthog.Posthog
-	logger  *slog.Logger
+	posthog  *posthog.Posthog
+	identity proxy.ServerIdentity
+	logger   *slog.Logger
 }
 
 var _ proxy.InitializeRequestInterceptor = (*InitializePostHogEventInterceptor)(nil)
 
 // NewInitializePostHogEventInterceptor constructs an interceptor bound to the
-// given PostHog client. The same instance can be reused across requests.
-func NewInitializePostHogEventInterceptor(posthogClient *posthog.Posthog, logger *slog.Logger) *InitializePostHogEventInterceptor {
+// given PostHog client and server correlation ids. Build a fresh instance per
+// request so the `remote_mcp_server_id` and `mcp_server_id` properties are
+// captured for the server the initialize landed on.
+func NewInitializePostHogEventInterceptor(posthogClient *posthog.Posthog, identity proxy.ServerIdentity, logger *slog.Logger) *InitializePostHogEventInterceptor {
 	return &InitializePostHogEventInterceptor{
-		posthog: posthogClient,
-		logger:  logger,
+		posthog:  posthogClient,
+		identity: identity,
+		logger:   logger,
 	}
 }
 
@@ -78,6 +82,8 @@ func (i *InitializePostHogEventInterceptor) InterceptInitializeRequest(ctx conte
 	if err := i.posthog.CaptureEvent(ctx, eventMCPInitialized, sessionID, map[string]any{
 		"project_id":           projectID,
 		"authenticated":        authenticated,
+		"remote_mcp_server_id": i.identity.RemoteMCPServerID,
+		"mcp_server_id":        i.identity.McpServerID,
 		"mcp_domain":           requestContext.Host,
 		"mcp_url":              requestContext.Host + requestContext.ReqURL,
 		"disable_notification": true,

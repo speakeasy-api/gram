@@ -1237,7 +1237,7 @@ type RemoteSessionClient struct {
 	ID                      uuid.UUID
 	ProjectID               uuid.NullUUID
 	RemoteSessionIssuerID   uuid.UUID
-	UserSessionIssuerID     uuid.UUID
+	UserSessionIssuerID     uuid.NullUUID
 	ClientID                string
 	ClientSecretEncrypted   pgtype.Text
 	ClientIDIssuedAt        pgtype.Timestamptz
@@ -1381,7 +1381,6 @@ type RiskResult struct {
 	EndPos              pgtype.Int4
 	Confidence          pgtype.Float8
 	Tags                []string
-	LlmJudgeReason      pgtype.Text
 	DeadLetterReason    pgtype.Text
 	ExcludedAt          pgtype.Timestamptz
 	ExcludedExclusionID uuid.NullUUID

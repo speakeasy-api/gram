@@ -64,6 +64,31 @@ func TestCreateRemoteSessionClient_Manual(t *testing.T) {
 	require.Equal(t, beforeCount+1, afterCount)
 }
 
+func TestCreateRemoteSessionClient_RejectsDuplicateRemoteIssuerBinding(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-dup", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-dup").String()
+
+	// First client binds (user_session_issuer, remote_session_issuer).
+	createRemoteClient(t, ctx, ti, issuerID, userIssuerID, "dup-client-1")
+
+	// Second client for the same pair must be rejected by the attach-time
+	// guard with a conflict, not a raw constraint error.
+	_, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID: issuerID,
+		UserSessionIssuerID:   userIssuerID,
+		ClientID:              "dup-client-2",
+		ClientSecret:          nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	requireOopsCode(t, err, oops.CodeConflict)
+}
+
 func TestCreateRemoteSessionClient_Manual_WithAuthMethodPost(t *testing.T) {
 	t.Parallel()
 
@@ -431,7 +456,7 @@ func TestListRemoteSessionClients_ColumnOnlyClientNotVisible(t *testing.T) {
 	columnOnlyClient, err := repo.New(ti.conn).CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
 		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
 		RemoteSessionIssuerID:   issuerUUID,
-		UserSessionIssuerID:     userIssuerID,
+		UserSessionIssuerID:     conv.ToNullUUID(userIssuerID),
 		ClientID:                "column-only-client",
 		ClientSecretEncrypted:   pgtype.Text{},
 		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now().UTC()),

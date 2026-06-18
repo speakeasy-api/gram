@@ -907,7 +907,7 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid,
   remote_session_issuer_id uuid NOT NULL,
-  user_session_issuer_id uuid NOT NULL,
+  user_session_issuer_id uuid,
 
   client_id TEXT NOT NULL,
   client_secret_encrypted TEXT,
@@ -950,9 +950,6 @@ CREATE TABLE IF NOT EXISTS remote_session_client_user_session_issuers (
 
 CREATE INDEX IF NOT EXISTS remote_session_client_user_session_issuers_issuer_idx
 ON remote_session_client_user_session_issuers (user_session_issuer_id, remote_session_client_id);
-
-CREATE UNIQUE INDEX IF NOT EXISTS remote_session_client_user_session_issuers_one_per_issuer
-ON remote_session_client_user_session_issuers (user_session_issuer_id);
 
 -- Remote sessions represent credentials for an external resource that have
 -- been granted to a single Gram subject
@@ -3072,11 +3069,6 @@ CREATE TABLE IF NOT EXISTS risk_results (
   end_pos INT,
   confidence DOUBLE PRECISION,
   tags TEXT[],
-
-  -- The LLM judge's one-sentence explanation of why this finding fired. NULL for
-  -- L0 heuristic findings and any engine that emits no judge reason. Expand step
-  -- (nullable, populated going forward) so existing rows are unaffected.
-  llm_judge_reason TEXT,
 
   -- Populated on rows that represent a message the scanner could not analyze
   -- after exhausting its retry budget

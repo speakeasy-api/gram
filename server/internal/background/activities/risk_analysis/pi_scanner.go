@@ -33,10 +33,13 @@ type PromptInjectionRequest struct {
 }
 
 // PromptInjectionResult is one prediction. Label decides whether to emit an L1 finding
-// (LabelInjection => emit); Score is retained as confidence metadata.
+// (LabelInjection => emit); Score is retained as confidence metadata; Rationale is the
+// judge's one-sentence explanation (empty for engines that emit none), used as the
+// finding description so a flagged event is explainable for triage.
 type PromptInjectionResult struct {
-	Label string
-	Score float64
+	Label     string
+	Score     float64
+	Rationale string
 }
 
 // PromptInjectionEngine is the L1 prompt-injection engine: it scores each message in the
@@ -168,6 +171,11 @@ func (s *PromptInjectionScanner) findingFromResult(text string, r PromptInjectio
 		return nil
 	}
 	ruleID, description := DescribePromptInjection()
+	// Prefer the judge's specific rationale as the description when present; fall
+	// back to the canonical label for L0 heuristic findings (which emit none).
+	if r.Rationale != "" {
+		description = r.Rationale
+	}
 	return &Finding{
 		RuleID:           ruleID,
 		Description:      description,

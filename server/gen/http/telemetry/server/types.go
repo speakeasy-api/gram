@@ -9200,6 +9200,11 @@ func ValidateListSessionsRequestBody(body *ListSessionsRequestBody) (err error) 
 			}
 		}
 	}
+	if body.SortBy != nil {
+		if !(*body.SortBy == "total_cost" || *body.SortBy == "total_tokens" || *body.SortBy == "total_input_tokens" || *body.SortBy == "total_output_tokens" || *body.SortBy == "tool_call_count" || *body.SortBy == "message_count" || *body.SortBy == "duration_seconds") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sort_by", *body.SortBy, []any{"total_cost", "total_tokens", "total_input_tokens", "total_output_tokens", "tool_call_count", "message_count", "duration_seconds"}))
+		}
+	}
 	if body.Limit != nil {
 		if *body.Limit < 1 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", *body.Limit, 1, true))

@@ -23,11 +23,15 @@ func BuildRemoteSessionClientView(row repo.RemoteSessionClient) (*types.RemoteSe
 		s := row.ClientSecretExpiresAt.Time.Format(time.RFC3339)
 		expiresAt = &s
 	}
+	var userSessionIssuerID string
+	if row.UserSessionIssuerID.Valid {
+		userSessionIssuerID = row.UserSessionIssuerID.UUID.String()
+	}
 	return &types.RemoteSessionClient{
 		ID:                      row.ID.String(),
 		ProjectID:               row.ProjectID.UUID.String(),
 		RemoteSessionIssuerID:   row.RemoteSessionIssuerID.String(),
-		UserSessionIssuerID:     row.UserSessionIssuerID.String(),
+		UserSessionIssuerID:     userSessionIssuerID,
 		ClientID:                row.ClientID,
 		ClientIDIssuedAt:        issuedAt,
 		ClientSecretExpiresAt:   expiresAt,

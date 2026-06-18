@@ -32,6 +32,7 @@ type Endpoints struct {
 	DeleteClient              goa.Endpoint
 	RemoveClientFromMcpServer goa.Endpoint
 	RevokeSession             goa.Endpoint
+	RefreshSession            goa.Endpoint
 	RevokeAllClientSessions   goa.Endpoint
 }
 
@@ -57,6 +58,7 @@ func NewEndpoints(s Service) *Endpoints {
 		DeleteClient:              NewDeleteClientEndpoint(s, a.APIKeyAuth),
 		RemoveClientFromMcpServer: NewRemoveClientFromMcpServerEndpoint(s, a.APIKeyAuth),
 		RevokeSession:             NewRevokeSessionEndpoint(s, a.APIKeyAuth),
+		RefreshSession:            NewRefreshSessionEndpoint(s, a.APIKeyAuth),
 		RevokeAllClientSessions:   NewRevokeAllClientSessionsEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -80,6 +82,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.DeleteClient = m(e.DeleteClient)
 	e.RemoveClientFromMcpServer = m(e.RemoveClientFromMcpServer)
 	e.RevokeSession = m(e.RevokeSession)
+	e.RefreshSession = m(e.RefreshSession)
 	e.RevokeAllClientSessions = m(e.RevokeAllClientSessions)
 }
 
@@ -643,6 +646,41 @@ func NewRevokeSessionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 			return nil, err
 		}
 		return nil, s.RevokeSession(ctx, p)
+	}
+}
+
+// NewRefreshSessionEndpoint returns an endpoint function that calls the method
+// "refreshSession" of service "organizationRemoteSessionIssuers".
+func NewRefreshSessionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RefreshSessionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.RefreshSession(ctx, p)
 	}
 }
 
