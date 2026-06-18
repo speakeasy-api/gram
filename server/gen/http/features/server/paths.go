@@ -16,3 +16,13 @@ func GetProductFeaturesFeaturesPath() string {
 func SetProductFeatureFeaturesPath() string {
 	return "/rpc/productFeatures.set"
 }
+
+// ListSessionCaptureExclusionsFeaturesPath returns the URL path to the features service listSessionCaptureExclusions HTTP endpoint.
+func ListSessionCaptureExclusionsFeaturesPath() string {
+	return "/rpc/productFeatures.listSessionCaptureExclusions"
+}
+
+// SetSessionCaptureExclusionsFeaturesPath returns the URL path to the features service setSessionCaptureExclusions HTTP endpoint.
+func SetSessionCaptureExclusionsFeaturesPath() string {
+	return "/rpc/productFeatures.setSessionCaptureExclusions"
+}
