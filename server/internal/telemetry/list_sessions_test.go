@@ -110,25 +110,27 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 		cost:         5.0,
 	})
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	allSessions, err := ti.service.ListSessions(ctx, &gen.ListSessionsPayload{
+	allSessions := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From:   from,
 		To:     to,
 		SortBy: "total_cost",
 		Limit:  10,
+	}, func(res *gen.ListSessionsResult) bool {
+		return len(res.Sessions) == 3 &&
+			res.Sessions[0].GramChatID == chatID3 &&
+			res.Sessions[1].GramChatID == chatID2 &&
+			res.Sessions[2].GramChatID == chatID1
 	})
-	require.NoError(t, err)
 	require.Len(t, allSessions.Sessions, 3)
 	require.Equal(t, chatID3, allSessions.Sessions[0].GramChatID)
 	require.Equal(t, chatID2, allSessions.Sessions[1].GramChatID)
 	require.Equal(t, otherProject.ID.String(), allSessions.Sessions[1].ProjectID)
 	require.Equal(t, chatID1, allSessions.Sessions[2].GramChatID)
 
-	filtered, err := ti.service.ListSessions(ctx, &gen.ListSessionsPayload{
+	filtered := waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
 		From: from,
 		To:   to,
 		Filters: []*gen.QueryFilter{
@@ -138,8 +140,15 @@ func TestListSessions_OrgScopedFiltersAndAggregates(t *testing.T) {
 		},
 		SortBy: "total_cost",
 		Limit:  10,
+	}, func(res *gen.ListSessionsResult) bool {
+		if len(res.Sessions) != 1 {
+			return false
+		}
+		session := res.Sessions[0]
+		return session.GramChatID == chatID1 &&
+			session.MessageCount == 2 &&
+			session.ToolCallCount == 1
 	})
-	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
 	require.Len(t, filtered.Sessions, 1)
 
 	session := filtered.Sessions[0]
@@ -195,10 +204,20 @@ func TestListSessions_CursorPagination(t *testing.T) {
 		})
 	}
 
-	time.Sleep(200 * time.Millisecond)
-
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	waitForListSessions(t, ctx, ti, &gen.ListSessionsPayload{
+		From:   from,
+		To:     to,
+		SortBy: "total_cost",
+		Limit:  10,
+	}, func(res *gen.ListSessionsResult) bool {
+		return len(res.Sessions) == 3 &&
+			res.Sessions[0].GramChatID == chatIDs[0] &&
+			res.Sessions[1].GramChatID == chatIDs[1] &&
+			res.Sessions[2].GramChatID == chatIDs[2]
+	})
 
 	page1, err := ti.service.ListSessions(ctx, &gen.ListSessionsPayload{
 		From:   from,
@@ -234,6 +253,25 @@ func TestListSessions_CursorPagination(t *testing.T) {
 	require.Len(t, page3.Sessions, 1)
 	require.Nil(t, page3.NextCursor)
 	require.Equal(t, chatIDs[2], page3.Sessions[0].GramChatID)
+}
+
+func waitForListSessions(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	payload *gen.ListSessionsPayload,
+	ready func(*gen.ListSessionsResult) bool,
+) *gen.ListSessionsResult {
+	t.Helper()
+
+	var result *gen.ListSessionsResult
+	var err error
+	require.Eventually(t, func() bool {
+		result, err = ti.service.ListSessions(ctx, payload)
+		return err == nil && result != nil && ready(result)
+	}, 10*time.Second, 200*time.Millisecond, "expected list sessions result to become query-ready, err: %v", errors.Unwrap(err))
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	return result
 }
 
 type listSessionLogParams struct {
