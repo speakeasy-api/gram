@@ -8,6 +8,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { MoreActions } from "@/components/ui/more-actions";
+import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import {
   sessionStatus,
@@ -26,8 +27,11 @@ export function SessionRow({
   onRevoked: () => void;
 }): JSX.Element {
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const { hasScope } = useRBAC();
   const status = sessionStatus(session);
-  const canRevoke = status === "active";
+  // Revoke is a write mutation (backend requires project:write); hide the
+  // affordance for read-only users instead of letting them hit a 403.
+  const canRevoke = status === "active" && hasScope("project:write");
 
   const rowContent = (
     <li className="flex items-center gap-3 px-3 py-2">

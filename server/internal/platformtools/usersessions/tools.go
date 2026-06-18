@@ -134,12 +134,18 @@ func (t *ListTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload i
 		return err
 	}
 
+	switch in.Status {
+	case "", "active", "expired", "revoked", "all":
+	default:
+		return oops.E(oops.CodeBadRequest, nil, "invalid status %q: must be active, expired, revoked, or all", in.Status)
+	}
+
 	limit := int32(50)
-	if in.Limit > 0 {
-		if in.Limit > maxLimit {
-			in.Limit = maxLimit
+	if in.Limit != 0 {
+		if in.Limit < 1 || in.Limit > maxLimit {
+			return oops.E(oops.CodeBadRequest, nil, "limit must be between 1 and %d", maxLimit)
 		}
-		limit = int32(in.Limit) //nolint:gosec // in.Limit is clamped to [1,maxLimit] above
+		limit = int32(in.Limit) //nolint:gosec // validated to [1,maxLimit] above
 	}
 
 	issuer, err := parseNullUUID(in.UserSessionIssuerID, "user_session_issuer_id")

@@ -10,6 +10,7 @@ import {
 import { DotRow } from "@/components/ui/dot-row";
 import { MoreActions } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
+import { useRBAC } from "@/hooks/useRBAC";
 import {
   sessionStatus,
   sessionTimeLabel,
@@ -26,8 +27,11 @@ export function SessionTableRow({
   onRevoked: () => void;
 }): JSX.Element {
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const { hasScope } = useRBAC();
   const status = sessionStatus(session);
-  const canRevoke = status === "active";
+  // Revoke is a write mutation (backend requires project:write); hide the
+  // affordance for read-only users instead of letting them hit a 403.
+  const canRevoke = status === "active" && hasScope("project:write");
 
   const row = (
     <DotRow>
