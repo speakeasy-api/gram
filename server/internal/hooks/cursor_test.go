@@ -144,13 +144,14 @@ func TestBuildCursorTelemetryAttributes_BasicFields(t *testing.T) {
 		ToolUseID:      &toolUseID,
 		UserEmail:      &userEmail,
 		ConversationID: &conversationID,
-	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), "")
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
 
 	assert.Equal(t, string(telemetry.EventSourceHook), attrs[attr.EventSourceKey])
 	assert.Equal(t, "Edit", attrs[attr.ToolNameKey])
 	assert.Equal(t, "PreToolUse", attrs[attr.HookEventKey])
 	assert.Equal(t, "cursor", attrs[attr.HookSourceKey])
-	assert.Equal(t, "dev@example.com", attrs[attr.UserEmailKey])
+	// User identity travels on LogParams.UserInfo, not the attributes map.
+	assert.NotContains(t, attrs, attr.UserEmailKey)
 	assert.Equal(t, "conv-123", attrs[attr.GenAIConversationIDKey])
 	assert.Equal(t, "toolu_cursor_attr", attrs[attr.GenAIToolCallIDKey])
 	// Trace ID should be hashed from toolUseID
@@ -169,7 +170,7 @@ func TestBuildCursorTelemetryAttributes_MCPToolParsing(t *testing.T) {
 	attrs := ti.service.buildCursorTelemetryAttributes(ctx, &hooks.CursorPayload{
 		HookEventName: "postToolUse",
 		ToolName:      &toolName,
-	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), "")
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
 
 	assert.Equal(t, "list_issues", attrs[attr.ToolNameKey])
 	assert.Equal(t, "linear", attrs[attr.ToolCallSourceKey])
@@ -277,7 +278,7 @@ func TestBuildCursorTelemetryAttributes_BeforeMCPExecution_ToolSourceFromURL(t *
 		HookEventName: "beforeMCPExecution",
 		ToolName:      &toolName,
 		URL:           &serverURL,
-	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), "")
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
 
 	assert.Equal(t, "BeforeMCPExecution", attrs[attr.HookEventKey])
 	assert.Equal(t, "list_issues", attrs[attr.ToolNameKey])
@@ -298,7 +299,7 @@ func TestBuildCursorTelemetryAttributes_BeforeMCPExecution_StripsMCPPrefix(t *te
 		HookEventName: "beforeMCPExecution",
 		ToolName:      &toolName,
 		Command:       &cmd,
-	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), "")
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
 
 	assert.Equal(t, "list_issues", attrs[attr.ToolNameKey])
 	assert.Equal(t, cmd, attrs[attr.ToolCallSourceKey])
@@ -325,7 +326,7 @@ func TestBuildCursorTelemetryAttributes_MCPBeforeAfter_ShareTraceID(t *testing.T
 		ToolName:       &toolName,
 		ToolInput:      toolInput,
 		URL:            &serverURL,
-	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), "")
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
 
 	after := ti.service.buildCursorTelemetryAttributes(ctx, &hooks.CursorPayload{
 		HookEventName:  "afterMCPExecution",
@@ -335,7 +336,7 @@ func TestBuildCursorTelemetryAttributes_MCPBeforeAfter_ShareTraceID(t *testing.T
 		ToolInput:      toolInput,
 		URL:            &serverURL,
 		ResultJSON:     &resultJSON,
-	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), "")
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
 
 	beforeTrace, ok := before[attr.TraceIDKey].(string)
 	require.True(t, ok)
@@ -368,7 +369,7 @@ func TestBuildCursorTelemetryAttributes_AfterMCPExecution_ResultJSON(t *testing.
 		ToolName:      &toolName,
 		URL:           &serverURL,
 		ResultJSON:    &resultJSON,
-	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), "")
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
 
 	assert.Equal(t, "AfterMCPExecution", attrs[attr.HookEventKey])
 	assert.Equal(t, "mcp.linear.app", attrs[attr.ToolCallSourceKey])
@@ -391,7 +392,7 @@ func TestBuildCursorTelemetryAttributes_AfterMCPExecution_IsErrorSetsHookError(t
 		HookEventName: "afterMCPExecution",
 		ToolName:      &toolName,
 		ResultJSON:    &resultJSON,
-	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), "")
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
 
 	got, ok := attrs[attr.HookErrorKey].(string)
 	require.True(t, ok, "gram.hook.error should be set when isError=true")
@@ -412,7 +413,7 @@ func TestBuildCursorTelemetryAttributes_AfterMCPExecution_IsErrorFalseNoHookErro
 		HookEventName: "afterMCPExecution",
 		ToolName:      &toolName,
 		ResultJSON:    &resultJSON,
-	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), "")
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
 
 	_, ok = attrs[attr.HookErrorKey]
 	assert.False(t, ok, "gram.hook.error should not be set when isError=false")
@@ -428,7 +429,7 @@ func TestBuildCursorTelemetryAttributes_NilUserEmail(t *testing.T) {
 	attrs := ti.service.buildCursorTelemetryAttributes(ctx, &hooks.CursorPayload{
 		HookEventName: "preToolUse",
 		UserEmail:     nil,
-	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), "")
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
 
 	assert.Empty(t, attrs[attr.UserEmailKey])
 }
@@ -586,7 +587,7 @@ func TestBuildCursorTelemetryAttributes_BeforeSubmitPromptNormalization(t *testi
 	attrs := ti.service.buildCursorTelemetryAttributes(ctx, &hooks.CursorPayload{
 		HookEventName: "beforeSubmitPrompt",
 		Prompt:        &prompt,
-	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), "")
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
 
 	require.Equal(t, "BeforeSubmitPrompt", attrs[attr.HookEventKey])
 	// Prompt should be stored as LogBody for beforeSubmitPrompt
@@ -610,7 +611,7 @@ func TestBuildCursorTelemetryAttributes_StopNormalization(t *testing.T) {
 		Status:        &status,
 		InputTokens:   &inputTokens,
 		OutputTokens:  &outputTokens,
-	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), "")
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
 
 	require.Equal(t, "Stop", attrs[attr.HookEventKey])
 	// Token usage should be captured from stop events
@@ -636,7 +637,7 @@ func TestBuildCursorTelemetryAttributes_ToolInputStringified(t *testing.T) {
 		HookEventName: "preToolUse",
 		ToolName:      &toolName,
 		ToolInput:     input,
-	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), "")
+	}, authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
 
 	// Should be stringified JSON, not a nested object
 	val, ok := attrs[attr.GenAIToolCallArgumentsKey].(string)

@@ -977,6 +977,7 @@ func (s *Service) writeClaudeBlockToClickHouse(ctx context.Context, payload *gen
 			DeploymentID:   "",
 			FunctionID:     nil,
 		},
+		UserInfo:   telemetry.UserInfoByID(metadata.UserID),
 		Attributes: attrs,
 	})
 }

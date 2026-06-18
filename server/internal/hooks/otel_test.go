@@ -209,7 +209,7 @@ func enableHookTelemetryLogger(t *testing.T, ctx context.Context, ti *testInstan
 	require.NoError(t, err)
 
 	enabled := func(context.Context, string) (bool, error) { return true, nil }
-	ti.service.telemetryLogger = telemetry.NewLogger(ctx, testenv.NewLogger(t), chConn, enabled, enabled)
+	ti.service.telemetryLogger = telemetry.NewLogger(ctx, testenv.NewLogger(t), chConn, enabled, enabled, nil)
 	return telemetryrepo.New(chConn)
 }
 

@@ -100,8 +100,9 @@ func TestBuildCodexTelemetryAttributes_UsesPayloadUserEmail(t *testing.T) {
 		ProjectID:   "project-id",
 	}
 
+	// User identity travels on LogParams.UserInfo, not the attributes map.
 	attrs := ti.service.buildCodexTelemetryAttributes(t.Context(), payload, metadata)
-	require.Equal(t, email, attrs[attr.UserEmailKey])
+	require.NotContains(t, attrs, attr.UserEmailKey)
 }
 
 func TestCodex_SessionStart_CapturesMCPInventory(t *testing.T) {

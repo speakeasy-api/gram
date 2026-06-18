@@ -88,6 +88,7 @@ func (s *Service) persistToolCallEvent(ctx context.Context, payload *gen.ClaudeP
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
 			Timestamp:  time.Now(),
 			ToolInfo:   toolInfo,
+			UserInfo:   telemetry.UserInfoByID(metadata.UserID),
 			Attributes: attrs,
 		})
 
@@ -129,16 +130,12 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 		attr.SpanIDKey:         generateSpanID(),
 		attr.TraceIDKey:        generateTraceID(),
 		attr.LogBodyKey:        fmt.Sprintf("Tool: %s, Hook: %s", toolName, payload.HookEventName),
-		attr.UserEmailKey:      metadata.UserEmail,
 		attr.ProjectIDKey:      metadata.ProjectID,
 		attr.OrganizationIDKey: metadata.GramOrgID,
 		attr.HookSourceKey:     hookSource,
 	}
 	if metadata.UserID == "" && metadata.UserEmail != "" {
 		metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
-	}
-	if metadata.UserID != "" {
-		attrs[attr.UserIDKey] = metadata.UserID
 	}
 	applyHookHostnameAttr(attrs, payload.HookHostname)
 
@@ -307,12 +304,6 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 		if m.Model != "" {
 			attrs[attr.GenAIResponseModelKey] = m.Model
 		}
-		if m.UserEmail != "" {
-			attrs[attr.UserEmailKey] = m.UserEmail
-			if userID := emailToUserID[conv.NormalizeEmail(m.UserEmail)]; userID != "" {
-				attrs[attr.UserIDKey] = userID
-			}
-		}
 		if m.SessionID != "" {
 			attrs[attr.GenAIConversationIDKey] = m.SessionID
 		}
@@ -327,9 +318,15 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 			FunctionID:     nil,
 		}
 
+		userInfo := telemetry.UserInfoByEmail(m.UserEmail)
+		if userID := emailToUserID[conv.NormalizeEmail(m.UserEmail)]; userID != "" {
+			userInfo = telemetry.UserInfoByID(userID)
+		}
+
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
 			Timestamp:  time.Unix(0, m.TimestampNano),
 			ToolInfo:   toolInfo,
+			UserInfo:   userInfo,
 			Attributes: attrs,
 		})
 	}

@@ -139,17 +139,11 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 	if durationMissing {
 		logAttrs[DurationMissingKey] = true
 	}
-	if authCtx.UserID != "" {
-		logAttrs[attr.UserIDKey] = authCtx.UserID
-	}
-	if authCtx.ExternalUserID != "" {
-		logAttrs[attr.ExternalUserIDKey] = authCtx.ExternalUserID
-	}
 	if authCtx.APIKeyID != "" {
 		logAttrs[attr.APIKeyIDKey] = authCtx.APIKeyID
 	}
-	if authCtx.Email != nil && *authCtx.Email != "" {
-		logAttrs[attr.UserEmailKey] = *authCtx.Email
+	if authCtx.ExternalUserID != "" {
+		logAttrs[attr.ExternalUserIDKey] = authCtx.ExternalUserID
 	}
 
 	params := tm.LogParams{
@@ -163,6 +157,7 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 			OrganizationID: authCtx.ActiveOrganizationID,
 			FunctionID:     nil,
 		},
+		UserInfo:   tm.UserInfoByID(authCtx.UserID),
 		Attributes: logAttrs,
 	}
 

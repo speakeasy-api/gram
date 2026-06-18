@@ -264,8 +264,10 @@ func TestBuildTelemetryAttributesWithMetadata_ResolvesUserIDFromEmail(t *testing
 		SessionID:     &metadata.SessionID,
 	}, metadata)
 
-	assert.Equal(t, userEmail, attrs[attr.UserEmailKey])
-	assert.Equal(t, userID, attrs[attr.UserIDKey])
+	// User identity travels on LogParams.UserInfo, not the attributes map;
+	// the build call's job is to resolve the user ID onto the metadata.
+	assert.NotContains(t, attrs, attr.UserEmailKey)
+	assert.NotContains(t, attrs, attr.UserIDKey)
 	assert.Equal(t, userID, metadata.UserID)
 }
 
