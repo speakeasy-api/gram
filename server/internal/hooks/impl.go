@@ -15,6 +15,8 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
+	"github.com/speakeasy-api/gram/server/internal/agentevents"
+	cursoragent "github.com/speakeasy-api/gram/server/internal/agentevents/providers/cursor"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -51,6 +53,7 @@ type Service struct {
 	policyBypass       *risk.PolicyBypassEvaluator
 	shadowMCPClient    *shadowmcp.Client
 	writer             *chat.ChatMessageWriter
+	cursorEvents       *agentevents.Agent[*gen.CursorPayload]
 	siteURL            *url.URL
 	jwtSecret          string
 }
@@ -110,6 +113,11 @@ func NewService(
 	siteURL *url.URL,
 	jwtSecret string,
 ) *Service {
+	cursorEvents, err := cursoragent.NewAgent()
+	if err != nil {
+		logger.Error("failed to configure Cursor agent events", attr.SlogError(err))
+	}
+
 	return &Service{
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
 		logger:             logger.With(attr.SlogComponent("hooks")),
@@ -126,6 +134,7 @@ func NewService(
 		policyBypass:       policyBypass,
 		shadowMCPClient:    shadowMCPClient,
 		writer:             writer,
+		cursorEvents:       cursorEvents,
 		siteURL:            siteURL,
 		jwtSecret:          jwtSecret,
 	}

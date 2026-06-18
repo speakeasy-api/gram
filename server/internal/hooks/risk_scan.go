@@ -3,10 +3,13 @@ package hooks
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/google/uuid"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	"github.com/speakeasy-api/gram/server/internal/agentevents"
+	agenttypes "github.com/speakeasy-api/gram/server/internal/agentevents/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -116,6 +119,78 @@ func (s *Service) scanCursorForEnforcement(ctx context.Context, payload *gen.Cur
 
 	messageType, ok := hookEventToMessageType(hookEvent)
 	if !ok {
+		return nil
+	}
+
+	result, err := s.riskScanner.ScanForEnforcement(ctx, pid, text, messageType, toolName)
+	if err != nil {
+		s.logger.WarnContext(ctx, "risk scan failed for Cursor hook",
+			attr.SlogError(err),
+			attr.SlogEvent("risk_scan_error"),
+		)
+		return nil
+	}
+
+	return result
+}
+
+func (s *Service) scanCursorEventForEnforcement(ctx context.Context, ev agentevents.Event[*gen.CursorPayload], projectID string) *risk.ScanResult {
+	if s.riskScanner == nil {
+		return nil
+	}
+
+	text, ok, err := ev.String(agenttypes.FieldScannableText)
+	if err != nil {
+		s.logger.WarnContext(ctx, "risk scan field resolution failed for Cursor hook",
+			attr.SlogError(err),
+			attr.SlogEvent("risk_scan_error"),
+		)
+		return nil
+	}
+	if !ok {
+		text = ""
+	}
+
+	toolName, ok, err := ev.String(agenttypes.FieldToolName)
+	if err != nil {
+		s.logger.WarnContext(ctx, "risk scan tool name resolution failed for Cursor hook",
+			attr.SlogError(err),
+			attr.SlogEvent("risk_scan_error"),
+		)
+		return nil
+	}
+	if !ok {
+		toolName = ""
+	}
+
+	// Empty body + tool attribution still matters for tool-scoped policies; only
+	// skip when there is neither.
+	if text == "" && toolName == "" {
+		return nil
+	}
+
+	value, ok, err := ev.Any(agenttypes.FieldScanMessageType)
+	if err != nil {
+		s.logger.WarnContext(ctx, "risk scan message type resolution failed for Cursor hook",
+			attr.SlogError(err),
+			attr.SlogEvent("risk_scan_error"),
+		)
+		return nil
+	}
+	if !ok {
+		return nil
+	}
+
+	messageType, ok := value.(message.Type)
+	if !ok {
+		messageType = message.Type(fmt.Sprint(value))
+	}
+	if messageType == "" {
+		return nil
+	}
+
+	pid, err := uuid.Parse(projectID)
+	if err != nil {
 		return nil
 	}
 
