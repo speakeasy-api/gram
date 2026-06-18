@@ -111,7 +111,7 @@ export default function AssistantsIndex(): JSX.Element {
     });
   }, [assistants, search]);
 
-  const showSearch = !isLoading && (assistants.length > 6 || search !== "");
+  const showSearch = !isLoading;
   const showNoMatches =
     !isLoading && search !== "" && filteredAssistants.length === 0;
 
