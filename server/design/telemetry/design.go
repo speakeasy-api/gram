@@ -1255,7 +1255,9 @@ var QueryFilter = Type("QueryFilter", func() {
 	Attribute("dimension", String, "Dimension to filter on", func() {
 		Enum(queryDimensions...)
 	})
-	Attribute("values", ArrayOf(String), "Match if the dimension equals any of these values (IN semantics; for multi-valued dimensions like role/group, matches if any element is present).")
+	Attribute("values", ArrayOf(String), "Match if the dimension equals any of these values (IN semantics; for multi-valued dimensions like role/group, matches if any element is present).", func() {
+		MinLength(1)
+	})
 
 	Required("dimension", "values")
 })
