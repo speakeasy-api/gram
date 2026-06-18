@@ -228,7 +228,7 @@ FROM directory_users
 WHERE user_id = @user_id
   AND organization_id = @organization_id
   AND deleted_at IS NULL
-ORDER BY updated_at DESC
+ORDER BY workos_updated_at DESC, updated_at DESC
 LIMIT 1;
 
 -- name: ListCurrentDirectoryGroupsByUserID :many

@@ -218,7 +218,7 @@ func (s *Service) writeCodexUsageToClickHouse(ctx context.Context, payload *gen.
 			ToolInfo:  toolInfo,
 			UserInfo: telemetry.UserInfo{
 				UserID:     emailToUserID[conv.NormalizeEmail(p.UserEmail)],
-				Email:      p.UserEmail,
+				Email:      conv.NormalizeEmail(p.UserEmail),
 				Attributes: telemetry.UserAttributes{},
 				Groups:     nil,
 				Roles:      nil,

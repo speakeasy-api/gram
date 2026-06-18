@@ -197,7 +197,7 @@ func handleResourcesRead(
 			},
 			UserInfo: tm.UserInfo{
 				UserID:     payload.userID,
-				Email:      resourceEmail,
+				Email:      conv.NormalizeEmail(resourceEmail),
 				Attributes: tm.UserAttributes{},
 				Groups:     nil,
 				Roles:      nil,
