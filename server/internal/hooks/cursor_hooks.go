@@ -173,6 +173,11 @@ func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPaylo
 		return
 	}
 
+	// Claim before persist so a redelivery (retry) is stored once.
+	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, "")) {
+		return
+	}
+
 	// Persistence outlives the request: the client may close the connection
 	// the instant the hook returns, which would otherwise cancel in-flight
 	// INSERTs and drop the chat message.

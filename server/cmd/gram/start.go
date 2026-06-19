@@ -1143,6 +1143,14 @@ func newStartCommand() *cli.Command {
 				Addr:              c.String("address"),
 				Handler:           mux,
 				ReadHeaderTimeout: 10 * time.Second,
+				// IdleTimeout must exceed the fronting load balancer's idle
+				// timeout (Cloud Run / GCLB default ~60s) so the server, not the
+				// LB, retires idle keep-alive connections — otherwise the LB
+				// closes a connection mid-reuse and the client sees the transient
+				// reset this change set is hardening against. No WriteTimeout: it
+				// is an absolute deadline on the whole response and would sever
+				// the long-lived SSE/MCP streams this mux also serves.
+				IdleTimeout: 620 * time.Second,
 				BaseContext: func(net.Listener) context.Context {
 					return ctx
 				},

@@ -20,6 +20,34 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 )
 
+// claimHookIdempotency reports whether this delivery should be persisted. The
+// sender stamps one idempotency token per hook invocation and reuses it across
+// retries, so a transient reset that triggers a retry re-sends the same token.
+// The first delivery wins the set-if-absent guard and persists; every repeat
+// is a no-op. An empty token (older plugins, OTEL-only flows) always persists —
+// there is nothing to dedupe on. A cache error fails open: dropping a hook is
+// worse than the rare duplicate a backend blip might cause.
+func (s *Service) claimHookIdempotency(ctx context.Context, token string) bool {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return true
+	}
+	claimed, err := s.cache.Add(ctx, hookIdempotencyCacheKey(token), hookIdempotencyTTL)
+	if err != nil {
+		s.logger.WarnContext(ctx, "hook idempotency guard failed; persisting anyway",
+			attr.SlogEvent("hook_idempotency_guard_failed"),
+			attr.SlogError(err),
+		)
+		return true
+	}
+	if !claimed {
+		s.logger.InfoContext(ctx, "skipping duplicate hook delivery",
+			attr.SlogEvent("hook_idempotency_duplicate"),
+		)
+	}
+	return claimed
+}
+
 // bufferHook stores a hook payload in Redis for later processing using atomic RPUSH
 func (s *Service) bufferHook(ctx context.Context, sessionID string, payload *gen.ClaudePayload) error {
 	// Use atomic RPUSH operation to append to the list

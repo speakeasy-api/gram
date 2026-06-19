@@ -26,6 +26,13 @@ type Cache interface {
 	// callers redeeming the same value.
 	GetAndDelete(ctx context.Context, key string, value any) error
 	Set(ctx context.Context, key string, value any, ttl time.Duration) error
+	// Add sets key to a sentinel value only if it does not already exist
+	// (Redis SET NX) and reports whether this call won the race. Use it as a
+	// set-if-absent guard for idempotency tokens and other once-only markers
+	// where a Get-then-Set sequence would let two concurrent callers both
+	// proceed. Returns true when the key was newly created by this call,
+	// false when it already existed.
+	Add(ctx context.Context, key string, ttl time.Duration) (bool, error)
 	Update(ctx context.Context, key string, value any) error
 	Delete(ctx context.Context, key string) error
 	// Expire refreshes the TTL of an existing key without touching its value.

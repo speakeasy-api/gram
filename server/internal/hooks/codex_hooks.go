@@ -136,6 +136,11 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 }
 
 func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload, metadata *SessionMetadata, blockReason string) {
+	// Claim before persist so a redelivery (retry) is stored once.
+	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, "")) {
+		return
+	}
+
 	if payload.HookEventName == "SessionStart" {
 		s.captureCodexMCPListSnapshot(ctx, payload)
 		if metadata.SessionID != "" && metadata.UserEmail != "" {

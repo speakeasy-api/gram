@@ -15,6 +15,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -f "$script_dir/identity.sh" ]; then
   . "$script_dir/identity.sh"
 fi
+. "$script_dir/http.sh"
 
 payload=$(cat)
 if type gram_enrich_identity_payload >/dev/null 2>&1; then
@@ -27,11 +28,15 @@ if [ -n "$hook_hostname" ]; then
   hook_hostname_header=(-H "X-Gram-Hook-Hostname: ${hook_hostname}")
 fi
 
-printf '%s' "$payload" | curl -s -X POST \
-  -H "Content-Type: application/json" \
+# Retry transient resets, then emit the response so Cursor can read its
+# decision. On total failure (server unreachable) emit an empty object so
+# Cursor proceeds rather than hanging.
+body='{}'
+if gram_http_post "${server_url}/rpc/hooks.cursor" "$payload" 10 \
   -H "Gram-Key: ${api_key}" \
   -H "Gram-Project: ${project_slug}" \
   ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
-  --data-binary @- \
-  --max-time 10 \
-  "${server_url}/rpc/hooks.cursor" 2>/dev/null || echo '{}'
+  && [ -n "$GRAM_HTTP_BODY" ]; then
+  body="$GRAM_HTTP_BODY"
+fi
+echo "$body"

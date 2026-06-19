@@ -453,6 +453,11 @@ func (s *Service) recordHook(ctx context.Context, payload *gen.ClaudePayload) {
 		return
 	}
 
+	// Claim before persist or buffer so a redelivery (retry) is stored once.
+	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, "")) {
+		return
+	}
+
 	// Persistence outlives the request: Claude Code may close the connection
 	// the instant the hook returns (Stop especially), which would otherwise
 	// cancel the in-flight INSERT and drop the chat message.

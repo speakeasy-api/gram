@@ -18,6 +18,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -f "$script_dir/identity.sh" ]; then
   . "$script_dir/identity.sh"
 fi
+. "$script_dir/http.sh"
 
 payload=$(cat)
 if type gram_enrich_identity_payload >/dev/null 2>&1; then
@@ -49,16 +50,14 @@ if [ -n "${GRAM_HOOKS_API_KEY:-}" ] || [ -n "${GRAM_HOOKS_PROJECT_SLUG:-}" ]; th
   auth_config_arg=(--config "$auth_config")
 fi
 
-response=$(printf '%s' "$payload" | curl -s -w "\n%{http_code}" -X POST \
-  -H "Content-Type: application/json" \
+# Retries transient resets (see http.sh) so a single reset no longer blocks
+# the tool call; the server still decides allow/block from the HTTP code.
+gram_http_post "${server_url}/rpc/hooks.claude" "$payload" 10 \
   ${hook_hostname_header[@]+"${hook_hostname_header[@]}"} \
-  ${auth_config_arg[@]+"${auth_config_arg[@]}"} \
-  --data-binary @- \
-  --max-time 10 \
-  "${server_url}/rpc/hooks.claude")
+  ${auth_config_arg[@]+"${auth_config_arg[@]}"}
 
-http_code=$(echo "$response" | tail -1)
-body=$(echo "$response" | sed '$d')
+http_code="$GRAM_HTTP_CODE"
+body="$GRAM_HTTP_BODY"
 
 # Forward the body to stdout so Claude can read PreToolUse decisions from it.
 echo "$body"
@@ -66,7 +65,7 @@ echo "$body"
 # Only treat real 2xx/3xx as allow. curl returns 000 on connection failure,
 # DNS error, or timeout — that must NOT silently allow the call, otherwise
 # blocking policies are bypassed any time the Gram server is unreachable.
-if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 400 ]; then
+if [ "$http_code" -ge 200 ] 2>/dev/null && [ "$http_code" -lt 400 ] 2>/dev/null; then
   exit 0
 fi
 
