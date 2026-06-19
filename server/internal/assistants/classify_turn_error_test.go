@@ -61,6 +61,41 @@ func TestClassifyTurnError(t *testing.T) {
 				errors.New("execute fly turn request: status=422 body=provider error: "+corruptionMarker)),
 			want: ErrHistoryCorrupted,
 		},
+		{
+			name: "runner rejected truncated tool_call args (decode marker)",
+			err:  fmt.Errorf("execute fly turn request: %w", &runtimeResponseError{StatusCode: 503, Body: "decode tool_call arguments for id call_1: EOF while parsing a value"}),
+			want: ErrHistoryCorrupted,
+		},
+		{
+			name: "runner rejected history missing tool_call_id",
+			err:  &runtimeResponseError{StatusCode: 503, Body: "tool history message missing tool_call_id"},
+			want: ErrHistoryCorrupted,
+		},
+		{
+			name: "live runner deterministic 400 is terminal, not a teardown",
+			err:  fmt.Errorf("execute gke turn request: %w", &runtimeResponseError{StatusCode: 400, Body: "bad request"}),
+			want: ErrCompletionFailed,
+		},
+		{
+			name: "live runner 404 is terminal",
+			err:  &runtimeResponseError{StatusCode: 404, Body: "thread not found"},
+			want: ErrCompletionFailed,
+		},
+		{
+			name: "live runner 429 is transient — retry under teardown, not terminal",
+			err:  &runtimeResponseError{StatusCode: 429, Body: "rate limited"},
+			want: ErrRuntimeUnhealthy,
+		},
+		{
+			name: "live runner 408 is transient",
+			err:  &runtimeResponseError{StatusCode: 408, Body: "request timeout"},
+			want: ErrRuntimeUnhealthy,
+		},
+		{
+			name: "live runner 500 without a known marker stays unhealthy (bounded by C)",
+			err:  &runtimeResponseError{StatusCode: 500, Body: "internal error"},
+			want: ErrRuntimeUnhealthy,
+		},
 	}
 
 	for _, tt := range tests {

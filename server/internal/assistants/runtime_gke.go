@@ -508,7 +508,7 @@ func (g *GKERuntimeBackend) doRequest(ctx context.Context, metadata gkeRuntimeMe
 		return nil, fmt.Errorf("read gke runtime response: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("gke runtime request %s %s: status %d: %s", method, path, resp.StatusCode, strings.TrimSpace(string(respBody)))
+		return nil, &runtimeResponseError{StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(respBody))}
 	}
 	return respBody, nil
 }
