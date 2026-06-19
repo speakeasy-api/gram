@@ -162,6 +162,9 @@ GRAM_SSL_KEY_FILE = "{{config_root}}/local/ssl/keys/local-key.pem"
 # GRAM_PLUGINS_GITHUB_INSTALLATION_ID = ""
 GRAM_PYSTREAMS_CONTROL_PORT = "8089"
 GRAM_PYSTREAMS_CONTROL_HOST = "127.0.0.1"
+## Raise on blocking code detected on the pystreams event loop (aiocop). On by
+## default locally; unset in production. Set to "" in mise.local.toml to disable.
+GRAM_PYSTREAMS_DETECT_BLOCKING = "1"
 
 ##########################
 ## Observability config ##

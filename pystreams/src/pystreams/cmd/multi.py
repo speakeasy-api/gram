@@ -19,6 +19,7 @@ from gram_infra.pubsub import (
 
 from .. import attr
 from ..deps import logging
+from ..deps.blocking import activate_blocking_detection
 from ..deps.loop_lag import monitor_event_loop_lag
 from ..health import HealthState, serve_control
 from .receiver import ReceiverGroup
@@ -63,6 +64,12 @@ async def multi(
         },
     )
     logger: structlog.stdlib.BoundLogger = structlog.get_logger()
+
+    # Opt-in (defaulted on for local dev via mise.toml): actively watch the loop
+    # for blocking calls and raise on a high-severity violation. The production
+    # container leaves the env var unset, so this is a no-op there.
+    if os.environ.get("GRAM_PYSTREAMS_DETECT_BLOCKING"):
+        activate_blocking_detection(logger=logger)
 
     # The emulator's project ID is arbitrary; against real GCP a project is
     # required to resolve the subscription path.

@@ -10,6 +10,15 @@ members = [
 ]
 
 [[package]]
+name = "aiocop"
+version = "1.1.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d8/3d/73386449323002edc3d88bc14cb72b59545fd6397f1610516685c042e82b/aiocop-1.1.4.tar.gz", hash = "sha256:2059a9837440dcd7122a16f5803f6c7a76e8bef99dea6f9af9d70d937debf6f0", size = 1391465, upload-time = "2026-02-26T10:50:41.277Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/91/b3/84769a0bcf73a548c095494b5cf1e1feba5ed685c91232029ffff7859062/aiocop-1.1.4-py3-none-any.whl", hash = "sha256:7263a4bc0c58023767729477590b20ce0dd9e5f51116cbba9a8ad1ec7e9ac51c", size = 21188, upload-time = "2026-02-26T10:50:42.609Z" },
+]
+
+[[package]]
 name = "annotated-doc"
 version = "0.0.4"
 source = { registry = "https://pypi.org/simple" }
@@ -911,6 +920,7 @@ name = "pystreams"
 version = "0.1.0"
 source = { editable = "pystreams" }
 dependencies = [
+    { name = "aiocop" },
     { name = "anyio" },
     { name = "asyncer" },
     { name = "click" },
@@ -936,6 +946,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiocop", specifier = ">=1.1.4" },
     { name = "anyio", specifier = ">=4.13.0" },
     { name = "asyncer", specifier = ">=0.0.17" },
     { name = "click", specifier = ">=8.4.1" },
