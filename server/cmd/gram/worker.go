@@ -461,6 +461,20 @@ func newWorkerCommand() *cli.Command {
 				featureFlags = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
 			}
 
+			_, psbroker, pubsubShutdown, err := newPubSubClient(ctx, c, logger)
+			if err != nil {
+				shutdownFuncs = append(shutdownFuncs, pubsubShutdown)
+				return fmt.Errorf("failed to create pubsub client: %w", err)
+			}
+
+			publishers, shutdown, err := newPublishers(ctx, psbroker)
+			// Make sure topics are stopped and flushed before the pubsub client
+			// is stopped.
+			shutdownFuncs = append(shutdownFuncs, shutdown, pubsubShutdown)
+			if err != nil {
+				return fmt.Errorf("failed to create publishers: %w", err)
+			}
+
 			{
 				controlServer := control.Server{
 					Address:          c.String("control-address"),
@@ -769,6 +783,7 @@ func newWorkerCommand() *cli.Command {
 				SvixClient:                     svixClient,
 				ProductFeatures:                productFeatures,
 				PluginPublisher:                pluginPublisher,
+				Publishers:                     publishers,
 			})
 
 			return temporalWorker.Run(worker.InterruptCh())
