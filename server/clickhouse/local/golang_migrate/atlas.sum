@@ -1,4 +1,4 @@
-h1:8Ha7nmd+allMxeNsD3IacwY1Q3IB7DHaKI4lCGtmw8g=
+h1:PKvbido9YgDLupEAGLVeg+DKQuvTUF/OYFQ4EX7epi4=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -42,3 +42,4 @@ h1:8Ha7nmd+allMxeNsD3IacwY1Q3IB7DHaKI4lCGtmw8g=
 20260618094239_add-attribute-metrics-summaries-mv.up.sql h1:y9yAsg2+IzSitPY4Ugic2r/lzqZCbADwtfbnibISfh4=
 20260619131002_add-tool-usage-cols-to-trace-summaries.up.sql h1:EY1O74vlpr6mUIGEpZ0rdosTJF9SByBOvlLhuz4PLDw=
 20260619135933_filter-attribute-metrics-usage-metrics.up.sql h1:b8X5oOaiXpSlwjwBwzkXT402jALm3Gb3VW5VF5wJsuM=
+20260619172906_set-cutoff-date-for-attributes-summaries-mv.up.sql h1:2FnZ3lg0C0j9PtW8wcB1sAMhOId9rw9qZx+kFS4KcBY=
