@@ -693,7 +693,7 @@ export function CostsExplorer(): JSX.Element {
     : null;
   const entityType = currentEntity
     ? (LABELS[currentEntity.dim] ?? "entity")
-    : "Organization";
+    : "Project";
   const childLabel = LABELS[groupBy] ?? "group";
   const rangeDays = Math.max(
     1,
@@ -705,13 +705,13 @@ export function CostsExplorer(): JSX.Element {
     : "What would you like to know about your AI spend?";
   const assistantSubtitle = entityLabel
     ? `Cost drivers, top spenders, and trends for this ${entityType.toLowerCase()}.`
-    : "Cost drivers, top spenders, and trends across the organization.";
+    : "Cost drivers, top spenders, and trends across this project.";
   const filterSummary =
     path.map((c) => `${LABELS[c.dim] ?? c.dim}=${c.value}`).join(", ") ||
     "none";
   const scope = entityLabel
     ? `the ${entityType.toLowerCase()} "${entityLabel}"`
-    : "the whole organization";
+    : `the "${project.name}" project`;
   const assistantContext = `Cost dashboard — viewing ${scope}, broken down by ${childLabel.toLowerCase()}. Over ${rangeLabel}: ${formatDollars(stats.cost)} total cost, ${stats.sessions.toLocaleString()} chat sessions, ${stats.tools.toLocaleString()} tool calls, ${stats.tokens.toLocaleString()} tokens. Active filters: ${filterSummary}.`;
   const assistantSuggestions = costExplorerSuggestions({
     level,
@@ -773,8 +773,8 @@ export function CostsExplorer(): JSX.Element {
           <div className="flex min-w-0 flex-col gap-1">
             <h1 className="text-xl font-semibold">Costs</h1>
             <p className="text-muted-foreground text-sm">
-              Break down AI spend across your organization by division,
-              department, user, agent, and model.
+              Break down this project's AI spend by division, department, user,
+              agent, and model.
             </p>
           </div>
           <div className="relative flex-1">
@@ -804,6 +804,7 @@ export function CostsExplorer(): JSX.Element {
         widgets={widgets}
         onBack={goUp}
         onHome={goHome}
+        projectName={project.name}
         parentValue={parentValue}
         ancestors={path.slice(0, -1)}
         stats={stats}

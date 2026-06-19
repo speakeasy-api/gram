@@ -217,6 +217,9 @@ export type EntityProfileProps = {
   onBack: () => void;
   // Jump straight back to the org root.
   onHome: () => void;
+  // The current project's name — the dashboard is project-scoped, so the root
+  // node represents this project rather than the whole organization.
+  projectName: string;
   // The immediate parent's value, for the "Back to …" control.
   parentValue: string | null;
   // The ancestor chain above this entity (root → immediate parent), rendered as
@@ -264,6 +267,7 @@ export function EntityProfile({
   entity,
   onBack,
   onHome,
+  projectName,
   parentValue,
   ancestors,
   stats,
@@ -285,8 +289,10 @@ export function EntityProfile({
 }: EntityProfileProps): JSX.Element {
   const groupLabel = LABELS[groupBy] ?? "Group";
 
-  const title = entity ? prettyName(entity.value, entity.dim) : "All costs";
-  const typeLabel = entity ? (LABELS[entity.dim] ?? "Group") : "Organization";
+  const title = entity
+    ? prettyName(entity.value, entity.dim)
+    : projectName || "All costs";
+  const typeLabel = entity ? (LABELS[entity.dim] ?? "Group") : "Project";
   // Raw ancestor values joined by chevrons (e.g. "R&D › Engineering › elena@…").
   // Values stay raw — the title already shows the entity's pretty name.
   const ancestryTrail = ancestors
@@ -368,7 +374,9 @@ export function EntityProfile({
               <span className="max-w-[220px] truncate">
                 Back to{" "}
                 <span className="text-foreground font-semibold">
-                  {parentValue ? displayValue(parentValue) : "All costs"}
+                  {parentValue
+                    ? displayValue(parentValue)
+                    : projectName || "All costs"}
                 </span>
               </span>
             </button>

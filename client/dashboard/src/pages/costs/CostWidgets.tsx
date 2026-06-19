@@ -227,7 +227,11 @@ function MixRowItem({
     </>
   );
   if (!onSelect) {
-    return <div className="space-y-1 py-1.5">{inner}</div>;
+    // Mirror the selectable button's box (-mx-2/px-2/w-full) so a non-drillable
+    // row's bar lines up with the rest instead of overshooting by 16px.
+    return (
+      <div className="-mx-2 block w-full space-y-1 px-2 py-1.5">{inner}</div>
+    );
   }
   return (
     <button
