@@ -693,6 +693,7 @@ func TestClaude_PreToolUse_DeniesMCPWhenNoAuthAndNoCachedMetadata(t *testing.T) 
 	require.NotNil(t, output.PermissionDecisionReason)
 	assert.Contains(t, *output.PermissionDecisionReason, "could not verify this MCP tool call")
 	assert.Contains(t, *output.PermissionDecisionReason, "/reload-plugins")
+	assert.Contains(t, *output.PermissionDecisionReason, "(err code: "+denyCodeNoMetadata+")")
 }
 
 func TestClaude_PreToolUse_DeniesMCPWhenResolvedMetadataHasNoUserEmail(t *testing.T) {
@@ -733,6 +734,7 @@ func TestClaude_PreToolUse_DeniesMCPWhenResolvedMetadataHasNoUserEmail(t *testin
 	assert.Equal(t, "deny", *output.PermissionDecision)
 	require.NotNil(t, output.PermissionDecisionReason)
 	assert.Contains(t, *output.PermissionDecisionReason, "could not verify this MCP tool call")
+	assert.Contains(t, *output.PermissionDecisionReason, "(err code: "+denyCodeNoUserEmail+")")
 }
 
 // Claude Code's hook output schema only permits hookSpecificOutput for
