@@ -1,0 +1,37 @@
+server/internal/permissions/selector.go
+  s_a5f37a1929f11b::t_ad0efcefcc2527 81-91,95
+  s_a5f37a1929f11b::t_d7425b26438d88 11
+  s_a5f37a1929f11b::t_f85972e327c8e0 3-7,13-62,64,71-73,75-80,92-94,96-109,111-112,115-150,153-159,162-163,165-167,170-180
+  s_a5f37a1929f11b::t_243dc3f23660b5 69,151-152,160-161,164,168-169
+  s_a5f37a1929f11b::t_3631e5d0ea5e18 63,65-68,70,74
+  h_2620cc60cfd1e9 110,113-114
+server/internal/permissions/selector_test.go
+  s_a5f37a1929f11b::t_6ed17b70db1862 65,75,81,87,90,93,96,110
+  s_a5f37a1929f11b::t_a6ae7612b5e8bd 13-16,19-22,25-28,31-34,37-40,43-46,49-52,60,69-72,76-78,82-84,88-89,94-95,99-102
+  s_a5f37a1929f11b::t_f85972e327c8e0 1-12,17-18,23-24,29-30,35-36,41-42,47-48,53-59,61-64,66-68,73-74,79-80,85-86,91-92,97-98,103-109,111-203
+docs/permissions-rewrite.md
+  s_a5f37a1929f11b::t_5b3306511bdbc3 83-84
+  s_a5f37a1929f11b::t_f85972e327c8e0 13-14
+  s_a5f37a1929f11b::t_2a8573903bb4b1 71-73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "0d2161e83fd9529e98fff89c8ed65b1b721b3436",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_a5f37a1929f11b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ee04b-25b9-7e42-9e18-fe6de7ddd0f2",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
