@@ -6,7 +6,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Type } from "@/components/ui/type";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import { Button, Input, Stack } from "@speakeasy-api/moonshine";
@@ -83,10 +82,6 @@ function CreateCollectionForm() {
   const [serverSearch, setServerSearch] = useState("");
   const createCollection = useCreateCollection();
 
-  const telemetry = useTelemetry();
-  const isRemoteMcpEnabled =
-    telemetry.isFeatureEnabled("gram-remote-mcp") ?? false;
-
   // Fetch toolsets from every project in the org
   const toolsetQueries = useQueries({
     queries: projects.map((project) => ({
@@ -96,14 +91,14 @@ function CreateCollectionForm() {
     })),
   });
 
-  // Fetch Remote MCP-backed mcp_servers from every project (gated on the
-  // remote-mcp feature). Toolset-backed mcp_servers don't exist yet
-  // (AGE-1902), so today this only surfaces remote-backed servers.
+  // Fetch Remote MCP-backed mcp_servers from every project. Toolset-backed
+  // mcp_servers don't exist yet (AGE-1902), so today this only surfaces
+  // remote-backed servers.
   const mcpServerQueries = useQueries({
     queries: projects.map((project) => ({
       queryKey: ["mcpServers", "list", project.slug],
       queryFn: () => client.mcpServers.list({ gramProject: project.slug }),
-      enabled: isRemoteMcpEnabled && !!project.slug,
+      enabled: !!project.slug,
     })),
   });
 
