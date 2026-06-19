@@ -166,6 +166,14 @@ func (tp *ToolProxy) Do(
 		span.End()
 	}()
 
+	// Capture the trace/span context onto the shared log attributes now, while the
+	// gateway.toolCall span is active. The callers (mcp tool-call handler, instances
+	// direct path) only call RecordTraceContext from their deferred closures against
+	// the outer ctx, which has no active span — so without this, hosted/direct tool
+	// call logs land in ClickHouse with an empty trace_id and never make it into the
+	// trace_summaries materialized view that powers the tool-usage dashboards.
+	attrs.RecordTraceContext(ctx)
+
 	logger := tp.logger.With(
 		attr.SlogProjectID(plan.Descriptor.ProjectID),
 		attr.SlogDeploymentID(plan.Descriptor.DeploymentID),
