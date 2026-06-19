@@ -206,6 +206,18 @@ ORDER BY p.slug, ps.sort_order ASC;
 -- name: GetOrganizationName :one
 SELECT name FROM organization_metadata WHERE id = @id;
 
+-- name: IsOrganizationFeatureEnabled :one
+-- Reports whether an organization feature flag is enabled. Mirrors the
+-- productfeatures service's read against organization_features so the generator
+-- can honour org-level toggles (e.g. observability_mode) at generation time.
+SELECT EXISTS (
+  SELECT 1
+  FROM organization_features
+  WHERE organization_id = @organization_id
+    AND feature_name = @feature_name
+    AND deleted IS FALSE
+) AS enabled;
+
 -- name: GetGitHubConnection :one
 SELECT *
 FROM plugin_github_connections

@@ -1,7 +1,7 @@
 lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
-  docChecksum: 91cec7a2ee5c69eaf528471cbbac1b91
+  docChecksum: f703b5b6f0c00a6bd6c661787a86e963
   docVersion: 0.0.1
   speakeasyVersion: 1.761.5
   generationVersion: 2.879.13
@@ -335,7 +335,7 @@ trackedFiles:
   docs/models/components/externaloauthserverform.md:
     last_write_checksum: sha1:2dfca2bf1f6cf89befb98dabc7e7db5d83523c65
   docs/models/components/featurename.md:
-    last_write_checksum: sha1:b02e4d20f763c724cb16e24ba8e6374fda188c07
+    last_write_checksum: sha1:daec110d1e973f2642a98d804ddbaa107eb45f87
   docs/models/components/feedback.md:
     last_write_checksum: sha1:ef93dc1781469531617f39432611ded991048862
   docs/models/components/fetchopenapiv3fromurlform2.md:
@@ -387,7 +387,7 @@ trackedFiles:
   docs/models/components/getpluginsresult.md:
     last_write_checksum: sha1:3a3a8f8d2c90f10a3a41bba699f319bb1a56fd90
   docs/models/components/getproductfeaturesresponsebody.md:
-    last_write_checksum: sha1:d92e84a1b65e679d39db2987deb0af2af2235a68
+    last_write_checksum: sha1:3b735a3a598bd48d3c8e38df8ddeafeff33e112f
   docs/models/components/getprojectmetricssummarypayload.md:
     last_write_checksum: sha1:bab9f23a9d3f2b4b52743618c911a5e5d0a55c19
   docs/models/components/getprojectoverviewresult.md:
@@ -1007,7 +1007,7 @@ trackedFiles:
   docs/models/components/setpluginassignmentsresponsebody.md:
     last_write_checksum: sha1:eca01ab11f06f2b2dddfb170f45b2f603ea24310
   docs/models/components/setproductfeaturerequestbody.md:
-    last_write_checksum: sha1:0c074a77b235e587f90c35e5a32d039afe07bd28
+    last_write_checksum: sha1:7e08b6581a9fd3626a9adb66f17ace82da431ec9
   docs/models/components/setprojectlogoresult.md:
     last_write_checksum: sha1:48ef7841396c44c42eda6c05af08a4a0866f1fca
   docs/models/components/setsourceenvironmentlinkrequestbody.md:
@@ -3061,7 +3061,7 @@ trackedFiles:
   docs/models/operations/setpluginassignmentssecurity.md:
     last_write_checksum: sha1:5b06c4af538e78e085278654f258e99d8fe2060d
   docs/models/operations/setproductfeaturerequest.md:
-    last_write_checksum: sha1:465e8e48d8403c8d8ce4ef3cceff897a62868efd
+    last_write_checksum: sha1:3050c8edb12f5fef9783e986981e08c2cce1527d
   docs/models/operations/setproductfeaturesecurity.md:
     last_write_checksum: sha1:78505231e83aedf6a7f6a1af58330268eb124555
   docs/models/operations/setprojectlogorequest.md:
@@ -4478,7 +4478,7 @@ trackedFiles:
   src/models/components/getpluginsresult.ts:
     last_write_checksum: sha1:671459cf68e9cb135cd5438c651bb35b0843b5de
   src/models/components/getproductfeaturesresponsebody.ts:
-    last_write_checksum: sha1:9f758037adb46a3b2a03a7171c9c7a443d588caa
+    last_write_checksum: sha1:eb4c5228d950273e770be0bd8ef7203c67c399e5
   src/models/components/getprojectmetricssummarypayload.ts:
     last_write_checksum: sha1:e37e5370768df11ea61585493bffcc2c0f2ac198
   src/models/components/getprojectoverviewresult.ts:
@@ -4999,7 +4999,7 @@ trackedFiles:
   src/models/components/setpluginassignmentsresponsebody.ts:
     last_write_checksum: sha1:880bca89d1b570199aa3c9161292f13052406ea9
   src/models/components/setproductfeaturerequestbody.ts:
-    last_write_checksum: sha1:27d7aa315c619e9d01ce12696fdf8d13921eace3
+    last_write_checksum: sha1:265b7c452867c2293d4c73229f5809e7f9e963d6
   src/models/components/setprojectlogoresult.ts:
     last_write_checksum: sha1:4b596a9d3ddae8d3cd24632a9dca5126ae123ada
   src/models/components/setsourceenvironmentlinkrequestbody.ts:
@@ -8561,7 +8561,7 @@ examples:
     speakeasy-default-get-product-features:
       responses:
         "200":
-          application/json: {"authz_challenge_logging_enabled": false, "logs_enabled": false, "scim_enabled": false, "session_capture_enabled": true, "sso_enabled": false, "tool_io_logs_enabled": true, "webhooks": true}
+          application/json: {"authz_challenge_logging_enabled": false, "logs_enabled": false, "observability_mode_enabled": false, "scim_enabled": false, "session_capture_enabled": true, "sso_enabled": false, "tool_io_logs_enabled": true, "webhooks": true}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

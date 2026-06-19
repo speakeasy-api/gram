@@ -6,7 +6,7 @@ import { Type } from "@/components/ui/type";
 import { FeatureName } from "@gram/client/models/components";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet";
 import { Stack } from "@speakeasy-api/moonshine";
-import { Eye, FileText, Monitor } from "lucide-react";
+import { Eye, FileText, Monitor, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { AIIntegrationsSection } from "./AIIntegrationsSection";
 import { OtelForwardingSection } from "./OtelForwardingSection";
@@ -37,6 +37,9 @@ function OrgLogsInner() {
   const [sessionCaptureEnabled, setSessionCaptureEnabled] = useState<
     boolean | null
   >(null);
+  const [observabilityModeEnabled, setObservabilityModeEnabled] = useState<
+    boolean | null
+  >(null);
 
   const effectiveLogsEnabled =
     logsEnabled ?? featuresData?.logsEnabled ?? false;
@@ -44,6 +47,8 @@ function OrgLogsInner() {
     toolIoLogsEnabled ?? featuresData?.toolIoLogsEnabled ?? false;
   const effectiveSessionCaptureEnabled =
     sessionCaptureEnabled ?? featuresData?.sessionCaptureEnabled ?? false;
+  const effectiveObservabilityModeEnabled =
+    observabilityModeEnabled ?? featuresData?.observabilityModeEnabled ?? false;
 
   const { mutate: setLogsFeature, status: logsMutationStatus } =
     useFeaturesSetMutation({
@@ -56,6 +61,8 @@ function OrgLogsInner() {
           setToolIoLogsEnabled(enabled);
         } else if (featureName === FeatureName.SessionCapture) {
           setSessionCaptureEnabled(enabled);
+        } else if (featureName === FeatureName.ObservabilityMode) {
+          setObservabilityModeEnabled(enabled);
         }
       },
     });
@@ -100,6 +107,17 @@ function OrgLogsInner() {
       request: {
         setProductFeatureRequestBody: {
           featureName: FeatureName.SessionCapture,
+          enabled,
+        },
+      },
+    });
+  };
+
+  const handleSetObservabilityMode = (enabled: boolean) => {
+    setLogsFeature({
+      request: {
+        setProductFeatureRequestBody: {
+          featureName: FeatureName.ObservabilityMode,
           enabled,
         },
       },
@@ -201,6 +219,36 @@ function OrgLogsInner() {
                   onCheckedChange={handleSetSessionCapture}
                   disabled={isMutatingLogs || !effectiveLogsEnabled}
                   aria-label="Enable Claude Code session capture"
+                />
+              </RequireScope>
+            )}
+          </Stack>
+
+          <div className="border-border border-t" />
+
+          <Stack direction="horizontal" justify="space-between" align="center">
+            <Stack gap={1}>
+              <Stack direction="horizontal" align="center" gap={2}>
+                <ShieldCheck className="text-muted-foreground h-4 w-4" />
+                <Type variant="body" className="font-medium">
+                  Observability Mode
+                </Type>
+              </Stack>
+              <Type
+                variant="body"
+                className="text-muted-foreground ml-6 text-sm"
+              >
+                Make generated hook plugins fully non-blocking. Hooks only
+                observe and report, and can never deny or delay a tool call.
+              </Type>
+            </Stack>
+            {!featuresLoading && (
+              <RequireScope scope="org:admin" level="component">
+                <Switch
+                  checked={effectiveObservabilityModeEnabled}
+                  onCheckedChange={handleSetObservabilityMode}
+                  disabled={isMutatingLogs}
+                  aria-label="Enable observability mode"
                 />
               </RequireScope>
             )}
