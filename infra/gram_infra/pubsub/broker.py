@@ -33,12 +33,11 @@ from types import TracebackType
 from typing import Protocol, Self, runtime_checkable
 
 import structlog
+from gcp.pubsub.v1 import options_pb2
 from google.api_core.exceptions import AlreadyExists
 from google.cloud.pubsub_v1 import PublisherClient, SubscriberClient
 from google.protobuf.duration_pb2 import Duration
 from google.protobuf.message import Message
-
-from gcp.pubsub.v1 import options_pb2
 
 from .discover import (
     require_subscription_for_message,
@@ -49,12 +48,12 @@ from .discover import (
 )
 
 __all__ = [
-    "PublisherHandle",
-    "SubscriberHandle",
-    "PublisherBroker",
-    "SubscriberBroker",
-    "PubSubBroker",
     "EmulatedPubSubBroker",
+    "PubSubBroker",
+    "PublisherBroker",
+    "PublisherHandle",
+    "SubscriberBroker",
+    "SubscriberHandle",
 ]
 
 
@@ -105,7 +104,8 @@ class PublisherHandle:
 
 @dataclass(frozen=True)
 class SubscriberHandle:
-    """A subscriber client paired with the fully-qualified subscription path to receive from."""
+    """A subscriber client paired with the fully-qualified subscription path to
+    receive from."""
 
     client: SubscriberClient
     subscription_path: str
@@ -209,7 +209,7 @@ class PubSubBroker:
             self._closed = True
 
     def _drain_publisher(self) -> None:
-        """Flush batched publishes and wait for those commits before the transport closes.
+        """Flush batched publishes, awaiting their commits before transport close.
 
         ``PublisherClient`` inherits the generated client's ``__exit__``, which
         only calls ``transport.close()`` — it never stops the batching layer. So a

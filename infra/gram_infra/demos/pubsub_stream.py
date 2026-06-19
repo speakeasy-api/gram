@@ -20,8 +20,8 @@ from __future__ import annotations
 
 import anyio
 import structlog
-
 from gram.ping.v1 import ping_pb2, processor_pb2
+
 from gram_infra.pubsub import (
     Subscriber,
     pubsub_publisher_for_message,

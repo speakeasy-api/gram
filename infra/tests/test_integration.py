@@ -13,9 +13,10 @@ import os
 import socket
 import uuid
 
-from google.cloud.pubsub_v1 import PublisherClient, SubscriberClient
 import pytest
+from google.cloud.pubsub_v1 import PublisherClient, SubscriberClient
 from gram.ping.v1 import ping_pb2, processor_pb2
+
 from gram_infra.pubsub import (
     EmulatedPubSubBroker,
     pubsub_publisher_for_message,
@@ -50,10 +51,16 @@ pytestmark = pytest.mark.skipif(
 
 
 async def test_publish_subscribe_roundtrip() -> None:
+    # Constructing the gRPC clients eagerly opens a channel — blocking import +
+    # file IO that would stall the event loop (the suite's aiocop guard fails on
+    # it), so build them off-loop in a worker thread.
+    publisher_client, subscriber_client = await asyncio.to_thread(
+        lambda: (PublisherClient(), SubscriberClient())
+    )
     broker = EmulatedPubSubBroker(
         "gram-infra-it",
-        publisher_client=PublisherClient(),
-        subscriber_client=SubscriberClient(),
+        publisher_client=publisher_client,
+        subscriber_client=subscriber_client,
     )
 
     publisher = pubsub_publisher_for_message(broker, ping_pb2.Message)

@@ -46,27 +46,23 @@ from .subscriber import (
 )
 
 __all__ = [
-    # brokers
-    "PubSubBroker",
     "EmulatedPubSubBroker",
-    "PublisherBroker",
-    "SubscriberBroker",
-    "PublisherHandle",
-    "SubscriberHandle",
-    # publisher
-    "Publisher",
-    "pubsub_publisher_for_message",
-    # subscriber
-    "Subscriber",
-    "MessageMetadata",
-    "ReceivedMessage",
     "MessageCallback",
+    "MessageMetadata",
+    "PubSubBroker",
+    "Publisher",
+    "PublisherBroker",
+    "PublisherHandle",
+    "ReceivedMessage",
+    "Subscriber",
+    "SubscriberBroker",
+    "SubscriberHandle",
+    "pubsub_publisher_for_message",
     "pubsub_subscriber_for_message",
-    # discovery / naming
-    "topic_options_from_message",
-    "subscription_options_from_message",
-    "resolve_topic_name",
-    "resolve_subscription_name",
     "resolve_dead_letter_topic_name",
+    "resolve_subscription_name",
+    "resolve_topic_name",
+    "subscription_options_from_message",
     "to_kebab",
+    "topic_options_from_message",
 ]
