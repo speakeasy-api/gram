@@ -14,18 +14,21 @@ const scopeDefinitions = [
     slug: "project:write",
     description: "Create and modify projects and project-related resources.",
     resourceType: "project",
+    visibility: "user_visible",
     exclusionScope: "project:blocked_write",
   },
   {
     slug: "mcp:write",
     description: "Create and modify MCP servers and configuration.",
     resourceType: "mcp",
+    visibility: "user_visible",
     exclusionScope: "mcp:blocked_write",
   },
   {
     slug: "mcp:connect",
     description: "Connect to and use MCP servers.",
     resourceType: "mcp",
+    visibility: "user_visible",
     exclusionScope: "mcp:blocked_connect",
   },
 ] satisfies ScopeDefinition[];

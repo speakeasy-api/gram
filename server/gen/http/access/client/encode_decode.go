@@ -5577,6 +5577,7 @@ func unmarshalScopeDefinitionResponseBodyToAccessScopeDefinition(v *ScopeDefinit
 		Slug:           *v.Slug,
 		Description:    *v.Description,
 		ResourceType:   *v.ResourceType,
+		Visibility:     *v.Visibility,
 		ExclusionScope: v.ExclusionScope,
 	}
 

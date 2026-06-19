@@ -711,7 +711,7 @@ var ListRoleGrantModel = Type("ListRoleGrant", func() {
 	Attribute("sub_scopes", ArrayOf(String), func() {
 		Description("The inherited scopes the primary scope grants.")
 		Elem(func() {
-			Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass")
+			Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "risk_policy:evaluate", "risk_policy:bypass")
 		})
 	})
 
@@ -745,16 +745,20 @@ var ListRolesResult = Type("ListRolesResult", func() {
 })
 
 var ScopeModel = Type("ScopeDefinition", func() {
-	Required("slug", "description", "resource_type")
+	Required("slug", "description", "resource_type", "visibility")
 
 	Attribute("slug", String, func() {
 		Description("Unique scope identifier.")
-		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass")
+		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "risk_policy:evaluate", "risk_policy:bypass")
 	})
 	Attribute("description", String, "What this scope protects.")
 	Attribute("resource_type", String, func() {
 		Description("The type of resource this scope applies to.")
 		Enum("org", "project", "mcp", "environment", "risk_policy")
+	})
+	Attribute("visibility", String, func() {
+		Description("Whether this scope is a first-class permission or an internal storage/evaluation scope.")
+		Enum("user_visible", "internal")
 	})
 	Attribute("exclusion_scope", String, func() {
 		Description("The scope used to store exception rules for this scope.")

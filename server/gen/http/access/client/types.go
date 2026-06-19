@@ -4707,6 +4707,9 @@ type ScopeDefinitionResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The type of resource this scope applies to.
 	ResourceType *string `form:"resource_type,omitempty" json:"resource_type,omitempty" xml:"resource_type,omitempty"`
+	// Whether this scope is a first-class permission or an internal
+	// storage/evaluation scope.
+	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
 	// The scope used to store exception rules for this scope.
 	ExclusionScope *string `form:"exclusion_scope,omitempty" json:"exclusion_scope,omitempty" xml:"exclusion_scope,omitempty"`
 }
@@ -15173,14 +15176,22 @@ func ValidateScopeDefinitionResponseBody(body *ScopeDefinitionResponseBody) (err
 	if body.ResourceType == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("resource_type", "body"))
 	}
+	if body.Visibility == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("visibility", "body"))
+	}
 	if body.Slug != nil {
-		if !(*body.Slug == "org:read" || *body.Slug == "org:admin" || *body.Slug == "project:read" || *body.Slug == "project:write" || *body.Slug == "mcp:read" || *body.Slug == "mcp:write" || *body.Slug == "mcp:connect" || *body.Slug == "environment:read" || *body.Slug == "environment:write" || *body.Slug == "risk_policy:evaluate" || *body.Slug == "risk_policy:bypass") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.slug", *body.Slug, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass"}))
+		if !(*body.Slug == "org:read" || *body.Slug == "org:blocked_read" || *body.Slug == "org:admin" || *body.Slug == "org:blocked_admin" || *body.Slug == "project:read" || *body.Slug == "project:blocked_read" || *body.Slug == "project:write" || *body.Slug == "project:blocked_write" || *body.Slug == "mcp:read" || *body.Slug == "mcp:blocked_read" || *body.Slug == "mcp:write" || *body.Slug == "mcp:blocked_write" || *body.Slug == "mcp:connect" || *body.Slug == "mcp:blocked_connect" || *body.Slug == "environment:read" || *body.Slug == "environment:blocked_read" || *body.Slug == "environment:write" || *body.Slug == "environment:blocked_write" || *body.Slug == "risk_policy:evaluate" || *body.Slug == "risk_policy:bypass") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.slug", *body.Slug, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "risk_policy:evaluate", "risk_policy:bypass"}))
 		}
 	}
 	if body.ResourceType != nil {
 		if !(*body.ResourceType == "org" || *body.ResourceType == "project" || *body.ResourceType == "mcp" || *body.ResourceType == "environment" || *body.ResourceType == "risk_policy") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_type", *body.ResourceType, []any{"org", "project", "mcp", "environment", "risk_policy"}))
+		}
+	}
+	if body.Visibility != nil {
+		if !(*body.Visibility == "user_visible" || *body.Visibility == "internal") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"user_visible", "internal"}))
 		}
 	}
 	if body.ExclusionScope != nil {
@@ -15230,8 +15241,8 @@ func ValidateListRoleGrantResponseBody(body *ListRoleGrantResponseBody) (err err
 		}
 	}
 	for _, e := range body.SubScopes {
-		if !(e == "org:read" || e == "org:admin" || e == "project:read" || e == "project:write" || e == "mcp:read" || e == "mcp:write" || e == "mcp:connect" || e == "environment:read" || e == "environment:write" || e == "risk_policy:evaluate" || e == "risk_policy:bypass") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sub_scopes[*]", e, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "risk_policy:evaluate", "risk_policy:bypass"}))
+		if !(e == "org:read" || e == "org:blocked_read" || e == "org:admin" || e == "org:blocked_admin" || e == "project:read" || e == "project:blocked_read" || e == "project:write" || e == "project:blocked_write" || e == "mcp:read" || e == "mcp:blocked_read" || e == "mcp:write" || e == "mcp:blocked_write" || e == "mcp:connect" || e == "mcp:blocked_connect" || e == "environment:read" || e == "environment:blocked_read" || e == "environment:write" || e == "environment:blocked_write" || e == "risk_policy:evaluate" || e == "risk_policy:bypass") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sub_scopes[*]", e, []any{"org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "risk_policy:evaluate", "risk_policy:bypass"}))
 		}
 	}
 	for _, e := range body.Selectors {

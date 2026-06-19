@@ -222,8 +222,9 @@ func (s *Service) DeleteRole(ctx context.Context, payload *gen.DeleteRolePayload
 	return nil
 }
 
-// ListScopes exposes the stable set of user-visible scopes so clients can build
-// role editing UX without hardcoding permission definitions.
+// ListScopes exposes the stable scope catalog so clients can build role editing
+// UX without hardcoding permission definitions. Clients should use visibility
+// to decide whether a scope is shown directly or only used as storage metadata.
 func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*gen.ListScopesResult, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
@@ -237,32 +238,58 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		attr.UserID(ac.UserID),
 	)
 
-	return &gen.ListScopesResult{Scopes: []*gen.ScopeDefinition{
-		scopeDefinition(authz.ScopeOrgRead, "Read organization metadata and members.", "org"),
-		scopeDefinition(authz.ScopeOrgAdmin, "Manage organization access and settings.", "org"),
-		scopeDefinition(authz.ScopeProjectRead, "View projects and project-related resources.", "project"),
-		scopeDefinition(authz.ScopeProjectWrite, "Create and modify projects and project-related resources.", "project"),
-		scopeDefinition(authz.ScopeMCPRead, "View MCP servers and configuration.", "mcp"),
-		scopeDefinition(authz.ScopeMCPWrite, "Create and modify MCP servers and configuration.", "mcp"),
-		scopeDefinition(authz.ScopeMCPConnect, "Connect to and use MCP servers.", "mcp"),
-		scopeDefinition(authz.ScopeEnvironmentRead, "View environments and their entries within the project.", "environment"),
-		scopeDefinition(authz.ScopeEnvironmentWrite, "Add, edit, clone, and remove environments within the project.", "environment"),
-		scopeDefinition(authz.ScopeRiskPolicyEvaluate, "Evaluate risk policies.", "risk_policy"),
-		scopeDefinition(authz.ScopeRiskPolicyBypass, "Bypass risk policies.", "risk_policy"),
-	}}, nil
+	scopes := []scopeDefinitionInput{
+		{scope: authz.ScopeOrgRead, description: "Read organization metadata and members.", resourceType: "org"},
+		{scope: authz.ScopeOrgBlockedRead, description: "Store exceptions for organization read access.", resourceType: "org"},
+		{scope: authz.ScopeOrgAdmin, description: "Manage organization access and settings.", resourceType: "org"},
+		{scope: authz.ScopeOrgBlockedAdmin, description: "Store exceptions for organization admin access.", resourceType: "org"},
+		{scope: authz.ScopeProjectRead, description: "View projects and project-related resources.", resourceType: "project"},
+		{scope: authz.ScopeProjectBlockedRead, description: "Store exceptions for project read access.", resourceType: "project"},
+		{scope: authz.ScopeProjectWrite, description: "Create and modify projects and project-related resources.", resourceType: "project"},
+		{scope: authz.ScopeProjectBlockedWrite, description: "Store exceptions for project write access.", resourceType: "project"},
+		{scope: authz.ScopeMCPRead, description: "View MCP servers and configuration.", resourceType: "mcp"},
+		{scope: authz.ScopeMCPBlockedRead, description: "Store exceptions for MCP read access.", resourceType: "mcp"},
+		{scope: authz.ScopeMCPWrite, description: "Create and modify MCP servers and configuration.", resourceType: "mcp"},
+		{scope: authz.ScopeMCPBlockedWrite, description: "Store exceptions for MCP write access.", resourceType: "mcp"},
+		{scope: authz.ScopeMCPConnect, description: "Connect to and use MCP servers.", resourceType: "mcp"},
+		{scope: authz.ScopeMCPBlockedConnect, description: "Store exceptions for MCP connect access.", resourceType: "mcp"},
+		{scope: authz.ScopeEnvironmentRead, description: "View environments and their entries within the project.", resourceType: "environment"},
+		{scope: authz.ScopeEnvironmentBlockedRead, description: "Store exceptions for environment read access.", resourceType: "environment"},
+		{scope: authz.ScopeEnvironmentWrite, description: "Add, edit, clone, and remove environments within the project.", resourceType: "environment"},
+		{scope: authz.ScopeEnvironmentBlockedWrite, description: "Store exceptions for environment write access.", resourceType: "environment"},
+		{scope: authz.ScopeRiskPolicyEvaluate, description: "Evaluate risk policies.", resourceType: "risk_policy"},
+		{scope: authz.ScopeRiskPolicyBypass, description: "Bypass risk policies.", resourceType: "risk_policy"},
+	}
+	result := make([]*gen.ScopeDefinition, 0, len(scopes))
+	for _, scope := range scopes {
+		result = append(result, scopeDefinition(scope))
+	}
+
+	return &gen.ListScopesResult{Scopes: result}, nil
 }
 
-func scopeDefinition(scope authz.Scope, description string, resourceType string) *gen.ScopeDefinition {
+type scopeDefinitionInput struct {
+	scope        authz.Scope
+	description  string
+	resourceType string
+}
+
+func scopeDefinition(input scopeDefinitionInput) *gen.ScopeDefinition {
 	var exclusionScope *string
-	if exclusion, ok := authz.ExclusionScopeFor(scope); ok {
+	if exclusion, ok := authz.ExclusionScopeFor(input.scope); ok {
 		exclusionScopeValue := string(exclusion)
 		exclusionScope = &exclusionScopeValue
 	}
+	visibility, ok := authz.ScopeVisibilityFor(input.scope)
+	if !ok {
+		visibility = authz.ScopeVisibilityInternal
+	}
 
 	return &gen.ScopeDefinition{
-		Slug:           string(scope),
-		Description:    description,
-		ResourceType:   resourceType,
+		Slug:           string(input.scope),
+		Description:    input.description,
+		ResourceType:   input.resourceType,
+		Visibility:     visibility,
 		ExclusionScope: exclusionScope,
 	}
 }

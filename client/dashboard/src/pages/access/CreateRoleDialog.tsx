@@ -153,6 +153,14 @@ export function CreateRoleDialog({
     a.name.localeCompare(b.name),
   );
   const { data: scopesData } = useListScopes();
+  const scopeDefinitions = scopesData?.scopes;
+  const userVisibleScopeDefinitions = useMemo(
+    () =>
+      (scopeDefinitions ?? []).filter(
+        (scope) => scope.visibility === "user_visible",
+      ),
+    [scopeDefinitions],
+  );
 
   const projectList = useMemo(
     () => organization.projects.map((p) => ({ id: p.id, name: p.name })),
@@ -160,7 +168,6 @@ export function CreateRoleDialog({
   );
 
   const scopeGroups = useMemo(() => {
-    const scopes = scopesData?.scopes ?? [];
     const groupOrder: { label: string; resourceType: string }[] = [
       { label: "Organization", resourceType: "org" },
       { label: "Build & Deploy", resourceType: "project" },
@@ -169,9 +176,11 @@ export function CreateRoleDialog({
     ];
     return groupOrder.map((g) => ({
       ...g,
-      scopes: scopes.filter((s) => s.resourceType === g.resourceType),
+      scopes: userVisibleScopeDefinitions.filter(
+        (s) => s.resourceType === g.resourceType,
+      ),
     }));
-  }, [scopesData]);
+  }, [userVisibleScopeDefinitions]);
 
   // ─── Initialize when editing ──────────────────────────────────
   if (editingRole && !initialized && scopesData && membersData) {
@@ -241,21 +250,23 @@ export function CreateRoleDialog({
   );
   const grantCount = effectiveGrantCount(visibleGrants);
 
-  const saveDisabled = isSaveDisabled({
-    isMutating,
-    isEditing,
-    isSystemRole,
-    name,
-    description,
-    grants,
-    selectedMembers,
-    initial: {
-      name: initialName,
-      description: initialDescription,
-      grantKeys: initialGrantKeys,
-      members: initialMembers,
-    },
-  });
+  const saveDisabled =
+    !scopeDefinitions ||
+    isSaveDisabled({
+      isMutating,
+      isEditing,
+      isSystemRole,
+      name,
+      description,
+      grants,
+      selectedMembers,
+      initial: {
+        name: initialName,
+        description: initialDescription,
+        grantKeys: initialGrantKeys,
+        members: initialMembers,
+      },
+    });
 
   // ─── Scope / grant operations ─────────────────────────────────
 
@@ -434,7 +445,8 @@ export function CreateRoleDialog({
   // ─── Submit ───────────────────────────────────────────────────
 
   const handleSubmit = () => {
-    const scopeDefinitions = scopesData?.scopes ?? [];
+    if (!scopeDefinitions) return;
+
     const sdkGrants = sdkGrantsFromForm(grants, scopeDefinitions);
 
     if (isEditing) {

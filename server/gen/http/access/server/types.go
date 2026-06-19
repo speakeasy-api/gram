@@ -4681,6 +4681,9 @@ type ScopeDefinitionResponseBody struct {
 	Description string `form:"description" json:"description" xml:"description"`
 	// The type of resource this scope applies to.
 	ResourceType string `form:"resource_type" json:"resource_type" xml:"resource_type"`
+	// Whether this scope is a first-class permission or an internal
+	// storage/evaluation scope.
+	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
 	// The scope used to store exception rules for this scope.
 	ExclusionScope *string `form:"exclusion_scope,omitempty" json:"exclusion_scope,omitempty" xml:"exclusion_scope,omitempty"`
 }

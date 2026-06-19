@@ -45,6 +45,11 @@ const (
 	scopeVisibilityInternal
 )
 
+const (
+	ScopeVisibilityUserVisible = "user_visible"
+	ScopeVisibilityInternal    = "internal"
+)
+
 var adminScopes = []Scope{
 	ScopeOrgRead,
 	ScopeOrgAdmin,
@@ -99,6 +104,22 @@ func (s Scope) Parts() ScopeParts {
 	}
 
 	return ScopeParts{Resource: resource, Action: action}
+}
+
+func ScopeVisibilityFor(scope Scope) (string, bool) {
+	visibility, ok := scopeVisibilityByScope[scope]
+	if !ok {
+		return "", false
+	}
+
+	switch visibility {
+	case scopeVisibilityUserVisible:
+		return ScopeVisibilityUserVisible, true
+	case scopeVisibilityInternal:
+		return ScopeVisibilityInternal, true
+	default:
+		return "", false
+	}
 }
 
 // scopeExpansions maps a checked scope to the other scopes that also satisfy

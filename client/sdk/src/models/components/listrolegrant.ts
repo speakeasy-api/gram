@@ -42,14 +42,23 @@ export type ListRoleGrantScope = ClosedEnum<typeof ListRoleGrantScope>;
 
 export const SubScopes = {
   OrgRead: "org:read",
+  OrgBlockedRead: "org:blocked_read",
   OrgAdmin: "org:admin",
+  OrgBlockedAdmin: "org:blocked_admin",
   ProjectRead: "project:read",
+  ProjectBlockedRead: "project:blocked_read",
   ProjectWrite: "project:write",
+  ProjectBlockedWrite: "project:blocked_write",
   McpRead: "mcp:read",
+  McpBlockedRead: "mcp:blocked_read",
   McpWrite: "mcp:write",
+  McpBlockedWrite: "mcp:blocked_write",
   McpConnect: "mcp:connect",
+  McpBlockedConnect: "mcp:blocked_connect",
   EnvironmentRead: "environment:read",
+  EnvironmentBlockedRead: "environment:blocked_read",
   EnvironmentWrite: "environment:write",
+  EnvironmentBlockedWrite: "environment:blocked_write",
   RiskPolicyEvaluate: "risk_policy:evaluate",
   RiskPolicyBypass: "risk_policy:bypass",
 } as const;

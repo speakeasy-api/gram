@@ -49,14 +49,23 @@ export type ResourceType = ClosedEnum<typeof ResourceType>;
  */
 export const Slug = {
   OrgRead: "org:read",
+  OrgBlockedRead: "org:blocked_read",
   OrgAdmin: "org:admin",
+  OrgBlockedAdmin: "org:blocked_admin",
   ProjectRead: "project:read",
+  ProjectBlockedRead: "project:blocked_read",
   ProjectWrite: "project:write",
+  ProjectBlockedWrite: "project:blocked_write",
   McpRead: "mcp:read",
+  McpBlockedRead: "mcp:blocked_read",
   McpWrite: "mcp:write",
+  McpBlockedWrite: "mcp:blocked_write",
   McpConnect: "mcp:connect",
+  McpBlockedConnect: "mcp:blocked_connect",
   EnvironmentRead: "environment:read",
+  EnvironmentBlockedRead: "environment:blocked_read",
   EnvironmentWrite: "environment:write",
+  EnvironmentBlockedWrite: "environment:blocked_write",
   RiskPolicyEvaluate: "risk_policy:evaluate",
   RiskPolicyBypass: "risk_policy:bypass",
 } as const;
@@ -64,6 +73,18 @@ export const Slug = {
  * Unique scope identifier.
  */
 export type Slug = ClosedEnum<typeof Slug>;
+
+/**
+ * Whether this scope is a first-class permission or an internal storage/evaluation scope.
+ */
+export const Visibility = {
+  UserVisible: "user_visible",
+  Internal: "internal",
+} as const;
+/**
+ * Whether this scope is a first-class permission or an internal storage/evaluation scope.
+ */
+export type Visibility = ClosedEnum<typeof Visibility>;
 
 export type ScopeDefinition = {
   /**
@@ -82,6 +103,10 @@ export type ScopeDefinition = {
    * Unique scope identifier.
    */
   slug: Slug;
+  /**
+   * Whether this scope is a first-class permission or an internal storage/evaluation scope.
+   */
+  visibility: Visibility;
 };
 
 /** @internal */
@@ -97,6 +122,10 @@ export const ResourceType$inboundSchema: z.ZodMiniEnum<typeof ResourceType> = z
 export const Slug$inboundSchema: z.ZodMiniEnum<typeof Slug> = z.enum(Slug);
 
 /** @internal */
+export const Visibility$inboundSchema: z.ZodMiniEnum<typeof Visibility> = z
+  .enum(Visibility);
+
+/** @internal */
 export const ScopeDefinition$inboundSchema: z.ZodMiniType<
   ScopeDefinition,
   unknown
@@ -106,6 +135,7 @@ export const ScopeDefinition$inboundSchema: z.ZodMiniType<
     exclusion_scope: z.optional(ExclusionScope$inboundSchema),
     resource_type: ResourceType$inboundSchema,
     slug: Slug$inboundSchema,
+    visibility: Visibility$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

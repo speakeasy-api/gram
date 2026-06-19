@@ -588,6 +588,9 @@ type ScopeDefinition struct {
 	Description string
 	// The type of resource this scope applies to.
 	ResourceType string
+	// Whether this scope is a first-class permission or an internal
+	// storage/evaluation scope.
+	Visibility string
 	// The scope used to store exception rules for this scope.
 	ExclusionScope *string
 }
