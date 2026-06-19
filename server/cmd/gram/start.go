@@ -722,7 +722,7 @@ func newStartCommand() *cli.Command {
 			chatWriter, chatWriterShutdown := chat.NewChatMessageWriter(logger, db, assetStorage)
 			shutdownFuncs = append(shutdownFuncs, chatWriterShutdown)
 
-			captureStrategy := chat.NewChatMessageCaptureStrategy(logger, db, chatWriter)
+			captureStrategy := chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter)
 
 			completionsClient := openrouter.NewUnifiedClient(
 				logger,
