@@ -12,9 +12,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
+import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { InsightsConfig } from "@/components/insights-dock";
+import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { useSlugs } from "@/contexts/Sdk";
+import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import {
   type CostEntityLevel,
   costExplorerSuggestions,
@@ -153,6 +156,7 @@ export function CostsExplorer(): JSX.Element {
   // while loading/empty: availableDims is undefined and nothing gets hidden.
   const { data: attrKeysData } = useQuery({
     queryKey: ["costs-attr-keys", from.toISOString(), to.toISOString()],
+    throwOnError: false,
     queryFn: () =>
       unwrapAsync(
         telemetryListAttributeKeys(client, {
@@ -169,30 +173,39 @@ export function CostsExplorer(): JSX.Element {
     ? byParam
     : defaultGroupBy(path, availableDims);
 
-  const { data, isFetching, isError } = useQuery({
-    queryKey: [
-      "costs-explorer",
-      from.toISOString(),
-      to.toISOString(),
-      groupBy,
-      filters,
-    ],
-    queryFn: () =>
-      unwrapAsync(
-        telemetryQuery(client, {
-          queryPayload: {
-            from,
-            to,
-            groupBy: groupBy as GroupBy,
-            sortBy: "total_cost",
-            topN: 100,
-            // Daily buckets → ~30 points per group for the row trend sparklines.
-            granularitySeconds: 86400,
-            filters: filters.length ? filters : undefined,
-          },
-        }),
-      ),
-  });
+  // The primary query also doubles as the logs-enabled probe: telemetry.query
+  // returns 404 when logging is off for the org. Opt out of the app-wide
+  // throw-to-error-boundary policy (Sdk.tsx) so that 404 lands in `error`
+  // instead of crashing the page, then derive `isLogsDisabled` from it to show
+  // the shared EnableLoggingOverlay — same pattern as the Logs/Agents pages.
+  const { data, isFetching, isError, refetch, isLogsDisabled } =
+    useLogsEnabledErrorCheck(
+      useQuery({
+        queryKey: [
+          "costs-explorer",
+          from.toISOString(),
+          to.toISOString(),
+          groupBy,
+          filters,
+        ],
+        throwOnError: false,
+        queryFn: () =>
+          unwrapAsync(
+            telemetryQuery(client, {
+              queryPayload: {
+                from,
+                to,
+                groupBy: groupBy as GroupBy,
+                sortBy: "total_cost",
+                topN: 100,
+                // Daily buckets → ~30 points per group for the row trend sparklines.
+                granularitySeconds: 86400,
+                filters: filters.length ? filters : undefined,
+              },
+            }),
+          ),
+      }),
+    );
 
   // The current entity's own attributes: a no-group_by query over the same
   // filters returns a single aggregate row whose dimension_values are this
@@ -206,6 +219,7 @@ export function CostsExplorer(): JSX.Element {
       filters,
     ],
     enabled: path.length > 0,
+    throwOnError: false,
     queryFn: () =>
       unwrapAsync(
         telemetryQuery(client, {
@@ -234,6 +248,7 @@ export function CostsExplorer(): JSX.Element {
       groupBy,
       filters,
     ],
+    throwOnError: false,
     queryFn: () =>
       unwrapAsync(
         telemetryQuery(client, {
@@ -332,6 +347,7 @@ export function CostsExplorer(): JSX.Element {
       filters,
     ],
     enabled: !!mixDimA,
+    throwOnError: false,
     queryFn: () =>
       unwrapAsync(
         telemetryQuery(client, {
@@ -355,6 +371,7 @@ export function CostsExplorer(): JSX.Element {
       filters,
     ],
     enabled: !!mixDimB,
+    throwOnError: false,
     queryFn: () =>
       unwrapAsync(
         telemetryQuery(client, {
@@ -487,7 +504,9 @@ export function CostsExplorer(): JSX.Element {
     // drilling stays enabled and never blocks prematurely.)
     const next = nextAvailableDimension(dim, availableDims);
     if (next === null) return;
-    if (value === "" || value === "Other") return;
+    // "" (the "(unset)" bucket) is drillable — it filters to the entities
+    // missing this attribute. Only "Other" (the synthetic top-N rollup) isn't.
+    if (value === "Other") return;
     goToNode([...path, { dim, value }], next);
   };
 
@@ -577,7 +596,7 @@ export function CostsExplorer(): JSX.Element {
       onCustomRangeChange={setCustomRangeParam}
       onClearCustomRange={clearCustomRange}
       projectSlug={projectSlug}
-      className="py-1"
+      className="bg-background py-1"
     />
   );
 
@@ -592,6 +611,35 @@ export function CostsExplorer(): JSX.Element {
       loading={isFetching && !data}
     />
   );
+
+  // Logging off for the org → no cost data exists. Show the shared enable
+  // overlay over a skeleton instead of an empty/broken profile, and hide the
+  // assistant dock (its prompts assume populated numbers). Enabling refetches.
+  if (isLogsDisabled) {
+    return (
+      <>
+        <InsightsConfig hideTrigger />
+        <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
+          <div className="flex min-w-0 flex-col gap-1">
+            <h1 className="text-xl font-semibold">Costs</h1>
+            <p className="text-muted-foreground text-sm">
+              Break down AI spend across your organization by division,
+              department, user, agent, and model.
+            </p>
+          </div>
+          <div className="relative flex-1">
+            <div
+              className="pointer-events-none h-full select-none"
+              aria-hidden="true"
+            >
+              <ObservabilitySkeleton />
+            </div>
+            <EnableLoggingOverlay onEnabled={() => void refetch()} />
+          </div>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
