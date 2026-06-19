@@ -30,15 +30,22 @@ function displayOrDash(value: string | undefined): string {
   return value && value.length > 0 ? value : "—";
 }
 
-// Unix-nanosecond string → "3 hours ago". Returns "" on a malformed timestamp
-// so a bad row degrades to blank rather than throwing.
-function relativeTime(unixNano: string): string {
+// Unix-nanosecond string → epoch millis, 0 on a malformed value. Shared by the
+// sort comparator and the relative-time label so neither throws on bad input.
+function nanosToMillis(unixNano: string): number {
   try {
-    const millis = Number(BigInt(unixNano) / 1_000_000n);
-    return formatDistanceToNow(new Date(millis), { addSuffix: true });
+    return Number(BigInt(unixNano) / 1_000_000n);
   } catch {
-    return "";
+    return 0;
   }
+}
+
+// Unix-nanosecond string → "3 hours ago". Blank on a malformed/zero timestamp
+// so a bad row degrades gracefully rather than rendering the epoch.
+function relativeTime(unixNano: string): string {
+  const millis = nanosToMillis(unixNano);
+  if (millis === 0) return "";
+  return formatDistanceToNow(new Date(millis), { addSuffix: true });
 }
 
 function durationLabel(session: SessionSummary): string {
@@ -88,7 +95,7 @@ export function SessionTable({
         id: "session",
         header: "Session",
         sortable: true,
-        sortValue: (s) => Number(BigInt(s.startTimeUnixNano) / 1_000_000n),
+        sortValue: (s) => nanosToMillis(s.startTimeUnixNano),
         width: "1.4fr",
         render: (s) => (
           <div className="flex min-w-0 flex-col">

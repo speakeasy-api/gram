@@ -59,7 +59,7 @@ export const LABELS: Record<string, string> = {
 // something you break down further. Drilling a row here jumps straight to that
 // slice's individual sessions (the SESSIONS_AXIS list) instead of another
 // dimension breakdown.
-export const SESSION_LEAF_DIMS = new Set<Dimension>([
+const SESSION_LEAF_DIMS = new Set<Dimension>([
   Dimension.HookSource,
   Dimension.Model,
 ]);

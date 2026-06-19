@@ -186,6 +186,10 @@ export function CostsExplorer(): JSX.Element {
   // result. Drive useQuery directly with a key that encodes the payload.
   const client = useGramContext();
 
+  // Project-scoped queries wait until the active project id resolves, so they
+  // never run org-wide (without the project_id filter) during the first paint.
+  const projectReady = Boolean(project.id);
+
   // Which dimensions the org actually has data for in this range — drives both
   // the breakdown dropdown (hide empties) and the default axis (so a customer
   // whose IDP omits the default chain doesn't land on an empty view). Fail open
@@ -224,6 +228,7 @@ export function CostsExplorer(): JSX.Element {
           groupBy,
           filters,
         ],
+        enabled: projectReady,
         throwOnError: false,
         queryFn: () =>
           unwrapAsync(
@@ -243,6 +248,10 @@ export function CostsExplorer(): JSX.Element {
       }),
     );
 
+  // Treat "project not resolved yet" as loading, so the skeleton shows instead
+  // of an empty "no data" flash before the project-scoped queries enable.
+  const loadingSlice = (!projectReady || isFetching) && !data;
+
   // The current entity's own attributes: a no-group_by query over the same
   // filters returns a single aggregate row whose dimension_values are this
   // entity's distinct division/department/job_title/roles/etc. Only meaningful
@@ -254,7 +263,7 @@ export function CostsExplorer(): JSX.Element {
       to.toISOString(),
       filters,
     ],
-    enabled: path.length > 0,
+    enabled: projectReady && path.length > 0,
     throwOnError: false,
     queryFn: () =>
       unwrapAsync(
@@ -284,6 +293,7 @@ export function CostsExplorer(): JSX.Element {
       groupBy,
       filters,
     ],
+    enabled: projectReady,
     throwOnError: false,
     queryFn: () =>
       unwrapAsync(
@@ -316,7 +326,7 @@ export function CostsExplorer(): JSX.Element {
       filters,
       "total_cost",
     ],
-    enabled: sessionsMode,
+    enabled: projectReady && sessionsMode,
     throwOnError: false,
     queryFn: () =>
       unwrapAsync(
@@ -342,7 +352,7 @@ export function CostsExplorer(): JSX.Element {
       to.toISOString(),
       filters,
     ],
-    enabled: showSessionsWidget,
+    enabled: projectReady && showSessionsWidget,
     throwOnError: false,
     queryFn: () =>
       unwrapAsync(
@@ -440,7 +450,7 @@ export function CostsExplorer(): JSX.Element {
       mixDimA,
       filters,
     ],
-    enabled: !!mixDimA,
+    enabled: projectReady && !!mixDimA,
     throwOnError: false,
     queryFn: () =>
       unwrapAsync(
@@ -464,7 +474,7 @@ export function CostsExplorer(): JSX.Element {
       mixDimB,
       filters,
     ],
-    enabled: !!mixDimB,
+    enabled: projectReady && !!mixDimB,
     throwOnError: false,
     queryFn: () =>
       unwrapAsync(
@@ -506,7 +516,7 @@ export function CostsExplorer(): JSX.Element {
         dim: Dimension.Email,
         drillable: drillableDim(Dimension.Email),
         rows: toRows(userRows),
-        loading: isFetching && !data,
+        loading: loadingSlice,
       });
     }
     if (mixDimA) {
@@ -535,7 +545,7 @@ export function CostsExplorer(): JSX.Element {
     const sessions = stats.sessions;
     const perSession = (n: number) => (sessions > 0 ? n / sessions : null);
     const caption = `across ${sessions.toLocaleString()} sessions`;
-    const loading = isFetching && !data;
+    const loading = loadingSlice;
     const fillers: CardSpec[] = [
       {
         kind: "stat",
@@ -584,7 +594,7 @@ export function CostsExplorer(): JSX.Element {
     availableDims,
     stats,
     data,
-    isFetching,
+    loadingSlice,
   ]);
 
   // Filter by a (dimension, value) and advance to that dimension's child axis.
@@ -748,7 +758,7 @@ export function CostsExplorer(): JSX.Element {
       rangeLabel={formatDateRange(from, to)}
       onDrill={drillIntoDim}
       onOpenSession={setOpenChatId}
-      loading={isFetching && !data}
+      loading={loadingSlice}
     />
   );
 
@@ -818,7 +828,7 @@ export function CostsExplorer(): JSX.Element {
         seriesByGroup={seriesByGroup}
         rangePicker={rangePicker}
         rangeLabel={formatDateRange(from, to)}
-        isLoading={isFetching && !data}
+        isLoading={loadingSlice}
         isError={isError}
       />
       {/* Interim session drilldown: the existing project-scoped chat trace
@@ -832,6 +842,13 @@ export function CostsExplorer(): JSX.Element {
             {
               onSuccess: () => {
                 void invalidateAllListChats(queryClient);
+                // Deleting a chat removes a session, so refresh every cost query
+                // (totals, breakdowns, session list + widget) — not just chats.
+                void queryClient.invalidateQueries({
+                  predicate: (query) =>
+                    typeof query.queryKey[0] === "string" &&
+                    query.queryKey[0].startsWith("costs-explorer"),
+                });
                 setOpenChatId(null);
               },
             },

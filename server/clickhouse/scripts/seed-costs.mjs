@@ -684,12 +684,12 @@ function discoverProjectIds() {
   return ids;
 }
 
-// The organization_id of the same top org discoverProjectIds() targets — needed
-// for the (NOT NULL) chats.organization_id column.
-function discoverOrgId() {
-  const q =
-    "SELECT organization_id FROM projects GROUP BY organization_id " +
-    "ORDER BY count(*) DESC LIMIT 1;";
+// The organization_id that owns a discovered project — needed for the (NOT NULL)
+// chats.organization_id column. Derived from one of the project ids we actually
+// seed (not a second independent "top org" query), so a tie in project counts
+// can't drift the org away from the projects the chats reference.
+function discoverOrgId(projectId) {
+  const q = `SELECT organization_id FROM projects WHERE id = '${sql(projectId)}' LIMIT 1;`;
   const out = execFileSync(
     "docker",
     ["exec", PG_CONTAINER, "psql", "-U", "gram", "-d", "gram", "-tA", "-c", q],
@@ -697,7 +697,7 @@ function discoverOrgId() {
   );
   const id = out.trim().split("\n")[0]?.trim();
   if (!id) {
-    console.error("No organization found in local Postgres.");
+    console.error("No organization found for project in local Postgres.");
     process.exit(1);
   }
   return id;
@@ -708,7 +708,7 @@ function discoverOrgId() {
 // keeps re-runs idempotent. Messages aren't seeded; the detail view still shows
 // the session's telemetry logs (searchLogs keys on gram_chat_id).
 function seedChats() {
-  const orgId = discoverOrgId();
+  const orgId = discoverOrgId(projectIds[0]);
   const values = chatRecords.map((c) => {
     const iso = new Date(c.tsMs).toISOString();
     return `('${c.id}', '${c.projectId}', '${sql(orgId)}', '${sql(c.userId)}', '${sql(c.title)}', '${iso}', '${iso}')`;
