@@ -84,8 +84,8 @@ func TestGeneratePluginPackagesProducesExpectedFiles(t *testing.T) {
 		".agents/plugins/marketplace.json",
 		"engineering-tools/.claude-plugin/plugin.json",
 		"engineering-tools/.mcp.json",
-		"engineering-tools-cursor/.cursor-plugin/plugin.json",
-		"engineering-tools-cursor/mcp.json",
+		"cursor-plugins/engineering-tools-cursor/.cursor-plugin/plugin.json",
+		"cursor-plugins/engineering-tools-cursor/mcp.json",
 		"engineering-tools-codex/.codex-plugin/plugin.json",
 		"engineering-tools-codex/.mcp.json",
 	}
@@ -144,7 +144,7 @@ func TestGenerateCursorMCPConfigUsesEnvSyntax(t *testing.T) {
 	require.NoError(t, err)
 
 	var mcpConfig cursorMCPConfig
-	err = json.Unmarshal(files["test-cursor/mcp.json"], &mcpConfig)
+	err = json.Unmarshal(files["cursor-plugins/test-cursor/mcp.json"], &mcpConfig)
 	require.NoError(t, err)
 
 	server := mcpConfig.MCPServers["gram-server"]
@@ -203,7 +203,7 @@ func TestGenerateCursorOAuthServerEmitsURLWithNoHeaders(t *testing.T) {
 	require.NoError(t, err)
 
 	var mcpConfig cursorMCPConfig
-	err = json.Unmarshal(files["test-cursor/mcp.json"], &mcpConfig)
+	err = json.Unmarshal(files["cursor-plugins/test-cursor/mcp.json"], &mcpConfig)
 	require.NoError(t, err)
 
 	server := mcpConfig.MCPServers["oauth-server"]
@@ -582,8 +582,10 @@ func TestGenerateMarketplaceManifest(t *testing.T) {
 
 	require.Equal(t, "acme-speakeasy", cursorManifest.Name)
 	require.Len(t, cursorManifest.Plugins, 2)
-	require.Equal(t, "./a-cursor", cursorManifest.Plugins[0].Source)
-	require.Equal(t, "./b-cursor", cursorManifest.Plugins[1].Source)
+	require.NotNil(t, cursorManifest.Metadata)
+	require.Equal(t, "cursor-plugins", cursorManifest.Metadata.PluginRoot)
+	require.Equal(t, "a-cursor", cursorManifest.Plugins[0].Source)
+	require.Equal(t, "b-cursor", cursorManifest.Plugins[1].Source)
 }
 
 func TestGenerateMarketplaceManifestUsesMarketplaceNameOverride(t *testing.T) {
@@ -820,7 +822,7 @@ func TestGenerateObservabilityPluginsIncludeIdentityHelper(t *testing.T) {
 
 	for _, path := range []string{
 		ClaudeObservabilitySlug(cfg) + "/hooks/identity.sh",
-		CursorObservabilitySlug(cfg) + "/hooks/identity.sh",
+		"cursor-plugins/" + CursorObservabilitySlug(cfg) + "/hooks/identity.sh",
 		CodexObservabilitySlug(cfg) + "/hooks/identity.sh",
 	} {
 		require.NotNil(t, files[path], "observability identity helper missing: %s", path)
@@ -1280,10 +1282,10 @@ func TestGeneratePluginPackagesStampsConfigVersionIntoEveryManifest(t *testing.T
 	// the supplied version.
 	manifestPaths := []string{
 		"engineering-tools/.claude-plugin/plugin.json",
-		"engineering-tools-cursor/.cursor-plugin/plugin.json",
+		"cursor-plugins/engineering-tools-cursor/.cursor-plugin/plugin.json",
 		"engineering-tools-codex/.codex-plugin/plugin.json",
 		"acme-observability/.claude-plugin/plugin.json",
-		"acme-observability-cursor/.cursor-plugin/plugin.json",
+		"cursor-plugins/acme-observability-cursor/.cursor-plugin/plugin.json",
 		"acme-observability-codex/.codex-plugin/plugin.json",
 	}
 	for _, p := range manifestPaths {

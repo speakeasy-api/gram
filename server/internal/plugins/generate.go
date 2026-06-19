@@ -215,6 +215,11 @@ var CursorObservabilityHookEvents = []string{
 	"afterMCPExecution",
 }
 
+// cursorPluginRoot is the subdirectory under which all Cursor plugins are
+// grouped in a published repo. Declared via marketplace.json's metadata.pluginRoot
+// so plugin sources can be referenced by bare name relative to this root.
+const cursorPluginRoot = "cursor-plugins"
+
 // GeneratePluginPackages produces the complete file map for a plugin distribution
 // repository containing Claude Code, Cursor, and Codex plugins. Used for GitHub push.
 func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[string][]byte, error) {
@@ -246,7 +251,7 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 		cursorObservability := CursorObservabilitySlug(cfg)
 		cursorPlugins = append(cursorPlugins, marketplaceEntry{
 			Name:        cursorObservability,
-			Source:      "./" + cursorObservability,
+			Source:      cursorObservability,
 			Description: "Required: Speakeasy observability hooks for " + cfg.OrgName + ".",
 		})
 		codexObservability := CodexObservabilitySlug(cfg)
@@ -280,7 +285,7 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 		})
 		cursorPlugins = append(cursorPlugins, marketplaceEntry{
 			Name:        p.Slug + "-cursor",
-			Source:      "./" + p.Slug + "-cursor",
+			Source:      p.Slug + "-cursor",
 			Description: p.Description,
 		})
 		codexPlugins = append(codexPlugins, codexMarketplaceEntry{
@@ -310,9 +315,10 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 	files[".claude-plugin/marketplace.json"] = claudeManifest
 
 	cursorManifest, err := marshalJSON(marketplaceManifest{
-		Name:    marketplaceName,
-		Owner:   owner,
-		Plugins: cursorPlugins,
+		Name:     marketplaceName,
+		Owner:    owner,
+		Metadata: &marketplaceMetadata{PluginRoot: cursorPluginRoot},
+		Plugins:  cursorPlugins,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal cursor marketplace.json: %w", err)
@@ -451,7 +457,8 @@ func generateClaudePlugin(files map[string][]byte, p PluginInfo, cfg GenerateCon
 }
 
 func generateCursorPlugin(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
-	return generateCursorPluginInDir(files, p.Slug+"-cursor", p.Slug+"-cursor", p, cfg)
+	name := p.Slug + "-cursor"
+	return generateCursorPluginInDir(files, path.Join(cursorPluginRoot, name), name, p, cfg)
 }
 
 func generateCodexPlugin(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
@@ -616,26 +623,23 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 // for Cursor. Same shape as the Claude variant but uses Cursor's hook event
 // names + script destination URL.
 func generateCursorObservabilityPlugin(files map[string][]byte, cfg GenerateConfig) error {
-	return generateCursorObservabilityPluginInDir(files, CursorObservabilitySlug(cfg), cfg)
+	name := CursorObservabilitySlug(cfg)
+	return generateCursorObservabilityPluginInDir(files, path.Join(cursorPluginRoot, name), name, cfg)
 }
 
 // generateCursorObservabilityPluginFlat emits the same files at the root
 // (no subdir) for direct ZIP installation.
 func generateCursorObservabilityPluginFlat(files map[string][]byte, cfg GenerateConfig) error {
-	return generateCursorObservabilityPluginInDir(files, "", cfg)
+	return generateCursorObservabilityPluginInDir(files, "", CursorObservabilitySlug(cfg), cfg)
 }
 
-func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir string, cfg GenerateConfig) error {
-	name := subdir
-	if name == "" {
-		name = CursorObservabilitySlug(cfg)
-	}
+func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir, name string, cfg GenerateConfig) error {
 	pluginJSON, err := marshalJSON(cursorPluginMeta{
 		Name:        name,
 		DisplayName: "Observability (Cursor)",
 		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
 		Version:     pluginManifestVersion(cfg),
-		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
+		Author:      cursorAuthor{Name: cfg.OrgName},
 		Homepage:    "https://getgram.ai",
 	})
 	if err != nil {
@@ -1760,7 +1764,7 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 		DisplayName: displayName,
 		Description: p.Description,
 		Version:     pluginManifestVersion(cfg),
-		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
+		Author:      cursorAuthor{Name: cfg.OrgName},
 		Homepage:    "https://getgram.ai",
 	})
 	if err != nil {
@@ -1802,9 +1806,17 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 // --- JSON types ---
 
 type marketplaceManifest struct {
-	Name    string             `json:"name"`
-	Owner   marketplaceOwner   `json:"owner"`
-	Plugins []marketplaceEntry `json:"plugins"`
+	Name     string               `json:"name"`
+	Owner    marketplaceOwner     `json:"owner"`
+	Metadata *marketplaceMetadata `json:"metadata,omitempty"`
+	Plugins  []marketplaceEntry   `json:"plugins"`
+}
+
+// marketplaceMetadata carries optional marketplace-level settings. Cursor uses
+// pluginRoot to declare the subdirectory that contains all plugins, letting
+// plugin sources be referenced by bare name relative to that root.
+type marketplaceMetadata struct {
+	PluginRoot string `json:"pluginRoot,omitempty"`
 }
 
 type marketplaceOwner struct {
@@ -1852,8 +1864,16 @@ type cursorPluginMeta struct {
 	DisplayName string       `json:"displayName"`
 	Description string       `json:"description"`
 	Version     string       `json:"version"`
-	Author      pluginAuthor `json:"author"`
+	Author      cursorAuthor `json:"author"`
 	Homepage    string       `json:"homepage"`
+}
+
+// cursorAuthor matches Cursor's documented plugin author schema (name + optional
+// email). Cursor does not recognize a url sub-field — the author URL belongs in
+// the top-level homepage/repository fields instead.
+type cursorAuthor struct {
+	Name  string `json:"name"`
+	Email string `json:"email,omitempty"`
 }
 
 type cursorMCPConfig struct {
