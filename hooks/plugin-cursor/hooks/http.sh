@@ -1,8 +1,7 @@
 # Shared retryable HTTP helper for Gram hook senders.
 #
-# Sourced (not executed) by every plugin's send_hook.sh / send_mcp_inventory.sh
-# so all plugins share one transport with identical retry and idempotency
-# behavior. Mirrors how identity.sh is copied per plugin.
+# Sourced (not executed) by every plugin's send/hook scripts so all plugins
+# share one transport with identical retry and idempotency behavior.
 #
 # Why retries are safe: the server de-duplicates on the per-invocation
 # Idempotency-Key header (see gram_http_post), so re-sending the same request
@@ -11,21 +10,18 @@
 # Usage:
 #   . "$script_dir/http.sh"
 #   gram_http_post "$url" "$payload" max_time [extra curl args...]
-#   # then read:
-#   $GRAM_HTTP_CODE   -> HTTP status string ("200", "000" on connect failure)
-#   $GRAM_HTTP_BODY   -> response body
+#   # then read $GRAM_HTTP_CODE (e.g. "200", "000") and $GRAM_HTTP_BODY.
 #
 # gram_http_post returns 0 once curl produced a definitive HTTP status (any
 # code, including 4xx/5xx — the caller decides allow/block from $GRAM_HTTP_CODE)
 # and non-zero only when every attempt failed to reach the server.
 
-# Number of total attempts (1 initial + retries) and base backoff in seconds.
 GRAM_HTTP_MAX_ATTEMPTS="${GRAM_HTTP_MAX_ATTEMPTS:-4}"
 GRAM_HTTP_BACKOFF_BASE="${GRAM_HTTP_BACKOFF_BASE:-1}"
 
-# gram_new_idempotency_token emits one token per shell invocation. The sender
-# captures it once and reuses it across retries so the server sees the same
-# token on every attempt of the same logical delivery.
+# gram_new_idempotency_token emits one token per shell invocation, captured
+# once and reused across retries so every attempt of the same logical delivery
+# carries the same token.
 gram_new_idempotency_token() {
   if [ -n "${GRAM_IDEMPOTENCY_TOKEN:-}" ]; then
     printf '%s' "$GRAM_IDEMPOTENCY_TOKEN"
@@ -36,16 +32,14 @@ gram_new_idempotency_token() {
   elif [ -r /proc/sys/kernel/random/uuid ]; then
     GRAM_IDEMPOTENCY_TOKEN=$(cat /proc/sys/kernel/random/uuid)
   else
-    # Fallback: enough entropy to be unique per invocation.
     GRAM_IDEMPOTENCY_TOKEN="$(date +%s)-$$-${RANDOM:-0}${RANDOM:-0}"
   fi
   printf '%s' "$GRAM_IDEMPOTENCY_TOKEN"
 }
 
-# _gram_http_is_transient returns 0 when a curl exit code / HTTP status pair
-# represents a transient failure worth retrying: a connection-level error
-# (curl couldn't get a response) or a 5xx the server may serve correctly on a
-# retry. A clean 2xx/3xx/4xx is a definitive answer and must NOT be retried.
+# _gram_http_is_transient returns 0 for a transient failure worth retrying: a
+# connection-level error (no response) or a 5xx. A clean 2xx/3xx/4xx is a
+# definitive answer and must NOT be retried.
 _gram_http_is_transient() {
   local curl_exit="$1"
   local http_code="$2"
@@ -64,9 +58,8 @@ _gram_http_is_transient() {
 }
 
 # gram_http_post POSTs $2 to $1 with a per-attempt timeout of $3 seconds,
-# retrying transient failures with exponential backoff. Remaining args are
-# passed verbatim to curl (auth config, hostname header, etc.). It always adds
-# Content-Type and the reused Idempotency-Key header.
+# retrying transient failures with backoff. Remaining args pass verbatim to
+# curl. It always adds Content-Type and the reused Idempotency-Key header.
 gram_http_post() {
   local _url="$1"
   local _payload="$2"
@@ -94,8 +87,8 @@ gram_http_post() {
     GRAM_HTTP_BODY=$(printf '%s' "$response" | sed '$d')
 
     if ! _gram_http_is_transient "$curl_exit" "$GRAM_HTTP_CODE"; then
-      # Definitive result: a 2xx/3xx/4xx (success) or a non-transient curl
-      # error (bad usage/URL — retrying won't help). Distinguish via the code.
+      # Definitive: a 2xx/3xx/4xx (success) or a non-transient curl error
+      # (bad usage/URL — retrying won't help). Distinguish via the code.
       if [ "$curl_exit" -eq 0 ]; then
         return 0
       fi
@@ -108,9 +101,9 @@ gram_http_post() {
     attempt=$((attempt + 1))
   done
 
-  # Exhausted retries. If the last attempt still produced a real HTTP status
-  # (e.g. a persistent 5xx) report success so the caller can act on the code;
-  # otherwise signal that the server was unreachable.
+  # Exhausted retries. A real HTTP status (e.g. a persistent 5xx) → report
+  # success so the caller can act on the code; otherwise the server was
+  # unreachable.
   if [ "$GRAM_HTTP_CODE" != "000" ] && [ -n "$GRAM_HTTP_CODE" ]; then
     return 0
   fi
