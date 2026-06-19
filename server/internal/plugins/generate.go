@@ -305,9 +305,10 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 	marketplaceName := resolveMarketplaceName(cfg)
 
 	claudeManifest, err := marshalJSON(marketplaceManifest{
-		Name:    marketplaceName,
-		Owner:   owner,
-		Plugins: claudePlugins,
+		Name:     marketplaceName,
+		Owner:    owner,
+		Metadata: nil,
+		Plugins:  claudePlugins,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal claude marketplace.json: %w", err)
@@ -639,7 +640,7 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir, nam
 		DisplayName: "Observability (Cursor)",
 		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
 		Version:     pluginManifestVersion(cfg),
-		Author:      cursorAuthor{Name: cfg.OrgName},
+		Author:      cursorAuthor{Name: cfg.OrgName, Email: ""},
 		Homepage:    "https://getgram.ai",
 	})
 	if err != nil {
@@ -1764,7 +1765,7 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 		DisplayName: displayName,
 		Description: p.Description,
 		Version:     pluginManifestVersion(cfg),
-		Author:      cursorAuthor{Name: cfg.OrgName},
+		Author:      cursorAuthor{Name: cfg.OrgName, Email: ""},
 		Homepage:    "https://getgram.ai",
 	})
 	if err != nil {
