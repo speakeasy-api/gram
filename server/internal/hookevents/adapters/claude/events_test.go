@@ -26,7 +26,7 @@ func TestNormalize_UserPromptSubmit(t *testing.T) {
 	prompt := "fix the bug"
 	timestamp := time.Unix(123, 0).UTC()
 
-	ev, ok, err := Normalize(authCtx, &gen.ClaudePayload{
+	ev, err := Normalize(authCtx, &gen.ClaudePayload{
 		HookEventName: "UserPromptSubmit",
 		SessionID:     &sessionID,
 		UserEmail:     &userEmail,
@@ -38,7 +38,7 @@ func TestNormalize_UserPromptSubmit(t *testing.T) {
 		UserEmail:      userEmail,
 	}, timestamp)
 	require.NoError(t, err)
-	require.True(t, ok)
+	require.NotNil(t, ev)
 
 	promptEvent := ev.(*hookevents.UserPromptSubmit)
 	assert.Equal(t, hookevents.ProviderClaude, promptEvent.Provider)
@@ -56,8 +56,7 @@ func TestNormalize_UserPromptSubmit(t *testing.T) {
 func TestNormalize_UnknownEvent(t *testing.T) {
 	t.Parallel()
 
-	ev, ok, err := Normalize(nil, &gen.ClaudePayload{HookEventName: "SomethingNew"}, hookevents.Identity{}, time.Now())
+	ev, err := Normalize(nil, &gen.ClaudePayload{HookEventName: "SomethingNew"}, hookevents.Identity{}, time.Now())
 	require.NoError(t, err)
-	assert.False(t, ok)
 	assert.Nil(t, ev)
 }

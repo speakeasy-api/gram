@@ -57,7 +57,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 
 	var blockReason, userReason string
 
-	codexEvent, codexEventOK, err := codexevents.Normalize(authCtx, payload, hookevents.Identity{
+	codexEvent, err := codexevents.Normalize(authCtx, payload, hookevents.Identity{
 		OrganizationID: orgID,
 		ProjectID:      *authCtx.ProjectID,
 		UserID:         metadata.UserID,
@@ -67,7 +67,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 		return nil, err
 	}
 
-	if codexEventOK {
+	if codexEvent != nil {
 		switch ev := codexEvent.(type) {
 		case *hookevents.BeforeToolUse:
 			if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {

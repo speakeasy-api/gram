@@ -77,7 +77,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		AgentMessage:      nil,
 	}
 
-	cursorEvent, cursorEventOK, err := cursorevents.Normalize(authCtx, payload, hookevents.Identity{
+	cursorEvent, err := cursorevents.Normalize(authCtx, payload, hookevents.Identity{
 		OrganizationID: orgID,
 		ProjectID:      *authCtx.ProjectID,
 		UserID:         actorUserID,
@@ -86,7 +86,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 	if err != nil {
 		return nil, err
 	}
-	if !cursorEventOK {
+	if cursorEvent == nil {
 		logger.InfoContext(ctx, "cursor hook received illegal event type",
 			attr.SlogEvent("cursor_hook_illegal_event_type"),
 			attr.SlogHookEvent(payload.HookEventName),

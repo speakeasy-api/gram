@@ -69,12 +69,12 @@ func TestNormalizeClaudeHookEvent_PrefersAuthContextProjectOverCachedMetadata(t 
 		UserEmail: "cached-scan@example.com",
 	}, 0))
 
-	normalized, ok, err := ti.service.normalizeClaudeHookEvent(ctx, &gen.ClaudePayload{
+	normalized, err := ti.service.normalizeClaudeHookEvent(ctx, &gen.ClaudePayload{
 		HookEventName: "UserPromptSubmit",
 		SessionID:     &sessionID,
 	}, time.Now())
 	require.NoError(t, err)
-	require.True(t, ok)
+	require.NotNil(t, normalized)
 	got, ok := normalized.(*hookevents.UserPromptSubmit)
 	require.True(t, ok)
 	assert.Equal(t, authCtx.ActiveOrganizationID, got.OrganizationID)
@@ -97,12 +97,12 @@ func TestNormalizeClaudeHookEvent_AllowsMissingUserEmail(t *testing.T) {
 		UserEmail: "",
 	}, 0))
 
-	normalized, ok, err := ti.service.normalizeClaudeHookEvent(ctx, &gen.ClaudePayload{
+	normalized, err := ti.service.normalizeClaudeHookEvent(ctx, &gen.ClaudePayload{
 		HookEventName: "UserPromptSubmit",
 		SessionID:     &sessionID,
 	}, time.Now())
 	require.NoError(t, err)
-	require.True(t, ok)
+	require.NotNil(t, normalized)
 	got, ok := normalized.(*hookevents.UserPromptSubmit)
 	require.True(t, ok)
 	assert.Equal(t, authCtx.ActiveOrganizationID, got.OrganizationID)
@@ -124,13 +124,13 @@ func TestNormalizeClaudeHookEvent_ResolvesPayloadEmailBeforeAuthUserID(t *testin
 	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, userEmail)
 
 	sessionID := uuid.NewString()
-	normalized, ok, err := ti.service.normalizeClaudeHookEvent(ctx, &gen.ClaudePayload{
+	normalized, err := ti.service.normalizeClaudeHookEvent(ctx, &gen.ClaudePayload{
 		HookEventName: "UserPromptSubmit",
 		SessionID:     &sessionID,
 		UserEmail:     &userEmail,
 	}, time.Now())
 	require.NoError(t, err)
-	require.True(t, ok)
+	require.NotNil(t, normalized)
 	got, ok := normalized.(*hookevents.UserPromptSubmit)
 	require.True(t, ok)
 	assert.Equal(t, authCtx.ActiveOrganizationID, got.OrganizationID)
@@ -165,12 +165,12 @@ func TestNormalizeClaudeHookEvent_ResolvesAuthContextActorFromCachedEmail(t *tes
 		ProjectID:   uuid.NewString(),
 	}, 0))
 
-	normalized, ok, err := ti.service.normalizeClaudeHookEvent(ctx, &gen.ClaudePayload{
+	normalized, err := ti.service.normalizeClaudeHookEvent(ctx, &gen.ClaudePayload{
 		HookEventName: "UserPromptSubmit",
 		SessionID:     &sessionID,
 	}, time.Now())
 	require.NoError(t, err)
-	require.True(t, ok)
+	require.NotNil(t, normalized)
 	got, ok := normalized.(*hookevents.UserPromptSubmit)
 	require.True(t, ok)
 	assert.Equal(t, authCtx.ActiveOrganizationID, got.OrganizationID)

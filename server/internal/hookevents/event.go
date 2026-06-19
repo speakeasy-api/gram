@@ -80,12 +80,17 @@ type BeforeToolUse struct {
 	ToolInput any
 }
 
-func NewBeforeToolUse(event Event, toolName string, toolInput any) *BeforeToolUse {
+type BeforeToolUseParams struct {
+	ToolName  string
+	ToolInput any
+}
+
+func NewBeforeToolUse(event Event, params BeforeToolUseParams) *BeforeToolUse {
 	event.Type = EventTypeBeforeToolUse
 	return &BeforeToolUse{
 		Event:     event,
-		ToolName:  toolName,
-		ToolInput: toolInput,
+		ToolName:  params.ToolName,
+		ToolInput: params.ToolInput,
 	}
 }
 
@@ -95,12 +100,17 @@ type BeforeMCPExecution struct {
 	ToolInput any
 }
 
-func NewBeforeMCPExecution(event Event, toolName string, toolInput any) *BeforeMCPExecution {
+type BeforeMCPExecutionParams struct {
+	ToolName  string
+	ToolInput any
+}
+
+func NewBeforeMCPExecution(event Event, params BeforeMCPExecutionParams) *BeforeMCPExecution {
 	event.Type = EventTypeBeforeMCPExecution
 	return &BeforeMCPExecution{
 		Event:     event,
-		ToolName:  toolName,
-		ToolInput: toolInput,
+		ToolName:  params.ToolName,
+		ToolInput: params.ToolInput,
 	}
 }
 
@@ -110,12 +120,17 @@ type AfterToolUse struct {
 	ToolOutput any
 }
 
-func NewAfterToolUse(event Event, toolName string, toolOutput any) *AfterToolUse {
+type AfterToolUseParams struct {
+	ToolName   string
+	ToolOutput any
+}
+
+func NewAfterToolUse(event Event, params AfterToolUseParams) *AfterToolUse {
 	event.Type = EventTypeAfterToolUse
 	return &AfterToolUse{
 		Event:      event,
-		ToolName:   toolName,
-		ToolOutput: toolOutput,
+		ToolName:   params.ToolName,
+		ToolOutput: params.ToolOutput,
 	}
 }
 
@@ -126,13 +141,19 @@ type AfterToolUseFailure struct {
 	IsInterrupt bool
 }
 
-func NewAfterToolUseFailure(event Event, toolName string, err any, isInterrupt bool) *AfterToolUseFailure {
+type AfterToolUseFailureParams struct {
+	ToolName    string
+	Error       any
+	IsInterrupt bool
+}
+
+func NewAfterToolUseFailure(event Event, params AfterToolUseFailureParams) *AfterToolUseFailure {
 	event.Type = EventTypeAfterToolUseFailure
 	return &AfterToolUseFailure{
 		Event:       event,
-		ToolName:    toolName,
-		Error:       err,
-		IsInterrupt: isInterrupt,
+		ToolName:    params.ToolName,
+		Error:       params.Error,
+		IsInterrupt: params.IsInterrupt,
 	}
 }
 
@@ -142,12 +163,17 @@ type AfterMCPExecution struct {
 	ToolOutput any
 }
 
-func NewAfterMCPExecution(event Event, toolName string, toolOutput any) *AfterMCPExecution {
+type AfterMCPExecutionParams struct {
+	ToolName   string
+	ToolOutput any
+}
+
+func NewAfterMCPExecution(event Event, params AfterMCPExecutionParams) *AfterMCPExecution {
 	event.Type = EventTypeAfterMCPExecution
 	return &AfterMCPExecution{
 		Event:      event,
-		ToolName:   toolName,
-		ToolOutput: toolOutput,
+		ToolName:   params.ToolName,
+		ToolOutput: params.ToolOutput,
 	}
 }
 
@@ -158,13 +184,19 @@ type PermissionRequest struct {
 	PermissionType string
 }
 
-func NewPermissionRequest(event Event, toolName string, toolInput any, permissionType string) *PermissionRequest {
+type PermissionRequestParams struct {
+	ToolName       string
+	ToolInput      any
+	PermissionType string
+}
+
+func NewPermissionRequest(event Event, params PermissionRequestParams) *PermissionRequest {
 	event.Type = EventTypePermissionRequest
 	return &PermissionRequest{
 		Event:          event,
-		ToolName:       toolName,
-		ToolInput:      toolInput,
-		PermissionType: permissionType,
+		ToolName:       params.ToolName,
+		ToolInput:      params.ToolInput,
+		PermissionType: params.PermissionType,
 	}
 }
 
@@ -173,11 +205,15 @@ type UserPromptSubmit struct {
 	Prompt string
 }
 
-func NewUserPromptSubmit(event Event, prompt string) *UserPromptSubmit {
+type UserPromptSubmitParams struct {
+	Prompt string
+}
+
+func NewUserPromptSubmit(event Event, params UserPromptSubmitParams) *UserPromptSubmit {
 	event.Type = EventTypeUserPromptSubmit
 	return &UserPromptSubmit{
 		Event:  event,
-		Prompt: prompt,
+		Prompt: params.Prompt,
 	}
 }
 
@@ -186,11 +222,15 @@ type AfterAgentResponse struct {
 	Text string
 }
 
-func NewAfterAgentResponse(event Event, text string) *AfterAgentResponse {
+type AfterAgentResponseParams struct {
+	Text string
+}
+
+func NewAfterAgentResponse(event Event, params AfterAgentResponseParams) *AfterAgentResponse {
 	event.Type = EventTypeAfterAgentResponse
 	return &AfterAgentResponse{
 		Event: event,
-		Text:  text,
+		Text:  params.Text,
 	}
 }
 
@@ -200,12 +240,17 @@ type AfterAgentThought struct {
 	DurationMs int
 }
 
-func NewAfterAgentThought(event Event, text string, durationMs int) *AfterAgentThought {
+type AfterAgentThoughtParams struct {
+	Text       string
+	DurationMs int
+}
+
+func NewAfterAgentThought(event Event, params AfterAgentThoughtParams) *AfterAgentThought {
 	event.Type = EventTypeAfterAgentThought
 	return &AfterAgentThought{
 		Event:      event,
-		Text:       text,
-		DurationMs: durationMs,
+		Text:       params.Text,
+		DurationMs: params.DurationMs,
 	}
 }
 
@@ -214,11 +259,15 @@ type Stop struct {
 	LastAssistantMessage string
 }
 
-func NewStop(event Event, lastAssistantMessage string) *Stop {
+type StopParams struct {
+	LastAssistantMessage string
+}
+
+func NewStop(event Event, params StopParams) *Stop {
 	event.Type = EventTypeStop
 	return &Stop{
 		Event:                event,
-		LastAssistantMessage: lastAssistantMessage,
+		LastAssistantMessage: params.LastAssistantMessage,
 	}
 }
 
@@ -227,11 +276,15 @@ type SessionEnd struct {
 	Reason string
 }
 
-func NewSessionEnd(event Event, reason string) *SessionEnd {
+type SessionEndParams struct {
+	Reason string
+}
+
+func NewSessionEnd(event Event, params SessionEndParams) *SessionEnd {
 	event.Type = EventTypeSessionEnd
 	return &SessionEnd{
 		Event:  event,
-		Reason: reason,
+		Reason: params.Reason,
 	}
 }
 
@@ -242,12 +295,18 @@ type Notification struct {
 	Title            string
 }
 
-func NewNotification(event Event, notificationType, message, title string) *Notification {
+type NotificationParams struct {
+	NotificationType string
+	Message          string
+	Title            string
+}
+
+func NewNotification(event Event, params NotificationParams) *Notification {
 	event.Type = EventTypeNotification
 	return &Notification{
 		Event:            event,
-		NotificationType: notificationType,
-		Message:          message,
-		Title:            title,
+		NotificationType: params.NotificationType,
+		Message:          params.Message,
+		Title:            params.Title,
 	}
 }

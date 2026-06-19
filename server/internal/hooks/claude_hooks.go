@@ -259,11 +259,11 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 
 	s.recordHook(ctx, payload)
 
-	claudeEvent, claudeEventOK, err := s.normalizeClaudeHookEvent(ctx, payload, time.Now())
+	claudeEvent, err := s.normalizeClaudeHookEvent(ctx, payload, time.Now())
 	if err != nil {
 		return nil, err
 	}
-	if !claudeEventOK {
+	if claudeEvent == nil {
 		logger.ErrorContext(ctx, fmt.Sprintf("Unknown hook event: %s", payload.HookEventName))
 		return makeHookResult(payload.HookEventName), nil
 	}
@@ -299,7 +299,7 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (*gen.
 	return result, err
 }
 
-func (s *Service) normalizeClaudeHookEvent(ctx context.Context, payload *gen.ClaudePayload, timestamp time.Time) (any, bool, error) {
+func (s *Service) normalizeClaudeHookEvent(ctx context.Context, payload *gen.ClaudePayload, timestamp time.Time) (any, error) {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	identity := hookevents.Identity{}
 	if authCtx != nil && authCtx.ProjectID != nil {
@@ -314,24 +314,22 @@ func (s *Service) normalizeClaudeHookEvent(ctx context.Context, payload *gen.Cla
 	if payload == nil {
 		return claudeevents.Normalize(authCtx, payload, identity, timestamp)
 	}
+
 	sessionID := conv.PtrValOr(payload.SessionID, "")
-	if sessionID == "" {
-		return claudeevents.Normalize(authCtx, payload, identity, timestamp)
+	if sessionID != "" {
+		metadata, err := s.resolveClaudeSessionMetadata(ctx, sessionID, strings.TrimSpace(conv.PtrValOr(payload.UserEmail, "")))
+		if err == nil {
+			if projectID, parseErr := uuid.Parse(metadata.ProjectID); parseErr == nil {
+				identity = hookevents.Identity{
+					OrganizationID: metadata.GramOrgID,
+					ProjectID:      projectID,
+					UserID:         metadata.UserID,
+					UserEmail:      strings.TrimSpace(metadata.UserEmail),
+				}
+			}
+		}
 	}
-	metadata, err := s.resolveClaudeSessionMetadata(ctx, sessionID, strings.TrimSpace(conv.PtrValOr(payload.UserEmail, "")))
-	if err != nil {
-		return claudeevents.Normalize(authCtx, payload, identity, timestamp)
-	}
-	projectID, err := uuid.Parse(metadata.ProjectID)
-	if err != nil {
-		return claudeevents.Normalize(authCtx, payload, identity, timestamp)
-	}
-	identity = hookevents.Identity{
-		OrganizationID: metadata.GramOrgID,
-		ProjectID:      projectID,
-		UserID:         metadata.UserID,
-		UserEmail:      strings.TrimSpace(metadata.UserEmail),
-	}
+
 	return claudeevents.Normalize(authCtx, payload, identity, timestamp)
 }
 

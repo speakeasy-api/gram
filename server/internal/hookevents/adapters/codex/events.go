@@ -9,9 +9,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 )
 
-func Normalize(authCtx *contextvalues.AuthContext, payload *gen.CodexPayload, identity hookevents.Identity, timestamp time.Time) (any, bool, error) {
+func Normalize(authCtx *contextvalues.AuthContext, payload *gen.CodexPayload, identity hookevents.Identity, timestamp time.Time) (any, error) {
 	if payload == nil {
-		return nil, false, nil
+		return nil, nil
 	}
 
 	base := hookevents.Event{
@@ -29,18 +29,32 @@ func Normalize(authCtx *contextvalues.AuthContext, payload *gen.CodexPayload, id
 
 	switch payload.HookEventName {
 	case "SessionStart":
-		return hookevents.NewSessionStart(base), true, nil
+		return hookevents.NewSessionStart(base), nil
 	case "PreToolUse":
-		return hookevents.NewBeforeToolUse(base, conv.PtrValOr(payload.ToolName, ""), payload.ToolInput), true, nil
+		return hookevents.NewBeforeToolUse(base, hookevents.BeforeToolUseParams{
+			ToolName:  conv.PtrValOr(payload.ToolName, ""),
+			ToolInput: payload.ToolInput,
+		}), nil
 	case "PostToolUse":
-		return hookevents.NewAfterToolUse(base, conv.PtrValOr(payload.ToolName, ""), payload.ToolOutput), true, nil
+		return hookevents.NewAfterToolUse(base, hookevents.AfterToolUseParams{
+			ToolName:   conv.PtrValOr(payload.ToolName, ""),
+			ToolOutput: payload.ToolOutput,
+		}), nil
 	case "PermissionRequest":
-		return hookevents.NewPermissionRequest(base, conv.PtrValOr(payload.ToolName, ""), payload.ToolInput, conv.PtrValOr(payload.PermissionType, "")), true, nil
+		return hookevents.NewPermissionRequest(base, hookevents.PermissionRequestParams{
+			ToolName:       conv.PtrValOr(payload.ToolName, ""),
+			ToolInput:      payload.ToolInput,
+			PermissionType: conv.PtrValOr(payload.PermissionType, ""),
+		}), nil
 	case "UserPromptSubmit":
-		return hookevents.NewUserPromptSubmit(base, conv.PtrValOr(payload.Prompt, "")), true, nil
+		return hookevents.NewUserPromptSubmit(base, hookevents.UserPromptSubmitParams{
+			Prompt: conv.PtrValOr(payload.Prompt, ""),
+		}), nil
 	case "Stop":
-		return hookevents.NewStop(base, conv.PtrValOr(payload.LastAssistantMessage, "")), true, nil
+		return hookevents.NewStop(base, hookevents.StopParams{
+			LastAssistantMessage: conv.PtrValOr(payload.LastAssistantMessage, ""),
+		}), nil
 	default:
-		return nil, false, nil
+		return nil, nil
 	}
 }

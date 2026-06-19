@@ -9,9 +9,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 )
 
-func Normalize(authCtx *contextvalues.AuthContext, payload *gen.CursorPayload, identity hookevents.Identity, timestamp time.Time) (any, bool, error) {
+func Normalize(authCtx *contextvalues.AuthContext, payload *gen.CursorPayload, identity hookevents.Identity, timestamp time.Time) (any, error) {
 	if payload == nil {
-		return nil, false, nil
+		return nil, nil
 	}
 
 	base := hookevents.Event{
@@ -29,24 +29,47 @@ func Normalize(authCtx *contextvalues.AuthContext, payload *gen.CursorPayload, i
 
 	switch payload.HookEventName {
 	case "beforeSubmitPrompt":
-		return hookevents.NewUserPromptSubmit(base, conv.PtrValOr(payload.Prompt, "")), true, nil
+		return hookevents.NewUserPromptSubmit(base, hookevents.UserPromptSubmitParams{
+			Prompt: conv.PtrValOr(payload.Prompt, ""),
+		}), nil
 	case "afterAgentResponse":
-		return hookevents.NewAfterAgentResponse(base, conv.PtrValOr(payload.Text, "")), true, nil
+		return hookevents.NewAfterAgentResponse(base, hookevents.AfterAgentResponseParams{
+			Text: conv.PtrValOr(payload.Text, ""),
+		}), nil
 	case "afterAgentThought":
-		return hookevents.NewAfterAgentThought(base, conv.PtrValOr(payload.Text, ""), conv.PtrValOr(payload.DurationMs, 0)), true, nil
+		return hookevents.NewAfterAgentThought(base, hookevents.AfterAgentThoughtParams{
+			Text:       conv.PtrValOr(payload.Text, ""),
+			DurationMs: conv.PtrValOr(payload.DurationMs, 0),
+		}), nil
 	case "preToolUse":
-		return hookevents.NewBeforeToolUse(base, conv.PtrValOr(payload.ToolName, ""), payload.ToolInput), true, nil
+		return hookevents.NewBeforeToolUse(base, hookevents.BeforeToolUseParams{
+			ToolName:  conv.PtrValOr(payload.ToolName, ""),
+			ToolInput: payload.ToolInput,
+		}), nil
 	case "postToolUse":
-		return hookevents.NewAfterToolUse(base, conv.PtrValOr(payload.ToolName, ""), payload.ToolResponse), true, nil
+		return hookevents.NewAfterToolUse(base, hookevents.AfterToolUseParams{
+			ToolName:   conv.PtrValOr(payload.ToolName, ""),
+			ToolOutput: payload.ToolResponse,
+		}), nil
 	case "postToolUseFailure":
-		return hookevents.NewAfterToolUseFailure(base, conv.PtrValOr(payload.ToolName, ""), payload.Error, conv.PtrValOr(payload.IsInterrupt, false)), true, nil
+		return hookevents.NewAfterToolUseFailure(base, hookevents.AfterToolUseFailureParams{
+			ToolName:    conv.PtrValOr(payload.ToolName, ""),
+			Error:       payload.Error,
+			IsInterrupt: conv.PtrValOr(payload.IsInterrupt, false),
+		}), nil
 	case "beforeMCPExecution":
-		return hookevents.NewBeforeMCPExecution(base, conv.PtrValOr(payload.ToolName, ""), payload.ToolInput), true, nil
+		return hookevents.NewBeforeMCPExecution(base, hookevents.BeforeMCPExecutionParams{
+			ToolName:  conv.PtrValOr(payload.ToolName, ""),
+			ToolInput: payload.ToolInput,
+		}), nil
 	case "afterMCPExecution":
-		return hookevents.NewAfterMCPExecution(base, conv.PtrValOr(payload.ToolName, ""), payload.ToolResponse), true, nil
+		return hookevents.NewAfterMCPExecution(base, hookevents.AfterMCPExecutionParams{
+			ToolName:   conv.PtrValOr(payload.ToolName, ""),
+			ToolOutput: payload.ToolResponse,
+		}), nil
 	case "stop":
-		return hookevents.NewStop(base, ""), true, nil
+		return hookevents.NewStop(base, hookevents.StopParams{}), nil
 	default:
-		return nil, false, nil
+		return nil, nil
 	}
 }

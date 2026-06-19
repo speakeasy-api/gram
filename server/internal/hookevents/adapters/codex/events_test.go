@@ -27,7 +27,7 @@ func TestNormalize_PreToolUse(t *testing.T) {
 	toolInput := map[string]any{"query": "bug"}
 	timestamp := time.Unix(123, 0).UTC()
 
-	ev, ok, err := Normalize(authCtx, &gen.CodexPayload{
+	ev, err := Normalize(authCtx, &gen.CodexPayload{
 		HookEventName: "PreToolUse",
 		SessionID:     &sessionID,
 		UserEmail:     &userEmail,
@@ -40,7 +40,7 @@ func TestNormalize_PreToolUse(t *testing.T) {
 		UserEmail:      userEmail,
 	}, timestamp)
 	require.NoError(t, err)
-	require.True(t, ok)
+	require.NotNil(t, ev)
 
 	toolEvent := ev.(*hookevents.BeforeToolUse)
 	assert.Equal(t, hookevents.ProviderCodex, toolEvent.Provider)
@@ -59,8 +59,7 @@ func TestNormalize_PreToolUse(t *testing.T) {
 func TestNormalize_UnknownEvent(t *testing.T) {
 	t.Parallel()
 
-	ev, ok, err := Normalize(nil, &gen.CodexPayload{HookEventName: "SomethingNew"}, hookevents.Identity{}, time.Now())
+	ev, err := Normalize(nil, &gen.CodexPayload{HookEventName: "SomethingNew"}, hookevents.Identity{}, time.Now())
 	require.NoError(t, err)
-	assert.False(t, ok)
 	assert.Nil(t, ev)
 }
