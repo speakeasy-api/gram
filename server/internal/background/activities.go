@@ -92,6 +92,7 @@ type Activities struct {
 	expireAssistantThreadRuntime    *activities.ExpireAssistantThreadRuntime
 	reapStuckAssistantRuntimes      *activities.ReapStuckAssistantRuntimes
 	reapInactiveAssistantRuntimes   *activities.ReapInactiveAssistantRuntimes
+	reapStoppedAssistantRuntimes    *activities.ReapStoppedAssistantRuntimes
 	recycleAssistantRuntimeImages   *activities.RecycleAssistantRuntimeImages
 	reapSoftDeletedAssistantMems    *activities.ReapSoftDeletedAssistantMemories
 	signalAssistantCoordinator      *activities.SignalAssistantCoordinator
@@ -190,6 +191,7 @@ func NewActivities(
 		expireAssistantThreadRuntime:    activities.NewExpireAssistantThreadRuntime(assistantsCore),
 		reapStuckAssistantRuntimes:      activities.NewReapStuckAssistantRuntimes(assistantsCore),
 		reapInactiveAssistantRuntimes:   activities.NewReapInactiveAssistantRuntimes(logger, assistantsCore),
+		reapStoppedAssistantRuntimes:    activities.NewReapStoppedAssistantRuntimes(logger, assistantsCore),
 		recycleAssistantRuntimeImages:   activities.NewRecycleAssistantRuntimeImages(logger, assistantsCore),
 		reapSoftDeletedAssistantMems:    activities.NewReapSoftDeletedAssistantMemories(logger, db),
 		signalAssistantCoordinator:      activities.NewSignalAssistantCoordinator(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
@@ -419,6 +421,10 @@ func (a *Activities) ReapStuckAssistantRuntimes(ctx context.Context) (*activitie
 
 func (a *Activities) ReapInactiveAssistantRuntimes(ctx context.Context, req activities.ReapInactiveAssistantRuntimesRequest) (*activities.ReapInactiveAssistantRuntimesResult, error) {
 	return a.reapInactiveAssistantRuntimes.Do(ctx, req)
+}
+
+func (a *Activities) ReapStoppedAssistantRuntimes(ctx context.Context, req activities.ReapStoppedAssistantRuntimesRequest) (*activities.ReapStoppedAssistantRuntimesResult, error) {
+	return a.reapStoppedAssistantRuntimes.Do(ctx, req)
 }
 
 func (a *Activities) RecycleAssistantRuntimeImages(ctx context.Context) (*activities.RecycleAssistantRuntimeImagesResult, error) {

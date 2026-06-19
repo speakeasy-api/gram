@@ -441,6 +441,13 @@ func (g *GKERuntimeBackend) Reap(ctx context.Context, runtime assistantRuntimeRe
 	return g.deleteClaim(ctx, runtime)
 }
 
+// ReapStoppedMachine has no machine/app split to preserve on GKE — a claim
+// owns its whole sandbox and pod, and the backend never reuses an idle one —
+// so the per-thread reap collapses to deleting the claim, same as Reap.
+func (g *GKERuntimeBackend) ReapStoppedMachine(ctx context.Context, runtime assistantRuntimeRecord) error {
+	return g.deleteClaim(ctx, runtime)
+}
+
 func (g *GKERuntimeBackend) deleteClaim(ctx context.Context, runtime assistantRuntimeRecord) error {
 	if err := validateRuntimeBackend(g, runtime.Backend); err != nil {
 		return err
