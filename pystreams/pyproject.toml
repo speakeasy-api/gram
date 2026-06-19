@@ -44,6 +44,9 @@ en-core-web-lg = { url = "https://github.com/explosion/spacy-models/releases/dow
 testpaths = ["tests"]
 asyncio_mode = "auto"
 
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "ASYNC", "RUF", "PT", "TID"]
+
 [tool.pyrefly]
 project-includes = ["**/*.py*", "**/*.ipynb"]
 
