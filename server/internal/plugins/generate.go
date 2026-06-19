@@ -74,6 +74,12 @@ type GenerateConfig struct {
 	// (e.g. `<plugin>@<marketplace>`) and the `name` field in the generated
 	// marketplace.json. Empty falls back to DefaultMarketplaceName.
 	MarketplaceName string
+	// ObservabilityMode makes the generated hook plugin fully non-blocking when
+	// set: every Claude hook event is emitted async so the plugin can only
+	// observe and report, never deny or delay a tool call. It is the low-risk
+	// path for POC rollouts in orgs that cannot tolerate hook errors or brief
+	// server unavailability disrupting the user.
+	ObservabilityMode bool
 }
 
 // DefaultMarketplaceName returns the marketplace identifier used when no
@@ -112,7 +118,7 @@ func pluginManifestVersion(cfg GenerateConfig) string {
 // for generator changes that alter behaviour in ways the placeholder
 // fingerprint pass can't observe. The Plugin Generate Check CI workflow
 // requires this to change whenever generate.go does.
-const pluginGeneratorVersion = "3"
+const pluginGeneratorVersion = "4"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -170,7 +176,16 @@ func PluginFingerprint(plugins []PluginInfo, cfg GenerateConfig) (string, error)
 // (including ConfigChange, which has no allow/deny decision to honor)
 // return true for fire-and-forget telemetry so Claude is not held up while
 // the MCP inventory is re-synced mid-session.
-func claudeHookAsyncFlag(event string) *bool {
+//
+// When observabilityMode is set, every event is forced async so the plugin
+// can only observe and report — no hook can deny or delay a tool call. This
+// is the low-risk path for POC rollouts in orgs that cannot tolerate hook
+// errors or brief server unavailability disrupting the user.
+func claudeHookAsyncFlag(event string, observabilityMode bool) *bool {
+	if observabilityMode {
+		t := true
+		return &t
+	}
 	switch event {
 	case "UserPromptSubmit", "PreToolUse", "Stop":
 		f := false
@@ -604,7 +619,7 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 			script = "mcp_inventory.sh"
 		}
 		hookEvents[event] = []claudeHookMatcher{
-			{Matcher: "", Hooks: []claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hooks/` + script + `"`, Async: claudeHookAsyncFlag(event)}}},
+			{Matcher: "", Hooks: []claudeHookCommand{{Type: "command", Command: `bash "$CLAUDE_PLUGIN_ROOT/hooks/` + script + `"`, Async: claudeHookAsyncFlag(event, cfg.ObservabilityMode)}}},
 		}
 	}
 	hooksJSON, err := marshalJSON(claudeHooksConfig{Hooks: hookEvents})

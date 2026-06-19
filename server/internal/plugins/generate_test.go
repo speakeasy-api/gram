@@ -909,6 +909,54 @@ func TestGenerateClaudeObservabilityRoutesInventoryEventsToOwnScript(t *testing.
 	}
 }
 
+// With observability mode off (the default) the blocking events keep their
+// synchronous flag so Claude waits for the deny/allow decision.
+func TestGenerateClaudeObservabilityBlockingEventsDefaultToSync(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+		ProjectSlug: "acme-prod",
+	}
+	files, err := GeneratePluginPackages(nil, cfg)
+	require.NoError(t, err)
+
+	var parsed claudeHooksConfig
+	require.NoError(t, json.Unmarshal(files[ClaudeObservabilitySlug(cfg)+"/hooks/hooks.json"], &parsed))
+
+	for _, event := range []string{"UserPromptSubmit", "PreToolUse", "Stop"} {
+		matchers, ok := parsed.Hooks[event]
+		require.True(t, ok, "%s must be registered", event)
+		require.NotNil(t, matchers[0].Hooks[0].Async)
+		require.False(t, *matchers[0].Hooks[0].Async, "%s must be blocking when observability mode is off", event)
+	}
+}
+
+// With observability mode on, every hook event is emitted async so the plugin
+// can only observe and report — no hook can deny or delay a tool call.
+func TestGenerateClaudeObservabilityModeForcesAsyncForAllEvents(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:           "Acme",
+		ServerURL:         "https://app.getgram.ai",
+		HooksAPIKey:       "gram_local_secret_xyz",
+		ProjectSlug:       "acme-prod",
+		ObservabilityMode: true,
+	}
+	files, err := GeneratePluginPackages(nil, cfg)
+	require.NoError(t, err)
+
+	var parsed claudeHooksConfig
+	require.NoError(t, json.Unmarshal(files[ClaudeObservabilitySlug(cfg)+"/hooks/hooks.json"], &parsed))
+
+	require.NotEmpty(t, parsed.Hooks)
+	for event, matchers := range parsed.Hooks {
+		require.NotNil(t, matchers[0].Hooks[0].Async, "event %q must carry an async flag", event)
+		require.True(t, *matchers[0].Hooks[0].Async, "event %q must be async in observability mode", event)
+	}
+}
+
 // mcp_inventory.sh enriches the payload with MCP inventory and posts to the
 // Claude hooks endpoint. It must carry the same Gram-Key + Gram-Project
 // headers the regular hook script uses, otherwise server-side org/project

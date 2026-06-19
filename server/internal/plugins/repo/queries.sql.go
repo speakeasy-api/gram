@@ -341,6 +341,31 @@ func (q *Queries) GetProjectMarketplaceNameContext(ctx context.Context, projectI
 	return i, err
 }
 
+const isOrganizationFeatureEnabled = `-- name: IsOrganizationFeatureEnabled :one
+SELECT EXISTS (
+  SELECT 1
+  FROM organization_features
+  WHERE organization_id = $1
+    AND feature_name = $2
+    AND deleted IS FALSE
+) AS enabled
+`
+
+type IsOrganizationFeatureEnabledParams struct {
+	OrganizationID string
+	FeatureName    string
+}
+
+// Reports whether an organization feature flag is enabled. Mirrors the
+// productfeatures service's read against organization_features so the generator
+// can honour org-level toggles (e.g. observability_mode) at generation time.
+func (q *Queries) IsOrganizationFeatureEnabled(ctx context.Context, arg IsOrganizationFeatureEnabledParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isOrganizationFeatureEnabled, arg.OrganizationID, arg.FeatureName)
+	var enabled bool
+	err := row.Scan(&enabled)
+	return enabled, err
+}
+
 const listPluginAssignments = `-- name: ListPluginAssignments :many
 SELECT id, plugin_id, organization_id, principal_urn, created_at, updated_at
 FROM plugin_assignments
