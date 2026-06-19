@@ -10,6 +10,8 @@ import (
 	"github.com/google/uuid"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	"github.com/speakeasy-api/gram/server/internal/agentevents"
+	eventtypes "github.com/speakeasy-api/gram/server/internal/agentevents/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/message"
@@ -114,37 +116,53 @@ func (s *Service) resolveClaudeScanContext(ctx context.Context, payload *gen.Cla
 	}, nil
 }
 
-// scanCursorForEnforcement runs the risk scanner for a Cursor hook payload.
-// Unlike Claude, Cursor hooks are authenticated so the project ID is known.
-func (s *Service) scanCursorForEnforcement(ctx context.Context, payload *gen.CursorPayload, orgID, projectID, userID string) *risk.ScanResult {
+func (s *Service) scanCursorForEnforcement(ctx context.Context, ev agentevents.Event[*gen.CursorPayload]) *risk.ScanResult {
 	if s.riskScanner == nil {
 		return nil
 	}
-
-	hookEvent, ok := parseCursorHookEvent(payload.HookEventName)
-	if !ok {
+	authCtx := ev.AuthContext()
+	if authCtx == nil || authCtx.ProjectID == nil {
 		return nil
 	}
 
-	text := extractCursorText(payload, hookEvent)
+	eventType, ok, err := ev.EventType()
+	if err != nil || !ok {
+		return nil
+	}
+
+	text, messageType, ok, err := cursorRiskScanText(ev, eventType)
+	if err != nil || !ok {
+		return nil
+	}
+
+	toolName, ok, err := ev.String(eventType, eventtypes.FieldToolName)
+	if err != nil {
+		s.logger.WarnContext(ctx, "risk scan tool name resolution failed for Cursor hook",
+			attr.SlogError(err),
+			attr.SlogEvent("risk_scan_error"),
+		)
+		return nil
+	}
+	if !ok {
+		toolName = ""
+	}
+
 	// Empty body + tool attribution still matters for tool-scoped policies; only
 	// skip when there is neither.
-	toolName := conv.PtrValOr(payload.ToolName, "")
 	if text == "" && toolName == "" {
 		return nil
 	}
 
-	pid, err := uuid.Parse(projectID)
-	if err != nil {
+	if messageType == "" {
 		return nil
 	}
 
-	messageType, ok := hookEventToMessageType(hookEvent)
-	if !ok {
-		return nil
+	userID := ""
+	if payload := ev.Raw(); payload != nil {
+		userID = s.resolveUserByEmail(ctx, strings.TrimSpace(conv.PtrValOr(payload.UserEmail, "")), authCtx.ActiveOrganizationID)
 	}
 
-	result, err := s.riskScanner.ScanForEnforcement(ctx, orgID, pid, userID, text, messageType, toolName)
+	result, err := s.riskScanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, userID, text, messageType, toolName)
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for Cursor hook",
 			attr.SlogError(err),
@@ -154,6 +172,22 @@ func (s *Service) scanCursorForEnforcement(ctx context.Context, payload *gen.Cur
 	}
 
 	return result
+}
+
+func cursorRiskScanText(ev agentevents.Event[*gen.CursorPayload], eventType eventtypes.EventType) (string, message.Type, bool, error) {
+	switch eventType {
+	case eventtypes.UserPromptSubmit:
+		prompt, ok, err := ev.String(eventType, eventtypes.FieldPrompt)
+		return prompt, message.User, ok, err
+	case eventtypes.BeforeToolUse, eventtypes.BeforeMCPExecution:
+		toolInput, ok, err := ev.Any(eventType, eventtypes.FieldToolInput)
+		if err != nil || !ok || toolInput == nil {
+			return "", message.ToolRequest, ok, err
+		}
+		return marshalToJSON(toolInput), message.ToolRequest, true, nil
+	default:
+		return "", "", false, nil
+	}
 }
 
 // scanCodexForEnforcement runs the risk scanner for a Codex hook payload.

@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	hookevents "github.com/speakeasy-api/gram/server/internal/agentevents/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
@@ -25,9 +26,9 @@ import (
 
 // Cursor is the endpoint for Cursor hook events
 func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.CursorHookResult, error) {
-	hookEvent, ok := parseCursorHookEvent(payload.HookEventName)
+	hookEvent, parsedHookEvent := parseCursorHookEvent(payload.HookEventName)
 	logHookEventName := payload.HookEventName
-	if ok {
+	if parsedHookEvent {
 		logHookEventName = string(hookEvent)
 	}
 
@@ -39,8 +40,8 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		attr.SlogAuthUserEmail(conv.PtrValOr(payload.UserEmail, "")),
 	)
 
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+	authCtx, authOK := contextvalues.GetAuthContext(ctx)
+	if !authOK || authCtx == nil || authCtx.ProjectID == nil {
 		logger.WarnContext(ctx, "rejected unauthorized cursor hook request",
 			attr.SlogEvent("cursor_hook_unauthorized"),
 		)
@@ -75,17 +76,31 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		AgentMessage:      nil,
 	}
 
+	ev := s.cursorEvents.NewEvent(authCtx, payload, time.Now())
+
+	eventType, eventTypeOK, err := ev.EventType()
+	if err != nil {
+		return nil, err
+	}
+	if !eventTypeOK {
+		logger.InfoContext(ctx, "cursor hook received illegal event type",
+			attr.SlogEvent("cursor_hook_illegal_event_type"),
+			attr.SlogHookEvent(payload.HookEventName),
+		)
+		return result, nil
+	}
+
 	// blockReason is empty unless this call is denied by the shadow-MCP guard.
 	// It propagates into the ClickHouse log entry as gram.hook.block_reason so
 	// the trace renders as "blocked" in dashboards.
 	var blockReason string
 
-	switch hookEvent {
-	case HookEventBeforeMCPExecution:
+	switch eventType {
+	case hookevents.BeforeMCPExecution:
 		// beforeMCPExecution fires for MCP-routed (non-local) tool calls. Run
 		// the risk scanner first (block-only today), then fall through to the
 		// shadow-MCP guard so unapproved toolsets are still blocked.
-		if scanResult := s.scanCursorForEnforcement(ctx, payload, orgID, projectID, actorUserID); scanResult != nil {
+		if scanResult := s.scanCursorForEnforcement(ctx, ev); scanResult != nil {
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			blockReason = auditReason
@@ -126,7 +141,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		} else {
 			result.Permission = new("allow")
 		}
-	case HookEventPreToolUse:
+	case hookevents.BeforeToolUse:
 		// preToolUse fires for ALL Cursor tool calls including MCP ones, while
 		// beforeMCPExecution also fires for MCP-routed calls and already runs
 		// the scan there. Skip the scan here for MCP tools to avoid scanning
@@ -138,7 +153,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 			result.Permission = new("allow")
 			break
 		}
-		if scanResult := s.scanCursorForEnforcement(ctx, payload, orgID, projectID, actorUserID); scanResult != nil {
+		if scanResult := s.scanCursorForEnforcement(ctx, ev); scanResult != nil {
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			blockReason = auditReason
@@ -147,8 +162,8 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		} else {
 			result.Permission = new("allow")
 		}
-	case HookEventBeforeSubmitPrompt:
-		if scanResult := s.scanCursorForEnforcement(ctx, payload, orgID, projectID, actorUserID); scanResult != nil {
+	case hookevents.UserPromptSubmit:
+		if scanResult := s.scanCursorForEnforcement(ctx, ev); scanResult != nil {
 			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			blockReason = auditReason

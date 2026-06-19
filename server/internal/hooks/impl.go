@@ -15,6 +15,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
+	"github.com/speakeasy-api/gram/server/internal/agentevents"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -51,6 +52,7 @@ type Service struct {
 	policyBypass       *risk.PolicyBypassEvaluator
 	shadowMCPClient    *shadowmcp.Client
 	writer             *chat.ChatMessageWriter
+	cursorEvents       *agentevents.Agent[*gen.CursorPayload]
 	siteURL            *url.URL
 	jwtSecret          string
 }
@@ -107,6 +109,7 @@ func NewService(
 	policyBypass *risk.PolicyBypassEvaluator,
 	shadowMCPClient *shadowmcp.Client,
 	writer *chat.ChatMessageWriter,
+	cursorEvents *agentevents.Agent[*gen.CursorPayload],
 	siteURL *url.URL,
 	jwtSecret string,
 ) *Service {
@@ -126,6 +129,7 @@ func NewService(
 		policyBypass:       policyBypass,
 		shadowMCPClient:    shadowMCPClient,
 		writer:             writer,
+		cursorEvents:       cursorEvents,
 		siteURL:            siteURL,
 		jwtSecret:          jwtSecret,
 	}

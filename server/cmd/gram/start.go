@@ -34,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/agent"
+	cursoragent "github.com/speakeasy-api/gram/server/internal/agentevents/providers/cursor"
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistantmemories"
@@ -970,6 +971,10 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("create risk scanner: %w", err)
 			}
 			policyBypass := risk.NewPolicyBypassEvaluator(logger, db)
+			cursorEvents, err := cursoragent.NewAgent()
+			if err != nil {
+				return fmt.Errorf("create cursor agent events: %w", err)
+			}
 
 			about.Attach(mux, about.NewService(logger, tracerProvider))
 			external.AttachWebhookHandler(mux, external.NewWebhookHandler(logger, tracerProvider, newWorkOSWebhooksClient(c), temporalEnv))
@@ -1001,6 +1006,7 @@ func newStartCommand() *cli.Command {
 				policyBypass,
 				shadowMCPClient,
 				chatWriter,
+				cursorEvents,
 				siteURL,
 				c.String("jwt-signing-key"),
 			))
