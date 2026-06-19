@@ -1,0 +1,21 @@
+server/internal/remotemcp/tools_call_shadow_mcp_validate_and_strip_interceptor_test.go
+  s_5a92cd828d83ac::t_83fcd6451f4b8e 119
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_5a92cd828d83ac::t_ab23cc315b8ff7 265,338
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "259fcba891928c954ec49b35509219112cb73748",
+  "prompts": {},
+  "sessions": {
+    "s_5a92cd828d83ac": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb6a2-6b62-7900-969e-22cc3bd839f6",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,32 @@
+server/.golangci.yaml
+  s_bfcdcec2fc12dd::t_444f194f01bfbf 76-80
+server/internal/risk/policy_bypass.go
+  s_bfcdcec2fc12dd::t_f9a137aa351009 388-390,392-394,396-398,400-402,406-407
+  s_bfcdcec2fc12dd::t_dae16778db8e0a 435-454,463-465
+  s_bfcdcec2fc12dd::t_18c51992ad48b0 146,213,263,329,345-347,375,379-380
+  s_bfcdcec2fc12dd::t_a8931f145bd095 351,354,360,362,408-432
+  s_bfcdcec2fc12dd::t_cc50423d03ee82 374,376-378,381-383,455-462
+  s_bfcdcec2fc12dd::t_d4d0d91b9e0f06 14-15,103-109,115-116,119-120,128,147-151,214-216,237-252,264-268,330-332,340-344,348-350,352-353,355-359,361,363-373,384-387,391,395,399,403-405
+server/internal/audit/risk.go
+  s_bfcdcec2fc12dd::t_b1cbac0887131b 21-24,27,36-37,221-232,235-288
+  s_bfcdcec2fc12dd::t_cc50423d03ee82 28-35
+  s_bfcdcec2fc12dd::t_1902edf9d16940 17-20,38-55,233-234
+server/internal/risk/policy_bypass_test.go
+  s_bfcdcec2fc12dd::t_51f19fff3b9aa4 11-12,37-43,58-69,78-89,97-100,124-126,134-142
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "338ac68d922e77e0ccc1216452caa021f7634201",
+  "prompts": {},
+  "sessions": {
+    "s_bfcdcec2fc12dd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e978b-d153-7f13-a173-e4e397dcc332",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

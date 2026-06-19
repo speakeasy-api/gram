@@ -1,0 +1,31 @@
+server/migrations/atlas.sum
+  s_4464e82f9c07a4::t_3da3527c057f86 1,209
+server/database/schema.sql
+  s_4464e82f9c07a4::t_e1db86c566efca 2917-2940,2947-2948,2953,2956-2957,2960-2961
+  s_4464e82f9c07a4::t_4b1d808c469157 2916,2941-2946,2949-2952,2954-2955,2958-2959
+server/migrations/20260604110845_add-risk-policy-bypass-requests-table.sql
+  s_4464e82f9c07a4::t_3da3527c057f86 1-40
+server/internal/database/models.go
+  s_4464e82f9c07a4::t_f4a8ad01482277 1249-1268
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "4ba37883a2703ffc7b615c1ae1704a0766fa0a25",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_4464e82f9c07a4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9236-ac4d-7440-a035-8a4766329334",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    }
+  }
+}

@@ -1,0 +1,36 @@
+server/internal/hooks/claude_hooks.go
+  s_bfcdcec2fc12dd::t_f034d27d6b4418 856
+client/dashboard/src/components/access/ApprovalRequestsContent.tsx
+  s_bfcdcec2fc12dd::t_ffe75881bda20c 382,407,416-424,430,444,674-676,688-692,706,711,1044-1046
+server/internal/hooks/shadow_mcp_access_test.go
+  s_bfcdcec2fc12dd::t_0a2a468e961ed8 5,152-220
+server/internal/hooks/shadow_mcp_access.go
+  s_bfcdcec2fc12dd::t_f034d27d6b4418 50,132,170-172,178-201
+server/internal/risk/policy_bypass_test.go
+  s_bfcdcec2fc12dd::t_af01fcd70cbf06 11
+  s_bfcdcec2fc12dd::t_ad1037220fbe7a 173,219,231-257,493-510
+  s_bfcdcec2fc12dd::t_70315b94a25438 258-294
+client/dashboard/src/components/access/ShadowMCPRequestAccessContent.tsx
+  s_bfcdcec2fc12dd::t_ffe75881bda20c 10,45,51-53,86
+server/internal/risk/policy_bypass.go
+  s_bfcdcec2fc12dd::t_22f9f233df9d8b 687-735
+  s_bfcdcec2fc12dd::t_af01fcd70cbf06 14
+  s_bfcdcec2fc12dd::t_98454d0859e381 329-350
+  s_bfcdcec2fc12dd::t_ffe75881bda20c 231-233,251,265,422
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "8059fd5f0e5f939af2d3d30004e97647889e9712",
+  "prompts": {},
+  "sessions": {
+    "s_bfcdcec2fc12dd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e978b-d153-7f13-a173-e4e397dcc332",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

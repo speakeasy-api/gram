@@ -1,0 +1,58 @@
+server/internal/authz/checks.go
+  s_058bec79386ff2::t_b4f34c237ebc18 40-51
+server/internal/authz/resource_grants_test.go
+  s_058bec79386ff2::t_300da5e029948d 305-412
+client/dashboard/src/pages/access/challengeHelpers.ts
+  s_058bec79386ff2::t_2491f5b0adc32d 17-18,20,22-24,42
+  s_058bec79386ff2::t_088b3fe6f88fa2 21
+  s_058bec79386ff2::t_89fcbb768cecca 16,19
+server/internal/risk/queries.sql
+  s_058bec79386ff2::t_a9aae9cfc07977 96-104
+server/internal/risk/scanner.go
+  s_058bec79386ff2::t_e3ace1256ad104 20,28-29,181-183,225,237-257
+server/internal/urn/principal_test.go
+  s_058bec79386ff2::t_c9442b0fd2a553 30-32,111,173
+  s_058bec79386ff2::t_28cd9a0f247a09 28-29,108-110,174-176
+client/dashboard/src/pages/access/ChallengesTab.tsx
+  s_058bec79386ff2::t_f87d7a0fb3f3a1 36-39,447
+  s_058bec79386ff2::t_0a347aae4ebae4 26,344-353,451-453
+  s_058bec79386ff2::t_377a8268691e11 35,40-44
+client/dashboard/src/pages/access/GrantDrawer.tsx
+  s_058bec79386ff2::t_70b5dea201d5da 22,112-115
+server/internal/authz/selector_test.go
+  s_058bec79386ff2::t_5fa5ef0879d040 318,327-340
+server/internal/access/queries.sql
+  s_058bec79386ff2::t_a2a1df49f6afe9 65
+  s_058bec79386ff2::t_c43102b41e0d84 63-64,66-74
+server/internal/urn/principal.go
+  s_058bec79386ff2::t_388eb40851fd36 33-34
+server/internal/authz/principal_test.go
+  s_058bec79386ff2::t_520bb34f5d1b06 41,68-86
+server/internal/authz/principal.go
+  s_058bec79386ff2::t_fc46b52ca39fbe 17,19-20,47-54,193-195,210-211,213-222,227-235
+  s_058bec79386ff2::t_73023600b4f8fc 18,21-24,212,223-226
+  s_058bec79386ff2::t_83f08d27d5a5cc 237-238
+server/internal/authz/grants.go
+  s_058bec79386ff2::t_b15056d72fc9b2 456-462
+client/dashboard/src/pages/access/useChallengeRowColumns.tsx
+  s_058bec79386ff2::t_57b9514b795ab6 20-24,83,108,119
+server/internal/risk/scanner_test.go
+  s_058bec79386ff2::t_a44a706d7085e8 16,120-136,142-153,321-402
+  s_058bec79386ff2::t_041b9585548342 137-141
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "dcbc7d0b0e009d2049d17000cdbe806ac1d54ef3",
+  "prompts": {},
+  "sessions": {
+    "s_058bec79386ff2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea681-42e0-7600-a211-b5c402bb3615",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

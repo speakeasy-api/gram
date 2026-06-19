@@ -1,0 +1,32 @@
+server/internal/authz/grants.go
+  s_5a92cd828d83ac::t_021500d888ded9 56
+  s_5cc1f9ecaa9d4c::t_bbb69f0849492a 57-64
+  s_5cc1f9ecaa9d4c::t_0569583e09bbd7 432-438,440-442,444,462,467-468,470,486,490-492
+  s_5cc1f9ecaa9d4c::t_cbe410bd503559 439,443
+server/internal/authz/engine.go
+  s_5a92cd828d83ac::t_021500d888ded9 208-210,538-539
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "975da4aaa9b4925ff6247eac13a114e77180c36e",
+  "prompts": {},
+  "sessions": {
+    "s_5a92cd828d83ac": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb6a2-6b62-7900-969e-22cc3bd839f6",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    },
+    "s_5cc1f9ecaa9d4c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb249-fed4-7522-8f02-b4f75c7d3a20",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

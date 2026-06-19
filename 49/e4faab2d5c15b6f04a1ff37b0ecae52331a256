@@ -1,0 +1,44 @@
+server/internal/hooks/claude_hooks_test.go
+  s_9971e86f513595::t_2debd01d9fbbae 51-53,60-92
+client/dashboard/src/components/access/ApprovalRequestsContent.tsx
+  s_9971e86f513595::t_d9fa500a09a566 181-190,406-408,412-416,419,430-431,436-439,441,446,448
+  s_9971e86f513595::t_53709eca91c600 61,66,77,173,404,447,459,476-477,681,684,692-695
+  s_9971e86f513595::t_aad36d8f0ba2ce 405,409-411,428-429,434-435,440
+  s_9971e86f513595::t_a4c8b2e142716f 139,148,157,166
+server/internal/authz/expressions.go
+  s_9971e86f513595::t_53709eca91c600 153,265,270
+  s_9971e86f513595::t_4c5480c4c0b00a 259
+server/internal/risk/policy_bypass_evaluator.go
+  s_9971e86f513595::t_44a37dc174d80a 97-102
+  s_9971e86f513595::t_53709eca91c600 105
+  s_9971e86f513595::t_6e509fa813d8ce 81
+server/internal/authz/expressions_test.go
+  s_9971e86f513595::t_2debd01d9fbbae 112-126
+server/internal/risk/scanner.go
+  s_9971e86f513595::t_53709eca91c600 179-182
+server/internal/risk/policy_bypass_test.go
+  s_9971e86f513595::t_6e509fa813d8ce 192,200-203,208,215,221-222,224-230,233-234,239-278
+  s_9971e86f513595::t_33804404199408 662-676
+server/internal/hooks/risk_scan.go
+  s_9971e86f513595::t_53709eca91c600 48,80-84,87-104,106,108
+server/internal/risk/scanner_test.go
+  s_9971e86f513595::t_2debd01d9fbbae 184-205
+client/dashboard/src/components/access/ApprovalRequestsContent.test.tsx
+  s_9971e86f513595::t_51e930077ca78b 803-936
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "49e4faab2d5c15b6f04a1ff37b0ecae52331a256",
+  "prompts": {},
+  "sessions": {
+    "s_9971e86f513595": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ecbe4-9fbc-7a21-bc41-2031dbdd6e97",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,29 @@
+server/internal/hooks/cursor_hooks.go
+  s_5a92cd828d83ac::t_e8da46dec35136 55-58,85,93,100,111,138,148,162,167
+server/internal/hooks/risk_scan.go
+  s_5a92cd828d83ac::t_8e7e82424ab439 109,148,173
+server/internal/hooks/codex_hooks.go
+  s_5a92cd828d83ac::t_ba60409d07fe6d 42,56,65,76,87,92,100,119,147,152
+server/internal/hooks/claude_hooks.go
+  s_5a92cd828d83ac::t_23fb53b61047c5 760-762,914
+server/internal/hooks/codex_hooks_test.go
+  s_5a92cd828d83ac::t_0ace7d2658400a 79,81-110
+server/internal/hooks/claude_hooks_test.go
+  s_5a92cd828d83ac::t_0526659b24682b 344-375
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "1556bc848f623f991b1dfad623bb5aa51bf6e505",
+  "prompts": {},
+  "sessions": {
+    "s_5a92cd828d83ac": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb6a2-6b62-7900-969e-22cc3bd839f6",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

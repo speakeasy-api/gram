@@ -1,0 +1,52 @@
+server/internal/authz/expressions_test.go
+  s_5a92cd828d83ac::t_ada349ed5dbb7d 51-64,67-68,71-75
+  s_5a92cd828d83ac::t_c8b0acd7d9bd71 45-46
+  s_5a92cd828d83ac::t_01870bf474aa9d 78-101,109-126
+  s_5a92cd828d83ac::t_271daa3c582bf4 1-44,47-50,76-77,102-108,127-181
+  s_5a92cd828d83ac::t_b245ec4847b951 65-66,69-70
+server/internal/risk/scanner.go
+  h_2620cc60cfd1e9 185
+  s_5a92cd828d83ac::t_9636612e027a98 186-187,189,243,245
+  s_5a92cd828d83ac::t_5ab07e39ddcd69 188,242,244
+  s_5a92cd828d83ac::t_81014bf5e5e571 190,246
+server/internal/authz/expressions.go
+  s_5a92cd828d83ac::t_9da4b98236fb97 12-31,37-38,40,62-63,75-79,85-87,109-110,125-126,214-215
+  s_5a92cd828d83ac::t_1c2d98aced873d 41-43,94,96,98-101,104,106,113,118,132,135,138,140,142-143,146-150,152,157-168,171-178,180
+  s_5a92cd828d83ac::t_8472b1732a2d5e 155,179,187-192
+  s_5a92cd828d83ac::t_bff289d2a55304 70-74
+  s_5a92cd828d83ac::t_2aedc05ee04234 61,64,66,81-82,116-117,121-123,183
+  s_5a92cd828d83ac::t_525198abc3ef0a 52,181
+  s_5a92cd828d83ac::t_5e79c9c8d61ef5 1-11,32-36,39,44-51,53-60,65,67-69,80,83-84,88-93,95,97,102-103,105,107-108,111-112,114-115,119-120,124,127-131,133-134,136-137,139,141,144-145,151,153-154,156,169-170,182,184-186,193-213,216-220
+server/internal/authz/access.go
+  s_5a92cd828d83ac::t_384ebaaf1fed1c 58,60,67
+server/internal/authz/checks.go
+  s_5a92cd828d83ac::t_d0d744720c7835 46
+  s_5a92cd828d83ac::t_c8b0acd7d9bd71 49-50
+  s_5a92cd828d83ac::t_cfe59a6ba76a2c 47
+  s_5a92cd828d83ac::t_ec4e2d545ad212 51
+  s_5a92cd828d83ac::t_cc5b40bb0ecf75 23,33,42,66
+  s_5a92cd828d83ac::t_6684e89f3f26c3 45,48
+server/internal/authz/grants.go
+  s_5a92cd828d83ac::t_216de0204883e9 56
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "ed87ac4cdbeeb7538f678764cd633736216ca689",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_5a92cd828d83ac": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb6a2-6b62-7900-969e-22cc3bd839f6",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

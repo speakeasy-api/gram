@@ -1,0 +1,23 @@
+client/dashboard/src/components/observe/observeTargetFilters.ts
+  s_59337254a71aba::t_32d7fc114f4d2b 17
+client/dashboard/src/components/observe/ObserveFilterBar.tsx
+  s_59337254a71aba::t_32d7fc114f4d2b 3
+client/dashboard/src/pages/logs/utils.ts
+  s_59337254a71aba::t_32d7fc114f4d2b 2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "b85cc8b031756154ef3476a834d48c06494ef569",
+  "prompts": {},
+  "sessions": {
+    "s_59337254a71aba": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb4b6-6761-7b51-aae8-8a95a6a06621",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Alex Martin <alex.martin@speakeasy.com>"
+    }
+  }
+}

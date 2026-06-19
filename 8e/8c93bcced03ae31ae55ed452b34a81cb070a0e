@@ -1,0 +1,31 @@
+server/design/risk/design.go
+  h_2620cc60cfd1e9 621,654,683,712
+server/internal/risk/policy_bypass_test.go
+  s_e22b3b94346bf4::t_ee1aa3102530dc 17,66
+  h_2620cc60cfd1e9 1-16,18-65,67-146
+server/internal/risk/policy_bypass.go
+  s_e22b3b94346bf4::t_5594798203fbdb 57,136,200,227,290,325-327,371,377-382,396-398
+  s_e22b3b94346bf4::t_7934ecaf73e978 313-316,319-323,328,330-331,333-334,337-341,343-349
+  h_2620cc60cfd1e9 1-56,58-135,137-199,201-226,228-289,291-312,317-318,324,329,332,335-336,342,350-370,372-376,383-395,399-417
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "8e8c93bcced03ae31ae55ed452b34a81cb070a0e",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_e22b3b94346bf4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9385-0ca9-70d3-97f9-9fdb17029cd4",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

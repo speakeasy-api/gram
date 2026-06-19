@@ -1,0 +1,37 @@
+server/internal/authz/selector.go
+  s_5bb7da1b2bb48b::t_a750038f0d1503 24,115-116
+  s_5bb7da1b2bb48b::t_104e2937b4547d 18-23
+server/internal/hooks/shadow_mcp_access_test.go
+  s_5bb7da1b2bb48b::t_98aee5c7dba863 116-152
+server/internal/risk/policy_bypass.go
+  s_5bb7da1b2bb48b::t_dfb08e40a71933 579-580
+server/internal/risk/policy_bypass_evaluator.go
+  s_5bb7da1b2bb48b::t_206c6c1bddaf79 50-58,62-63,123-127,138-146,149
+  s_5bb7da1b2bb48b::t_9c612a66a7d588 4
+server/internal/risk/policy_bypass_test.go
+  s_5bb7da1b2bb48b::t_6a16b53cf42884 545-568
+  s_5bb7da1b2bb48b::t_f5cfd5799c2cc1 108-146,476-486
+server/internal/authz/checks.go
+  s_5bb7da1b2bb48b::t_cdf8d9d3c0f62b 37-38,44-51
+server/internal/authz/selector_test.go
+  s_5bb7da1b2bb48b::t_27901e5e3d946c 318-319,330,336-344,348
+server/internal/authz/scopes_test.go
+  s_5bb7da1b2bb48b::t_b3d0280ef9d9ac 214-222
+  s_5bb7da1b2bb48b::t_759de05846725d 181,192,207
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "5e1a4e366d496a9b33734d85b37220650762a84d",
+  "prompts": {},
+  "sessions": {
+    "s_5bb7da1b2bb48b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb0be-3dcf-7cf1-ba40-ad162ca07261",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

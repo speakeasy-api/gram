@@ -1,0 +1,27 @@
+server/internal/risk/policy_audience_test.go
+  s_5a92cd828d83ac::t_90ecbcc672a9b2 101
+  s_5a92cd828d83ac::t_fc99c4df1f4df1 16
+  s_5a92cd828d83ac::t_82d9f3cf323e24 63-100,102-155,281-290
+server/internal/risk/impl.go
+  s_5a92cd828d83ac::t_868df5381259c1 251,2066
+  s_5a92cd828d83ac::t_fac9632669425e 247-250,495-498
+server/internal/risk/policy_audience.go
+  s_5a92cd828d83ac::t_387bda068b798c 88,105,128
+  s_5a92cd828d83ac::t_5cd3a9b5d8c15f 6,80,97
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "0b3b880e1f506313c7c3a52ae9fee399e33e5139",
+  "prompts": {},
+  "sessions": {
+    "s_5a92cd828d83ac": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb6a2-6b62-7900-969e-22cc3bd839f6",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

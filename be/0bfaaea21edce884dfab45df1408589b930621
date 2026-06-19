@@ -1,0 +1,21 @@
+server/internal/authz/expressions.go
+  s_5a92cd828d83ac::t_4f1aa7c867a46e 12,14,16,18-19,21-22,24-44,47-51,53-57,60-62,81-90,97,99-101,103-111,117-130,189-191,233-247
+server/internal/authz/checks.go
+  s_5a92cd828d83ac::t_ffb19e7b2ed2ea 45-56
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "be0bfaaea21edce884dfab45df1408589b930621",
+  "prompts": {},
+  "sessions": {
+    "s_5a92cd828d83ac": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb6a2-6b62-7900-969e-22cc3bd839f6",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

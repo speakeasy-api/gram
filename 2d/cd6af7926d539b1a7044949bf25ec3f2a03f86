@@ -1,0 +1,21 @@
+server/internal/authz/expressions.go
+  s_5a92cd828d83ac::t_c5d6331b9ca108 12-13,15-19,21,23-25,27-36
+server/internal/risk/policy_bypass_evaluator.go
+  s_5a92cd828d83ac::t_1b36cb1c2a21c8 121,123,125
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "2dcd6af7926d539b1a7044949bf25ec3f2a03f86",
+  "prompts": {},
+  "sessions": {
+    "s_5a92cd828d83ac": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb6a2-6b62-7900-969e-22cc3bd839f6",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

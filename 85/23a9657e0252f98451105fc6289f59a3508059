@@ -1,0 +1,23 @@
+client/dashboard/src/components/access/ApprovalRequestsContent.test.tsx
+  s_8302dd6dc68c04::t_d341924e0f76a4 1083
+  s_8302dd6dc68c04::t_ee5850302b8ff7 1024-1082,1084-1100
+client/dashboard/src/components/access/ApprovalRequestsContent.tsx
+  s_8302dd6dc68c04::t_f543858219d01c 274
+  s_8302dd6dc68c04::t_51a32b00e3b0c4 264-273,275-280,945-946,1124-1129,1137-1141,1149-1161,1168-1172,1179-1185,1193-1195
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "8523a9657e0252f98451105fc6289f59a3508059",
+  "prompts": {},
+  "sessions": {
+    "s_8302dd6dc68c04": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea9ef-9748-7590-9f10-373acccbc0c7",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Alex Martin <alex.martin@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,35 @@
+client/dashboard/src/pages/security/PolicyCenter.tsx
+  s_5a92cd828d83ac::t_d8a50598d5c532 1844
+server/design/access/design.go
+  s_5a92cd828d83ac::t_b360911ff9beb9 736,739
+server/internal/access/listusergrants_test.go
+  s_5a92cd828d83ac::t_964c047a1e58c4 93,110,112-116
+server/internal/access/getrole_test.go
+  s_5a92cd828d83ac::t_7448ba32b5fea6 39
+client/dashboard/src/pages/access/roundtrip.test.ts
+  s_5a92cd828d83ac::t_dcf72c5febbeaa 14
+client/dashboard/src/components/access/ApprovalRequestsContent.test.tsx
+  s_5a92cd828d83ac::t_2e33ed9182da44 330
+client/dashboard/src/components/observe/useObserveFilters.test.tsx
+  s_5a92cd828d83ac::t_a190937e6610db 59,71
+server/internal/access/role_manager.go
+  s_5a92cd828d83ac::t_33edc3afe8697c 1026-1035
+server/internal/access/listroles_test.go
+  s_5a92cd828d83ac::t_f4c76a1edbe768 49,62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "ac9144cf9c3142536fb3a00c7afda57d0ea263d2",
+  "prompts": {},
+  "sessions": {
+    "s_5a92cd828d83ac": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb6a2-6b62-7900-969e-22cc3bd839f6",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

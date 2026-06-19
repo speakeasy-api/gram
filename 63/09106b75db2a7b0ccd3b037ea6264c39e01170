@@ -1,0 +1,19 @@
+.changeset/access-webhook-event-names.md
+  s_9ea3f125eaa40a::t_b2c2935d3b307f 1-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "6309106b75db2a7b0ccd3b037ea6264c39e01170",
+  "prompts": {},
+  "sessions": {
+    "s_9ea3f125eaa40a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea993-d952-7c03-8c1e-c43bcaab1de9",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Alex Martin <alex.martin@speakeasy.com>"
+    }
+  }
+}

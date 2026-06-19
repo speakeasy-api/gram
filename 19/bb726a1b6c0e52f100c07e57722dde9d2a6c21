@@ -1,0 +1,31 @@
+server/internal/risk/policy_bypass_evaluator.go
+  s_5cc1f9ecaa9d4c::t_7283a9e3881858 73,92
+  s_5cc1f9ecaa9d4c::t_080e734ea39d38 133,135,137
+  s_5a92cd828d83ac::t_6ff732e43f6936 15,81-82,96-107
+server/internal/risk/policy_bypass_test.go
+  s_5a92cd828d83ac::t_1b86046c71d540 19,192-235
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "19bb726a1b6c0e52f100c07e57722dde9d2a6c21",
+  "prompts": {},
+  "sessions": {
+    "s_5a92cd828d83ac": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb6a2-6b62-7900-969e-22cc3bd839f6",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    },
+    "s_5cc1f9ecaa9d4c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb249-fed4-7522-8f02-b4f75c7d3a20",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

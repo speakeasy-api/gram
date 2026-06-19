@@ -1,0 +1,28 @@
+server/cmd/gram/start.go
+  s_a902e15a92d4b7::t_8c495b79c4e8dc 1085
+server/internal/hooks/claude_hooks_test.go
+  s_a902e15a92d4b7::t_30ffe4c67d4556 203,236
+server/internal/risk/setup_test.go
+  s_a902e15a92d4b7::t_8c495b79c4e8dc 100
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "55f2712b0f7b784f76de8508545bceba4e73d36b",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_a902e15a92d4b7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb22f-194b-7460-b2e3-61530269d087",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

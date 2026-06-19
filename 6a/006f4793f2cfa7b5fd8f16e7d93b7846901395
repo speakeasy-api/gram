@@ -1,0 +1,22 @@
+server/internal/risk/policy_audience_test.go
+  s_95d069cf52f7b4::t_a8c9ad289e85e4 101,109-115,149
+server/internal/authz/grant_surface.go
+  s_95d069cf52f7b4::t_657e579669b325 33-37
+  s_95d069cf52f7b4::t_89e716174535ab 17-32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "6a006f4793f2cfa7b5fd8f16e7d93b7846901395",
+  "prompts": {},
+  "sessions": {
+    "s_95d069cf52f7b4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ecfff-79bd-7ac0-8355-76dbf61e503f",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

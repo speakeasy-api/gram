@@ -1,0 +1,30 @@
+server/internal/authz/expressions_bench_test.go
+  s_bad31f9bdaac48::t_fa44301c421bc9 1-73,108-140
+  s_95d069cf52f7b4::t_c165143b5013f3 74-107
+server/internal/authz/checks.go
+  s_95d069cf52f7b4::t_1a37ef7a5d38cc 37-38,43-46,49-53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "37a14e77fdba9476607b6735a121d3f0279917ea",
+  "prompts": {},
+  "sessions": {
+    "s_95d069cf52f7b4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ecfff-79bd-7ac0-8355-76dbf61e503f",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    },
+    "s_bad31f9bdaac48": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4ea-4166-7552-bf58-8b723ca59372",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
