@@ -329,6 +329,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ExpireAssistantThreadRuntime)
 	temporalWorker.RegisterActivity(activities.ReapStuckAssistantRuntimes)
 	temporalWorker.RegisterActivity(activities.ReapInactiveAssistantRuntimes)
+	temporalWorker.RegisterActivity(activities.ReapStoppedAssistantRuntimes)
 	temporalWorker.RegisterActivity(activities.RecycleAssistantRuntimeImages)
 	temporalWorker.RegisterActivity(activities.ReapSoftDeletedAssistantMemories)
 	temporalWorker.RegisterActivity(activities.SignalAssistantCoordinator)

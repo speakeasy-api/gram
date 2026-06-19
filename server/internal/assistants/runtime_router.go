@@ -129,4 +129,15 @@ func (r *runtimeRouter) Reap(ctx context.Context, runtime assistantRuntimeRecord
 	return nil
 }
 
+func (r *runtimeRouter) ReapStoppedMachine(ctx context.Context, runtime assistantRuntimeRecord) error {
+	b, err := r.route(runtime.Backend)
+	if err != nil {
+		return err
+	}
+	if err := b.ReapStoppedMachine(ctx, runtime); err != nil {
+		return fmt.Errorf("reap stopped machine of %s runtime: %w", runtime.Backend, err)
+	}
+	return nil
+}
+
 var _ RuntimeBackend = (*runtimeRouter)(nil)
