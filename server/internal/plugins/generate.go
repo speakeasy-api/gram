@@ -640,7 +640,7 @@ func generateCursorObservabilityPluginInDir(files map[string][]byte, subdir, nam
 		DisplayName: "Observability (Cursor)",
 		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
 		Version:     pluginManifestVersion(cfg),
-		Author:      cursorAuthor{Name: cfg.OrgName, Email: ""},
+		Author:      cursorAuthor{Name: cfg.OrgName, Email: cfg.OrgEmail},
 		Homepage:    "https://getgram.ai",
 	})
 	if err != nil {
