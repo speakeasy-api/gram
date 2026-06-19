@@ -27,6 +27,10 @@ const OP_OPTIONS: { value: Operator; label: string }[] = [
  * A solid grey filter pill: `value ✕`. The body opens the editor (the filter
  * sheet); the × clears the filter. Matches the Untitled UI reference where every
  * applied filter reads as a uniform pill.
+ *
+ * `onRemove` is optional: a pinned dimension sitting at its default value (e.g.
+ * "All servers" or a daterange on its default preset) has nothing to clear, so
+ * the caller omits it and the × is hidden rather than rendered as a no-op.
  */
 export function FilterChip({
   label,
@@ -35,10 +39,14 @@ export function FilterChip({
 }: {
   label: string;
   onClick?: () => void;
-  onRemove: () => void;
+  onRemove?: () => void;
 }): JSX.Element {
   return (
-    <span className="border-border bg-card hover:bg-muted/50 inline-flex h-10 shrink-0 items-center gap-2 rounded-md border pr-2 pl-3 text-sm font-medium transition-colors">
+    <span
+      className={`border-border bg-card hover:bg-muted/50 inline-flex h-10 shrink-0 items-center gap-2 rounded-md border pl-3 text-sm font-medium transition-colors ${
+        onRemove ? "pr-2" : "pr-3"
+      }`}
+    >
       <button
         type="button"
         onClick={onClick}
@@ -46,14 +54,16 @@ export function FilterChip({
       >
         {label}
       </button>
-      <button
-        type="button"
-        onClick={onRemove}
-        aria-label={`Remove ${label} filter`}
-        className="text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <X className="size-4" />
-      </button>
+      {onRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label={`Remove ${label} filter`}
+          className="text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <X className="size-4" />
+        </button>
+      )}
     </span>
   );
 }

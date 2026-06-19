@@ -26,6 +26,7 @@ import { FilterSheet } from "@/components/filters/FilterSheet";
 import {
   chipLabel,
   isDimensionActive,
+  isDimensionAtDefault,
   type FilterDimension,
   type FilterValue,
   type OptionsById,
@@ -229,7 +230,13 @@ function ToolbarFilters({
           key={dim.id}
           label={chipLabel(dim, values[dim.id]!, optionsById[dim.id])}
           onClick={() => setSheetOpen(true)}
-          onRemove={() => onClear(dim.id)}
+          // A default pinned chip ("All …", default daterange) has nothing to
+          // clear — omit onRemove so the × is hidden instead of a no-op.
+          onRemove={
+            isDimensionAtDefault(dim, values[dim.id]!)
+              ? undefined
+              : () => onClear(dim.id)
+          }
         />
       ))}
 

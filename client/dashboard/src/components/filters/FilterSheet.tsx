@@ -82,6 +82,12 @@ export function FilterSheet({
         className="bg-card w-full overflow-y-auto sm:max-w-md"
         onInteractOutside={keepOpenOnPopoverInteraction}
         onPointerDownOutside={keepOpenOnPopoverInteraction}
+        // Radix auto-focuses the first focusable control on open. When that's a
+        // daterange dimension (e.g. the Sessions sheet, where `date` is first),
+        // focusing the TimeRangePicker's input flips it into edit mode and blanks
+        // the displayed value — the picker looks un-prefilled. Suppress the
+        // open-autofocus so every control keeps showing its current value.
+        onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <SheetHeader>
           <SheetTitle>Filters</SheetTitle>
