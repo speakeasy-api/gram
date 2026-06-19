@@ -17,7 +17,11 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { TextArea } from "@/components/ui/textarea";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { type Step } from "@/pages/setup/components/onboarding-stepper";
+import {
+  OnboardingStepper,
+  type Step,
+} from "@/pages/setup/components/onboarding-stepper";
+import { useInsightsState } from "@/components/insights-context";
 import {
   Sheet,
   SheetContent,
@@ -57,7 +61,6 @@ import {
   Sparkles,
   SlidersHorizontal,
   X,
-  Check,
 } from "lucide-react";
 import {
   useState,
@@ -65,7 +68,7 @@ import {
   useEffect,
   useMemo,
   useRef,
-  Fragment,
+  useLayoutEffect,
   type ReactNode,
 } from "react";
 import { useQueryState } from "nuqs";
@@ -192,10 +195,8 @@ const PROMPT_WIZARD_STEPS: Step[] = [
   POLICY_WIZARD_STEPS[3]!,
 ];
 
-/** Shared wizard chrome: a horizontal step indicator above the paged content.
- *  On a full page the left rail (the drawer-style OnboardingStepper) reads as
- *  cramped chrome, so steps run across the top instead. The footer
- *  (Back/Continue/Create) lives in the page shell, driven by the parent. */
+/** Shared wizard chrome: the left step rail + the paged content column. The
+ *  footer (Back/Continue/Create) lives in the page shell, driven by the parent. */
 function WizardShell({
   steps,
   currentStep,
@@ -208,47 +209,16 @@ function WizardShell({
   children: ReactNode;
 }) {
   return (
-    <div className="space-y-8">
-      <nav className="flex items-center">
-        {steps.map((step, i) => {
-          const done = i < currentStep;
-          const active = i === currentStep;
-          return (
-            <Fragment key={step.id}>
-              {i > 0 && <div className="bg-border mx-2 h-px flex-1" />}
-              <button
-                type="button"
-                onClick={() => setCurrentStep(i)}
-                className="flex items-center gap-2"
-              >
-                <span
-                  className={cn(
-                    "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-medium transition-colors",
-                    active
-                      ? "bg-foreground text-background"
-                      : done
-                        ? "bg-foreground/70 text-background"
-                        : "bg-muted text-muted-foreground",
-                  )}
-                >
-                  {done ? <Check className="h-3.5 w-3.5" /> : i + 1}
-                </span>
-                <span
-                  className={cn(
-                    "text-sm",
-                    active
-                      ? "text-foreground font-medium"
-                      : "text-muted-foreground",
-                  )}
-                >
-                  {step.title}
-                </span>
-              </button>
-            </Fragment>
-          );
-        })}
-      </nav>
-      <div className="min-w-0 space-y-6">{children}</div>
+    <div className="flex gap-8">
+      <div className="w-44 flex-shrink-0">
+        <OnboardingStepper
+          steps={steps}
+          currentStep={currentStep}
+          onStepClick={(i) => setCurrentStep(i)}
+          allowJumpAhead
+        />
+      </div>
+      <div className="min-w-0 flex-1 space-y-6">{children}</div>
     </div>
   );
 }
@@ -1034,9 +1004,9 @@ function PolicyCenterContent() {
     void setPolicyParam(null);
   }, [setPolicyParam]);
 
-  // The create/edit view is a full-bleed page (not a Dialog), so wire Escape to
-  // close it. Skip when a layered sub-sheet (e.g. the category Customize sheet)
-  // already handled Escape — it calls preventDefault on dismiss.
+  // The create/edit view is a focused full-screen card (not a Dialog), so wire
+  // Escape to close it. Skip when a layered sub-sheet (e.g. the category
+  // Customize sheet) already handled Escape — it calls preventDefault on dismiss.
   useEffect(() => {
     if (!sheetOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -1047,6 +1017,14 @@ function PolicyCenterContent() {
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [sheetOpen, clearPolicyDeepLink]);
+
+  // While the create/edit card is open it owns the whole viewport, so hide the
+  // floating assistant dock for the duration (it would otherwise float on top).
+  const { registerDockHide } = useInsightsState();
+  useLayoutEffect(() => {
+    if (!sheetOpen) return;
+    return registerDockHide();
+  }, [sheetOpen, registerDockHide]);
 
   const invalidate = useCallback(() => {
     void invalidateAllRiskListPolicies(queryClient);
@@ -1768,151 +1746,156 @@ function PolicyCenterContent() {
           </Page.Section.Body>
         </Page.Section>
 
-        {/* Edit/Create page (full-bleed, not a modal — see AGE-2756) */}
+        {/* Edit/Create page: a focused full-screen card that covers the nav
+         *  sidebar and assistant dock, inset by a small gutter so it reads as
+         *  padded rather than full-bleed — mirrors the inset content surface
+         *  (see AGE-2756). */}
         {sheetOpen && (
-          <div className="bg-background fixed inset-0 z-50 flex flex-col">
-            <div className="border-border flex items-start justify-between gap-4 border-b px-8 py-5">
-              <div className="mx-auto flex w-full max-w-5xl items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <Type variant="subheading">{sheetTitle}</Type>
-                  <Type small muted className="mt-1">
-                    {sheetDescription}
-                  </Type>
+          <div className="bg-background fixed inset-0 z-50">
+            <div className="bg-surface-primary absolute inset-2 flex flex-col overflow-hidden rounded-xl border shadow-sm">
+              <div className="border-border flex items-start justify-between gap-4 border-b px-8 py-5">
+                <div className="mx-auto flex w-full max-w-5xl items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <Type variant="subheading">{sheetTitle}</Type>
+                    <Type small muted className="mt-1">
+                      {sheetDescription}
+                    </Type>
+                  </div>
+                  <Button
+                    variant="tertiary"
+                    onClick={() => {
+                      setSheetOpen(false);
+                      clearPolicyDeepLink();
+                    }}
+                  >
+                    <Button.LeftIcon>
+                      <X className="h-4 w-4" />
+                    </Button.LeftIcon>
+                    <Button.Text>Close</Button.Text>
+                  </Button>
                 </div>
-                <Button
-                  variant="tertiary"
-                  onClick={() => {
-                    setSheetOpen(false);
-                    clearPolicyDeepLink();
-                  }}
-                >
-                  <Button.LeftIcon>
-                    <X className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>Close</Button.Text>
-                </Button>
               </div>
-            </div>
-            <div className="flex-1 overflow-y-auto px-8">
-              <div className="mx-auto w-full max-w-5xl space-y-6 py-8">
-                {isChoosingPolicyKind ? (
-                  <PolicyKindChoice onSelect={handleChoosePolicyKind} />
-                ) : formPolicyKind === "risk" ? (
-                  <PolicySheetBody
-                    key={editingPolicy?.id ?? "new-risk-policy"}
-                    wizardStep={wizardStep}
-                    setWizardStep={setWizardStep}
-                    formName={formName}
-                    setFormName={setFormName}
-                    formEnabled={formEnabled}
-                    setFormEnabled={setFormEnabled}
-                    selectedCategories={selectedCategories}
-                    setSelectedCategories={setSelectedCategories}
-                    disabledRules={disabledRules}
-                    setDisabledRules={setDisabledRules}
-                    customRules={customRules}
-                    selectedCustomRuleIds={selectedCustomRuleIds}
-                    setSelectedCustomRuleIds={setSelectedCustomRuleIds}
-                    exemptRuleIds={exemptRuleIds}
-                    setExemptRuleIds={setExemptRuleIds}
-                    includePredicate={includePredicate}
-                    setIncludePredicate={setIncludePredicate}
-                    exemptPredicate={exemptPredicate}
-                    setExemptPredicate={setExemptPredicate}
-                    scopeMode={scopeMode}
-                    setScopeMode={setScopeMode}
-                    selectedMessageTypes={selectedMessageTypes}
-                    setSelectedMessageTypes={setSelectedMessageTypes}
-                    formAction={formAction}
-                    setFormAction={setFormAction}
-                    formAutoName={formAutoName}
-                    setFormAutoName={setFormAutoName}
-                    formUserMessage={formUserMessage}
-                    setFormUserMessage={setFormUserMessage}
-                    formAudienceType={formAudienceType}
-                    setFormAudienceType={setFormAudienceType}
-                    selectedAudiencePrincipalUrns={
-                      selectedAudiencePrincipalUrns
-                    }
-                    setSelectedAudiencePrincipalUrns={
-                      setSelectedAudiencePrincipalUrns
-                    }
-                  />
-                ) : (
-                  <PromptPolicySheetBody
-                    key={editingPolicy?.id ?? "new-prompt-policy"}
-                    wizardStep={wizardStep}
-                    setWizardStep={setWizardStep}
-                    isEditing={!!editingPolicy}
-                    formName={formName}
-                    setFormName={setFormName}
-                    formPromptInstruction={formPromptInstruction}
-                    setFormPromptInstruction={setFormPromptInstruction}
-                    formAction={formAction}
-                    setFormAction={setFormAction}
-                    formAutoName={formAutoName}
-                    setFormAutoName={setFormAutoName}
-                    formEnabled={formEnabled}
-                    setFormEnabled={setFormEnabled}
-                    formModel={formModel}
-                    setFormModel={setFormModel}
-                    formTemperature={formTemperature}
-                    setFormTemperature={setFormTemperature}
-                    formFailOpen={formFailOpen}
-                    setFormFailOpen={setFormFailOpen}
-                    selectedMessageTypes={selectedMessageTypes}
-                    setSelectedMessageTypes={setSelectedMessageTypes}
-                  />
-                )}
-              </div>
-            </div>
-            {!isChoosingPolicyKind && (
-              <div className="border-border bg-background border-t px-8 py-4">
-                <div className="mx-auto flex w-full max-w-5xl flex-row items-center justify-between">
-                  {isWizard ? (
-                    <span className="text-muted-foreground text-xs">
-                      Step {wizardStep + 1} of {wizardSteps.length} ·{" "}
-                      {wizardSteps[wizardStep]?.title}
-                    </span>
+              <div className="flex-1 overflow-y-auto px-8">
+                <div className="mx-auto w-full max-w-5xl space-y-6 py-8">
+                  {isChoosingPolicyKind ? (
+                    <PolicyKindChoice onSelect={handleChoosePolicyKind} />
+                  ) : formPolicyKind === "risk" ? (
+                    <PolicySheetBody
+                      key={editingPolicy?.id ?? "new-risk-policy"}
+                      wizardStep={wizardStep}
+                      setWizardStep={setWizardStep}
+                      formName={formName}
+                      setFormName={setFormName}
+                      formEnabled={formEnabled}
+                      setFormEnabled={setFormEnabled}
+                      selectedCategories={selectedCategories}
+                      setSelectedCategories={setSelectedCategories}
+                      disabledRules={disabledRules}
+                      setDisabledRules={setDisabledRules}
+                      customRules={customRules}
+                      selectedCustomRuleIds={selectedCustomRuleIds}
+                      setSelectedCustomRuleIds={setSelectedCustomRuleIds}
+                      exemptRuleIds={exemptRuleIds}
+                      setExemptRuleIds={setExemptRuleIds}
+                      includePredicate={includePredicate}
+                      setIncludePredicate={setIncludePredicate}
+                      exemptPredicate={exemptPredicate}
+                      setExemptPredicate={setExemptPredicate}
+                      scopeMode={scopeMode}
+                      setScopeMode={setScopeMode}
+                      selectedMessageTypes={selectedMessageTypes}
+                      setSelectedMessageTypes={setSelectedMessageTypes}
+                      formAction={formAction}
+                      setFormAction={setFormAction}
+                      formAutoName={formAutoName}
+                      setFormAutoName={setFormAutoName}
+                      formUserMessage={formUserMessage}
+                      setFormUserMessage={setFormUserMessage}
+                      formAudienceType={formAudienceType}
+                      setFormAudienceType={setFormAudienceType}
+                      selectedAudiencePrincipalUrns={
+                        selectedAudiencePrincipalUrns
+                      }
+                      setSelectedAudiencePrincipalUrns={
+                        setSelectedAudiencePrincipalUrns
+                      }
+                    />
                   ) : (
-                    <span />
+                    <PromptPolicySheetBody
+                      key={editingPolicy?.id ?? "new-prompt-policy"}
+                      wizardStep={wizardStep}
+                      setWizardStep={setWizardStep}
+                      isEditing={!!editingPolicy}
+                      formName={formName}
+                      setFormName={setFormName}
+                      formPromptInstruction={formPromptInstruction}
+                      setFormPromptInstruction={setFormPromptInstruction}
+                      formAction={formAction}
+                      setFormAction={setFormAction}
+                      formAutoName={formAutoName}
+                      setFormAutoName={setFormAutoName}
+                      formEnabled={formEnabled}
+                      setFormEnabled={setFormEnabled}
+                      formModel={formModel}
+                      setFormModel={setFormModel}
+                      formTemperature={formTemperature}
+                      setFormTemperature={setFormTemperature}
+                      formFailOpen={formFailOpen}
+                      setFormFailOpen={setFormFailOpen}
+                      selectedMessageTypes={selectedMessageTypes}
+                      setSelectedMessageTypes={setSelectedMessageTypes}
+                    />
                   )}
-                  <div className="flex gap-2">
-                    {showFooterBack && (
-                      <Button variant="secondary" onClick={onFooterBack}>
-                        <Button.LeftIcon>
-                          <ArrowLeft className="h-4 w-4" />
-                        </Button.LeftIcon>
-                        <Button.Text>Back</Button.Text>
-                      </Button>
-                    )}
-                    {showWizardContinue ? (
-                      <Button
-                        onClick={() => setWizardStep(wizardStep + 1)}
-                        disabled={continueDisabled}
-                      >
-                        <Button.Text>Continue</Button.Text>
-                      </Button>
+                </div>
+              </div>
+              {!isChoosingPolicyKind && (
+                <div className="border-border bg-background border-t px-8 py-4">
+                  <div className="mx-auto flex w-full max-w-5xl flex-row items-center justify-between">
+                    {isWizard ? (
+                      <span className="text-muted-foreground text-xs">
+                        Step {wizardStep + 1} of {wizardSteps.length} ·{" "}
+                        {wizardSteps[wizardStep]?.title}
+                      </span>
                     ) : (
-                      <Button onClick={handleSave} disabled={saveDisabled}>
-                        {mutationPending && (
-                          <Button.LeftIcon>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          </Button.LeftIcon>
-                        )}
-                        <Button.Text>
-                          {mutationPending
-                            ? "Saving..."
-                            : editingPolicy
-                              ? "Update"
-                              : "Create"}
-                        </Button.Text>
-                      </Button>
+                      <span />
                     )}
+                    <div className="flex gap-2">
+                      {showFooterBack && (
+                        <Button variant="secondary" onClick={onFooterBack}>
+                          <Button.LeftIcon>
+                            <ArrowLeft className="h-4 w-4" />
+                          </Button.LeftIcon>
+                          <Button.Text>Back</Button.Text>
+                        </Button>
+                      )}
+                      {showWizardContinue ? (
+                        <Button
+                          onClick={() => setWizardStep(wizardStep + 1)}
+                          disabled={continueDisabled}
+                        >
+                          <Button.Text>Continue</Button.Text>
+                        </Button>
+                      ) : (
+                        <Button onClick={handleSave} disabled={saveDisabled}>
+                          {mutationPending && (
+                            <Button.LeftIcon>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            </Button.LeftIcon>
+                          )}
+                          <Button.Text>
+                            {mutationPending
+                              ? "Saving..."
+                              : editingPolicy
+                                ? "Update"
+                                : "Create"}
+                          </Button.Text>
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         )}
 
