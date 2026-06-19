@@ -12,4 +12,7 @@ against="${usage_against:?--against is required}"
 buf lint
 buf breaking --against "${against}"
 
+# ruff is provided by mise (see mise.toml), not the uv environment, so call it
+# directly. It picks up the lint selection from infra/pyproject.toml and skips
+# the buf-generated gen_py tree via that config's extend-exclude.
 ruff check infra
