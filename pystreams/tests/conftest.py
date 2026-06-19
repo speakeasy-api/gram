@@ -27,7 +27,7 @@ def _configure_aiocop():
     aiocop.patch_audit_functions()
     aiocop.start_blocking_io_detection()
     aiocop.detect_slow_tasks(threshold_ms=DEFAULT_THRESHOLD_MS)
-    yield
+    return
 
 
 @pytest.fixture(autouse=True)
@@ -41,4 +41,4 @@ async def _enforce_no_blocking(_configure_aiocop):
     """
     aiocop.activate()
     aiocop.enable_raise_on_violations()
-    yield
+    return

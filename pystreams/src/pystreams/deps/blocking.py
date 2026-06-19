@@ -22,7 +22,7 @@ import aiocop
 import structlog
 from opentelemetry import metrics
 
-from .. import attr
+from pystreams import attr
 
 # Tasks slower than this without yielding are treated as blocking the loop. The
 # trivial ping handler stays well under it, and the Presidio scan is offloaded to

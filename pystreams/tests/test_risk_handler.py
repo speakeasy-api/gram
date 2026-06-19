@@ -1,8 +1,8 @@
 import structlog
-from structlog.testing import capture_logs
-
 from gram.risk.v1 import presidio_request_pb2
 from gram_infra.pubsub.subscriber import MessageMetadata
+from structlog.testing import capture_logs
+
 from pystreams.risk.handler import PresidioHandler, Recognized
 
 

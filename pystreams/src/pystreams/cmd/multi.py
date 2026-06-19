@@ -3,13 +3,10 @@ import os
 import signal
 from functools import partial
 
-import click
-from pystreams.ping.handler import PingHandler
-from pystreams.risk.handler import PresidioHandler
-import structlog
 import anyio
+import click
+import structlog
 from google.cloud.pubsub_v1 import PublisherClient, SubscriberClient
-
 from gram.ping.v1 import ping_pb2, processor_pb2
 from gram.risk.v1 import presidio_request_pb2, presidio_scanner_pb2
 from gram_infra.pubsub import (
@@ -17,15 +14,16 @@ from gram_infra.pubsub import (
     PubSubBroker,
 )
 
-from .. import attr
-from ..deps import logging
-from ..deps.blocking import activate_blocking_detection
-from ..deps.loop_lag import monitor_event_loop_lag
-from ..health import HealthState, serve_control
+from pystreams import attr
+from pystreams.deps import logging
+from pystreams.deps.blocking import activate_blocking_detection
+from pystreams.deps.loop_lag import monitor_event_loop_lag
+from pystreams.health import HealthState, serve_control
+from pystreams.ping.handler import PingHandler
+from pystreams.risk.handler import PresidioHandler
+
+from . import flags_control, flags_gcp, flags_service
 from .receiver import ReceiverGroup
-from . import flags_service
-from . import flags_gcp
-from . import flags_control
 
 
 @click.command(

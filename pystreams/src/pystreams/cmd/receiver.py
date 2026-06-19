@@ -15,11 +15,10 @@ from typing import TypeVar
 import anyio.abc
 import structlog
 from google.protobuf.message import Message
-
 from gram_infra.pubsub import SubscriberBroker, pubsub_subscriber_for_message
 from gram_infra.pubsub.subscriber import MessageCallback
 
-from ..deps.tracing import traced
+from pystreams.deps.tracing import traced
 
 M = TypeVar("M", bound=Message)
 

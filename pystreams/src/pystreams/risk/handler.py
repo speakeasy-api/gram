@@ -2,11 +2,10 @@ from typing import Protocol
 
 import structlog
 from asyncer import asyncify
-from presidio_analyzer import AnalyzerEngine
-from presidio_analyzer.nlp_engine import NlpEngineProvider
-
 from gram.risk.v1 import presidio_request_pb2
 from gram_infra.pubsub.subscriber import MessageMetadata
+from presidio_analyzer import AnalyzerEngine
+from presidio_analyzer.nlp_engine import NlpEngineProvider
 
 # The spaCy model bundled into the image (pinned in pystreams/pyproject.toml).
 # Presidio's default AnalyzerEngine() would also load this model, but selecting
@@ -77,7 +76,7 @@ class PresidioHandler:
                 contents=list(message.contents),
                 entities=requested,
             )
-        except Exception as exc:  # noqa: BLE001 - keep shadow processing non-fatal
+        except Exception as exc:
             # This is best-effort shadow processing, and the PresidioScanner
             # subscription declares no dead-letter policy. Letting a scan failure
             # escape would nack the message, and any input that deterministically
