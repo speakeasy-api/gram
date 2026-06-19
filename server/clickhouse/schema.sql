@@ -397,6 +397,11 @@ SELECT
     -- Tool call count
     countIfState(startsWith(toString(attributes.gram.tool.urn), 'tools:')) AS total_tool_calls
 FROM telemetry_logs
+WHERE gram_urn IN (
+  'claude-code:usage:metrics',
+  'cursor:usage:metrics',
+  'codex:usage:metrics'
+)
 GROUP BY
     gram_project_id,
     time_bucket,
