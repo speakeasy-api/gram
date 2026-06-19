@@ -11,3 +11,5 @@ against="${usage_against:?--against is required}"
 
 buf lint
 buf breaking --against "${against}"
+
+ruff check infra
