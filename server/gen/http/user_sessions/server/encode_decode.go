@@ -41,6 +41,8 @@ func DecodeListUserSessionsRequest(mux goahttp.Muxer, decoder func(*http.Request
 		var (
 			subjectUrn          *string
 			userSessionIssuerID *string
+			status              *string
+			clientID            *string
 			cursor              *string
 			limit               *int
 			sessionToken        *string
@@ -59,6 +61,22 @@ func DecodeListUserSessionsRequest(mux goahttp.Muxer, decoder func(*http.Request
 		}
 		if userSessionIssuerID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("user_session_issuer_id", *userSessionIssuerID, goa.FormatUUID))
+		}
+		statusRaw := qp.Get("status")
+		if statusRaw != "" {
+			status = &statusRaw
+		}
+		if status != nil {
+			if !(*status == "active" || *status == "expired" || *status == "revoked" || *status == "all") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("status", *status, []any{"active", "expired", "revoked", "all"}))
+			}
+		}
+		clientIDRaw := qp.Get("client_id")
+		if clientIDRaw != "" {
+			clientID = &clientIDRaw
+		}
+		if clientID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("client_id", *clientID, goa.FormatUUID))
 		}
 		cursorRaw := qp.Get("cursor")
 		if cursorRaw != "" {
@@ -93,7 +111,7 @@ func DecodeListUserSessionsRequest(mux goahttp.Muxer, decoder func(*http.Request
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListUserSessionsPayload(subjectUrn, userSessionIssuerID, cursor, limit, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewListUserSessionsPayload(subjectUrn, userSessionIssuerID, status, clientID, cursor, limit, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -266,6 +284,223 @@ func EncodeListUserSessionsError(encoder func(context.Context, http.ResponseWrit
 				body = formatter(ctx, res)
 			} else {
 				body = NewListUserSessionsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeListFacetsResponse returns an encoder for responses returned by the
+// userSessions listFacets endpoint.
+func EncodeListFacetsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*usersessions.ListUserSessionFacetsResult)
+		enc := encoder(ctx, w)
+		body := NewListFacetsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeListFacetsRequest returns a decoder for requests sent to the
+// userSessions listFacets endpoint.
+func DecodeListFacetsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*usersessions.ListFacetsPayload, error) {
+	return func(r *http.Request) (*usersessions.ListFacetsPayload, error) {
+		var payload *usersessions.ListFacetsPayload
+		var (
+			sessionToken     *string
+			apikeyToken      *string
+			projectSlugInput *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewListFacetsPayload(sessionToken, apikeyToken, projectSlugInput)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeListFacetsError returns an encoder for errors returned by the
+// listFacets userSessions endpoint.
+func EncodeListFacetsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListFacetsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListFacetsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListFacetsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListFacetsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListFacetsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListFacetsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListFacetsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListFacetsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListFacetsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListFacetsGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -737,6 +972,24 @@ func marshalTypesUserSessionToUserSessionResponseBody(v *types.UserSession) *Use
 		ExpiresAt:           v.ExpiresAt,
 		CreatedAt:           v.CreatedAt,
 		UpdatedAt:           v.UpdatedAt,
+		IssuerSlug:          v.IssuerSlug,
+		ClientName:          v.ClientName,
+		SubjectType:         v.SubjectType,
+		SubjectDisplayName:  v.SubjectDisplayName,
+		RevokedAt:           v.RevokedAt,
+	}
+
+	return res
+}
+
+// marshalUsersessionsUserSessionFacetOptionToUserSessionFacetOptionResponseBody
+// builds a value of type *UserSessionFacetOptionResponseBody from a value of
+// type *usersessions.UserSessionFacetOption.
+func marshalUsersessionsUserSessionFacetOptionToUserSessionFacetOptionResponseBody(v *usersessions.UserSessionFacetOption) *UserSessionFacetOptionResponseBody {
+	res := &UserSessionFacetOptionResponseBody{
+		Value:       v.Value,
+		DisplayName: v.DisplayName,
+		Count:       v.Count,
 	}
 
 	return res
