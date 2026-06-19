@@ -452,7 +452,7 @@ export function CostWidgets({
       </div>
       <div className="grid grid-cols-3 gap-4">
         <KpiTile
-          label="Chat sessions"
+          label="Agent sessions"
           value={formatCompact(totals.sessions)}
           series={series.chats}
           delta={relDelta(totals.sessions, prevTotals.sessions)}

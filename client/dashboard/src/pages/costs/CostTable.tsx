@@ -106,8 +106,11 @@ function displayValue(groupValue: string): string {
   return groupValue === "" ? "(unset)" : groupValue;
 }
 
+// "" is the "(unset)" bucket — a real slice (everyone missing this attribute),
+// so it stays drillable. Only "Other" — the synthetic top-N overflow rollup of
+// many distinct values — can't map back to a single filter, so it's inert.
 function isDrillableValue(groupValue: string): boolean {
-  return groupValue !== "" && groupValue !== "Other";
+  return groupValue !== "Other";
 }
 
 // The provider logo for a model value (claude-* → Claude, gpt-* → OpenAI, …).
@@ -356,7 +359,7 @@ export function CostTable({
         </span>
         <span className="flex">
           <HeaderButton
-            label="Chats"
+            label="Sessions"
             sortKey="chats"
             sort={sort}
             onSort={onSort}

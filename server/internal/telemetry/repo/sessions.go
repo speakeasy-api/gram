@@ -60,7 +60,7 @@ func applySessionFilters(sb squirrel.SelectBuilder, filters []AttributeMetricsFi
 		}
 		switch dim.kind {
 		case attributeDimArray:
-			sb = sb.Where(squirrel.Expr("hasAny("+dim.column+", ?)", f.Values))
+			sb = sb.Where(arrayDimFilter(dim.column, f.Values))
 		case attributeDimScalar, attributeDimProject:
 			sb = sb.Where(squirrel.Eq{dim.column: f.Values})
 		default:

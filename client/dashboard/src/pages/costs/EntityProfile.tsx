@@ -67,7 +67,7 @@ function buildCostCsv(rows: QueryRow[], groupLabel: string): string {
     "Total Cost",
     "% Share",
     "Cost / Session",
-    "Chats",
+    "Sessions",
     "Tool Calls",
     "Tokens",
   ];
@@ -229,7 +229,7 @@ export type EntityProfileProps = {
   onDrill: (row: QueryRow) => void;
   // Per-group daily cost series for the row sparklines.
   seriesByGroup: Map<string, number[]>;
-  // The date-range picker control, rendered next to the row count.
+  // The date-range picker control, rendered in the header above the stats.
   rangePicker: ReactNode;
   // Human date-range label (e.g. "June 15–19") for the CSV export filename.
   rangeLabel: string;
@@ -334,6 +334,9 @@ export function EntityProfile({
               </span>
             </button>
           </div>
+          {/* Date-range picker pinned to the top-right of the header, in line
+              with the back controls on the left — it scopes every number below. */}
+          <div className="absolute top-5 right-8 z-10">{rangePicker}</div>
           <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 items-start gap-4">
               <div className="border-border bg-background flex size-16 shrink-0 items-center justify-center rounded-2xl border">
@@ -356,7 +359,7 @@ export function EntityProfile({
             <div className="flex shrink-0 gap-8">
               <HeaderStat label="Cost" value={formatCost(stats.cost)} />
               <HeaderStat
-                label="Chat sessions"
+                label="Agent sessions"
                 value={stats.sessions.toLocaleString()}
               />
               <HeaderStat
@@ -375,37 +378,34 @@ export function EntityProfile({
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-8 pt-2 pb-24">
         {widgets}
         <div className="flex flex-col gap-3">
-          <div className="mb-3 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <h2 className="flex items-center gap-2 text-sm font-semibold">
-                Breakdown by
-                <Select
-                  value={groupBy}
-                  onValueChange={(value) => onGroupByChange(value as Dimension)}
-                >
-                  <SelectTrigger className="border-border hover:bg-muted data-[state=open]:bg-muted !h-auto w-auto -my-1 cursor-pointer gap-1.5 rounded-md border bg-transparent py-1.5 pr-2.5 pl-3 text-sm font-semibold shadow-none transition-colors focus-visible:ring-0">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {pivotOptions.map((p) => (
-                      <SelectItem key={p.dim} value={p.dim}>
-                        {p.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </h2>
-              <button
-                type="button"
-                onClick={handleExportCsv}
-                disabled={rows.length === 0}
-                className="text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex items-center gap-1.5 rounded-md border bg-transparent px-2.5 py-1.5 text-sm transition-colors disabled:pointer-events-none disabled:opacity-40"
+          <div className="mb-3 flex items-center gap-3">
+            <h2 className="flex items-center gap-2 text-sm font-semibold">
+              Breakdown by
+              <Select
+                value={groupBy}
+                onValueChange={(value) => onGroupByChange(value as Dimension)}
               >
-                <Download className="size-3.5 shrink-0" />
-                Export CSV
-              </button>
-            </div>
-            {rangePicker}
+                <SelectTrigger className="border-border hover:bg-muted data-[state=open]:bg-muted !h-auto w-auto -my-1 cursor-pointer gap-1.5 rounded-md border bg-transparent py-1.5 pr-2.5 pl-3 text-sm font-semibold shadow-none transition-colors focus-visible:ring-0">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {pivotOptions.map((p) => (
+                    <SelectItem key={p.dim} value={p.dim}>
+                      {p.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </h2>
+            <button
+              type="button"
+              onClick={handleExportCsv}
+              disabled={rows.length === 0}
+              className="text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex items-center gap-1.5 rounded-md border bg-transparent px-2.5 py-1.5 text-sm transition-colors disabled:pointer-events-none disabled:opacity-40"
+            >
+              <Download className="size-3.5 shrink-0" />
+              Export CSV
+            </button>
           </div>
           {isError ? (
             <Type className="text-muted-foreground">
