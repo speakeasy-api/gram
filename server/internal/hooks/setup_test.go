@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
-	cursoragent "github.com/speakeasy-api/gram/server/internal/agentevents/providers/cursor"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -96,8 +95,6 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 	policyBypass := risk.NewPolicyBypassEvaluator(logger, conn)
 	siteURL, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
-	cursorEvents, err := cursoragent.NewAgent()
-	require.NoError(t, err)
 	svc := NewService(
 		logger,
 		conn,
@@ -114,7 +111,6 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		policyBypass,
 		shadowMCPClient,
 		chatWriter,
-		cursorEvents,
 		siteURL,
 		"test-jwt-secret",
 	)

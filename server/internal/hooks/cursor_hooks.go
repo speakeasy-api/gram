@@ -13,12 +13,13 @@ import (
 	"github.com/google/uuid"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
-	hookevents "github.com/speakeasy-api/gram/server/internal/agentevents/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hookevents"
+	cursorevents "github.com/speakeasy-api/gram/server/internal/hookevents/adapters/cursor"
 	"github.com/speakeasy-api/gram/server/internal/mcpname"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -76,13 +77,16 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		AgentMessage:      nil,
 	}
 
-	ev := s.cursorEvents.NewEvent(authCtx, payload, time.Now())
-
-	eventType, eventTypeOK, err := ev.EventType()
+	cursorEvent, cursorEventOK, err := cursorevents.Normalize(authCtx, payload, hookevents.Identity{
+		OrganizationID: orgID,
+		ProjectID:      *authCtx.ProjectID,
+		UserID:         actorUserID,
+		UserEmail:      userEmail,
+	}, time.Now())
 	if err != nil {
 		return nil, err
 	}
-	if !eventTypeOK {
+	if !cursorEventOK {
 		logger.InfoContext(ctx, "cursor hook received illegal event type",
 			attr.SlogEvent("cursor_hook_illegal_event_type"),
 			attr.SlogHookEvent(payload.HookEventName),
@@ -95,12 +99,12 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 	// the trace renders as "blocked" in dashboards.
 	var blockReason string
 
-	switch eventType {
-	case hookevents.BeforeMCPExecution:
+	switch ev := cursorEvent.(type) {
+	case *hookevents.BeforeMCPExecution:
 		// beforeMCPExecution fires for MCP-routed (non-local) tool calls. Run
 		// the risk scanner first (block-only today), then fall through to the
 		// shadow-MCP guard so unapproved toolsets are still blocked.
-		if scanResult := s.scanCursorForEnforcement(ctx, ev); scanResult != nil {
+		if scanResult := s.scanMCPRequestForEnforcement(ctx, ev); scanResult != nil {
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			blockReason = auditReason
@@ -113,9 +117,9 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 			result.Permission = new("allow")
 			break
 		}
-		toolName := strings.TrimPrefix(conv.PtrValOr(payload.ToolName, ""), "MCP:")
+		toolName := strings.TrimPrefix(ev.ToolName, "MCP:")
 		evidence := cursorShadowMCPEvidence(payload)
-		if detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, actorUserID, policy.ID, payload.ToolInput, toolName, evidence); denied {
+		if detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, actorUserID, policy.ID, ev.ToolInput, toolName, evidence); denied {
 			logger.InfoContext(ctx, "denying cursor tool call: failed gram toolset validation",
 				attr.SlogEvent("cursor_hook_denied"),
 				attr.SlogHookBlockReason(detail),
@@ -131,7 +135,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 				AuditReason:     auditReason,
 				Evidence:        evidence,
 				ToolName:        toolName,
-				ToolInput:       payload.ToolInput,
+				ToolInput:       ev.ToolInput,
 				RiskPolicyID:    policy.ID,
 			})
 			blockReason = auditReason
@@ -141,19 +145,19 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		} else {
 			result.Permission = new("allow")
 		}
-	case hookevents.BeforeToolUse:
+	case *hookevents.BeforeToolUse:
 		// preToolUse fires for ALL Cursor tool calls including MCP ones, while
 		// beforeMCPExecution also fires for MCP-routed calls and already runs
 		// the scan there. Skip the scan here for MCP tools to avoid scanning
 		// (and DB-querying) the same input twice on the hot path. Native tools
 		// (read_file, edit_file, ...) only have this single event and still
 		// get scanned.
-		toolName := conv.PtrValOr(payload.ToolName, "")
+		toolName := ev.ToolName
 		if strings.HasPrefix(toolName, "MCP:") {
 			result.Permission = new("allow")
 			break
 		}
-		if scanResult := s.scanCursorForEnforcement(ctx, ev); scanResult != nil {
+		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			blockReason = auditReason
@@ -162,8 +166,8 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (*gen.
 		} else {
 			result.Permission = new("allow")
 		}
-	case hookevents.UserPromptSubmit:
-		if scanResult := s.scanCursorForEnforcement(ctx, ev); scanResult != nil {
+	case *hookevents.UserPromptSubmit:
+		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
 			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			blockReason = auditReason
