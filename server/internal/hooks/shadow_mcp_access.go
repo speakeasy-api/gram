@@ -7,9 +7,9 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/mcpname"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
 
 func (s *Service) enforceShadowMCPToolAccess(
@@ -147,5 +147,5 @@ func claudeShadowMCPEvidence(rawToolName string) shadowmcp.AccessEvidence {
 // or Claude tool name. Both hosts emit the "mcp__<server>__<tool>" form, so the
 // shared parser's Cursor "MCP:" branch never fires here.
 func mcpServerIdentityFromToolName(rawName string) string {
-	return mcpname.MCPServerOf(rawName)
+	return toolref.MCPServerOf(rawName)
 }

@@ -8,7 +8,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/customdomains/repo"
-	"github.com/speakeasy-api/gram/server/internal/mcpname"
+	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
 
 // gramHostedMCPHost is the canonical host for Gram-managed MCP servers.
@@ -39,7 +39,7 @@ func parseClaudeToolName(rawName string) parsedClaudeToolName {
 	if !strings.HasPrefix(rawName, "mcp__") {
 		return parsedClaudeToolName{Server: "", Tool: "", IsMCP: false}
 	}
-	server, tool, isMCP := mcpname.AttributeTool(rawName)
+	server, tool, isMCP := toolref.AttributeTool(rawName)
 	if !isMCP {
 		return parsedClaudeToolName{Server: "", Tool: "", IsMCP: false}
 	}

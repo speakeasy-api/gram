@@ -1,11 +1,13 @@
-// Package mcpname parses the namespaced tool-call names that agent hosts emit.
+// Package toolref parses and attributes the namespaced tool-call names that
+// agent hosts emit.
 //
 // MCP-routed tools use either the "mcp__<server>__<function>" convention
 // (Claude Code) or a "MCP:" prefix (Cursor); native tools are bare (e.g.
 // "bash"). These helpers are the single source of truth for that parsing,
 // shared by the hooks package (shadow_mcp matching, telemetry attribution) and
-// the risk_analysis package (batch analyzer + realtime judge attribution).
-package mcpname
+// the risk_analysis package (batch analyzer, realtime judge, and custom-rule
+// engine attribution).
+package toolref
 
 import "strings"
 
