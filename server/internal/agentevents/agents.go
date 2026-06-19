@@ -3,24 +3,52 @@ package agentevents
 import (
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/agentevents/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
+type fieldResolvers[T any] map[types.Field]FieldResolver[T, any]
+type resolverRegistry[T any] map[types.EventType]fieldResolvers[T]
+
 type Agent[T any] struct {
 	name      types.Provider
-	mu        sync.RWMutex
-	resolvers map[types.EventType]map[types.Field]FieldResolver[T, any]
+	resolvers resolverRegistry[T]
 }
 
-func NewAgent[T any](provider types.Provider) (*Agent[T], error) {
+type Registration[T any] struct {
+	eventTypes []types.EventType
+	resolvers  []Resolver[T]
+}
+
+func Register[T any](resolvers ...Resolver[T]) Registration[T] {
+	return RegisterFor([]types.EventType{types.AnyEventType}, resolvers...)
+}
+
+func RegisterFor[T any](eventTypes []types.EventType, resolvers ...Resolver[T]) Registration[T] {
+	return Registration[T]{
+		eventTypes: eventTypes,
+		resolvers:  resolvers,
+	}
+}
+
+func NewAgent[T any](provider types.Provider, registrations ...Registration[T]) (*Agent[T], error) {
+	resolvers := make(resolverRegistry[T])
+	for _, registration := range registrations {
+		if err := register(resolvers, registration); err != nil {
+			return nil, err
+		}
+	}
+
 	return &Agent[T]{
 		name:      provider,
-		resolvers: make(map[types.EventType]map[types.Field]FieldResolver[T, any]),
+		resolvers: resolvers,
 	}, nil
+}
+
+func (a *Agent[T]) resolver(eventType types.EventType, field types.Field) FieldResolver[T, any] {
+	return a.resolvers[eventType][field]
 }
 
 func (a *Agent[T]) NewEvent(authContext *contextvalues.AuthContext, raw T, timestamp time.Time) Event[T] {
@@ -32,11 +60,9 @@ func (a *Agent[T]) NewEvent(authContext *contextvalues.AuthContext, raw T, times
 	}
 }
 
-func (a *Agent[T]) Register(resolvers ...Resolver[T]) error {
-	return a.RegisterFor([]types.EventType{types.AnyEventType}, resolvers...)
-}
-
-func (a *Agent[T]) RegisterFor(eventTypes []types.EventType, resolvers ...Resolver[T]) error {
+func register[T any](registry resolverRegistry[T], registration Registration[T]) error {
+	eventTypes := registration.eventTypes
+	resolvers := registration.resolvers
 	if len(eventTypes) == 0 {
 		return errors.New("agentevents: no event types")
 	}
@@ -46,35 +72,11 @@ func (a *Agent[T]) RegisterFor(eventTypes []types.EventType, resolvers ...Resolv
 
 	for _, eventType := range eventTypes {
 		for _, resolver := range resolvers {
-			if err := a.register(eventType, resolver); err != nil {
-				return err
+			if registry[eventType][resolver.Field] != nil {
+				return fmt.Errorf("agentevents: duplicate resolver for %s/%s", eventType, resolver.Field)
 			}
+			registry[eventType][resolver.Field] = resolver.ResolveFunc
 		}
 	}
 	return nil
-}
-
-func (a *Agent[T]) register(eventType types.EventType, resolver Resolver[T]) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	if a.resolvers[eventType] == nil {
-		a.resolvers[eventType] = make(map[types.Field]FieldResolver[T, any])
-	}
-	if _, ok := a.resolvers[eventType][resolver.Field]; ok {
-		return fmt.Errorf("agentevents: duplicate resolver for %s/%s", eventType, resolver.Field)
-	}
-
-	a.resolvers[eventType][resolver.Field] = resolver.ResolveFunc
-	return nil
-}
-
-func (a *Agent[T]) resolver(eventType types.EventType, field types.Field) FieldResolver[T, any] {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	if a.resolvers == nil {
-		return nil
-	}
-	return a.resolvers[eventType][field]
 }
