@@ -3,14 +3,17 @@ name = "pystreams"
 version = "0.1.0"
 description = "Python Pub/Sub subscribers for Gram streams"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 dependencies = [
   "anyio>=4.13.0",
+  "asyncer>=0.0.17",
   "click>=8.4.1",
+  "en-core-web-lg",
   "gram-infra",
   "opentelemetry-api>=1.42.1",
   "opentelemetry-sdk>=1.42.1",
   "opentelemetry-semantic-conventions>=0.63b1",
+  "presidio-analyzer>=2.2.362",
   "starlette>=0.40.0",
   "structlog>=26.1.0",
   "uvicorn>=0.30.0",
@@ -34,6 +37,7 @@ build-backend = "uv_build"
 
 [tool.uv.sources]
 gram-infra = { workspace = true }
+en-core-web-lg = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

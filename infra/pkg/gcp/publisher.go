@@ -14,6 +14,11 @@ type PublisherBroker interface {
 	PublisherForMessage(ctx context.Context, msg proto.Message) (*pubsub.Publisher, error)
 }
 
+type Publisher[M any] interface {
+	Publish(ctx context.Context, msg M) PublishResult
+	Stop(ctx context.Context) error
+}
+
 // isNilMessage reports whether a proto message is unusable as input: either a
 // nil interface or a typed-nil pointer (an invalid reflect message). Guarding
 // on this at the boundary lets callers receive a typed error instead of a
@@ -39,10 +44,6 @@ func (e *errPublishResult) Ready() <-chan struct{} {
 
 func (e *errPublishResult) Get(ctx context.Context) (serverID string, err error) {
 	return "", e.err
-}
-
-type Publisher[M any] interface {
-	Publish(ctx context.Context, msg M) PublishResult
 }
 
 type psPublisherOptions struct {
@@ -123,4 +124,25 @@ func (p *psPublisher[M]) Publish(ctx context.Context, msg M) PublishResult {
 	})
 
 	return res
+}
+
+// Stop flushes buffered messages and releases the publisher's resources. The
+// underlying pubsub.Publisher.Stop blocks until the flush completes and cannot
+// itself be cancelled, so it runs in a goroutine and is raced against ctx. If
+// ctx is cancelled first, Stop returns the context error while the flush
+// continues in the background, ensuring shutdown stays bounded by the caller's
+// deadline rather than stalling indefinitely.
+func (p *psPublisher[M]) Stop(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() {
+		p.pub.Stop()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("stop publisher: %w", ctx.Err())
+	}
 }
