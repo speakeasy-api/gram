@@ -17,6 +17,7 @@ import { ChatConversation, ChatHome, ChatRoot } from "./pages/chat/Chat";
 import CLIs from "./pages/CLIs";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
+import UserSessions from "./pages/org/UserSessions";
 import DeviceAgent from "./pages/device-agent/DeviceAgent";
 import Elements from "./pages/elements/Elements";
 import EnvironmentPage from "./pages/environments/Environment";
@@ -785,8 +786,14 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "history",
     component: OrgAuditLogs,
   },
+  userSessions: {
+    title: "MCP Connections",
+    url: "user-sessions",
+    icon: "users",
+    component: UserSessions,
+  },
   identity: {
-    title: "Identity",
+    title: "IDP and SSO",
     url: "identity",
     icon: "fingerprint",
     component: OrgIdentity,

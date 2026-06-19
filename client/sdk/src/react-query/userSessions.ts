@@ -199,6 +199,8 @@ export function setUserSessionsData(
     parameters: {
       subjectUrn?: string | undefined;
       userSessionIssuerId?: string | undefined;
+      status?: operations.ListUserSessionsQueryParamStatus | undefined;
+      clientId?: string | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
       gramSession?: string | undefined;
@@ -219,6 +221,8 @@ export function invalidateUserSessions(
     [parameters: {
       subjectUrn?: string | undefined;
       userSessionIssuerId?: string | undefined;
+      status?: operations.ListUserSessionsQueryParamStatus | undefined;
+      clientId?: string | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
       gramSession?: string | undefined;
