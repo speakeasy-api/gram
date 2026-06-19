@@ -488,6 +488,7 @@ async fn build_thread_mcp(
     let catalog = manager.source();
     let mut auth_notices = Vec::new();
     let mut known = BTreeSet::new();
+    let configured: BTreeSet<String> = servers.iter().map(|s| s.id.clone()).collect();
 
     for server in servers {
         let config = build_mcp_server_config(server, &host.http_client, tokens)?;
@@ -521,17 +522,23 @@ async fn build_thread_mcp(
         if !matches!(failure.error, McpError::AuthRequired(_)) {
             continue;
         }
-        // Auth-pending counts as known: the integration is part of the
-        // assistant's set, so reconcile must not re-add it and a manual
-        // force_reconnect should be allowed once the user authorizes.
-        known.insert(server_id.0.clone());
         let Some(server) = servers.iter().find(|s| s.id == server_id.0) else {
             continue;
         };
+        // Mark auth-pending as known only once the prompt is created, so a
+        // transient auth-flow failure leaves the server out of `known` and the
+        // next /turn reconcile retries the prompt instead of stranding the
+        // integration unprompted for the thread's lifetime.
         if let Some(notice) =
             create_auth_notice(host, thread_id, &server.id, &server.url, tokens).await
         {
+            known.insert(server_id.0.clone());
             auth_notices.push(notice);
+        } else {
+            tracing::warn!(
+                server_id = %server_id,
+                "auth prompt creation failed; will retry on next reconcile"
+            );
         }
     }
 
@@ -542,6 +549,7 @@ async fn build_thread_mcp(
         tokens: tokens.clone(),
         inbox_tx,
         known,
+        configured,
     };
     tokio::spawn(run_mcp_actor(manager, cmd_rx, actor_ctx));
     Ok((cmd_tx, catalog, auth_notices))
@@ -552,7 +560,14 @@ struct McpActorContext {
     thread_id: String,
     tokens: TokenRegistry,
     inbox_tx: UnboundedSender<String>,
+    // Servers currently connected or auth-pending. Drives reconcile's
+    // add/remove diff and is mutated as connections come and go.
     known: BTreeSet<String>,
+    // Server ids in the assistant's current configuration (the latest
+    // reconcile's desired set). Gates ForceReconnect so a configured but
+    // not-yet-connected server can still be retried, while a server detached
+    // from the configuration cannot be resurrected.
+    configured: BTreeSet<String>,
 }
 
 async fn create_auth_notice(
@@ -590,6 +605,7 @@ async fn reconcile_servers(
     desired: Vec<McpServer>,
 ) {
     let desired_ids: BTreeSet<String> = desired.iter().map(|s| s.id.clone()).collect();
+    ctx.configured = desired_ids.clone();
 
     for server in &desired {
         if ctx.known.contains(&server.id) {
@@ -616,8 +632,11 @@ async fn reconcile_servers(
                 ctx.known.insert(server.id.clone());
             }
             Err(err) if err.auth_required => {
-                ctx.known.insert(server.id.clone());
-                if let Some(notice) = create_auth_notice(
+                // Mark known only once the auth prompt is created, so a
+                // transient auth-flow failure leaves the server out of `known`
+                // and the next reconcile retries the prompt instead of
+                // stranding the integration unprompted for the thread.
+                match create_auth_notice(
                     &ctx.host,
                     &ctx.thread_id,
                     &server.id,
@@ -625,20 +644,29 @@ async fn reconcile_servers(
                     &ctx.tokens,
                 )
                 .await
-                    && ctx.inbox_tx.send(notice).is_err()
                 {
-                    tracing::warn!(
-                        server_id = %server.id,
-                        "drop reconcile auth notice: thread inbox closed"
-                    );
+                    Some(notice) => {
+                        ctx.known.insert(server.id.clone());
+                        if ctx.inbox_tx.send(notice).is_err() {
+                            tracing::warn!(
+                                server_id = %server.id,
+                                "drop reconcile auth notice: thread inbox closed"
+                            );
+                        }
+                    }
+                    None => {
+                        tracing::warn!(
+                            server_id = %server.id,
+                            "reconcile auth prompt failed; will retry on next reconcile"
+                        );
+                    }
                 }
             }
             Err(_) => {
-                // Transient transport failure on connect: leave out of
-                // `known` so a later reconcile re-attempts the connect.
-                // The config is still registered, which means a manual
-                // `mcp_force_reconnect` will not bypass this path — see
-                // the `known` guard in the ForceReconnect arm.
+                // Transient transport failure on connect: leave out of `known`
+                // so a later reconcile re-attempts the connect. The server
+                // stays in `configured`, so a manual mcp_force_reconnect is
+                // still allowed to retry it immediately.
             }
         }
     }
@@ -652,7 +680,11 @@ async fn reconcile_servers(
     for id in removed {
         let server_uid = McpServerId::new(id.clone());
         if let Err(err) = manager.disconnect_server(&server_uid).await {
-            tracing::debug!(server_id = %id, error = %err, "reconcile disconnect (ignored)");
+            // Keep the id in `known` so the next reconcile retries the detach;
+            // dropping it now would remove it from the `removed` diff forever,
+            // leaving the server connected for the thread's lifetime.
+            tracing::warn!(server_id = %id, error = %err, "reconcile disconnect failed; will retry");
+            continue;
         }
         ctx.known.remove(&id);
     }
@@ -732,12 +764,13 @@ async fn run_mcp_actor(
         match cmd {
             McpCmd::ForceReconnect { server_id, reply } => {
                 // Reject ids that aren't part of the assistant's current
-                // catalog. `disconnect_server` only clears `connections`;
-                // the underlying config lingers in the manager for the
-                // thread's lifetime (agentkit-mcp exposes no unregister
-                // path). Without this guard a detached integration could
-                // be resurrected via force_reconnect.
-                if !ctx.known.contains(server_id.0.as_str()) {
+                // configuration. `disconnect_server` only clears `connections`;
+                // the underlying config lingers in the manager for the thread's
+                // lifetime (agentkit-mcp exposes no unregister path). Gating on
+                // `configured` (not `known`) lets a user retry a configured
+                // server that is not yet connected, while still refusing to
+                // resurrect one that has been detached from the configuration.
+                if !ctx.configured.contains(server_id.0.as_str()) {
                     let _ = reply.send(Err(format!(
                         "mcp server {server_id} is not part of this assistant's current configuration"
                     )));

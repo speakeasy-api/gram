@@ -138,7 +138,14 @@ async fn thread_turn(
             .await
             .is_err()
     {
-        tracing::warn!(thread_id = %thread_id, "drop mcp reconcile: actor channel closed");
+        // The MCP actor is gone, so we can't reconcile the thread's server set
+        // for this turn. Don't accept the turn on stale state — fail so the
+        // backend retries instead of silently running with the wrong tools.
+        tracing::warn!(thread_id = %thread_id, "mcp reconcile failed: actor channel closed");
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "mcp reconcile actor unavailable".to_string(),
+        ));
     }
 
     thread
