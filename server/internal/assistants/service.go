@@ -1913,8 +1913,14 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 					_ = s.runtime.Stop(stopCtx, runtimeRecord)
 					cancelStop()
 					recordCtx, cancelRecord := context.WithTimeout(context.WithoutCancel(ctx), teardownCapCleanupTimeout)
-					_ = s.stopRuntimeRecord(recordCtx, thread.ProjectID, runtimeRecord.ID, runtimeStateFailed)
+					recordErr := s.stopRuntimeRecord(recordCtx, thread.ProjectID, runtimeRecord.ID, runtimeStateFailed)
 					cancelRecord()
+					if recordErr != nil {
+						// The slot is still held by an active row; re-admitting now
+						// would redispatch siblings onto the dead runtime. Surface the
+						// error so the workflow retries and frees the slot first.
+						return ProcessThreadEventsResult{}, fmt.Errorf("free runtime slot after teardown cap: %w", recordErr)
+					}
 					return ProcessThreadEventsResult{
 						AssistantID:         assistant.ID,
 						WarmUntil:           time.Time{},
