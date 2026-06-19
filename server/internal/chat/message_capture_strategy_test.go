@@ -731,6 +731,81 @@ func TestCaptureMessage_DropsGenerationWithMalformedToolCallArgs(t *testing.T) {
 	}
 }
 
+// A client can replay a previous turn's aborted assistant message — malformed
+// tool_call arguments and all. StartOrResumeChat must drop that message (and
+// any tool result that pairs with it, else the tool_result is orphaned) before
+// persisting, while keeping the surrounding user input.
+func TestStartOrResumeChat_DropsReplayedAssistantWithMalformedToolCallArgs(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestChatService(t)
+	ctx, conn, projectID, orgID := t.Context(), ti.conn, ti.projectID, ti.orgID
+	s := newCaptureStrategy(t, conn)
+	chatID := uuid.New()
+
+	runTurn(t, ctx, s,
+		makeRequest(chatID, projectID, orgID,
+			openrouter.CreateMessageUser("do it"),
+			makeAssistantToolOnly(or.ChatToolCall{
+				ID:   "call_bad",
+				Type: or.ChatToolCallTypeFunction,
+				Function: or.ChatToolCallFunction{
+					Name:      "send_message",
+					Arguments: `{"text":"hi`,
+				},
+			}),
+			or.CreateChatMessagesTool(or.ChatToolMessage{
+				Role:       or.ChatToolMessageRoleTool,
+				Content:    or.CreateChatToolMessageContentStr(`{"ok":true}`),
+				ToolCallID: "call_bad",
+			}),
+			openrouter.CreateMessageUser("still there?"),
+		),
+		makeResponse("yes"),
+	)
+
+	rows := listAllMessages(t, ctx, conn, chatID, projectID)
+	require.Equal(t, []string{"user", "user", "assistant"}, roles(rows),
+		"poisoned assistant + its tool result dropped; user input and fresh response kept")
+	require.Equal(t, "yes", rows[2].Content)
+}
+
+// A valid replayed assistant tool_call must NOT be dropped — only malformed
+// arguments are poison.
+func TestStartOrResumeChat_KeepsReplayedAssistantWithValidToolCallArgs(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestChatService(t)
+	ctx, conn, projectID, orgID := t.Context(), ti.conn, ti.projectID, ti.orgID
+	s := newCaptureStrategy(t, conn)
+	chatID := uuid.New()
+
+	runTurn(t, ctx, s,
+		makeRequest(chatID, projectID, orgID,
+			openrouter.CreateMessageUser("do it"),
+			makeAssistantToolOnly(or.ChatToolCall{
+				ID:   "call_ok",
+				Type: or.ChatToolCallTypeFunction,
+				Function: or.ChatToolCallFunction{
+					Name:      "send_message",
+					Arguments: `{"text":"hi"}`,
+				},
+			}),
+			or.CreateChatMessagesTool(or.ChatToolMessage{
+				Role:       or.ChatToolMessageRoleTool,
+				Content:    or.CreateChatToolMessageContentStr(`{"ok":true}`),
+				ToolCallID: "call_ok",
+			}),
+			openrouter.CreateMessageUser("next"),
+		),
+		makeResponse("done"),
+	)
+
+	rows := listAllMessages(t, ctx, conn, chatID, projectID)
+	require.Equal(t, []string{"user", "assistant", "tool", "user", "assistant"}, roles(rows),
+		"well-formed replayed tool call and its result persist intact")
+}
+
 // Whitespace-only assistant response content is treated as no text so storage
 // does not preserve invisible narrative around tool calls.
 func TestCaptureMessage_WhitespaceOnlyContentWithToolCallsStoresSingleRow(t *testing.T) {
