@@ -21,6 +21,18 @@ func requireFileBytes(t *testing.T, path string) []byte {
 	return data
 }
 
+// TestSharedHTTPScriptMatchesCheckedIn guards against drift between the
+// generated hooks/http.sh (renderSharedHTTPScript) and the checked-in
+// hooks/plugin-claude/hooks/http.sh sourced by the local-dev plugin. Both must
+// be identical so local-dev and generated plugins share one transport.
+func TestSharedHTTPScriptMatchesCheckedIn(t *testing.T) {
+	t.Parallel()
+	checkedIn := requireFileBytes(t, filepath.Join("..", "..", "..", "hooks", "plugin-claude", "hooks", "http.sh"))
+	// renderSharedHTTPScript() is canonical → pass it as testify's "expected".
+	require.Equal(t, string(renderSharedHTTPScript()), string(checkedIn),
+		"hooks/plugin-claude/hooks/http.sh has drifted from renderSharedHTTPScript() — keep them identical")
+}
+
 func TestGeneratePluginWithCustomDomainURL(t *testing.T) {
 	t.Parallel()
 	plugins := []PluginInfo{
@@ -717,6 +729,7 @@ func TestRenderHookScriptUsesDeviceAgentIdentityWhenAvailable(t *testing.T) {
 	capturePath := filepath.Join(dir, "payload.json")
 	require.NoError(t, os.WriteFile(hookPath, []byte(script), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "identity.sh"), renderDeviceAgentIdentityScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "fake-agent"), []byte(`#!/usr/bin/env bash
 if [ "$1" = "identity" ]; then
   printf '{"identity":{"email":"agent@example.com"}}'
@@ -762,6 +775,7 @@ func TestRenderHookScriptFallsBackWhenDeviceAgentMissing(t *testing.T) {
 	capturePath := filepath.Join(dir, "payload.json")
 	require.NoError(t, os.WriteFile(hookPath, []byte(script), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "identity.sh"), renderDeviceAgentIdentityScript(), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "http.sh"), renderSharedHTTPScript(), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "curl"), []byte(`#!/usr/bin/env bash
 cat > "$GRAM_CAPTURE_PAYLOAD"
 printf '{}\n200'

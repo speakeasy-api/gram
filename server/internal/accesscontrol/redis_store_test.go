@@ -710,6 +710,16 @@ func (c *memoryCache) Set(_ context.Context, key string, value any, _ time.Durat
 	return nil
 }
 
+func (c *memoryCache) Add(_ context.Context, key string, _ time.Duration) (bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, ok := c.values[key]; ok {
+		return false, nil
+	}
+	c.values[key] = []byte("1")
+	return true, nil
+}
+
 func (c *memoryCache) Update(ctx context.Context, key string, value any) error {
 	c.mu.Lock()
 	_, ok := c.values[key]
@@ -793,6 +803,10 @@ func (c *nonMutatingMemoryCache) GetAndDelete(ctx context.Context, key string, v
 
 func (c *nonMutatingMemoryCache) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
 	return c.inner.Set(ctx, key, value, ttl)
+}
+
+func (c *nonMutatingMemoryCache) Add(ctx context.Context, key string, ttl time.Duration) (bool, error) {
+	return c.inner.Add(ctx, key, ttl)
 }
 
 func (c *nonMutatingMemoryCache) Update(ctx context.Context, key string, value any) error {

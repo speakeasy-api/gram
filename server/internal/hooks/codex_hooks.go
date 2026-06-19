@@ -54,6 +54,14 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 		attr.SlogEvent("codex_hook"),
 	)
 
+	// Claim the per-invocation idempotency token before persistence. A retry
+	// re-sends the same token: the decision still re-runs so the user stays
+	// blocked, but tagging the context as a duplicate suppresses the duplicate
+	// writes in recordCodexHook.
+	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, "")) {
+		ctx = withHookDuplicate(ctx)
+	}
+
 	var blockReason, userReason string
 
 	switch payload.HookEventName {
@@ -136,6 +144,11 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (*gen.Co
 }
 
 func (s *Service) recordCodexHook(ctx context.Context, payload *gen.CodexPayload, metadata *SessionMetadata, blockReason string) {
+	// Skip persistence for a redelivery (the token was claimed in Codex()).
+	if s.isHookDuplicate(ctx) {
+		return
+	}
+
 	if payload.HookEventName == "SessionStart" {
 		s.captureCodexMCPListSnapshot(ctx, payload)
 		if metadata.SessionID != "" && metadata.UserEmail != "" {

@@ -168,6 +168,7 @@ var _ = Service("hooks", func() {
 			Attribute("apikey_token", String, "Optional API key for plugin-driven attribution.")
 			Attribute("project_slug_input", String, "Optional project slug for plugin-driven attribution.")
 			Attribute("hook_hostname", String, "Optional endpoint hostname supplied by the Gram hook plugin.")
+			Attribute("idempotency_key", String, "Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.")
 		})
 		Result(ClaudeHookResult)
 		HTTP(func() {
@@ -175,6 +176,7 @@ var _ = Service("hooks", func() {
 			Header("apikey_token:Gram-Key")
 			Header("project_slug_input:Gram-Project")
 			Header("hook_hostname:X-Gram-Hook-Hostname")
+			Header("idempotency_key:Idempotency-Key")
 		})
 	})
 
@@ -190,6 +192,7 @@ var _ = Service("hooks", func() {
 			security.ByKeyPayload()
 			security.ProjectPayload()
 			Attribute("hook_hostname", String, "Optional endpoint hostname supplied by the Gram hook plugin.")
+			Attribute("idempotency_key", String, "Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.")
 		})
 
 		Result(CursorHookResult)
@@ -199,6 +202,7 @@ var _ = Service("hooks", func() {
 			security.ByKeyHeader()
 			security.ProjectHeader()
 			Header("hook_hostname:X-Gram-Hook-Hostname")
+			Header("idempotency_key:Idempotency-Key")
 		})
 	})
 
@@ -214,6 +218,7 @@ var _ = Service("hooks", func() {
 			security.ByKeyPayload()
 			security.ProjectPayload()
 			Attribute("hook_hostname", String, "Optional endpoint hostname supplied by the Gram hook plugin.")
+			Attribute("idempotency_key", String, "Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.")
 		})
 
 		Result(CodexHookResult)
@@ -223,6 +228,7 @@ var _ = Service("hooks", func() {
 			security.ByKeyHeader()
 			security.ProjectHeader()
 			Header("hook_hostname:X-Gram-Hook-Hostname")
+			Header("idempotency_key:Idempotency-Key")
 		})
 	})
 
